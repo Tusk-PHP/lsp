@@ -27,6 +27,7 @@ type lspHarness struct {
 	out       *io.PipeReader
 	nextID    int
 	responses chan map[string]interface{}
+	notes     chan map[string]interface{}
 }
 
 func newHarness(t *testing.T) *lspHarness {
@@ -40,7 +41,15 @@ func newHarness(t *testing.T) *lspHarness {
 			// Server stopped
 		}
 	}()
-	h := &lspHarness{t: t, server: server, in: inW, out: outR, nextID: 1, responses: make(chan map[string]interface{}, 100)}
+	h := &lspHarness{
+		t:         t,
+		server:    server,
+		in:        inW,
+		out:       outR,
+		nextID:    1,
+		responses: make(chan map[string]interface{}, 100),
+		notes:     make(chan map[string]interface{}, 100),
+	}
 	// Background reader: parses all LSP messages from the server and routes
 	// responses (messages with an "id") to the responses channel.
 	// Notifications are silently discarded.
@@ -74,7 +83,9 @@ func newHarness(t *testing.T) *lspHarness {
 			}
 			if _, hasID := msg["id"]; hasID {
 				h.responses <- msg
+				continue
 			}
+			h.notes <- msg
 		}
 	}()
 	return h
@@ -126,6 +137,22 @@ func (h *lspHarness) readResponse(id int) map[string]interface{} {
 			}
 		case <-timeout:
 			h.t.Fatalf("timeout waiting for response id=%d", id)
+			return nil
+		}
+	}
+}
+
+func (h *lspHarness) readNotification(method string, timeout time.Duration) map[string]interface{} {
+	h.t.Helper()
+	deadline := time.After(timeout)
+	for {
+		select {
+		case msg := <-h.notes:
+			if gotMethod, _ := msg["method"].(string); gotMethod == method {
+				return msg
+			}
+		case <-deadline:
+			h.t.Fatalf("timeout waiting for notification %q", method)
 			return nil
 		}
 	}

@@ -99,6 +99,9 @@ class Foo {
 	if len(result.Errors) == 0 {
 		t.Error("expected parse error for unterminated comment")
 	}
+	if result.Errors[0].Line != 1 || result.Errors[0].Column != 0 {
+		t.Fatalf("expected unterminated comment at 1:0, got %d:%d", result.Errors[0].Line, result.Errors[0].Column)
+	}
 }
 
 func TestParseUnterminatedDocComment(t *testing.T) {

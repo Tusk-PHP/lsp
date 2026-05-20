@@ -388,6 +388,7 @@ func tokenize(source string) ([]Token, []ParseError) {
 		// Block comment
 		if offset+1 < len(source) && source[offset:offset+2] == "/*" {
 			start := offset
+			startLine, startCol := line, col
 			offset += 2
 			col += 2
 			for offset+1 < len(source) {
@@ -404,9 +405,9 @@ func tokenize(source string) ([]Token, []ParseError) {
 				}
 				offset++
 			}
-			tokens = append(tokens, Token{TokenComment, source[start:offset], line, col, start})
+			tokens = append(tokens, Token{TokenComment, source[start:offset], startLine, startCol, start})
 			if !strings.HasSuffix(source[start:offset], "*/") {
-				errors = append(errors, ParseError{Message: "unterminated comment", Line: line, Column: col})
+				errors = append(errors, ParseError{Message: "unterminated comment", Line: startLine, Column: startCol})
 			}
 			continue
 		}

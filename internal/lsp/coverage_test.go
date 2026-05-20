@@ -59,6 +59,120 @@ class Foo {
 	})
 }
 
+func TestPublishDiagnosticsIncludesParserErrors(t *testing.T) {
+	h := initHarness(t)
+	defer h.close()
+
+	uri := "file:///tmp/test_parser_diags.php"
+	source := `<?php
+$name = "unterminated;
+`
+
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "php", "version": 1, "text": source,
+		},
+	})
+
+	msg := h.readNotification("textDocument/publishDiagnostics", 5*time.Second)
+	params, ok := msg["params"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected publishDiagnostics params, got %T", msg["params"])
+	}
+	if gotURI, _ := params["uri"].(string); gotURI != uri {
+		t.Fatalf("expected diagnostics for %q, got %q", uri, gotURI)
+	}
+	diagnostics, ok := params["diagnostics"].([]interface{})
+	if !ok {
+		t.Fatalf("expected diagnostics array, got %T", params["diagnostics"])
+	}
+
+	found := false
+	for _, raw := range diagnostics {
+		diag, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if diag["code"] != "syntax-error" || diag["message"] != "unterminated string" {
+			continue
+		}
+		found = true
+		if diag["source"] != "tusk-php" {
+			t.Fatalf("expected source tusk-php, got %v", diag["source"])
+		}
+		if severity, _ := diag["severity"].(float64); int(severity) != 1 {
+			t.Fatalf("expected error severity 1, got %v", diag["severity"])
+		}
+		rng, ok := diag["range"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected range map, got %T", diag["range"])
+		}
+		start, _ := rng["start"].(map[string]interface{})
+		end, _ := rng["end"].(map[string]interface{})
+		if int(start["line"].(float64)) != 1 || int(start["character"].(float64)) != 8 {
+			t.Fatalf("expected start 1:8, got %v", start)
+		}
+		if int(end["line"].(float64)) != 1 || int(end["character"].(float64)) != 9 {
+			t.Fatalf("expected end 1:9, got %v", end)
+		}
+	}
+	if !found {
+		t.Fatalf("expected syntax-error publishDiagnostics entry, got %#v", diagnostics)
+	}
+}
+
+func TestPublishDiagnosticsIncludesStructuralParserErrorsOnChange(t *testing.T) {
+	h := initHarness(t)
+	defer h.close()
+
+	uri := "file:///tmp/test_parser_change_diags.php"
+	initial := "<?php\nclass Foo {}\n"
+	changed := `<?php
+class Foo {
+    public function bar($name {
+        return $name;
+    }
+}
+`
+
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "php", "version": 1, "text": initial,
+		},
+	})
+	_ = h.readNotification("textDocument/publishDiagnostics", 5*time.Second)
+
+	h.notify("textDocument/didChange", map[string]interface{}{
+		"textDocument":   map[string]interface{}{"uri": uri, "version": 2},
+		"contentChanges": []map[string]interface{}{{"text": changed}},
+	})
+
+	msg := h.readNotification("textDocument/publishDiagnostics", 5*time.Second)
+	params, ok := msg["params"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected publishDiagnostics params, got %T", msg["params"])
+	}
+	diagnostics, ok := params["diagnostics"].([]interface{})
+	if !ok {
+		t.Fatalf("expected diagnostics array, got %T", params["diagnostics"])
+	}
+
+	found := false
+	for _, raw := range diagnostics {
+		diag, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if diag["code"] == "syntax-error" && diag["message"] == "expected ')'" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected structural syntax-error publishDiagnostics entry, got %#v", diagnostics)
+	}
+}
+
 func TestHandleCompletion(t *testing.T) {
 	h := initHarness(t)
 	defer h.close()

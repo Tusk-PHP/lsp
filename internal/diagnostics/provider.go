@@ -60,6 +60,7 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 	var diags []protocol.Diagnostic
 	file := parser.ParseFile(source)
 	if file != nil {
+		diags = append(diags, parserErrorsToDiagnostics(file.Errors, source)...)
 		diags = append(diags, p.checkDeprecations(source)...)
 		diags = append(diags, p.checkClassStructure(file)...)
 		if p.cfg.IsRuleEnabled("unused-import") {
@@ -183,8 +184,8 @@ func (p *Provider) checkClassStructure(file *parser.FileNode) []protocol.Diagnos
 					diags = append(diags, protocol.Diagnostic{
 						Range:    protocol.Range{Start: protocol.Position{Line: m.StartLine}},
 						Severity: protocol.DiagnosticSeverityError, Source: "tusk-php",
-						Message:  fmt.Sprintf("Class '%s' contains abstract method '%s' but is not declared abstract", cls.Name, m.Name),
-						Code:     "abstract-in-concrete",
+						Message: fmt.Sprintf("Class '%s' contains abstract method '%s' but is not declared abstract", cls.Name, m.Name),
+						Code:    "abstract-in-concrete",
 					})
 				}
 			}
@@ -196,6 +197,70 @@ func (p *Provider) checkClassStructure(file *parser.FileNode) []protocol.Diagnos
 func (p *Provider) checkUnusedImports(file *parser.FileNode, source string) []protocol.Diagnostic {
 	rule := &checks.UnusedImportsRule{}
 	return findingsToDiagnostics(rule.Check(file, source, p.index))
+}
+
+func parserErrorsToDiagnostics(errors []parser.ParseError, source string) []protocol.Diagnostic {
+	if len(errors) == 0 {
+		return nil
+	}
+	lines := strings.Split(source, "\n")
+	diags := make([]protocol.Diagnostic, 0, len(errors))
+	for _, parseErr := range errors {
+		line := clamp(parseErr.Line, 0, max(len(lines)-1, 0))
+		lineText := ""
+		if line >= 0 && line < len(lines) {
+			lineText = lines[line]
+		}
+		lineLen := len(lineText)
+		startCol := clamp(parseErr.Column, 0, lineLen)
+		endCol := startCol + parserErrorWidth(parseErr.Message)
+		if endCol > lineLen {
+			endCol = lineLen
+		}
+		if endCol <= startCol {
+			switch {
+			case lineLen == 0:
+				endCol = startCol + 1
+			case startCol < lineLen:
+				endCol = startCol + 1
+			default:
+				startCol = max(lineLen-1, 0)
+				endCol = lineLen
+			}
+		}
+		diags = append(diags, protocol.Diagnostic{
+			Range: protocol.Range{
+				Start: protocol.Position{Line: line, Character: startCol},
+				End:   protocol.Position{Line: line, Character: endCol},
+			},
+			Severity: protocol.DiagnosticSeverityError,
+			Source:   "tusk-php",
+			Message:  parseErr.Message,
+			Code:     "syntax-error",
+		})
+	}
+	return diags
+}
+
+func parserErrorWidth(message string) int {
+	switch {
+	case strings.Contains(message, "doc comment"):
+		return 3
+	case strings.Contains(message, "comment"):
+		return 2
+	default:
+		return 1
+	}
+}
+
+func clamp(value, low, high int) int {
+	if value < low {
+		return low
+	}
+	if value > high {
+		return high
+	}
+	return value
 }
 
 // findingsToDiagnostics converts standalone check findings to LSP diagnostics.

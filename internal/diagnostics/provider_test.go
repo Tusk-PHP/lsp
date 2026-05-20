@@ -86,6 +86,86 @@ class Foo {
 	}
 }
 
+func TestStaticSyntaxDiagnosticsTokenizerError(t *testing.T) {
+	p := newTestProvider()
+	source := `<?php
+$name = "unterminated;
+`
+	diags := p.Analyze("file:///test.php", source)
+	syntax := filterByCode(diags, "syntax-error")
+	if len(syntax) != 1 {
+		t.Fatalf("expected 1 syntax diagnostic, got %d: %#v", len(syntax), syntax)
+	}
+	if syntax[0].Severity != protocol.DiagnosticSeverityError {
+		t.Fatalf("expected error severity, got %d", syntax[0].Severity)
+	}
+	if syntax[0].Message != "unterminated string" {
+		t.Fatalf("expected unterminated string message, got %q", syntax[0].Message)
+	}
+	if syntax[0].Range.Start.Line != 1 || syntax[0].Range.Start.Character != 8 {
+		t.Fatalf("expected diagnostic start 1:8, got %d:%d", syntax[0].Range.Start.Line, syntax[0].Range.Start.Character)
+	}
+	if syntax[0].Range.End.Line != 1 || syntax[0].Range.End.Character != 9 {
+		t.Fatalf("expected diagnostic end 1:9, got %d:%d", syntax[0].Range.End.Line, syntax[0].Range.End.Character)
+	}
+}
+
+func TestStaticSyntaxDiagnosticsUnterminatedComment(t *testing.T) {
+	p := newTestProvider()
+	source := `<?php
+/* never closed
+class Foo {}
+`
+	diags := p.Analyze("file:///test.php", source)
+	syntax := filterByCode(diags, "syntax-error")
+	if len(syntax) != 1 {
+		t.Fatalf("expected 1 syntax diagnostic, got %d: %#v", len(syntax), syntax)
+	}
+	if syntax[0].Message != "unterminated comment" {
+		t.Fatalf("expected unterminated comment message, got %q", syntax[0].Message)
+	}
+	if syntax[0].Range.Start.Line != 1 || syntax[0].Range.Start.Character != 0 {
+		t.Fatalf("expected diagnostic start 1:0, got %d:%d", syntax[0].Range.Start.Line, syntax[0].Range.Start.Character)
+	}
+	if syntax[0].Range.End.Line != 1 || syntax[0].Range.End.Character != 2 {
+		t.Fatalf("expected diagnostic end 1:2, got %d:%d", syntax[0].Range.End.Line, syntax[0].Range.End.Character)
+	}
+}
+
+func TestStaticSyntaxDiagnosticsStructuralError(t *testing.T) {
+	p := newTestProvider()
+	source := `<?php
+class Foo {
+    public function bar($name {
+        return $name;
+    }
+}
+`
+	diags := p.Analyze("file:///test.php", source)
+	syntax := filterByCode(diags, "syntax-error")
+	if len(syntax) == 0 {
+		t.Fatal("expected syntax diagnostic for missing paren")
+	}
+	found := false
+	for _, diag := range syntax {
+		if diag.Message == "expected ')'" {
+			found = true
+			if diag.Severity != protocol.DiagnosticSeverityError {
+				t.Fatalf("expected error severity, got %d", diag.Severity)
+			}
+			if diag.Range.Start.Line != 2 || diag.Range.Start.Character != 30 {
+				t.Fatalf("expected diagnostic start 2:30, got %d:%d", diag.Range.Start.Line, diag.Range.Start.Character)
+			}
+			if diag.Range.End.Line != 2 || diag.Range.End.Character != 31 {
+				t.Fatalf("expected diagnostic end 2:31, got %d:%d", diag.Range.End.Line, diag.Range.End.Character)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected missing paren diagnostic, got %#v", syntax)
+	}
+}
+
 func TestToolResultsCaching(t *testing.T) {
 	p := newTestProvider()
 	uri := "file:///test.php"
@@ -204,14 +284,14 @@ func TestPHPStanDiagnosticRange(t *testing.T) {
 	]}}}`)
 
 	lines := []string{
-		"<?php",                                   // 0
-		"",                                        // 1
-		"namespace App\\Http\\Controllers;",       // 2
-		"",                                        // 3
-		"        clients();",                      // 4 (line 5 in PHPStan = 0-based 4)
-		"",                                        // 5
-		"        $svc = new Service();",           // 6
-		"        $svc->missing();",                // 7 (line 8 in PHPStan = 0-based 7)
+		"<?php",                             // 0
+		"",                                  // 1
+		"namespace App\\Http\\Controllers;", // 2
+		"",                                  // 3
+		"        clients();",                // 4 (line 5 in PHPStan = 0-based 4)
+		"",                                  // 5
+		"        $svc = new Service();",     // 6
+		"        $svc->missing();",          // 7 (line 8 in PHPStan = 0-based 7)
 	}
 
 	diags := r.parseOutput(output, lines)
@@ -254,8 +334,8 @@ func TestPHPStanDiagnosticRangeFallback(t *testing.T) {
 	]}}}`)
 
 	lines := []string{
-		"<?php",                         // 0
-		"    $x = something_weird();",   // 1 (line 2 in PHPStan = 0-based 1)
+		"<?php",                       // 0
+		"    $x = something_weird();", // 1 (line 2 in PHPStan = 0-based 1)
 	}
 
 	diags := r.parseOutput(output, lines)
