@@ -25,7 +25,14 @@ _None open._
 
 ## Low / performance
 
-_None open._
+### L9 — Interface implementation lookup skips enums
+- Where: `internal/symbols/index.go`, `internal/analyzer/analyzer.go`
+- What: `textDocument/implementation` resolves interfaces to implementing classes and inherited
+  concrete descendants, but enum indexing records `implementsMap` without updating
+  `reverseImplementsMap`. Interfaces implemented only by enums therefore do not appear in
+  implementation results.
+- Fix: When indexing enums, append each resolved interface to `reverseImplementsMap` the same way
+  classes do, then add analyzer/LSP regression coverage for enum implementors.
 
 ---
 
