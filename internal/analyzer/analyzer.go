@@ -1358,17 +1358,14 @@ func findWordEdits(line string, lineNum int, oldWord, newWord string) []protocol
 
 // GetCodeActions returns available code actions for the given range.
 func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeActionParams) []protocol.CodeAction {
-	var actions []protocol.CodeAction
+	actions := make([]protocol.CodeAction, 0)
 
 	file := parser.ParseFile(source)
 	if file == nil {
 		return actions
 	}
 
-	actions = append(actions, a.importUnusedImportQuickFixes(uri, source, params)...)
-	if action := a.importOrganizeImportsAction(uri, source, file, params.Context.Only); action != nil {
-		actions = append(actions, *action)
-	}
+	actions = append(actions, a.unknownClassCodeActions(uri, source, file, params)...)
 
 	// Offer "Copy Namespace" for any position
 	ns := file.Namespace
@@ -1401,11 +1398,13 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 
 	if fqn != "" {
 		uriJSON, _ := json.Marshal(uri)
-		actions = append(actions, protocol.CodeAction{
-			Title:   "Copy Namespace: " + fqn,
-			Kind:    "source",
-			Command: &protocol.Command{Title: "Copy Namespace", Command: "tuskPhpLsp.copyNamespace", Arguments: []json.RawMessage{uriJSON}},
-		})
+		if supportsCodeActionKind(params.Context.Only, "source") {
+			actions = append(actions, protocol.CodeAction{
+				Title:   "Copy Namespace: " + fqn,
+				Kind:    "source",
+				Command: &protocol.Command{Title: "Copy Namespace", Command: "tuskPhpLsp.copyNamespace", Arguments: []json.RawMessage{uriJSON}},
+			})
+		}
 	}
 
 	// Offer "Move to namespace" when cursor is on a type declaration
@@ -1447,15 +1446,17 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 			uriJSON, _ := json.Marshal(uri)
 			// The target namespace will be prompted by the editor extension
 			// For now, provide the command with URI; the extension fills in the target
-			actions = append(actions, protocol.CodeAction{
-				Title: "Move to namespace...",
-				Kind:  "refactor.move",
-				Command: &protocol.Command{
-					Title:     "Move to namespace",
-					Command:   "tuskPhpLsp.moveToNamespace",
-					Arguments: []json.RawMessage{uriJSON},
-				},
-			})
+			if supportsCodeActionKind(params.Context.Only, "refactor.move") {
+				actions = append(actions, protocol.CodeAction{
+					Title: "Move to namespace...",
+					Kind:  "refactor.move",
+					Command: &protocol.Command{
+						Title:     "Move to namespace",
+						Command:   "tuskPhpLsp.moveToNamespace",
+						Arguments: []json.RawMessage{uriJSON},
+					},
+				})
+			}
 		}
 	}
 
