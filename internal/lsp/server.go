@@ -337,9 +337,15 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 			WorkspaceSymbolProvider:   true,
 			SignatureHelpProvider:     &protocol.SignatureHelpOptions{TriggerCharacters: []string{"(", ","}},
 			RenameProvider:            &protocol.RenameOptions{PrepareProvider: true},
-			CodeActionProvider:        &protocol.CodeActionOptions{CodeActionKinds: []string{"refactor", "source"}},
-			ExecuteCommandProvider:    &protocol.ExecuteCommandOptions{Commands: []string{"tuskPhpLsp.namespaceForPath"}},
-			InlayHintProvider:         &protocol.InlayHintOptions{ResolveProvider: false},
+			CodeActionProvider: &protocol.CodeActionOptions{CodeActionKinds: []string{
+				"quickfix",
+				"refactor",
+				"refactor.move",
+				"source",
+				"source.organizeImports",
+			}},
+			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{Commands: []string{"tuskPhpLsp.namespaceForPath"}},
+			InlayHintProvider:      &protocol.InlayHintOptions{ResolveProvider: false},
 		},
 		ServerInfo: protocol.ServerInfo{Name: ServerName, Version: ServerVersion},
 	})
@@ -599,7 +605,28 @@ func (s *Server) handleCodeAction(msg *jsonRPCMessage) {
 	}
 	source := s.getDocument(params.TextDocument.URI)
 	result := s.analyzer.GetCodeActions(params.TextDocument.URI, source, params)
+	if len(params.Context.Only) > 0 {
+		filtered := result[:0]
+		for _, action := range result {
+			if matchesCodeActionKind(action.Kind, params.Context.Only) {
+				filtered = append(filtered, action)
+			}
+		}
+		result = filtered
+	}
 	s.sendResponse(msg.ID, result)
+}
+
+func matchesCodeActionKind(kind string, only []string) bool {
+	if kind == "" {
+		return false
+	}
+	for _, filter := range only {
+		if kind == filter || strings.HasPrefix(kind, filter+".") {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleInlayHint(msg *jsonRPCMessage) {

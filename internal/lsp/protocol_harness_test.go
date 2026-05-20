@@ -206,6 +206,29 @@ func TestProtocolLifecycle(t *testing.T) {
 	if caps["completionProvider"] == nil {
 		t.Error("expected completionProvider to be present")
 	}
+	codeActionProvider, ok := caps["codeActionProvider"].(map[string]interface{})
+	if !ok {
+		t.Fatal("initialize: expected codeActionProvider")
+	}
+	rawKinds, ok := codeActionProvider["codeActionKinds"].([]interface{})
+	if !ok {
+		t.Fatalf("initialize: expected codeActionKinds array, got %T", codeActionProvider["codeActionKinds"])
+	}
+	wantKinds := map[string]bool{
+		"quickfix":               false,
+		"source.organizeImports": false,
+	}
+	for _, raw := range rawKinds {
+		kind, _ := raw.(string)
+		if _, ok := wantKinds[kind]; ok {
+			wantKinds[kind] = true
+		}
+	}
+	for kind, found := range wantKinds {
+		if !found {
+			t.Errorf("initialize: expected code action kind %q, got %v", kind, rawKinds)
+		}
+	}
 	serverInfo, ok := result["serverInfo"].(map[string]interface{})
 	if !ok {
 		t.Fatal("initialize: expected serverInfo")

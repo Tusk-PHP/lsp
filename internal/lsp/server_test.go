@@ -206,6 +206,32 @@ func TestServerInitialize(t *testing.T) {
 	if caps["foldingRangeProvider"] != true {
 		t.Error("expected foldingRangeProvider to be true")
 	}
+	codeActionProvider, ok := caps["codeActionProvider"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected codeActionProvider")
+	}
+	rawKinds, ok := codeActionProvider["codeActionKinds"].([]interface{})
+	if !ok {
+		t.Fatalf("expected codeActionKinds array, got %T", codeActionProvider["codeActionKinds"])
+	}
+	wantKinds := map[string]bool{
+		"quickfix":               false,
+		"refactor":               false,
+		"refactor.move":          false,
+		"source":                 false,
+		"source.organizeImports": false,
+	}
+	for _, raw := range rawKinds {
+		kind, _ := raw.(string)
+		if _, ok := wantKinds[kind]; ok {
+			wantKinds[kind] = true
+		}
+	}
+	for kind, found := range wantKinds {
+		if !found {
+			t.Errorf("expected advertised code action kind %q, got %v", kind, rawKinds)
+		}
+	}
 	serverInfo, ok := result["serverInfo"].(map[string]interface{})
 	if !ok {
 		t.Fatal("expected serverInfo")

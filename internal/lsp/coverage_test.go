@@ -653,6 +653,125 @@ class User {}
 	}
 }
 
+func TestHandleCodeActionFiltersByOnlyKinds(t *testing.T) {
+	h := initHarness(t)
+	defer h.close()
+
+	uri := "file:///tmp/test_action_filters.php"
+	source := `<?php
+namespace App\Models;
+class User {}
+`
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "php", "version": 1, "text": source,
+		},
+	})
+	time.Sleep(200 * time.Millisecond)
+
+	diagnostics := []interface{}{
+		map[string]interface{}{
+			"range": map[string]interface{}{
+				"start": map[string]interface{}{"line": 2, "character": 0},
+				"end":   map[string]interface{}{"line": 2, "character": 5},
+			},
+			"message":  "unused import",
+			"severity": 2,
+			"source":   "tusk-php",
+			"code":     "unused-import",
+		},
+	}
+
+	sourceOnlyID := h.send("textDocument/codeAction", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"range": map[string]interface{}{
+			"start": map[string]interface{}{"line": 2, "character": 0},
+			"end":   map[string]interface{}{"line": 2, "character": 12},
+		},
+		"context": map[string]interface{}{
+			"diagnostics": diagnostics,
+			"only":        []string{"source"},
+		},
+	})
+	sourceOnlyResp := h.readResponse(sourceOnlyID)
+	if sourceOnlyResp["error"] != nil {
+		t.Fatalf("source-only codeAction returned error: %v", sourceOnlyResp["error"])
+	}
+	sourceActions, ok := sourceOnlyResp["result"].([]interface{})
+	if !ok {
+		t.Fatalf("expected source-only result array, got %T", sourceOnlyResp["result"])
+	}
+	if len(sourceActions) == 0 {
+		t.Fatal("expected at least one source action")
+	}
+	for _, raw := range sourceActions {
+		action, ok := raw.(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected code action object, got %T", raw)
+		}
+		kind, _ := action["kind"].(string)
+		if kind != "source" && !strings.HasPrefix(kind, "source.") {
+			t.Fatalf("expected only source actions, got kind %q in %#v", kind, action)
+		}
+	}
+
+	refactorOnlyID := h.send("textDocument/codeAction", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"range": map[string]interface{}{
+			"start": map[string]interface{}{"line": 2, "character": 0},
+			"end":   map[string]interface{}{"line": 2, "character": 12},
+		},
+		"context": map[string]interface{}{
+			"diagnostics": diagnostics,
+			"only":        []string{"refactor"},
+		},
+	})
+	refactorOnlyResp := h.readResponse(refactorOnlyID)
+	if refactorOnlyResp["error"] != nil {
+		t.Fatalf("refactor-only codeAction returned error: %v", refactorOnlyResp["error"])
+	}
+	refactorActions, ok := refactorOnlyResp["result"].([]interface{})
+	if !ok {
+		t.Fatalf("expected refactor-only result array, got %T", refactorOnlyResp["result"])
+	}
+	if len(refactorActions) == 0 {
+		t.Fatal("expected at least one refactor action")
+	}
+	for _, raw := range refactorActions {
+		action, ok := raw.(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected code action object, got %T", raw)
+		}
+		kind, _ := action["kind"].(string)
+		if kind != "refactor" && !strings.HasPrefix(kind, "refactor.") {
+			t.Fatalf("expected only refactor actions, got kind %q in %#v", kind, action)
+		}
+	}
+
+	quickfixOnlyID := h.send("textDocument/codeAction", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"range": map[string]interface{}{
+			"start": map[string]interface{}{"line": 2, "character": 0},
+			"end":   map[string]interface{}{"line": 2, "character": 12},
+		},
+		"context": map[string]interface{}{
+			"diagnostics": diagnostics,
+			"only":        []string{"quickfix"},
+		},
+	})
+	quickfixOnlyResp := h.readResponse(quickfixOnlyID)
+	if quickfixOnlyResp["error"] != nil {
+		t.Fatalf("quickfix-only codeAction returned error: %v", quickfixOnlyResp["error"])
+	}
+	quickfixActions, ok := quickfixOnlyResp["result"].([]interface{})
+	if !ok {
+		t.Fatalf("expected quickfix-only result array, got %T", quickfixOnlyResp["result"])
+	}
+	if len(quickfixActions) != 0 {
+		t.Fatalf("expected no quickfix actions before analyzer implementation, got %#v", quickfixActions)
+	}
+}
+
 func TestHandlePrepareRename(t *testing.T) {
 	h := initHarness(t)
 	defer h.close()
