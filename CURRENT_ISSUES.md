@@ -22,7 +22,21 @@ _None open._
 
 ## Medium
 
-_None open._
+### M5 — Parser errors are collected but not yet surfaced as diagnostics
+- **Where:** `internal/parser/compat.go`, `internal/diagnostics/provider.go`
+- **What:** `ParseResult.Errors` were already collected by the parser, and `ParseFile` now preserves them on `FileNode.Errors`, but the diagnostics pipeline still does not read either source. Syntax failures therefore remain internal parser state instead of editor-visible diagnostics.
+- **Suggested Fix:** add a fast syntax-diagnostics pass in `internal/diagnostics` that reads `FileNode.Errors` (or `ParseResult.Errors` directly), converts each entry into a protocol diagnostic, and add protocol/provider tests that assert publication for unterminated strings/comments and structural recovery errors like missing `)` / `}`.
+
+### M6 — Initial scope collector does not yet model arrow-function captures or grouped `use` imports
+- **Where:** `internal/scope/collector.go`
+- **What:** The new Sprint 1 collector now covers function/method/closure scopes, parameters,
+  `foreach`, `catch`, destructuring, closure `use (...)`, and basic top-level imports. It does
+  not yet infer implicit arrow-function captures (`fn () => $x`) and only records one alias per
+  parsed `use` statement, so grouped imports such as `use Foo\{Bar, Baz};` are still outside the
+  reusable collector surface.
+- **Suggested Fix:** add an expression-range walker for `fn` bodies and either extend the parser's
+  import model for grouped `use` statements or collect grouped aliases directly from the token
+  stream before later source-context and diagnostics work starts depending on them.
 
 ---
 
