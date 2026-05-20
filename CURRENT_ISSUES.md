@@ -19,50 +19,7 @@ _None open._
 
 ## Medium
 
-### M5 — Parser errors are collected but not yet surfaced as diagnostics
-- **Where:** `internal/parser/compat.go`, `internal/diagnostics/provider.go`
-- **What:** `ParseResult.Errors` were already collected by the parser, and `ParseFile` now preserves them on `FileNode.Errors`, but the diagnostics pipeline still does not read either source. Syntax failures therefore remain internal parser state instead of editor-visible diagnostics.
-- **Suggested Fix:** add a fast syntax-diagnostics pass in `internal/diagnostics` that reads `FileNode.Errors` (or `ParseResult.Errors` directly), converts each entry into a protocol diagnostic, and add protocol/provider tests that assert publication for unterminated strings/comments and structural recovery errors like missing `)` / `}`.
-
-### M6 — Initial scope collector does not yet model arrow-function captures or grouped `use` imports
-- **Where:** `internal/scope/collector.go`
-- **What:** The new Sprint 1 collector now covers function/method/closure scopes, parameters,
-  `foreach`, `catch`, destructuring, closure `use (...)`, and basic top-level imports. It does
-  not yet infer implicit arrow-function captures (`fn () => $x`) and only records one alias per
-  parsed `use` statement, so grouped imports such as `use Foo\{Bar, Baz};` are still outside the
-  reusable collector surface.
-- **Suggested Fix:** add an expression-range walker for `fn` bodies and either extend the parser's
-  import model for grouped `use` statements or collect grouped aliases directly from the token
-  stream before later source-context and diagnostics work starts depending on them.
-
-### M7 — CursorContext scope only models enclosing class/method, not full position scope
-- **Where:** `internal/source/context.go`
-- **What:** Phase 1's shared `CursorContext` exposes `Scope`, but `scopeAt` only fills class and method metadata. Positions inside free functions, closures, and other non-method scopes therefore do not get a reusable scope descriptor, which falls short of ROADMAP Architecture Priority 1's "What scope contains the position?" target.
-- **Suggested Fix:** extend `internal/source` scope derivation to recognize free functions and closures at minimum, or thread the later reusable scope collector into `CursorContext` once that API is stable.
-
-### M8 — CursorContext namespace/import state is file-global rather than position-aware
-- **Where:** `internal/source/context.go`
-- **What:** `Analyze` currently reads `file.Namespace` and `file.Uses` directly from the parsed file and returns them for every position. That is adequate for the common single-namespace file, but it will misclassify positions in files with multiple namespace blocks or any future position-sensitive import handling because the shared context does not filter namespace/import state by cursor location.
-- **Suggested Fix:** make namespace and active-import collection position-aware in `internal/source`, either by recording namespace/use ranges in the parser model or by deriving the active block from the token stream during analysis.
-
-### M9 — `list(...)` destructuring is outside the collector binding surface
-- **Where:** `internal/scope/collector.go`
-- **What:** `parseDestructureBindings` only activates on `[` ... `] =` patterns. PHP's
-  `list($a, $b) = ...` form is not recognized, so references/rename built on the collector miss
-  one of the core destructuring syntaxes called out by the scope-collector roadmap slice.
-- **Suggested Fix:** add a `list`-aware destructuring parser that treats `list(` headers as
-  declaration sites, ideally sharing the same nested-binding extraction path used for bracket
-  destructuring and `foreach` destructuring.
-
-### M10 — `PrepareRename` still advertises any `$variable` even when no scoped binding exists
-- **Where:** `internal/analyzer/analyzer.go`
-- **What:** `PrepareRename` returns success for every non-`$this` variable token before checking
-  whether `internal/scope` can resolve a binding at that position. `Rename` then correctly returns
-  `nil` when the collector cannot resolve the symbol, so clients can be told rename is available
-  for undefined locals, superglobals, or otherwise untracked variables and then fail on execution.
-- **Suggested Fix:** route variable prepare-rename through `scope.Collect(source).BindingAt(pos)`
-  and only allow rename when the collector resolves a local binding kind that the rename path can
-  actually edit.
+_None open._
 
 ---
 
@@ -105,6 +62,52 @@ _None open._
 - `Server` gained an injectable `exitFunc func(int)` field (defaults to `os.Exit`, set in
   `NewServer`); the `exit` handler calls it, making the full lifecycle testable.
   `internal/lsp/server.go`.
+
+### M5 — Parser diagnostics are now published from parser recovery state
+- `internal/diagnostics/provider.go` now converts `FileNode.Errors` into `syntax-error`
+  diagnostics (`SeverityError`, source `tusk-php`) during the fast analysis pass, so tokenizer
+  and structural recovery failures are editor-visible through `publishDiagnostics`.
+- `internal/parser/parser.go` now reports unterminated block comments at their opening `/*`
+  location instead of the scan end, keeping parser and diagnostic coordinates stable.
+- Regression coverage:
+  `internal/diagnostics/provider_test.go`, `internal/lsp/coverage_test.go`,
+  `internal/parser/parser_test.go`.
+
+### M6 — Scope collector now models arrow captures and grouped imports
+- `internal/scope/collector.go` now derives grouped top-level `use` aliases from the token stream
+  and represents implicit `fn (...) => ...` captures as `BindingClosureUse` bindings linked to
+  their outer origin.
+- Regression coverage: `internal/scope/collector_test.go`.
+
+### M7 — CursorContext scope only modeled enclosing class/method, not full position scope
+- Fixed in `internal/source/context.go`: `Analyze` now derives cursor scope from
+  `parser.ParseResult` ranges and token scanning, so `CursorContext.Scope` covers named free
+  functions, anonymous `function (...) { ... }` closures, and class/trait/enum methods while
+  preserving class FQN metadata for method/closure contexts.
+- Regression coverage: `internal/source/context_test.go`.
+
+### M8 — CursorContext namespace/import state was file-global rather than position-aware
+- Fixed in `internal/source/context.go`: `Analyze` now derives the active namespace block and
+  import list from the token stream at the cursor position, so multiple namespace blocks and
+  later import regions no longer leak into earlier positions.
+- Regression coverage: `internal/source/context_test.go`.
+
+### M9 — `list(...)` destructuring is now collected
+- `internal/scope/collector.go` now treats `list(...) = ...` as a destructuring declaration form,
+  sharing the collector binding surface used by references and rename.
+- Regression coverage: `internal/scope/collector_test.go`.
+
+### M10 — `PrepareRename` now requires a scoped variable binding
+- `internal/analyzer/analyzer.go` now routes variable prepare-rename checks through
+  `scope.Collect(source).BindingAt(pos)` and only advertises rename for supported local binding
+  kinds that the rename path can edit.
+- Regression coverage: `internal/analyzer/rename_test.go`.
+
+### M11 — CursorContext now models arrow-function scope
+- `internal/source/context.go` now recognizes `fn (...) => ...` expression bodies as closure-like
+  cursor scopes, so positions inside arrow functions no longer inherit only the surrounding
+  function or method scope.
+- Regression coverage: `internal/source/context_test.go`.
 
 ### L1 — `SearchByFQNPrefix` was O(N) over all symbols
 - Replaced with binary search over a maintained sorted-FQN slice (dirty-flag rebuild done
