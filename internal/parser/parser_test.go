@@ -203,6 +203,48 @@ class Foo {
 	if len(file.Classes) != 1 {
 		t.Fatalf("expected 1 class, got %d", len(file.Classes))
 	}
+	if len(file.Errors) != 0 {
+		t.Fatalf("expected no file errors, got %v", file.Errors)
+	}
+}
+
+func TestParseFilePropagatesTokenizerErrors(t *testing.T) {
+	source := `<?php
+$x = "hello world
+class Foo {}
+`
+
+	file := ParseFile(source)
+	if file == nil {
+		t.Fatal("expected non-nil FileNode")
+	}
+	if len(file.Errors) == 0 {
+		t.Fatal("expected ParseFile to expose tokenizer errors")
+	}
+	if file.Errors[0].Message != "unterminated string" {
+		t.Fatalf("expected unterminated string error, got %#v", file.Errors[0])
+	}
+}
+
+func TestParseFilePropagatesStructuralErrors(t *testing.T) {
+	source := `<?php
+class Foo {
+    public function bar(string $name {
+        return $name;
+    }
+}
+`
+
+	file := ParseFile(source)
+	if file == nil {
+		t.Fatal("expected non-nil FileNode")
+	}
+	if len(file.Errors) == 0 {
+		t.Fatal("expected ParseFile to expose structural errors")
+	}
+	if file.Errors[0].Message != "expected ')'" {
+		t.Fatalf("expected missing paren error, got %#v", file.Errors[0])
+	}
 }
 
 func TestParseMissingBraceBeforeInterface(t *testing.T) {

@@ -136,6 +136,7 @@ type FileNode struct {
 	Enums      []EnumNode
 	Functions  []FunctionNode
 	Constants  []ConstantNode
+	Errors     []ParseError
 }
 
 type DocParam struct {
@@ -433,7 +434,10 @@ func parseDocMethod(value string) DocMethod {
 }
 
 func toFileNode(result *ParseResult) *FileNode {
-	file := &FileNode{Namespace: result.Namespace}
+	file := &FileNode{
+		Namespace: result.Namespace,
+		Errors:    append([]ParseError(nil), result.Errors...),
+	}
 
 	for _, useStmt := range result.Uses {
 		file.Uses = append(file.Uses, UseNode{
