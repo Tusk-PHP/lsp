@@ -151,6 +151,44 @@ type DocumentSymbol struct {
 	Children       []DocumentSymbol `json:"children,omitempty"`
 }
 
+// SymbolInformation represents a workspace-level symbol search result.
+type SymbolInformation struct {
+	Name          string     `json:"name"`
+	Kind          SymbolKind `json:"kind"`
+	Location      Location   `json:"location"`
+	ContainerName string     `json:"containerName,omitempty"`
+}
+
+// DocumentHighlightKind as defined by LSP spec.
+type DocumentHighlightKind int
+
+const (
+	DocumentHighlightKindText  DocumentHighlightKind = 1
+	DocumentHighlightKindRead  DocumentHighlightKind = 2
+	DocumentHighlightKindWrite DocumentHighlightKind = 3
+)
+
+// DocumentHighlight marks a document range related to the symbol at the cursor.
+type DocumentHighlight struct {
+	Range Range                 `json:"range"`
+	Kind  DocumentHighlightKind `json:"kind,omitempty"`
+}
+
+// FoldingRangeKind as defined by LSP spec.
+type FoldingRangeKind string
+
+const (
+	FoldingRangeKindComment FoldingRangeKind = "comment"
+	FoldingRangeKindRegion  FoldingRangeKind = "region"
+)
+
+// FoldingRange describes a foldable span in a text document.
+type FoldingRange struct {
+	StartLine int              `json:"startLine"`
+	EndLine   int              `json:"endLine"`
+	Kind      FoldingRangeKind `json:"kind,omitempty"`
+}
+
 // TextDocumentIdentifier identifies a text document.
 type TextDocumentIdentifier struct {
 	URI string `json:"uri"`
@@ -168,6 +206,11 @@ type TextDocumentItem struct {
 type TextDocumentPositionParams struct {
 	TextDocument TextDocumentIdentifier `json:"textDocument"`
 	Position     Position               `json:"position"`
+}
+
+// WorkspaceSymbolParams is the params type for workspace/symbol requests.
+type WorkspaceSymbolParams struct {
+	Query string `json:"query"`
 }
 
 // TextDocumentContentChangeEvent describes a content change event.
@@ -288,6 +331,11 @@ type InlayHintParams struct {
 	Range        Range                  `json:"range"`
 }
 
+// FoldingRangeParams is the params type for textDocument/foldingRange requests.
+type FoldingRangeParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
 // InlayHintsClientOptions carries per-flag inlay hint toggles from the client.
 // All fields use *bool so an unset flag is distinguishable from an explicit false.
 type InlayHintsClientOptions struct {
@@ -307,8 +355,12 @@ type ServerCapabilities struct {
 	CompletionProvider         *CompletionOptions      `json:"completionProvider,omitempty"`
 	HoverProvider              bool                    `json:"hoverProvider"`
 	DefinitionProvider         bool                    `json:"definitionProvider"`
+	TypeDefinitionProvider     bool                    `json:"typeDefinitionProvider"`
+	ImplementationProvider     bool                    `json:"implementationProvider"`
 	ReferencesProvider         bool                    `json:"referencesProvider"`
 	DocumentSymbolProvider     bool                    `json:"documentSymbolProvider"`
+	DocumentHighlightProvider  bool                    `json:"documentHighlightProvider"`
+	FoldingRangeProvider       bool                    `json:"foldingRangeProvider"`
 	WorkspaceSymbolProvider    bool                    `json:"workspaceSymbolProvider"`
 	DiagnosticProvider         *DiagnosticOptions      `json:"diagnosticProvider,omitempty"`
 	SignatureHelpProvider      *SignatureHelpOptions   `json:"signatureHelpProvider,omitempty"`

@@ -198,7 +198,7 @@ func TestProtocolLifecycle(t *testing.T) {
 		t.Fatal("initialize: expected capabilities")
 	}
 	// Assert a representative set of capabilities.
-	for _, cap := range []string{"hoverProvider", "definitionProvider", "referencesProvider", "documentSymbolProvider"} {
+	for _, cap := range []string{"hoverProvider", "definitionProvider", "referencesProvider", "documentSymbolProvider", "documentHighlightProvider", "workspaceSymbolProvider", "foldingRangeProvider"} {
 		if caps[cap] != true {
 			t.Errorf("expected capability %q to be true, caps=%v", cap, caps)
 		}
@@ -224,6 +224,13 @@ func TestProtocolLifecycle(t *testing.T) {
 	symResp := h.readResponse(symID)
 	if symResp["error"] != nil {
 		t.Errorf("documentSymbol on unknown URI should not return an RPC error, got: %v", symResp["error"])
+	}
+	foldID := h.send("textDocument/foldingRange", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": "file:///nonexistent.php"},
+	})
+	foldResp := h.readResponse(foldID)
+	if foldResp["error"] != nil {
+		t.Errorf("foldingRange on unknown URI should not return an RPC error, got: %v", foldResp["error"])
 	}
 
 	// 4. shutdown
@@ -503,7 +510,9 @@ func TestRobustnessPositionOutOfBounds(t *testing.T) {
 		{500, "textDocument/hover"},
 		{501, "textDocument/completion"},
 		{502, "textDocument/definition"},
-		{503, "textDocument/signatureHelp"},
+		{503, "textDocument/typeDefinition"},
+		{504, "textDocument/implementation"},
+		{505, "textDocument/signatureHelp"},
 	}
 	for _, tc := range cases {
 		rh.sendFramed(tc.id, tc.method, map[string]interface{}{

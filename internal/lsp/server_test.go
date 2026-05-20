@@ -191,6 +191,21 @@ func TestServerInitialize(t *testing.T) {
 	if caps["definitionProvider"] != true {
 		t.Error("expected definitionProvider to be true")
 	}
+	if caps["documentHighlightProvider"] != true {
+		t.Error("expected documentHighlightProvider to be true")
+	}
+	if caps["workspaceSymbolProvider"] != true {
+		t.Error("expected workspaceSymbolProvider to be true")
+	}
+	if caps["typeDefinitionProvider"] != true {
+		t.Error("expected typeDefinitionProvider to be true")
+	}
+	if caps["implementationProvider"] != true {
+		t.Error("expected implementationProvider to be true")
+	}
+	if caps["foldingRangeProvider"] != true {
+		t.Error("expected foldingRangeProvider to be true")
+	}
 	serverInfo, ok := result["serverInfo"].(map[string]interface{})
 	if !ok {
 		t.Fatal("expected serverInfo")

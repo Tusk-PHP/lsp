@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -227,6 +228,85 @@ $log->info("hello");
 	}
 }
 
+func TestHandleTypeDefinition(t *testing.T) {
+	h := initHarness(t)
+	defer h.close()
+
+	uri := "file:///tmp/test_type_def.php"
+	source := `<?php
+use Monolog\Handler\StreamHandler;
+$handler = new StreamHandler();
+$handler->handle(["message" => "hello"]);
+`
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "php", "version": 1, "text": source,
+		},
+	})
+	time.Sleep(200 * time.Millisecond)
+
+	id := h.send("textDocument/typeDefinition", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 3, "character": 1},
+	})
+	resp := h.readResponse(id)
+	if resp["error"] != nil {
+		t.Errorf("typeDefinition returned error: %v", resp["error"])
+	}
+	results, ok := resp["result"].([]interface{})
+	if !ok || len(results) == 0 {
+		t.Fatalf("expected typeDefinition results, got %#v", resp["result"])
+	}
+	first, _ := results[0].(map[string]interface{})
+	if uri, _ := first["uri"].(string); !strings.Contains(uri, "StreamHandler.php") {
+		t.Fatalf("expected StreamHandler type definition, got %v", first["uri"])
+	}
+}
+
+func TestHandleImplementation(t *testing.T) {
+	h := initHarness(t)
+	defer h.close()
+
+	uri := "file:///tmp/test_impl.php"
+	source := `<?php
+interface CacheStore {
+    public function get(string $key): string;
+}
+
+abstract class BaseStore implements CacheStore {}
+
+class RedisStore extends BaseStore {
+    public function get(string $key): string { return $key; }
+}
+`
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "php", "version": 1, "text": source,
+		},
+	})
+	time.Sleep(200 * time.Millisecond)
+
+	id := h.send("textDocument/implementation", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 1, "character": 11},
+	})
+	resp := h.readResponse(id)
+	if resp["error"] != nil {
+		t.Errorf("implementation returned error: %v", resp["error"])
+	}
+	results, ok := resp["result"].([]interface{})
+	if !ok || len(results) == 0 {
+		t.Fatalf("expected implementation results, got %#v", resp["result"])
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 implementation result, got %d", len(results))
+	}
+	first, _ := results[0].(map[string]interface{})
+	if gotURI, _ := first["uri"].(string); gotURI != uri {
+		t.Fatalf("expected implementation result in opened document, got %v", first["uri"])
+	}
+}
+
 func TestHandleReferences(t *testing.T) {
 	h := initHarness(t)
 	defer h.close()
@@ -255,6 +335,67 @@ class Foo {
 	resp := h.readResponse(id)
 	if resp["error"] != nil {
 		t.Errorf("references returned error: %v", resp["error"])
+	}
+}
+
+func TestHandleDocumentHighlight(t *testing.T) {
+	h := initHarness(t)
+	defer h.close()
+
+	uri := "file:///tmp/test_highlight.php"
+	source := `<?php
+function run() {
+    $count = 1;
+    echo $count;
+    $count++;
+}
+`
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "php", "version": 1, "text": source,
+		},
+	})
+	time.Sleep(200 * time.Millisecond)
+
+	id := h.send("textDocument/documentHighlight", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 2, "character": 7},
+	})
+	resp := h.readResponse(id)
+	if resp["error"] != nil {
+		t.Fatalf("documentHighlight returned error: %v", resp["error"])
+	}
+	result, ok := resp["result"].([]interface{})
+	if !ok {
+		t.Fatalf("expected highlight array result, got %T", resp["result"])
+	}
+	if len(result) != 3 {
+		t.Fatalf("expected 3 highlights, got %d", len(result))
+	}
+}
+
+func TestHandleWorkspaceSymbol(t *testing.T) {
+	h := initHarness(t)
+	defer h.close()
+
+	id := h.send("workspace/symbol", map[string]interface{}{"query": "User"})
+	resp := h.readResponse(id)
+	if resp["error"] != nil {
+		t.Fatalf("workspace/symbol returned error: %v", resp["error"])
+	}
+	result, ok := resp["result"].([]interface{})
+	if !ok {
+		t.Fatalf("expected workspace symbol array result, got %T", resp["result"])
+	}
+	if len(result) == 0 {
+		t.Fatal("expected at least one workspace symbol result")
+	}
+	first, ok := result[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected first workspace symbol result object, got %T", result[0])
+	}
+	if first["name"] == "" {
+		t.Fatal("expected workspace symbol name")
 	}
 }
 
@@ -288,6 +429,49 @@ class Foo {
 	}
 }
 
+func TestHandleFoldingRange(t *testing.T) {
+	h := initHarness(t)
+	defer h.close()
+
+	uri := "file:///tmp/test_folding.php"
+	source := `<?php
+namespace App;
+
+class Foo {
+    public function bar(): array {
+        $items = [
+            'a' => 1,
+            'b' => 2,
+        ];
+        return $items;
+    }
+}
+`
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "php", "version": 1, "text": source,
+		},
+	})
+	time.Sleep(200 * time.Millisecond)
+
+	id := h.send("textDocument/foldingRange", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+	})
+	resp := h.readResponse(id)
+	if resp["error"] != nil {
+		t.Fatalf("foldingRange returned error: %v", resp["error"])
+	}
+
+	ranges, ok := resp["result"].([]interface{})
+	if !ok {
+		t.Fatalf("expected folding ranges array, got %T", resp["result"])
+	}
+	assertHasFoldRange(t, ranges, 1, 11, "")
+	assertHasFoldRange(t, ranges, 3, 10, "")
+	assertHasFoldRange(t, ranges, 4, 9, "")
+	assertHasFoldRange(t, ranges, 5, 7, "region")
+}
+
 func TestHandleSignatureHelp(t *testing.T) {
 	h := initHarness(t)
 	defer h.close()
@@ -314,6 +498,26 @@ greet(
 	if resp["error"] != nil {
 		t.Errorf("signatureHelp returned error: %v", resp["error"])
 	}
+}
+
+func assertHasFoldRange(t *testing.T, ranges []interface{}, startLine, endLine int, kind string) {
+	t.Helper()
+	for _, raw := range ranges {
+		rng, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		gotStart, startOK := rng["startLine"].(float64)
+		gotEnd, endOK := rng["endLine"].(float64)
+		if !startOK || !endOK {
+			continue
+		}
+		gotKind, _ := rng["kind"].(string)
+		if int(gotStart) == startLine && int(gotEnd) == endLine && gotKind == kind {
+			return
+		}
+	}
+	t.Fatalf("expected folding range %d-%d kind=%q, got %#v", startLine, endLine, kind, ranges)
 }
 
 func TestHandleCodeAction(t *testing.T) {

@@ -828,12 +828,26 @@ func (idx *Index) GetImplementors(ifaceFQN string) []*Symbol {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	var results []*Symbol
+	seen := make(map[string]bool)
 	for _, classFQN := range idx.reverseImplementsMap[ifaceFQN] {
-		if sym, ok := idx.symbols[classFQN]; ok {
-			results = append(results, sym)
-		}
+		idx.collectImplementorLocked(classFQN, seen, &results)
 	}
 	return results
+}
+
+func (idx *Index) collectImplementorLocked(classFQN string, seen map[string]bool, results *[]*Symbol) {
+	if seen[classFQN] {
+		return
+	}
+	seen[classFQN] = true
+	if sym, ok := idx.symbols[classFQN]; ok {
+		*results = append(*results, sym)
+	}
+	for childFQN, parentFQN := range idx.inheritanceMap {
+		if parentFQN == classFQN {
+			idx.collectImplementorLocked(childFQN, seen, results)
+		}
+	}
 }
 
 func (idx *Index) GetImplementedInterfaces(classFQN string) []string {

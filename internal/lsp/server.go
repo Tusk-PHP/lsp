@@ -235,10 +235,18 @@ func (s *Server) handleMessage(msg *jsonRPCMessage) {
 		s.handleHover(msg)
 	case "textDocument/definition":
 		s.handleDefinition(msg)
+	case "textDocument/typeDefinition":
+		s.handleTypeDefinition(msg)
+	case "textDocument/implementation":
+		s.handleImplementation(msg)
 	case "textDocument/references":
 		s.handleReferences(msg)
 	case "textDocument/documentSymbol":
 		s.handleDocumentSymbol(msg)
+	case "textDocument/foldingRange":
+		s.handleFoldingRange(msg)
+	case "textDocument/documentHighlight":
+		s.handleDocumentHighlight(msg)
 	case "textDocument/signatureHelp":
 		s.handleSignatureHelp(msg)
 	case "textDocument/prepareRename":
@@ -249,6 +257,8 @@ func (s *Server) handleMessage(msg *jsonRPCMessage) {
 		s.handleCodeAction(msg)
 	case "textDocument/inlayHint":
 		s.handleInlayHint(msg)
+	case "workspace/symbol":
+		s.handleWorkspaceSymbol(msg)
 	case "workspace/executeCommand":
 		s.handleExecuteCommand(msg)
 	default:
@@ -306,6 +316,8 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	}
 	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(s.index)
 	s.analyzer = analyzer.NewAnalyzer(s.index, s.container)
+	s.analyzer.SetChainResolver(s.completion.ResolveExpressionType)
+	s.analyzer.SetTypedChainResolver(s.completion.ResolveExpressionTypeTyped)
 	s.sendResponse(msg.ID, protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
 			TextDocumentSync: protocol.TextDocumentSyncOptions{
@@ -313,13 +325,21 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 				Change:    1, // Full
 				Save:      &protocol.SaveOptions{IncludeText: false},
 			},
-			CompletionProvider: &protocol.CompletionOptions{TriggerCharacters: []string{".", ">", ":", "$", "\\", "|", "#", "[", "(", "'", "\""}, ResolveProvider: false},
-			HoverProvider:      true, DefinitionProvider: true, ReferencesProvider: true, DocumentSymbolProvider: true,
-			SignatureHelpProvider:  &protocol.SignatureHelpOptions{TriggerCharacters: []string{"(", ","}},
-			RenameProvider:         &protocol.RenameOptions{PrepareProvider: true},
-			CodeActionProvider:     &protocol.CodeActionOptions{CodeActionKinds: []string{"refactor", "source"}},
-			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{Commands: []string{"tuskPhpLsp.namespaceForPath"}},
-			InlayHintProvider:      &protocol.InlayHintOptions{ResolveProvider: false},
+			CompletionProvider:        &protocol.CompletionOptions{TriggerCharacters: []string{".", ">", ":", "$", "\\", "|", "#", "[", "(", "'", "\""}, ResolveProvider: false},
+			HoverProvider:             true,
+			DefinitionProvider:        true,
+			TypeDefinitionProvider:    true,
+			ImplementationProvider:    true,
+			ReferencesProvider:        true,
+			DocumentSymbolProvider:    true,
+			DocumentHighlightProvider: true,
+			FoldingRangeProvider:      true,
+			WorkspaceSymbolProvider:   true,
+			SignatureHelpProvider:     &protocol.SignatureHelpOptions{TriggerCharacters: []string{"(", ","}},
+			RenameProvider:            &protocol.RenameOptions{PrepareProvider: true},
+			CodeActionProvider:        &protocol.CodeActionOptions{CodeActionKinds: []string{"refactor", "source"}},
+			ExecuteCommandProvider:    &protocol.ExecuteCommandOptions{Commands: []string{"tuskPhpLsp.namespaceForPath"}},
+			InlayHintProvider:         &protocol.InlayHintOptions{ResolveProvider: false},
 		},
 		ServerInfo: protocol.ServerInfo{Name: ServerName, Version: ServerVersion},
 	})
@@ -468,6 +488,26 @@ func (s *Server) handleDefinition(msg *jsonRPCMessage) {
 	s.sendResponse(msg.ID, s.analyzer.FindDefinition(params.TextDocument.URI, source, params.Position))
 }
 
+func (s *Server) handleTypeDefinition(msg *jsonRPCMessage) {
+	var params protocol.TextDocumentPositionParams
+	if json.Unmarshal(msg.Params, &params) != nil {
+		s.sendError(msg.ID, -32602, "Invalid params")
+		return
+	}
+	source := s.getDocument(params.TextDocument.URI)
+	s.sendResponse(msg.ID, s.analyzer.FindTypeDefinition(params.TextDocument.URI, source, params.Position))
+}
+
+func (s *Server) handleImplementation(msg *jsonRPCMessage) {
+	var params protocol.TextDocumentPositionParams
+	if json.Unmarshal(msg.Params, &params) != nil {
+		s.sendError(msg.ID, -32602, "Invalid params")
+		return
+	}
+	source := s.getDocument(params.TextDocument.URI)
+	s.sendResponse(msg.ID, s.analyzer.FindImplementation(params.TextDocument.URI, source, params.Position))
+}
+
 func (s *Server) handleReferences(msg *jsonRPCMessage) {
 	var params protocol.TextDocumentPositionParams
 	if json.Unmarshal(msg.Params, &params) != nil {
@@ -488,6 +528,35 @@ func (s *Server) handleDocumentSymbol(msg *jsonRPCMessage) {
 	}
 	source := s.getDocument(params.TextDocument.URI)
 	s.sendResponse(msg.ID, s.analyzer.GetDocumentSymbols(params.TextDocument.URI, source))
+}
+
+func (s *Server) handleFoldingRange(msg *jsonRPCMessage) {
+	var params protocol.FoldingRangeParams
+	if json.Unmarshal(msg.Params, &params) != nil {
+		s.sendError(msg.ID, -32602, "Invalid params")
+		return
+	}
+	source := s.getDocument(params.TextDocument.URI)
+	s.sendResponse(msg.ID, s.analyzer.GetFoldingRanges(params.TextDocument.URI, source))
+}
+
+func (s *Server) handleDocumentHighlight(msg *jsonRPCMessage) {
+	var params protocol.TextDocumentPositionParams
+	if json.Unmarshal(msg.Params, &params) != nil {
+		s.sendError(msg.ID, -32602, "Invalid params")
+		return
+	}
+	source := s.getDocument(params.TextDocument.URI)
+	s.sendResponse(msg.ID, s.analyzer.GetDocumentHighlights(params.TextDocument.URI, source, params.Position))
+}
+
+func (s *Server) handleWorkspaceSymbol(msg *jsonRPCMessage) {
+	var params protocol.WorkspaceSymbolParams
+	if json.Unmarshal(msg.Params, &params) != nil {
+		s.sendError(msg.ID, -32602, "Invalid params")
+		return
+	}
+	s.sendResponse(msg.ID, s.analyzer.GetWorkspaceSymbols(params.Query))
 }
 
 func (s *Server) handleSignatureHelp(msg *jsonRPCMessage) {

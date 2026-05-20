@@ -210,6 +210,49 @@ func TestIndexGetClassMembers(t *testing.T) {
 	}
 }
 
+func TestIndexGetImplementorsIncludesConcreteDescendants(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///contracts.php", `<?php
+namespace App\Contracts;
+interface CacheStore {
+    public function get(string $key): string;
+}
+`)
+	idx.IndexFile("file:///stores.php", `<?php
+namespace App\Stores;
+use App\Contracts\CacheStore;
+
+abstract class BaseStore implements CacheStore {}
+
+class RedisStore extends BaseStore {
+    public function get(string $key): string { return $key; }
+}
+
+class FileStore implements CacheStore {
+    public function get(string $key): string { return $key; }
+}
+`)
+
+	impls := idx.GetImplementors("App\\Contracts\\CacheStore")
+	if len(impls) != 3 {
+		t.Fatalf("expected 3 implementors including descendant, got %d", len(impls))
+	}
+
+	found := map[string]bool{}
+	for _, impl := range impls {
+		found[impl.FQN] = true
+	}
+	for _, want := range []string{
+		"App\\Stores\\BaseStore",
+		"App\\Stores\\RedisStore",
+		"App\\Stores\\FileStore",
+	} {
+		if !found[want] {
+			t.Fatalf("expected implementor %q", want)
+		}
+	}
+}
+
 func TestIndexReindex(t *testing.T) {
 	idx := NewIndex()
 	uri := "file:///test.php"

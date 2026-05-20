@@ -3,6 +3,7 @@ package analyzer
 import (
 	"encoding/json"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/open-southeners/tusk-php/internal/composer"
@@ -23,6 +24,14 @@ type Analyzer struct {
 
 func NewAnalyzer(index *symbols.Index, ca *container.ContainerAnalyzer) *Analyzer {
 	return &Analyzer{index: index, container: ca, resolver: resolve.NewResolver(index)}
+}
+
+func (a *Analyzer) SetChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) string) {
+	a.resolver.ChainResolver = fn
+}
+
+func (a *Analyzer) SetTypedChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType) {
+	a.resolver.TypedChainResolver = fn
 }
 
 func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *protocol.Location {
@@ -311,6 +320,155 @@ func symbolLocation(sym *symbols.Symbol) *protocol.Location {
 	return &protocol.Location{URI: sym.URI, Range: sym.Range}
 }
 
+func singleLocation(loc *protocol.Location) []protocol.Location {
+	if loc == nil {
+		return nil
+	}
+	return []protocol.Location{*loc}
+}
+
+func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position) []protocol.Location {
+	ctx := sourcectx.Analyze(uri, source, pos)
+	if ctx == nil {
+		return nil
+	}
+	word := ctx.SymbolText
+	if word == "" {
+		return nil
+	}
+
+	file := ctx.File
+
+	if a.container != nil {
+		if loc := a.definitionForContainerArg(ctx.Line, pos, source, file); loc != nil {
+			return singleLocation(loc)
+		}
+	}
+
+	if strings.HasPrefix(word, "$") {
+		return a.locationsForTypeName(a.resolver.ResolveVariableType(word, resolve.SplitLines(source), pos, file), file)
+	}
+
+	if ctx.AccessKind != sourcectx.AccessNone {
+		classFQN := a.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		if classFQN != "" {
+			if member := a.resolver.FindMember(classFQN, word); member != nil {
+				return a.locationsForMemberType(member, file)
+			}
+		}
+	}
+
+	sym := a.resolveSymbolAtCursor(uri, source, pos, word, file)
+	if sym == nil {
+		return nil
+	}
+
+	switch sym.Kind {
+	case symbols.KindProperty, symbols.KindMethod:
+		return a.locationsForMemberType(sym, file)
+	case symbols.KindClass, symbols.KindInterface, symbols.KindTrait, symbols.KindEnum:
+		return singleLocation(symbolLocation(sym))
+	default:
+		return nil
+	}
+}
+
+func (a *Analyzer) FindImplementation(uri, source string, pos protocol.Position) []protocol.Location {
+	word, _ := sourcectx.WordAt(source, pos)
+	if word == "" {
+		return nil
+	}
+
+	file := parser.ParseFile(source)
+	sym := a.resolveSymbolAtCursor(uri, source, pos, word, file)
+	if sym == nil {
+		return nil
+	}
+
+	switch sym.Kind {
+	case symbols.KindInterface:
+		return a.findTypeImplementations(sym)
+	case symbols.KindClass:
+		if sym.IsAbstract {
+			return a.findAbstractClassImplementations(sym)
+		}
+	case symbols.KindMethod:
+		parent := a.index.Lookup(sym.ParentFQN)
+		if parent == nil {
+			return nil
+		}
+		switch {
+		case parent.Kind == symbols.KindInterface:
+			return a.findMemberImplementations(sym, a.index.GetImplementors(parent.FQN))
+		case parent.Kind == symbols.KindClass && parent.IsAbstract && sym.IsAbstract:
+			return a.findMemberImplementations(sym, a.index.GetDescendants(parent.FQN))
+		}
+	}
+
+	return nil
+}
+
+func (a *Analyzer) locationsForMemberType(member *symbols.Symbol, file *parser.FileNode) []protocol.Location {
+	return a.locationsForTypeName(a.resolver.MemberType(member, file), file)
+}
+
+func (a *Analyzer) locationsForTypeName(typeName string, file *parser.FileNode) []protocol.Location {
+	typeName = strings.TrimSpace(typeName)
+	typeName = strings.TrimPrefix(typeName, "?")
+	if typeName == "" || symbols.IsPHPBuiltinType(typeName) {
+		return nil
+	}
+	if strings.Contains(typeName, "|") {
+		typeName = resolve.PickBestUnionPart(typeName)
+	}
+	if idx := strings.IndexByte(typeName, '<'); idx > 0 {
+		typeName = typeName[:idx]
+	}
+	typeName = a.resolver.ResolveClassName(typeName, file)
+	return singleLocation(symbolLocation(a.index.Lookup(typeName)))
+}
+
+func (a *Analyzer) findTypeImplementations(sym *symbols.Symbol) []protocol.Location {
+	return a.classSymbolsToLocations(a.index.GetImplementors(sym.FQN), true)
+}
+
+func (a *Analyzer) findAbstractClassImplementations(sym *symbols.Symbol) []protocol.Location {
+	return a.classSymbolsToLocations(a.index.GetDescendants(sym.FQN), true)
+}
+
+func (a *Analyzer) findMemberImplementations(sym *symbols.Symbol, owners []*symbols.Symbol) []protocol.Location {
+	var locs []protocol.Location
+	for _, owner := range owners {
+		if owner == nil || owner.Kind != symbols.KindClass || owner.IsAbstract {
+			continue
+		}
+		member := a.resolver.FindMember(owner.FQN, sym.Name)
+		if member == nil || member.IsAbstract {
+			continue
+		}
+		if loc := symbolLocation(member); loc != nil {
+			locs = append(locs, *loc)
+		}
+	}
+	return deduplicateLocations(locs)
+}
+
+func (a *Analyzer) classSymbolsToLocations(classes []*symbols.Symbol, concreteOnly bool) []protocol.Location {
+	var locs []protocol.Location
+	for _, classSym := range classes {
+		if classSym == nil || classSym.Kind != symbols.KindClass {
+			continue
+		}
+		if concreteOnly && classSym.IsAbstract {
+			continue
+		}
+		if loc := symbolLocation(classSym); loc != nil {
+			locs = append(locs, *loc)
+		}
+	}
+	return deduplicateLocations(locs)
+}
+
 func (a *Analyzer) FindReferences(uri, source string, pos protocol.Position) []protocol.Location {
 	return a.FindAllReferences(uri, source, pos, nil)
 }
@@ -375,6 +533,18 @@ func (a *Analyzer) resolveSymbolAtCursor(uri, source string, pos protocol.Positi
 			// Also try with $ prefix (some indexes store it with $)
 			propFQN = classFQN + "::" + word
 			if sym := a.index.Lookup(propFQN); sym != nil {
+				return sym
+			}
+		}
+	}
+
+	// Check if we're on a member declaration inside the enclosing type.
+	if ctx != nil && ctx.EnclosingFQN != "" {
+		if sym := a.index.Lookup(ctx.EnclosingFQN + "::" + word); sym != nil {
+			return sym
+		}
+		if strings.HasPrefix(word, "$") {
+			if sym := a.index.Lookup(ctx.EnclosingFQN + "::" + strings.TrimPrefix(word, "$")); sym != nil {
 				return sym
 			}
 		}
@@ -568,6 +738,105 @@ func deduplicateLocations(locs []protocol.Location) []protocol.Location {
 	return result
 }
 
+func deduplicateHighlights(highlights []protocol.DocumentHighlight) []protocol.DocumentHighlight {
+	type key struct {
+		sLine int
+		sChar int
+		eLine int
+		eChar int
+	}
+	seen := make(map[key]bool, len(highlights))
+	var result []protocol.DocumentHighlight
+	for _, highlight := range highlights {
+		k := key{
+			sLine: highlight.Range.Start.Line,
+			sChar: highlight.Range.Start.Character,
+			eLine: highlight.Range.End.Line,
+			eChar: highlight.Range.End.Character,
+		}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		result = append(result, highlight)
+	}
+	return result
+}
+
+func highlightVariableOccurrences(source string, pos protocol.Position, varName string) []protocol.DocumentHighlight {
+	doc := scope.Collect(source)
+	binding := doc.BindingAt(pos)
+	if binding == nil || binding.Name != varName {
+		return nil
+	}
+	ranges := doc.Occurrences(binding)
+	highlights := make([]protocol.DocumentHighlight, 0, len(ranges))
+	for _, rng := range ranges {
+		kind := protocol.DocumentHighlightKindRead
+		if sameRange(rng, binding.Decl) {
+			kind = protocol.DocumentHighlightKindWrite
+		}
+		highlights = append(highlights, protocol.DocumentHighlight{Range: rng, Kind: kind})
+	}
+	return deduplicateHighlights(highlights)
+}
+
+func protocolSymbolKind(kind symbols.SymbolKind) protocol.SymbolKind {
+	switch kind {
+	case symbols.KindClass:
+		return protocol.SymbolKindClass
+	case symbols.KindInterface:
+		return protocol.SymbolKindInterface
+	case symbols.KindTrait:
+		return protocol.SymbolKindClass
+	case symbols.KindEnum:
+		return protocol.SymbolKindEnum
+	case symbols.KindFunction:
+		return protocol.SymbolKindFunction
+	case symbols.KindMethod:
+		return protocol.SymbolKindMethod
+	case symbols.KindProperty:
+		return protocol.SymbolKindProperty
+	case symbols.KindConstant:
+		return protocol.SymbolKindConstant
+	case symbols.KindVariable:
+		return protocol.SymbolKindVariable
+	case symbols.KindEnumCase:
+		return protocol.SymbolKindEnumMember
+	case symbols.KindNamespace:
+		return protocol.SymbolKindNamespace
+	default:
+		return protocol.SymbolKindObject
+	}
+}
+
+func symbolContainerName(sym *symbols.Symbol) string {
+	switch sym.Kind {
+	case symbols.KindMethod, symbols.KindProperty, symbols.KindConstant, symbols.KindEnumCase:
+		return sym.ParentFQN
+	default:
+		if idx := strings.LastIndex(sym.FQN, "\\"); idx >= 0 {
+			return sym.FQN[:idx]
+		}
+	}
+	return ""
+}
+
+func highlightKindForRange(rng protocol.Range, declRange protocol.Range, cursorRange protocol.Range) protocol.DocumentHighlightKind {
+	switch {
+	case sameRange(rng, declRange):
+		return protocol.DocumentHighlightKindWrite
+	case sameRange(rng, cursorRange):
+		return protocol.DocumentHighlightKindText
+	default:
+		return protocol.DocumentHighlightKindRead
+	}
+}
+
+func sameRange(a, b protocol.Range) bool {
+	return a.Start == b.Start && a.End == b.End
+}
+
 func (a *Analyzer) GetDocumentSymbols(uri, source string) []protocol.DocumentSymbol {
 	file := parser.ParseFile(source)
 	if file == nil {
@@ -614,6 +883,141 @@ func (a *Analyzer) GetDocumentSymbols(uri, source string) []protocol.DocumentSym
 		ds = append(ds, protocol.DocumentSymbol{Name: fn.Name, Kind: protocol.SymbolKindFunction, Range: mkRange(fn.StartLine), SelectionRange: mkRange(fn.StartLine)})
 	}
 	return ds
+}
+
+func (a *Analyzer) GetFoldingRanges(uri, source string) []protocol.FoldingRange {
+	ranges := parser.ExtractFoldingRanges(source)
+	if len(ranges) == 0 {
+		return nil
+	}
+	out := make([]protocol.FoldingRange, 0, len(ranges))
+	for _, rng := range ranges {
+		out = append(out, protocol.FoldingRange{
+			StartLine: rng.StartLine,
+			EndLine:   rng.EndLine,
+			Kind:      protocol.FoldingRangeKind(rng.Kind),
+		})
+	}
+	return out
+}
+
+func (a *Analyzer) GetWorkspaceSymbols(query string) []protocol.SymbolInformation {
+	query = strings.TrimSpace(query)
+
+	candidates := a.index.SearchByPrefix(query)
+	if strings.Contains(query, "\\") {
+		if fqns, _ := a.index.SearchByFQNPrefix(strings.TrimPrefix(query, "\\")); len(fqns) > 0 {
+			candidates = append(candidates, fqns...)
+		}
+	}
+
+	type scoredSymbol struct {
+		sym   *symbols.Symbol
+		score int
+	}
+
+	seen := make(map[string]bool, len(candidates))
+	scored := make([]scoredSymbol, 0, len(candidates))
+	lowerQuery := strings.ToLower(query)
+
+	for _, sym := range candidates {
+		if sym == nil || sym.FQN == "" || sym.Name == "" || sym.URI == "" || sym.URI == "builtin" {
+			continue
+		}
+		if seen[sym.FQN] {
+			continue
+		}
+		seen[sym.FQN] = true
+
+		score := 3
+		switch {
+		case lowerQuery == "":
+			score = 3
+		case strings.EqualFold(sym.Name, query):
+			score = 0
+		case strings.EqualFold(sym.FQN, strings.TrimPrefix(query, "\\")):
+			score = 1
+		case strings.HasPrefix(strings.ToLower(sym.Name), lowerQuery):
+			score = 2
+		}
+		scored = append(scored, scoredSymbol{sym: sym, score: score})
+	}
+
+	sort.Slice(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score < scored[j].score
+		}
+		if scored[i].sym.Name != scored[j].sym.Name {
+			return scored[i].sym.Name < scored[j].sym.Name
+		}
+		if scored[i].sym.FQN != scored[j].sym.FQN {
+			return scored[i].sym.FQN < scored[j].sym.FQN
+		}
+		return scored[i].sym.URI < scored[j].sym.URI
+	})
+
+	results := make([]protocol.SymbolInformation, 0, len(scored))
+	for _, item := range scored {
+		sym := item.sym
+		results = append(results, protocol.SymbolInformation{
+			Name:          sym.Name,
+			Kind:          protocolSymbolKind(sym.Kind),
+			Location:      protocol.Location{URI: sym.URI, Range: sym.Range},
+			ContainerName: symbolContainerName(sym),
+		})
+	}
+	return results
+}
+
+func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Position) []protocol.DocumentHighlight {
+	word, wordRange := sourcectx.WordAt(source, pos)
+	if word == "" {
+		return nil
+	}
+
+	file := parser.ParseFile(source)
+	sym := a.resolveSymbolAtCursor(uri, source, pos, word, file)
+	if sym == nil && strings.HasPrefix(word, "$") && word != "$this" {
+		return highlightVariableOccurrences(source, pos, word)
+	}
+
+	lines := strings.Split(source, "\n")
+	if sym == nil {
+		var highlights []protocol.DocumentHighlight
+		for i, line := range lines {
+			for _, loc := range findWordLocations(uri, line, i, word) {
+				highlights = append(highlights, protocol.DocumentHighlight{Range: loc.Range, Kind: protocol.DocumentHighlightKindText})
+			}
+		}
+		return deduplicateHighlights(highlights)
+	}
+
+	var highlights []protocol.DocumentHighlight
+	for i, line := range lines {
+		switch sym.Kind {
+		case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
+			for _, loc := range findWordLocations(uri, line, i, sym.Name) {
+				highlights = append(highlights, protocol.DocumentHighlight{Range: loc.Range, Kind: highlightKindForRange(loc.Range, sym.Range, wordRange)})
+			}
+			for _, loc := range findAccessLocations(uri, line, i, "\\"+sym.Name, 1, sym.Name) {
+				highlights = append(highlights, protocol.DocumentHighlight{Range: loc.Range, Kind: protocol.DocumentHighlightKindRead})
+			}
+		case symbols.KindMethod, symbols.KindFunction, symbols.KindConstant, symbols.KindEnumCase:
+			for _, loc := range findWordLocations(uri, line, i, sym.Name) {
+				highlights = append(highlights, protocol.DocumentHighlight{Range: loc.Range, Kind: highlightKindForRange(loc.Range, sym.Range, wordRange)})
+			}
+		case symbols.KindProperty:
+			bareName := strings.TrimPrefix(sym.Name, "$")
+			for _, loc := range findWordLocations(uri, line, i, "$"+bareName) {
+				highlights = append(highlights, protocol.DocumentHighlight{Range: loc.Range, Kind: highlightKindForRange(loc.Range, sym.Range, wordRange)})
+			}
+			for _, loc := range findAccessLocations(uri, line, i, "->"+bareName, 2, bareName) {
+				highlights = append(highlights, protocol.DocumentHighlight{Range: loc.Range, Kind: protocol.DocumentHighlightKindRead})
+			}
+		}
+	}
+
+	return deduplicateHighlights(highlights)
 }
 
 func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *protocol.SignatureHelp {
