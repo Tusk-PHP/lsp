@@ -30,7 +30,7 @@ func TestDefaultConfig(t *testing.T) {
 func TestLoadFromFile(t *testing.T) {
 	t.Run("valid JSON", func(t *testing.T) {
 		dir := t.TempDir()
-		path := filepath.Join(dir, ".php-lsp.json")
+		path := filepath.Join(dir, ".tusk-php.json")
 		os.WriteFile(path, []byte(`{"phpVersion":"8.3","framework":"laravel"}`), 0644)
 		cfg, err := LoadFromFile(path)
 		if err != nil {
@@ -49,7 +49,7 @@ func TestLoadFromFile(t *testing.T) {
 	})
 
 	t.Run("missing file returns defaults", func(t *testing.T) {
-		cfg, err := LoadFromFile("/nonexistent/.php-lsp.json")
+		cfg, err := LoadFromFile("/nonexistent/.tusk-php.json")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -60,7 +60,7 @@ func TestLoadFromFile(t *testing.T) {
 
 	t.Run("invalid JSON returns error", func(t *testing.T) {
 		dir := t.TempDir()
-		path := filepath.Join(dir, ".php-lsp.json")
+		path := filepath.Join(dir, ".tusk-php.json")
 		os.WriteFile(path, []byte(`{invalid`), 0644)
 		_, err := LoadFromFile(path)
 		if err == nil {

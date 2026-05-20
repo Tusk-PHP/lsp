@@ -168,8 +168,8 @@ func TestServerInitialize(t *testing.T) {
 	if !ok {
 		t.Fatal("expected serverInfo")
 	}
-	if serverInfo["name"] != "php-lsp" {
-		t.Errorf("expected server name 'php-lsp', got %v", serverInfo["name"])
+	if serverInfo["name"] != "tusk-php" {
+		t.Errorf("expected server name 'tusk-php', got %v", serverInfo["name"])
 	}
 }
 

@@ -1,7 +1,7 @@
 .PHONY: build install test clean dev cross-build vscode-ext vscode-package zed-ext zed-package conformance conformance-pr
 
 VERSION ?= 0.5.0
-BINARY  := php-lsp
+BINARY  := tusk-php
 LDFLAGS := -ldflags="-s -w -X main.version=$(VERSION)"
 DIST_DIR := dist
 ZED_DIR := editors/zed
@@ -16,7 +16,7 @@ install: build
 	cp build/$(BINARY) $(HOME)/.local/bin/$(BINARY)
 
 dev:
-	go run ./cmd/tusk-php/ --log /tmp/php-lsp.log
+	go run ./cmd/tusk-php/ --log /tmp/tusk-php.log
 
 test:
 	go test -v -race ./...

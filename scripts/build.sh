@@ -14,7 +14,7 @@ for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; d
     # Bundle into VSCode extension
     vscode_dir="${VSCODE_BIN_DIR}/${GOOS}-${GOARCH}"
     mkdir -p "${vscode_dir}"
-    cp "${out}" "${vscode_dir}/php-lsp${ext}"
+    cp "${out}" "${vscode_dir}/tusk-php${ext}"
 done
 echo "Build complete. Binaries in: ${OUTPUT_DIR}/"
 ls -lh "${OUTPUT_DIR}/"

@@ -210,7 +210,7 @@ func TestProtocolLifecycle(t *testing.T) {
 	if !ok {
 		t.Fatal("initialize: expected serverInfo")
 	}
-	if serverInfo["name"] != "php-lsp" {
+	if serverInfo["name"] != "tusk-php" {
 		t.Errorf("serverInfo.name: got %v", serverInfo["name"])
 	}
 

@@ -28,7 +28,7 @@ import (
 	"github.com/open-southeners/tusk-php/internal/symbols"
 )
 
-const ServerName = "php-lsp"
+const ServerName = "tusk-php"
 const ServerVersion = "0.5.0"
 
 // largeDocThreshold is the line-count above which document indexing on
@@ -269,7 +269,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		s.rootPath = params.RootPath
 	}
 	s.logger.Printf("Initializing for workspace: %s", s.rootPath)
-	cfgPath := filepath.Join(s.rootPath, ".php-lsp.json")
+	cfgPath := filepath.Join(s.rootPath, ".tusk-php.json")
 	if cfg, err := config.LoadFromFile(cfgPath); err == nil {
 		s.cfg = cfg
 	}

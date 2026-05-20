@@ -34,7 +34,7 @@ class Foo {
 }
 `
 	diags := p.Analyze("file:///test.php", source)
-	deprecations := filterBySource(diags, "php-lsp")
+	deprecations := filterBySource(diags, "tusk-php")
 	deprecations = filterByCode(deprecations, "deprecated")
 	if len(deprecations) != 3 {
 		t.Fatalf("expected 3 deprecation diagnostics, got %d", len(deprecations))

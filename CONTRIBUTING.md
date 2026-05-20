@@ -70,9 +70,9 @@ make vscode-package
 ### Testing with an Editor
 
 1. Build the binary: `make build`
-2. Point your editor to `build/php-lsp`
-3. For VS Code: set `phpLsp.executablePath` to the absolute path of `build/php-lsp`
-4. Use `make dev` to run with logging to `/tmp/php-lsp.log`
+2. Point your editor to `build/tusk-php`
+3. For VS Code: set `phpLsp.executablePath` to the absolute path of `build/tusk-php`
+4. Use `make dev` to run with logging to `/tmp/tusk-php.log`
 
 ## Making Changes
 
@@ -106,7 +106,7 @@ Tests use `testdata/project/` which contains a mock PHP project with `composer.j
 
 - Use the [GitHub issue tracker](https://github.com/open-southeners/tusk-php/issues)
 - Include your editor, OS, PHP version, and steps to reproduce
-- Attach the server log (`--log /tmp/php-lsp.log`) if relevant
+- Attach the server log (`--log /tmp/tusk-php.log`) if relevant
 
 ## Feature Requests
 

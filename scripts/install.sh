@@ -10,11 +10,11 @@ if command -v go &> /dev/null; then
     echo "Building from source..."
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     cd "$(dirname "$SCRIPT_DIR")"
-    go build -ldflags="-s -w -X main.version=${VERSION}" -trimpath -o "${INSTALL_DIR}/php-lsp" ./cmd/tusk-php/
+    go build -ldflags="-s -w -X main.version=${VERSION}" -trimpath -o "${INSTALL_DIR}/tusk-php" ./cmd/tusk-php/
 else
     echo "Downloading binary..."
-    curl -fsSL -o "${INSTALL_DIR}/php-lsp" "https://github.com/open-southeners/tusk-php/releases/download/v${VERSION}/tusk-php-${OS}-${ARCH}"
-    chmod +x "${INSTALL_DIR}/php-lsp"
+    curl -fsSL -o "${INSTALL_DIR}/tusk-php" "https://github.com/open-southeners/tusk-php/releases/download/v${VERSION}/tusk-php-${OS}-${ARCH}"
+    chmod +x "${INSTALL_DIR}/tusk-php"
 fi
-echo "Installed to ${INSTALL_DIR}/php-lsp"
+echo "Installed to ${INSTALL_DIR}/tusk-php"
 [[ ":$PATH:" != *":${INSTALL_DIR}:"* ]] && echo "Add to PATH: export PATH=\"\${HOME}/.local/bin:\${PATH}\""

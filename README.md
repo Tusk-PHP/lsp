@@ -212,7 +212,7 @@ git clone https://github.com/open-southeners/tusk-php.git && cd tusk-php && make
 
 ### Project Configuration
 
-Create `.php-lsp.json` in your project root to override settings per project:
+Create `.tusk-php.json` in your project root to override settings per project:
 
 ```json
 {

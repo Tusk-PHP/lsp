@@ -5,7 +5,7 @@ A Go-based Language Server Protocol (LSP) implementation for PHP 8.0–8.5, with
 ## Project Structure
 
 ```
-php-lsp/
+tusk-php/
 ├── cmd/tusk-php/main.go             # Entry point: CLI flags, stdio, server startup
 ├── internal/
 │   ├── parser/                      # PHP tokenizer + lightweight AST
@@ -17,7 +17,7 @@ php-lsp/
 │   ├── diagnostics/                 # Static checks + PHPStan/Pint integration
 │   ├── composer/                    # Parses composer.json autoload (PSR-4 + files)
 │   ├── container/                   # Laravel/Symfony DI container analysis
-│   ├── config/                      # .php-lsp.json + client options + framework detection
+│   ├── config/                      # .tusk-php.json + client options + framework detection
 │   └── protocol/                    # LSP type definitions (no logic)
 ├── editors/
 │   ├── vscode/                      # TypeScript extension
@@ -222,13 +222,13 @@ Analyzes DI container bindings. Laravel: scans service providers for `bind`/`sin
 
 ### config
 
-Loads `.php-lsp.json`, merges client `initializationOptions`. Detects framework from `artisan` (Laravel), `bin/console` (Symfony), or `composer.json` requires. Defaults: 10000 max index files, excludes `vendor/node_modules/.git/storage`.
+Loads `.tusk-php.json`, merges client `initializationOptions`. Detects framework from `artisan` (Laravel), `bin/console` (Symfony), or `composer.json` requires. Defaults: 10000 max index files, excludes `vendor/node_modules/.git/storage`.
 
 ## Editor Extensions
 
 ### VSCode (`editors/vscode/`)
 
-TypeScript. Discovers binary from settings → bundled `bin/{platform}-{arch}/php-lsp` → PATH. Passes user settings as `initializationOptions`. Watches `.php` and `composer.json` files. Commands: restart, reindex.
+TypeScript. Discovers binary from settings → bundled `bin/{platform}-{arch}/tusk-php` → PATH. Passes user settings as `initializationOptions`. Watches `.php` and `composer.json` files. Commands: restart, reindex.
 
 ### Zed (`editors/zed/`)
 

@@ -24,7 +24,7 @@ func main() {
 		*transport = "stdio"
 	}
 	if *showVer {
-		fmt.Printf("php-lsp %s\n", version)
+		fmt.Printf("tusk-php %s\n", version)
 		os.Exit(0)
 	}
 	// Strict mode is enabled via flag OR the TUSK_STRICT environment variable.
@@ -37,11 +37,11 @@ func main() {
 			os.Exit(1)
 		}
 		defer f.Close()
-		logger = log.New(f, "[php-lsp] ", log.LstdFlags|log.Lshortfile)
+		logger = log.New(f, "[tusk-php] ", log.LstdFlags|log.Lshortfile)
 	} else {
-		logger = log.New(os.Stderr, "[php-lsp] ", log.LstdFlags|log.Lshortfile)
+		logger = log.New(os.Stderr, "[tusk-php] ", log.LstdFlags|log.Lshortfile)
 	}
-	logger.Printf("Starting php-lsp %s", version)
+	logger.Printf("Starting tusk-php %s", version)
 	server := lsp.NewServer(os.Stdin, os.Stdout, logger)
 	server.SetStrict(strict)
 	if err := server.Run(); err != nil {

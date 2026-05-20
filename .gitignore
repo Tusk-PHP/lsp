@@ -9,6 +9,6 @@ dist/
 plans/
 .DS_Store
 CLAUDE.md
-/php-lsp
+/tusk-php
 *.wasm
 testdata/corpus/_repos/

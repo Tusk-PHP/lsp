@@ -165,7 +165,7 @@ func (p *Provider) checkDeprecations(source string) []protocol.Diagnostic {
 			if col := strings.Index(line, dep[0]); col >= 0 {
 				diags = append(diags, protocol.Diagnostic{
 					Range:    protocol.Range{Start: protocol.Position{Line: i, Character: col}, End: protocol.Position{Line: i, Character: col + len(dep[0]) - 1}},
-					Severity: protocol.DiagnosticSeverityWarning, Source: "php-lsp", Message: dep[1], Code: "deprecated",
+					Severity: protocol.DiagnosticSeverityWarning, Source: "tusk-php", Message: dep[1], Code: "deprecated",
 					Tags: []protocol.DiagnosticTag{protocol.DiagnosticTagDeprecated},
 				})
 			}
@@ -182,7 +182,7 @@ func (p *Provider) checkClassStructure(file *parser.FileNode) []protocol.Diagnos
 				if m.IsAbstract {
 					diags = append(diags, protocol.Diagnostic{
 						Range:    protocol.Range{Start: protocol.Position{Line: m.StartLine}},
-						Severity: protocol.DiagnosticSeverityError, Source: "php-lsp",
+						Severity: protocol.DiagnosticSeverityError, Source: "tusk-php",
 						Message:  fmt.Sprintf("Class '%s' contains abstract method '%s' but is not declared abstract", cls.Name, m.Name),
 						Code:     "abstract-in-concrete",
 					})
@@ -219,7 +219,7 @@ func findingsToDiagnostics(findings []checks.Finding) []protocol.Diagnostic {
 				End:   protocol.Position{Line: f.EndLine, Character: f.EndCol},
 			},
 			Severity: sev,
-			Source:   "php-lsp",
+			Source:   "tusk-php",
 			Message:  f.Message,
 			Code:     f.Code,
 		}

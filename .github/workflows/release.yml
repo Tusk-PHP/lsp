@@ -92,7 +92,7 @@ jobs:
             if [[ "$goos" == "windows" ]]; then ext=".exe"; fi
             vscode_dir="editors/vscode/bin/${goos}-${goarch}"
             mkdir -p "$vscode_dir"
-            cp "dist/tusk-php-${goos}-${goarch}${ext}" "${vscode_dir}/php-lsp${ext}"
+            cp "dist/tusk-php-${goos}-${goarch}${ext}" "${vscode_dir}/tusk-php${ext}"
           done
 
           npm --prefix editors/vscode install

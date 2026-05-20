@@ -55,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- VSCode extension failing to start the bundled LSP binary on Windows (`spawn php-lsp ENOENT`) by appending `.exe` to the PATH fallback command.
+- VSCode extension failing to start the bundled LSP binary on Windows (`spawn tusk-php ENOENT`) by appending `.exe` to the PATH fallback command.
 - VSCode extension failing to start the bundled LSP binary on Linux/macOS remote environments by ensuring execute permissions after `.vsix` extraction.
 - Zed extension build failure caused by `unicode-segmentation` 1.13.0 breaking `heck` 0.4.1 (`UnicodeWords` made private); pinned to 1.12.0.
 
@@ -109,7 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unknown relation validation in Builder string arguments (`with`, `has`, `whereHas`, `load`, etc.).
 - Aggregate relation method second-arg validation (`withSum('relation', 'column')` checks column on the related model).
 - `DiagnosticTag` support: unused code greyed out (`Unnecessary`), deprecated functions struck through (`Deprecated`).
-- `diagnosticRules` configuration in `.php-lsp.json` to enable/disable individual diagnostic rules.
+- `diagnosticRules` configuration in `.tusk-php.json` to enable/disable individual diagnostic rules.
 - Multi-line method chain resolution for hover, go-to-definition, and completions.
 - `resolve.JoinChainLines()` helper to join continuation lines starting with `->`, `::`, or `?->`.
 - Comprehensive chain resolution test suite covering single-line and multi-line Eloquent method chains.
