@@ -25,14 +25,7 @@ _None open._
 
 ## Low / performance
 
-### L9 — Interface implementation lookup skips enums
-- Where: `internal/symbols/index.go`, `internal/analyzer/analyzer.go`
-- What: `textDocument/implementation` resolves interfaces to implementing classes and inherited
-  concrete descendants, but enum indexing records `implementsMap` without updating
-  `reverseImplementsMap`. Interfaces implemented only by enums therefore do not appear in
-  implementation results.
-- Fix: When indexing enums, append each resolved interface to `reverseImplementsMap` the same way
-  classes do, then add analyzer/LSP regression coverage for enum implementors.
+_None open._
 
 ---
 
@@ -156,3 +149,9 @@ _None open._
   through `toPropertyNode` and the symbol indexer; hover cards now render asymmetric visibility
   (`public private(set) …`) and `{ get; set; }` hooks. `internal/parser/compat.go`,
   `internal/symbols/index.go`, `internal/hover/format.go`.
+
+### L9 — Interface implementation lookup now includes enums
+- Enum indexing now records each resolved implemented interface in `reverseImplementsMap`, and
+  analyzer implementation results allow enum symbols alongside classes. Regression coverage in
+  `internal/analyzer/navigation_test.go`, `internal/lsp/coverage_test.go`, and
+  `internal/symbols/index_test.go`.

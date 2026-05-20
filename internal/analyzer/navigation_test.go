@@ -114,3 +114,37 @@ class QueueHandler extends MidHandler {
 		t.Fatalf("expected 2 concrete method implementations, got %d", len(methodLocs))
 	}
 }
+
+func TestImplementationInterfaceImplementedOnlyByEnums(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///contracts.php", `<?php
+namespace App\Contracts;
+interface StatusLabel {
+    public function label(): string;
+}
+`)
+	idx.IndexFile("file:///status.php", `<?php
+namespace App\Domain;
+use App\Contracts\StatusLabel;
+
+enum Status: string implements StatusLabel {
+    case Draft = 'draft';
+
+    public function label(): string {
+        return 'Draft';
+    }
+}
+`)
+
+	a := NewAnalyzer(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"))
+	source := idx.GetFileSource("file:///contracts.php")
+
+	typePos := protocol.Position{Line: 2, Character: strings.Index(strings.Split(source, "\n")[2], "StatusLabel")}
+	typeLocs := a.FindImplementation("file:///contracts.php", source, typePos)
+	if len(typeLocs) != 1 {
+		t.Fatalf("expected 1 enum implementor, got %d", len(typeLocs))
+	}
+	if got := typeLocs[0].URI; got != "file:///status.php" {
+		t.Fatalf("expected enum implementor in status.php, got %s", got)
+	}
+}

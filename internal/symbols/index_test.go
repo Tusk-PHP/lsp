@@ -253,6 +253,33 @@ class FileStore implements CacheStore {
 	}
 }
 
+func TestIndexGetImplementorsIncludesEnums(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///contracts.php", `<?php
+namespace App\Contracts;
+interface StatusLabel {}
+`)
+	idx.IndexFile("file:///status.php", `<?php
+namespace App\Domain;
+use App\Contracts\StatusLabel;
+
+enum Status: string implements StatusLabel {
+    case Draft = 'draft';
+}
+`)
+
+	impls := idx.GetImplementors("App\\Contracts\\StatusLabel")
+	if len(impls) != 1 {
+		t.Fatalf("expected 1 enum implementor, got %d", len(impls))
+	}
+	if impls[0].FQN != "App\\Domain\\Status" {
+		t.Fatalf("expected App\\Domain\\Status implementor, got %s", impls[0].FQN)
+	}
+	if impls[0].Kind != KindEnum {
+		t.Fatalf("expected enum implementor kind, got %v", impls[0].Kind)
+	}
+}
+
 func TestIndexReindex(t *testing.T) {
 	idx := NewIndex()
 	uri := "file:///test.php"

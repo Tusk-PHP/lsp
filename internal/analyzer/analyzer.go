@@ -439,7 +439,7 @@ func (a *Analyzer) findAbstractClassImplementations(sym *symbols.Symbol) []proto
 func (a *Analyzer) findMemberImplementations(sym *symbols.Symbol, owners []*symbols.Symbol) []protocol.Location {
 	var locs []protocol.Location
 	for _, owner := range owners {
-		if owner == nil || owner.Kind != symbols.KindClass || owner.IsAbstract {
+		if owner == nil || (owner.Kind != symbols.KindClass && owner.Kind != symbols.KindEnum) || owner.IsAbstract {
 			continue
 		}
 		member := a.resolver.FindMember(owner.FQN, sym.Name)
@@ -456,7 +456,7 @@ func (a *Analyzer) findMemberImplementations(sym *symbols.Symbol, owners []*symb
 func (a *Analyzer) classSymbolsToLocations(classes []*symbols.Symbol, concreteOnly bool) []protocol.Location {
 	var locs []protocol.Location
 	for _, classSym := range classes {
-		if classSym == nil || classSym.Kind != symbols.KindClass {
+		if classSym == nil || (classSym.Kind != symbols.KindClass && classSym.Kind != symbols.KindEnum) {
 			continue
 		}
 		if concreteOnly && classSym.IsAbstract {

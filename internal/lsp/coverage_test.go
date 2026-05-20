@@ -371,6 +371,45 @@ class RedisStore extends BaseStore {
 	}
 }
 
+func TestHandleImplementationIncludesEnumImplementors(t *testing.T) {
+	h := initHarness(t)
+	defer h.close()
+
+	uri := "file:///tmp/test_enum_impl.php"
+	source := `<?php
+interface StatusLabel {
+    public function label(): string;
+}
+
+enum Status: string implements StatusLabel {
+    case Draft = 'draft';
+}
+`
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "php", "version": 1, "text": source,
+		},
+	})
+	time.Sleep(200 * time.Millisecond)
+
+	id := h.send("textDocument/implementation", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 1, "character": 11},
+	})
+	resp := h.readResponse(id)
+	if resp["error"] != nil {
+		t.Errorf("implementation returned error: %v", resp["error"])
+	}
+	results, ok := resp["result"].([]interface{})
+	if !ok || len(results) != 1 {
+		t.Fatalf("expected 1 enum implementation result, got %#v", resp["result"])
+	}
+	first, _ := results[0].(map[string]interface{})
+	if gotURI, _ := first["uri"].(string); gotURI != uri {
+		t.Fatalf("expected enum implementation result in opened document, got %v", first["uri"])
+	}
+}
+
 func TestHandleReferences(t *testing.T) {
 	h := initHarness(t)
 	defer h.close()

@@ -341,6 +341,7 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 		idx.addSymbolWithSource(uri, sym, src)
 		for _, impl := range resolvedEnumImpls {
 			idx.implementsMap[fqn] = append(idx.implementsMap[fqn], impl)
+			idx.reverseImplementsMap[impl] = appendUnique(idx.reverseImplementsMap[impl], fqn)
 		}
 		for _, ec := range en.Cases {
 			cs := &Symbol{Name: ec.Name, FQN: fqn + "::" + ec.Name, Kind: KindEnumCase, URI: uri, ParentFQN: fqn, Value: ec.Value,
