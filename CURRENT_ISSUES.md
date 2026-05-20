@@ -1,10 +1,7 @@
 # Current Issues
 
-Issues discovered during the **core-solidity-conformance** orchestrated work
-(see `.claude/plans/core-solidity-conformance.md`). Each open entry records
-**Where**, **What**, and a suggested **Fix**, ordered by severity.
-
-**All issues logged so far have been resolved** — see the "Resolved" section.
+Issues discovered during orchestrated implementation and review work. Each open
+entry records **Where**, **What**, and a suggested **Fix**, ordered by severity.
 
 ---
 
@@ -37,6 +34,35 @@ _None open._
 - **Suggested Fix:** add an expression-range walker for `fn` bodies and either extend the parser's
   import model for grouped `use` statements or collect grouped aliases directly from the token
   stream before later source-context and diagnostics work starts depending on them.
+
+### M7 — CursorContext scope only models enclosing class/method, not full position scope
+- **Where:** `internal/source/context.go`
+- **What:** Phase 1's shared `CursorContext` exposes `Scope`, but `scopeAt` only fills class and method metadata. Positions inside free functions, closures, and other non-method scopes therefore do not get a reusable scope descriptor, which falls short of ROADMAP Architecture Priority 1's "What scope contains the position?" target.
+- **Suggested Fix:** extend `internal/source` scope derivation to recognize free functions and closures at minimum, or thread the later reusable scope collector into `CursorContext` once that API is stable.
+
+### M8 — CursorContext namespace/import state is file-global rather than position-aware
+- **Where:** `internal/source/context.go`
+- **What:** `Analyze` currently reads `file.Namespace` and `file.Uses` directly from the parsed file and returns them for every position. That is adequate for the common single-namespace file, but it will misclassify positions in files with multiple namespace blocks or any future position-sensitive import handling because the shared context does not filter namespace/import state by cursor location.
+- **Suggested Fix:** make namespace and active-import collection position-aware in `internal/source`, either by recording namespace/use ranges in the parser model or by deriving the active block from the token stream during analysis.
+
+### M9 — `list(...)` destructuring is outside the collector binding surface
+- **Where:** `internal/scope/collector.go`
+- **What:** `parseDestructureBindings` only activates on `[` ... `] =` patterns. PHP's
+  `list($a, $b) = ...` form is not recognized, so references/rename built on the collector miss
+  one of the core destructuring syntaxes called out by the scope-collector roadmap slice.
+- **Suggested Fix:** add a `list`-aware destructuring parser that treats `list(` headers as
+  declaration sites, ideally sharing the same nested-binding extraction path used for bracket
+  destructuring and `foreach` destructuring.
+
+### M10 — `PrepareRename` still advertises any `$variable` even when no scoped binding exists
+- **Where:** `internal/analyzer/analyzer.go`
+- **What:** `PrepareRename` returns success for every non-`$this` variable token before checking
+  whether `internal/scope` can resolve a binding at that position. `Rename` then correctly returns
+  `nil` when the collector cannot resolve the symbol, so clients can be told rename is available
+  for undefined locals, superglobals, or otherwise untracked variables and then fail on execution.
+- **Suggested Fix:** route variable prepare-rename through `scope.Collect(source).BindingAt(pos)`
+  and only allow rename when the collector resolves a local binding kind that the rename path can
+  actually edit.
 
 ---
 
