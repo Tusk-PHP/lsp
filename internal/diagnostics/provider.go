@@ -63,6 +63,15 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 		diags = append(diags, parserErrorsToDiagnostics(file.Errors, source)...)
 		diags = append(diags, p.checkDeprecations(source)...)
 		diags = append(diags, p.checkClassStructure(file)...)
+		if p.cfg.IsRuleEnabled("unknown-class") {
+			diags = append(diags, findingsToDiagnostics((&checks.UnknownClassRule{}).Check(file, source, p.index))...)
+		}
+		if p.cfg.IsRuleEnabled("unknown-function") {
+			diags = append(diags, findingsToDiagnostics((&checks.UnknownFunctionRule{}).Check(file, source, p.index))...)
+		}
+		if p.TypeResolver != nil && p.cfg.IsRuleEnabled("unknown-member") {
+			diags = append(diags, findingsToDiagnostics((&checks.UnknownMemberRule{TypeResolver: p.TypeResolver}).Check(file, source, p.index))...)
+		}
 		if p.cfg.IsRuleEnabled("unused-import") {
 			diags = append(diags, p.checkUnusedImports(file, source)...)
 		}
@@ -101,7 +110,6 @@ func (p *Provider) AnalyzeOnSave(uri, source string) {
 		rule := &checks.RedundantNullsafeRule{TypeResolver: p.TypeResolver}
 		diags = append(diags, findingsToDiagnostics(rule.Check(file, source, p.index))...)
 	}
-
 	// Invalid builder args — needs model resolution + member checking
 	if p.BuilderModelResolver != nil && p.BuilderMemberChecker != nil {
 		if p.cfg.IsRuleEnabled("unknown-column") || p.cfg.IsRuleEnabled("unknown-relation") {
