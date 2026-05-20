@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	"github.com/open-southeners/tusk-php/internal/config"
+	"github.com/open-southeners/tusk-php/internal/parser"
 	"github.com/open-southeners/tusk-php/internal/protocol"
 	"github.com/open-southeners/tusk-php/internal/symbols"
 )
 
 func newTestProvider() *Provider {
 	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
 	logger := log.New(io.Discard, "", 0)
 	cfg := config.DefaultConfig()
 	// Disable external tools for unit tests
@@ -83,6 +85,51 @@ class Foo {
 	}
 	if abstracts[0].Severity != protocol.DiagnosticSeverityError {
 		t.Errorf("expected error severity, got %d", abstracts[0].Severity)
+	}
+}
+
+func TestSprint3BaselineUnknownDiagnostics(t *testing.T) {
+	p := newTestProvider()
+	p.TypeResolver = func(expr, source string, line int, file *parser.FileNode) string {
+		return ""
+	}
+
+	source := `<?php
+namespace App;
+
+class Known {
+    public function run(): void {}
+}
+
+function helper(): void {}
+
+class Demo {
+    public function go(): void {
+        new Known();
+        new MissingClass();
+        helper();
+        missing_function();
+        Known::run();
+        Known::missingMethod();
+    }
+}
+`
+
+	diags := p.Analyze("file:///test.php", source)
+	if got := filterByCode(diags, "unknown-class"); len(got) == 0 {
+		t.Fatal("expected unknown-class diagnostic")
+	}
+	if got := filterByCode(diags, "unknown-function"); len(got) == 0 {
+		t.Fatal("expected unknown-function diagnostic")
+	}
+	if got := filterByCode(diags, "unknown-member"); len(got) == 0 {
+		t.Fatal("expected unknown-member diagnostic")
+	}
+
+	for _, code := range []string{"unknown-class", "unknown-function", "unknown-member"} {
+		if len(filterByCode(diags, code)) == 0 {
+			t.Fatalf("expected at least one %s diagnostic", code)
+		}
 	}
 }
 
@@ -163,6 +210,66 @@ class Foo {
 	}
 	if !found {
 		t.Fatalf("expected missing paren diagnostic, got %#v", syntax)
+	}
+}
+
+func TestAnalyzeIncludesSprint3BaselineDiagnostics(t *testing.T) {
+	p := newTestProvider()
+	uri := "file:///test.php"
+	source := `<?php
+$name = "unterminated;
+`
+
+	p.mu.Lock()
+	p.saveResults[uri] = []protocol.Diagnostic{
+		{
+			Range:    protocol.Range{Start: protocol.Position{Line: 2, Character: 4}, End: protocol.Position{Line: 2, Character: 15}},
+			Severity: protocol.DiagnosticSeverityError,
+			Source:   "tusk-php",
+			Message:  "Class MissingClass not found",
+			Code:     "unknown-class",
+		},
+		{
+			Range:    protocol.Range{Start: protocol.Position{Line: 3, Character: 4}, End: protocol.Position{Line: 3, Character: 12}},
+			Severity: protocol.DiagnosticSeverityError,
+			Source:   "tusk-php",
+			Message:  "Function clients not found",
+			Code:     "unknown-function",
+		},
+		{
+			Range:    protocol.Range{Start: protocol.Position{Line: 4, Character: 4}, End: protocol.Position{Line: 4, Character: 15}},
+			Severity: protocol.DiagnosticSeverityError,
+			Source:   "tusk-php",
+			Message:  "Access to property $name on MissingClass",
+			Code:     "unknown-member",
+		},
+	}
+	p.mu.Unlock()
+
+	diags := p.Analyze(uri, source)
+	if len(diags) != 4 {
+		t.Fatalf("expected 4 diagnostics, got %d: %#v", len(diags), diags)
+	}
+
+	syntax := filterByCode(diags, "syntax-error")
+	if len(syntax) != 1 {
+		t.Fatalf("expected 1 syntax diagnostic, got %d: %#v", len(syntax), syntax)
+	}
+	if syntax[0].Message != "unterminated string" {
+		t.Fatalf("expected parser error message, got %q", syntax[0].Message)
+	}
+
+	for _, code := range []string{"unknown-class", "unknown-function", "unknown-member"} {
+		matches := filterByCode(diags, code)
+		if len(matches) != 1 {
+			t.Fatalf("expected 1 %s diagnostic, got %d: %#v", code, len(matches), matches)
+		}
+		if matches[0].Source != "tusk-php" {
+			t.Fatalf("expected %s source tusk-php, got %q", code, matches[0].Source)
+		}
+		if matches[0].Severity != protocol.DiagnosticSeverityError {
+			t.Fatalf("expected %s severity error, got %d", code, matches[0].Severity)
+		}
 	}
 }
 

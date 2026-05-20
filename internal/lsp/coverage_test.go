@@ -174,6 +174,70 @@ class Foo {
 	}
 }
 
+func TestPublishDiagnosticsIncludesSprint3BaselineDiagnostics(t *testing.T) {
+	h := initHarness(t)
+	defer h.close()
+
+	uri := "file:///tmp/test_sprint3_baseline.php"
+	source := `<?php
+namespace App;
+
+class Known {
+    public function run(): void {}
+}
+
+function helper(): void {}
+
+new MissingClass();
+missing_function();
+Known::missingMethod();
+
+class Broken {
+    public function bad($value {
+        return $value;
+    }
+}
+`
+
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "php", "version": 1, "text": source,
+		},
+	})
+
+	msg := h.readNotification("textDocument/publishDiagnostics", 5*time.Second)
+	params, ok := msg["params"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected publishDiagnostics params, got %T", msg["params"])
+	}
+	diagnostics, ok := params["diagnostics"].([]interface{})
+	if !ok {
+		t.Fatalf("expected diagnostics array, got %T", params["diagnostics"])
+	}
+
+	want := map[string]bool{
+		"syntax-error":     false,
+		"unknown-class":    false,
+		"unknown-function": false,
+		"unknown-member":   false,
+	}
+	for _, raw := range diagnostics {
+		diag, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		code, _ := diag["code"].(string)
+		if _, ok := want[code]; ok {
+			want[code] = true
+		}
+	}
+	for code, found := range want {
+		if !found {
+			t.Fatalf("expected publishDiagnostics entry for %s, got %#v", code, diagnostics)
+		}
+	}
+}
+
 func TestHandleCompletion(t *testing.T) {
 	h := initHarness(t)
 	defer h.close()
