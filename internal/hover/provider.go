@@ -10,6 +10,7 @@ import (
 	"github.com/open-southeners/tusk-php/internal/phparray"
 	"github.com/open-southeners/tusk-php/internal/protocol"
 	"github.com/open-southeners/tusk-php/internal/resolve"
+	sourcectx "github.com/open-southeners/tusk-php/internal/source"
 	"github.com/open-southeners/tusk-php/internal/symbols"
 	"github.com/open-southeners/tusk-php/internal/types"
 )
@@ -55,13 +56,14 @@ func (p *Provider) SetArrayResolver(resolver *models.FrameworkArrayResolver) {
 }
 
 func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol.Hover {
-	lines := strings.Split(source, "\n")
-	if pos.Line < 0 || pos.Line >= len(lines) {
+	ctx := sourcectx.Analyze(uri, source, pos)
+	if ctx == nil {
 		return nil
 	}
-	line := lines[pos.Line]
+	lines := strings.Split(source, "\n")
+	line := ctx.Line
 
-	file := parser.ParseFile(source)
+	file := ctx.File
 
 	// Check for array key hover: $config['key'] or $config['db']['host'] — cursor on a key
 	if ctx, ok := getArrayKeyContext(line, pos.Character); ok {
@@ -73,7 +75,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		return hover
 	}
 
-	word := resolve.WordAt(lines, pos)
+	word := ctx.SymbolText
 	if word == "" {
 		return nil
 	}
@@ -93,7 +95,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		if file != nil {
 			var classFQN string
 			if word == "parent" {
-				enclosing := resolve.FindEnclosingClass(file, pos)
+				enclosing := ctx.EnclosingFQN
 				if enclosing != "" {
 					chain := p.index.GetInheritanceChain(enclosing)
 					if len(chain) > 0 {
@@ -101,7 +103,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 					}
 				}
 			} else {
-				classFQN = resolve.FindEnclosingClass(file, pos)
+				classFQN = ctx.EnclosingFQN
 			}
 			if classFQN != "" {
 				if sym := p.index.Lookup(classFQN); sym != nil {
@@ -114,53 +116,46 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		}
 	}
 
-	// Find the start position of the word on the line
-	wordStart := pos.Character
-	for wordStart > 0 && resolve.IsWordChar(line[wordStart-1]) {
-		wordStart--
-	}
-
-	// Join multi-line chains so resolveAccessChain can walk the full expression.
-	chainLine, chainWordStart := resolve.JoinChainLines(lines, pos.Line, wordStart)
-
 	// Check for -> or :: access context
-	if classFQN := p.resolveAccessChain(chainLine, chainWordStart, lines, pos, file); classFQN != "" {
-		sym := p.resolver.FindMember(classFQN, word)
-		// For Laravel facades, also look up the member on the concrete class
-		if sym == nil && p.container != nil && p.framework == "laravel" {
-			if concrete := p.container.ResolveFacade(classFQN); concrete != "" {
-				sym = p.resolver.FindMember(concrete, word)
-			}
-		}
-		if sym != nil {
-			content := p.formatHover(sym)
-
-			// Enhance with generic return type if available
-			if sym.Kind == symbols.KindMethod && p.GenericExprResolver != nil {
-				// Build the full expression up to and including the method call
-				hoverPrefix := chainLine[:chainWordStart]
-				trimmedPrefix := strings.TrimSpace(hoverPrefix)
-				if strings.HasSuffix(trimmedPrefix, "->") || strings.HasSuffix(trimmedPrefix, "::") {
-					expr := trimmedPrefix + word + "()"
-					rt := p.GenericExprResolver(expr, source, pos, file)
-					if rt.IsGeneric() || (rt.Nullable && rt.FQN != "") {
-						content = replaceReturnType(content, rt.String())
-					}
+	if ctx.AccessKind != sourcectx.AccessNone {
+		if classFQN := p.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, lines, pos, file); classFQN != "" {
+			sym := p.resolver.FindMember(classFQN, word)
+			// For Laravel facades, also look up the member on the concrete class
+			if sym == nil && p.container != nil && p.framework == "laravel" {
+				if concrete := p.container.ResolveFacade(classFQN); concrete != "" {
+					sym = p.resolver.FindMember(concrete, word)
 				}
 			}
+			if sym != nil {
+				content := p.formatHover(sym)
 
-			if content != "" {
-				return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: content}}
+				// Enhance with generic return type if available
+				if sym.Kind == symbols.KindMethod && p.GenericExprResolver != nil {
+					// Build the full expression up to and including the method call
+					hoverPrefix := ctx.JoinedLine[:ctx.JoinedWordStart]
+					trimmedPrefix := strings.TrimSpace(hoverPrefix)
+					if strings.HasSuffix(trimmedPrefix, "->") || strings.HasSuffix(trimmedPrefix, "::") {
+						expr := trimmedPrefix + word + "()"
+						rt := p.GenericExprResolver(expr, source, pos, file)
+						if rt.IsGeneric() || (rt.Nullable && rt.FQN != "") {
+							content = replaceReturnType(content, rt.String())
+						}
+					}
+				}
+
+				if content != "" {
+					return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: content}}
+				}
 			}
+			// Member not found on the resolved class — don't fall through to
+			// standalone lookups which would show unrelated symbols with the same name.
+			return nil
 		}
-		// Member not found on the resolved class — don't fall through to
-		// standalone lookups which would show unrelated symbols with the same name.
-		return nil
 	}
 
 	// Resolve the word via use statements
 	if file != nil {
-		for _, u := range file.Uses {
+		for _, u := range ctx.Uses {
 			if u.Alias == word {
 				if sym := p.index.Lookup(u.FullName); sym != nil {
 					content := p.formatHover(sym)

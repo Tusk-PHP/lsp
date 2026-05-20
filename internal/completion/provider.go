@@ -10,6 +10,7 @@ import (
 	"github.com/open-southeners/tusk-php/internal/parser"
 	"github.com/open-southeners/tusk-php/internal/protocol"
 	"github.com/open-southeners/tusk-php/internal/resolve"
+	sourcectx "github.com/open-southeners/tusk-php/internal/source"
 	"github.com/open-southeners/tusk-php/internal/symbols"
 )
 
@@ -129,7 +130,12 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 	}
 
-	file := parser.ParseFile(source)
+	ctx := sourcectx.Analyze(uri, source, pos)
+	if ctx == nil {
+		return nil
+	}
+	file := ctx.File
+	currentNS := ctx.Namespace
 
 	if strings.HasSuffix(trimmed, "->") || strings.HasSuffix(trimmed, "?->") {
 		return sanitizeCompletions(p.completeMemberAccess(uri, source, pos, prefix, file, parenAfterCursor))
@@ -141,17 +147,16 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 			return sanitizeCompletions(p.completeStaticAccess(source, prefix, pos, file, parenAfterCursor))
 		}
 		// Typing after -> or :: (e.g. "$foo->ba" or "Foo::cr")
-		if memberCtx, filter := detectMemberContext(trimmed); memberCtx != "" {
-			if strings.Contains(memberCtx, "::") {
-				items := p.completeStaticAccess(source, memberCtx, pos, file, parenAfterCursor)
-				return sanitizeCompletions(filterByPrefix(items, filter))
+		if memberCtx, ok := sourcectx.DetectMemberContext(trimmed); ok {
+			if memberCtx.AccessKind == sourcectx.AccessStatic {
+				items := p.completeStaticAccess(source, memberCtx.Prefix, pos, file, parenAfterCursor)
+				return sanitizeCompletions(filterByPrefix(items, memberCtx.Filter))
 			}
-			items := p.completeMemberAccess(uri, source, pos, memberCtx, file, parenAfterCursor)
-			return sanitizeCompletions(filterByPrefix(items, filter))
+			items := p.completeMemberAccess(uri, source, pos, memberCtx.Prefix, file, parenAfterCursor)
+			return sanitizeCompletions(filterByPrefix(items, memberCtx.Filter))
 		}
 	}
 	if strings.HasSuffix(trimmed, "|>") {
-		currentNS := extractNamespace(source)
 		return sanitizeCompletions(p.completePipe(currentNS))
 	}
 	if strings.Contains(trimmed, "#[") && !strings.Contains(trimmed, "]") {
@@ -159,11 +164,9 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 	}
 	words := strings.Fields(trimmed)
 	if len(words) >= 1 && (words[len(words)-1] == "new" || (len(words) >= 2 && words[len(words)-2] == "new")) {
-		currentNS := extractNamespace(source)
 		return sanitizeCompletions(p.completeNew(prefix, currentNS, source, file))
 	}
 	if len(words) >= 1 && words[0] == "use" {
-		currentNS := extractNamespace(source)
 		return sanitizeCompletions(p.completeUse(prefix, currentNS))
 	}
 	// Builder column/relation argument completion: ->where('col, ->with('rel
@@ -185,10 +188,8 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		return sanitizeCompletions(p.completeConfigKeys(configPath, partial, quote))
 	}
 	if filter, quoteCtx, ok := extractContainerArgContext(trimmed); ok {
-		currentNS := extractNamespace(source)
 		return sanitizeCompletions(p.completeContainerResolve(source, filter, currentNS, quoteCtx, file))
 	}
-	currentNS := extractNamespace(source)
 	// Detect namespace path typing (contains \)
 	search := extractLastWord(prefix)
 	if strings.Contains(search, "\\") {
@@ -1055,34 +1056,6 @@ func (p *Provider) completeNamespacePath(search, currentNS string) []protocol.Co
 	return items
 }
 
-// detectMemberContext checks if the cursor is typing after -> or ::
-// e.g. "$foo->ba" returns ("$foo->", "ba"), "Foo::cr" returns ("Foo::", "cr").
-// Returns ("", "") if not in a member context.
-func detectMemberContext(trimmed string) (string, string) {
-	// Find the last -> or :: that has text after it (the partial member name)
-	for i := len(trimmed) - 1; i >= 2; i-- {
-		if trimmed[i-1] == '-' && trimmed[i] == '>' {
-			filter := trimmed[i+1:]
-			if filter != "" && !strings.ContainsAny(filter, " \t(=;,") {
-				return trimmed[:i+1], filter
-			}
-		}
-		if trimmed[i-1] == '?' && i >= 2 && trimmed[i] == '-' && i+1 < len(trimmed) && trimmed[i+1] == '>' {
-			filter := trimmed[i+2:]
-			if filter != "" && !strings.ContainsAny(filter, " \t(=;,") {
-				return trimmed[:i+2], filter
-			}
-		}
-		if trimmed[i-1] == ':' && trimmed[i] == ':' {
-			filter := trimmed[i+1:]
-			if filter != "" && !strings.ContainsAny(filter, " \t(=;,") {
-				return trimmed[:i+1], filter
-			}
-		}
-	}
-	return "", ""
-}
-
 func filterByPrefix(items []protocol.CompletionItem, prefix string) []protocol.CompletionItem {
 	if prefix == "" {
 		return items
@@ -1178,16 +1151,7 @@ func sortPriority(sym *symbols.Symbol, currentNS string) string {
 }
 
 func extractNamespace(source string) string {
-	for _, line := range strings.Split(source, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "namespace ") {
-			ns := strings.TrimPrefix(trimmed, "namespace ")
-			ns = strings.TrimSuffix(ns, ";")
-			ns = strings.TrimSuffix(ns, " {")
-			return strings.TrimSpace(ns)
-		}
-	}
-	return ""
+	return sourcectx.Namespace(source)
 }
 
 func extractVariableBefore(prefix, op string) string {
