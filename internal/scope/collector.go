@@ -70,11 +70,14 @@ func (c *Collector) Collect(source string) *Document {
 type scopeFrame struct {
 	scope      *Scope
 	braceDepth int
+	exprEnd    int
 }
 
 type pendingScope struct {
-	scope         *Scope
-	bodyOpenIndex int
+	scope          *Scope
+	bodyOpenIndex  int
+	bodyCloseIndex int
+	expressionBody bool
 }
 
 func (c *Collector) collectResult(result *parser.ParseResult) *Document {
@@ -94,21 +97,22 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 		return doc
 	}
 
-	for _, useStmt := range result.Uses {
-		rng, ok := findUseAliasRange(result.Tokens, useStmt)
-		if !ok {
-			continue
-		}
-		doc.addBinding(root, useStmt.Alias, BindingImport, rng, nil)
-	}
-
-	active := []scopeFrame{{scope: root, braceDepth: 0}}
+	active := []scopeFrame{{scope: root, braceDepth: 0, exprEnd: -1}}
 	var pending []pendingScope
 	declByToken := map[int]*Binding{}
 	braceDepth := 0
 
+	for idx, binding := range parseUseBindings(result.Tokens, doc, root) {
+		declByToken[idx] = binding
+	}
+
 	for i := 0; i < len(result.Tokens); i++ {
 		tok := result.Tokens[i]
+
+		for len(pending) > 0 && pending[0].bodyOpenIndex == i && pending[0].expressionBody {
+			active = append(active, scopeFrame{scope: pending[0].scope, braceDepth: braceDepth, exprEnd: pending[0].bodyCloseIndex})
+			pending = pending[1:]
+		}
 
 		if tok.Kind == parser.TokenFunction {
 			if ps, decls := parseFunctionLike(result.Tokens, i, active[len(active)-1].scope, doc, declByToken); ps != nil {
@@ -131,6 +135,12 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 			}
 		}
 
+		if tok.Kind == parser.TokenIdentifier && tok.Value == "list" {
+			for idx, binding := range parseListDestructureBindings(result.Tokens, i, active[len(active)-1].scope, doc) {
+				declByToken[idx] = binding
+			}
+		}
+
 		if tok.Kind == parser.TokenOpenBracket {
 			for idx, binding := range parseDestructureBindings(result.Tokens, i, active[len(active)-1].scope, doc) {
 				declByToken[idx] = binding
@@ -148,8 +158,8 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 
 		if tok.Kind == parser.TokenOpenBrace {
 			braceDepth++
-			for len(pending) > 0 && pending[0].bodyOpenIndex == i {
-				active = append(active, scopeFrame{scope: pending[0].scope, braceDepth: braceDepth})
+			for len(pending) > 0 && pending[0].bodyOpenIndex == i && !pending[0].expressionBody {
+				active = append(active, scopeFrame{scope: pending[0].scope, braceDepth: braceDepth, exprEnd: -1})
 				pending = pending[1:]
 			}
 			continue
@@ -173,6 +183,11 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 			if braceDepth > 0 {
 				braceDepth--
 			}
+		}
+
+		for len(active) > 1 && active[len(active)-1].exprEnd == i {
+			active[len(active)-1].scope.Range.End = tokenRange(tok).End
+			active = active[:len(active)-1]
 		}
 	}
 
@@ -311,6 +326,22 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 	if j >= 0 && j < len(tokens) && tokens[j].Kind == parser.TokenOpenBrace {
 		return &pendingScope{scope: scope, bodyOpenIndex: j}, decls
 	}
+	if j >= 0 && j < len(tokens) && tokens[j].Kind == parser.TokenDoubleArrow {
+		bodyStart := nextSignificant(tokens, j+1)
+		bodyEnd := findArrowExpressionEnd(tokens, bodyStart)
+		if bodyStart < 0 || bodyEnd < 0 {
+			scope.Range.End = scope.Range.Start
+			return nil, decls
+		}
+		scope.Range.End = tokenRange(tokens[bodyEnd]).End
+		bindArrowCaptures(tokens, bodyStart, bodyEnd, parent, scope, doc, decls)
+		return &pendingScope{
+			scope:          scope,
+			bodyOpenIndex:  bodyStart,
+			bodyCloseIndex: bodyEnd,
+			expressionBody: true,
+		}, decls
+	}
 	scope.Range.End = scope.Range.Start
 	return nil, decls
 }
@@ -408,6 +439,193 @@ func parseDestructureBindings(tokens []parser.Token, start int, scope *Scope, do
 	return decls
 }
 
+func parseListDestructureBindings(tokens []parser.Token, start int, scope *Scope, doc *Document) map[int]*Binding {
+	decls := map[int]*Binding{}
+	open := nextSignificant(tokens, start+1)
+	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
+		return decls
+	}
+	close := findMatching(tokens, open, parser.TokenOpenParen, parser.TokenCloseParen)
+	if close < 0 {
+		return decls
+	}
+	next := nextSignificant(tokens, close+1)
+	if next < 0 || tokens[next].Kind != parser.TokenEquals {
+		return decls
+	}
+	for i := open + 1; i < close; i++ {
+		if tokens[i].Kind == parser.TokenVariable {
+			decls[i] = ensureBinding(doc, scope, tokens[i].Value, BindingDestructure, tokenRange(tokens[i]))
+		}
+	}
+	return decls
+}
+
+func parseUseBindings(tokens []parser.Token, doc *Document, scope *Scope) map[int]*Binding {
+	decls := map[int]*Binding{}
+	braceDepth := 0
+	for i := 0; i < len(tokens); i++ {
+		switch tokens[i].Kind {
+		case parser.TokenOpenBrace:
+			braceDepth++
+		case parser.TokenCloseBrace:
+			if braceDepth > 0 {
+				braceDepth--
+			}
+		case parser.TokenUse:
+			if braceDepth != 0 {
+				continue
+			}
+			for idx, binding := range parseSingleUseBinding(tokens, i, doc, scope) {
+				decls[idx] = binding
+			}
+		}
+	}
+	return decls
+}
+
+func parseSingleUseBinding(tokens []parser.Token, start int, doc *Document, scope *Scope) map[int]*Binding {
+	decls := map[int]*Binding{}
+	semi := nextTokenKind(tokens, start+1, parser.TokenSemicolon)
+	if semi < 0 {
+		return decls
+	}
+	openGroup := -1
+	for i := start + 1; i < semi; i++ {
+		if tokens[i].Kind == parser.TokenOpenBrace {
+			openGroup = i
+			break
+		}
+	}
+	if openGroup < 0 {
+		if idx := useAliasTokenIndex(tokens, start+1, semi); idx >= 0 {
+			decls[idx] = doc.addBinding(scope, tokens[idx].Value, BindingImport, tokenRange(tokens[idx]), nil)
+		}
+		return decls
+	}
+	closeGroup := findMatching(tokens, openGroup, parser.TokenOpenBrace, parser.TokenCloseBrace)
+	if closeGroup < 0 || closeGroup > semi {
+		return decls
+	}
+	itemStart := openGroup + 1
+	for i := openGroup + 1; i <= closeGroup; i++ {
+		if i < closeGroup && tokens[i].Kind != parser.TokenComma {
+			continue
+		}
+		if idx := useAliasTokenIndex(tokens, itemStart, i); idx >= 0 {
+			decls[idx] = doc.addBinding(scope, tokens[idx].Value, BindingImport, tokenRange(tokens[idx]), nil)
+		}
+		itemStart = i + 1
+	}
+	return decls
+}
+
+func useAliasTokenIndex(tokens []parser.Token, start, end int) int {
+	aliasIdx := -1
+	lastIdentifierIdx := -1
+	for i := start; i < end; i++ {
+		if tokens[i].Kind == parser.TokenIdentifier {
+			lastIdentifierIdx = i
+			if tokens[i].Value == "as" {
+				aliasIdx = nextSignificant(tokens, i+1)
+				if aliasIdx >= end || tokens[aliasIdx].Kind != parser.TokenIdentifier {
+					return -1
+				}
+				return aliasIdx
+			}
+		}
+	}
+	return lastIdentifierIdx
+}
+
+func nextTokenKind(tokens []parser.Token, start int, kind parser.TokenKind) int {
+	for i := start; i < len(tokens); i++ {
+		if tokens[i].Kind == kind {
+			return i
+		}
+	}
+	return -1
+}
+
+func bindArrowCaptures(tokens []parser.Token, bodyStart, bodyEnd int, parent, scope *Scope, doc *Document, decls map[int]*Binding) {
+	active := []scopeFrame{
+		{scope: parent, exprEnd: -1},
+		{scope: scope, exprEnd: bodyEnd},
+	}
+	for i := bodyStart; i <= bodyEnd; i++ {
+		if tokens[i].Kind != parser.TokenVariable {
+			continue
+		}
+		if _, ok := decls[i]; ok {
+			continue
+		}
+		binding := resolveVariable(active, tokens[i].Value)
+		if binding == nil {
+			continue
+		}
+		if binding.Scope != scope {
+			binding = ensureArrowCapture(doc, scope, binding, tokenRange(tokens[i]))
+			decls[i] = binding
+			continue
+		}
+	}
+}
+
+func ensureArrowCapture(doc *Document, scope *Scope, origin *Binding, ref protocol.Range) *Binding {
+	for _, binding := range scope.Bindings {
+		if binding.Name == origin.Name && binding.Kind == BindingClosureUse && binding.Origin == origin {
+			binding.References = append(binding.References, ref)
+			return binding
+		}
+	}
+	return doc.addBinding(scope, origin.Name, BindingClosureUse, ref, origin)
+}
+
+func findArrowExpressionEnd(tokens []parser.Token, start int) int {
+	if start < 0 {
+		return -1
+	}
+	parenDepth := 0
+	bracketDepth := 0
+	braceDepth := 0
+	for i := start; i < len(tokens); i++ {
+		switch tokens[i].Kind {
+		case parser.TokenOpenParen:
+			parenDepth++
+		case parser.TokenCloseParen:
+			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
+				return i - 1
+			}
+			if parenDepth > 0 {
+				parenDepth--
+			}
+		case parser.TokenOpenBracket:
+			bracketDepth++
+		case parser.TokenCloseBracket:
+			if bracketDepth == 0 && parenDepth == 0 && braceDepth == 0 {
+				return i - 1
+			}
+			if bracketDepth > 0 {
+				bracketDepth--
+			}
+		case parser.TokenOpenBrace:
+			braceDepth++
+		case parser.TokenCloseBrace:
+			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
+				return i - 1
+			}
+			if braceDepth > 0 {
+				braceDepth--
+			}
+		case parser.TokenComma, parser.TokenSemicolon:
+			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
+				return prevSignificant(tokens, i-1)
+			}
+		}
+	}
+	return prevSignificant(tokens, len(tokens)-1)
+}
+
 func nextSignificant(tokens []parser.Token, i int) int {
 	for i < len(tokens) {
 		switch tokens[i].Kind {
@@ -473,24 +691,6 @@ func lineLength(result *parser.ParseResult, idx int) int {
 		return 0
 	}
 	return len(result.Lines[idx])
-}
-
-func findUseAliasRange(tokens []parser.Token, useStmt parser.UseStatement) (protocol.Range, bool) {
-	for i := 0; i < len(tokens); i++ {
-		if tokens[i].Kind != parser.TokenUse || tokens[i].Line != useStmt.Line {
-			continue
-		}
-		aliasIdx := -1
-		for j := i + 1; j < len(tokens) && tokens[j].Line == useStmt.Line; j++ {
-			if tokens[j].Kind == parser.TokenIdentifier && tokens[j].Value == useStmt.Alias {
-				aliasIdx = j
-			}
-		}
-		if aliasIdx >= 0 {
-			return tokenRange(tokens[aliasIdx]), true
-		}
-	}
-	return protocol.Range{}, false
 }
 
 func enclosingClassName(tokens []parser.Token, idx int) string {

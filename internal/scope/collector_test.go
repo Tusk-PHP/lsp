@@ -144,3 +144,137 @@ function run($value) {
 		t.Fatalf("expected grouped outer+closure occurrences for $prefix, got %d", got)
 	}
 }
+
+func TestCollectArrowFunctionCaptures(t *testing.T) {
+	source := `<?php
+function run(array $rows) {
+    $prefix = "user";
+    $mapper = fn ($row) => $prefix . $row;
+    return $mapper($rows);
+}
+`
+
+	doc := Collect(source)
+
+	prefixBinding := findBinding(doc, "$prefix", BindingVariable)
+	if prefixBinding == nil {
+		t.Fatal("expected outer $prefix binding")
+	}
+	capture := findBinding(doc, "$prefix", BindingClosureUse)
+	if capture == nil {
+		t.Fatal("expected arrow-function capture for $prefix")
+	}
+	if capture.Origin != prefixBinding {
+		t.Fatal("expected arrow-function capture to link to outer $prefix")
+	}
+	if got := len(doc.Occurrences(prefixBinding)); got != 2 {
+		t.Fatalf("expected grouped outer+arrow occurrences for $prefix, got %d", got)
+	}
+
+	rowBinding := findBinding(doc, "$row", BindingParameter)
+	if rowBinding == nil {
+		t.Fatal("expected arrow-function parameter binding for $row")
+	}
+	if got := len(doc.Occurrences(rowBinding)); got != 2 {
+		t.Fatalf("expected declaration and reference for $row, got %d", got)
+	}
+}
+
+func findBinding(doc *Document, name string, kind BindingKind) *Binding {
+	for _, binding := range doc.Bindings {
+		if binding.Name == name && binding.Kind == kind {
+			return binding
+		}
+	}
+	return nil
+}
+
+func TestCollectGroupedImportsAndArrowCaptures(t *testing.T) {
+	source := `<?php
+use App\Support\{Helper, Tool as Alias};
+
+function run($value) {
+    $prefix = "hi";
+    $fn = fn($name) => $prefix . $name . $value;
+
+    return $fn($value);
+}
+`
+
+	doc := Collect(source)
+
+	var helperImport *Binding
+	var aliasImport *Binding
+	for _, binding := range doc.Bindings {
+		if binding.Kind != BindingImport {
+			continue
+		}
+		switch binding.Name {
+		case "Helper":
+			helperImport = binding
+		case "Alias":
+			aliasImport = binding
+		}
+	}
+	if helperImport == nil {
+		t.Fatal("expected grouped use import binding for Helper")
+	}
+	if aliasImport == nil {
+		t.Fatal("expected grouped use import binding for Alias")
+	}
+
+	prefixBinding := doc.BindingAt(protocol.Position{Line: 4, Character: 6})
+	if prefixBinding == nil || prefixBinding.Kind != BindingVariable {
+		t.Fatal("expected outer variable binding for $prefix")
+	}
+
+	arrowCapture := doc.BindingAt(protocol.Position{Line: 5, Character: 26})
+	if arrowCapture == nil {
+		t.Fatal("expected arrow capture binding for $prefix")
+	}
+	if arrowCapture.Kind != BindingClosureUse {
+		t.Fatalf("arrow capture kind = %q, want %q", arrowCapture.Kind, BindingClosureUse)
+	}
+	if arrowCapture.Origin != prefixBinding {
+		t.Fatal("expected arrow capture to link back to outer variable")
+	}
+
+	valueBinding := doc.BindingAt(protocol.Position{Line: 3, Character: 14})
+	if valueBinding == nil || valueBinding.Kind != BindingParameter {
+		t.Fatal("expected parameter binding for $value")
+	}
+	if got := len(doc.Occurrences(valueBinding)); got != 3 {
+		t.Fatalf("expected 3 occurrences for captured parameter $value, got %d", got)
+	}
+}
+
+func TestCollectListDestructureBindings(t *testing.T) {
+	source := `<?php
+function run() {
+    list($first, $second) = [1, 2];
+    echo $first;
+    echo $second;
+}
+`
+
+	doc := Collect(source)
+
+	for _, tc := range []struct {
+		name string
+		pos  protocol.Position
+	}{
+		{name: "$first", pos: protocol.Position{Line: 2, Character: 9}},
+		{name: "$second", pos: protocol.Position{Line: 2, Character: 17}},
+	} {
+		binding := doc.BindingAt(tc.pos)
+		if binding == nil {
+			t.Fatalf("expected binding for %s", tc.name)
+		}
+		if binding.Kind != BindingDestructure {
+			t.Fatalf("%s kind = %q, want %q", tc.name, binding.Kind, BindingDestructure)
+		}
+		if got := len(doc.Occurrences(binding)); got != 2 {
+			t.Fatalf("%s occurrences = %d, want 2", tc.name, got)
+		}
+	}
+}

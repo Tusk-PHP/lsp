@@ -43,6 +43,20 @@ class Foo {
 	}
 }
 
+func TestPrepareRenameRejectsUnboundVariable(t *testing.T) {
+	source := `<?php
+function run() {
+    echo $missing;
+}
+`
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///test.php": source})
+
+	result := a.PrepareRename("file:///test.php", source, protocol.Position{Line: 2, Character: 10})
+	if result != nil {
+		t.Fatal("expected PrepareRename to reject unresolved variable")
+	}
+}
+
 func TestPrepareRenameRejectsThis(t *testing.T) {
 	source := `<?php
 namespace App;

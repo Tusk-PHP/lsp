@@ -758,6 +758,10 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 
 	// Variables are always renameable (local scope)
 	if strings.HasPrefix(word, "$") {
+		binding := scope.Collect(source).BindingAt(pos)
+		if !isPrepareRenameVariableBindingSupported(binding, word) {
+			return nil
+		}
 		return &protocol.PrepareRenameResult{Range: wordRange, Placeholder: word}
 	}
 
@@ -796,6 +800,24 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 	}
 
 	return nil
+}
+
+func isPrepareRenameVariableBindingSupported(binding *scope.Binding, word string) bool {
+	if binding == nil || binding.Name != word {
+		return false
+	}
+	switch binding.Kind {
+	case scope.BindingVariable,
+		scope.BindingParameter,
+		scope.BindingForeachKey,
+		scope.BindingForeachValue,
+		scope.BindingCatch,
+		scope.BindingDestructure,
+		scope.BindingClosureUse:
+		return true
+	default:
+		return false
+	}
 }
 
 // Rename performs a rename of the symbol at the given position.
