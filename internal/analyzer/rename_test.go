@@ -126,6 +126,33 @@ class Foo {
 	}
 }
 
+func TestRenameVariableForeachBinding(t *testing.T) {
+	source := `<?php
+function run(array $rows) {
+    foreach ($rows as $key => $value) {
+        echo $key;
+        echo $value;
+    }
+}
+`
+	a, reader := setupRenameAnalyzer(map[string]string{"file:///test.php": source})
+
+	edit := a.Rename("file:///test.php", source, protocol.Position{Line: 2, Character: 23}, "$index", reader)
+	if edit == nil {
+		t.Fatal("expected WorkspaceEdit for foreach key rename")
+	}
+
+	edits := edit.Changes["file:///test.php"]
+	if len(edits) != 2 {
+		t.Fatalf("expected 2 edits for foreach key rename, got %d", len(edits))
+	}
+	for _, e := range edits {
+		if e.NewText != "$index" {
+			t.Fatalf("rename text = %q, want $index", e.NewText)
+		}
+	}
+}
+
 func TestRenameClassAcrossFiles(t *testing.T) {
 	sources := map[string]string{
 		"file:///service.php": `<?php

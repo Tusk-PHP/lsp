@@ -115,6 +115,23 @@ class Foo {
 	}
 }
 
+func TestFindAllReferencesParameter(t *testing.T) {
+	source := `<?php
+function run($name) {
+    echo $name;
+    return $name;
+}
+`
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///test.php": source})
+
+	locs := a.FindAllReferences("file:///test.php", source,
+		protocol.Position{Line: 1, Character: 14}, nil)
+
+	if len(locs) != 3 {
+		t.Fatalf("expected 3 references to $name (decl + 2 uses), got %d", len(locs))
+	}
+}
+
 func TestFindAllReferencesProperty(t *testing.T) {
 	sources := map[string]string{
 		"file:///model.php": `<?php

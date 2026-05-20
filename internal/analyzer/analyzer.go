@@ -10,6 +10,8 @@ import (
 	"github.com/open-southeners/tusk-php/internal/parser"
 	"github.com/open-southeners/tusk-php/internal/protocol"
 	"github.com/open-southeners/tusk-php/internal/resolve"
+	"github.com/open-southeners/tusk-php/internal/scope"
+	sourcectx "github.com/open-southeners/tusk-php/internal/source"
 	"github.com/open-southeners/tusk-php/internal/symbols"
 )
 
@@ -24,17 +26,17 @@ func NewAnalyzer(index *symbols.Index, ca *container.ContainerAnalyzer) *Analyze
 }
 
 func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *protocol.Location {
-	lines := strings.Split(source, "\n")
-	if pos.Line < 0 || pos.Line >= len(lines) {
+	ctx := sourcectx.Analyze(uri, source, pos)
+	if ctx == nil {
 		return nil
 	}
-	line := lines[pos.Line]
-	word := resolve.WordAt(lines, pos)
+	line := ctx.Line
+	word := ctx.SymbolText
 	if word == "" {
 		return nil
 	}
 
-	file := parser.ParseFile(source)
+	file := ctx.File
 
 	// Handle container call arguments: app('request'), app(Request::class)
 	// Go to the concrete class definition
@@ -49,25 +51,18 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 		return a.definitionForVariable(word, source, pos, file)
 	}
 
-	// Find the start of the word on the line
-	wordStart := pos.Character
-	for wordStart > 0 && resolve.IsWordChar(line[wordStart-1]) {
-		wordStart--
-	}
-
-	// Join multi-line chains so resolveAccessChain can walk the full expression.
-	chainLine, chainWordStart := resolve.JoinChainLines(lines, pos.Line, wordStart)
-
 	// Check for -> or :: access (method/property on a class)
-	if classFQN := a.resolveAccessChain(chainLine, chainWordStart, source, pos, file); classFQN != "" {
-		if sym := a.resolver.FindMember(classFQN, word); sym != nil {
-			return symbolLocation(sym)
+	if ctx.AccessKind != sourcectx.AccessNone {
+		if classFQN := a.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file); classFQN != "" {
+			if sym := a.resolver.FindMember(classFQN, word); sym != nil {
+				return symbolLocation(sym)
+			}
 		}
 	}
 
 	// Resolve via use statements
 	if file != nil {
-		for _, u := range file.Uses {
+		for _, u := range ctx.Uses {
 			if u.Alias == word {
 				if sym := a.index.Lookup(u.FullName); sym != nil {
 					return symbolLocation(sym)
@@ -324,7 +319,7 @@ func (a *Analyzer) FindReferences(uri, source string, pos protocol.Position) []p
 // the workspace. readDocument is used to read file contents; if nil, falls back
 // to reading from the index's stored file URIs via disk.
 func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, readDocument func(string) string) []protocol.Location {
-	word, _ := getWordRangeAt(source, pos)
+	word, _ := sourcectx.WordAt(source, pos)
 	if word == "" {
 		return nil
 	}
@@ -356,28 +351,14 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 // resolveSymbolAtCursor resolves the word at cursor to a Symbol, handling
 // member access chains, use imports, and namespace resolution.
 func (a *Analyzer) resolveSymbolAtCursor(uri, source string, pos protocol.Position, word string, file *parser.FileNode) *symbols.Symbol {
+	ctx := sourcectx.Analyze(uri, source, pos)
 
 	// Check for member access context (->method or ::method)
-	lines := strings.Split(source, "\n")
-	if pos.Line >= 0 && pos.Line < len(lines) {
-		line := lines[pos.Line]
-		wordStart := pos.Character
-		for wordStart > 0 && resolve.IsWordChar(line[wordStart-1]) {
-			wordStart--
-		}
-		if wordStart > 0 && line[wordStart-1] == '$' {
-			wordStart--
-		}
-		if wordStart >= 2 {
-			before := line[:wordStart]
-			trimmed := strings.TrimRight(before, " \t")
-			if strings.HasSuffix(trimmed, "->") || strings.HasSuffix(trimmed, "::") {
-				classFQN := a.resolveAccessChain(line, wordStart, source, pos, file)
-				if classFQN != "" {
-					if member := a.resolver.FindMember(classFQN, word); member != nil {
-						return member
-					}
-				}
+	if ctx != nil && ctx.AccessKind != sourcectx.AccessNone {
+		classFQN := a.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		if classFQN != "" {
+			if member := a.resolver.FindMember(classFQN, word); member != nil {
+				return member
 			}
 		}
 	}
@@ -484,57 +465,15 @@ func (a *Analyzer) findSymbolOccurrences(sym *symbols.Symbol, readDocument func(
 
 // findVariableReferences finds all occurrences of a variable within its enclosing function scope.
 func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Position, varName string, file *parser.FileNode) []protocol.Location {
-	if file == nil {
+	_ = file
+	doc := scope.Collect(source)
+	binding := doc.BindingAt(pos)
+	if binding == nil || binding.Name != varName {
 		return nil
 	}
-
-	method := resolve.FindEnclosingMethod(file, pos)
-	lines := strings.Split(source, "\n")
-	scopeStart := 0
-	scopeEnd := len(lines)
-	if method != nil {
-		scopeStart = method.StartLine
-		depth := 0
-		for i := scopeStart; i < len(lines); i++ {
-			for _, ch := range lines[i] {
-				if ch == '{' {
-					depth++
-				} else if ch == '}' {
-					depth--
-					if depth == 0 {
-						scopeEnd = i + 1
-						goto found
-					}
-				}
-			}
-		}
-	found:
-	}
-
 	var locs []protocol.Location
-	for i := scopeStart; i < scopeEnd && i < len(lines); i++ {
-		line := lines[i]
-		offset := 0
-		for {
-			idx := strings.Index(line[offset:], varName)
-			if idx < 0 {
-				break
-			}
-			col := offset + idx
-			end := col + len(varName)
-			if end < len(line) && resolve.IsWordChar(line[end]) {
-				offset = end
-				continue
-			}
-			locs = append(locs, protocol.Location{
-				URI: uri,
-				Range: protocol.Range{
-					Start: protocol.Position{Line: i, Character: col},
-					End:   protocol.Position{Line: i, Character: end},
-				},
-			})
-			offset = end
-		}
+	for _, rng := range doc.Occurrences(binding) {
+		locs = append(locs, protocol.Location{URI: uri, Range: rng})
 	}
 	return locs
 }
@@ -776,62 +715,22 @@ func mkRange(line int) protocol.Range {
 
 // getWordRangeAt returns the word at the cursor and its exact range in the document.
 func getWordRangeAt(source string, pos protocol.Position) (string, protocol.Range) {
-	lines := strings.Split(source, "\n")
-	if pos.Line < 0 || pos.Line >= len(lines) {
-		return "", protocol.Range{}
-	}
-	line := lines[pos.Line]
-	if pos.Character > len(line) {
-		return "", protocol.Range{}
-	}
-
-	ch := pos.Character
-	// Handle cursor on '$' for variables
-	if ch < len(line) && line[ch] == '$' {
-		start := ch
-		end := ch + 1
-		for end < len(line) && resolve.IsWordChar(line[end]) {
-			end++
-		}
-		if end > start+1 {
-			return line[start:end], protocol.Range{
-				Start: protocol.Position{Line: pos.Line, Character: start},
-				End:   protocol.Position{Line: pos.Line, Character: end},
-			}
-		}
-		return "", protocol.Range{}
-	}
-
-	start := pos.Character
-	for start > 0 && resolve.IsWordChar(line[start-1]) {
-		start--
-	}
-	hasDollar := start > 0 && line[start-1] == '$'
-	if hasDollar {
-		start--
-	}
-	end := pos.Character
-	for end < len(line) && resolve.IsWordChar(line[end]) {
-		end++
-	}
-	if start >= end {
-		return "", protocol.Range{}
-	}
-	return line[start:end], protocol.Range{
-		Start: protocol.Position{Line: pos.Line, Character: start},
-		End:   protocol.Position{Line: pos.Line, Character: end},
-	}
+	return sourcectx.WordAt(source, pos)
 }
 
 // PrepareRename checks if the symbol at the cursor can be renamed and returns
 // the range and current name as a placeholder.
 func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *protocol.PrepareRenameResult {
-	word, wordRange := getWordRangeAt(source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos)
+	if ctx == nil {
+		return nil
+	}
+	word, wordRange := ctx.SymbolText, ctx.WordRange
 	if word == "" || word == "$this" {
 		return nil
 	}
 
-	file := parser.ParseFile(source)
+	file := ctx.File
 
 	// Try resolving as a symbol (class, method, property, function, etc.)
 	sym := a.resolveSymbolAtCursor(uri, source, pos, word, file)
@@ -863,17 +762,8 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 	}
 
 	// Check for member access context (method/property on -> or ::)
-	lines := strings.Split(source, "\n")
-	if pos.Line >= 0 && pos.Line < len(lines) {
-		line := lines[pos.Line]
-		wordStart := wordRange.Start.Character
-		if wordStart >= 2 {
-			before := line[:wordStart]
-			trimmed := strings.TrimRight(before, " \t")
-			if strings.HasSuffix(trimmed, "->") || strings.HasSuffix(trimmed, "::") {
-				return &protocol.PrepareRenameResult{Range: wordRange, Placeholder: word}
-			}
-		}
+	if ctx.AccessKind != sourcectx.AccessNone {
+		return &protocol.PrepareRenameResult{Range: wordRange, Placeholder: word}
 	}
 
 	// Allow rename for identifiers declared in the current file's AST
@@ -911,12 +801,16 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 // Rename performs a rename of the symbol at the given position.
 // readDocument is used to read file contents for files not open in the editor.
 func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName string, readDocument func(string) string) *protocol.WorkspaceEdit {
-	word, _ := getWordRangeAt(source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos)
+	if ctx == nil {
+		return nil
+	}
+	word := ctx.SymbolText
 	if word == "" || word == "$this" {
 		return nil
 	}
 
-	file := parser.ParseFile(source)
+	file := ctx.File
 
 	// Try resolving as a symbol first (handles properties, methods, classes, etc.)
 	sym := a.resolveSymbolAtCursor(uri, source, pos, word, file)
@@ -942,62 +836,16 @@ func (a *Analyzer) renameVariable(uri, source string, pos protocol.Position, old
 	if !strings.HasPrefix(newName, "$") {
 		newName = "$" + newName
 	}
-	if file == nil {
+	_ = file
+	doc := scope.Collect(source)
+	binding := doc.BindingAt(pos)
+	if binding == nil || binding.Name != oldName {
 		return nil
 	}
 
-	// Find enclosing method/function scope
-	method := resolve.FindEnclosingMethod(file, pos)
-	scopeStart := 0
-	lines := strings.Split(source, "\n")
-	scopeEnd := len(lines)
-	if method != nil {
-		scopeStart = method.StartLine
-		// Estimate scope end: find the next method after this one, or use file end
-		// Scan for closing brace by counting depth from method start
-		depth := 0
-		for i := scopeStart; i < len(lines); i++ {
-			for _, ch := range lines[i] {
-				if ch == '{' {
-					depth++
-				} else if ch == '}' {
-					depth--
-					if depth == 0 {
-						scopeEnd = i + 1
-						goto scopeFound
-					}
-				}
-			}
-		}
-	scopeFound:
-	}
-
 	var edits []protocol.TextEdit
-	for i := scopeStart; i < scopeEnd && i < len(lines); i++ {
-		line := lines[i]
-		// Find all occurrences of the variable on this line
-		offset := 0
-		for {
-			idx := strings.Index(line[offset:], oldName)
-			if idx < 0 {
-				break
-			}
-			col := offset + idx
-			end := col + len(oldName)
-			// Ensure it's a complete token (not part of a longer identifier)
-			if end < len(line) && resolve.IsWordChar(line[end]) {
-				offset = end
-				continue
-			}
-			edits = append(edits, protocol.TextEdit{
-				Range: protocol.Range{
-					Start: protocol.Position{Line: i, Character: col},
-					End:   protocol.Position{Line: i, Character: end},
-				},
-				NewText: newName,
-			})
-			offset = end
-		}
+	for _, rng := range doc.Occurrences(binding) {
+		edits = append(edits, protocol.TextEdit{Range: rng, NewText: newName})
 	}
 
 	if len(edits) == 0 {
