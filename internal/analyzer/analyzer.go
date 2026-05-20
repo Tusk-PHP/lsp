@@ -1365,6 +1365,11 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 		return actions
 	}
 
+	actions = append(actions, a.importUnusedImportQuickFixes(uri, source, params)...)
+	if action := a.importOrganizeImportsAction(uri, source, file, params.Context.Only); action != nil {
+		actions = append(actions, *action)
+	}
+
 	// Offer "Copy Namespace" for any position
 	ns := file.Namespace
 	primaryClass := ""
