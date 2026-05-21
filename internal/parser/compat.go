@@ -141,12 +141,14 @@ type FileNode struct {
 
 type DocParam struct {
 	Type        string
+	ParsedType  *types.TypeExpr
 	Name        string
 	Description string
 }
 
 type DocReturn struct {
 	Type        string
+	ParsedType  *types.TypeExpr
 	Description string
 }
 
@@ -157,6 +159,7 @@ type DocThrow struct {
 
 type DocProperty struct {
 	Type        string
+	ParsedType  *types.TypeExpr
 	Name        string
 	Description string
 	ReadOnly    bool
@@ -165,6 +168,7 @@ type DocProperty struct {
 
 type DocMethod struct {
 	ReturnType  string
+	ParsedType  *types.TypeExpr
 	Name        string
 	Params      string
 	Description string
@@ -173,8 +177,21 @@ type DocMethod struct {
 
 // DocTemplate represents a @template tag: @template T of SomeClass
 type DocTemplate struct {
-	Name  string // e.g., "T", "TModel"
-	Bound string // e.g., "SomeClass" (from "of SomeClass"), or "" if unbounded
+	Name        string // e.g., "T", "TModel"
+	Bound       string // e.g., "SomeClass" (from "of SomeClass"), or "" if unbounded
+	ParsedBound *types.TypeExpr
+}
+
+type DocTypeAlias struct {
+	Name       string
+	Type       string
+	ParsedType *types.TypeExpr
+}
+
+type DocImportedTypeAlias struct {
+	Name  string
+	From  string
+	Alias string
 }
 
 type DocBlock struct {
@@ -186,6 +203,8 @@ type DocBlock struct {
 	Properties    []DocProperty
 	Methods       []DocMethod
 	Templates     []DocTemplate
+	TypeAliases   []DocTypeAlias
+	ImportedTypes []DocImportedTypeAlias
 	Deprecated    bool
 	DeprecatedMsg string
 }
@@ -258,6 +277,14 @@ func ParseDocBlock(raw string) *DocBlock {
 				doc.Methods = append(doc.Methods, parseDocMethod(value))
 			case "template", "template-covariant", "template-contravariant":
 				doc.Templates = append(doc.Templates, parseDocTemplate(value))
+			case "phpstan-type", "psalm-type":
+				if alias := parseDocTypeAlias(value); alias.Name != "" {
+					doc.TypeAliases = append(doc.TypeAliases, alias)
+				}
+			case "phpstan-import-type", "psalm-import-type":
+				if alias := parseDocImportedTypeAlias(value); alias.Name != "" && alias.From != "" {
+					doc.ImportedTypes = append(doc.ImportedTypes, alias)
+				}
 			}
 			continue
 		}
@@ -291,6 +318,7 @@ func parseDocParam(value string) DocParam {
 	}
 	// Extract type (handles nested braces/angles)
 	p.Type, value = types.ExtractDocTypeString(value)
+	p.ParsedType = parseDocTypeExprPtr(p.Type)
 	parts := strings.Fields(value)
 	idx := 0
 	if idx < len(parts) && strings.HasPrefix(parts[idx], "$") {
@@ -308,6 +336,7 @@ func parseDocParam(value string) DocParam {
 func parseDocReturn(value string) DocReturn {
 	r := DocReturn{}
 	r.Type, r.Description = types.ExtractDocTypeString(value)
+	r.ParsedType = parseDocTypeExprPtr(r.Type)
 	return r
 }
 
@@ -334,6 +363,7 @@ func parseDocTemplate(value string) DocTemplate {
 	// Check for "of Bound" syntax: @template TModel of Model
 	if len(parts) >= 3 && parts[1] == "of" {
 		t.Bound = parts[2]
+		t.ParsedBound = parseDocTypeExprPtr(t.Bound)
 	}
 	return t
 }
@@ -356,6 +386,7 @@ func parseDocProperty(value string, readOnly, writeOnly bool) DocProperty {
 	}
 	// Extract type (handles nested braces/angles)
 	p.Type, value = types.ExtractDocTypeString(value)
+	p.ParsedType = parseDocTypeExprPtr(p.Type)
 	parts := strings.Fields(value)
 	idx := 0
 	if idx < len(parts) && strings.HasPrefix(parts[idx], "$") {
@@ -405,6 +436,7 @@ func parseDocMethod(value string) DocMethod {
 		// "ReturnType name(" — last part is name, everything before is return type
 		m.Name = parts[len(parts)-1]
 		m.ReturnType = strings.Join(parts[:len(parts)-1], " ")
+		m.ParsedType = parseDocTypeExprPtr(m.ReturnType)
 	}
 
 	// Extract params between ( and matching )
@@ -431,6 +463,47 @@ func parseDocMethod(value string) DocMethod {
 	}
 
 	return m
+}
+
+func parseDocTypeAlias(value string) DocTypeAlias {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return DocTypeAlias{}
+	}
+
+	parts := strings.Fields(value)
+	if len(parts) < 2 {
+		return DocTypeAlias{}
+	}
+
+	alias := DocTypeAlias{Name: parts[0]}
+	alias.Type = strings.TrimSpace(value[len(parts[0]):])
+	alias.ParsedType = parseDocTypeExprPtr(alias.Type)
+	return alias
+}
+
+func parseDocTypeExprPtr(raw string) *types.TypeExpr {
+	expr := types.ParseTypeExpr(raw)
+	if expr.String() == "" {
+		return nil
+	}
+	return &expr
+}
+
+func parseDocImportedTypeAlias(value string) DocImportedTypeAlias {
+	parts := strings.Fields(strings.TrimSpace(value))
+	if len(parts) < 3 || parts[1] != "from" {
+		return DocImportedTypeAlias{}
+	}
+
+	alias := DocImportedTypeAlias{
+		Name: parts[0],
+		From: parts[2],
+	}
+	if len(parts) >= 5 && parts[3] == "as" {
+		alias.Alias = parts[4]
+	}
+	return alias
 }
 
 func toFileNode(result *ParseResult) *FileNode {

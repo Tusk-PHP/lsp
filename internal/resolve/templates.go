@@ -21,17 +21,17 @@ var knownTemplates = map[string]TemplateMapping{
 		Params: []string{"TModel"},
 		Methods: map[string]string{
 			// Query execution — return model or collection
-			"get":         "Illuminate\\Database\\Eloquent\\Collection<int, TModel>",
-			"first":       "?TModel",
-			"firstOrFail": "TModel",
-			"find":        "?TModel",
-			"findOrFail":  "TModel",
-			"findMany":    "Illuminate\\Database\\Eloquent\\Collection<int, TModel>",
-			"create":      "TModel",
-			"firstOrNew":  "TModel",
-			"firstOrCreate": "TModel",
+			"get":            "Illuminate\\Database\\Eloquent\\Collection<int, TModel>",
+			"first":          "?TModel",
+			"firstOrFail":    "TModel",
+			"find":           "?TModel",
+			"findOrFail":     "TModel",
+			"findMany":       "Illuminate\\Database\\Eloquent\\Collection<int, TModel>",
+			"create":         "TModel",
+			"firstOrNew":     "TModel",
+			"firstOrCreate":  "TModel",
 			"updateOrCreate": "TModel",
-			"sole":        "TModel",
+			"sole":           "TModel",
 			// Builder methods — return static (preserves Builder<TModel>)
 			"where": "static", "whereIn": "static", "whereNotIn": "static",
 			"whereNull": "static", "whereNotNull": "static",
@@ -44,11 +44,11 @@ var knownTemplates = map[string]TemplateMapping{
 			"groupBy": "static", "having": "static",
 			"select": "static", "addSelect": "static",
 			"distinct": "static",
-			"with": "static", "without": "static",
+			"with":     "static", "without": "static",
 			"has": "static", "doesntHave": "static",
 			"whereHas": "static", "whereDoesntHave": "static",
 			"withCount": "static",
-			"join": "static", "leftJoin": "static",
+			"join":      "static", "leftJoin": "static",
 			"withTrashed": "static", "onlyTrashed": "static",
 			"when": "static", "unless": "static",
 			"tap": "static",
@@ -195,6 +195,7 @@ func (r *Resolver) ResolveSymbolTemplateReturn(sym *symbols.Symbol, methodName s
 	if retType == "" {
 		return ResolvedType{}
 	}
+	retType = r.expandTypeAliases(retType, sym.FQN, nil)
 
 	return substituteTemplate(retType, subst)
 }

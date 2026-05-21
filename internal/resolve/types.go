@@ -63,43 +63,7 @@ func (rt ResolvedType) String() string {
 // ParseGenericType parses a type string like "Collection<int, Category>" into
 // a ResolvedType. Handles nested generics and nullable prefix.
 func ParseGenericType(raw string) ResolvedType {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ResolvedType{}
-	}
-
-	nullable := false
-	if strings.HasPrefix(raw, "?") {
-		nullable = true
-		raw = raw[1:]
-	}
-
-	// Strip leading backslash
-	raw = strings.TrimPrefix(raw, "\\")
-
-	// Find the opening < for generic params
-	openIdx := strings.IndexByte(raw, '<')
-	if openIdx < 0 {
-		return ResolvedType{FQN: raw, Nullable: nullable}
-	}
-
-	// Verify there's a matching closing >
-	if raw[len(raw)-1] != '>' {
-		// Malformed — return base type only
-		return ResolvedType{FQN: raw[:openIdx], Nullable: nullable}
-	}
-
-	baseFQN := raw[:openIdx]
-	paramsStr := raw[openIdx+1 : len(raw)-1]
-
-	// Split params by comma, respecting nested < >
-	params := splitGenericParams(paramsStr)
-	var resolved []ResolvedType
-	for _, p := range params {
-		resolved = append(resolved, ParseGenericType(p))
-	}
-
-	return ResolvedType{FQN: baseFQN, Params: resolved, Nullable: nullable}
+	return resolvedTypeFromDocType(types.ParseTypeExpr(raw))
 }
 
 // InferArrayLiteralType analyzes a PHP array literal string and returns a
@@ -263,27 +227,96 @@ func splitArrayValues(content string) []string {
 	return values
 }
 
-// splitGenericParams splits "int, Collection<int, Model>" into ["int", "Collection<int, Model>"]
-// respecting nested angle brackets.
-func splitGenericParams(s string) []string {
-	var parts []string
-	depth := 0
-	start := 0
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '<':
-			depth++
-		case '>':
-			depth--
-		case ',':
-			if depth == 0 {
-				parts = append(parts, strings.TrimSpace(s[start:i]))
-				start = i + 1
+func resolvedTypeFromDocType(t types.TypeExpr) ResolvedType {
+	if t.String() == "" {
+		return ResolvedType{}
+	}
+
+	switch t.Kind {
+	case types.TypeKindUnion:
+		nullable := false
+		for _, part := range t.Types {
+			if strings.EqualFold(part.Name, "null") {
+				nullable = true
 			}
 		}
+		best := pickBestResolvedBranch(t.Types)
+		best.Nullable = best.Nullable || nullable
+		return best
+	case types.TypeKindIntersection:
+		return pickBestResolvedBranch(t.Types)
+	case types.TypeKindGeneric:
+		rt := ResolvedType{FQN: strings.TrimPrefix(t.Name, "\\"), Nullable: t.Nullable}
+		for _, param := range t.Params {
+			rt.Params = append(rt.Params, resolvedTypeFromDocType(param))
+		}
+		return rt
+	case types.TypeKindShape:
+		if t.Name == "array" || t.Name == "list" {
+			return ResolvedType{FQN: "array", Shape: t.String(), Nullable: t.Nullable}
+		}
+		return ResolvedType{FQN: "object", Nullable: t.Nullable}
+	case types.TypeKindArray:
+		elem := ResolvedType{FQN: "mixed"}
+		if t.Element != nil {
+			elem = resolvedTypeFromDocType(*t.Element)
+		}
+		return ResolvedType{
+			FQN:      "array",
+			Nullable: t.Nullable,
+			Params:   []ResolvedType{{FQN: "int"}, elem},
+		}
+	case types.TypeKindCallable:
+		return ResolvedType{FQN: "callable", Nullable: t.Nullable}
+	case types.TypeKindLiteral:
+		switch strings.ToLower(t.Literal) {
+		case "true", "false":
+			return ResolvedType{FQN: "bool", Nullable: t.Nullable}
+		case "null":
+			return ResolvedType{Nullable: true}
+		}
+		if strings.HasPrefix(t.Literal, "'") || strings.HasPrefix(t.Literal, "\"") {
+			return ResolvedType{FQN: "string", Nullable: t.Nullable}
+		}
+		if strings.Contains(t.Literal, ".") {
+			return ResolvedType{FQN: "float", Nullable: t.Nullable}
+		}
+		return ResolvedType{FQN: "int", Nullable: t.Nullable}
+	case types.TypeKindConditional:
+		if t.Condition == nil {
+			return ResolvedType{}
+		}
+		return resolvedTypeFromDocType(types.TypeExpr{
+			Kind:  types.TypeKindUnion,
+			Types: []types.TypeExpr{t.Condition.IfTrue, t.Condition.IfFalse},
+		})
+	default:
+		switch strings.ToLower(t.Name) {
+		case "true", "false":
+			return ResolvedType{FQN: "bool", Nullable: t.Nullable}
+		case "null":
+			return ResolvedType{Nullable: true}
+		}
+		if strings.HasPrefix(t.Name, "'") || strings.HasPrefix(t.Name, "\"") {
+			return ResolvedType{FQN: "string", Nullable: t.Nullable}
+		}
+		return ResolvedType{FQN: strings.TrimPrefix(t.Name, "\\"), Nullable: t.Nullable}
 	}
-	if tail := strings.TrimSpace(s[start:]); tail != "" {
-		parts = append(parts, tail)
+}
+
+func pickBestResolvedBranch(parts []types.TypeExpr) ResolvedType {
+	var fallback ResolvedType
+	for _, part := range parts {
+		rt := resolvedTypeFromDocType(part)
+		if rt.IsEmpty() {
+			continue
+		}
+		if rt.Shape != "" || len(rt.Params) > 0 {
+			return rt
+		}
+		if fallback.IsEmpty() && rt.FQN != "mixed" && rt.FQN != "void" {
+			fallback = rt
+		}
 	}
-	return parts
+	return fallback
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/open-southeners/tusk-php/internal/phparray"
 	"github.com/open-southeners/tusk-php/internal/protocol"
 	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/open-southeners/tusk-php/internal/types"
 )
 
 // maxResolveDepth is the maximum re-entrancy depth for ResolveVariableType and
@@ -138,7 +139,8 @@ func FindEnclosingClass(file *parser.FileNode, pos protocol.Position) string {
 	if file == nil {
 		return ""
 	}
-	for _, cls := range file.Classes {
+	for i := len(file.Classes) - 1; i >= 0; i-- {
+		cls := file.Classes[i]
 		if pos.Line >= cls.StartLine {
 			fqn := cls.FullName
 			if fqn == "" {
@@ -418,24 +420,7 @@ func (r *Resolver) inferArgType(argStr string, lines []string, pos protocol.Posi
 }
 
 func (r *Resolver) resolveDocType(raw string, file *parser.FileNode) ResolvedType {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ResolvedType{}
-	}
-
-	nullable := false
-	if strings.Contains(raw, "|") {
-		if HasNullInUnion(raw) {
-			nullable = true
-		}
-		raw = PickBestUnionPart(raw)
-	}
-
 	rt := ParseGenericType(raw)
-	if rt.IsEmpty() {
-		return ResolvedType{}
-	}
-	rt.Nullable = rt.Nullable || nullable
 	return r.resolveResolvedType(rt, file)
 }
 
@@ -494,6 +479,7 @@ func (r *Resolver) resolveMethodParamTypeTyped(method *parser.MethodNode, varNam
 			continue
 		}
 		if docType := resolveDocParam(parser.ParseDocBlock(method.DocComment), varName); docType != "" {
+			docType = r.expandTypeAliases(docType, FindEnclosingClass(file, protocol.Position{Line: method.StartLine}), file)
 			if rt := r.resolveDocType(docType, file); !rt.IsEmpty() {
 				return rt
 			}
@@ -598,18 +584,19 @@ func IndexOutsideBrackets(s string, ch byte) int {
 // without any resolution or stripping. Used by MemberTypeResolved to check
 // for generic syntax before falling back to MemberType.
 func (r *Resolver) rawMemberReturnType(member *symbols.Symbol) string {
+	ownerFQN := ownerScopeFQN(member, protocol.Position{}, nil)
 	switch member.Kind {
 	case symbols.KindMethod:
 		if member.ReturnType != "" {
-			return member.ReturnType
+			return r.expandTypeAliases(member.ReturnType, ownerFQN, nil)
 		}
 		if member.DocComment != "" {
 			if doc := parser.ParseDocBlock(member.DocComment); doc != nil && doc.Return.Type != "" {
-				return doc.Return.Type
+				return r.expandTypeAliases(doc.Return.Type, ownerFQN, nil)
 			}
 		}
 	case symbols.KindProperty:
-		return member.Type
+		return r.expandTypeAliases(member.Type, ownerFQN, nil)
 	}
 	return ""
 }
@@ -618,6 +605,7 @@ func (r *Resolver) rawMemberReturnType(member *symbols.Symbol) string {
 // Falls back to @return/@var docblock annotations when no type hint is present.
 func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) string {
 	var typeName string
+	ownerFQN := ownerScopeFQN(member, protocol.Position{}, file)
 	switch member.Kind {
 	case symbols.KindProperty:
 		typeName = member.Type
@@ -638,8 +626,12 @@ func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) str
 	default:
 		return ""
 	}
+	typeName = r.expandTypeAliases(typeName, ownerFQN, file)
 	if typeName == "" || typeName == "void" || typeName == "mixed" {
 		return ""
+	}
+	if fields := types.ParseArrayShape(typeName); len(fields) > 0 {
+		return "array"
 	}
 	if typeName == "self" || typeName == "static" || typeName == "$this" {
 		return member.ParentFQN

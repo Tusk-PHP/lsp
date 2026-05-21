@@ -61,6 +61,7 @@ type Symbol struct {
 	Value         string
 	IsVirtual     bool
 	Templates     []TemplateParam
+	TypeAliases   map[string]TypeAlias
 	Hooks         []parser.PropertyHook // PHP 8.4 property hooks (get/set accessors)
 }
 
@@ -68,6 +69,20 @@ type Symbol struct {
 type TemplateParam struct {
 	Name  string
 	Bound string
+}
+
+// TypeAlias represents a structured PHPDoc alias declared on a symbol owner.
+// Imported aliases keep Import populated and Type empty until resolved lazily.
+type TypeAlias struct {
+	Name   string
+	Type   string
+	Import *ImportedTypeAlias
+}
+
+// ImportedTypeAlias describes @phpstan-import-type/@psalm-import-type metadata.
+type ImportedTypeAlias struct {
+	FromFQN    string
+	ImportedAs string
 }
 
 type ParamInfo struct {
@@ -145,6 +160,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 			if c.DocComment != "" {
 				doc := parser.ParseDocBlock(c.DocComment)
 				if doc != nil {
+					indexTypeAliases(existing, doc, resolve)
 					for _, prop := range doc.Properties {
 						if prop.Name == "" {
 							continue
@@ -462,6 +478,8 @@ func (idx *Index) indexVirtualMembers(uri string, parent *Symbol, src SymbolSour
 	}
 	fqn := parent.FQN
 
+	indexTypeAliases(parent, doc, resolve)
+
 	// Populate template parameters from @template tags
 	for _, tmpl := range doc.Templates {
 		if tmpl.Name != "" {
@@ -562,6 +580,19 @@ func (idx *Index) Lookup(fqn string) *Symbol {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.symbols[fqn]
+}
+
+// LookupTypeAlias returns the alias declared or imported on the given owner symbol.
+func (idx *Index) LookupTypeAlias(ownerFQN, aliasName string) (TypeAlias, bool) {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	owner := idx.symbols[ownerFQN]
+	if owner == nil || owner.TypeAliases == nil {
+		return TypeAlias{}, false
+	}
+	alias, ok := owner.TypeAliases[aliasName]
+	return alias, ok
 }
 
 func (idx *Index) LookupByName(name string) []*Symbol {
