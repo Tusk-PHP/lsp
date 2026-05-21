@@ -1465,6 +1465,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 	if action := a.generateConstructorCodeAction(uri, source, parseResult, params.Context.Only, params.Range.Start); action != nil {
 		actions = append(actions, *action)
 	}
+	actions = append(actions, a.generateGetterSetterCodeActions(uri, source, parseResult, params.Context.Only, params.Range.Start)...)
 	actions = append(actions, a.implementMissingMethodsCodeActions(uri, source, parseResult, params.Context.Only, params.Range.Start)...)
 	if action := a.importOrganizeImportsAction(uri, source, file, params.Context.Only); action != nil {
 		actions = append(actions, *action)
