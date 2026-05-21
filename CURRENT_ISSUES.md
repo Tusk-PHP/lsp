@@ -19,6 +19,11 @@ _None open._
 
 ## Medium
 
+### M13 — Inline variable still lacks safe single-assignment and side-effect analysis
+- **Where:** `internal/analyzer`, `internal/scope`
+- **What:** Sprint 7 now offers a conservative extract-variable refactor for single-line expression selections in local brace-backed scopes, but inline-variable is still unsafe because the current scope model does not prove a binding has exactly one dominating assignment or that substituting the initializer preserves precedence and side effects across all uses.
+- **Fix:** Extend the scope/refactor pipeline with statement-aware assignment tracking, dominance checks for local reassignments, and expression-parenthesization rules, then add inline-variable code actions only for bindings that satisfy those constraints.
+
 ### M12 — Symfony PHP service config files are not analyzed
 - **Where:** `internal/container/analyzer.go`
 - **What:** Symfony container discovery only reads `config/services.yaml|yml` plus class/interface autowiring from `src/`; projects using PHP DI config (`config/services.php`, package PHP config files) do not surface those service IDs or aliases.
@@ -27,6 +32,11 @@ _None open._
 ---
 
 ## Low / performance
+
+### L12 — Code action kind filtering is duplicated across analyzer helpers
+- **Where:** `internal/analyzer/import_code_actions.go`, `internal/analyzer/unknown_class_code_actions.go`
+- **What:** `supportsCodeActionKind` and `importCodeActionKindAllowed` implement the same prefix-matching logic separately, which makes future refactor action additions easy to wire inconsistently.
+- **Fix:** Consolidate code-action kind matching behind one shared analyzer helper and reuse it across quickfix/source/refactor providers.
 
 ### L11 — Symfony route discovery only covers attribute routes in indexed PHP sources
 - **Where:** `internal/framework/symfony/routes.go`
