@@ -19,6 +19,7 @@ import (
 	"github.com/open-southeners/tusk-php/internal/config"
 	"github.com/open-southeners/tusk-php/internal/container"
 	"github.com/open-southeners/tusk-php/internal/diagnostics"
+	frameworklaravel "github.com/open-southeners/tusk-php/internal/framework/laravel"
 	"github.com/open-southeners/tusk-php/internal/hover"
 	"github.com/open-southeners/tusk-php/internal/inlayhint"
 	"github.com/open-southeners/tusk-php/internal/models"
@@ -47,6 +48,7 @@ type Server struct {
 	inlayHint   *inlayhint.Provider
 	diag        *diagnostics.Provider
 	analyzer    *analyzer.Analyzer
+	routeIndex  *frameworklaravel.RouteIndex
 	schemaCache *models.SchemaCache
 	docMu       sync.RWMutex
 	documents   map[string]string
@@ -296,8 +298,20 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.index.RegisterBuiltins()
 	s.container = container.NewContainerAnalyzer(s.index, s.rootPath, s.framework)
 	arrayResolver := models.NewFrameworkArrayResolver(s.index, s.rootPath, s.framework)
+	viewResolver := frameworklaravel.NewViews(s.rootPath)
+	translationResolver := frameworklaravel.NewTranslationResolver(s.rootPath)
+	if s.framework == "laravel" {
+		s.routeIndex = frameworklaravel.NewRouteIndex(s.rootPath)
+	} else {
+		s.routeIndex = nil
+	}
 	s.completion = completion.NewProvider(s.index, s.container, s.framework)
 	s.completion.SetArrayResolver(arrayResolver)
+	if s.routeIndex != nil {
+		s.completion.SetLaravelRouteIndex(s.routeIndex)
+	}
+	s.completion.SetViewResolver(viewResolver)
+	s.completion.SetTranslationResolver(translationResolver)
 	s.inlayHint = inlayhint.NewProvider(s.index, s.container)
 	s.inlayHint.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
@@ -318,6 +332,11 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.analyzer = analyzer.NewAnalyzer(s.index, s.container)
 	s.analyzer.SetChainResolver(s.completion.ResolveExpressionType)
 	s.analyzer.SetTypedChainResolver(s.completion.ResolveExpressionTypeTyped)
+	if s.routeIndex != nil {
+		s.analyzer.SetLaravelRouteIndex(s.routeIndex)
+	}
+	s.analyzer.SetViewResolver(viewResolver)
+	s.analyzer.SetTranslationResolver(translationResolver)
 	s.sendResponse(msg.ID, protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
 			TextDocumentSync: protocol.TextDocumentSyncOptions{
@@ -363,6 +382,11 @@ func (s *Server) handleInitialized(msg *jsonRPCMessage) {
 		s.indexComposerDependencies()
 	})
 	s.goSafe("container.Analyze", s.container.Analyze)
+	if s.routeIndex != nil {
+		s.goSafe("laravelRoutes.ScanWorkspace", func() {
+			_ = s.routeIndex.ScanWorkspace()
+		})
+	}
 	// Run model analysis after both workspace and vendor indexing complete
 	s.goSafe("analyzeModels", func() {
 		indexWg.Wait()
@@ -738,6 +762,9 @@ func (s *Server) indexFileByURI(uri string, source string) {
 		s.index.IndexIDEHelperFile(uri, source)
 	} else {
 		s.index.IndexFile(uri, source)
+	}
+	if s.routeIndex != nil {
+		s.routeIndex.IndexFile(uri, source)
 	}
 }
 

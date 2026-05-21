@@ -5,20 +5,24 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
 	"github.com/open-southeners/tusk-php/internal/parser"
+	"github.com/open-southeners/tusk-php/internal/protocol"
 	"github.com/open-southeners/tusk-php/internal/symbols"
 )
 
 type ServiceBinding struct {
-	Abstract  string
-	Concrete  string
-	Singleton bool
-	Source    string
-	Tags     []string
-	Alias    string
+	Abstract      string
+	Concrete      string
+	Singleton     bool
+	Source        string
+	Tags          []string
+	Alias         string
+	DefinitionURI string
+	Definition    protocol.Range
 }
 
 type ContainerAnalyzer struct {
@@ -42,6 +46,20 @@ func NewContainerAnalyzer(index *symbols.Index, rootPath, framework string) *Con
 	}
 }
 
+func (ca *ContainerAnalyzer) Framework() string {
+	if ca == nil {
+		return ""
+	}
+	return ca.framework
+}
+
+func (ca *ContainerAnalyzer) RootPath() string {
+	if ca == nil {
+		return ""
+	}
+	return ca.rootPath
+}
+
 func (ca *ContainerAnalyzer) Analyze() {
 	switch ca.framework {
 	case "laravel":
@@ -54,15 +72,38 @@ func (ca *ContainerAnalyzer) Analyze() {
 func (ca *ContainerAnalyzer) ResolveDependency(typeName string) *ServiceBinding {
 	ca.mu.RLock()
 	defer ca.mu.RUnlock()
-	if abstract, ok := ca.aliases[typeName]; ok {
-		if binding, ok := ca.bindings[abstract]; ok {
-			return binding
-		}
-	}
-	if binding, ok := ca.bindings[typeName]; ok {
+	return ca.resolveDependencyLocked(typeName, map[string]bool{})
+}
+
+func (ca *ContainerAnalyzer) LookupBinding(name string) *ServiceBinding {
+	ca.mu.RLock()
+	defer ca.mu.RUnlock()
+	if binding, ok := ca.bindings[name]; ok {
 		return binding
 	}
 	return nil
+}
+
+func (ca *ContainerAnalyzer) resolveDependencyLocked(name string, seen map[string]bool) *ServiceBinding {
+	if seen[name] {
+		return nil
+	}
+	seen[name] = true
+	if abstract, ok := ca.aliases[name]; ok {
+		if binding := ca.resolveDependencyLocked(abstract, seen); binding != nil {
+			return binding
+		}
+	}
+	binding, ok := ca.bindings[name]
+	if !ok {
+		return nil
+	}
+	if binding.Alias != "" {
+		if resolved := ca.resolveDependencyLocked(binding.Alias, seen); resolved != nil {
+			return resolved
+		}
+	}
+	return binding
 }
 
 // ResolveFacade checks whether classFQN is a Laravel Facade (extends
@@ -269,26 +310,137 @@ func (ca *ContainerAnalyzer) parseSymfonyServicesYAML() {
 			continue
 		}
 		lines := strings.Split(string(content), "\n")
-		var currentService string
-		for _, line := range lines {
+		var (
+			inServices     bool
+			servicesIndent = -1
+			serviceIndent  = -1
+			currentService string
+			currentIndent  int
+			inTags         bool
+		)
+		for lineNo, line := range lines {
 			trimmed := strings.TrimSpace(line)
-			if strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "#") {
-				svcName := strings.TrimSuffix(trimmed, ":")
-				if strings.Contains(svcName, "\\") || strings.HasPrefix(svcName, "App\\") {
-					currentService = svcName
-					ca.bindings[currentService] = &ServiceBinding{Abstract: currentService, Concrete: currentService, Singleton: true, Source: yamlPath}
-				}
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+				continue
 			}
-			if currentService != "" && strings.Contains(trimmed, "class:") {
-				parts := strings.SplitN(trimmed, ":", 2)
-				if len(parts) == 2 {
+
+			indent := leadingIndent(line)
+			key, isMapping := parseYAMLMappingKey(trimmed)
+			if !inServices {
+				if isMapping && key == "services" {
+					inServices = true
+					servicesIndent = indent
+					serviceIndent = -1
+				}
+				continue
+			}
+			if indent <= servicesIndent {
+				inServices = false
+				currentService = ""
+				inTags = false
+				serviceIndent = -1
+				continue
+			}
+			if isMapping && indent > servicesIndent && (serviceIndent == -1 || indent == serviceIndent) {
+				currentService = ""
+				inTags = false
+				if serviceIndent == -1 {
+					serviceIndent = indent
+				}
+				currentIndent = indent
+				serviceID := normalizeYAMLScalar(key)
+				if !shouldTrackSymfonyServiceID(serviceID) {
+					continue
+				}
+				currentService = serviceID
+				binding := ca.ensureSymfonyBinding(serviceID, yamlPath, lineNo, len(line)-len(strings.TrimLeft(line, " \t")))
+				if binding.Concrete == "" {
+					binding.Concrete = serviceID
+				}
+				continue
+			}
+			if currentService == "" || indent <= currentIndent {
+				inTags = false
+				continue
+			}
+
+			if inTags && strings.HasPrefix(trimmed, "-") {
+				if binding, ok := ca.bindings[currentService]; ok {
+					binding.Tags = append(binding.Tags, normalizeYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))))
+				}
+				continue
+			}
+			inTags = false
+
+			if !isMapping {
+				continue
+			}
+			value := normalizeYAMLScalar(strings.TrimSpace(trimmed[strings.Index(trimmed, ":")+1:]))
+			switch key {
+			case "class":
+				if b, ok := ca.bindings[currentService]; ok {
+					b.Concrete = value
+				}
+			case "alias":
+				if b, ok := ca.bindings[currentService]; ok {
+					b.Alias = value
+					if b.Concrete == "" {
+						b.Concrete = value
+					}
+					ca.aliases[currentService] = value
+				}
+			case "shared":
+				if b, ok := ca.bindings[currentService]; ok {
+					b.Singleton = value != "false"
+				}
+			case "tags":
+				inTags = true
+				if value != "" && value != "[]" {
 					if b, ok := ca.bindings[currentService]; ok {
-						b.Concrete = strings.TrimSpace(parts[1])
+						b.Tags = append(b.Tags, parseInlineYAMLList(value)...)
 					}
 				}
 			}
 		}
+		for serviceID, binding := range ca.bindings {
+			if binding.Alias == "" || binding.Concrete != binding.Alias {
+				continue
+			}
+			if resolved := ca.resolveDependencyLocked(serviceID, map[string]bool{}); resolved != nil {
+				binding.Concrete = resolved.Concrete
+				binding.Singleton = resolved.Singleton
+			}
+		}
 	}
+}
+
+func (ca *ContainerAnalyzer) ensureSymfonyBinding(serviceID, sourcePath string, lineNo, column int) *ServiceBinding {
+	if binding, ok := ca.bindings[serviceID]; ok {
+		if binding.DefinitionURI == "" {
+			binding.DefinitionURI = pathToFileURI(sourcePath)
+			binding.Definition = protocol.Range{
+				Start: protocol.Position{Line: lineNo, Character: column},
+				End:   protocol.Position{Line: lineNo, Character: column + len(serviceID)},
+			}
+		}
+		if binding.Source == "" {
+			binding.Source = sourcePath
+		}
+		return binding
+	}
+	binding := &ServiceBinding{
+		Abstract:      serviceID,
+		Concrete:      serviceID,
+		Singleton:     true,
+		Source:        sourcePath,
+		DefinitionURI: pathToFileURI(sourcePath),
+		Definition: protocol.Range{
+			Start: protocol.Position{Line: lineNo, Character: column},
+			End:   protocol.Position{Line: lineNo, Character: column + len(serviceID)},
+		},
+	}
+	ca.bindings[serviceID] = binding
+	return binding
 }
 
 func (ca *ContainerAnalyzer) parseSymfonyAttributes(path string, content string) {
@@ -304,13 +456,13 @@ func (ca *ContainerAnalyzer) parseSymfonyAttributes(path string, content string)
 		fqn := ns + "\\" + cls.Name
 		if strings.Contains(path, "src"+string(filepath.Separator)) {
 			if _, exists := ca.bindings[fqn]; !exists {
-				ca.bindings[fqn] = &ServiceBinding{Abstract: fqn, Concrete: fqn, Singleton: true, Source: path}
+				ca.bindings[fqn] = &ServiceBinding{Abstract: fqn, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: pathToFileURI(path)}
 			}
 		}
 		for _, iface := range cls.Implements {
 			ifaceFQN := resolveType(iface, ns, file.Uses)
 			if _, exists := ca.bindings[ifaceFQN]; !exists {
-				ca.bindings[ifaceFQN] = &ServiceBinding{Abstract: ifaceFQN, Concrete: fqn, Singleton: true, Source: path}
+				ca.bindings[ifaceFQN] = &ServiceBinding{Abstract: ifaceFQN, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: pathToFileURI(path)}
 			}
 		}
 	}
@@ -392,4 +544,63 @@ func resolveType(name, currentNs string, uses []parser.UseNode) string {
 		return currentNs + "\\" + name
 	}
 	return name
+}
+
+func leadingIndent(s string) int {
+	return len(s) - len(strings.TrimLeft(s, " \t"))
+}
+
+func parseYAMLMappingKey(trimmed string) (string, bool) {
+	if trimmed == "" || strings.HasPrefix(trimmed, "-") {
+		return "", false
+	}
+	idx := strings.Index(trimmed, ":")
+	if idx <= 0 {
+		return "", false
+	}
+	return strings.TrimSpace(trimmed[:idx]), true
+}
+
+func normalizeYAMLScalar(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.Trim(s, "'\"")
+	if idx := strings.Index(s, " #"); idx >= 0 {
+		s = strings.TrimSpace(s[:idx])
+	}
+	return s
+}
+
+func shouldTrackSymfonyServiceID(serviceID string) bool {
+	if serviceID == "" || strings.HasPrefix(serviceID, "_") {
+		return false
+	}
+	if strings.HasSuffix(serviceID, "\\") {
+		return false
+	}
+	return true
+}
+
+func parseInlineYAMLList(value string) []string {
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(value, "[") || !strings.HasSuffix(value, "]") {
+		return nil
+	}
+	value = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(value, "["), "]"))
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	items := make([]string, 0, len(parts))
+	for _, part := range parts {
+		item := normalizeYAMLScalar(part)
+		if item != "" {
+			items = append(items, item)
+		}
+	}
+	sort.Strings(items)
+	return items
+}
+
+func pathToFileURI(path string) string {
+	return "file://" + filepath.ToSlash(path)
 }

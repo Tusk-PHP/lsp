@@ -131,8 +131,10 @@ func TestParseSymfonyServicesYAML(t *testing.T) {
 	os.MkdirAll(configDir, 0755)
 
 	yaml := `services:
-    App\Service\PaymentService:
+    app.payment:
         class: App\Service\StripePaymentService
+    app.mailer:
+        alias: App\Service\MailService
     App\Service\MailService:
 `
 	os.WriteFile(filepath.Join(configDir, "services.yaml"), []byte(yaml), 0644)
@@ -141,14 +143,24 @@ func TestParseSymfonyServicesYAML(t *testing.T) {
 	ca := NewContainerAnalyzer(idx, dir, "none")
 	ca.parseSymfonyServicesYAML()
 
-	if b := ca.ResolveDependency("App\\Service\\PaymentService"); b == nil {
-		t.Error("expected PaymentService binding")
+	if b := ca.LookupBinding("app.payment"); b == nil {
+		t.Error("expected app.payment binding")
 	} else if b.Concrete != "App\\Service\\StripePaymentService" {
 		t.Errorf("concrete = %q", b.Concrete)
+	} else if b.DefinitionURI == "" {
+		t.Error("expected definition metadata for app.payment")
 	}
 
-	if b := ca.ResolveDependency("App\\Service\\MailService"); b == nil {
-		t.Error("expected MailService binding")
+	if b := ca.ResolveDependency("app.mailer"); b == nil {
+		t.Error("expected app.mailer alias binding")
+	} else if b.Concrete != "App\\Service\\MailService" {
+		t.Errorf("alias concrete = %q", b.Concrete)
+	}
+
+	if b := ca.LookupBinding("app.mailer"); b == nil {
+		t.Error("expected raw alias binding")
+	} else if b.DefinitionURI == "" {
+		t.Error("expected definition metadata for alias")
 	}
 }
 

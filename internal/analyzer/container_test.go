@@ -15,6 +15,10 @@ func laravelTestdataPath() string {
 	return filepath.Join("..", "..", "testdata", "laravel")
 }
 
+func symfonyTestdataPath() string {
+	return filepath.Join("..", "..", "testdata", "symfony")
+}
+
 func readLaravelFile(t *testing.T, relPath string) string {
 	t.Helper()
 	content, err := os.ReadFile(filepath.Join(laravelTestdataPath(), relPath))
@@ -51,6 +55,25 @@ func setupLaravelAnalyzer(t *testing.T) *Analyzer {
 	indexPHPDir(t, idx, root, "vendor/laravel/framework/src", symbols.SourceVendor)
 
 	ca := container.NewContainerAnalyzer(idx, root, "laravel")
+	ca.Analyze()
+
+	return NewAnalyzer(idx, ca)
+}
+
+func setupSymfonyAnalyzer(t *testing.T) *Analyzer {
+	t.Helper()
+	root := symfonyTestdataPath()
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+
+	indexPHPDir(t, idx, root, "src", symbols.SourceProject)
+	indexPHPDir(t, idx, root, "vendor/symfony/framework-bundle", symbols.SourceVendor)
+	indexPHPDir(t, idx, root, "vendor/symfony/http-foundation", symbols.SourceVendor)
+	indexPHPDir(t, idx, root, "vendor/symfony/dependency-injection", symbols.SourceVendor)
+	indexPHPDir(t, idx, root, "vendor/symfony/http-kernel", symbols.SourceVendor)
+	indexPHPDir(t, idx, root, "vendor/psr/container", symbols.SourceVendor)
+
+	ca := container.NewContainerAnalyzer(idx, root, "symfony")
 	ca.Analyze()
 
 	return NewAnalyzer(idx, ca)
@@ -147,5 +170,60 @@ class TestController {
 	}
 	if !strings.Contains(loc.URI, "Request.php") {
 		t.Errorf("expected URI containing Request.php, got %s", loc.URI)
+	}
+}
+
+func TestDefinitionSymfonyServiceIDGoesToServiceConfig(t *testing.T) {
+	a := setupSymfonyAnalyzer(t)
+
+	source := `<?php
+namespace App\Controller;
+
+use Symfony\Component\DependencyInjection\ContainerInterface;
+
+class TestController {
+    public function __construct(private ContainerInterface $container) {}
+
+    public function index(): void {
+        $this->container->get('app.notifier');
+    }
+}
+`
+	pos := protocol.Position{Line: 9, Character: 31}
+	loc := a.FindDefinition("file:///test.php", source, pos)
+	if loc == nil {
+		t.Fatal("expected definition for Symfony service ID")
+	}
+	if !strings.Contains(loc.URI, "services.yaml") {
+		t.Fatalf("expected services.yaml definition, got %s", loc.URI)
+	}
+	if loc.Range.Start.Line != 5 {
+		t.Fatalf("expected alias definition on line 5, got %d", loc.Range.Start.Line)
+	}
+}
+
+func TestTypeDefinitionSymfonyServiceIDGoesToConcreteClass(t *testing.T) {
+	a := setupSymfonyAnalyzer(t)
+
+	source := `<?php
+namespace App\Controller;
+
+use Symfony\Component\DependencyInjection\ContainerInterface;
+
+class TestController {
+    public function __construct(private ContainerInterface $container) {}
+
+    public function index(): void {
+        $this->container->get('app.payment_processor');
+    }
+}
+`
+	pos := protocol.Position{Line: 9, Character: 31}
+	locs := a.FindTypeDefinition("file:///test.php", source, pos)
+	if len(locs) == 0 {
+		t.Fatal("expected type definition for Symfony service ID")
+	}
+	if !strings.Contains(locs[0].URI, "PaymentProcessor.php") {
+		t.Fatalf("expected PaymentProcessor.php type definition, got %s", locs[0].URI)
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/open-southeners/tusk-php/internal/container"
+	frameworklaravel "github.com/open-southeners/tusk-php/internal/framework/laravel"
+	frameworksymfony "github.com/open-southeners/tusk-php/internal/framework/symfony"
 	"github.com/open-southeners/tusk-php/internal/models"
 	"github.com/open-southeners/tusk-php/internal/parser"
 	"github.com/open-southeners/tusk-php/internal/protocol"
@@ -21,6 +23,9 @@ type Provider struct {
 	resolver      *resolve.Resolver
 	framework     string
 	arrayResolver *models.FrameworkArrayResolver
+	routes        *frameworklaravel.RouteIndex
+	views         *frameworklaravel.Views
+	translations  *frameworklaravel.TranslationResolver
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
@@ -63,6 +68,18 @@ func (p *Provider) ResolveExpressionTypeTyped(expr string, source string, pos pr
 // SetArrayResolver sets the framework array resolver for config/request/model key completion.
 func (p *Provider) SetArrayResolver(resolver *models.FrameworkArrayResolver) {
 	p.arrayResolver = resolver
+}
+
+func (p *Provider) SetViewResolver(resolver *frameworklaravel.Views) {
+	p.views = resolver
+}
+
+func (p *Provider) SetLaravelRouteIndex(routeIndex *frameworklaravel.RouteIndex) {
+	p.routes = routeIndex
+}
+
+func (p *Provider) SetTranslationResolver(resolver *frameworklaravel.TranslationResolver) {
+	p.translations = resolver
 }
 
 // sanitizeCompletions is the authoritative post-processing step applied to every
@@ -130,6 +147,11 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 			break
 		}
 	}
+	if p.framework == "laravel" && p.views != nil {
+		if viewCtx, ok := frameworklaravel.ExtractViewCompletionContext(trimmed); ok {
+			return sanitizeCompletions(p.completeLaravelViews(viewCtx))
+		}
+	}
 
 	ctx := sourcectx.Analyze(uri, source, pos)
 	if ctx == nil {
@@ -188,6 +210,21 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 	if configPath, partial, quote, ok := extractConfigArgContext(trimmed); ok {
 		return sanitizeCompletions(p.completeConfigKeys(configPath, partial, quote))
 	}
+	if p.framework == "laravel" && p.routes != nil {
+		if partial, quote, ok := frameworklaravel.ExtractRouteNameArgContext(trimmed); ok {
+			return sanitizeCompletions(p.completeLaravelRouteNames(partial, quote))
+		}
+	}
+	if p.framework == "laravel" && p.translations != nil {
+		if txCtx := frameworklaravel.DetectTranslationContext(line, pos.Character); txCtx != nil {
+			return sanitizeCompletions(p.translations.Complete(txCtx))
+		}
+	}
+	if p.framework == "symfony" {
+		if partial, quote, ok := frameworksymfony.ExtractRouteNameContext(trimmed); ok {
+			return sanitizeCompletions(p.completeSymfonyRouteNames(partial, quote))
+		}
+	}
 	if filter, quoteCtx, ok := extractContainerArgContext(trimmed); ok {
 		return sanitizeCompletions(p.completeContainerResolve(source, filter, currentNS, quoteCtx, file))
 	}
@@ -215,6 +252,61 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 	}
 	return sanitizeCompletions(items)
+}
+
+func (p *Provider) completeLaravelViews(ctx *frameworklaravel.ViewContext) []protocol.CompletionItem {
+	matches := p.views.Search(ctx.Partial)
+	items := make([]protocol.CompletionItem, 0, len(matches))
+	for _, view := range matches {
+		insertText := view.Name
+		if strings.HasPrefix(view.Name, ctx.Partial) {
+			insertText = view.Name[len(ctx.Partial):]
+		}
+		items = append(items, protocol.CompletionItem{
+			Label:      view.Name,
+			Kind:       protocol.CompletionItemKindModule,
+			Detail:     "Laravel view",
+			InsertText: insertText,
+			FilterText: view.Name,
+			SortText:   "0" + view.Name,
+		})
+	}
+	return items
+}
+
+func (p *Provider) completeSymfonyRouteNames(partial, quote string) []protocol.CompletionItem {
+	var items []protocol.CompletionItem
+	lowerPartial := strings.ToLower(partial)
+	wrap := "'"
+	if quote == `"` {
+		wrap = `"`
+	}
+
+	for _, route := range frameworksymfony.DiscoverRoutes(p.index) {
+		if lowerPartial != "" && !strings.HasPrefix(strings.ToLower(route.Name), lowerPartial) {
+			continue
+		}
+
+		insertText := route.Name
+		if quote == "" {
+			insertText = wrap + route.Name + wrap
+		}
+
+		detail := route.Path
+		if detail == "" {
+			detail = route.URI
+		}
+
+		items = append(items, protocol.CompletionItem{
+			Label:      route.Name,
+			Kind:       protocol.CompletionItemKindValue,
+			Detail:     detail,
+			InsertText: insertText,
+			SortText:   "0" + route.Name,
+		})
+	}
+
+	return items
 }
 
 func (p *Provider) completeMemberAccess(uri, source string, pos protocol.Position, prefix string, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {

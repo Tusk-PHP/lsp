@@ -634,6 +634,12 @@ class TestController {
 	if !labels["App\\Service\\NotificationService"] {
 		t.Error("expected 'App\\Service\\NotificationService' from services.yaml")
 	}
+	if !labels["app.notifier"] {
+		t.Error("expected explicit Symfony alias service ID")
+	}
+	if !labels["app.payment_processor"] {
+		t.Error("expected explicit Symfony service ID")
+	}
 }
 
 func TestSymfonyContainerFiltersByPrefix(t *testing.T) {
@@ -664,6 +670,37 @@ class TestController {
 			t.Errorf("expected NotificationService completion matching 'Notif', got labels: %v", labels)
 		}
 	}
+}
+
+func TestSymfonyContainerCompletesExplicitServiceIDs(t *testing.T) {
+	idx, ca := setupSymfonyIndex(t)
+	p := NewProvider(idx, ca, "symfony")
+
+	source := `<?php
+namespace App\Controller;
+
+class TestController {
+    public function index() {
+        $container->get('app.not
+    }
+}
+`
+	items := p.GetCompletions("file:///test.php", source, protocol.Position{Line: 5, Character: 31})
+
+	for _, item := range items {
+		if item.Label != "app.notifier" {
+			continue
+		}
+		if item.InsertText != "app.notifier" {
+			t.Fatalf("expected raw insert text for quoted alias, got %q", item.InsertText)
+		}
+		if item.Detail != "-> App\\Service\\NotificationService (alias of App\\Service\\NotificationService) (singleton)" {
+			t.Fatalf("unexpected detail for alias binding: %q", item.Detail)
+		}
+		return
+	}
+
+	t.Fatal("expected app.notifier completion")
 }
 
 // --- Eloquent model static method and variable resolution tests ---

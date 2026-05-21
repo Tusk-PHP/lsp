@@ -185,6 +185,16 @@ func TestE2ESymfonyCompletions(t *testing.T) {
 			t.Errorf("expected 'getName' on $product->, got: %v", mapKeys(labels, 10))
 		}
 	})
+
+	t.Run("generateUrl route names complete from Symfony attributes", func(t *testing.T) {
+		labels := complete("$detailsUrl = $this->generateUrl('product_", "generateUrl('product_")
+		if !labels["product_index"] {
+			t.Errorf("expected 'product_index', got: %v", mapKeys(labels, 10))
+		}
+		if !labels["product_show"] {
+			t.Errorf("expected 'product_show', got: %v", mapKeys(labels, 10))
+		}
+	})
 }
 
 // TestE2ESymfonyDI tests that Symfony DI bindings from services.yaml are loaded.

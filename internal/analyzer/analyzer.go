@@ -8,6 +8,8 @@ import (
 
 	"github.com/open-southeners/tusk-php/internal/composer"
 	"github.com/open-southeners/tusk-php/internal/container"
+	frameworklaravel "github.com/open-southeners/tusk-php/internal/framework/laravel"
+	frameworksymfony "github.com/open-southeners/tusk-php/internal/framework/symfony"
 	"github.com/open-southeners/tusk-php/internal/parser"
 	"github.com/open-southeners/tusk-php/internal/protocol"
 	"github.com/open-southeners/tusk-php/internal/resolve"
@@ -17,13 +19,21 @@ import (
 )
 
 type Analyzer struct {
-	index     *symbols.Index
-	container *container.ContainerAnalyzer
-	resolver  *resolve.Resolver
+	index        *symbols.Index
+	container    *container.ContainerAnalyzer
+	resolver     *resolve.Resolver
+	framework    string
+	routes       *frameworklaravel.RouteIndex
+	views        *frameworklaravel.Views
+	translations *frameworklaravel.TranslationResolver
 }
 
 func NewAnalyzer(index *symbols.Index, ca *container.ContainerAnalyzer) *Analyzer {
-	return &Analyzer{index: index, container: ca, resolver: resolve.NewResolver(index)}
+	framework := ""
+	if ca != nil {
+		framework = ca.Framework()
+	}
+	return &Analyzer{index: index, container: ca, resolver: resolve.NewResolver(index), framework: framework}
 }
 
 func (a *Analyzer) SetChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) string) {
@@ -34,25 +44,60 @@ func (a *Analyzer) SetTypedChainResolver(fn func(expr string, source string, pos
 	a.resolver.TypedChainResolver = fn
 }
 
+func (a *Analyzer) SetTranslationResolver(resolver *frameworklaravel.TranslationResolver) {
+	a.translations = resolver
+}
+
+func (a *Analyzer) SetLaravelRouteIndex(routeIndex *frameworklaravel.RouteIndex) {
+	a.routes = routeIndex
+}
+
+func (a *Analyzer) SetViewResolver(resolver *frameworklaravel.Views) {
+	a.views = resolver
+}
+
 func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *protocol.Location {
+	if a.framework == "symfony" {
+		if routeName, _, ok := frameworksymfony.RouteNameAtPosition(source, pos); ok {
+			if route := frameworksymfony.FindRoute(a.index, routeName); route != nil {
+				return &protocol.Location{URI: route.URI, Range: route.DeclRange}
+			}
+		}
+	}
 	ctx := sourcectx.Analyze(uri, source, pos)
 	if ctx == nil {
 		return nil
 	}
 	line := ctx.Line
-	word := ctx.SymbolText
-	if word == "" {
-		return nil
-	}
 
 	file := ctx.File
 
 	// Handle container call arguments: app('request'), app(Request::class)
 	// Go to the concrete class definition
 	if a.container != nil {
-		if loc := a.definitionForContainerArg(line, pos, source, file); loc != nil {
+		if loc := a.definitionForContainerArg(line, pos, source, file, false); loc != nil {
 			return loc
 		}
+	}
+	if a.framework == "laravel" && a.views != nil {
+		if loc := a.definitionForLaravelView(line, pos.Character); loc != nil {
+			return loc
+		}
+	}
+	if a.translations != nil {
+		if loc := a.definitionForTranslationKey(line, pos.Character); loc != nil {
+			return loc
+		}
+	}
+	if a.framework == "laravel" && a.routes != nil {
+		if loc := a.definitionForRouteName(line, pos.Character); loc != nil {
+			return loc
+		}
+	}
+
+	word := ctx.SymbolText
+	if word == "" {
+		return nil
 	}
 
 	// Handle $variable → go to its type definition
@@ -108,6 +153,44 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 	return nil
 }
 
+func (a *Analyzer) definitionForTranslationKey(line string, character int) *protocol.Location {
+	ctx := frameworklaravel.DetectTranslationContext(line, character)
+	if ctx == nil {
+		return nil
+	}
+	return a.translations.Definition(ctx.Key)
+}
+
+func (a *Analyzer) definitionForRouteName(line string, character int) *protocol.Location {
+	name, ok := frameworklaravel.FindRouteNameReference(line, character)
+	if !ok {
+		return nil
+	}
+	route := a.routes.Find(name)
+	if route == nil {
+		return nil
+	}
+	return &protocol.Location{URI: route.URI, Range: route.Range}
+}
+
+func (a *Analyzer) definitionForLaravelView(line string, character int) *protocol.Location {
+	ctx, ok := frameworklaravel.ExtractViewDefinitionContext(line, character)
+	if !ok {
+		return nil
+	}
+	view := a.views.Find(ctx.Name)
+	if view == nil {
+		return nil
+	}
+	return &protocol.Location{
+		URI: view.URI,
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 0, Character: 0},
+			End:   protocol.Position{Line: 0, Character: 0},
+		},
+	}
+}
+
 // definitionForVariable resolves a $variable to its type's definition.
 func (a *Analyzer) definitionForVariable(varName string, source string, pos protocol.Position, file *parser.FileNode) *protocol.Location {
 	if file == nil {
@@ -126,7 +209,7 @@ func (a *Analyzer) definitionForVariable(varName string, source string, pos prot
 // definitionForContainerArg checks if the cursor is inside a container resolution
 // call argument (e.g. app('request'), app(Request::class)) and returns the
 // definition of the concrete class.
-func (a *Analyzer) definitionForContainerArg(line string, pos protocol.Position, source string, file *parser.FileNode) *protocol.Location {
+func (a *Analyzer) definitionForContainerArg(line string, pos protocol.Position, source string, file *parser.FileNode, preferType bool) *protocol.Location {
 	prefix := line[:min(pos.Character, len(line))]
 	// Check if we're inside a container call
 	patterns := []string{"app(", "resolve(", "->get(", "->make("}
@@ -167,10 +250,17 @@ func (a *Analyzer) definitionForContainerArg(line string, pos protocol.Position,
 	}
 	arg = strings.Trim(arg, "'\"")
 
-	// Handle ::class suffix
+	wasClassConst := false
 	if strings.HasSuffix(arg, "::class") {
+		wasClassConst = true
 		className := strings.TrimSuffix(arg, "::class")
 		arg = a.resolver.ResolveClassName(className, file)
+	}
+
+	if !preferType && !wasClassConst {
+		if binding := a.container.LookupBinding(arg); binding != nil && binding.DefinitionURI != "" {
+			return &protocol.Location{URI: binding.DefinitionURI, Range: binding.Definition}
+		}
 	}
 
 	// Resolve via container bindings
@@ -340,7 +430,7 @@ func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position)
 	file := ctx.File
 
 	if a.container != nil {
-		if loc := a.definitionForContainerArg(ctx.Line, pos, source, file); loc != nil {
+		if loc := a.definitionForContainerArg(ctx.Line, pos, source, file, true); loc != nil {
 			return singleLocation(loc)
 		}
 	}

@@ -6,10 +6,12 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\Attribute\Route;
 use App\Repository\ProductRepository;
 use App\Service\NotificationService;
 use App\Entity\Product;
 
+#[Route('/products', name: 'product_')]
 class ProductController extends AbstractController
 {
     public function __construct(
@@ -17,6 +19,7 @@ class ProductController extends AbstractController
         private NotificationService $notifier
     ) {}
 
+    #[Route('', name: 'index')]
     public function index(): JsonResponse
     {
         // Injected service method with return type
@@ -27,10 +30,12 @@ class ProductController extends AbstractController
 
         // Response creation
         $response = new JsonResponse(['products' => $allProducts]);
+        $listingUrl = $this->generateUrl('product_index');
 
         return $response;
     }
 
+    #[Route('/{id}', name: 'show')]
     public function show(Request $request): Response
     {
         // Request parameter access
@@ -49,6 +54,7 @@ class ProductController extends AbstractController
 
         // Array shape
         $data = ['id' => 1, 'name' => 'Test Product', 'price' => 9.99];
+        $detailsUrl = $this->generateUrl('product_show');
 
         return new Response('OK');
     }

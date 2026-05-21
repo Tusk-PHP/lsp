@@ -3,6 +3,12 @@ services:
         autowire: true
         autoconfigure: true
 
+    app.notifier:
+        alias: App\Service\NotificationService
+
+    app.payment_processor:
+        class: App\Service\PaymentProcessor
+
     App\Service\NotificationService:
         class: App\Service\NotificationService
 

@@ -100,8 +100,15 @@ func (p *Provider) completeContainerResolve(source, filter, currentNS, quoteCtx 
 					continue
 				}
 			}
-			d := fmt.Sprintf("-> %s", binding.Concrete)
-			if binding.Singleton {
+			resolved := p.container.ResolveDependency(abstract)
+			if resolved == nil {
+				resolved = binding
+			}
+			d := fmt.Sprintf("-> %s", resolved.Concrete)
+			if binding.Alias != "" {
+				d += fmt.Sprintf(" (alias of %s)", binding.Alias)
+			}
+			if resolved.Singleton {
 				d += " (singleton)"
 			}
 			label := abstract
