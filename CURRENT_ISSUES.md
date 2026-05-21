@@ -19,13 +19,19 @@ _None open._
 
 ## Medium
 
-_None open._
+### M12 — Symfony PHP service config files are not analyzed
+- **Where:** `internal/container/analyzer.go`
+- **What:** Symfony container discovery only reads `config/services.yaml|yml` plus class/interface autowiring from `src/`; projects using PHP DI config (`config/services.php`, package PHP config files) do not surface those service IDs or aliases.
+- **Fix:** Add a focused extractor for `ContainerConfigurator` / fluent `->set()` / `->alias()` service definitions in Symfony PHP config files and cover it with container completion/definition tests.
 
 ---
 
 ## Low / performance
 
-_None open._
+### L11 — Symfony route discovery only covers attribute routes in indexed PHP sources
+- **Where:** `internal/framework/symfony/routes.go`
+- **What:** Sprint 6 route-name support currently discovers `#[Route(...)]` declarations from project PHP files, but does not yet parse `config/routes.{yaml,yml,xml}` files or imported route resources, so some valid Symfony route names will be missing from completion/definition.
+- **Fix:** Add a Symfony route loader that parses route config files and import prefixes, then merge those results with attribute-derived routes in the shared framework route index.
 
 ---
 
