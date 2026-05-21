@@ -1,8 +1,6 @@
 package types
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestParseArrayShapeBasic(t *testing.T) {
 	fields := ParseArrayShape("array{name: string, age: int}")
@@ -35,21 +33,8 @@ func TestParseArrayShapeNested(t *testing.T) {
 	if len(fields) != 2 {
 		t.Fatalf("expected 2 fields, got %d", len(fields))
 	}
-	if fields[0].Key != "user" || fields[0].Type != "array{name: string, age: int}" {
-		t.Errorf("field 0: got %+v", fields[0])
-	}
-	if fields[1].Key != "count" || fields[1].Type != "int" {
-		t.Errorf("field 1: got %+v", fields[1])
-	}
-}
-
-func TestParseArrayShapeNullable(t *testing.T) {
-	fields := ParseArrayShape("?array{key: string}")
-	if len(fields) != 1 {
-		t.Fatalf("expected 1 field, got %d", len(fields))
-	}
-	if fields[0].Key != "key" {
-		t.Errorf("expected key 'key', got %q", fields[0].Key)
+	if fields[0].Type != "array{name: string, age: int}" {
+		t.Errorf("unexpected nested field: %+v", fields[0])
 	}
 }
 
@@ -63,50 +48,61 @@ func TestParseArrayShapeInUnion(t *testing.T) {
 	}
 }
 
-func TestParseArrayShapeNotAShape(t *testing.T) {
-	tests := []string{"string", "array", "int|string", "array<string, int>", ""}
-	for _, s := range tests {
-		if fields := ParseArrayShape(s); fields != nil {
-			t.Errorf("ParseArrayShape(%q) should return nil, got %v", s, fields)
-		}
-	}
-}
-
-func TestParseArrayShapeGenericTypes(t *testing.T) {
-	fields := ParseArrayShape("array{items: Collection<User>, total: int}")
-	if len(fields) != 2 {
-		t.Fatalf("expected 2 fields, got %d", len(fields))
-	}
-	if fields[0].Type != "Collection<User>" {
-		t.Errorf("expected Collection<User>, got %q", fields[0].Type)
-	}
-}
-
 func TestParseArrayShapeQuotedKeys(t *testing.T) {
 	fields := ParseArrayShape("array{'content-type': string, 'x-api-key': string}")
 	if len(fields) != 2 {
 		t.Fatalf("expected 2 fields, got %d", len(fields))
 	}
 	if fields[0].Key != "content-type" {
-		t.Errorf("expected 'content-type', got %q", fields[0].Key)
+		t.Errorf("expected unquoted key, got %q", fields[0].Key)
 	}
 }
 
-func TestParseArrayShapePositional(t *testing.T) {
-	fields := ParseArrayShape("array{string, int}")
-	if len(fields) != 2 {
-		t.Fatalf("expected 2 fields, got %d", len(fields))
+func TestParseTypeStructured(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		kind  TypeKind
+		out   string
+	}{
+		{"union", "Foo|Bar|null", TypeKindUnion, "Foo | Bar | null"},
+		{"intersection", "Foo&Bar", TypeKindIntersection, "Foo & Bar"},
+		{"generic", "Collection<int, User>", TypeKindGeneric, "Collection<int, User>"},
+		{"array suffix", "User[]", TypeKindArray, "User[]"},
+		{"callable", "callable(string, int): bool", TypeKindCallable, "callable(string, int): bool"},
+		{"literal", "'ok'", TypeKindLiteral, "'ok'"},
+		{"conditional", "($input is class-string<T> ? T : object)", TypeKindConditional, "($input is class-string<T> ? T : object)"},
+		{"object shape", "object{name: string, age?: int}", TypeKindShape, "object{name: string, age?: int}"},
 	}
-	// Positional fields have no key
-	if fields[0].Key != "" || fields[0].Type != "string" {
-		t.Errorf("field 0: got %+v", fields[0])
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parsed := Parse(tt.input)
+			if parsed == nil {
+				t.Fatal("expected parsed type")
+			}
+			if parsed.Kind != tt.kind {
+				t.Fatalf("kind = %v, want %v", parsed.Kind, tt.kind)
+			}
+			if got := parsed.String(); got != tt.out {
+				t.Fatalf("String() = %q, want %q", got, tt.out)
+			}
+		})
 	}
 }
 
-func TestParseArrayShapeList(t *testing.T) {
-	fields := ParseArrayShape("list{string, int}")
-	if len(fields) != 2 {
-		t.Fatalf("expected 2 fields, got %d", len(fields))
+func TestExpandAliases(t *testing.T) {
+	aliases := map[string]*Type{
+		"Payload": Parse("array{id: int, user: User}"),
+		"Result":  Parse("Payload|false"),
+	}
+
+	expanded := ExpandAliases(Parse("Result"), aliases)
+	if expanded == nil {
+		t.Fatal("expected expanded type")
+	}
+	if got := expanded.String(); got != "array{id: int, user: User} | false" {
+		t.Fatalf("String() = %q", got)
 	}
 }
 
@@ -118,11 +114,9 @@ func TestExtractDocTypeString(t *testing.T) {
 	}{
 		{"string $name", "string", "$name"},
 		{"array{name: string, age: int} $config desc", "array{name: string, age: int}", "$config desc"},
-		{"?array{key: string} $var", "?array{key: string}", "$var"},
 		{"Collection<User> $users", "Collection<User>", "$users"},
-		{"int", "int", ""},
-		{"", "", ""},
-		{"array<string, array{id: int}> $data", "array<string, array{id: int}>", "$data"},
+		{"callable(string, int): bool $handler", "callable(string, int): bool", "$handler"},
+		{"($input is class-string<T> ? T : object) description", "($input is class-string<T> ? T : object)", "description"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {

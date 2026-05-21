@@ -347,6 +347,22 @@ func TestParseDocBlockStructuredParams(t *testing.T) {
 	}
 }
 
+func TestParseDocBlockConditionalReturnType(t *testing.T) {
+	raw := `/**
+	 * @return ($name is class-string<T> ? T : object) The resolved service
+	 */`
+	doc := ParseDocBlock(raw)
+	if doc == nil {
+		t.Fatal("expected non-nil docblock")
+	}
+	if doc.Return.Type != "($name is class-string<T> ? T : object)" {
+		t.Fatalf("unexpected return type: %q", doc.Return.Type)
+	}
+	if doc.Return.Description != "The resolved service" {
+		t.Fatalf("unexpected return description: %q", doc.Return.Description)
+	}
+}
+
 func TestParseDocBlockDeprecated(t *testing.T) {
 	raw := `/**
 	 * Old method.
@@ -554,5 +570,39 @@ func TestParseDocBlockPropertyAndMethod(t *testing.T) {
 	}
 	if m2.Params != "string $name, bool $force = false" {
 		t.Errorf("unexpected method 2 params: %q", m2.Params)
+	}
+}
+
+func TestParseDocBlockStructuredTypeAliases(t *testing.T) {
+	raw := `/**
+	 * @phpstan-type Payload array{id: int, name: string}
+	 * @phpstan-import-type SharedPayload from External\Message as ImportedPayload
+	 * @param Payload $payload
+	 * @return ($payload is array{id: int} ? Payload : ImportedPayload)
+	 */`
+	doc := ParseDocBlock(raw)
+	if doc == nil {
+		t.Fatal("expected non-nil docblock")
+	}
+	if len(doc.TypeAliases) != 1 {
+		t.Fatalf("expected 1 type alias, got %d", len(doc.TypeAliases))
+	}
+	if doc.TypeAliases[0].Name != "Payload" {
+		t.Fatalf("unexpected alias name %q", doc.TypeAliases[0].Name)
+	}
+	if doc.TypeAliases[0].ParsedType == nil || doc.TypeAliases[0].ParsedType.String() != "array{id: int, name: string}" {
+		t.Fatalf("unexpected alias type %+v", doc.TypeAliases[0].ParsedType)
+	}
+	if len(doc.ImportedTypes) != 1 {
+		t.Fatalf("expected 1 imported alias, got %d", len(doc.ImportedTypes))
+	}
+	if doc.ImportedTypes[0].Alias != "ImportedPayload" || doc.ImportedTypes[0].From != "External\\Message" {
+		t.Fatalf("unexpected imported alias %+v", doc.ImportedTypes[0])
+	}
+	if doc.Params[0].ParsedType == nil || doc.Params[0].ParsedType.String() != "Payload" {
+		t.Fatalf("unexpected parsed param %+v", doc.Params[0].ParsedType)
+	}
+	if doc.Return.ParsedType == nil || doc.Return.ParsedType.String() != "($payload is array{id: int} ? Payload : ImportedPayload)" {
+		t.Fatalf("unexpected parsed return %+v", doc.Return.ParsedType)
 	}
 }

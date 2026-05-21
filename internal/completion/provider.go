@@ -12,6 +12,7 @@ import (
 	"github.com/open-southeners/tusk-php/internal/resolve"
 	sourcectx "github.com/open-southeners/tusk-php/internal/source"
 	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/open-southeners/tusk-php/internal/types"
 )
 
 type Provider struct {
@@ -1249,7 +1250,7 @@ func fmtParams(sym *symbols.Symbol) string {
 	for _, p := range sym.Params {
 		s := ""
 		if p.Type != "" {
-			s += p.Type + " "
+			s += types.RenderTypeExpr(p.Type) + " "
 		}
 		if p.IsVariadic {
 			s += "..."
@@ -1264,11 +1265,11 @@ func fmtParams(sym *symbols.Symbol) string {
 // Keeps generic type parameters (e.g. array<TKey, TValue>) intact.
 func resolveReturnType(sym *symbols.Symbol) string {
 	if sym.ReturnType != "" {
-		return sym.ReturnType
+		return types.RenderTypeExpr(sym.ReturnType)
 	}
 	if sym.DocComment != "" {
 		if doc := parser.ParseDocBlock(sym.DocComment); doc != nil && doc.Return.Type != "" {
-			return strings.TrimPrefix(doc.Return.Type, "\\")
+			return types.RenderTypeExpr(doc.Return.Type)
 		}
 	}
 	return "mixed"
@@ -1284,10 +1285,8 @@ func docblockVarType(sym *symbols.Symbol) string {
 		return ""
 	}
 	if vars, ok := doc.Tags["var"]; ok && len(vars) > 0 {
-		fields := strings.Fields(vars[0])
-		if len(fields) > 0 {
-			return strings.TrimPrefix(fields[0], "\\")
-		}
+		typ, _ := types.ExtractDocTypeString(vars[0])
+		return types.RenderTypeExpr(typ)
 	}
 	return ""
 }

@@ -99,3 +99,39 @@ func TestProviderGenericCoverageHelpers(t *testing.T) {
 		t.Fatalf("expected empty result for empty arg string, got %#v", rt)
 	}
 }
+
+func TestCompletionDetailFormatsConditionalReturnType(t *testing.T) {
+	source := `<?php
+class Container {
+    /**
+     * @template T
+     * @param string|class-string<T> $id
+     * @return ($id is class-string<T> ? T : object)
+     */
+    public function get(string $id) {}
+}
+
+$container = new Container();
+$container->
+`
+
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///completion-conditional.php", source)
+	p := NewProvider(idx, nil, "none")
+	items := p.GetCompletions("file:///completion-conditional.php", source, protocol.Position{
+		Line:      providerLineContaining(t, source, "$container->"),
+		Character: len("$container->"),
+	})
+
+	for _, item := range items {
+		if item.Label != "get" {
+			continue
+		}
+		if !strings.Contains(item.Detail, "($id is class-string<T> ? T : object)") {
+			t.Fatalf("expected conditional return in detail, got %q", item.Detail)
+		}
+		return
+	}
+
+	t.Fatal("expected get completion item")
+}

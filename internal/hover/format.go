@@ -6,6 +6,7 @@ import (
 
 	"github.com/open-southeners/tusk-php/internal/parser"
 	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/open-southeners/tusk-php/internal/types"
 )
 
 func (p *Provider) formatHoverDeclaration(sym *symbols.Symbol) string {
@@ -54,12 +55,12 @@ func (p *Provider) formatHoverDeclaration(sym *symbols.Symbol) string {
 		}
 		sb.WriteString(fmt.Sprintf(" function %s%s", sym.Name, fmtParams(sym.Params)))
 		if sym.ReturnType != "" {
-			sb.WriteString(": " + sym.ReturnType)
+			sb.WriteString(": " + types.RenderTypeExpr(sym.ReturnType))
 		}
 	case symbols.KindFunction:
 		sb.WriteString(fmt.Sprintf("function %s%s", sym.Name, fmtParams(sym.Params)))
 		if sym.ReturnType != "" {
-			sb.WriteString(": " + sym.ReturnType)
+			sb.WriteString(": " + types.RenderTypeExpr(sym.ReturnType))
 		}
 	case symbols.KindProperty:
 		if sym.IsVirtual {
@@ -72,6 +73,8 @@ func (p *Provider) formatHoverDeclaration(sym *symbols.Symbol) string {
 		t := sym.Type
 		if t == "" {
 			t = "mixed"
+		} else {
+			t = types.RenderTypeExpr(t)
 		}
 		sb.WriteString(vis)
 		// PHP 8.4 asymmetric visibility: e.g. public private(set) string $x
@@ -179,7 +182,7 @@ func (p *Provider) formatDocBlockDetails(doc *parser.DocBlock) string {
 				line += "`" + param.Name + "` "
 			}
 			if param.Type != "" {
-				line += "`" + param.Type + "`"
+				line += "`" + types.RenderTypeExpr(param.Type) + "`"
 			}
 			if param.Description != "" {
 				line += " — " + param.Description
@@ -188,7 +191,7 @@ func (p *Provider) formatDocBlockDetails(doc *parser.DocBlock) string {
 		}
 	}
 	if doc.Return.Type != "" {
-		ret := fmt.Sprintf("\n**Returns** `%s`", doc.Return.Type)
+		ret := fmt.Sprintf("\n**Returns** `%s`", types.RenderTypeExpr(doc.Return.Type))
 		if doc.Return.Description != "" {
 			ret += " — " + doc.Return.Description
 		}
@@ -197,7 +200,7 @@ func (p *Provider) formatDocBlockDetails(doc *parser.DocBlock) string {
 	if len(doc.Throws) > 0 {
 		sb.WriteString("\n**Throws**\n")
 		for _, th := range doc.Throws {
-			line := "- `" + th.Type + "`"
+			line := "- `" + types.RenderTypeExpr(th.Type) + "`"
 			if th.Description != "" {
 				line += " — " + th.Description
 			}
@@ -260,7 +263,7 @@ func fmtParams(params []symbols.ParamInfo) string {
 	for _, p := range params {
 		s := ""
 		if p.Type != "" {
-			s += p.Type + " "
+			s += types.RenderTypeExpr(p.Type) + " "
 		}
 		if p.IsVariadic {
 			s += "..."

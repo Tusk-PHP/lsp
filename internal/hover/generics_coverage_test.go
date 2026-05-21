@@ -81,6 +81,36 @@ $service->fetch();
 	}
 }
 
+func TestHoverFormatsConditionalDocReturn(t *testing.T) {
+	source := `<?php
+class Container {
+    /**
+     * @template T
+     * @param string|class-string<T> $id
+     * @return ($id is class-string<T> ? T : object) Resolved instance
+     */
+    public function get(string $id) {}
+}
+
+$container = new Container();
+$container->get(Foo::class);
+`
+
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///hover-conditional.php", source)
+	p := NewProvider(idx, nil, "none")
+
+	pos := hoverLineContaining(t, source, "$container->get")
+	pos.Character = strings.Index(strings.Split(source, "\n")[pos.Line], "get")
+	hover := p.GetHover("file:///hover-conditional.php", source, pos)
+	if hover == nil {
+		t.Fatal("expected hover result")
+	}
+	if !strings.Contains(hover.Contents.Value, "**Returns** `($id is class-string<T> ? T : object)`") {
+		t.Fatalf("expected conditional return type in hover, got:\n%s", hover.Contents.Value)
+	}
+}
+
 func TestHoverVariableShowsGenericType(t *testing.T) {
 	p := NewProvider(symbols.NewIndex(), nil, "none")
 	p.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
