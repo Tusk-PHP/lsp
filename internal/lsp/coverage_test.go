@@ -849,6 +849,56 @@ class User {}
 	}
 }
 
+func TestHandleCodeActionExtractVariable(t *testing.T) {
+	h := initHarness(t)
+	defer h.close()
+
+	uri := "file:///tmp/test_extract.php"
+	source := `<?php
+function run($user) {
+    return strtoupper($user);
+}
+`
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "php", "version": 1, "text": source,
+		},
+	})
+	time.Sleep(200 * time.Millisecond)
+
+	id := h.send("textDocument/codeAction", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"range": map[string]interface{}{
+			"start": map[string]interface{}{"line": 2, "character": 11},
+			"end":   map[string]interface{}{"line": 2, "character": 28},
+		},
+		"context": map[string]interface{}{
+			"diagnostics": []interface{}{},
+			"only":        []string{"refactor.extract"},
+		},
+	})
+	resp := h.readResponse(id)
+	if resp["error"] != nil {
+		t.Fatalf("codeAction returned error: %v", resp["error"])
+	}
+
+	actions, ok := resp["result"].([]interface{})
+	if !ok {
+		t.Fatalf("expected result array, got %T", resp["result"])
+	}
+	for _, raw := range actions {
+		action, ok := raw.(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected code action object, got %T", raw)
+		}
+		if kind, _ := action["kind"].(string); kind == "refactor.extract" {
+			return
+		}
+	}
+
+	t.Fatal("expected refactor.extract code action")
+}
+
 func TestHandlePrepareRename(t *testing.T) {
 	h := initHarness(t)
 	defer h.close()

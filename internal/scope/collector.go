@@ -33,6 +33,7 @@ type Scope struct {
 	Kind     ScopeKind
 	Name     string
 	Range    protocol.Range
+	ExprBody bool
 	Parent   *Scope
 	Bindings []*Binding
 }
@@ -214,6 +215,19 @@ func (d *Document) BindingAt(pos protocol.Position) *Binding {
 	return nil
 }
 
+func (d *Document) ScopeAt(pos protocol.Position) *Scope {
+	var best *Scope
+	for _, scope := range d.Scopes {
+		if !containsPos(scope.Range, pos) {
+			continue
+		}
+		if best == nil || scopeContains(best.Range, scope.Range) {
+			best = scope
+		}
+	}
+	return best
+}
+
 func (d *Document) Occurrences(binding *Binding) []protocol.Range {
 	if binding == nil {
 		return nil
@@ -333,6 +347,7 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 			scope.Range.End = scope.Range.Start
 			return nil, decls
 		}
+		scope.ExprBody = true
 		scope.Range.End = tokenRange(tokens[bodyEnd]).End
 		bindArrowCaptures(tokens, bodyStart, bodyEnd, parent, scope, doc, decls)
 		return &pendingScope{
@@ -754,4 +769,27 @@ func BindingNames(doc *Document) []string {
 		names = append(names, strings.TrimPrefix(binding.Name, "$"))
 	}
 	return names
+}
+
+func scopeContains(outer, inner protocol.Range) bool {
+	if comparePos(outer.Start, inner.Start) > 0 {
+		return false
+	}
+	return comparePos(outer.End, inner.End) >= 0
+}
+
+func comparePos(a, b protocol.Position) int {
+	if a.Line != b.Line {
+		if a.Line < b.Line {
+			return -1
+		}
+		return 1
+	}
+	if a.Character < b.Character {
+		return -1
+	}
+	if a.Character > b.Character {
+		return 1
+	}
+	return 0
 }

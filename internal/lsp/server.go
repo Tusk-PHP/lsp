@@ -359,6 +359,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 			CodeActionProvider: &protocol.CodeActionOptions{CodeActionKinds: []string{
 				"quickfix",
 				"refactor",
+				"refactor.extract",
 				"refactor.move",
 				"source",
 				"source.organizeImports",

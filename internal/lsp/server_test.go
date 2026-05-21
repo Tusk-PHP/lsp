@@ -217,6 +217,7 @@ func TestServerInitialize(t *testing.T) {
 	wantKinds := map[string]bool{
 		"quickfix":               false,
 		"refactor":               false,
+		"refactor.extract":       false,
 		"refactor.move":          false,
 		"source":                 false,
 		"source.organizeImports": false,

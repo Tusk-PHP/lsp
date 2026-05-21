@@ -216,6 +216,7 @@ func TestProtocolLifecycle(t *testing.T) {
 	}
 	wantKinds := map[string]bool{
 		"quickfix":               false,
+		"refactor.extract":       false,
 		"source.organizeImports": false,
 	}
 	for _, raw := range rawKinds {
