@@ -653,6 +653,83 @@ class User {}
 	}
 }
 
+func TestHandleCodeActionGenerateConstructor(t *testing.T) {
+	h := initHarness(t)
+	defer h.close()
+
+	uri := "file:///tmp/test_constructor_action.php"
+	source := `<?php
+namespace App\Models;
+
+class User {
+    private string $name;
+}
+`
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "php", "version": 1, "text": source,
+		},
+	})
+	time.Sleep(200 * time.Millisecond)
+
+	id := h.send("textDocument/codeAction", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"range": map[string]interface{}{
+			"start": map[string]interface{}{"line": 3, "character": 0},
+			"end":   map[string]interface{}{"line": 3, "character": 10},
+		},
+		"context": map[string]interface{}{
+			"diagnostics": []interface{}{},
+			"only":        []string{"refactor"},
+		},
+	})
+	resp := h.readResponse(id)
+	if resp["error"] != nil {
+		t.Fatalf("codeAction returned error: %v", resp["error"])
+	}
+
+	actions, ok := resp["result"].([]interface{})
+	if !ok {
+		t.Fatalf("expected code actions array, got %T", resp["result"])
+	}
+
+	var constructor map[string]interface{}
+	for _, raw := range actions {
+		action, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if action["title"] == "Generate Constructor" {
+			constructor = action
+			break
+		}
+	}
+	if constructor == nil {
+		t.Fatalf("expected Generate Constructor action, got %#v", actions)
+	}
+
+	edit, ok := constructor["edit"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected workspace edit, got %#v", constructor)
+	}
+	changes, ok := edit["changes"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected edit changes map, got %#v", edit)
+	}
+	fileChanges, ok := changes[uri].([]interface{})
+	if !ok || len(fileChanges) != 1 {
+		t.Fatalf("expected one file edit, got %#v", changes[uri])
+	}
+	textEdit, ok := fileChanges[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected text edit object, got %#v", fileChanges[0])
+	}
+	newText, _ := textEdit["newText"].(string)
+	if !strings.Contains(newText, "public function __construct(string $name)") {
+		t.Fatalf("expected constructor edit text, got %q", newText)
+	}
+}
+
 func TestHandleCodeActionFiltersByOnlyKinds(t *testing.T) {
 	h := initHarness(t)
 	defer h.close()
