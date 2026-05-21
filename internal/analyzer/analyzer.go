@@ -1450,6 +1450,11 @@ func findWordEdits(line string, lineNum int, oldWord, newWord string) []protocol
 func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeActionParams) []protocol.CodeAction {
 	actions := make([]protocol.CodeAction, 0)
 
+	parseResult := parser.New().Parse(source)
+	if parseResult == nil {
+		return actions
+	}
+
 	file := parser.ParseFile(source)
 	if file == nil {
 		return actions
@@ -1457,6 +1462,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 
 	actions = append(actions, a.unknownClassCodeActions(uri, source, file, params)...)
 	actions = append(actions, a.importUnusedImportQuickFixes(uri, source, params)...)
+	actions = append(actions, a.implementMissingMethodsCodeActions(uri, source, parseResult, params.Context.Only, params.Range.Start)...)
 	if action := a.importOrganizeImportsAction(uri, source, file, params.Context.Only); action != nil {
 		actions = append(actions, *action)
 	}
