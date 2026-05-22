@@ -8,8 +8,6 @@
   <a href="https://github.com/open-southeners/tusk-php/actions/workflows/test.yml"><img alt="CI" src="https://github.com/open-southeners/tusk-php/actions/workflows/test.yml/badge.svg"></a>
   <a href="https://github.com/open-southeners/tusk-php/actions/workflows/release.yml"><img alt="Release" src="https://github.com/open-southeners/tusk-php/actions/workflows/release.yml/badge.svg"></a>
   <a href="https://codecov.io/gh/open-southeners/tusk-php"><img alt="codecov" src="https://codecov.io/gh/open-southeners/tusk-php/graph/badge.svg?token=BgBvrfITKq"></a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=open-southeners.tusk-php"><img alt="VS Code Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/open-southeners.tusk-php?label=VS%20Code%20Marketplace"></a>
-  <a href="https://open-vsx.org/extension/open-southeners/tusk-php"><img alt="Open VSX" src="https://img.shields.io/open-vsx/v/open-southeners/tusk-php?label=Open%20VSX"></a>
   <a href="https://github.com/open-southeners/tusk-php/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/open-southeners/tusk-php"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
   <img alt="PHP 8.0-8.5" src="https://img.shields.io/badge/PHP-8.0--8.5-777BB4?logo=php&logoColor=white">
@@ -120,13 +118,18 @@ Full support for modern PHP syntax: union/intersection/DNF types, enums, fibers,
 
 ### VS Code / VS Codium
 
-Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=open-southeners.tusk-php) or [Open VSX Registry](https://open-vsx.org/extension/open-southeners/tusk-php):
+Install the extension from the registry used by your editor:
+
+- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=open-southeners.tusk-php) for Visual Studio Code.
+- [Open VSX Registry](https://open-vsx.org/extension/open-southeners/tusk-php) for VS Codium and other Open VSX-based editors.
+
+VS Code can also install it from the command palette or CLI:
 
 ```
 ext install open-southeners.tusk-php
 ```
 
-Or search for **"Tusk PHP"** in the Extensions panel. The extension bundles the language server binary — no additional setup required.
+The extension bundles the language server binary — no additional setup required.
 
 ### Zed
 
