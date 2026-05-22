@@ -1,15 +1,23 @@
-# Tusk PHP
+<p align="center">
+  <img src="art/tusk-php-icon.png" alt="Tusk PHP logo" width="180">
+</p>
 
-[![CI](https://github.com/open-southeners/tusk-php/actions/workflows/test.yml/badge.svg)](https://github.com/open-southeners/tusk-php/actions/workflows/test.yml)
-[![Release](https://github.com/open-southeners/tusk-php/actions/workflows/release.yml/badge.svg)](https://github.com/open-southeners/tusk-php/actions/workflows/release.yml)
-[![codecov](https://codecov.io/gh/open-southeners/tusk-php/graph/badge.svg?token=BgBvrfITKq)](https://codecov.io/gh/open-southeners/tusk-php)
-[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/open-southeners.tusk-php?label=VS%20Code%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=open-southeners.tusk-php)
-[![Open VSX](https://img.shields.io/open-vsx/v/open-southeners/tusk-php?label=Open%20VSX)](https://open-vsx.org/extension/open-southeners/tusk-php)
-[![GitHub Release](https://img.shields.io/github/v/release/open-southeners/tusk-php)](https://github.com/open-southeners/tusk-php/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![PHP 8.0-8.5](https://img.shields.io/badge/PHP-8.0--8.5-777BB4?logo=php&logoColor=white)
+<h1 align="center">Tusk PHP</h1>
 
-A high-performance Language Server for PHP written in Go, with deep understanding of **Laravel** and **Symfony** dependency injection.
+<p align="center">
+  <a href="https://github.com/open-southeners/tusk-php/actions/workflows/test.yml"><img alt="CI" src="https://github.com/open-southeners/tusk-php/actions/workflows/test.yml/badge.svg"></a>
+  <a href="https://github.com/open-southeners/tusk-php/actions/workflows/release.yml"><img alt="Release" src="https://github.com/open-southeners/tusk-php/actions/workflows/release.yml/badge.svg"></a>
+  <a href="https://codecov.io/gh/open-southeners/tusk-php"><img alt="codecov" src="https://codecov.io/gh/open-southeners/tusk-php/graph/badge.svg?token=BgBvrfITKq"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=open-southeners.tusk-php"><img alt="VS Code Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/open-southeners.tusk-php?label=VS%20Code%20Marketplace"></a>
+  <a href="https://open-vsx.org/extension/open-southeners/tusk-php"><img alt="Open VSX" src="https://img.shields.io/open-vsx/v/open-southeners/tusk-php?label=Open%20VSX"></a>
+  <a href="https://github.com/open-southeners/tusk-php/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/open-southeners/tusk-php"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+  <img alt="PHP 8.0-8.5" src="https://img.shields.io/badge/PHP-8.0--8.5-777BB4?logo=php&logoColor=white">
+</p>
+
+<p align="center">
+  A high-performance PHP language server written in Go, with framework-aware Laravel and Symfony intelligence.
+</p>
 
 ## Intelligent Completions
 
@@ -26,16 +34,34 @@ Context-aware suggestions that understand your code. Method chains resolve throu
 ## Hover & Navigation
 
 - **Hover** — type signatures, docblock summaries, inheritance info, container bindings
-- **Go to Definition** — jump to classes, methods, properties, functions, container bindings
+- **Go to Definition** — jump to classes, methods, properties, functions, container bindings, framework string references
+- **Go to Type Definition** — resolve container services and member types to concrete declarations
+- **Go to Implementation** — find implementations for interfaces and abstract contracts
 - **Find References** — all usages across the workspace, including member access chains
 - **Document Symbols** — full file outline with classes, methods, properties, constants
+- **Workspace Symbols** — search indexed classes, members, functions, and constants across the project
+- **Document Highlights** — highlight declaration, read, and write occurrences in the current file
+- **Folding Ranges** — fold namespaces, declarations, arrays, comments, and nested regions
 - **Signature Help** — parameter hints while typing function calls
 - **Rename** — rename variables (scoped), classes, methods, properties across the workspace
+
+## Inlay Hints
+
+Inline hints are enabled by default for:
+
+- inferred local variable types
+- `foreach` key and value types
+- closure return types
+- method return types from PHPDoc
+- call-site parameter names
 
 ## Refactoring
 
 - **Copy Namespace** — copy the fully qualified name of the current file's class
 - **Move to Namespace** — move a class to a different namespace, updating all references and the file path per PSR-4
+- **Import Code Actions** — remove unused imports, organize imports, and import unknown classes
+- **Generate Code** — implement missing methods, generate constructors, and generate safe getters/setters
+- **Local Refactors** — extract a selected expression to a variable and inline safe single-assignment variables
 
 ## Diagnostics
 
@@ -51,6 +77,9 @@ Built-in static analysis rules run on every change (fast checks) or on save (hea
 | Redundant nullsafe `?->` | `redundant-nullsafe` | Info | Save |
 | Unknown column in Builder | `unknown-column` | Warning | Save |
 | Unknown relation in Builder | `unknown-relation` | Warning | Save |
+| Unknown class | `unknown-class` | Warning | Change |
+| Unknown function | `unknown-function` | Warning | Change |
+| Unknown member | `unknown-member` | Warning | Change |
 | Deprecated PHP functions | `deprecated` | Warning | Change |
 | Abstract method in concrete class | `abstract-in-concrete` | Error | Change |
 
@@ -70,15 +99,17 @@ Scans service providers for `bind()` / `singleton()` calls and pre-loads 25+ cor
 - `app('request')`, `resolve(Cache::class)`, `$this->app->make(...)`
 - `config()` with dot-notation key navigation and value preview
 - Eloquent method chains: `Model::query()->with()->where()->get()`
+- route names, view names, and translation keys with completion and go-to-definition
 - Interface-to-concrete resolution from container bindings
 
 ### Symfony
 
-Parses `services.yaml`, PHP service configs, and autowiring attributes:
+Parses `services.yaml`, PHP service configs, route config, and autowiring attributes:
 
 - `#[Autowire]`, `#[AsController]`, `#[AsCommand]`, `#[AsEventListener]`, `#[AsMessageHandler]`
 - Auto-wired services from `src/`
-- `$container->get(...)` with registered service completions
+- `$container->get(...)` with registered service completions and service/type definition navigation
+- route names from controller attributes and `config/routes.{yaml,yml,xml}` imports
 - Interface-to-concrete resolution from `implements` declarations
 
 ### PHP 8.0 - 8.5
@@ -199,16 +230,16 @@ git clone https://github.com/open-southeners/tusk-php.git && cd tusk-php && make
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `phpLsp.enable` | `true` | Enable/disable the extension |
-| `phpLsp.executablePath` | `""` | Custom path to the binary |
-| `phpLsp.phpVersion` | `"8.5"` | Target PHP version (`8.0`-`8.5`) |
-| `phpLsp.framework` | `"auto"` | Framework: `auto`, `laravel`, `symfony`, `none` |
-| `phpLsp.containerAware` | `true` | Enable DI container analysis |
-| `phpLsp.diagnostics.enable` | `true` | Enable diagnostics |
-| `phpLsp.diagnostics.phpstan.enable` | `true` | Run PHPStan on save |
-| `phpLsp.diagnostics.pint.enable` | `true` | Run Laravel Pint on save |
-| `phpLsp.maxIndexFiles` | `10000` | Maximum PHP files to index |
-| `phpLsp.excludePaths` | `["vendor", ...]` | Paths to skip when indexing |
+| `tuskPhpLsp.enable` | `true` | Enable/disable the extension |
+| `tuskPhpLsp.executablePath` | `""` | Custom path to the binary |
+| `tuskPhpLsp.phpVersion` | `"8.5"` | Target PHP version (`8.0`-`8.5`) |
+| `tuskPhpLsp.framework` | `"auto"` | Framework: `auto`, `laravel`, `symfony`, `none` |
+| `tuskPhpLsp.containerAware` | `true` | Enable DI container analysis |
+| `tuskPhpLsp.diagnostics.enable` | `true` | Enable diagnostics |
+| `tuskPhpLsp.diagnostics.phpstan.enable` | `true` | Run PHPStan on save |
+| `tuskPhpLsp.diagnostics.pint.enable` | `true` | Run Laravel Pint on save |
+| `tuskPhpLsp.maxIndexFiles` | `10000` | Maximum PHP files to index |
+| `tuskPhpLsp.excludePaths` | `["vendor", ...]` | Paths to skip when indexing |
 
 ### Project Configuration
 
@@ -230,7 +261,18 @@ Create `.tusk-php.json` in your project root to override settings per project:
     "redundant-nullsafe": true,
     "redundant-union-member": true,
     "unknown-column": true,
-    "unknown-relation": true
+    "unknown-relation": true,
+    "unknown-class": true,
+    "unknown-function": true,
+    "unknown-member": true
+  },
+  "inlayHints": {
+    "enabled": true,
+    "variableTypes": true,
+    "foreachTypes": true,
+    "closureReturnTypes": true,
+    "returnTypes": true,
+    "parameterNames": true
   }
 }
 ```
