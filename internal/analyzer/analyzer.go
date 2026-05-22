@@ -1470,6 +1470,9 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 	if action := a.extractVariableCodeAction(uri, source, params); action != nil {
 		actions = append(actions, *action)
 	}
+	if action := a.inlineVariableCodeAction(uri, source, params); action != nil {
+		actions = append(actions, *action)
+	}
 	if action := a.importOrganizeImportsAction(uri, source, file, params.Context.Only); action != nil {
 		actions = append(actions, *action)
 	}
@@ -1505,7 +1508,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 
 	if fqn != "" {
 		uriJSON, _ := json.Marshal(uri)
-		if importCodeActionKindAllowed(params.Context.Only, "source") {
+		if codeActionKindAllowed(params.Context.Only, "source") {
 			actions = append(actions, protocol.CodeAction{
 				Title:   "Copy Namespace: " + fqn,
 				Kind:    "source",
@@ -1553,7 +1556,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 			uriJSON, _ := json.Marshal(uri)
 			// The target namespace will be prompted by the editor extension
 			// For now, provide the command with URI; the extension fills in the target
-			if importCodeActionKindAllowed(params.Context.Only, "refactor.move") {
+			if codeActionKindAllowed(params.Context.Only, "refactor.move") {
 				actions = append(actions, protocol.CodeAction{
 					Title: "Move to namespace...",
 					Kind:  "refactor.move",

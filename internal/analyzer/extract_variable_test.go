@@ -49,6 +49,32 @@ function run($user) {
 	}
 }
 
+func TestGetCodeActionsExtractVariableAllowedByRefactorParent(t *testing.T) {
+	source := `<?php
+function run($user) {
+    return strtoupper($user);
+}
+`
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///test.php": source})
+
+	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 2, Character: 11},
+			End:   protocol.Position{Line: 2, Character: 28},
+		},
+		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+	})
+
+	for _, action := range actions {
+		if action.Kind == "refactor.extract" {
+			return
+		}
+	}
+
+	t.Fatalf("expected refactor.extract action when only=refactor, got %#v", actions)
+}
+
 func TestGetCodeActionsExtractVariableSkipsArrowFunctionBody(t *testing.T) {
 	source := `<?php
 function run($user) {

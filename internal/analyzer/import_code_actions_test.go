@@ -93,6 +93,29 @@ $name = formatName('Ada');
 	}
 }
 
+func TestGetCodeActionsOrganizeImportsAllowedBySourceParent(t *testing.T) {
+	source := `<?php
+use App\Models\Post;
+use App\Models\User;
+
+$user = new User();
+`
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///test.php": source})
+
+	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
+		Context:      protocol.CodeActionContext{Only: []string{"source"}},
+	})
+
+	for _, action := range actions {
+		if action.Kind == "source.organizeImports" {
+			return
+		}
+	}
+
+	t.Fatalf("expected source.organizeImports action when only=source, got %#v", actions)
+}
+
 func TestGetCodeActionsOrganizeImportsSkipsUnsafeBlockImportSlice(t *testing.T) {
 	source := `<?php
 use App\Models\User;

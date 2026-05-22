@@ -19,20 +19,8 @@ type importCodeActionBlock struct {
 	lines     []importCodeActionLine
 }
 
-func importCodeActionKindAllowed(only []string, kind string) bool {
-	if len(only) == 0 {
-		return true
-	}
-	for _, requested := range only {
-		if kind == requested || strings.HasPrefix(kind, requested+".") {
-			return true
-		}
-	}
-	return false
-}
-
 func (a *Analyzer) importUnusedImportQuickFixes(uri, source string, params protocol.CodeActionParams) []protocol.CodeAction {
-	if !importCodeActionKindAllowed(params.Context.Only, "quickfix") {
+	if !codeActionKindAllowed(params.Context.Only, "quickfix") {
 		return nil
 	}
 
@@ -74,7 +62,7 @@ func (a *Analyzer) importUnusedImportQuickFixes(uri, source string, params proto
 }
 
 func (a *Analyzer) importOrganizeImportsAction(uri, source string, file *parser.FileNode, only []string) *protocol.CodeAction {
-	if !importCodeActionKindAllowed(only, "source.organizeImports") {
+	if !codeActionKindAllowed(only, "source.organizeImports") {
 		return nil
 	}
 

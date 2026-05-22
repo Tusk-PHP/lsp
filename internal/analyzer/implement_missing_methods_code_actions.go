@@ -11,7 +11,7 @@ import (
 )
 
 func (a *Analyzer) implementMissingMethodsCodeActions(uri, source string, result *parser.ParseResult, only []string, pos protocol.Position) []protocol.CodeAction {
-	if !supportsCodeActionKind(only, "refactor") {
+	if !codeActionKindAllowed(only, "refactor") {
 		return nil
 	}
 	if result == nil {

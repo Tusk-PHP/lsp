@@ -8,7 +8,7 @@ import (
 )
 
 func (a *Analyzer) generateConstructorCodeAction(uri, source string, result *parser.ParseResult, only []string, pos protocol.Position) *protocol.CodeAction {
-	if result == nil || !importCodeActionKindAllowed(only, "refactor") {
+	if result == nil || !codeActionKindAllowed(only, "refactor") {
 		return nil
 	}
 

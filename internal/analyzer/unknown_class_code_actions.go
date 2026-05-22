@@ -10,20 +10,8 @@ import (
 	"github.com/open-southeners/tusk-php/internal/symbols"
 )
 
-func supportsCodeActionKind(only []string, kind string) bool {
-	if len(only) == 0 {
-		return true
-	}
-	for _, allowed := range only {
-		if kind == allowed || strings.HasPrefix(kind, allowed+".") {
-			return true
-		}
-	}
-	return false
-}
-
 func (a *Analyzer) unknownClassCodeActions(uri, source string, file *parser.FileNode, params protocol.CodeActionParams) []protocol.CodeAction {
-	if !supportsCodeActionKind(params.Context.Only, "quickfix") {
+	if !codeActionKindAllowed(params.Context.Only, "quickfix") {
 		return nil
 	}
 
