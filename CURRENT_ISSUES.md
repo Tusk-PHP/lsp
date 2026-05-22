@@ -19,29 +19,13 @@ _None open._
 
 ## Medium
 
-### M13 — Inline variable still lacks safe single-assignment and side-effect analysis
-- **Where:** `internal/analyzer`, `internal/scope`
-- **What:** Sprint 7 now offers a conservative extract-variable refactor for single-line expression selections in local brace-backed scopes, but inline-variable is still unsafe because the current scope model does not prove a binding has exactly one dominating assignment or that substituting the initializer preserves precedence and side effects across all uses.
-- **Fix:** Extend the scope/refactor pipeline with statement-aware assignment tracking, dominance checks for local reassignments, and expression-parenthesization rules, then add inline-variable code actions only for bindings that satisfy those constraints.
-
-### M12 — Symfony PHP service config files are not analyzed
-- **Where:** `internal/container/analyzer.go`
-- **What:** Symfony container discovery only reads `config/services.yaml|yml` plus class/interface autowiring from `src/`; projects using PHP DI config (`config/services.php`, package PHP config files) do not surface those service IDs or aliases.
-- **Fix:** Add a focused extractor for `ContainerConfigurator` / fluent `->set()` / `->alias()` service definitions in Symfony PHP config files and cover it with container completion/definition tests.
+_None open._
 
 ---
 
 ## Low / performance
 
-### L12 — Code action kind filtering is duplicated across analyzer helpers
-- **Where:** `internal/analyzer/import_code_actions.go`, `internal/analyzer/unknown_class_code_actions.go`
-- **What:** `supportsCodeActionKind` and `importCodeActionKindAllowed` implement the same prefix-matching logic separately, which makes future refactor action additions easy to wire inconsistently.
-- **Fix:** Consolidate code-action kind matching behind one shared analyzer helper and reuse it across quickfix/source/refactor providers.
-
-### L11 — Symfony route discovery only covers attribute routes in indexed PHP sources
-- **Where:** `internal/framework/symfony/routes.go`
-- **What:** Sprint 6 route-name support currently discovers `#[Route(...)]` declarations from project PHP files, but does not yet parse `config/routes.{yaml,yml,xml}` files or imported route resources, so some valid Symfony route names will be missing from completion/definition.
-- **Fix:** Add a Symfony route loader that parses route config files and import prefixes, then merge those results with attribute-derived routes in the shared framework route index.
+_None open._
 
 ---
 
@@ -171,3 +155,10 @@ _None open._
   analyzer implementation results allow enum symbols alongside classes. Regression coverage in
   `internal/analyzer/navigation_test.go`, `internal/lsp/coverage_test.go`, and
   `internal/symbols/index_test.go`.
+
+### L10 — Sprint 3 unknown diagnostics are now wired natively
+- `internal/checks/unknown_symbols.go` adds configurable `unknown-class`, `unknown-function`,
+  and `unknown-member` checks over the compatibility AST plus local in-file declarations.
+- `internal/diagnostics/provider.go` now runs those checks during the fast analysis pass, and the
+  provider/LSP regression tests cover the native code paths in
+  `internal/diagnostics/provider_test.go` and `internal/lsp/coverage_test.go`.
