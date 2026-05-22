@@ -164,6 +164,64 @@ func TestParseSymfonyServicesYAML(t *testing.T) {
 	}
 }
 
+func TestParseSymfonyServicesPHP(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	packageDir := filepath.Join(configDir, "packages")
+	if err := os.MkdirAll(packageDir, 0755); err != nil {
+		t.Fatalf("failed to create config dirs: %v", err)
+	}
+
+	servicesPHP := `<?php
+
+use App\Service\NotificationService;
+use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
+
+return static function (ContainerConfigurator $container): void {
+    $services = $container->services();
+    $services->alias('app.php_notifier', NotificationService::class);
+};
+`
+	packagePHP := `<?php
+
+use App\Service\PaymentProcessor;
+use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
+
+return static function (ContainerConfigurator $container): void {
+    $container->services()->set('app.package_payment_processor', PaymentProcessor::class);
+};
+`
+	if err := os.WriteFile(filepath.Join(configDir, "services.php"), []byte(servicesPHP), 0644); err != nil {
+		t.Fatalf("failed to write services.php: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(packageDir, "payments.php"), []byte(packagePHP), 0644); err != nil {
+		t.Fatalf("failed to write package config: %v", err)
+	}
+
+	idx := symbols.NewIndex()
+	ca := NewContainerAnalyzer(idx, dir, "none")
+	ca.parseSymfonyServicesPHP()
+	ca.resolveSymfonyAliases()
+
+	if b := ca.ResolveDependency("app.php_notifier"); b == nil {
+		t.Fatal("expected app.php_notifier alias binding")
+	} else if b.Concrete != "App\\Service\\NotificationService" {
+		t.Fatalf("alias concrete = %q", b.Concrete)
+	}
+
+	if b := ca.LookupBinding("app.php_notifier"); b == nil {
+		t.Fatal("expected raw alias binding")
+	} else if b.DefinitionURI == "" {
+		t.Fatal("expected definition metadata for php alias")
+	}
+
+	if b := ca.LookupBinding("app.package_payment_processor"); b == nil {
+		t.Fatal("expected package php binding")
+	} else if b.Concrete != "App\\Service\\PaymentProcessor" {
+		t.Fatalf("package concrete = %q", b.Concrete)
+	}
+}
+
 func TestCleanPHPString(t *testing.T) {
 	tests := []struct{ input, want string }{
 		{"'hello'", "hello"},

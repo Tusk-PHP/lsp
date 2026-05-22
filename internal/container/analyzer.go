@@ -216,6 +216,7 @@ func (ca *ContainerAnalyzer) AnalyzeConstructorInjection(classFQN string) []Inje
 var (
 	laravelBindRegex      = regexp.MustCompile(`\$this->app->bind\(\s*([^,]+),\s*([^)]+)\)`)
 	laravelSingletonRegex = regexp.MustCompile(`\$this->app->singleton\(\s*([^,]+),\s*([^)]+)\)`)
+	symfonyClassExprRegex = regexp.MustCompile(`^[A-Za-z_\\][A-Za-z0-9_\\]*::class$`)
 )
 
 func (ca *ContainerAnalyzer) analyzeLaravel() {
@@ -278,7 +279,9 @@ func (ca *ContainerAnalyzer) analyzeSymfony() {
 	defer ca.mu.Unlock()
 	ca.registerSymfonyDefaults()
 	ca.parseSymfonyServicesYAML()
+	ca.parseSymfonyServicesPHP()
 	ca.scanDirectory(filepath.Join(ca.rootPath, "src"), ca.parseSymfonyAttributes)
+	ca.resolveSymfonyAliases()
 }
 
 func (ca *ContainerAnalyzer) registerSymfonyDefaults() {
@@ -353,7 +356,10 @@ func (ca *ContainerAnalyzer) parseSymfonyServicesYAML() {
 					continue
 				}
 				currentService = serviceID
-				binding := ca.ensureSymfonyBinding(serviceID, yamlPath, lineNo, len(line)-len(strings.TrimLeft(line, " \t")))
+				binding := ca.ensureSymfonyBinding(serviceID, yamlPath, protocol.Position{
+					Line:      lineNo,
+					Character: len(line) - len(strings.TrimLeft(line, " \t")),
+				})
 				if binding.Concrete == "" {
 					binding.Concrete = serviceID
 				}
@@ -402,25 +408,86 @@ func (ca *ContainerAnalyzer) parseSymfonyServicesYAML() {
 				}
 			}
 		}
-		for serviceID, binding := range ca.bindings {
-			if binding.Alias == "" || binding.Concrete != binding.Alias {
+	}
+}
+
+func (ca *ContainerAnalyzer) parseSymfonyServicesPHP() {
+	configDir := filepath.Join(ca.rootPath, "config")
+	filepath.Walk(configDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info == nil || info.IsDir() || filepath.Ext(path) != ".php" {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		ca.parseSymfonyPHPConfigFile(path, string(content))
+		return nil
+	})
+}
+
+func (ca *ContainerAnalyzer) parseSymfonyPHPConfigFile(path, content string) {
+	file := parser.ParseFile(content)
+	var (
+		ns   string
+		uses []parser.UseNode
+	)
+	if file != nil {
+		ns = file.Namespace
+		uses = file.Uses
+	}
+
+	for _, call := range findSymfonyPHPConfigCalls(content) {
+		switch call.method {
+		case "set":
+			serviceID := interpretSymfonyPHPServiceExpr(call.args[0].raw, ns, uses)
+			if serviceID == "" || !shouldTrackSymfonyServiceID(serviceID) {
 				continue
 			}
-			if resolved := ca.resolveDependencyLocked(serviceID, map[string]bool{}); resolved != nil {
-				binding.Concrete = resolved.Concrete
-				binding.Singleton = resolved.Singleton
+			concrete := serviceID
+			if len(call.args) > 1 {
+				if resolved := interpretSymfonyPHPServiceExpr(call.args[1].raw, ns, uses); resolved != "" {
+					concrete = resolved
+				}
 			}
+			binding := ca.ensureSymfonyBinding(serviceID, path, offsetToPosition(content, call.args[0].start))
+			binding.Concrete = concrete
+		case "alias":
+			if len(call.args) < 2 {
+				continue
+			}
+			serviceID := interpretSymfonyPHPServiceExpr(call.args[0].raw, ns, uses)
+			target := interpretSymfonyPHPServiceExpr(call.args[1].raw, ns, uses)
+			if serviceID == "" || target == "" || !shouldTrackSymfonyServiceID(serviceID) {
+				continue
+			}
+			binding := ca.ensureSymfonyBinding(serviceID, path, offsetToPosition(content, call.args[0].start))
+			binding.Alias = target
+			binding.Concrete = target
+			ca.aliases[serviceID] = target
 		}
 	}
 }
 
-func (ca *ContainerAnalyzer) ensureSymfonyBinding(serviceID, sourcePath string, lineNo, column int) *ServiceBinding {
+func (ca *ContainerAnalyzer) resolveSymfonyAliases() {
+	for serviceID, binding := range ca.bindings {
+		if binding.Alias == "" || binding.Concrete != binding.Alias {
+			continue
+		}
+		if resolved := ca.resolveDependencyLocked(serviceID, map[string]bool{}); resolved != nil {
+			binding.Concrete = resolved.Concrete
+			binding.Singleton = resolved.Singleton
+		}
+	}
+}
+
+func (ca *ContainerAnalyzer) ensureSymfonyBinding(serviceID, sourcePath string, pos protocol.Position) *ServiceBinding {
 	if binding, ok := ca.bindings[serviceID]; ok {
 		if binding.DefinitionURI == "" {
 			binding.DefinitionURI = pathToFileURI(sourcePath)
 			binding.Definition = protocol.Range{
-				Start: protocol.Position{Line: lineNo, Character: column},
-				End:   protocol.Position{Line: lineNo, Character: column + len(serviceID)},
+				Start: pos,
+				End:   protocol.Position{Line: pos.Line, Character: pos.Character + len(serviceID)},
 			}
 		}
 		if binding.Source == "" {
@@ -435,8 +502,8 @@ func (ca *ContainerAnalyzer) ensureSymfonyBinding(serviceID, sourcePath string, 
 		Source:        sourcePath,
 		DefinitionURI: pathToFileURI(sourcePath),
 		Definition: protocol.Range{
-			Start: protocol.Position{Line: lineNo, Character: column},
-			End:   protocol.Position{Line: lineNo, Character: column + len(serviceID)},
+			Start: pos,
+			End:   protocol.Position{Line: pos.Line, Character: pos.Character + len(serviceID)},
 		},
 	}
 	ca.bindings[serviceID] = binding
@@ -599,6 +666,178 @@ func parseInlineYAMLList(value string) []string {
 	}
 	sort.Strings(items)
 	return items
+}
+
+type symfonyPHPConfigArg struct {
+	raw   string
+	start int
+}
+
+type symfonyPHPConfigCall struct {
+	method string
+	args   []symfonyPHPConfigArg
+}
+
+func findSymfonyPHPConfigCalls(content string) []symfonyPHPConfigCall {
+	var calls []symfonyPHPConfigCall
+	for _, method := range []string{"set", "alias"} {
+		needle := "->" + method + "("
+		offset := 0
+		for {
+			idx := strings.Index(content[offset:], needle)
+			if idx < 0 {
+				break
+			}
+			open := offset + idx + len(needle) - 1
+			close := findMatchingParen(content, open)
+			if close < 0 {
+				offset = open + 1
+				continue
+			}
+			args := splitSymfonyPHPArgs(content, open+1, close)
+			if len(args) > 0 {
+				calls = append(calls, symfonyPHPConfigCall{method: method, args: args})
+			}
+			offset = close + 1
+		}
+	}
+	sort.SliceStable(calls, func(i, j int) bool {
+		return calls[i].args[0].start < calls[j].args[0].start
+	})
+	return calls
+}
+
+func findMatchingParen(content string, open int) int {
+	depth := 0
+	inQuote := byte(0)
+	escaped := false
+	for i := open; i < len(content); i++ {
+		ch := content[i]
+		if inQuote != 0 {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == inQuote {
+				inQuote = 0
+			}
+			continue
+		}
+		switch ch {
+		case '\'', '"':
+			inQuote = ch
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func splitSymfonyPHPArgs(content string, start, end int) []symfonyPHPConfigArg {
+	var args []symfonyPHPConfigArg
+	depth := 0
+	inQuote := byte(0)
+	escaped := false
+	argStart := start
+
+	flush := func(argEnd int) {
+		raw := strings.TrimSpace(content[argStart:argEnd])
+		if raw == "" {
+			return
+		}
+		trimmedStart := argStart
+		for trimmedStart < argEnd {
+			switch content[trimmedStart] {
+			case ' ', '\t', '\n', '\r':
+				trimmedStart++
+			default:
+				args = append(args, symfonyPHPConfigArg{
+					raw:   raw,
+					start: trimmedStart,
+				})
+				return
+			}
+		}
+	}
+
+	for i := start; i < end; i++ {
+		ch := content[i]
+		if inQuote != 0 {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == inQuote {
+				inQuote = 0
+			}
+			continue
+		}
+		switch ch {
+		case '\'', '"':
+			inQuote = ch
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				flush(i)
+				argStart = i + 1
+			}
+		}
+	}
+	flush(end)
+	return args
+}
+
+func interpretSymfonyPHPServiceExpr(expr, currentNs string, uses []parser.UseNode) string {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return ""
+	}
+	if strings.HasPrefix(expr, "'") || strings.HasPrefix(expr, `"`) {
+		return cleanPHPString(expr)
+	}
+	if symfonyClassExprRegex.MatchString(expr) {
+		return resolveType(cleanPHPString(expr), currentNs, uses)
+	}
+	return ""
+}
+
+func offsetToPosition(content string, offset int) protocol.Position {
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > len(content) {
+		offset = len(content)
+	}
+	line := 0
+	lineStart := 0
+	for i := 0; i < offset; i++ {
+		if content[i] == '\n' {
+			line++
+			lineStart = i + 1
+		}
+	}
+	return protocol.Position{
+		Line:      line,
+		Character: offset - lineStart,
+	}
 }
 
 func pathToFileURI(path string) string {

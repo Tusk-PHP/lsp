@@ -227,3 +227,58 @@ class TestController {
 		t.Fatalf("expected PaymentProcessor.php type definition, got %s", locs[0].URI)
 	}
 }
+
+func TestDefinitionSymfonyPHPServiceIDGoesToServiceConfig(t *testing.T) {
+	a := setupSymfonyAnalyzer(t)
+
+	source := `<?php
+namespace App\Controller;
+
+use Symfony\Component\DependencyInjection\ContainerInterface;
+
+class TestController {
+    public function __construct(private ContainerInterface $container) {}
+
+    public function index(): void {
+        $this->container->get('app.php_notifier');
+    }
+}
+`
+	pos := protocol.Position{Line: 9, Character: 31}
+	loc := a.FindDefinition("file:///test.php", source, pos)
+	if loc == nil {
+		t.Fatal("expected definition for Symfony PHP service ID")
+	}
+	if !strings.Contains(loc.URI, "services.php") {
+		t.Fatalf("expected services.php definition, got %s", loc.URI)
+	}
+	if loc.Range.Start.Line != 10 {
+		t.Fatalf("expected php service definition on line 10, got %d", loc.Range.Start.Line)
+	}
+}
+
+func TestTypeDefinitionSymfonyPHPServiceIDGoesToConcreteClass(t *testing.T) {
+	a := setupSymfonyAnalyzer(t)
+
+	source := `<?php
+namespace App\Controller;
+
+use Symfony\Component\DependencyInjection\ContainerInterface;
+
+class TestController {
+    public function __construct(private ContainerInterface $container) {}
+
+    public function index(): void {
+        $this->container->get('app.package_payment_processor');
+    }
+}
+`
+	pos := protocol.Position{Line: 9, Character: 31}
+	locs := a.FindTypeDefinition("file:///test.php", source, pos)
+	if len(locs) == 0 {
+		t.Fatal("expected type definition for Symfony PHP service ID")
+	}
+	if !strings.Contains(locs[0].URI, "PaymentProcessor.php") {
+		t.Fatalf("expected PaymentProcessor.php type definition, got %s", locs[0].URI)
+	}
+}
