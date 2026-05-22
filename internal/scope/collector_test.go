@@ -278,3 +278,33 @@ function run() {
 		}
 	}
 }
+
+func TestCollectVariableAssignments(t *testing.T) {
+	source := `<?php
+function run($name, $flag) {
+    $label = $name;
+    if ($flag) {
+        $label = strtoupper($label);
+    }
+    return $label;
+}
+`
+
+	doc := Collect(source)
+	label := doc.BindingAt(protocol.Position{Line: 2, Character: 5})
+	if label == nil {
+		t.Fatal("expected binding for $label")
+	}
+	if got := len(label.Assignments); got != 2 {
+		t.Fatalf("expected 2 assignments, got %d", got)
+	}
+	if !label.Assignments[0].DirectStatement {
+		t.Fatal("expected the first assignment to be a direct statement")
+	}
+	if got := label.Assignments[0].RelativeBraceDepth; got != 0 {
+		t.Fatalf("expected top-level assignment depth 0, got %d", got)
+	}
+	if got := label.Assignments[1].RelativeBraceDepth; got != 1 {
+		t.Fatalf("expected nested assignment depth 1, got %d", got)
+	}
+}

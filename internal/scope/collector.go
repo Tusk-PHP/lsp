@@ -39,12 +39,21 @@ type Scope struct {
 }
 
 type Binding struct {
-	Name       string
-	Kind       BindingKind
-	Decl       protocol.Range
-	Scope      *Scope
-	Origin     *Binding
-	References []protocol.Range
+	Name        string
+	Kind        BindingKind
+	Decl        protocol.Range
+	Scope       *Scope
+	Origin      *Binding
+	Assignments []*Assignment
+	References  []protocol.Range
+}
+
+type Assignment struct {
+	Variable           protocol.Range
+	Expression         protocol.Range
+	Statement          protocol.Range
+	RelativeBraceDepth int
+	DirectStatement    bool
 }
 
 type Document struct {
@@ -149,10 +158,12 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 		}
 
 		if tok.Kind == parser.TokenVariable {
-			if _, ok := declByToken[i]; !ok {
-				if next := nextSignificant(result.Tokens, i+1); next >= 0 && result.Tokens[next].Kind == parser.TokenEquals {
-					binding := ensureBinding(doc, active[len(active)-1].scope, tok.Value, BindingVariable, tokenRange(tok))
-					declByToken[i] = binding
+			if next := nextSignificant(result.Tokens, i+1); next >= 0 && result.Tokens[next].Kind == parser.TokenEquals {
+				current := active[len(active)-1]
+				binding := ensureBinding(doc, current.scope, tok.Value, BindingVariable, tokenRange(tok))
+				declByToken[i] = binding
+				if assignment := buildAssignment(result.Tokens, i, next, braceDepth-current.braceDepth); assignment != nil {
+					binding.Assignments = append(binding.Assignments, assignment)
 				}
 			}
 		}
@@ -679,6 +690,111 @@ func findMatching(tokens []parser.Token, start int, openKind, closeKind parser.T
 		}
 	}
 	return -1
+}
+
+func buildAssignment(tokens []parser.Token, variableIdx, equalsIdx, relativeBraceDepth int) *Assignment {
+	stmtStart := findStatementStart(tokens, variableIdx)
+	stmtEnd := findStatementEnd(tokens, equalsIdx+1)
+	exprStart := nextSignificant(tokens, equalsIdx+1)
+	if stmtStart < 0 || stmtEnd < 0 || exprStart < 0 {
+		return nil
+	}
+
+	exprEnd := prevSignificant(tokens, stmtEnd-1)
+	if exprEnd < exprStart {
+		return nil
+	}
+
+	return &Assignment{
+		Variable:           tokenRange(tokens[variableIdx]),
+		Expression:         protocol.Range{Start: tokenRange(tokens[exprStart]).Start, End: tokenRange(tokens[exprEnd]).End},
+		Statement:          protocol.Range{Start: tokenRange(tokens[stmtStart]).Start, End: tokenRange(tokens[stmtEnd]).End},
+		RelativeBraceDepth: relativeBraceDepth,
+		DirectStatement:    stmtStart == variableIdx && tokens[stmtEnd].Kind == parser.TokenSemicolon,
+	}
+}
+
+func findStatementStart(tokens []parser.Token, first int) int {
+	depthParen := 0
+	depthBracket := 0
+	for i := first - 1; i >= 0; i-- {
+		tok := tokens[i]
+		if isTriviaToken(tok.Kind) {
+			continue
+		}
+		switch tok.Kind {
+		case parser.TokenCloseParen:
+			depthParen++
+		case parser.TokenOpenParen:
+			if depthParen > 0 {
+				depthParen--
+				continue
+			}
+		case parser.TokenCloseBracket:
+			depthBracket++
+		case parser.TokenOpenBracket:
+			if depthBracket > 0 {
+				depthBracket--
+				continue
+			}
+		}
+		if depthParen == 0 && depthBracket == 0 {
+			switch tok.Kind {
+			case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace:
+				return nextSignificant(tokens, i+1)
+			}
+		}
+	}
+	return nextSignificant(tokens, 0)
+}
+
+func findStatementEnd(tokens []parser.Token, start int) int {
+	depthParen := 0
+	depthBracket := 0
+	depthBrace := 0
+	for i := start; i < len(tokens); i++ {
+		if isTriviaToken(tokens[i].Kind) {
+			continue
+		}
+		switch tokens[i].Kind {
+		case parser.TokenOpenParen:
+			depthParen++
+		case parser.TokenCloseParen:
+			if depthParen == 0 && depthBracket == 0 && depthBrace == 0 {
+				return -1
+			}
+			if depthParen > 0 {
+				depthParen--
+			}
+		case parser.TokenOpenBracket:
+			depthBracket++
+		case parser.TokenCloseBracket:
+			if depthBracket == 0 && depthParen == 0 && depthBrace == 0 {
+				return -1
+			}
+			if depthBracket > 0 {
+				depthBracket--
+			}
+		case parser.TokenOpenBrace:
+			depthBrace++
+		case parser.TokenCloseBrace:
+			if depthBrace == 0 && depthParen == 0 && depthBracket == 0 {
+				return -1
+			}
+			if depthBrace > 0 {
+				depthBrace--
+			}
+		case parser.TokenSemicolon:
+			if depthParen == 0 && depthBracket == 0 && depthBrace == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func isTriviaToken(kind parser.TokenKind) bool {
+	return kind == parser.TokenWhitespace || kind == parser.TokenComment || kind == parser.TokenDocComment
 }
 
 func containsPos(r protocol.Range, pos protocol.Position) bool {
