@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-22
+
+### Added
+
+- Configurable inlay hints for inferred variable types, `foreach` key/value types, closure and method return types, and call-site parameter names.
+- New LSP navigation surfaces for type definitions, implementations, document highlights, folding ranges, and richer workspace symbol results.
+- Native unknown-symbol diagnostics for unresolved classes, functions, and members.
+- Code actions for unused imports, import organization, and unknown-class import quick fixes.
+- Refactor code actions for implementing missing methods, generating constructors, generating getters and setters, extracting variables, and conservatively inlining local variables.
+- Structured PHPDoc support for conditional type rendering and local type-alias resolution across completion, hover, and type resolution.
+- Laravel route, view, and translation metadata indexes with completion and definition support for framework string references.
+- Symfony route-name intelligence for attribute routes plus YAML/XML route config and imported route resources.
+- Symfony container discovery for YAML and PHP service configuration, including fluent PHP `set()` and `alias()` definitions.
+
+### Changed
+
+- Renamed the server binary, bundled editor binaries, logs, and project config references from `php-lsp` to `tusk-php`.
+- Cursor analysis and scoped variable tracking now model position-aware namespaces/imports, free functions, closures, arrow functions, grouped imports, closure captures, destructuring, and assignment metadata used by rename and refactor actions.
+- Container service-ID navigation now distinguishes service-definition locations from type-definition targets.
+- Inlay hints render shorter type names when fully qualified names can be reduced for display.
+
+### Fixed
+
+- Generic and docblock type resolution for annotated parameters and union generic carriers, including recursion isolation for concurrent resolver work.
+- Parser recovery errors are preserved and published as syntax diagnostics with stable locations for malformed input.
+- Enum interface implementations now participate in implementation lookup.
+- Variable rename preparation no longer advertises unsupported unscoped variable renames.
+- Position-aware cursor scope and import resolution prevent later namespace/import state from leaking into earlier source regions.
+
 ## [0.5.0] - 2026-05-17
 
 ### Added
