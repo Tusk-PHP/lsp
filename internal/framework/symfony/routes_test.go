@@ -1,6 +1,8 @@
 package symfony
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -106,5 +108,120 @@ class ProductController
 	}
 	if rng.Start.Line != lineNo || rng.End.Line != lineNo {
 		t.Fatalf("range = %#v", rng)
+	}
+}
+
+func TestDiscoverRoutesFromYAMLConfigImports(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "composer.json"), "{}\n")
+	mustWriteFile(t, filepath.Join(root, "config", "routes.yaml"), `product_routes:
+  resource: ../src/Controller/
+  type: attribute
+  prefix: /api
+
+catalog:
+  resource: routes/catalog.yaml
+  prefix: /shop
+  name_prefix: shop_
+`)
+	mustWriteFile(t, filepath.Join(root, "config", "routes", "catalog.yaml"), `home:
+  path: /
+`)
+
+	controllerPath := filepath.Join(root, "src", "Controller", "ProductController.php")
+	controllerSource := `<?php
+namespace App\Controller;
+
+use Symfony\Component\Routing\Attribute\Route;
+
+#[Route('/products', name: 'product_')]
+class ProductController
+{
+    #[Route('', name: 'index')]
+    public function index(): void {}
+
+    #[Route('/{id}', name: 'show')]
+    public function show(): void {}
+}
+`
+	mustWriteFile(t, controllerPath, controllerSource)
+
+	idx := symbols.NewIndex()
+	idx.IndexFileWithSource("file://"+filepath.ToSlash(controllerPath), controllerSource, symbols.SourceProject)
+
+	routes := DiscoverRoutes(idx)
+	if len(routes) != 3 {
+		t.Fatalf("expected 3 routes, got %d", len(routes))
+	}
+
+	got := map[string]string{}
+	for _, route := range routes {
+		got[route.Name] = route.Path
+	}
+
+	if got["product_index"] != "/api/products" {
+		t.Fatalf("product_index path = %q, want %q", got["product_index"], "/api/products")
+	}
+	if got["product_show"] != "/api/products/{id}" {
+		t.Fatalf("product_show path = %q, want %q", got["product_show"], "/api/products/{id}")
+	}
+	if got["shop_home"] != "/shop/" {
+		t.Fatalf("shop_home path = %q, want %q", got["shop_home"], "/shop/")
+	}
+}
+
+func TestDiscoverRoutesFromXMLConfigImports(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "composer.json"), "{}\n")
+	mustWriteFile(t, filepath.Join(root, "config", "routes.xml"), `<?xml version="1.0" encoding="UTF-8"?>
+<routes>
+    <import resource="../src/Controller/" type="attribute" prefix="/xml" />
+    <route id="homepage" path="/" />
+</routes>
+`)
+
+	controllerPath := filepath.Join(root, "src", "Controller", "ProductController.php")
+	controllerSource := `<?php
+namespace App\Controller;
+
+use Symfony\Component\Routing\Attribute\Route;
+
+#[Route('/products', name: 'product_')]
+class ProductController
+{
+    #[Route('', name: 'index')]
+    public function index(): void {}
+}
+`
+	mustWriteFile(t, controllerPath, controllerSource)
+
+	idx := symbols.NewIndex()
+	idx.IndexFileWithSource("file://"+filepath.ToSlash(controllerPath), controllerSource, symbols.SourceProject)
+
+	routes := DiscoverRoutes(idx)
+	if len(routes) != 2 {
+		t.Fatalf("expected 2 routes, got %d", len(routes))
+	}
+
+	got := map[string]string{}
+	for _, route := range routes {
+		got[route.Name] = route.Path
+	}
+
+	if got["homepage"] != "/" {
+		t.Fatalf("homepage path = %q, want %q", got["homepage"], "/")
+	}
+	if got["product_index"] != "/xml/products" {
+		t.Fatalf("product_index path = %q, want %q", got["product_index"], "/xml/products")
+	}
+}
+
+func mustWriteFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("mkdir %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
 	}
 }

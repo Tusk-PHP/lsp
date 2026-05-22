@@ -1,8 +1,12 @@
 package symfony
 
 import (
+	"encoding/xml"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/open-southeners/tusk-php/internal/parser"
@@ -29,13 +33,72 @@ var routeNamePattern = regexp.MustCompile(`name\s*:\s*['"]([^'"]*)['"]`)
 var routePathPattern = regexp.MustCompile(`path\s*:\s*['"]([^'"]*)['"]`)
 var firstStringPattern = regexp.MustCompile(`^\s*['"]([^'"]*)['"]`)
 
-// DiscoverRoutes scans indexed project PHP sources for Symfony #[Route(...)]
-// attributes and returns named routes discovered from controller classes.
+type routeConfigEntry struct {
+	Name       string
+	Path       string
+	URI        string
+	DeclRange  protocol.Range
+	IsImport   bool
+	Resource   string
+	Type       string
+	Prefix     string
+	NamePrefix string
+}
+
+type xmlRoutes struct {
+	XMLName xml.Name    `xml:"routes"`
+	Routes  []xmlRoute  `xml:"route"`
+	Imports []xmlImport `xml:"import"`
+}
+
+type xmlRoute struct {
+	ID   string `xml:"id,attr"`
+	Path string `xml:"path,attr"`
+}
+
+type xmlImport struct {
+	Resource   string `xml:"resource,attr"`
+	Type       string `xml:"type,attr"`
+	Prefix     string `xml:"prefix,attr"`
+	NamePrefix string `xml:"name-prefix,attr"`
+}
+
+// DiscoverRoutes scans indexed project PHP sources and Symfony route config
+// files, then returns named routes discovered from both sources.
 func DiscoverRoutes(index *symbols.Index) []Route {
 	if index == nil {
 		return nil
 	}
 
+	merged := make(map[string]Route)
+	for _, route := range discoverAttributeRoutes(index) {
+		if route.Name == "" {
+			continue
+		}
+		merged[route.Name] = route
+	}
+	for _, route := range discoverConfigRoutes(index) {
+		if route.Name == "" {
+			continue
+		}
+		merged[route.Name] = route
+	}
+
+	routes := make([]Route, 0, len(merged))
+	for _, route := range merged {
+		routes = append(routes, route)
+	}
+
+	sort.Slice(routes, func(i, j int) bool {
+		if routes[i].Name != routes[j].Name {
+			return routes[i].Name < routes[j].Name
+		}
+		return routes[i].URI < routes[j].URI
+	})
+	return routes
+}
+
+func discoverAttributeRoutes(index *symbols.Index) []Route {
 	var routes []Route
 	for _, uri := range index.GetAllFileURIs() {
 		if strings.Contains(uri, "/vendor/") {
@@ -47,13 +110,170 @@ func DiscoverRoutes(index *symbols.Index) []Route {
 		}
 		routes = append(routes, discoverRoutesInFile(uri, source)...)
 	}
+	return routes
+}
 
-	sort.Slice(routes, func(i, j int) bool {
-		if routes[i].Name != routes[j].Name {
-			return routes[i].Name < routes[j].Name
+func discoverConfigRoutes(index *symbols.Index) []Route {
+	var routes []Route
+	visited := make(map[string]bool)
+
+	for _, root := range discoverSymfonyRoots(index) {
+		configDir := filepath.Join(root, "config")
+		for _, name := range []string{"routes.yaml", "routes.yml", "routes.xml"} {
+			path := filepath.Join(configDir, name)
+			if _, err := os.Stat(path); err != nil {
+				continue
+			}
+			routes = append(routes, discoverRoutesFromConfigPath(path, "", "", visited)...)
 		}
-		return routes[i].URI < routes[j].URI
+	}
+
+	return routes
+}
+
+func discoverSymfonyRoots(index *symbols.Index) []string {
+	seen := make(map[string]bool)
+	var roots []string
+
+	for _, uri := range index.GetAllFileURIs() {
+		if strings.Contains(uri, "/vendor/") {
+			continue
+		}
+		path := symbols.URIToPath(uri)
+		if path == "" {
+			continue
+		}
+
+		info, err := os.Stat(path)
+		if err != nil || info.IsDir() {
+			continue
+		}
+
+		dir := filepath.Dir(path)
+		for {
+			if dir == "." || dir == string(filepath.Separator) || dir == "" {
+				break
+			}
+			if _, err := os.Stat(filepath.Join(dir, "composer.json")); err == nil {
+				if !seen[dir] {
+					seen[dir] = true
+					roots = append(roots, dir)
+				}
+				break
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+
+	sort.Strings(roots)
+	return roots
+}
+
+func discoverRoutesFromConfigPath(path, pathPrefix, namePrefix string, visited map[string]bool) []Route {
+	cleanPath := filepath.Clean(path)
+	if visited[cleanPath] {
+		return nil
+	}
+	visited[cleanPath] = true
+
+	content, err := os.ReadFile(cleanPath)
+	if err != nil {
+		return nil
+	}
+
+	var entries []routeConfigEntry
+	switch strings.ToLower(filepath.Ext(cleanPath)) {
+	case ".yaml", ".yml":
+		entries = parseYAMLRouteConfig(cleanPath, string(content))
+	case ".xml":
+		entries = parseXMLRouteConfig(cleanPath, string(content))
+	default:
+		return nil
+	}
+
+	var routes []Route
+	baseDir := filepath.Dir(cleanPath)
+	for _, entry := range entries {
+		entryPathPrefix := joinRoutePath(pathPrefix, entry.Prefix)
+		entryNamePrefix := namePrefix + entry.NamePrefix
+
+		if entry.IsImport {
+			resourcePath := filepath.Clean(filepath.Join(baseDir, entry.Resource))
+			routes = append(routes, discoverRoutesFromResource(resourcePath, entry.Type, entryPathPrefix, entryNamePrefix, visited)...)
+			continue
+		}
+
+		routes = append(routes, Route{
+			Name:      entryNamePrefix + entry.Name,
+			Path:      joinRoutePath(entryPathPrefix, entry.Path),
+			URI:       entry.URI,
+			NameRange: entry.DeclRange,
+			DeclRange: entry.DeclRange,
+		})
+	}
+
+	return routes
+}
+
+func discoverRoutesFromResource(path, resourceType, pathPrefix, namePrefix string, visited map[string]bool) []Route {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+
+	if info.IsDir() {
+		if resourceType != "attribute" && resourceType != "" {
+			return nil
+		}
+		return discoverRoutesFromAttributeDir(path, pathPrefix, namePrefix)
+	}
+
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".yaml", ".yml", ".xml":
+		return discoverRoutesFromConfigPath(path, pathPrefix, namePrefix, visited)
+	case ".php":
+		if resourceType != "attribute" && resourceType != "" {
+			return nil
+		}
+		return discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix)
+	default:
+		return nil
+	}
+}
+
+func discoverRoutesFromAttributeDir(root, pathPrefix, namePrefix string) []Route {
+	var routes []Route
+	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info == nil || info.IsDir() || filepath.Ext(path) != ".php" {
+			return nil
+		}
+		routes = append(routes, discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix)...)
+		return nil
 	})
+	return routes
+}
+
+func discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix string) []Route {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	uri := path
+	if abs, err := filepath.Abs(path); err == nil {
+		uri = "file://" + filepath.ToSlash(abs)
+	}
+
+	routes := discoverRoutesInFile(uri, string(source))
+	for i := range routes {
+		routes[i].Name = namePrefix + routes[i].Name
+		routes[i].Path = joinRoutePath(pathPrefix, routes[i].Path)
+	}
 	return routes
 }
 
@@ -349,4 +569,183 @@ func positionFromOffset(text string, baseLine, offset int) protocol.Position {
 		col++
 	}
 	return protocol.Position{Line: line, Character: col}
+}
+
+func parseYAMLRouteConfig(uri, source string) []routeConfigEntry {
+	lines := strings.Split(source, "\n")
+	var entries []routeConfigEntry
+
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || leadingIndent(line) != 0 {
+			continue
+		}
+
+		colon := strings.Index(trimmed, ":")
+		if colon <= 0 {
+			continue
+		}
+
+		name := strings.TrimSpace(trimmed[:colon])
+		if strings.Contains(name, " ") || strings.HasPrefix(name, "-") {
+			continue
+		}
+
+		entry := routeConfigEntry{
+			Name:      name,
+			URI:       "file://" + filepath.ToSlash(uri),
+			DeclRange: protocol.Range{Start: protocol.Position{Line: i, Character: 0}, End: protocol.Position{Line: i, Character: len(name)}},
+		}
+
+		baseIndent := leadingIndent(line)
+		for j := i + 1; j < len(lines); j++ {
+			childLine := lines[j]
+			childTrimmed := strings.TrimSpace(childLine)
+			if childTrimmed == "" || strings.HasPrefix(childTrimmed, "#") {
+				continue
+			}
+			childIndent := leadingIndent(childLine)
+			if childIndent <= baseIndent {
+				break
+			}
+
+			key, value, ok := splitYAMLKeyValue(childTrimmed)
+			if !ok {
+				continue
+			}
+
+			switch key {
+			case "path":
+				entry.Path = trimYAMLScalar(value)
+			case "resource":
+				if value != "" {
+					entry.IsImport = true
+					entry.Resource = trimYAMLScalar(value)
+					continue
+				}
+				for k := j + 1; k < len(lines); k++ {
+					nestedLine := lines[k]
+					nestedTrimmed := strings.TrimSpace(nestedLine)
+					if nestedTrimmed == "" || strings.HasPrefix(nestedTrimmed, "#") {
+						continue
+					}
+					nestedIndent := leadingIndent(nestedLine)
+					if nestedIndent <= childIndent {
+						break
+					}
+					nestedKey, nestedValue, ok := splitYAMLKeyValue(nestedTrimmed)
+					if !ok {
+						continue
+					}
+					if nestedKey == "path" {
+						entry.IsImport = true
+						entry.Resource = trimYAMLScalar(nestedValue)
+					}
+				}
+			case "type":
+				entry.Type = trimYAMLScalar(value)
+			case "prefix":
+				entry.Prefix = trimYAMLScalar(value)
+			case "name_prefix":
+				entry.NamePrefix = trimYAMLScalar(value)
+			}
+		}
+
+		if entry.IsImport || entry.Path != "" {
+			entries = append(entries, entry)
+		}
+	}
+
+	return entries
+}
+
+func parseXMLRouteConfig(uri, source string) []routeConfigEntry {
+	var doc xmlRoutes
+	if err := xml.Unmarshal([]byte(source), &doc); err != nil {
+		return nil
+	}
+
+	var entries []routeConfigEntry
+	for _, route := range doc.Routes {
+		if route.ID == "" {
+			continue
+		}
+		rng := findXMLDeclRange(source, "id", route.ID)
+		entries = append(entries, routeConfigEntry{
+			Name:      route.ID,
+			Path:      route.Path,
+			URI:       "file://" + filepath.ToSlash(uri),
+			DeclRange: rng,
+		})
+	}
+	for _, imp := range doc.Imports {
+		if imp.Resource == "" {
+			continue
+		}
+		entries = append(entries, routeConfigEntry{
+			URI:        "file://" + filepath.ToSlash(uri),
+			DeclRange:  findXMLDeclRange(source, "resource", imp.Resource),
+			IsImport:   true,
+			Resource:   imp.Resource,
+			Type:       imp.Type,
+			Prefix:     imp.Prefix,
+			NamePrefix: imp.NamePrefix,
+		})
+	}
+	return entries
+}
+
+func joinRoutePath(prefix, path string) string {
+	switch {
+	case prefix == "":
+		return path
+	case path == "":
+		return prefix
+	case strings.HasSuffix(prefix, "/") && strings.HasPrefix(path, "/"):
+		return prefix + strings.TrimPrefix(path, "/")
+	case !strings.HasSuffix(prefix, "/") && !strings.HasPrefix(path, "/"):
+		return prefix + "/" + path
+	default:
+		return prefix + path
+	}
+}
+
+func leadingIndent(line string) int {
+	return len(line) - len(strings.TrimLeft(line, " \t"))
+}
+
+func splitYAMLKeyValue(line string) (string, string, bool) {
+	colon := strings.Index(line, ":")
+	if colon <= 0 {
+		return "", "", false
+	}
+	return strings.TrimSpace(line[:colon]), strings.TrimSpace(line[colon+1:]), true
+}
+
+func trimYAMLScalar(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if idx := strings.Index(value, " #"); idx >= 0 {
+		value = strings.TrimSpace(value[:idx])
+	}
+	if unquoted, err := strconv.Unquote(value); err == nil {
+		return unquoted
+	}
+	return strings.Trim(value, `'"`)
+}
+
+func findXMLDeclRange(source, attr, value string) protocol.Range {
+	needle := attr + `="` + value + `"`
+	offset := strings.Index(source, needle)
+	if offset < 0 {
+		return protocol.Range{}
+	}
+
+	valueOffset := offset + len(attr) + 2
+	start := positionFromOffset(source, 0, valueOffset)
+	end := positionFromOffset(source, 0, valueOffset+len(value))
+	return protocol.Range{Start: start, End: end}
 }
