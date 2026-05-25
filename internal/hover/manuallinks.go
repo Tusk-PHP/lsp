@@ -8,7 +8,7 @@ import (
 
 // phpManualURL returns a PHP manual URL for built-in symbols, or empty string for user-defined ones.
 func phpManualURL(sym *symbols.Symbol) string {
-	if sym.URI != "builtin" {
+	if sym.Source != symbols.SourceBuiltin && sym.URI != "builtin" {
 		return ""
 	}
 	switch sym.Kind {
