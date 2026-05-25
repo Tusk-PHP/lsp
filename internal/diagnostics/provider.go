@@ -34,6 +34,10 @@ type Provider struct {
 	// Set by the LSP server after initialization.
 	BuilderMemberChecker checks.MemberChecker
 
+	// BuiltinUnavailableRule reports PHP builtin usages not available in the
+	// resolved PHP profile. Set by the LSP server after initialization.
+	BuiltinUnavailableRule *checks.BuiltinUnavailableRule
+
 	mu          sync.RWMutex
 	toolResults map[string][]protocol.Diagnostic
 	saveResults map[string][]protocol.Diagnostic
@@ -72,6 +76,9 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 		if p.TypeResolver != nil && p.cfg.IsRuleEnabled("unknown-member") {
 			diags = append(diags, findingsToDiagnostics((&checks.UnknownMemberRule{TypeResolver: p.TypeResolver}).Check(file, source, p.index))...)
 		}
+		if p.BuiltinUnavailableRule != nil && p.cfg.IsRuleEnabled("builtin-unavailable") {
+			diags = append(diags, findingsToDiagnostics(p.BuiltinUnavailableRule.Check(file, source, p.index))...)
+		}
 		if p.cfg.IsRuleEnabled("unused-import") {
 			diags = append(diags, p.checkUnusedImports(file, source)...)
 		}
@@ -93,6 +100,15 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 		diags = append(diags, cached...)
 	}
 	p.mu.RUnlock()
+
+	// Soft-mode the unknown-* rules until the workspace + composer index has
+	// completed at least once. The rules still ran (for testability), but their
+	// findings depend on cross-file symbol presence and produce false positives
+	// during the warm-up window.
+	if p.index != nil && !p.index.Ready() {
+		diags = filterOutCodes(diags, "unknown-class", "unknown-function", "unknown-member")
+	}
+
 	return diags
 }
 
@@ -269,6 +285,27 @@ func clamp(value, low, high int) int {
 		return high
 	}
 	return value
+}
+
+// filterOutCodes returns a new slice with all diagnostics whose Code matches
+// one of the provided codes removed. It reuses the backing array of diags when
+// possible to avoid an allocation in the common (no-op) case where the slice is
+// already empty.
+func filterOutCodes(diags []protocol.Diagnostic, codes ...string) []protocol.Diagnostic {
+	if len(diags) == 0 {
+		return diags
+	}
+	skip := make(map[string]bool, len(codes))
+	for _, c := range codes {
+		skip[c] = true
+	}
+	out := diags[:0]
+	for _, d := range diags {
+		if !skip[d.Code] {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // findingsToDiagnostics converts standalone check findings to LSP diagnostics.

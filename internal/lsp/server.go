@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/open-southeners/tusk-php/internal/analyzer"
+	"github.com/open-southeners/tusk-php/internal/checks"
 	"github.com/open-southeners/tusk-php/internal/completion"
 	"github.com/open-southeners/tusk-php/internal/composer"
 	"github.com/open-southeners/tusk-php/internal/config"
@@ -24,8 +25,10 @@ import (
 	"github.com/open-southeners/tusk-php/internal/inlayhint"
 	"github.com/open-southeners/tusk-php/internal/models"
 	"github.com/open-southeners/tusk-php/internal/parser"
+	"github.com/open-southeners/tusk-php/internal/phpdetect"
 	"github.com/open-southeners/tusk-php/internal/protocol"
 	"github.com/open-southeners/tusk-php/internal/resolve"
+	"github.com/open-southeners/tusk-php/internal/stubs"
 	"github.com/open-southeners/tusk-php/internal/symbols"
 )
 
@@ -60,6 +63,9 @@ type Server struct {
 	shutdown    bool
 	strict      bool      // when true, recovered panics are re-raised after logging
 	exitFunc    func(int) // called by the "exit" notification handler; defaults to os.Exit
+
+	builtinPHPVersion string
+	builtinPHPSource  string // "composer" | "local" | "fallback"
 }
 
 func NewServer(reader io.Reader, writer io.Writer, logger *log.Logger) *Server {
@@ -295,7 +301,8 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		s.framework = s.cfg.Framework
 	}
 	s.logger.Printf("Detected framework: %s", s.framework)
-	s.index.RegisterBuiltinsForProfile(builtinProfileFromComposer(composer.GetPlatform(s.rootPath)))
+	profile := s.resolveBuiltinProfile()
+	s.index.RegisterBuiltinsForProfile(profile)
 	s.container = container.NewContainerAnalyzer(s.index, s.rootPath, s.framework)
 	arrayResolver := models.NewFrameworkArrayResolver(s.index, s.rootPath, s.framework)
 	viewResolver := frameworklaravel.NewViews(s.rootPath)
@@ -329,6 +336,10 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		return s.completion.ResolveExpressionType(expr, source, protocol.Position{Line: line}, file)
 	}
 	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(s.index)
+	s.diag.BuiltinUnavailableRule = &checks.BuiltinUnavailableRule{
+		PHPVersion: profile.PHPVersion,
+		Extensions: profile.Extensions,
+	}
 	s.analyzer = analyzer.NewAnalyzer(s.index, s.container)
 	s.analyzer.SetChainResolver(s.completion.ResolveExpressionType)
 	s.analyzer.SetTypedChainResolver(s.completion.ResolveExpressionTypeTyped)
@@ -371,11 +382,56 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	})
 }
 
-func builtinProfileFromComposer(platform composer.Platform) symbols.BuiltinProfile {
-	return symbols.BuiltinProfile{
-		PHPVersion: platform.PHPVersion,
-		Extensions: platform.Extensions,
+// resolvePHPProfile is the pure core of the PHP version fallback chain. It
+// applies the following priority order:
+//  1. composer.json (config.platform.php or require.php)
+//  2. locally installed php binary (via phpdetect)
+//  3. bundled default (stubs.DefaultProfile)
+//
+// It returns the resolved profile and a source string ("composer", "local", or
+// "fallback") so callers can log provenance. The logf callback receives a single
+// human-readable message for surfacing to the user; it may be nil.
+func resolvePHPProfile(rootPath, phpBinary string, logf func(string)) (symbols.BuiltinProfile, string) {
+	platform := composer.GetPlatform(rootPath)
+	profile := symbols.BuiltinProfile{Extensions: platform.Extensions}
+	var source string
+
+	switch {
+	case platform.PHPVersion != "":
+		profile.PHPVersion = platform.PHPVersion
+		source = "composer"
+	default:
+		if local, err := phpdetect.Detect(phpBinary); err == nil && local.Version != "" {
+			profile.PHPVersion = local.Version
+			source = "local"
+		} else {
+			profile.PHPVersion = stubs.DefaultProfile().PHPVersion
+			source = "fallback"
+		}
 	}
+
+	if logf != nil {
+		logf(fmt.Sprintf("PHP LSP: PHP %s (source: %s)", profile.PHPVersion, source))
+	}
+	return profile, source
+}
+
+// resolveBuiltinProfile applies the PHP profile fallback chain:
+//  1. composer.json (config.platform.php or require.php)
+//  2. locally installed php binary (via phpdetect)
+//  3. bundled default
+//
+// The resolved profile is cached on the Server and surfaced via window/logMessage.
+func (s *Server) resolveBuiltinProfile() symbols.BuiltinProfile {
+	profile, source := resolvePHPProfile(s.rootPath, s.cfg.PHPBinary, func(msg string) {
+		s.sendNotification("window/logMessage", map[string]interface{}{
+			"type":    protocol.MessageTypeInfo,
+			"message": msg,
+		})
+	})
+	s.builtinPHPVersion = profile.PHPVersion
+	s.builtinPHPSource = source
+	return profile
 }
 
 func (s *Server) handleInitialized(msg *jsonRPCMessage) {
@@ -388,6 +444,11 @@ func (s *Server) handleInitialized(msg *jsonRPCMessage) {
 	s.goSafe("indexComposerDeps", func() {
 		defer indexWg.Done()
 		s.indexComposerDependencies()
+	})
+	s.goSafe("postIndexSettle", func() {
+		indexWg.Wait()
+		s.index.MarkReady()
+		s.republishOpenDocuments()
 	})
 	s.goSafe("container.Analyze", s.container.Analyze)
 	if s.routeIndex != nil {
@@ -761,6 +822,23 @@ func (s *Server) publishDiagnostics(uri, source string) {
 		diagnostics = []protocol.Diagnostic{}
 	}
 	s.sendNotification("textDocument/publishDiagnostics", map[string]interface{}{"uri": uri, "diagnostics": diagnostics})
+}
+
+// republishOpenDocuments re-runs diagnostics for every open document.
+// Called after async workspace + composer indexing settles so any findings
+// that depended on a populated index (or were soft-moded during warm-up)
+// produce their authoritative result.
+func (s *Server) republishOpenDocuments() {
+	s.docMu.RLock()
+	pairs := make([][2]string, 0, len(s.documents))
+	for uri, source := range s.documents {
+		pairs = append(pairs, [2]string{uri, source})
+	}
+	s.docMu.RUnlock()
+
+	for _, p := range pairs {
+		s.publishDiagnostics(p[0], p[1])
+	}
 }
 
 // indexFileByURI indexes a file, using the IDE helper merge strategy for known IDE helper files.
