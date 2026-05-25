@@ -179,6 +179,12 @@ Zed-specific Tusk PHP settings can be passed through `lsp.tusk-php`:
 }
 ```
 
+For local language-server development, build the binary with `make build` and
+set `lsp.tusk-php.binary.path` to the absolute path of `build/tusk-php`; Zed
+will use that binary instead of downloading the release artifact. See
+[CONTRIBUTING.md](CONTRIBUTING.md#testing-with-zed) for the full local Zed
+testing workflow.
+
 The Zed extension also provides Assistant slash commands:
 
 ```text

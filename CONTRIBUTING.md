@@ -74,6 +74,58 @@ make vscode-package
 3. For VS Code: set `phpLsp.executablePath` to the absolute path of `build/tusk-php`
 4. Use `make dev` to run with logging to `/tmp/tusk-php.log`
 
+### Testing with Zed
+
+The Zed extension can either find `tusk-php` on `PATH`, download the release
+binary for the extension version, or use an explicit local binary path. For
+local LSP development, prefer the explicit path so Zed runs the binary you just
+built instead of downloading one from GitHub.
+
+Build the local server:
+
+```bash
+make build
+```
+
+Then add this to your Zed settings, using the absolute path to this checkout:
+
+```json
+{
+  "languages": {
+    "PHP": {
+      "language_servers": ["tusk-php"]
+    }
+  },
+  "lsp": {
+    "tusk-php": {
+      "binary": {
+        "path": "/absolute/path/to/tusk-php/build/tusk-php",
+        "arguments": ["--transport", "stdio"]
+      }
+    }
+  }
+}
+```
+
+For this repository on a typical local checkout, that path may look like:
+
+```json
+{
+  "lsp": {
+    "tusk-php": {
+      "binary": {
+        "path": "/Users/d8vjork/Projects/OpenSoutheners/php-lsp/build/tusk-php",
+        "arguments": ["--transport", "stdio"]
+      }
+    }
+  }
+}
+```
+
+After changing the binary path or rebuilding the server, run Zed's
+`lsp: restart language servers` action. If the configured `binary.path` exists,
+the Zed extension uses it and skips the online release download path.
+
 ## Making Changes
 
 ### Before You Start
