@@ -62,6 +62,7 @@ func findUnreachable(lines []string, startLine, endLine int) []Finding {
 	// depth=0 means we're at the method body level.
 	depth := 0
 	inTerminal := false
+	pendingTerminal := false
 	terminalDepth := -1
 	unreachableStart := -1
 
@@ -114,6 +115,14 @@ func findUnreachable(lines []string, startLine, endLine int) []Finding {
 			continue
 		}
 
+		if pendingTerminal {
+			if statementComplete(trimmed) {
+				pendingTerminal = false
+				inTerminal = true
+			}
+			continue
+		}
+
 		// If we found a terminal statement and now see real code at same depth
 		if inTerminal && depth >= terminalDepth {
 			if trimmed == "}" || trimmed == "};" {
@@ -159,8 +168,12 @@ func findUnreachable(lines []string, startLine, endLine int) []Finding {
 
 		// Check if this line contains a terminal statement
 		if !inTerminal && isTerminalLine(trimmed) {
-			inTerminal = true
 			terminalDepth = depth
+			if statementComplete(trimmed) {
+				inTerminal = true
+			} else {
+				pendingTerminal = true
+			}
 		}
 	}
 
@@ -184,4 +197,60 @@ func isTerminalLine(trimmed string) bool {
 		}
 	}
 	return false
+}
+
+func statementComplete(trimmed string) bool {
+	line := stripTrailingLineComment(trimmed)
+	if strings.HasSuffix(line, ";") {
+		return true
+	}
+	if blockStart := commentStart(line, true); blockStart >= 0 {
+		return strings.HasSuffix(strings.TrimSpace(line[:blockStart]), ";")
+	}
+	return false
+}
+
+func stripTrailingLineComment(line string) string {
+	if commentStart := commentStart(line, false); commentStart >= 0 {
+		return strings.TrimSpace(line[:commentStart])
+	}
+	return strings.TrimSpace(line)
+}
+
+func commentStart(line string, includeBlock bool) int {
+	inSingle := false
+	inDouble := false
+	escaped := false
+
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+
+		if escaped {
+			escaped = false
+			continue
+		}
+		if (inSingle || inDouble) && ch == '\\' {
+			escaped = true
+			continue
+		}
+		if !inDouble && ch == '\'' {
+			inSingle = !inSingle
+			continue
+		}
+		if !inSingle && ch == '"' {
+			inDouble = !inDouble
+			continue
+		}
+		if inSingle || inDouble {
+			continue
+		}
+		if ch == '#' || (ch == '/' && i+1 < len(line) && line[i+1] == '/') {
+			return i
+		}
+		if includeBlock && ch == '/' && i+1 < len(line) && line[i+1] == '*' {
+			return i
+		}
+	}
+
+	return -1
 }

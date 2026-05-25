@@ -26,6 +26,20 @@ class Foo {
 		}
 	})
 
+	t.Run("code after return with trailing comment", func(t *testing.T) {
+		source := `<?php
+class Foo {
+    public function bar(): string {
+        return "hello"; // done
+        echo "unreachable";
+    }
+}
+`
+		file := parser.ParseFile(source)
+		findings := rule.Check(file, source, nil)
+		assertFindingCodes(t, findings, []string{"unreachable-code"})
+	})
+
 	t.Run("code after throw", func(t *testing.T) {
 		source := `<?php
 class Foo {
@@ -82,6 +96,62 @@ class Foo {
 		file := parser.ParseFile(source)
 		findings := rule.Check(file, source, nil)
 		assertNoFindings(t, findings)
+	})
+
+	t.Run("multi-line returned array is not flagged", func(t *testing.T) {
+		source := `<?php
+class Foo {
+    public function hostCompose(array $services): array {
+        return [
+            'version' => '3',
+            'services' => array_merge([
+                'traefik' => $this->traefikService([
+                    '/var/run/docker.sock:/var/run/docker.sock',
+                ]),
+            ], $services),
+        ];
+    }
+}
+`
+		file := parser.ParseFile(source)
+		findings := rule.Check(file, source, nil)
+		assertNoFindings(t, findings)
+	})
+
+	t.Run("code after multi-line returned array is flagged", func(t *testing.T) {
+		source := `<?php
+class Foo {
+    public function hostCompose(array $services): array {
+        return [
+            'version' => '3',
+            'services' => $services,
+        ];
+        echo "unreachable";
+    }
+}
+`
+		file := parser.ParseFile(source)
+		findings := rule.Check(file, source, nil)
+		assertFindingCodes(t, findings, []string{"unreachable-code"})
+		if findings[0].StartLine != 7 {
+			t.Errorf("expected unreachable code to start after returned array on line 7, got %d", findings[0].StartLine)
+		}
+	})
+
+	t.Run("code after multi-line returned array with trailing comment is flagged", func(t *testing.T) {
+		source := `<?php
+class Foo {
+    public function hostCompose(array $services): array {
+        return [
+            'version' => '3',
+        ]; // done
+        echo "unreachable";
+    }
+}
+`
+		file := parser.ParseFile(source)
+		findings := rule.Check(file, source, nil)
+		assertFindingCodes(t, findings, []string{"unreachable-code"})
 	})
 
 	t.Run("closing brace after return not flagged", func(t *testing.T) {
