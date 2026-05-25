@@ -133,6 +133,22 @@ class Demo {
 	}
 }
 
+func TestUnknownFunctionAllowsBuiltinAndLaravelHelperCalls(t *testing.T) {
+	p := newTestProvider()
+	source := `<?php
+class LambdaFunction {}
+
+function build(LambdaFunction $lambdaFunction): string {
+    return class_basename(get_class($lambdaFunction));
+}
+`
+	diags := p.Analyze("file:///test.php", source)
+	unknownFunctions := filterByCode(diags, "unknown-function")
+	if len(unknownFunctions) != 0 {
+		t.Fatalf("expected no unknown-function diagnostics, got %#v", unknownFunctions)
+	}
+}
+
 func TestStaticSyntaxDiagnosticsTokenizerError(t *testing.T) {
 	p := newTestProvider()
 	source := `<?php
