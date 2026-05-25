@@ -428,6 +428,35 @@ class DefaultClass {}
 	})
 }
 
+func TestRegisterBuiltinsForProfileFiltersVersionAndExtensionDeltas(t *testing.T) {
+	php74 := NewIndex()
+	php74.RegisterBuiltinsForProfile(BuiltinProfile{PHPVersion: "7.4"})
+	if php74.Lookup("array_reverse") == nil {
+		t.Fatal("expected PHP 7.4 baseline function array_reverse")
+	}
+	if php74.Lookup("str_contains") != nil {
+		t.Fatal("did not expect PHP 8.0 function str_contains in PHP 7.4 profile")
+	}
+	if php74.Lookup("json_validate") != nil {
+		t.Fatal("did not expect ext-json PHP 8.3 function json_validate without extension")
+	}
+
+	php80 := NewIndex()
+	php80.RegisterBuiltinsForProfile(BuiltinProfile{PHPVersion: "8.0"})
+	if php80.Lookup("str_contains") == nil {
+		t.Fatal("expected PHP 8.0 function str_contains in PHP 8.0 profile")
+	}
+
+	json83 := NewIndex()
+	json83.RegisterBuiltinsForProfile(BuiltinProfile{PHPVersion: "8.3", Extensions: []string{"json"}})
+	if json83.Lookup("json_decode") == nil {
+		t.Fatal("expected ext-json baseline function json_decode")
+	}
+	if json83.Lookup("json_validate") == nil {
+		t.Fatal("expected ext-json PHP 8.3 function json_validate")
+	}
+}
+
 func TestIndexVirtualMembers(t *testing.T) {
 	idx := NewIndex()
 	idx.IndexFile("file:///model.php", `<?php

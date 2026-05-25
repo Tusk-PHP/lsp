@@ -187,6 +187,35 @@ class Documentor {
 	}
 }
 
+func TestUnknownFunctionRespectsPHPBuiltinProfile(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
+	logger := log.New(io.Discard, "", 0)
+	cfg := config.DefaultConfig()
+	f := false
+	cfg.PHPStanEnabled = &f
+	cfg.PintEnabled = &f
+	p := NewProvider(idx, "none", "/tmp", logger, cfg)
+
+	source := `<?php
+array_reverse([]);
+str_contains('haystack', 'needle');
+json_validate('{}');
+`
+
+	diags := p.Analyze("file:///test.php", source)
+	unknownFunctions := filterByCode(diags, "unknown-function")
+	if len(unknownFunctions) != 2 {
+		t.Fatalf("expected 2 unknown-function diagnostics, got %#v", unknownFunctions)
+	}
+	if unknownFunctions[0].Message != "Unknown function 'str_contains'" {
+		t.Fatalf("expected str_contains diagnostic first, got %q", unknownFunctions[0].Message)
+	}
+	if unknownFunctions[1].Message != "Unknown function 'json_validate'" {
+		t.Fatalf("expected json_validate diagnostic second, got %q", unknownFunctions[1].Message)
+	}
+}
+
 func TestStaticSyntaxDiagnosticsTokenizerError(t *testing.T) {
 	p := newTestProvider()
 	source := `<?php

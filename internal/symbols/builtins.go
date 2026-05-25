@@ -1,6 +1,12 @@
 package symbols
 
-import "github.com/open-southeners/tusk-php/internal/stubs"
+import (
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/open-southeners/tusk-php/internal/stubs"
+)
 
 type builtinFunction struct {
 	Name   string
@@ -99,17 +105,56 @@ var builtinClasses = []struct{ Name, Doc string }{
 	{"ArrayObject", "Allows objects to work as arrays"},
 }
 
-// RegisterBuiltins populates the index with PHP built-in symbols.
-func (idx *Index) RegisterBuiltins() {
-	idx.registerBuiltinRegistry()
-	idx.RegisterBuiltinStubs()
+// BuiltinProfile selects the PHP version and extension layers used for
+// built-in symbol registration.
+type BuiltinProfile struct {
+	PHPVersion string
+	Extensions []string
 }
 
-func (idx *Index) registerBuiltinRegistry() {
+type builtinAvailability struct {
+	Since     string
+	Extension string
+}
+
+var builtinAvailabilityByName = map[string]builtinAvailability{
+	"str_contains":     {Since: "8.0"},
+	"str_starts_with":  {Since: "8.0"},
+	"str_ends_with":    {Since: "8.0"},
+	"json_validate":    {Since: "8.3", Extension: "json"},
+	"Fiber":            {Since: "8.1"},
+	"WeakMap":          {Since: "8.0"},
+	"ReflectionMethod": {Since: "7.4"},
+	"ReflectionObject": {Since: "7.4"},
+}
+
+// RegisterBuiltins populates the index with PHP built-in symbols.
+func (idx *Index) RegisterBuiltins() {
+	idx.RegisterBuiltinsForProfile(DefaultBuiltinProfile())
+}
+
+// DefaultBuiltinProfile returns the broadest bundled built-in profile.
+func DefaultBuiltinProfile() BuiltinProfile {
+	profile := stubs.DefaultProfile()
+	return BuiltinProfile{PHPVersion: profile.PHPVersion, Extensions: profile.Extensions}
+}
+
+// RegisterBuiltinsForProfile populates the index with built-in symbols
+// available for a PHP version/extension profile.
+func (idx *Index) RegisterBuiltinsForProfile(profile BuiltinProfile) {
+	profile = normalizeBuiltinProfile(profile)
+	idx.registerBuiltinRegistry(profile)
+	idx.RegisterBuiltinStubs(profile)
+}
+
+func (idx *Index) registerBuiltinRegistry(profile BuiltinProfile) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
 	for _, fn := range builtinFunctions {
+		if !builtinAvailable(fn.Name, profile) {
+			continue
+		}
 		idx.addBuiltinFunctionLocked(fn.Name, fn.Params, fn.Ret, fn.Doc)
 	}
 
@@ -117,15 +162,24 @@ func (idx *Index) registerBuiltinRegistry() {
 		if idx.symbols[name] != nil {
 			continue
 		}
+		if !builtinAvailable(name, profile) {
+			continue
+		}
 		idx.addBuiltinFunctionLocked(name, nil, "mixed", "PHP built-in function")
 	}
 
 	for _, cls := range builtinClasses {
+		if !builtinAvailable(cls.Name, profile) {
+			continue
+		}
 		idx.addBuiltinClassLikeLocked(cls.Name, cls.Doc)
 	}
 
 	for _, name := range generatedBuiltinClassLikeNames {
 		if idx.symbols[name] != nil {
+			continue
+		}
+		if !builtinAvailable(name, profile) {
 			continue
 		}
 		idx.addBuiltinClassLikeLocked(name, "PHP built-in class-like symbol")
@@ -135,14 +189,86 @@ func (idx *Index) registerBuiltinRegistry() {
 // RegisterBuiltinStubs indexes embedded PHP stub declarations as built-in
 // symbols. Stubs intentionally run after the generated registry so richer
 // signatures, class kinds, methods, and constants replace generic fallbacks.
-func (idx *Index) RegisterBuiltinStubs() {
-	entries, err := stubs.BuiltinPHP()
+func (idx *Index) RegisterBuiltinStubs(profile BuiltinProfile) {
+	entries, err := stubs.BuiltinPHPForProfile(stubs.Profile{PHPVersion: profile.PHPVersion, Extensions: profile.Extensions})
 	if err != nil {
 		return
 	}
 	for _, entry := range entries {
 		idx.IndexFileWithSource("builtin://"+entry.Path, entry.Content, SourceBuiltin)
 	}
+}
+
+func normalizeBuiltinProfile(profile BuiltinProfile) BuiltinProfile {
+	if strings.TrimSpace(profile.PHPVersion) == "" {
+		profile.PHPVersion = DefaultBuiltinProfile().PHPVersion
+	}
+	seen := make(map[string]struct{}, len(profile.Extensions))
+	extensions := make([]string, 0, len(profile.Extensions))
+	for _, ext := range profile.Extensions {
+		ext = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(ext)), "ext-")
+		if ext == "" {
+			continue
+		}
+		if _, ok := seen[ext]; ok {
+			continue
+		}
+		seen[ext] = struct{}{}
+		extensions = append(extensions, ext)
+	}
+	sort.Strings(extensions)
+	profile.Extensions = extensions
+	return profile
+}
+
+func builtinAvailable(name string, profile BuiltinProfile) bool {
+	availability, ok := builtinAvailabilityByName[name]
+	if !ok {
+		return true
+	}
+	if availability.Since != "" && compareBuiltinVersions(availability.Since, profile.PHPVersion) > 0 {
+		return false
+	}
+	if availability.Extension != "" {
+		for _, ext := range profile.Extensions {
+			if ext == availability.Extension {
+				return true
+			}
+		}
+		return false
+	}
+	return true
+}
+
+func compareBuiltinVersions(left string, right string) int {
+	leftMajor, leftMinor := parseBuiltinMajorMinor(left)
+	rightMajor, rightMinor := parseBuiltinMajorMinor(right)
+	if leftMajor != rightMajor {
+		if leftMajor < rightMajor {
+			return -1
+		}
+		return 1
+	}
+	if leftMinor != rightMinor {
+		if leftMinor < rightMinor {
+			return -1
+		}
+		return 1
+	}
+	return 0
+}
+
+func parseBuiltinMajorMinor(version string) (int, int) {
+	parts := strings.Split(version, ".")
+	major := 0
+	minor := 0
+	if len(parts) > 0 {
+		major, _ = strconv.Atoi(parts[0])
+	}
+	if len(parts) > 1 {
+		minor, _ = strconv.Atoi(parts[1])
+	}
+	return major, minor
 }
 
 func (idx *Index) addBuiltinFunctionLocked(name string, params []ParamInfo, ret string, doc string) {
