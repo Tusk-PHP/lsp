@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -17,8 +19,14 @@ type AutoloadEntry struct {
 }
 
 type composerJSON struct {
-	Autoload    autoloadBlock `json:"autoload"`
-	AutoloadDev autoloadBlock `json:"autoload-dev"`
+	Autoload    autoloadBlock     `json:"autoload"`
+	AutoloadDev autoloadBlock     `json:"autoload-dev"`
+	Require     map[string]string `json:"require"`
+	Config      composerConfig    `json:"config"`
+}
+
+type composerConfig struct {
+	Platform map[string]interface{} `json:"platform"`
 }
 
 type autoloadBlock struct {
@@ -34,6 +42,54 @@ type installedPackage struct {
 	Name        string        `json:"name"`
 	InstallPath string        `json:"install-path"`
 	Autoload    autoloadBlock `json:"autoload"`
+}
+
+// Platform describes the PHP platform constraints declared by composer.json.
+type Platform struct {
+	PHPVersion  string
+	Extensions  []string
+	HasComposer bool
+}
+
+// GetPlatform reads composer.json from rootPath and returns the effective PHP
+// platform target together with the required extensions.
+func GetPlatform(rootPath string) Platform {
+	composerPath := filepath.Join(rootPath, "composer.json")
+	data, err := os.ReadFile(composerPath)
+	if err != nil {
+		return Platform{}
+	}
+
+	platform := Platform{HasComposer: true}
+
+	var cj composerJSON
+	if err := json.Unmarshal(data, &cj); err != nil {
+		return platform
+	}
+
+	if phpConstraint, ok := cj.Config.Platform["php"].(string); ok && phpConstraint != "" {
+		platform.PHPVersion = minimumPHPVersion(phpConstraint)
+	} else if requireConstraint, ok := cj.Require["php"]; ok {
+		platform.PHPVersion = minimumPHPVersion(requireConstraint)
+	}
+
+	extensions := make(map[string]struct{})
+	for pkg := range cj.Require {
+		addExtension(extensions, pkg)
+	}
+	for pkg := range cj.Config.Platform {
+		addExtension(extensions, pkg)
+	}
+
+	if len(extensions) > 0 {
+		platform.Extensions = make([]string, 0, len(extensions))
+		for ext := range extensions {
+			platform.Extensions = append(platform.Extensions, ext)
+		}
+		sort.Strings(platform.Extensions)
+	}
+
+	return platform
 }
 
 // GetAutoloadPaths returns all PSR-4 namespace-to-directory mappings from the
@@ -221,4 +277,70 @@ func parsePSR4(psr4 map[string]interface{}, basePath string, isVendor bool) []Au
 		}
 	}
 	return entries
+}
+
+var phpConstraintVersionRe = regexp.MustCompile(`\d+(?:\.\d+){0,2}`)
+
+func minimumPHPVersion(constraint string) string {
+	matches := phpConstraintVersionRe.FindAllString(constraint, -1)
+	if len(matches) == 0 {
+		return ""
+	}
+
+	bestMajor := 0
+	bestMinor := 0
+	found := false
+
+	for _, match := range matches {
+		major, minor, ok := parseMajorMinor(match)
+		if !ok {
+			continue
+		}
+		if !found || major < bestMajor || (major == bestMajor && minor < bestMinor) {
+			bestMajor = major
+			bestMinor = minor
+			found = true
+		}
+	}
+
+	if !found {
+		return ""
+	}
+
+	return strconv.Itoa(bestMajor) + "." + strconv.Itoa(bestMinor)
+}
+
+func parseMajorMinor(version string) (int, int, bool) {
+	parts := strings.Split(version, ".")
+	if len(parts) == 0 {
+		return 0, 0, false
+	}
+
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, false
+	}
+
+	minor := 0
+	if len(parts) > 1 {
+		minor, err = strconv.Atoi(parts[1])
+		if err != nil {
+			return 0, 0, false
+		}
+	}
+
+	return major, minor, true
+}
+
+func addExtension(extensions map[string]struct{}, pkg string) {
+	if !strings.HasPrefix(strings.ToLower(pkg), "ext-") {
+		return
+	}
+
+	name := strings.TrimPrefix(strings.ToLower(pkg), "ext-")
+	if name == "" {
+		return
+	}
+
+	extensions[name] = struct{}{}
 }
