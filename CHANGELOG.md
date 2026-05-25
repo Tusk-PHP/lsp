@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-05-25
+
+### Added
+
+- Composer-generated `vendor/composer/autoload_files.php` parsing so global helper files registered through Composer are indexed even when package metadata is unavailable or incomplete.
+- Additional PHP built-in function symbols for common array, regex, type-checking, constant, class, object, and function-introspection helpers.
+
+### Fixed
+
+- Hover cards no longer resolve words inside PHP string literals as unrelated symbols, preventing array declaration keys such as `'environment' => [...]` from showing constant or method hover cards.
+- Unknown-function diagnostics no longer flag PHP built-ins such as `get_class()` or indexed Laravel/Composer global helpers such as `class_basename()`.
+
 ## [0.6.0] - 2026-05-22
 
 ### Added
