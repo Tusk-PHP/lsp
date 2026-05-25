@@ -149,6 +149,44 @@ function build(LambdaFunction $lambdaFunction): string {
 	}
 }
 
+func TestUnknownDiagnosticsAllowGeneratedPHPBuiltinsAndAbsoluteBuiltinClasses(t *testing.T) {
+	p := newTestProvider()
+	p.index.IndexFile("file:///vendor/faker/src/Faker/Provider/Base.php", `<?php
+namespace Faker\Provider;
+
+class Base {}
+`)
+
+	source := `<?php
+namespace Faker;
+
+class Generator {}
+class UniqueGenerator {}
+
+class Documentor {
+    public function getFormatters(): array {
+        $providers = array_reverse([]);
+        $providers[] = new Provider\Base();
+        $refl = new \ReflectionObject($this);
+        foreach ($refl->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {}
+        try {
+            return $providers;
+        } catch (\InvalidArgumentException $e) {
+            return [];
+        }
+    }
+}
+`
+
+	diags := p.Analyze("file:///vendor/faker/src/Faker/Documentor.php", source)
+	if unknownClasses := filterByCode(diags, "unknown-class"); len(unknownClasses) != 0 {
+		t.Fatalf("expected no unknown-class diagnostics, got %#v", unknownClasses)
+	}
+	if unknownFunctions := filterByCode(diags, "unknown-function"); len(unknownFunctions) != 0 {
+		t.Fatalf("expected no unknown-function diagnostics, got %#v", unknownFunctions)
+	}
+}
+
 func TestStaticSyntaxDiagnosticsTokenizerError(t *testing.T) {
 	p := newTestProvider()
 	source := `<?php

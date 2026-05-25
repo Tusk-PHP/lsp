@@ -103,14 +103,54 @@ func (idx *Index) RegisterBuiltins() {
 	defer idx.mu.Unlock()
 
 	for _, fn := range builtinFunctions {
-		sym := &Symbol{Name: fn.Name, FQN: fn.Name, Kind: KindFunction, Source: SourceBuiltin, URI: "builtin", ReturnType: fn.Ret, DocComment: fn.Doc, Params: fn.Params}
-		idx.symbols[sym.FQN] = sym
-		idx.nameIndex[sym.Name] = appendUnique(idx.nameIndex[sym.Name], sym.FQN)
+		idx.addBuiltinFunctionLocked(fn.Name, fn.Params, fn.Ret, fn.Doc)
+	}
+
+	for _, name := range generatedBuiltinFunctionNames {
+		if idx.symbols[name] != nil {
+			continue
+		}
+		idx.addBuiltinFunctionLocked(name, nil, "mixed", "PHP built-in function")
 	}
 
 	for _, cls := range builtinClasses {
-		sym := &Symbol{Name: cls.Name, FQN: cls.Name, Kind: KindClass, Source: SourceBuiltin, URI: "builtin", DocComment: cls.Doc}
-		idx.symbols[sym.FQN] = sym
-		idx.nameIndex[sym.Name] = appendUnique(idx.nameIndex[sym.Name], sym.FQN)
+		idx.addBuiltinClassLikeLocked(cls.Name, cls.Doc)
 	}
+
+	for _, name := range generatedBuiltinClassLikeNames {
+		if idx.symbols[name] != nil {
+			continue
+		}
+		idx.addBuiltinClassLikeLocked(name, "PHP built-in class-like symbol")
+	}
+}
+
+func (idx *Index) addBuiltinFunctionLocked(name string, params []ParamInfo, ret string, doc string) {
+	sym := &Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: "builtin", ReturnType: ret, DocComment: doc, Params: params}
+	idx.symbols[sym.FQN] = sym
+	idx.nameIndex[sym.Name] = appendUnique(idx.nameIndex[sym.Name], sym.FQN)
+	idx.fileSymbols[sym.URI] = appendUniqueSymbol(idx.fileSymbols[sym.URI], sym)
+	idx.sortedNamesDirty = true
+	idx.sortedFQNsDirty = true
+	idx.namespaceIndex[namespaceForFQN(sym.FQN)] = appendUnique(idx.namespaceIndex[namespaceForFQN(sym.FQN)], sym.FQN)
+}
+
+func (idx *Index) addBuiltinClassLikeLocked(name string, doc string) {
+	sym := &Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: "builtin", DocComment: doc}
+	idx.symbols[sym.FQN] = sym
+	idx.nameIndex[sym.Name] = appendUnique(idx.nameIndex[sym.Name], sym.FQN)
+	idx.fileSymbols[sym.URI] = appendUniqueSymbol(idx.fileSymbols[sym.URI], sym)
+	idx.sortedNamesDirty = true
+	idx.sortedFQNsDirty = true
+	idx.namespaceIndex[namespaceForFQN(sym.FQN)] = appendUnique(idx.namespaceIndex[namespaceForFQN(sym.FQN)], sym.FQN)
+}
+
+func appendUniqueSymbol(symbols []*Symbol, sym *Symbol) []*Symbol {
+	for i, existing := range symbols {
+		if existing.FQN == sym.FQN {
+			symbols[i] = sym
+			return symbols
+		}
+	}
+	return append(symbols, sym)
 }

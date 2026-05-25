@@ -15,9 +15,9 @@ type UnknownClassRule struct{}
 
 func (r *UnknownClassRule) Code() string { return "unknown-class" }
 
-var unknownClassNewRe = regexp.MustCompile(`\bnew\s+\\?([A-Za-z_][A-Za-z0-9_\\]*)`)
-var unknownClassSingleRefRe = regexp.MustCompile(`\b(?:extends|instanceof)\s+\\?([A-Za-z_][A-Za-z0-9_\\]*)`)
-var unknownClassStaticRe = regexp.MustCompile(`(^|[^$A-Za-z0-9_\\])\\?([A-Za-z_][A-Za-z0-9_\\]*)::`)
+var unknownClassNewRe = regexp.MustCompile(`\bnew\s+(\\?[A-Za-z_][A-Za-z0-9_\\]*)`)
+var unknownClassSingleRefRe = regexp.MustCompile(`\b(?:extends|instanceof)\s+(\\?[A-Za-z_][A-Za-z0-9_\\]*)`)
+var unknownClassStaticRe = regexp.MustCompile(`(^|[^$A-Za-z0-9_\\])(\\?[A-Za-z_][A-Za-z0-9_\\]*)::`)
 var unknownClassCatchRe = regexp.MustCompile(`\bcatch\s*\(\s*([^)]+)\s+\$[A-Za-z_][A-Za-z0-9_]*`)
 var unknownClassImplementsRe = regexp.MustCompile(`\bimplements\s+([^{]+)`)
 
@@ -219,6 +219,7 @@ func shouldSkipFunctionCall(line string, start int, name string) bool {
 	case strings.HasSuffix(prefix, "function"),
 		strings.HasSuffix(prefix, "fn"),
 		strings.HasSuffix(prefix, "new"),
+		strings.HasSuffix(prefix, "new \\"),
 		strings.HasSuffix(prefix, "class"),
 		strings.HasSuffix(prefix, "interface"),
 		strings.HasSuffix(prefix, "trait"),
@@ -439,9 +440,12 @@ func memberExists(ownerFQN, member string, file *parser.FileNode, index *symbols
 }
 
 func resolveClassLikeName(name string, line int, file *parser.FileNode) (string, bool) {
-	name = strings.TrimSpace(strings.TrimPrefix(name, "\\"))
+	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", false
+	}
+	if strings.HasPrefix(name, "\\") {
+		return strings.TrimPrefix(name, "\\"), true
 	}
 	lower := strings.ToLower(name)
 	switch lower {
@@ -459,7 +463,7 @@ func resolveClassLikeName(name string, line int, file *parser.FileNode) (string,
 	if symbols.IsPHPBuiltinType(lower) {
 		return "", false
 	}
-	return resolveImportedName(name, file.Namespace, file.Uses, ""), true
+	return resolveImportedName(name, file.Namespace, file.Uses, "class"), true
 }
 
 func resolveFunctionNames(name string, file *parser.FileNode) ([]string, bool) {
