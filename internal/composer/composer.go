@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -16,8 +17,8 @@ type AutoloadEntry struct {
 }
 
 type composerJSON struct {
-	Autoload    autoloadBlock         `json:"autoload"`
-	AutoloadDev autoloadBlock         `json:"autoload-dev"`
+	Autoload    autoloadBlock `json:"autoload"`
+	AutoloadDev autoloadBlock `json:"autoload-dev"`
 }
 
 type autoloadBlock struct {
@@ -58,7 +59,7 @@ func GetAutoloadPaths(rootPath string) []AutoloadEntry {
 	installedPath := filepath.Join(composerDir, "installed.json")
 	data, err := os.ReadFile(installedPath)
 	if err != nil {
-		return entries
+		return appendComposerAutoloadFiles(entries, rootPath)
 	}
 
 	// Composer v2 format: {"packages": [...]}
@@ -83,6 +84,43 @@ func GetAutoloadPaths(rootPath string) []AutoloadEntry {
 		}
 	}
 
+	return appendComposerAutoloadFiles(entries, rootPath)
+}
+
+var composerAutoloadFileRe = regexp.MustCompile(`\$(vendorDir|baseDir)\s*\.\s*'([^']+\.php)'`)
+
+func appendComposerAutoloadFiles(entries []AutoloadEntry, rootPath string) []AutoloadEntry {
+	autoloadFilesPath := filepath.Join(rootPath, "vendor", "composer", "autoload_files.php")
+	data, err := os.ReadFile(autoloadFilesPath)
+	if err != nil {
+		return entries
+	}
+
+	seen := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		if entry.IsFile {
+			seen[filepath.Clean(entry.Path)] = true
+		}
+	}
+
+	vendorDir := filepath.Join(rootPath, "vendor")
+	baseDir := rootPath
+	for _, match := range composerAutoloadFileRe.FindAllStringSubmatch(string(data), -1) {
+		base := vendorDir
+		if match[1] == "baseDir" {
+			base = baseDir
+		}
+		path := filepath.Clean(filepath.Join(base, match[2]))
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		entries = append(entries, AutoloadEntry{
+			Path:     path,
+			IsVendor: strings.HasPrefix(path, vendorDir+string(filepath.Separator)),
+			IsFile:   true,
+		})
+	}
 	return entries
 }
 
