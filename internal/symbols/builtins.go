@@ -112,12 +112,14 @@ type BuiltinProfile struct {
 	Extensions []string
 }
 
-type builtinAvailability struct {
+// BuiltinAvailability records the version and optional extension constraint
+// for a PHP built-in symbol.
+type BuiltinAvailability struct {
 	Since     string
 	Extension string
 }
 
-var builtinAvailabilityByName = map[string]builtinAvailability{
+var builtinAvailabilityByName = map[string]BuiltinAvailability{
 	"str_contains":     {Since: "8.0"},
 	"str_starts_with":  {Since: "8.0"},
 	"str_ends_with":    {Since: "8.0"},
@@ -222,7 +224,7 @@ func normalizeBuiltinProfile(profile BuiltinProfile) BuiltinProfile {
 }
 
 func builtinAvailable(name string, profile BuiltinProfile) bool {
-	availability, ok := builtinAvailabilityByName[name]
+	availability, ok := LookupAvailability(name)
 	if !ok {
 		return true
 	}
@@ -238,6 +240,21 @@ func builtinAvailable(name string, profile BuiltinProfile) bool {
 		return false
 	}
 	return true
+}
+
+// LookupAvailability reports whether name is a known PHP built-in subject
+// to a version or extension constraint. The hand-authored override map
+// (builtinAvailabilityByName in this file) wins over the generated table
+// (builtin_availability_generated.go) so we can correct upstream stub data
+// without regenerating.
+func LookupAvailability(name string) (BuiltinAvailability, bool) {
+	if a, ok := builtinAvailabilityByName[name]; ok {
+		return a, true
+	}
+	if a, ok := generatedBuiltinAvailability[name]; ok {
+		return a, true
+	}
+	return BuiltinAvailability{}, false
 }
 
 func compareBuiltinVersions(left string, right string) int {
