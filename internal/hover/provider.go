@@ -75,6 +75,10 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		return hover
 	}
 
+	if isInStringLiteral(line, pos.Character) {
+		return nil
+	}
+
 	word := ctx.SymbolText
 	if word == "" {
 		return nil
@@ -209,6 +213,44 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		return nil
 	}
 	return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: content}}
+}
+
+func isInStringLiteral(line string, character int) bool {
+	if character < 0 || character > len(line) {
+		return false
+	}
+
+	inQuote := byte(0)
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+		if inQuote != 0 {
+			if i == character {
+				return true
+			}
+			if ch == '\\' && i+1 < len(line) {
+				i++
+				if i == character {
+					return true
+				}
+				continue
+			}
+			if ch == inQuote {
+				if character == i {
+					return true
+				}
+				inQuote = 0
+			}
+			continue
+		}
+		if ch == '\'' || ch == '"' {
+			if character == i {
+				return true
+			}
+			inQuote = ch
+		}
+	}
+
+	return inQuote != 0 && character == len(line)
 }
 
 // resolveAccessChain walks left through a chain of -> and :: accesses and

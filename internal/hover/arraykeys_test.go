@@ -111,6 +111,32 @@ function test() {
 	}
 }
 
+func TestHoverArrayDeclarationKeyDoesNotResolveStandaloneSymbol(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///vendor/Application.php", `<?php
+namespace Illuminate\Contracts\Foundation;
+
+class Application {
+    public function environment(...$environments): string|bool {}
+}
+`)
+	p := NewProvider(idx, nil, "")
+
+	source := `<?php
+function test() {
+    $services = [
+        'environment' => [
+            'DOCKER_TLS_CERTDIR=',
+        ],
+    ];
+}
+`
+	hover := p.GetHover("file:///test.php", source, protocol.Position{Line: 3, Character: 11})
+	if hover != nil {
+		t.Fatalf("expected no hover for array declaration key, got:\n%s", hover.Contents.Value)
+	}
+}
+
 func TestHoverArrayKeyFromVarAnnotation(t *testing.T) {
 	idx := symbols.NewIndex()
 	p := NewProvider(idx, nil, "")
