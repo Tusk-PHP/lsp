@@ -45,7 +45,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-wasip1
+          targets: wasm32-wasip2
 
       - name: Sync release version into extension manifests
         env:
@@ -108,13 +108,14 @@ jobs:
 
           cargo build \
             --manifest-path editors/zed/Cargo.toml \
-            --target wasm32-wasip1 \
+            --target wasm32-wasip2 \
             --release
 
           cp editors/zed/extension.toml "dist/tusk-php-zed-${VERSION}/"
           cp editors/zed/Cargo.toml "dist/tusk-php-zed-${VERSION}/"
           cp editors/zed/Cargo.lock "dist/tusk-php-zed-${VERSION}/"
-          cp editors/zed/target/wasm32-wasip1/release/tusk_php_zed.wasm "dist/tusk-php-zed-${VERSION}/"
+          cp -R editors/zed/src "dist/tusk-php-zed-${VERSION}/"
+          cp editors/zed/target/wasm32-wasip2/release/tusk_php_zed.wasm "dist/tusk-php-zed-${VERSION}/"
           (
             cd dist
             zip -r "tusk-php-zed-${VERSION}.zip" "tusk-php-zed-${VERSION}"
