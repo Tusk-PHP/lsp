@@ -717,3 +717,19 @@ class Post {
 		}
 	})
 }
+
+func TestIndexReadyStartsFalseAndCanBeMarkedReady(t *testing.T) {
+	idx := NewIndex()
+	if idx.Ready() {
+		t.Fatal("expected Ready() to be false on a new Index")
+	}
+	idx.MarkReady()
+	if !idx.Ready() {
+		t.Fatal("expected Ready() to be true after MarkReady()")
+	}
+	// Idempotent
+	idx.MarkReady()
+	if !idx.Ready() {
+		t.Fatal("MarkReady must be idempotent")
+	}
+}

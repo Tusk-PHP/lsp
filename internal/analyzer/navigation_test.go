@@ -115,6 +115,29 @@ class QueueHandler extends MidHandler {
 	}
 }
 
+func TestDefinitionOnBuiltinReturnsNone(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+
+	source := "<?php\n$x = array_reverse([]);\n"
+	idx.IndexFileWithSource("file:///project/test.php", source, symbols.SourceProject)
+
+	a := NewAnalyzer(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"))
+
+	// Position the cursor on "array_reverse"
+	lines := strings.Split(source, "\n")
+	col := strings.Index(lines[1], "array_reverse")
+	if col < 0 {
+		t.Fatalf("could not find array_reverse in source")
+	}
+	pos := protocol.Position{Line: 1, Character: col}
+
+	loc := a.FindDefinition("file:///project/test.php", source, pos)
+	if loc != nil {
+		t.Fatalf("expected nil location for builtin array_reverse, got %+v", loc)
+	}
+}
+
 func TestImplementationInterfaceImplementedOnlyByEnums(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///contracts.php", `<?php
