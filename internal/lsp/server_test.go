@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/open-southeners/tusk-php/internal/stubs"
 )
 
 func testdataPath() string {
@@ -387,4 +389,59 @@ func TestExitLifecycle(t *testing.T) {
 	}
 
 	inW.Close()
+}
+
+func TestResolveBuiltinProfilePrefersComposer(t *testing.T) {
+	dir := t.TempDir()
+	composerJSON := `{
+		"require": {
+			"php": "^8.2"
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"), []byte(composerJSON), 0644); err != nil {
+		t.Fatalf("failed to write composer.json: %v", err)
+	}
+
+	profile, source := resolvePHPProfile(dir, "", nil)
+	if source != "composer" {
+		t.Errorf("expected source 'composer', got %q", source)
+	}
+	if profile.PHPVersion != "8.2" {
+		t.Errorf("expected PHPVersion '8.2', got %q", profile.PHPVersion)
+	}
+}
+
+func TestResolveBuiltinProfileFallsBackToLocalPHP(t *testing.T) {
+	dir := t.TempDir()
+	// No composer.json — fallback to local PHP binary.
+
+	// Create a fake php script that outputs a version string.
+	scriptPath := filepath.Join(dir, "fake-php")
+	script := "#!/bin/sh\necho 8.1\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
+		t.Fatalf("failed to write fake php script: %v", err)
+	}
+
+	profile, source := resolvePHPProfile(dir, scriptPath, nil)
+	if source != "local" {
+		t.Errorf("expected source 'local', got %q", source)
+	}
+	if profile.PHPVersion != "8.1" {
+		t.Errorf("expected PHPVersion '8.1', got %q", profile.PHPVersion)
+	}
+}
+
+func TestResolveBuiltinProfileUsesBundledDefault(t *testing.T) {
+	dir := t.TempDir()
+	// No composer.json and a non-existent PHP binary path.
+	nonExistent := filepath.Join(dir, "nonexistent-php")
+
+	profile, source := resolvePHPProfile(dir, nonExistent, nil)
+	if source != "fallback" {
+		t.Errorf("expected source 'fallback', got %q", source)
+	}
+	wantVersion := stubs.DefaultProfile().PHPVersion
+	if profile.PHPVersion != wantVersion {
+		t.Errorf("expected PHPVersion %q, got %q", wantVersion, profile.PHPVersion)
+	}
 }
