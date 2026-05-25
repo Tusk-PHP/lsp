@@ -295,7 +295,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		s.framework = s.cfg.Framework
 	}
 	s.logger.Printf("Detected framework: %s", s.framework)
-	s.index.RegisterBuiltins()
+	s.index.RegisterBuiltinsForProfile(builtinProfileFromComposer(composer.GetPlatform(s.rootPath)))
 	s.container = container.NewContainerAnalyzer(s.index, s.rootPath, s.framework)
 	arrayResolver := models.NewFrameworkArrayResolver(s.index, s.rootPath, s.framework)
 	viewResolver := frameworklaravel.NewViews(s.rootPath)
@@ -369,6 +369,13 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		},
 		ServerInfo: protocol.ServerInfo{Name: ServerName, Version: ServerVersion},
 	})
+}
+
+func builtinProfileFromComposer(platform composer.Platform) symbols.BuiltinProfile {
+	return symbols.BuiltinProfile{
+		PHPVersion: platform.PHPVersion,
+		Extensions: platform.Extensions,
+	}
 }
 
 func (s *Server) handleInitialized(msg *jsonRPCMessage) {
