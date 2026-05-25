@@ -382,6 +382,38 @@ class Logger {
 		}
 	})
 
+	t.Run("builtin stub overrides generated fallback", func(t *testing.T) {
+		sym := idx.Lookup("array_reverse")
+		if sym == nil {
+			t.Fatal("expected array_reverse builtin")
+		}
+		if sym.Source != SourceBuiltin {
+			t.Errorf("expected SourceBuiltin, got %d", sym.Source)
+		}
+		if sym.ReturnType != "array" {
+			t.Errorf("expected array return type from stub, got %q", sym.ReturnType)
+		}
+		if len(sym.Params) != 2 {
+			t.Fatalf("expected 2 params from stub, got %d", len(sym.Params))
+		}
+	})
+
+	t.Run("builtin stub class constants and methods indexed", func(t *testing.T) {
+		cls := idx.Lookup("ReflectionMethod")
+		if cls == nil {
+			t.Fatal("expected ReflectionMethod builtin")
+		}
+		if cls.Kind != KindClass {
+			t.Errorf("expected ReflectionMethod class, got %d", cls.Kind)
+		}
+		if constant := idx.Lookup("ReflectionMethod::IS_PUBLIC"); constant == nil || constant.Kind != KindConstant {
+			t.Fatalf("expected ReflectionMethod::IS_PUBLIC constant, got %#v", constant)
+		}
+		if method := idx.Lookup("ReflectionObject::getMethod"); method == nil || method.ReturnType != "ReflectionMethod" {
+			t.Fatalf("expected ReflectionObject::getMethod return ReflectionMethod, got %#v", method)
+		}
+	})
+
 	t.Run("IndexFile defaults to SourceProject", func(t *testing.T) {
 		idx.IndexFile("file:///default.php", `<?php
 class DefaultClass {}

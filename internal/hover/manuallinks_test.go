@@ -42,6 +42,11 @@ func TestPhpManualURLFunction(t *testing.T) {
 			sym:      &symbols.Symbol{Name: "str_starts_with", Kind: symbols.KindFunction, URI: "builtin"},
 			expected: "https://www.php.net/manual/en/function.str-starts-with.php",
 		},
+		{
+			name:     "builtin stub function",
+			sym:      &symbols.Symbol{Name: "array_reverse", Kind: symbols.KindFunction, Source: symbols.SourceBuiltin, URI: "builtin://php/core.php"},
+			expected: "https://www.php.net/manual/en/function.array-reverse.php",
+		},
 	}
 
 	for _, tt := range tests {

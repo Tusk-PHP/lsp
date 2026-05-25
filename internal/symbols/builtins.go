@@ -1,5 +1,7 @@
 package symbols
 
+import "github.com/open-southeners/tusk-php/internal/stubs"
+
 type builtinFunction struct {
 	Name   string
 	Params []ParamInfo
@@ -99,6 +101,11 @@ var builtinClasses = []struct{ Name, Doc string }{
 
 // RegisterBuiltins populates the index with PHP built-in symbols.
 func (idx *Index) RegisterBuiltins() {
+	idx.registerBuiltinRegistry()
+	idx.RegisterBuiltinStubs()
+}
+
+func (idx *Index) registerBuiltinRegistry() {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
@@ -122,6 +129,19 @@ func (idx *Index) RegisterBuiltins() {
 			continue
 		}
 		idx.addBuiltinClassLikeLocked(name, "PHP built-in class-like symbol")
+	}
+}
+
+// RegisterBuiltinStubs indexes embedded PHP stub declarations as built-in
+// symbols. Stubs intentionally run after the generated registry so richer
+// signatures, class kinds, methods, and constants replace generic fallbacks.
+func (idx *Index) RegisterBuiltinStubs() {
+	entries, err := stubs.BuiltinPHP()
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		idx.IndexFileWithSource("builtin://"+entry.Path, entry.Content, SourceBuiltin)
 	}
 }
 
