@@ -3,8 +3,10 @@ package diagnostics
 import (
 	"io"
 	"log"
+	"strings"
 	"testing"
 
+	"github.com/open-southeners/tusk-php/internal/checks"
 	"github.com/open-southeners/tusk-php/internal/config"
 	"github.com/open-southeners/tusk-php/internal/parser"
 	"github.com/open-southeners/tusk-php/internal/protocol"
@@ -90,6 +92,7 @@ class Foo {
 
 func TestSprint3BaselineUnknownDiagnostics(t *testing.T) {
 	p := newTestProvider()
+	p.index.MarkReady()
 	p.TypeResolver = func(expr, source string, line int, file *parser.FileNode) string {
 		return ""
 	}
@@ -190,6 +193,7 @@ class Documentor {
 func TestUnknownFunctionRespectsPHPBuiltinProfile(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
+	idx.MarkReady()
 	logger := log.New(io.Discard, "", 0)
 	cfg := config.DefaultConfig()
 	f := false
@@ -298,6 +302,7 @@ class Foo {
 
 func TestAnalyzeIncludesSprint3BaselineDiagnostics(t *testing.T) {
 	p := newTestProvider()
+	p.index.MarkReady()
 	uri := "file:///test.php"
 	source := `<?php
 $name = "unterminated;
@@ -666,6 +671,71 @@ func TestRunnerAvailability(t *testing.T) {
 			t.Error("pint should not be available with missing binary")
 		}
 	})
+}
+
+func TestUnknownDiagnosticsSuppressedWhenIndexNotReady(t *testing.T) {
+	p := newTestProvider()
+	// Do NOT call MarkReady — the index is in warm-up state.
+
+	source := `<?php
+class Caller {
+    public function run(): void {
+        $x = new SomeMysteryClass();
+        otherMystery();
+    }
+}
+`
+	diags := p.Analyze("file:///test.php", source)
+
+	// Soft-moded: unknown-* findings must be absent during warm-up.
+	if found := filterByCode(diags, "unknown-class"); len(found) != 0 {
+		t.Fatalf("expected unknown-class to be soft-moded, got %#v", found)
+	}
+	if found := filterByCode(diags, "unknown-function"); len(found) != 0 {
+		t.Fatalf("expected unknown-function to be soft-moded, got %#v", found)
+	}
+
+	// Now mark ready and confirm the diagnostics return on a fresh analyze.
+	p.index.MarkReady()
+	diags2 := p.Analyze("file:///test.php", source)
+	if found := filterByCode(diags2, "unknown-class"); len(found) == 0 {
+		t.Fatalf("expected unknown-class once Ready, got none")
+	}
+	if found := filterByCode(diags2, "unknown-function"); len(found) == 0 {
+		t.Fatalf("expected unknown-function once Ready, got none")
+	}
+}
+
+func TestBuiltinUnavailableRuleEmitsEvenWhenIndexNotReady(t *testing.T) {
+	// Use a PHP 7.4 profile so str_contains is NOT registered in the index.
+	// The BuiltinUnavailableRule fires precisely when a symbol is absent from the
+	// index (excluded by profile) but IS a known builtin — this exercises that path.
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
+	logger := log.New(io.Discard, "", 0)
+	cfg := config.DefaultConfig()
+	f := false
+	cfg.PHPStanEnabled = &f
+	cfg.PintEnabled = &f
+	p := NewProvider(idx, "none", "/tmp", logger, cfg)
+	// DO NOT call MarkReady — we're proving the rule is not soft-moded.
+	p.BuiltinUnavailableRule = &checks.BuiltinUnavailableRule{
+		PHPVersion: "7.4",
+		Extensions: nil,
+	}
+
+	source := `<?php
+$x = str_contains("hay", "needle");
+`
+	diags := p.Analyze("file:///test.php", source)
+
+	found := filterByCode(diags, "builtin-unavailable")
+	if len(found) == 0 {
+		t.Fatalf("expected builtin-unavailable finding, got %#v", diags)
+	}
+	if !strings.Contains(found[0].Message, "PHP >= 8.0") {
+		t.Fatalf("expected version message, got %q", found[0].Message)
+	}
 }
 
 func filterBySource(diags []protocol.Diagnostic, source string) []protocol.Diagnostic {
