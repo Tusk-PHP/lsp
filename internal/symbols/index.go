@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/open-southeners/tusk-php/internal/parser"
 	"github.com/open-southeners/tusk-php/internal/protocol"
@@ -108,6 +109,7 @@ type Index struct {
 	sortedFQNs           []string          // sorted FQN keys for binary search (SearchByFQNPrefix)
 	sortedFQNsDirty      bool              // rebuild flag for sortedFQNs
 	fileSource           map[string]string // URI → raw source text stored during IndexFileWithSource
+	ready                atomic.Bool       // true once project + vendor indexing has completed at least once
 }
 
 func NewIndex() *Index {
@@ -925,6 +927,13 @@ func IsPHPBuiltinType(name string) bool {
 	return phpBuiltinTypes[strings.ToLower(name)]
 }
 
+// IsBuiltin reports whether the symbol comes from the PHP builtin registry
+// or embedded stubs. Built-in symbols are opaque to navigation: callers
+// should not return a Location for them or scan the workspace for refs.
+func IsBuiltin(sym *Symbol) bool {
+	return sym != nil && sym.Source == SourceBuiltin
+}
+
 func resolveTypeName(name string, currentNs string, uses []parser.UseNode) string {
 	if name == "" {
 		return ""
@@ -1019,6 +1028,21 @@ func (idx *Index) GetFileSource(uri string) string {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.fileSource[uri]
+}
+
+// Ready reports whether at least one full workspace + composer indexing pass
+// has completed. Diagnostic rules that depend on cross-file symbol presence
+// (unknown-class, unknown-function, unknown-member) should consult this and
+// suppress findings during the warm-up window.
+func (idx *Index) Ready() bool {
+	return idx.ready.Load()
+}
+
+// MarkReady flips the index into the ready state. Called once by the LSP
+// server after the async workspace + composer indexers finish. Safe to call
+// multiple times.
+func (idx *Index) MarkReady() {
+	idx.ready.Store(true)
 }
 
 func URIToPath(uri string) string {

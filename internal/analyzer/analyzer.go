@@ -404,7 +404,7 @@ func (a *Analyzer) resolveContainerCallType(expr string, source string, file *pa
 }
 
 func symbolLocation(sym *symbols.Symbol) *protocol.Location {
-	if sym.URI == "" || sym.URI == "builtin" {
+	if sym == nil || sym.URI == "" || symbols.IsBuiltin(sym) {
 		return nil
 	}
 	return &protocol.Location{URI: sym.URI, Range: sym.Range}
@@ -578,6 +578,11 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 	// and member access contexts before falling back to variable scope
 	sym := a.resolveSymbolAtCursor(uri, source, pos, word, file)
 
+	// Built-in symbols are opaque to navigation: do not scan the workspace for refs.
+	if symbols.IsBuiltin(sym) {
+		return nil
+	}
+
 	// Variable references — local scope only (if not resolved as a property/symbol)
 	if sym == nil && strings.HasPrefix(word, "$") && word != "$this" {
 		return a.findVariableReferences(uri, source, pos, word, file)
@@ -586,7 +591,7 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 		// Fallback: definition-only lookup by name (original behavior)
 		var locs []protocol.Location
 		for _, s := range a.index.LookupByName(word) {
-			if s.URI != "builtin" {
+			if !symbols.IsBuiltin(s) && s.URI != "" {
 				locs = append(locs, protocol.Location{URI: s.URI, Range: s.Range})
 			}
 		}
@@ -664,11 +669,16 @@ func (a *Analyzer) resolveSymbolAtCursor(uri, source string, pos protocol.Positi
 // findSymbolOccurrences scans all indexed files for references to the given symbol.
 // Returns locations for both definition sites and usage sites.
 func (a *Analyzer) findSymbolOccurrences(sym *symbols.Symbol, readDocument func(string) string) []protocol.Location {
+	// Built-in symbols are opaque to navigation.
+	if symbols.IsBuiltin(sym) {
+		return nil
+	}
+
 	var locs []protocol.Location
 	name := sym.Name
 
 	// Include the definition itself
-	if sym.URI != "" && sym.URI != "builtin" {
+	if sym.URI != "" {
 		locs = append(locs, protocol.Location{URI: sym.URI, Range: sym.Range})
 	}
 
@@ -676,6 +686,10 @@ func (a *Analyzer) findSymbolOccurrences(sym *symbols.Symbol, readDocument func(
 
 	allURIs := a.index.GetAllFileURIs()
 	for _, fileURI := range allURIs {
+		// Defense in depth: skip any stub URIs that may have been indexed.
+		if strings.HasPrefix(fileURI, "builtin://") {
+			continue
+		}
 		var source string
 		if readDocument != nil {
 			source = readDocument(fileURI)

@@ -1,9 +1,12 @@
 package analyzer
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/open-southeners/tusk-php/internal/container"
 	"github.com/open-southeners/tusk-php/internal/protocol"
+	"github.com/open-southeners/tusk-php/internal/symbols"
 )
 
 func TestFindAllReferencesClass(t *testing.T) {
@@ -219,5 +222,74 @@ class Foo {}
 	}
 	if count > 1 {
 		t.Errorf("expected definition to appear once, got %d times", count)
+	}
+}
+
+func TestFindReferencesOnBuiltinReturnsEmpty(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+
+	source := "<?php\n$x = array_reverse([]);\n"
+	idx.IndexFileWithSource("file:///project/test.php", source, symbols.SourceProject)
+
+	a := NewAnalyzer(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"))
+
+	// Position the cursor on "array_reverse"
+	lines := strings.Split(source, "\n")
+	col := strings.Index(lines[1], "array_reverse")
+	if col < 0 {
+		t.Fatalf("could not find array_reverse in source")
+	}
+	pos := protocol.Position{Line: 1, Character: col}
+
+	locs := a.FindReferences("file:///project/test.php", source, pos)
+	if len(locs) != 0 {
+		t.Fatalf("expected empty references for builtin array_reverse, got %d locations", len(locs))
+	}
+}
+
+func TestFindReferencesSkipsBuiltinURIs(t *testing.T) {
+	// Index a project file that defines formatName, then also register builtins.
+	// Confirm that no returned reference location has a URI starting with "builtin://".
+	sources := map[string]string{
+		"file:///project/helpers.php": `<?php
+function formatName(string $name): string {
+    return strtoupper($name);
+}
+`,
+		"file:///project/caller.php": `<?php
+$result = formatName("john");
+echo formatName("jane");
+`,
+	}
+
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	for uri, src := range sources {
+		idx.IndexFileWithSource(uri, src, symbols.SourceProject)
+	}
+	a := NewAnalyzer(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"))
+	reader := func(uri string) string { return sources[uri] }
+
+	// Position on formatName in helpers.php (line 1)
+	helperSrc := sources["file:///project/helpers.php"]
+	lines := strings.Split(helperSrc, "\n")
+	col := strings.Index(lines[1], "formatName")
+	if col < 0 {
+		t.Fatalf("could not find formatName in helpers.php")
+	}
+	pos := protocol.Position{Line: 1, Character: col}
+
+	locs := a.FindAllReferences("file:///project/helpers.php", helperSrc, pos, reader)
+
+	for _, loc := range locs {
+		if strings.HasPrefix(loc.URI, "builtin://") {
+			t.Errorf("found reference with builtin:// URI: %s", loc.URI)
+		}
+	}
+
+	// Sanity check: we do get references from the project files
+	if len(locs) == 0 {
+		t.Fatalf("expected at least one reference to formatName in project files, got none")
 	}
 }
