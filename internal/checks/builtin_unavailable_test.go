@@ -209,13 +209,35 @@ class Foo implements WeakMap {}
 	}
 }
 
-// TestBuiltinUnavailableAttribute verifies attribute syntax behavior.
-//
-// NOTE: This test is intentionally skipped. The maskPHPLine helper treats '#'
-// as a line comment delimiter and blanks out everything from '#' onward,
-// which means PHP 8 attribute syntax (#[Override]) is masked before any regex
-// sees it. Adding a new regex to detect attributes is out of scope for this
-// unit — see CURRENT_ISSUES.md for the deferred tracking item.
+// TestBuiltinUnavailableAttribute verifies that a builtin attribute introduced
+// in PHP 8.3 is flagged when the project profile targets PHP 8.2.
 func TestBuiltinUnavailableAttribute(t *testing.T) {
-	t.Skip("attribute syntax (#[Name]) is masked by maskPHPLine — regex matching not supported in this unit")
+	source := "<?php\nclass Foo {\n    #[Override]\n    public function run(): void {}\n}\n"
+	file := parser.ParseFile(source)
+	idx := symbols.NewIndex()
+	// Register builtins for PHP 8.2 — Override is NOT included (PHP 8.3+).
+	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.2"})
+
+	rule := &BuiltinUnavailableRule{PHPVersion: "8.2"}
+	findings := rule.Check(file, source, idx)
+
+	var relevant []Finding
+	for _, f := range findings {
+		if f.Code == "builtin-unavailable" {
+			relevant = append(relevant, f)
+		}
+	}
+	if len(relevant) == 0 {
+		t.Fatal("expected at least one builtin-unavailable finding for Override attribute, got none")
+	}
+	found := false
+	for _, f := range relevant {
+		if strings.Contains(f.Message, "Override") && strings.Contains(f.Message, "PHP >= 8.3") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected a finding mentioning 'Override' and 'PHP >= 8.3', got: %v", relevant)
+	}
 }
