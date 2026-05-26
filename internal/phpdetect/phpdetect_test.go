@@ -26,7 +26,7 @@ func TestDetectParsesValidOutput(t *testing.T) {
 	dir := t.TempDir()
 	bin := writeFakeScript(t, dir, "php", `echo 8.2`)
 
-	got, err := Detect(bin)
+	got, err := Detect(bin, DefaultTimeout)
 	if err != nil {
 		t.Fatalf("Detect returned unexpected error: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestDetectRejectsMalformedOutput(t *testing.T) {
 	dir := t.TempDir()
 	bin := writeFakeScript(t, dir, "php", `echo "not a version"`)
 
-	got, err := Detect(bin)
+	got, err := Detect(bin, DefaultTimeout)
 	if err == nil {
 		t.Fatalf("expected error for malformed output, got nil (Version=%q)", got.Version)
 	}
@@ -52,7 +52,7 @@ func TestDetectRejectsMalformedOutput(t *testing.T) {
 func TestDetectFailsWhenBinaryMissing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nonexistent-php")
 
-	_, err := Detect(path)
+	_, err := Detect(path, DefaultTimeout)
 	if err == nil {
 		t.Fatal("expected error for missing binary, got nil")
 	}
@@ -63,19 +63,19 @@ func TestDetectTimesOut(t *testing.T) {
 	bin := writeFakeScript(t, dir, "php", `sleep 2`)
 
 	start := time.Now()
-	_, err := Detect(bin)
+	_, err := Detect(bin, 200*time.Millisecond)
 	elapsed := time.Since(start)
 
 	if err == nil {
 		t.Fatal("expected error due to timeout, got nil")
 	}
-	if elapsed >= 1*time.Second {
-		t.Errorf("Detect took %v; expected < 1s (500ms timeout + scheduling slack)", elapsed)
+	if elapsed >= 800*time.Millisecond {
+		t.Errorf("Detect took %v; expected < 800ms (200ms timeout + WaitDelay + scheduling slack)", elapsed)
 	}
 }
 
 func TestDetectEmptyBinaryPathDefaultsToPath(t *testing.T) {
-	got, err := Detect("")
+	got, err := Detect("", DefaultTimeout)
 	if err != nil {
 		// Acceptable: php not on $PATH in CI. Verify the error is exec-related.
 		if !strings.Contains(err.Error(), "executable file not found") &&
@@ -91,5 +91,20 @@ func TestDetectEmptyBinaryPathDefaultsToPath(t *testing.T) {
 	}
 	if got.Source != "local" {
 		t.Errorf("expected Source %q, got %q", "local", got.Source)
+	}
+}
+
+func TestDetectDefaultsTimeoutWhenZero(t *testing.T) {
+	dir := t.TempDir()
+	bin := writeFakeScript(t, dir, "php", `echo 8.4`)
+
+	// Passing timeout=0 should fall back to DefaultTimeout (1s) and succeed.
+	got, err := Detect(bin, 0)
+	if err != nil {
+		t.Fatalf("Detect with timeout=0 returned unexpected error: %v", err)
+	}
+	want := LocalPHP{Version: "8.4", Source: "local"}
+	if got != want {
+		t.Fatalf("Detect = %+v, want %+v", got, want)
 	}
 }

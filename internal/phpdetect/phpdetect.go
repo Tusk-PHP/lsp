@@ -13,6 +13,9 @@ import (
 	"time"
 )
 
+// DefaultTimeout is the timeout applied when Detect is called with timeout <= 0.
+const DefaultTimeout = 1 * time.Second
+
 // versionRE matches exactly MAJOR.MINOR, e.g. "8.2".
 var versionRE = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
 
@@ -25,17 +28,25 @@ type LocalPHP struct {
 	Source string
 }
 
-// Detect runs the PHP binary at binaryPath with a 500 ms deadline and returns
-// its major.minor version. If binaryPath is empty, "php" is used so that the
-// user's $PATH is consulted. Any execution failure, non-zero exit, context
-// cancellation, or malformed output causes a non-nil error to be returned;
-// Version will be empty in that case.
-func Detect(binaryPath string) (LocalPHP, error) {
+// Detect runs the given PHP binary to read its major.minor version. A
+// timeout <= 0 falls back to DefaultTimeout. The detection result is
+// intended to be cached for the lifetime of an LSP session, so this default
+// is comfortably wide for CI-under-load while still being short enough that
+// a missing binary fails the LSP initialize quickly.
+//
+// If binaryPath is empty, "php" is used so that the user's $PATH is
+// consulted. Any execution failure, non-zero exit, context cancellation, or
+// malformed output causes a non-nil error to be returned; Version will be
+// empty in that case.
+func Detect(binaryPath string, timeout time.Duration) (LocalPHP, error) {
 	if binaryPath == "" {
 		binaryPath = "php"
 	}
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, binaryPath, "-r", `echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;`)

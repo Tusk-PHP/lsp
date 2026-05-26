@@ -30,6 +30,7 @@ type Config struct {
 	ContainerAware     bool             `json:"containerAware"`
 	DiagnosticsEnabled bool             `json:"diagnosticsEnabled"`
 	PHPBinary          string           `json:"phpBinary,omitempty"`
+	PHPDetectTimeoutMs int              `json:"phpDetectTimeoutMs,omitempty"`
 	PHPStanEnabled     *bool            `json:"phpstanEnabled,omitempty"`
 	PHPStanPath        string           `json:"phpstanPath,omitempty"`
 	PHPStanLevel       string           `json:"phpstanLevel,omitempty"`

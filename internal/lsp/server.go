@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/open-southeners/tusk-php/internal/analyzer"
 	"github.com/open-southeners/tusk-php/internal/checks"
@@ -390,8 +391,9 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 //
 // It returns the resolved profile and a source string ("composer", "local", or
 // "fallback") so callers can log provenance. The logf callback receives a single
-// human-readable message for surfacing to the user; it may be nil.
-func resolvePHPProfile(rootPath, phpBinary string, logf func(string)) (symbols.BuiltinProfile, string) {
+// human-readable message for surfacing to the user; it may be nil. A timeout
+// <= 0 falls back to phpdetect.DefaultTimeout.
+func resolvePHPProfile(rootPath, phpBinary string, timeout time.Duration, logf func(string)) (symbols.BuiltinProfile, string) {
 	platform := composer.GetPlatform(rootPath)
 	profile := symbols.BuiltinProfile{Extensions: platform.Extensions}
 	var source string
@@ -401,7 +403,7 @@ func resolvePHPProfile(rootPath, phpBinary string, logf func(string)) (symbols.B
 		profile.PHPVersion = platform.PHPVersion
 		source = "composer"
 	default:
-		if local, err := phpdetect.Detect(phpBinary); err == nil && local.Version != "" {
+		if local, err := phpdetect.Detect(phpBinary, timeout); err == nil && local.Version != "" {
 			profile.PHPVersion = local.Version
 			source = "local"
 		} else {
@@ -423,7 +425,8 @@ func resolvePHPProfile(rootPath, phpBinary string, logf func(string)) (symbols.B
 //
 // The resolved profile is cached on the Server and surfaced via window/logMessage.
 func (s *Server) resolveBuiltinProfile() symbols.BuiltinProfile {
-	profile, source := resolvePHPProfile(s.rootPath, s.cfg.PHPBinary, func(msg string) {
+	timeout := time.Duration(s.cfg.PHPDetectTimeoutMs) * time.Millisecond
+	profile, source := resolvePHPProfile(s.rootPath, s.cfg.PHPBinary, timeout, func(msg string) {
 		s.sendNotification("window/logMessage", map[string]interface{}{
 			"type":    protocol.MessageTypeInfo,
 			"message": msg,
