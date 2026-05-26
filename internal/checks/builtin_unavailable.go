@@ -45,6 +45,7 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 		findings = append(findings, r.checkClassLikesStatic(line, lineNum, file, index)...)
 		findings = append(findings, r.checkClassLikesCatch(line, lineNum, file, index)...)
 		findings = append(findings, r.checkClassLikesImplements(line, lineNum, file, index)...)
+		findings = append(findings, r.checkClassLikesAttribute(line, lineNum, file, index)...)
 	}
 	return findings
 }
@@ -153,6 +154,32 @@ func (r *BuiltinUnavailableRule) checkClassLikesImplements(line string, lineNum 
 			start := listStart + offset + rel
 			end := start + len(trimmed)
 			findings = append(findings, r.classLikeFinding(trimmed, lineNum, start, end, file, index)...)
+			offset += len(part) + 1
+		}
+	}
+	return findings
+}
+
+func (r *BuiltinUnavailableRule) checkClassLikesAttribute(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
+	var findings []Finding
+	for _, match := range unknownClassAttributeRe.FindAllStringSubmatchIndex(line, -1) {
+		listStart, listEnd := match[2], match[3]
+		list := line[listStart:listEnd]
+		offset := 0
+		for _, part := range strings.Split(list, ",") {
+			trimmed := strings.TrimSpace(part)
+			// Strip a parenthesized argument list `Name(args)` -> `Name`.
+			if paren := strings.Index(trimmed, "("); paren > 0 {
+				trimmed = trimmed[:paren]
+			}
+			if trimmed == "" {
+				offset += len(part) + 1
+				continue
+			}
+			rel := strings.Index(part, trimmed)
+			start := listStart + offset + rel
+			end := start + len(trimmed)
+			findings = append(findings, r.attributeFinding(trimmed, lineNum, start, end, file, index)...)
 			offset += len(part) + 1
 		}
 	}
@@ -269,4 +296,47 @@ func (r *BuiltinUnavailableRule) classMessage(name string, avail symbols.Builtin
 		return fmt.Sprintf("Class '%s' requires ext-%s (PHP >= %s)", name, avail.Extension, avail.Since)
 	}
 	return fmt.Sprintf("Class '%s' requires PHP >= %s", name, avail.Since)
+}
+
+// attributeFinding emits a builtin-unavailable finding for an attribute name
+// when the name resolves to a known PHP builtin that the project's profile
+// cannot use. Returns nil if the name is already resolved or is in-profile.
+func (r *BuiltinUnavailableRule) attributeFinding(name string, lineNum, start, end int, file *parser.FileNode, index *symbols.Index) []Finding {
+	// If the class-like is already resolved (locally defined or indexed), skip.
+	if classLikeExists(name, lineNum, file, index) {
+		return nil
+	}
+
+	bare := strings.TrimPrefix(name, "\\")
+	if strings.Contains(bare, "\\") {
+		// Namespaced reference — not a global builtin.
+		return nil
+	}
+
+	avail, ok := symbols.LookupAvailability(bare)
+	if !ok {
+		// Not a known builtin — UnknownClassRule handles this.
+		return nil
+	}
+
+	if r.satisfies(avail) {
+		return nil
+	}
+
+	return []Finding{{
+		StartLine: lineNum,
+		StartCol:  start,
+		EndLine:   lineNum,
+		EndCol:    end,
+		Severity:  SeverityWarning,
+		Code:      "builtin-unavailable",
+		Message:   r.attributeMessage(bare, avail),
+	}}
+}
+
+func (r *BuiltinUnavailableRule) attributeMessage(name string, avail symbols.BuiltinAvailability) string {
+	if avail.Extension != "" {
+		return fmt.Sprintf("Attribute '%s' requires ext-%s (PHP >= %s)", name, avail.Extension, avail.Since)
+	}
+	return fmt.Sprintf("Attribute '%s' requires PHP >= %s", name, avail.Since)
 }

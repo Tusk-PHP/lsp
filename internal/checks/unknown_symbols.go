@@ -21,6 +21,11 @@ var unknownClassStaticRe = regexp.MustCompile(`(^|[^$A-Za-z0-9_\\])(\\?[A-Za-z_]
 var unknownClassCatchRe = regexp.MustCompile(`\bcatch\s*\(\s*([^)]+)\s+\$[A-Za-z_][A-Za-z0-9_]*`)
 var unknownClassImplementsRe = regexp.MustCompile(`\bimplements\s+([^{]+)`)
 
+// Matches PHP 8 attribute usage like `#[MyAttr]`, `#[MyAttr(args)]`, or
+// `#[A, B, C]`. The capture is the comma-separated list inside the brackets,
+// which the iterator splits and resolves per name.
+var unknownClassAttributeRe = regexp.MustCompile(`#\[\s*([^\]]+)\s*\]`)
+
 func (r *UnknownClassRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	if file == nil {
 		return nil
@@ -36,6 +41,7 @@ func (r *UnknownClassRule) Check(file *parser.FileNode, source string, index *sy
 		findings = append(findings, checkUnknownStaticClassMatches(line, lineNum, file, index)...)
 		findings = append(findings, checkUnknownCatchClasses(line, lineNum, file, index)...)
 		findings = append(findings, checkUnknownImplementsClasses(line, lineNum, file, index)...)
+		findings = append(findings, checkUnknownAttributeClasses(line, lineNum, file, index)...)
 	}
 
 	return findings
@@ -144,6 +150,47 @@ func checkUnknownImplementsClasses(line string, lineNum int, file *parser.FileNo
 				Severity:  SeverityWarning,
 				Code:      "unknown-class",
 				Message:   fmt.Sprintf("Unknown class '%s'", strings.TrimPrefix(trimmed, "\\")),
+			})
+			offset += len(part) + 1
+		}
+	}
+	return findings
+}
+
+// checkUnknownAttributeClasses iterates `#[A, B(...), \\Ns\\C]` lists.
+// Each name is resolved via the standard class-like resolver and the same
+// presence checks; arguments inside `(...)` are stripped before resolution.
+func checkUnknownAttributeClasses(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
+	var findings []Finding
+	for _, match := range unknownClassAttributeRe.FindAllStringSubmatchIndex(line, -1) {
+		listStart, listEnd := match[2], match[3]
+		list := line[listStart:listEnd]
+		offset := 0
+		for _, part := range strings.Split(list, ",") {
+			trimmed := strings.TrimSpace(part)
+			// Strip a parenthesized argument list `Name(args)` -> `Name`.
+			if paren := strings.Index(trimmed, "("); paren > 0 {
+				trimmed = trimmed[:paren]
+			}
+			if trimmed == "" {
+				offset += len(part) + 1
+				continue
+			}
+			rel := strings.Index(part, trimmed)
+			start := listStart + offset + rel
+			end := start + len(trimmed)
+			if classLikeExists(trimmed, lineNum, file, index) {
+				offset += len(part) + 1
+				continue
+			}
+			findings = append(findings, Finding{
+				StartLine: lineNum,
+				StartCol:  start,
+				EndLine:   lineNum,
+				EndCol:    end,
+				Severity:  SeverityWarning,
+				Code:      "unknown-class",
+				Message:   fmt.Sprintf("Unknown attribute '%s'", strings.TrimPrefix(trimmed, "\\")),
 			})
 			offset += len(part) + 1
 		}
@@ -371,6 +418,14 @@ func maskPHPLine(line string, inBlockComment *bool) string {
 			break
 		}
 		if line[i] == '#' {
+			// PHP 8 attribute syntax `#[Name]` must remain visible — only treat
+			// standalone `#` (followed by anything other than `[`) as a line
+			// comment. Attribute brackets pair with `]` later on the same line or
+			// a subsequent line; we leave their contents in the masked buffer.
+			if i+1 < len(buf) && line[i+1] == '[' {
+				// leave the `#[` and everything after it intact, fall through
+				continue
+			}
 			for j := i; j < len(buf); j++ {
 				buf[j] = ' '
 			}
