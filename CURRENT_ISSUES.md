@@ -58,16 +58,6 @@ _None open._
 - **What:** Detecting calls that match a newer overload than the project's PHP profile allows (e.g. `DateTimeImmutable::createFromInterface()` on PHP < 8.0) requires richer per-version stub layering than the current `internal/stubs/php/` provides.
 - **Fix:** Land once per-version stubs are richer; gate behind `checks.builtin_unavailable.signature_deltas` defaulting off.
 
-### L20 — `phpdetect` 500 ms timeout is tight under high-load CI / `-race`
-- **Where:** `internal/phpdetect/phpdetect.go` (the context timeout) and `internal/phpdetect/phpdetect_test.go::TestDetectParsesValidOutput`.
-- **What:** Under `-race` and high parallelism, the fake shell script subprocess can be killed by the OS scheduler before the 500 ms deadline, returning `signal: killed`. Local runs are reliable; CI under load may flake. Not caused by U7 — it's a U2 sensitivity surfaced when running the full suite.
-- **Fix:** Either raise the timeout to ~1.5–2 s (the call still runs once per session), or make the timeout configurable so tests can override it.
-
-### L18 — PHP 8 attribute syntax (`#[Name]`) is masked away by `maskPHPLine`
-- **Where:** `internal/checks/unknown_symbols.go:373` (the `'#'` branch treats everything from `#` onward as a comment).
-- **What:** Diagnostic rules (`UnknownClassRule`, `BuiltinUnavailableRule`) cannot see attribute usage at all because the masking step blanks the line at the leading `#`. `TestBuiltinUnavailableAttribute` in `internal/checks/builtin_unavailable_test.go` is skipped for this reason.
-- **Fix:** The `'#'` branch needs a look-ahead for `[` to distinguish PHP 8 attribute syntax (`#[`) from a shell-style comment (`#` followed by anything else — defensively masked). Once that lands, un-skip the attribute test.
-
 ### L19 — Protocol-harness test for diagnostics re-publish is deferred
 - **Where:** `internal/lsp/protocol_harness_test.go`.
 - **What:** The harness drives requests synchronously through a pipe and has no mechanism to wait deterministically for the `postIndexSettle` goroutine. Asserting "first publish is soft-moded, second publish carries unknown-* findings" would require a settle channel or injectable goroutine. Skipped during U5; the soft-mode and re-publish are covered by package-level tests in `internal/symbols/` and `internal/diagnostics/`.
@@ -81,6 +71,17 @@ _None open._
 ---
 
 ## Resolved
+
+### L18 — PHP 8 attribute syntax (`#[Name]`) now visible to diagnostics
+- `internal/checks/unknown_symbols.go::maskPHPLine` now leaves `#[` intact while still masking the historical `#`-to-end-of-line comment form.
+- Added `unknownClassAttributeRe` plus `checkUnknownAttributeClasses` so `UnknownClassRule` emits an `unknown-class` finding (`Unknown attribute '…'`) for unknown attributes.
+- Mirrored the same scope on `BuiltinUnavailableRule.checkClassLikesAttribute` so attributes like `#[Override]` on PHP 8.2 emit `Attribute 'Override' requires PHP >= 8.3`.
+- Un-skipped `TestBuiltinUnavailableAttribute` and added `TestUnknownClassUnknownAttribute`.
+
+### L20 — `phpdetect` timeout is now configurable, default raised to 1 s
+- `phpdetect.Detect` now takes an explicit `timeout time.Duration`; `timeout <= 0` falls back to the exported `DefaultTimeout = 1 * time.Second`.
+- Added `config.Config.PHPDetectTimeoutMs` for project-level override; `internal/lsp/server.go::resolvePHPProfile` reads it and propagates it to `Detect`.
+- Tests now run against `DefaultTimeout` (production value) for happy paths and a deliberately short 200 ms for the sleep-based timeout test; `TestDetectDefaultsTimeoutWhenZero` exercises the sentinel.
 
 ### C1 — Fatal stack overflow in the hover/completion chain resolver
 - Fixed by an atomic re-entrancy depth guard (`const maxResolveDepth = 32`) added to
