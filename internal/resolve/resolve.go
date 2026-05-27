@@ -230,7 +230,7 @@ func (r *Resolver) MemberTypeResolved(member *symbols.Symbol, file *parser.FileN
 		// is [Category], so TModel → Category.
 		templateSubst := buildTemplateSubst(r.Index, member.ParentFQN, typeContext)
 
-		if strings.Contains(resolvedRaw, "<") {
+		if strings.Contains(resolvedRaw, "<") || strings.HasSuffix(resolvedRaw, "[]") {
 			rt := ParseGenericType(resolvedRaw)
 			rt.FQN = resolveTypeParam(r, rt.FQN, staticFQN, templateSubst, file)
 			for i := range rt.Params {
@@ -743,6 +743,11 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	bare := strings.TrimPrefix(varName, "$")
 	varPrefix := "$" + bare
 
+	// Check foreach loop value bindings: foreach ($iterable as $v) or foreach ($iterable as $k => $v)
+	if rt := r.resolveForeachValueType(varPrefix, lines, pos, file); !rt.IsEmpty() {
+		return rt
+	}
+
 	// Look for assignments with chain expressions
 	for i := pos.Line; i >= 0 && i >= pos.Line-200; i-- {
 		if i >= len(lines) {
@@ -852,6 +857,125 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	// Fall back to standard resolution
 	fqn := r.ResolveVariableType(varName, lines, pos, file)
 	return ResolvedType{FQN: fqn}
+}
+
+// resolveForeachValueType looks backward for a foreach loop that binds varPrefix
+// as its value variable and returns the element type of the iterable.
+// Handles both "foreach ($x as $v)" and "foreach ($x as $k => $v)".
+func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+	source := strings.Join(lines, "\n")
+	for i := pos.Line; i >= 0 && i >= pos.Line-200; i-- {
+		if i >= len(lines) {
+			continue
+		}
+		line := strings.TrimSpace(lines[i])
+		if !strings.Contains(line, "foreach") || !strings.Contains(line, "as") {
+			continue
+		}
+		// Check that varPrefix appears after "as" in the line
+		asIdx := strings.Index(line, " as ")
+		if asIdx < 0 {
+			continue
+		}
+		afterAs := line[asIdx+4:]
+		// For "as $k => $v", check last variable matches; for "as $v", check directly
+		arrowIdx := strings.Index(afterAs, "=>")
+		var valueVarSection string
+		if arrowIdx >= 0 {
+			valueVarSection = strings.TrimSpace(afterAs[arrowIdx+2:])
+		} else {
+			valueVarSection = strings.TrimSpace(afterAs)
+		}
+		// Strip closing paren/brace/semicolon
+		valueVarSection = strings.TrimRight(valueVarSection, ") {;\t ")
+		if valueVarSection != varPrefix {
+			continue
+		}
+		// Extract the iterable expression: between "foreach (" and " as "
+		foreachIdx := strings.Index(line, "foreach")
+		openParen := strings.IndexByte(line[foreachIdx:], '(')
+		if openParen < 0 {
+			continue
+		}
+		openParen += foreachIdx
+		iterableExpr := strings.TrimSpace(line[openParen+1 : foreachIdx+strings.Index(line[foreachIdx:], " as ")])
+		if iterableExpr == "" {
+			continue
+		}
+
+		var iterableType ResolvedType
+		hasChain := strings.Contains(iterableExpr, "->") || strings.Contains(iterableExpr, "::")
+		if r.TypedChainResolver != nil && hasChain {
+			iterableType = r.TypedChainResolver(iterableExpr, source, pos, file)
+		} else if r.ChainResolver != nil && hasChain {
+			if t := r.ChainResolver(iterableExpr, source, pos, file); t != "" {
+				iterableType = ResolvedType{FQN: t}
+			}
+		} else if strings.HasPrefix(iterableExpr, "$") {
+			iterableType = r.ResolveVariableTypeTyped(iterableExpr, lines, pos, file)
+		} else if funcName := extractFunctionCallName(iterableExpr); funcName != "" && r.Index != nil {
+			iterableType = r.resolveFunctionCallReturnType(funcName, file)
+		}
+		if iterableType.IsEmpty() {
+			continue
+		}
+		return arrayElementType(iterableType)
+	}
+	return ResolvedType{}
+}
+
+// resolveFunctionCallReturnType resolves the return type of a named function,
+// preferring PHPDoc @return over the bare native type hint.
+func (r *Resolver) resolveFunctionCallReturnType(funcName string, file *parser.FileNode) ResolvedType {
+	if r.Index == nil {
+		return ResolvedType{}
+	}
+	// Check file-local functions first for PHPDoc annotations
+	if file != nil {
+		for i := range file.Functions {
+			fn := &file.Functions[i]
+			if fn.Name != funcName {
+				continue
+			}
+			doc := parser.ParseDocBlock(fn.DocComment)
+			if doc != nil && doc.Return.Type != "" {
+				if rt := r.resolveDocType(doc.Return.Type, file); !rt.IsEmpty() {
+					return rt
+				}
+			}
+			if fn.ReturnType.Name != "" && fn.ReturnType.Name != "array" && fn.ReturnType.Name != "mixed" {
+				return ResolvedType{FQN: r.ResolveClassName(fn.ReturnType.Name, file)}
+			}
+			break
+		}
+	}
+	// Fall back to symbol index
+	for _, sym := range r.Index.LookupByName(funcName) {
+		if sym.Kind != symbols.KindFunction {
+			continue
+		}
+		if sym.DocComment != "" {
+			if doc := parser.ParseDocBlock(sym.DocComment); doc != nil && doc.Return.Type != "" {
+				if rt := r.resolveDocType(doc.Return.Type, file); !rt.IsEmpty() {
+					return rt
+				}
+			}
+		}
+		if sym.ReturnType != "" {
+			return ResolvedType{FQN: sym.ReturnType}
+		}
+	}
+	return ResolvedType{}
+}
+
+// arrayElementType extracts the value element type from an array ResolvedType.
+// For array<K, V> returns V; for array<V> (single param) returns V.
+func arrayElementType(rt ResolvedType) ResolvedType {
+	if rt.FQN != "array" || len(rt.Params) == 0 {
+		return ResolvedType{}
+	}
+	// array<K, V> — value is last param
+	return rt.Params[len(rt.Params)-1]
 }
 
 // ResolveVariableType infers the type of a variable from context:

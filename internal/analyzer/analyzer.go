@@ -33,7 +33,21 @@ func NewAnalyzer(index *symbols.Index, ca *container.ContainerAnalyzer) *Analyze
 	if ca != nil {
 		framework = ca.Framework()
 	}
-	return &Analyzer{index: index, container: ca, resolver: resolve.NewResolver(index), framework: framework}
+	a := &Analyzer{index: index, container: ca, resolver: resolve.NewResolver(index), framework: framework}
+	a.resolver.TypedChainResolver = a.resolveExpressionTypeTyped
+	return a
+}
+
+// resolveExpressionTypeTyped resolves the type of a chain expression preserving
+// generic parameters, so that array<int, ReflectionMethod> is not collapsed to array.
+func (a *Analyzer) resolveExpressionTypeTyped(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return resolve.ResolvedType{}
+	}
+	dummyLine := expr + "->__dummy__"
+	wordStart := len(expr) + 2
+	return a.resolveAccessChainTyped(dummyLine, wordStart, source, pos, file)
 }
 
 func (a *Analyzer) SetChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) string) {
@@ -282,12 +296,19 @@ func (a *Analyzer) definitionForContainerArg(line string, pos protocol.Position,
 // resolveAccessChain walks left through -> and :: chains to return the FQN
 // of the class that owns the member at wordStart.
 func (a *Analyzer) resolveAccessChain(line string, wordStart int, source string, pos protocol.Position, file *parser.FileNode) string {
+	return a.resolveAccessChainTyped(line, wordStart, source, pos, file).BaseFQN()
+}
+
+// resolveAccessChainTyped is the generic-aware variant of resolveAccessChain.
+// It propagates receiver template params through method-call steps so that
+// @return T substitution fires correctly for template-typed receivers.
+func (a *Analyzer) resolveAccessChainTyped(line string, wordStart int, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 	i := wordStart
 	for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {
 		i--
 	}
 	if i < 2 {
-		return ""
+		return resolve.ResolvedType{}
 	}
 
 	if line[i-2] == '-' && line[i-1] == '>' {
@@ -295,7 +316,7 @@ func (a *Analyzer) resolveAccessChain(line string, wordStart int, source string,
 	} else if line[i-2] == ':' && line[i-1] == ':' {
 		i -= 2
 	} else {
-		return ""
+		return resolve.ResolvedType{}
 	}
 
 	for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {
@@ -320,7 +341,7 @@ func (a *Analyzer) resolveAccessChain(line string, wordStart int, source string,
 		if a.container != nil {
 			callExpr := strings.TrimSpace(line[:parenEnd])
 			if concrete := a.resolveContainerCallType(callExpr, source, file); concrete != "" {
-				return concrete
+				return resolve.ResolvedType{FQN: concrete}
 			}
 		}
 
@@ -337,31 +358,32 @@ func (a *Analyzer) resolveAccessChain(line string, wordStart int, source string,
 		i--
 	}
 	if i >= end {
-		return ""
+		return resolve.ResolvedType{}
 	}
 	target := line[i:end]
 
 	if file == nil {
-		return ""
+		return resolve.ResolvedType{}
 	}
 
 	switch target {
 	case "$this", "self", "static":
-		return resolve.FindEnclosingClass(file, pos)
+		return resolve.ResolvedType{FQN: resolve.FindEnclosingClass(file, pos)}
 	case "parent":
 		classFQN := resolve.FindEnclosingClass(file, pos)
 		if classFQN == "" {
-			return ""
+			return resolve.ResolvedType{}
 		}
 		chain := a.index.GetInheritanceChain(classFQN)
 		if len(chain) > 0 {
-			return chain[0]
+			return resolve.ResolvedType{FQN: chain[0]}
 		}
-		return ""
+		return resolve.ResolvedType{}
 	}
 
 	if strings.HasPrefix(target, "$") {
-		return a.resolver.ResolveVariableType(target, resolve.SplitLines(source), pos, file)
+		// Use typed resolution to preserve generic params
+		return a.resolver.ResolveVariableTypeTyped(target, resolve.SplitLines(source), pos, file)
 	}
 
 	// Try as a class name (for static access like Logger::create)
@@ -369,21 +391,21 @@ func (a *Analyzer) resolveAccessChain(line string, wordStart int, source string,
 		if sym := a.index.Lookup(fqn); sym != nil {
 			switch sym.Kind {
 			case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
-				return fqn
+				return resolve.ResolvedType{FQN: fqn}
 			}
 		}
 	}
 
-	// Recursive chain resolution
-	ownerFQN := a.resolveAccessChain(line, i, source, pos, file)
-	if ownerFQN == "" {
-		return ""
+	// Recursive chain resolution — propagate template-bound return through method-call chain.
+	ownerResolved := a.resolveAccessChainTyped(line, i, source, pos, file)
+	if ownerResolved.IsEmpty() {
+		return resolve.ResolvedType{}
 	}
-	member := a.resolver.FindMember(ownerFQN, target)
+	member := a.resolver.FindMember(ownerResolved.BaseFQN(), target)
 	if member == nil {
-		return ""
+		return resolve.ResolvedType{}
 	}
-	return a.resolver.MemberType(member, file)
+	return a.resolver.MemberTypeResolved(member, file, ownerResolved.BaseFQN(), ownerResolved.Params)
 }
 
 // resolveContainerCallType resolves a container call expression to a concrete FQN.

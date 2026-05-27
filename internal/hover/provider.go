@@ -30,6 +30,7 @@ type Provider struct {
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
 	p := &Provider{index: index, container: ca, resolver: resolve.NewResolver(index), framework: framework}
 	p.resolver.ChainResolver = p.resolveExpressionType
+	p.resolver.TypedChainResolver = p.resolveExpressionTypeTyped
 	return p
 }
 
@@ -48,6 +49,18 @@ func (p *Provider) resolveExpressionType(expr string, source string, pos protoco
 	dummyLine := expr + "->__dummy__"
 	wordStart := len(expr) + 2
 	return p.resolveAccessChain(dummyLine, wordStart, strings.Split(source, "\n"), pos, file)
+}
+
+// resolveExpressionTypeTyped resolves the type of a chain expression preserving
+// generic parameters, so that array<int, ReflectionMethod> is not collapsed to array.
+func (p *Provider) resolveExpressionTypeTyped(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return resolve.ResolvedType{}
+	}
+	dummyLine := expr + "->__dummy__"
+	wordStart := len(expr) + 2
+	return p.resolveAccessChainTyped(dummyLine, wordStart, strings.Split(source, "\n"), pos, file)
 }
 
 // SetArrayResolver sets the framework array resolver for config hover.
@@ -260,6 +273,13 @@ func isInStringLiteral(line string, character int) bool {
 // E.g. for "$this->logger->info()", if wordStart points at "info",
 // it resolves $this -> Service, finds property "logger" -> Logger type, returns Logger FQN.
 func (p *Provider) resolveAccessChain(line string, wordStart int, lines []string, pos protocol.Position, file *parser.FileNode) string {
+	return p.resolveAccessChainTyped(line, wordStart, lines, pos, file).BaseFQN()
+}
+
+// resolveAccessChainTyped is the generic-aware variant of resolveAccessChain.
+// It propagates receiver template params (ResolvedType.Params) through method-call
+// steps so that @return T substitution fires correctly (e.g. ReflectionClass<MyModel>::newInstance() → MyModel).
+func (p *Provider) resolveAccessChainTyped(line string, wordStart int, lines []string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 	i := wordStart
 
 	// Skip whitespace before the word
@@ -267,7 +287,7 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, lines []string
 		i--
 	}
 	if i < 2 {
-		return ""
+		return resolve.ResolvedType{}
 	}
 
 	if line[i-2] == '-' && line[i-1] == '>' {
@@ -275,7 +295,7 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, lines []string
 	} else if line[i-2] == ':' && line[i-1] == ':' {
 		i -= 2
 	} else {
-		return ""
+		return resolve.ResolvedType{}
 	}
 
 	// Skip whitespace before operator
@@ -311,34 +331,33 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, lines []string
 		i--
 	}
 	if i >= end {
-		return ""
+		return resolve.ResolvedType{}
 	}
 	target := line[i:end]
 
 	if file == nil {
-		return ""
+		return resolve.ResolvedType{}
 	}
 
 	// Resolve the target to a class FQN
 	switch target {
 	case "$this", "self", "static":
-		return resolve.FindEnclosingClass(file, pos)
+		return resolve.ResolvedType{FQN: resolve.FindEnclosingClass(file, pos)}
 	case "parent":
 		classFQN := resolve.FindEnclosingClass(file, pos)
 		if classFQN == "" {
-			return ""
+			return resolve.ResolvedType{}
 		}
 		chain := p.index.GetInheritanceChain(classFQN)
 		if len(chain) > 0 {
-			return chain[0]
+			return resolve.ResolvedType{FQN: chain[0]}
 		}
-		return ""
+		return resolve.ResolvedType{}
 	}
 
 	if strings.HasPrefix(target, "$") {
-		// Variable: resolve its type
-		typeFQN := p.resolver.ResolveVariableType(target, lines, pos, file)
-		return typeFQN
+		// Variable: use typed resolution to preserve generic params
+		return p.resolver.ResolveVariableTypeTyped(target, lines, pos, file)
 	}
 
 	// Bare word target: could be a class name (for static access)
@@ -348,22 +367,23 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, lines []string
 		if sym := p.index.Lookup(fqn); sym != nil {
 			switch sym.Kind {
 			case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
-				return fqn
+				return resolve.ResolvedType{FQN: fqn}
 			}
 		}
 	}
 
 	// Otherwise, recursively resolve the chain to get the owner class,
-	// then find the target as a member and return its type.
-	ownerFQN := p.resolveAccessChain(line, i, lines, pos, file)
-	if ownerFQN == "" {
-		return ""
+	// then find the target as a member and return its type — propagating
+	// template-bound return through the method-call chain.
+	ownerResolved := p.resolveAccessChainTyped(line, i, lines, pos, file)
+	if ownerResolved.IsEmpty() {
+		return resolve.ResolvedType{}
 	}
-	member := p.resolver.FindMember(ownerFQN, target)
+	member := p.resolver.FindMember(ownerResolved.BaseFQN(), target)
 	if member == nil {
-		return ""
+		return resolve.ResolvedType{}
 	}
-	return p.resolver.MemberType(member, file)
+	return p.resolver.MemberTypeResolved(member, file, ownerResolved.BaseFQN(), ownerResolved.Params)
 }
 
 func (p *Provider) hoverVariable(lines []string, pos protocol.Position, file *parser.FileNode, varName string) *protocol.Hover {
