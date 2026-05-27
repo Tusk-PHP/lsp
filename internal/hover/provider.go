@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/open-southeners/tusk-php/internal/config"
 	"github.com/open-southeners/tusk-php/internal/container"
 	"github.com/open-southeners/tusk-php/internal/models"
 	"github.com/open-southeners/tusk-php/internal/parser"
@@ -21,6 +22,7 @@ type Provider struct {
 	resolver      *resolve.Resolver
 	framework     string
 	arrayResolver *models.FrameworkArrayResolver
+	cfg           *config.Config
 	// GenericExprResolver resolves the type of a full expression preserving generics.
 	// E.g., "Category::query()->get()" → Collection<int, Category>.
 	// Set by the LSP server after initialization by wiring to the completion provider.
@@ -66,6 +68,13 @@ func (p *Provider) resolveExpressionTypeTyped(expr string, source string, pos pr
 // SetArrayResolver sets the framework array resolver for config hover.
 func (p *Provider) SetArrayResolver(resolver *models.FrameworkArrayResolver) {
 	p.arrayResolver = resolver
+}
+
+// SetConfig stores the server config so hover can read live settings (e.g.
+// PHPManualLocale) at request time rather than at construction time, which
+// allows config reloads to take effect without rebuilding the provider.
+func (p *Provider) SetConfig(cfg *config.Config) {
+	p.cfg = cfg
 }
 
 func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol.Hover {
@@ -470,7 +479,15 @@ func (p *Provider) formatHover(sym *symbols.Symbol) string {
 	}
 
 	// === 7. PHP Manual link ===
-	if url := phpManualURL(sym); url != "" {
+	var manualOwner *symbols.Symbol
+	if sym.ParentFQN != "" {
+		manualOwner = p.index.Lookup(sym.ParentFQN)
+	}
+	locale := ""
+	if p.cfg != nil {
+		locale = p.cfg.PHPManualLocale
+	}
+	if url := symbols.PHPManualURL(sym, manualOwner, locale); url != "" {
 		sb.WriteString(fmt.Sprintf("\n[PHP Manual](%s)\n", url))
 	}
 
