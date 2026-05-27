@@ -148,15 +148,22 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		if classFQN == "" {
 			return nil
 		}
+		// receiverFQN tracks which class the user is accessing through, so the
+		// PHP Manual URL points at the receiver class rather than the declaring
+		// class when the method/property is inherited.
+		receiverFQN := classFQN
 		sym := p.resolver.FindMember(classFQN, word)
 		// For Laravel facades, also look up the member on the concrete class
 		if sym == nil && p.container != nil && p.framework == "laravel" {
 			if concrete := p.container.ResolveFacade(classFQN); concrete != "" {
 				sym = p.resolver.FindMember(concrete, word)
+				if sym != nil {
+					receiverFQN = concrete
+				}
 			}
 		}
 		if sym != nil {
-			content := p.formatHover(sym)
+			content := p.formatHoverForReceiver(sym, receiverFQN)
 
 			// Enhance with generic return type if available
 			if sym.Kind == symbols.KindMethod && p.GenericExprResolver != nil {
@@ -450,6 +457,16 @@ func (p *Provider) hoverVariable(lines []string, pos protocol.Position, file *pa
 }
 
 func (p *Provider) formatHover(sym *symbols.Symbol) string {
+	return p.formatHoverForReceiver(sym, "")
+}
+
+// formatHoverForReceiver renders hover content for sym, using receiverFQN
+// (when non-empty) as the owner for the PHP manual URL. This matters for
+// inherited members: $method->getParameters() where $method is ReflectionMethod
+// resolves to the method declared on ReflectionFunctionAbstract, but the
+// manual link should point at the receiver class (ReflectionMethod) so the
+// URL matches what the user actually wrote.
+func (p *Provider) formatHoverForReceiver(sym *symbols.Symbol, receiverFQN string) string {
 	var sb strings.Builder
 
 	// === 1. Header: bold FQN ===
@@ -479,8 +496,14 @@ func (p *Provider) formatHover(sym *symbols.Symbol) string {
 	}
 
 	// === 7. PHP Manual link ===
+	// For member access, prefer the receiver class over the declaring class so
+	// that inherited methods/properties link to the class the user is working
+	// with (e.g. ReflectionMethod::getParameters, not ReflectionFunctionAbstract).
 	var manualOwner *symbols.Symbol
-	if sym.ParentFQN != "" {
+	switch {
+	case receiverFQN != "":
+		manualOwner = p.index.Lookup(receiverFQN)
+	case sym.ParentFQN != "":
 		manualOwner = p.index.Lookup(sym.ParentFQN)
 	}
 	locale := ""

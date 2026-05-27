@@ -122,6 +122,24 @@ func TestPHPManualURL(t *testing.T) {
 			sym:      &Symbol{Name: "x", Kind: KindFunction, Source: SourceProject},
 			expected: "",
 		},
+
+		// --- leading-backslash FQN cases (Bug 1) ---
+		{
+			name:     "class with leading backslash",
+			sym:      &Symbol{Name: "ReflectionMethod", FQN: "\\ReflectionMethod", Kind: KindClass, Source: SourceBuiltin, URI: "builtin"},
+			expected: "https://www.php.net/manual/en/class.reflectionmethod.php",
+		},
+		{
+			name:     "namespaced class with leading backslash",
+			sym:      &Symbol{Name: "Engine", FQN: "\\Random\\Engine", Kind: KindClass, Source: SourceBuiltin, URI: "builtin"},
+			expected: "https://www.php.net/manual/en/class.random-engine.php",
+		},
+		{
+			name:  "method whose owner FQN has leading backslash",
+			sym:   &Symbol{Name: "getName", Kind: KindMethod, Source: SourceBuiltin},
+			owner: &Symbol{Name: "ReflectionClass", FQN: "\\ReflectionClass"},
+			expected: "https://www.php.net/manual/en/reflectionclass.getname.php",
+		},
 	}
 
 	for _, tt := range tests {
