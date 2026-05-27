@@ -24,6 +24,11 @@ _None open._
 - **What:** `BUILTIN_STUBS_PLAN.md` calls for diagnostics on built-in constants (`JSON_THROW_ON_ERROR`, `SORT_FLAG_CASE`) and class constants. Deferred so the initial rule lands with the highest-impact scopes first.
 - **Fix:** Extend `BuiltinUnavailableRule` with a constants scope and seed availability entries for those constants. Bitwise-or chains need per-token checking.
 
+### M13 — `resolveSymbolAtCursor` still falls back to `LookupByName` in `->`/`::` context
+- **Where:** `internal/analyzer/analyzer.go:665-666` (the broad `a.index.LookupByName(...)` + `PickBestStandalone` tail of `resolveSymbolAtCursor`).
+- **What:** The hover and `FindDefinition` / `FindTypeDefinition` paths were hardened to return nil when the cursor is in `->`/`::` access context but the receiver type cannot be resolved (see W1 of the stubs-generics work). `resolveSymbolAtCursor` — used by `FindReferences`, `PrepareRename`, and `Rename` — still has the same fallthrough: when the access chain can't be resolved, it ignores `ctx.AccessKind` and matches any project-wide symbol with the same short name. Rename is the worst case: invoking rename on `$x->name` where `$x` has an unknown type can match and edit unrelated `name` symbols across the project.
+- **Fix:** Mirror the W1 guard in `resolveSymbolAtCursor`: when `ctx.AccessKind != AccessNone` and the resolved chain FQN is empty, return `nil` rather than falling through to `LookupByName`. Add regression tests under `internal/analyzer/` covering `FindReferences`, `PrepareRename`, and `Rename` against the same "unresolved receiver, same-name unrelated symbol" fixture used by `unresolved_receiver_test.go`.
+
 ---
 
 ## Low / performance
