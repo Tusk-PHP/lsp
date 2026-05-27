@@ -122,39 +122,41 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 
 	// Check for -> or :: access context
 	if ctx.AccessKind != sourcectx.AccessNone {
-		if classFQN := p.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, lines, pos, file); classFQN != "" {
-			sym := p.resolver.FindMember(classFQN, word)
-			// For Laravel facades, also look up the member on the concrete class
-			if sym == nil && p.container != nil && p.framework == "laravel" {
-				if concrete := p.container.ResolveFacade(classFQN); concrete != "" {
-					sym = p.resolver.FindMember(concrete, word)
-				}
-			}
-			if sym != nil {
-				content := p.formatHover(sym)
-
-				// Enhance with generic return type if available
-				if sym.Kind == symbols.KindMethod && p.GenericExprResolver != nil {
-					// Build the full expression up to and including the method call
-					hoverPrefix := ctx.JoinedLine[:ctx.JoinedWordStart]
-					trimmedPrefix := strings.TrimSpace(hoverPrefix)
-					if strings.HasSuffix(trimmedPrefix, "->") || strings.HasSuffix(trimmedPrefix, "::") {
-						expr := trimmedPrefix + word + "()"
-						rt := p.GenericExprResolver(expr, source, pos, file)
-						if rt.IsGeneric() || (rt.Nullable && rt.FQN != "") {
-							content = replaceReturnType(content, rt.String())
-						}
-					}
-				}
-
-				if content != "" {
-					return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: content}}
-				}
-			}
-			// Member not found on the resolved class — don't fall through to
-			// standalone lookups which would show unrelated symbols with the same name.
+		classFQN := p.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, lines, pos, file)
+		if classFQN == "" {
 			return nil
 		}
+		sym := p.resolver.FindMember(classFQN, word)
+		// For Laravel facades, also look up the member on the concrete class
+		if sym == nil && p.container != nil && p.framework == "laravel" {
+			if concrete := p.container.ResolveFacade(classFQN); concrete != "" {
+				sym = p.resolver.FindMember(concrete, word)
+			}
+		}
+		if sym != nil {
+			content := p.formatHover(sym)
+
+			// Enhance with generic return type if available
+			if sym.Kind == symbols.KindMethod && p.GenericExprResolver != nil {
+				// Build the full expression up to and including the method call
+				hoverPrefix := ctx.JoinedLine[:ctx.JoinedWordStart]
+				trimmedPrefix := strings.TrimSpace(hoverPrefix)
+				if strings.HasSuffix(trimmedPrefix, "->") || strings.HasSuffix(trimmedPrefix, "::") {
+					expr := trimmedPrefix + word + "()"
+					rt := p.GenericExprResolver(expr, source, pos, file)
+					if rt.IsGeneric() || (rt.Nullable && rt.FQN != "") {
+						content = replaceReturnType(content, rt.String())
+					}
+				}
+			}
+
+			if content != "" {
+				return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: content}}
+			}
+		}
+		// Member not found on the resolved class — don't fall through to
+		// standalone lookups which would show unrelated symbols with the same name.
+		return nil
 	}
 
 	// Resolve the word via use statements

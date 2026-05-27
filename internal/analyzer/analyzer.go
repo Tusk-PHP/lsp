@@ -107,11 +107,14 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 
 	// Check for -> or :: access (method/property on a class)
 	if ctx.AccessKind != sourcectx.AccessNone {
-		if classFQN := a.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file); classFQN != "" {
-			if sym := a.resolver.FindMember(classFQN, word); sym != nil {
-				return symbolLocation(sym)
-			}
+		classFQN := a.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		if classFQN == "" {
+			return nil
 		}
+		if sym := a.resolver.FindMember(classFQN, word); sym != nil {
+			return symbolLocation(sym)
+		}
+		return nil
 	}
 
 	// Resolve via use statements
@@ -441,11 +444,13 @@ func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position)
 
 	if ctx.AccessKind != sourcectx.AccessNone {
 		classFQN := a.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
-		if classFQN != "" {
-			if member := a.resolver.FindMember(classFQN, word); member != nil {
-				return a.locationsForMemberType(member, file)
-			}
+		if classFQN == "" {
+			return nil
 		}
+		if member := a.resolver.FindMember(classFQN, word); member != nil {
+			return a.locationsForMemberType(member, file)
+		}
+		return nil
 	}
 
 	sym := a.resolveSymbolAtCursor(uri, source, pos, word, file)
