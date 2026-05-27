@@ -269,6 +269,42 @@ func TestPickBestStandalone(t *testing.T) {
 	})
 }
 
+// TestPickBestStandaloneSkipsProperties verifies that PickBestStandalone never
+// returns a KindProperty symbol, since properties require -> or :: access and
+// are never valid in standalone (bare-name) context.
+func TestPickBestStandaloneSkipsProperties(t *testing.T) {
+	t.Run("property only returns nil", func(t *testing.T) {
+		syms := []*Symbol{
+			{Name: "name", Kind: KindProperty, ParentFQN: "ReflectionMethod"},
+		}
+		best := PickBestStandalone(syms, "name")
+		if best != nil {
+			t.Errorf("expected nil for property-only candidates, got Kind=%v", best.Kind)
+		}
+	})
+
+	t.Run("function wins over property with same name", func(t *testing.T) {
+		syms := []*Symbol{
+			{Name: "name", Kind: KindProperty, ParentFQN: "ReflectionMethod"},
+			{Name: "name", Kind: KindFunction},
+		}
+		best := PickBestStandalone(syms, "name")
+		if best == nil || best.Kind != KindFunction {
+			t.Errorf("expected function to win over property, got %v", best)
+		}
+	})
+
+	t.Run("multiple properties with no other kind returns nil", func(t *testing.T) {
+		syms := []*Symbol{
+			{Name: "class", Kind: KindProperty, ParentFQN: "ReflectionMethod"},
+			{Name: "class", Kind: KindProperty, ParentFQN: "ReflectionClass"},
+		}
+		if best := PickBestStandalone(syms, "class"); best != nil {
+			t.Errorf("expected nil for all-property candidates, got Kind=%v", best.Kind)
+		}
+	})
+}
+
 func TestSplitTypeExpr(t *testing.T) {
 	// splitTypeExpr is unexported, test through index behavior
 	idx := NewIndex()
