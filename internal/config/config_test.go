@@ -171,6 +171,71 @@ func TestIsDatabaseEnabled(t *testing.T) {
 	})
 }
 
+func TestDefaultConfigPHPManual(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.PHPManualLocale != "" {
+		t.Errorf("PHPManualLocale should default to empty, got %q", cfg.PHPManualLocale)
+	}
+	if cfg.PHPManualOpenOnDefinition {
+		t.Error("PHPManualOpenOnDefinition should default to false")
+	}
+}
+
+func TestLoadFromFilePHPManualLocale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".tusk-php.json")
+	os.WriteFile(path, []byte(`{"php_manual_locale":"es"}`), 0644)
+	cfg, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PHPManualLocale != "es" {
+		t.Errorf("PHPManualLocale = %q, want %q", cfg.PHPManualLocale, "es")
+	}
+}
+
+func TestMergeClientOptionsPHPManual(t *testing.T) {
+	t.Run("locale overrides file value", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.PHPManualLocale = "de"
+		opts := &protocol.InitializationOptions{PHPManualLocale: "fr"}
+		cfg.MergeClientOptions(opts)
+		if cfg.PHPManualLocale != "fr" {
+			t.Errorf("PHPManualLocale = %q, want %q", cfg.PHPManualLocale, "fr")
+		}
+	})
+
+	t.Run("empty locale does not override", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.PHPManualLocale = "ja"
+		opts := &protocol.InitializationOptions{}
+		cfg.MergeClientOptions(opts)
+		if cfg.PHPManualLocale != "ja" {
+			t.Errorf("PHPManualLocale = %q, want %q", cfg.PHPManualLocale, "ja")
+		}
+	})
+
+	t.Run("open on definition set to true", func(t *testing.T) {
+		cfg := DefaultConfig()
+		trueVal := true
+		opts := &protocol.InitializationOptions{PHPManualOpenOnDefinition: &trueVal}
+		cfg.MergeClientOptions(opts)
+		if !cfg.PHPManualOpenOnDefinition {
+			t.Error("PHPManualOpenOnDefinition should be true after merge")
+		}
+	})
+
+	t.Run("open on definition nil does not override", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.PHPManualOpenOnDefinition = true
+		opts := &protocol.InitializationOptions{}
+		cfg.MergeClientOptions(opts)
+		if !cfg.PHPManualOpenOnDefinition {
+			t.Error("PHPManualOpenOnDefinition should remain true when opts is nil")
+		}
+	})
+}
+
 func TestDetectFramework(t *testing.T) {
 	t.Run("laravel with artisan", func(t *testing.T) {
 		dir := t.TempDir()

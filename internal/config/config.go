@@ -38,13 +38,15 @@ type Config struct {
 	PintEnabled        *bool            `json:"pintEnabled,omitempty"`
 	PintPath           string           `json:"pintPath,omitempty"`
 	PintConfig         string           `json:"pintConfig,omitempty"`
-	DatabaseEnabled    *bool            `json:"databaseEnabled,omitempty"`
-	DiagnosticRules    map[string]bool  `json:"diagnosticRules,omitempty"`
-	MaxIndexFiles      int              `json:"maxIndexFiles"`
-	StubsPath          string           `json:"stubsPath"`
-	LogLevel           string           `json:"logLevel"`
-	LogFile            string           `json:"logFile"`
-	InlayHints         InlayHintsConfig `json:"inlayHints"`
+	DatabaseEnabled              *bool            `json:"databaseEnabled,omitempty"`
+	DiagnosticRules              map[string]bool  `json:"diagnosticRules,omitempty"`
+	MaxIndexFiles                int              `json:"maxIndexFiles"`
+	StubsPath                    string           `json:"stubsPath"`
+	LogLevel                     string           `json:"logLevel"`
+	LogFile                      string           `json:"logFile"`
+	InlayHints                   InlayHintsConfig `json:"inlayHints"`
+	PHPManualLocale              string           `json:"php_manual_locale,omitempty"`
+	PHPManualOpenOnDefinition    bool             `json:"php_manual_open_on_definition,omitempty"`
 }
 
 // IsRuleEnabled returns whether a diagnostic rule is enabled.
@@ -170,6 +172,12 @@ func (c *Config) MergeClientOptions(opts *protocol.InitializationOptions) {
 		if ih.SuppressNameMatch != nil {
 			c.InlayHints.SuppressNameMatch = *ih.SuppressNameMatch
 		}
+	}
+	if opts.PHPManualLocale != "" {
+		c.PHPManualLocale = opts.PHPManualLocale
+	}
+	if opts.PHPManualOpenOnDefinition != nil {
+		c.PHPManualOpenOnDefinition = *opts.PHPManualOpenOnDefinition
 	}
 }
 
