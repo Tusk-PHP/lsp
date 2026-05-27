@@ -302,6 +302,40 @@ $x->info("test");
 			t.Error("nil file should return empty")
 		}
 	})
+
+	t.Run("$var = get_class($obj) resolves to string", func(t *testing.T) {
+		idx := symbols.NewIndex()
+		idx.RegisterBuiltins()
+		r2 := NewResolver(idx)
+		source := `<?php
+$provider = new stdClass();
+$providerClass = get_class($provider);
+echo $providerClass;
+`
+		file := parser.ParseFile(source)
+		lines := SplitLines(source)
+		typ := r2.ResolveVariableType("$providerClass", lines, protocol.Position{Line: 3}, file)
+		if typ != "string" {
+			t.Errorf("expected string, got %q", typ)
+		}
+	})
+
+	t.Run("ResolveVariableTypeTyped: $var = get_class($obj) resolves to string", func(t *testing.T) {
+		idx := symbols.NewIndex()
+		idx.RegisterBuiltins()
+		r2 := NewResolver(idx)
+		source := `<?php
+$provider = new stdClass();
+$providerClass = get_class($provider);
+echo $providerClass;
+`
+		file := parser.ParseFile(source)
+		lines := SplitLines(source)
+		rt := r2.ResolveVariableTypeTyped("$providerClass", lines, protocol.Position{Line: 3}, file)
+		if rt.FQN != "string" {
+			t.Errorf("expected string, got %q", rt.FQN)
+		}
+	})
 }
 
 func TestInferLiteralType(t *testing.T) {
