@@ -786,6 +786,10 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 						return rt
 					}
 				}
+				// Try class-string<T> binding from @template + @param annotations.
+				if rt := r.inferClassStringBinding(classFQN, argStr, lines, pos, file); !rt.IsEmpty() {
+					return rt
+				}
 			}
 			return ResolvedType{FQN: classFQN}
 		}
