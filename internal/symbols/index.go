@@ -1070,6 +1070,10 @@ func PickBestStandalone(syms []*Symbol, word string) *Symbol {
 	bestExact := false
 
 	for _, s := range syms {
+		// Properties are never standalone in PHP — they require -> or :: access.
+		if s.Kind == KindProperty {
+			continue
+		}
 		r := standaloneRank(s)
 		exact := s.Name == word
 		if r < bestRank || (r == bestRank && exact && !bestExact) {
