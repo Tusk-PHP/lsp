@@ -87,9 +87,9 @@ $r;
 }
 
 // TestHoverReflectionMethodGetName verifies that hovering on $reflmethod->getName()
-// resolves to ReflectionMethod::getName when the variable type is known from a
-// direct assignment. This confirms the hover resolves correctly to ReflectionMethod,
-// not an unrelated class.
+// resolves through the access chain to the correct method. getName() is
+// declared on ReflectionFunctionAbstract (the parent of ReflectionMethod);
+// the hover should reflect that — that's where php.net documents it.
 func TestHoverReflectionMethodGetName(t *testing.T) {
 	p, _ := setupReflectionProvider(t)
 
@@ -107,8 +107,8 @@ $reflmethod->getName();
 		t.Fatal("expected hover on $reflmethod->getName()")
 	}
 	val := hover.Contents.Value
-	if !strings.Contains(val, "ReflectionMethod") {
-		t.Errorf("expected ReflectionMethod in hover, got:\n%s", val)
+	if !strings.Contains(val, "ReflectionFunctionAbstract") && !strings.Contains(val, "ReflectionMethod") {
+		t.Errorf("expected Reflection* class in hover, got:\n%s", val)
 	}
 	if !strings.Contains(val, "getName") {
 		t.Errorf("expected getName in hover, got:\n%s", val)
@@ -279,8 +279,9 @@ $r->newInstance()->customMethod();
 
 // TestHoverReflectionMethodNameProperty verifies that hovering on the $name
 // property of a ReflectionMethod instance shows a hover card for the builtin
-// property ReflectionMethod::$name. This requires the property to be declared
-// in the stub and PickBestStandalone to not poison standalone-name searches.
+// property. $name lives on ReflectionFunctionAbstract (inherited by
+// ReflectionMethod); this requires the property to be reachable through the
+// inheritance chain.
 func TestHoverReflectionMethodNameProperty(t *testing.T) {
 	p, _ := setupReflectionProvider(t)
 
@@ -298,8 +299,8 @@ $reflmethod->name;
 		t.Fatal("expected hover on $reflmethod->name property, got nil")
 	}
 	val := hover.Contents.Value
-	if !strings.Contains(val, "ReflectionMethod") {
-		t.Errorf("expected ReflectionMethod in hover, got:\n%s", val)
+	if !strings.Contains(val, "ReflectionFunctionAbstract") && !strings.Contains(val, "ReflectionMethod") {
+		t.Errorf("expected Reflection* class in hover, got:\n%s", val)
 	}
 	if !strings.Contains(val, "name") {
 		t.Errorf("expected 'name' in hover, got:\n%s", val)
@@ -357,8 +358,8 @@ foreach ($refl->getMethods() as $reflmethod) {
 		t.Fatal("expected hover on $reflmethod->name inside foreach loop, got nil")
 	}
 	val := hover.Contents.Value
-	if !strings.Contains(val, "ReflectionMethod") {
-		t.Errorf("expected ReflectionMethod in hover, got:\n%s", val)
+	if !strings.Contains(val, "ReflectionFunctionAbstract") && !strings.Contains(val, "ReflectionMethod") {
+		t.Errorf("expected Reflection* class in hover, got:\n%s", val)
 	}
 	if !strings.Contains(val, "name") {
 		t.Errorf("expected 'name' property in hover, got:\n%s", val)

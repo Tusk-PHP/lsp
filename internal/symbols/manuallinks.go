@@ -70,7 +70,7 @@ func PHPManualURL(sym *Symbol, owner *Symbol, locale string) string {
 			return ""
 		}
 		ownerSlug := classSlug(fqnOrName(owner))
-		prop := strings.ToLower(sym.Name)
+		prop := strings.ToLower(strings.TrimPrefix(sym.Name, "$"))
 		return base + "class." + ownerSlug + ".php#" + ownerSlug + ".props." + prop
 
 	case KindConstant:
