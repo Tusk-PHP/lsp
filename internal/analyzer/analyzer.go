@@ -28,6 +28,18 @@ type Analyzer struct {
 	translations *frameworklaravel.TranslationResolver
 }
 
+// DefinitionResult is the extended return shape from FindDefinitionWithManual.
+// When ExternalManualURL is non-empty, the caller should treat this as
+// "open this URL in an external browser" — Location will be nil. When
+// ExternalManualURL is empty, Location is the standard go-to-definition
+// target (which itself may be nil if no target was resolved).
+//
+// The two fields are mutually exclusive: at most one is populated per call.
+type DefinitionResult struct {
+	Location          *protocol.Location
+	ExternalManualURL string
+}
+
 func NewAnalyzer(index *symbols.Index, ca *container.ContainerAnalyzer) *Analyzer {
 	framework := ""
 	if ca != nil {
@@ -168,6 +180,135 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 	}
 
 	return nil
+}
+
+// FindDefinitionWithManual is like FindDefinition but, when openManualEnabled
+// is true and the resolved symbol is a built-in (functions, classes, members),
+// returns an ExternalManualURL pointing at the php.net manual page instead of
+// a Location. When openManualEnabled is false, the behavior is identical to
+// FindDefinition: builtins resolve to nil and project symbols return a
+// Location as usual.
+//
+// locale is forwarded to symbols.PHPManualURL. Empty string is fine —
+// the URL builder falls back to "en".
+func (a *Analyzer) FindDefinitionWithManual(uri, source string, pos protocol.Position, openManualEnabled bool, locale string) DefinitionResult {
+	// Quick path: when the flag is off, behave exactly like FindDefinition.
+	if !openManualEnabled {
+		return DefinitionResult{Location: a.FindDefinition(uri, source, pos)}
+	}
+
+	sym, owner, loc := a.resolveDefinitionSymbol(uri, source, pos)
+	if sym != nil && symbols.IsBuiltin(sym) {
+		if url := symbols.PHPManualURL(sym, owner, locale); url != "" {
+			return DefinitionResult{ExternalManualURL: url}
+		}
+		// URL builder had nothing — fall through to nil location (builtin with no page).
+		return DefinitionResult{}
+	}
+	return DefinitionResult{Location: loc}
+}
+
+// resolveDefinitionSymbol resolves the symbol at the cursor position and returns
+// the resolved symbol, its owner (for member kinds), and the would-be Location.
+// The returned location may be nil (e.g. for builtin symbols where symbolLocation
+// filters them out). Callers that need to distinguish builtins from genuinely
+// unresolvable positions should inspect sym directly.
+func (a *Analyzer) resolveDefinitionSymbol(uri, source string, pos protocol.Position) (sym *symbols.Symbol, owner *symbols.Symbol, loc *protocol.Location) {
+	if a.framework == "symfony" {
+		if routeName, _, ok := frameworksymfony.RouteNameAtPosition(source, pos); ok {
+			if route := frameworksymfony.FindRoute(a.index, routeName); route != nil {
+				return nil, nil, &protocol.Location{URI: route.URI, Range: route.DeclRange}
+			}
+		}
+	}
+	ctx := sourcectx.Analyze(uri, source, pos)
+	if ctx == nil {
+		return nil, nil, nil
+	}
+	line := ctx.Line
+	file := ctx.File
+
+	if a.container != nil {
+		if l := a.definitionForContainerArg(line, pos, source, file, false); l != nil {
+			return nil, nil, l
+		}
+	}
+	if a.framework == "laravel" && a.views != nil {
+		if l := a.definitionForLaravelView(line, pos.Character); l != nil {
+			return nil, nil, l
+		}
+	}
+	if a.translations != nil {
+		if l := a.definitionForTranslationKey(line, pos.Character); l != nil {
+			return nil, nil, l
+		}
+	}
+	if a.framework == "laravel" && a.routes != nil {
+		if l := a.definitionForRouteName(line, pos.Character); l != nil {
+			return nil, nil, l
+		}
+	}
+
+	word := ctx.SymbolText
+	if word == "" {
+		return nil, nil, nil
+	}
+
+	// Handle $variable → go to its type definition
+	if strings.HasPrefix(word, "$") {
+		return nil, nil, a.definitionForVariable(word, source, pos, file)
+	}
+
+	// Check for -> or :: access (method/property on a class)
+	if ctx.AccessKind != sourcectx.AccessNone {
+		classFQN := a.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		if classFQN == "" {
+			return nil, nil, nil
+		}
+		if member := a.resolver.FindMember(classFQN, word); member != nil {
+			ownerSym := a.index.Lookup(classFQN)
+			return member, ownerSym, symbolLocation(member)
+		}
+		return nil, nil, nil
+	}
+
+	// Resolve via use statements
+	if file != nil {
+		for _, u := range ctx.Uses {
+			if u.Alias == word {
+				if s := a.index.Lookup(u.FullName); s != nil {
+					return s, nil, symbolLocation(s)
+				}
+			}
+		}
+		// Try as class name in current namespace
+		fqn := a.resolver.ResolveClassName(word, file)
+		if fqn != word {
+			if s := a.index.Lookup(fqn); s != nil {
+				return s, nil, symbolLocation(s)
+			}
+		}
+	}
+
+	// FQN with backslashes
+	if strings.Contains(word, "\\") {
+		if s := a.index.Lookup(word); s != nil {
+			return s, nil, symbolLocation(s)
+		}
+	}
+
+	// Fallback: lookup by short name — prefer standalone-appropriate symbols
+	// (functions/classes over methods/properties) since we have no access chain.
+	lookupName := word
+	if idx := strings.LastIndex(word, "\\"); idx >= 0 {
+		lookupName = word[idx+1:]
+	}
+	syms := a.index.LookupByName(lookupName)
+	if best := symbols.PickBestStandalone(syms, word); best != nil {
+		return best, nil, symbolLocation(best)
+	}
+
+	return nil, nil, nil
 }
 
 func (a *Analyzer) definitionForTranslationKey(line string, character int) *protocol.Location {
