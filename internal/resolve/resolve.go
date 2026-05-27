@@ -473,6 +473,43 @@ func extractLeadingVariable(expr string) string {
 	return expr[:end]
 }
 
+// extractFunctionCallName returns the short function name if expr starts with
+// a (optionally namespace-qualified) identifier followed by `(`, otherwise "".
+// e.g. "get_class($x)" → "get_class", "\Some\ns\fn($x)" → "fn".
+func extractFunctionCallName(expr string) string {
+	if expr == "" {
+		return ""
+	}
+	start := 0
+	if expr[0] == '\\' {
+		start = 1
+	}
+	if start >= len(expr) {
+		return ""
+	}
+	c := expr[start]
+	if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
+		return ""
+	}
+	end := start
+	for end < len(expr) {
+		ch := expr[end]
+		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '\\' {
+			end++
+			continue
+		}
+		break
+	}
+	if end >= len(expr) || expr[end] != '(' {
+		return ""
+	}
+	name := expr[start:end]
+	if idx := strings.LastIndexByte(name, '\\'); idx >= 0 {
+		name = name[idx+1:]
+	}
+	return name
+}
+
 func (r *Resolver) resolveMethodParamTypeTyped(method *parser.MethodNode, varName string, file *parser.FileNode) ResolvedType {
 	for _, param := range method.Params {
 		if param.Name != varName {
@@ -768,6 +805,15 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 			}
 		}
 
+		// $var = funcName(...) — look up function return type in symbol index
+		if funcName := extractFunctionCallName(rhs); funcName != "" && r.Index != nil {
+			for _, sym := range r.Index.LookupByName(funcName) {
+				if sym.Kind == symbols.KindFunction && sym.ReturnType != "" {
+					return ResolvedType{FQN: sym.ReturnType}
+				}
+			}
+		}
+
 		// Use typed chain resolver if available
 		if r.TypedChainResolver != nil && (strings.Contains(rhs, "->") || strings.Contains(rhs, "::")) {
 			if rt := r.TypedChainResolver(rhs, strings.Join(lines, "\n"), pos, file); !rt.IsEmpty() {
@@ -872,6 +918,14 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 		if otherVar := extractLeadingVariable(rhs); otherVar != "" && otherVar == strings.TrimSpace(rhs) && otherVar != varName {
 			if t := r.ResolveVariableType(otherVar, lines, pos, file); t != "" {
 				return t
+			}
+		}
+		// $var = funcName(...) — look up function return type in symbol index
+		if funcName := extractFunctionCallName(rhs); funcName != "" && r.Index != nil {
+			for _, sym := range r.Index.LookupByName(funcName) {
+				if sym.Kind == symbols.KindFunction && sym.ReturnType != "" {
+					return sym.ReturnType
+				}
 			}
 		}
 		// $var = ClassName::method() or $var = $foo->bar()->baz()
