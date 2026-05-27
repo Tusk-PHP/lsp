@@ -249,7 +249,7 @@ type InitializeParams struct {
 	RootURI               string                 `json:"rootUri"`
 	RootPath              string                 `json:"rootPath"`
 	InitializationOptions *InitializationOptions `json:"initializationOptions,omitempty"`
-	Capabilities          struct {
+	Capabilities struct {
 		TextDocument struct {
 			Completion struct {
 				CompletionItem struct {
@@ -257,6 +257,11 @@ type InitializeParams struct {
 				} `json:"completionItem"`
 			} `json:"completion"`
 		} `json:"textDocument"`
+		Window struct {
+			ShowDocument struct {
+				Support bool `json:"support"`
+			} `json:"showDocument"`
+		} `json:"window"`
 	} `json:"capabilities"`
 }
 
@@ -273,10 +278,12 @@ type InitializationOptions struct {
 	PintEnabled        *bool                    `json:"pintEnabled,omitempty"`
 	PintPath           string                   `json:"pintPath,omitempty"`
 	PintConfig         string                   `json:"pintConfig,omitempty"`
-	DatabaseEnabled    *bool                    `json:"databaseEnabled,omitempty"`
-	MaxIndexFiles      *int                     `json:"maxIndexFiles,omitempty"`
-	ExcludePaths       []string                 `json:"excludePaths,omitempty"`
-	InlayHints         *InlayHintsClientOptions `json:"inlayHints,omitempty"`
+	DatabaseEnabled              *bool                    `json:"databaseEnabled,omitempty"`
+	MaxIndexFiles                *int                     `json:"maxIndexFiles,omitempty"`
+	ExcludePaths                 []string                 `json:"excludePaths,omitempty"`
+	InlayHints                   *InlayHintsClientOptions `json:"inlayHints,omitempty"`
+	PHPManualLocale              string                   `json:"phpManualLocale,omitempty"`
+	PHPManualOpenOnDefinition    *bool                    `json:"phpManualOpenOnDefinition,omitempty"`
 }
 
 // InitializeResult for the initialize response.
@@ -582,4 +589,13 @@ type ApplyWorkspaceEditParams struct {
 // ApplyWorkspaceEditResult is the client's response to workspace/applyEdit.
 type ApplyWorkspaceEditResult struct {
 	Applied bool `json:"applied"`
+}
+
+// ShowDocumentParams are the parameters for the window/showDocument request.
+// See LSP 3.16.
+type ShowDocumentParams struct {
+	URI       string `json:"uri"`
+	External  bool   `json:"external,omitempty"`
+	TakeFocus bool   `json:"takeFocus,omitempty"`
+	Selection *Range `json:"selection,omitempty"`
 }
