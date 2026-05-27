@@ -32,6 +32,7 @@ Context-aware suggestions that understand your code. Method chains resolve throu
 ## Hover & Navigation
 
 - **Hover** — type signatures, docblock summaries, inheritance info, container bindings
+- **PHP Manual Links** — hover on built-in functions, classes, methods, properties, and constants includes a link to the php.net manual page. Optionally configure `php_manual_open_on_definition` to make Cmd+Click open the page in your browser.
 - **Go to Definition** — jump to classes, methods, properties, functions, container bindings, framework string references
 - **Go to Type Definition** — resolve container services and member types to concrete declarations
 - **Go to Implementation** — find implementations for interfaces and abstract contracts
@@ -249,6 +250,8 @@ git clone https://github.com/open-southeners/tusk-php.git && cd tusk-php && make
 | `tuskPhpLsp.diagnostics.pint.enable` | `true` | Run Laravel Pint on save |
 | `tuskPhpLsp.maxIndexFiles` | `10000` | Maximum PHP files to index |
 | `tuskPhpLsp.excludePaths` | `["vendor", ...]` | Paths to skip when indexing |
+| `tuskPhpLsp.phpManual.locale` | `""` | Locale for php.net manual links (`en`, `de`, `es`, `fr`, `it`, `ja`, `pt_BR`, `ru`, `tr`, `zh`). Empty = English. |
+| `tuskPhpLsp.phpManual.openOnDefinition` | `false` | Cmd+Click on a built-in opens its php.net page in your browser. |
 
 ### Project Configuration
 
@@ -262,6 +265,8 @@ Create `.tusk-php.json` in your project root to override settings per project:
   "diagnosticsEnabled": true,
   "excludePaths": ["vendor", "node_modules", ".git"],
   "maxIndexFiles": 10000,
+  "php_manual_locale": "",
+  "php_manual_open_on_definition": false,
   "diagnosticRules": {
     "unused-import": true,
     "unused-private-method": true,
