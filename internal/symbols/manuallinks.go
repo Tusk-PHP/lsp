@@ -101,8 +101,10 @@ func fqnOrName(sym *Symbol) string {
 }
 
 // classSlug converts a class FQN to the php.net manual slug:
-// backslashes are replaced with hyphens and the result is lowercased.
+// leading backslashes (global-namespace marker) are stripped first,
+// then remaining backslashes are replaced with hyphens and the result is lowercased.
 func classSlug(fqn string) string {
+	fqn = strings.TrimLeft(fqn, "\\")
 	return strings.ReplaceAll(strings.ToLower(fqn), "\\", "-")
 }
 
