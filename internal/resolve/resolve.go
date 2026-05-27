@@ -620,17 +620,31 @@ func IndexOutsideBrackets(s string, ch byte) int {
 // rawMemberReturnType extracts the raw return type string from a member
 // without any resolution or stripping. Used by MemberTypeResolved to check
 // for generic syntax before falling back to MemberType.
+// rawMemberReturnType extracts the raw return type string from a member
+// without any resolution or stripping. Used by MemberTypeResolved to check
+// for generic syntax before falling back to MemberType.
 func (r *Resolver) rawMemberReturnType(member *symbols.Symbol) string {
 	ownerFQN := ownerScopeFQN(member, protocol.Position{}, nil)
 	switch member.Kind {
 	case symbols.KindMethod:
-		if member.ReturnType != "" {
-			return r.expandTypeAliases(member.ReturnType, ownerFQN, nil)
-		}
+		nativeType := member.ReturnType
+		var docType string
 		if member.DocComment != "" {
-			if doc := parser.ParseDocBlock(member.DocComment); doc != nil && doc.Return.Type != "" {
-				return r.expandTypeAliases(doc.Return.Type, ownerFQN, nil)
+			if doc := parser.ParseDocBlock(member.DocComment); doc != nil {
+				docType = doc.Return.Type
 			}
+		}
+		// Prefer @return over non-specific native hints (object/mixed/array) so that
+		// element-typed PHPDoc like @return ReflectionMethod[] is not obscured by
+		// a bare "array" return type hint.
+		if nativeType != "" && nativeType != "object" && nativeType != "mixed" && nativeType != "array" {
+			return r.expandTypeAliases(nativeType, ownerFQN, nil)
+		}
+		if docType != "" {
+			return r.expandTypeAliases(docType, ownerFQN, nil)
+		}
+		if nativeType != "" {
+			return r.expandTypeAliases(nativeType, ownerFQN, nil)
 		}
 	case symbols.KindProperty:
 		return r.expandTypeAliases(member.Type, ownerFQN, nil)
