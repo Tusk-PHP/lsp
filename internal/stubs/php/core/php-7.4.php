@@ -37,6 +37,9 @@ class DateTime implements DateTimeInterface
 
 class ReflectionMethod
 {
+    public string $name;
+    public string $class;
+
     public const IS_STATIC = 16;
     public const IS_PUBLIC = 1;
 
@@ -57,21 +60,39 @@ class ReflectionMethod
     public function isStatic(): bool {}
 }
 
+/** @template T of object */
 class ReflectionClass
 {
+    /** @param class-string<T>|T $objectOrClass */
     public function __construct(object|string $objectOrClass) {}
 
+    /** @return class-string<T> */
     public function getName(): string {}
-}
 
-class ReflectionObject
-{
-    public function __construct(object $object) {}
+    /** @return T */
+    public function newInstance(mixed ...$args): object {}
 
-    public function getName(): string {}
+    /** @return T */
+    public function newInstanceArgs(array $args = []): object {}
+
+    /** @return T */
+    public function newInstanceWithoutConstructor(): object {}
 
     public function getMethod(string $name): ReflectionMethod {}
 
+    /** @return ReflectionMethod[] */
+    public function getMethods(int $filter = 0): array {}
+
+    public function hasMethod(string $name): bool {}
+}
+
+class ReflectionObject extends ReflectionClass
+{
+    public function __construct(object $object) {}
+
+    public function getMethod(string $name): ReflectionMethod {}
+
+    /** @return ReflectionMethod[] */
     public function getMethods(int $filter = 0): array {}
 
     public function hasMethod(string $name): bool {}
