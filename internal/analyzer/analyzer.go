@@ -266,7 +266,15 @@ func (a *Analyzer) resolveDefinitionSymbol(uri, source string, pos protocol.Posi
 			return nil, nil, nil
 		}
 		if member := a.resolver.FindMember(classFQN, word); member != nil {
-			ownerSym := a.index.Lookup(classFQN)
+			// Owner is the *declaring* class (member.ParentFQN), not the
+			// receiver — that's how php.net documents methods/properties:
+			// ReflectionMethod::getParameters lives at
+			// reflectionfunctionabstract.getparameters.php.
+			ownerFQN := member.ParentFQN
+			if ownerFQN == "" {
+				ownerFQN = classFQN
+			}
+			ownerSym := a.index.Lookup(ownerFQN)
 			return member, ownerSym, symbolLocation(member)
 		}
 		return nil, nil, nil
