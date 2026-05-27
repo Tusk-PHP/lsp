@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/open-southeners/tusk-php/internal/analyzer"
@@ -67,6 +68,17 @@ type Server struct {
 
 	builtinPHPVersion string
 	builtinPHPSource  string // "composer" | "local" | "fallback"
+
+	clientSupportsShowDocument bool
+
+	// requestIDCounter generates unique IDs for server-to-client requests.
+	// Accessed via atomic operations.
+	requestIDCounter int64
+
+	// manualFlagWarnedOnce ensures the "php_manual_open_on_definition is set but
+	// client does not support window/showDocument" warning is emitted at most once
+	// per session (logged during initialize).
+	manualFlagWarnedOnce sync.Once
 }
 
 func NewServer(reader io.Reader, writer io.Writer, logger *log.Logger) *Server {
@@ -210,6 +222,23 @@ func (s *Server) sendNotification(method string, params interface{}) {
 	}{JSONRPC: "2.0", Method: method, Params: params})
 }
 
+// sendServerRequest sends a server-to-client JSON-RPC request. The response
+// is intentionally ignored ("fire-and-forget"). Use this for one-way side
+// effects such as window/showDocument where the server has no business
+// logic dependent on the client's reply.
+//
+// Each call generates a unique numeric ID. The client's response (if any)
+// arrives back through the normal message loop and is silently dropped.
+func (s *Server) sendServerRequest(method string, params interface{}) {
+	id := atomic.AddInt64(&s.requestIDCounter, 1)
+	s.writeMessage(struct {
+		JSONRPC string      `json:"jsonrpc"`
+		ID      int64       `json:"id"`
+		Method  string      `json:"method"`
+		Params  interface{} `json:"params,omitempty"`
+	}{JSONRPC: "2.0", ID: id, Method: method, Params: params})
+}
+
 func (s *Server) writeMessage(msg interface{}) {
 	body, err := json.Marshal(msg)
 	if err != nil {
@@ -220,6 +249,11 @@ func (s *Server) writeMessage(msg interface{}) {
 }
 
 func (s *Server) handleMessage(msg *jsonRPCMessage) {
+	// Responses to server-initiated requests (e.g. window/showDocument) are
+	// fire-and-forget; we drop them silently.
+	if msg.Method == "" && msg.ID != nil {
+		return
+	}
 	switch msg.Method {
 	case "initialize":
 		s.handleInitialize(msg)
@@ -296,6 +330,18 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if opts := params.InitializationOptions; opts != nil {
 		s.cfg.MergeClientOptions(opts)
 	}
+	s.clientSupportsShowDocument = params.Capabilities.Window.ShowDocument.Support
+	if !s.clientSupportsShowDocument {
+		s.logger.Printf("PHP LSP: client does not advertise window/showDocument support; builtin Cmd+Click → manual will be disabled if enabled in config")
+	}
+	if s.cfg.PHPManualOpenOnDefinition && !s.clientSupportsShowDocument {
+		s.manualFlagWarnedOnce.Do(func() {
+			s.sendNotification("window/logMessage", map[string]interface{}{
+				"type":    protocol.MessageTypeWarning,
+				"message": "PHP LSP: php_manual_open_on_definition is enabled but the client does not advertise window/showDocument support; feature disabled",
+			})
+		})
+	}
 	if s.cfg.Framework == "auto" {
 		s.framework = config.DetectFramework(s.rootPath)
 	} else {
@@ -326,6 +372,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	})
 	s.hover = hover.NewProvider(s.index, s.container, s.framework)
 	s.hover.SetArrayResolver(arrayResolver)
+	s.hover.SetConfig(s.cfg)
 	s.hover.GenericExprResolver = func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
 	}
@@ -587,7 +634,21 @@ func (s *Server) handleDefinition(msg *jsonRPCMessage) {
 		return
 	}
 	source := s.getDocument(params.TextDocument.URI)
-	s.sendResponse(msg.ID, s.analyzer.FindDefinition(params.TextDocument.URI, source, params.Position))
+
+	openManual := s.cfg.PHPManualOpenOnDefinition && s.clientSupportsShowDocument
+	result := s.analyzer.FindDefinitionWithManual(params.TextDocument.URI, source, params.Position, openManual, s.cfg.PHPManualLocale)
+
+	if result.ExternalManualURL != "" {
+		s.sendServerRequest("window/showDocument", protocol.ShowDocumentParams{
+			URI:       result.ExternalManualURL,
+			External:  true,
+			TakeFocus: true,
+		})
+		s.sendResponse(msg.ID, nil)
+		return
+	}
+
+	s.sendResponse(msg.ID, result.Location)
 }
 
 func (s *Server) handleTypeDefinition(msg *jsonRPCMessage) {
