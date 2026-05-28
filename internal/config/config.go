@@ -20,6 +20,26 @@ type InlayHintsConfig struct {
 	SuppressNameMatch   bool `json:"suppressNameMatch"`
 }
 
+// ComposerHoverConfig controls hover behavior on composer.json files.
+//
+// FetchRemote / FetchVCS / CacheTTLHours / RequestTimeoutMs are stubbed for
+// v1 (lockfile-only). Their zero values mean "off" — keeping them in the
+// struct now ensures user .tusk-php.json files written against v1 stay
+// valid when v2/v3 wire those paths.
+type ComposerHoverConfig struct {
+	Enable           bool `json:"enable"`
+	FetchRemote      bool `json:"fetchRemote,omitempty"`
+	FetchVCS         bool `json:"fetchVCS,omitempty"`
+	CacheTTLHours    int  `json:"cacheTTLHours,omitempty"`
+	RequestTimeoutMs int  `json:"requestTimeoutMs,omitempty"`
+}
+
+// ComposerConfig groups composer.json-aware features.
+type ComposerConfig struct {
+	Hover            ComposerHoverConfig `json:"hover"`
+	OpenOnDefinition bool                `json:"openOnDefinition,omitempty"`
+}
+
 // Config holds the LSP server configuration.
 type Config struct {
 	PHPVersion         string           `json:"phpVersion"`
@@ -47,6 +67,7 @@ type Config struct {
 	InlayHints                   InlayHintsConfig `json:"inlayHints"`
 	PHPManualLocale              string           `json:"php_manual_locale,omitempty"`
 	PHPManualOpenOnDefinition    bool             `json:"php_manual_open_on_definition,omitempty"`
+	Composer                     ComposerConfig   `json:"composer,omitempty"`
 }
 
 // IsRuleEnabled returns whether a diagnostic rule is enabled.
@@ -82,6 +103,9 @@ func DefaultConfig() *Config {
 			ParameterNames:      true,
 			SuppressSingleParam: true,
 			SuppressNameMatch:   true,
+		},
+		Composer: ComposerConfig{
+			Hover: ComposerHoverConfig{Enable: true, CacheTTLHours: 6, RequestTimeoutMs: 3000},
 		},
 	}
 }
@@ -178,6 +202,28 @@ func (c *Config) MergeClientOptions(opts *protocol.InitializationOptions) {
 	}
 	if opts.PHPManualOpenOnDefinition != nil {
 		c.PHPManualOpenOnDefinition = *opts.PHPManualOpenOnDefinition
+	}
+	if opts.Composer != nil {
+		if opts.Composer.OpenOnDefinition != nil {
+			c.Composer.OpenOnDefinition = *opts.Composer.OpenOnDefinition
+		}
+		if h := opts.Composer.Hover; h != nil {
+			if h.Enable != nil {
+				c.Composer.Hover.Enable = *h.Enable
+			}
+			if h.FetchRemote != nil {
+				c.Composer.Hover.FetchRemote = *h.FetchRemote
+			}
+			if h.FetchVCS != nil {
+				c.Composer.Hover.FetchVCS = *h.FetchVCS
+			}
+			if h.CacheTTLHours != nil {
+				c.Composer.Hover.CacheTTLHours = *h.CacheTTLHours
+			}
+			if h.RequestTimeoutMs != nil {
+				c.Composer.Hover.RequestTimeoutMs = *h.RequestTimeoutMs
+			}
+		}
 	}
 }
 
