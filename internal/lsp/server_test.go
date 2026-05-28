@@ -445,3 +445,136 @@ func TestResolveBuiltinProfileUsesBundledDefault(t *testing.T) {
 		t.Errorf("expected PHPVersion %q, got %q", wantVersion, profile.PHPVersion)
 	}
 }
+
+// TestComposerJSONHoverIntegration drives the full LSP round-trip for a
+// hover on a require-block package key inside composer.json. It verifies
+// the dispatch routes to the cardhover provider rather than the PHP hover
+// provider, and that the lockfile-derived card content is rendered.
+func TestComposerJSONHoverIntegration(t *testing.T) {
+	root := t.TempDir()
+	composer := `{
+  "name": "acme/widgets",
+  "require": {
+    "php": "^8.1",
+    "laravel/framework": "^10.0"
+  }
+}`
+	lock := `{
+  "packages": [
+    {
+      "name": "laravel/framework",
+      "version": "v10.48.4",
+      "description": "The Laravel Framework.",
+      "license": ["MIT"],
+      "require": {"php": "^8.1"},
+      "source": {"url": "https://github.com/laravel/framework.git", "type": "git"}
+    }
+  ]
+}`
+	if err := os.WriteFile(filepath.Join(root, "composer.json"), []byte(composer), 0644); err != nil {
+		t.Fatalf("write composer.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "composer.lock"), []byte(lock), 0644); err != nil {
+		t.Fatalf("write composer.lock: %v", err)
+	}
+
+	h := newHarness(t)
+	defer h.close()
+
+	initID := h.send("initialize", map[string]interface{}{
+		"rootUri":      "file://" + root,
+		"capabilities": map[string]interface{}{},
+		"processId":    nil,
+	})
+	h.readResponse(initID)
+	h.notify("initialized", map[string]interface{}{})
+
+	composerURI := "file://" + filepath.Join(root, "composer.json")
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri":        composerURI,
+			"languageId": "json",
+			"version":    1,
+			"text":       composer,
+		},
+	})
+
+	// Find the "laravel/framework" key — line 4, after the indent + quote.
+	lines := strings.Split(composer, "\n")
+	var hoverLine, hoverChar int
+	for i, ln := range lines {
+		if strings.Contains(ln, "laravel/framework") {
+			hoverLine = i
+			hoverChar = strings.Index(ln, "laravel/framework") + 3
+			break
+		}
+	}
+
+	hoverID := h.send("textDocument/hover", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": composerURI},
+		"position":     map[string]interface{}{"line": hoverLine, "character": hoverChar},
+	})
+	resp := h.readResponse(hoverID)
+	result, ok := resp["result"].(map[string]interface{})
+	if !ok || result == nil {
+		t.Fatalf("expected hover result, got %+v", resp)
+	}
+	contents, _ := result["contents"].(map[string]interface{})
+	value, _ := contents["value"].(string)
+	for _, want := range []string{
+		"[laravel/framework](https://packagist.org/packages/laravel/framework)",
+		"`^10.0`",
+		"The Laravel Framework.",
+		"Requires PHP ^8.1",
+		"Installed: `v10.48.4`",
+	} {
+		if !strings.Contains(value, want) {
+			t.Errorf("hover missing %q in:\n%s", want, value)
+		}
+	}
+}
+
+// TestComposerJSONHoverOnNameKeyReturnsNil verifies that hovering on
+// non-require keys (here: "name") does not produce a card.
+func TestComposerJSONHoverOnNameKeyReturnsNil(t *testing.T) {
+	root := t.TempDir()
+	composer := `{
+  "name": "acme/widgets",
+  "require": {"laravel/framework": "^10.0"}
+}`
+	if err := os.WriteFile(filepath.Join(root, "composer.json"), []byte(composer), 0644); err != nil {
+		t.Fatalf("write composer.json: %v", err)
+	}
+
+	h := newHarness(t)
+	defer h.close()
+	initID := h.send("initialize", map[string]interface{}{
+		"rootUri":      "file://" + root,
+		"capabilities": map[string]interface{}{},
+		"processId":    nil,
+	})
+	h.readResponse(initID)
+	h.notify("initialized", map[string]interface{}{})
+
+	composerURI := "file://" + filepath.Join(root, "composer.json")
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri":        composerURI,
+			"languageId": "json",
+			"version":    1,
+			"text":       composer,
+		},
+	})
+
+	// Cursor on "acme/widgets" (the project name).
+	line := 1 // 0-indexed
+	col := strings.Index(strings.Split(composer, "\n")[1], "acme/widgets") + 1
+	hoverID := h.send("textDocument/hover", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": composerURI},
+		"position":     map[string]interface{}{"line": line, "character": col},
+	})
+	resp := h.readResponse(hoverID)
+	if result, ok := resp["result"].(map[string]interface{}); ok && result != nil {
+		t.Errorf("expected nil hover on project name, got %+v", result)
+	}
+}
