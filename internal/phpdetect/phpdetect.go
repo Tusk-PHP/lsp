@@ -6,6 +6,7 @@ package phpdetect
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -15,6 +16,10 @@ import (
 
 // DefaultTimeout is the timeout applied when Detect is called with timeout <= 0.
 const DefaultTimeout = 1 * time.Second
+
+// ErrTimeout is returned (wrapped) when Detect cannot complete within the
+// requested timeout. Callers can test for it with errors.Is.
+var ErrTimeout = errors.New("phpdetect: timed out")
 
 // versionRE matches exactly MAJOR.MINOR, e.g. "8.2".
 var versionRE = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
@@ -58,6 +63,9 @@ func Detect(binaryPath string, timeout time.Duration) (LocalPHP, error) {
 
 	out, err := cmd.Output()
 	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return LocalPHP{}, fmt.Errorf("phpdetect: running %q: %s: %w", binaryPath, err.Error(), ErrTimeout)
+		}
 		return LocalPHP{}, fmt.Errorf("phpdetect: running %q: %w", binaryPath, err)
 	}
 

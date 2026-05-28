@@ -128,6 +128,27 @@ var builtinAvailabilityByName = map[string]BuiltinAvailability{
 	"WeakMap":          {Since: "8.0"},
 	"ReflectionMethod": {Since: "7.4"},
 	"ReflectionObject": {Since: "7.4"},
+
+	// PHP 7.3 constants
+	"JSON_THROW_ON_ERROR": {Since: "7.3"},
+
+	// PHP 7.4 constants
+	"T_FN":                  {Since: "7.4"},
+	"ARRAY_FILTER_USE_BOTH": {Since: "7.4"},
+
+	// PHP 8.0 constants
+	"FILTER_VALIDATE_BOOL": {Since: "8.0"},
+	"T_NAME_QUALIFIED":     {Since: "8.0"},
+	"T_NAME_FULLY_QUALIFIED": {Since: "8.0"},
+	"T_NAME_RELATIVE":        {Since: "8.0"},
+
+	// PHP 8.1 constants
+	"MYSQLI_REFRESH_REPLICA": {Since: "8.1"},
+	"CURLOPT_DOH_URL":        {Since: "8.1"},
+
+	// PHP 8.3 constants
+	"SEEK_HOLE": {Since: "8.3"},
+	"SEEK_DATA": {Since: "8.3"},
 }
 
 // RegisterBuiltins populates the index with PHP built-in symbols.

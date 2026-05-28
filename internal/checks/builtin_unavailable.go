@@ -9,6 +9,13 @@ import (
 	"github.com/open-southeners/tusk-php/internal/symbols"
 )
 
+// builtinConstantRe matches sequences of uppercase letters, digits, and
+// underscores that start with an uppercase letter and are at least two
+// characters long (to avoid false positives on single-letter type keywords).
+// The surrounding context is checked in the calling loop to filter out class
+// constant accesses (:: prefix) and function calls (trailing '(').
+var builtinConstantRe = regexp.MustCompile(`\b([A-Z][A-Z0-9_]+)\b`)
+
 // BuiltinUnavailableRule reports usages of PHP builtins that are not
 // available in the project's resolved PHP version / extension profile.
 // It is complementary to UnknownFunctionRule and UnknownClassRule: those
@@ -46,6 +53,7 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 		findings = append(findings, r.checkClassLikesCatch(line, lineNum, file, index)...)
 		findings = append(findings, r.checkClassLikesImplements(line, lineNum, file, index)...)
 		findings = append(findings, r.checkClassLikesAttribute(line, lineNum, file, index)...)
+		findings = append(findings, r.checkConstants(line, lineNum)...)
 	}
 	return findings
 }
@@ -233,6 +241,77 @@ func (r *BuiltinUnavailableRule) classLikeFinding(name string, lineNum, start, e
 		Code:      "builtin-unavailable",
 		Message:   r.classMessage(bare, avail),
 	}}
+}
+
+// checkConstants scans a masked line for global built-in constant references
+// and emits findings for any that require a newer PHP version than the profile.
+// It uses builtinConstantRe to find candidate all-uppercase identifiers and
+// then applies context checks to exclude:
+//   - class constant accesses: Foo::BAR  (preceded by '::')
+//   - function calls: NAME(  (followed by '(')
+//   - const declarations: `const NAME` or `define(` contexts are already masked
+//     by the string/comment masking layer, but leading `const ` is checked too.
+func (r *BuiltinUnavailableRule) checkConstants(line string, lineNum int) []Finding {
+	var findings []Finding
+	for _, match := range builtinConstantRe.FindAllStringSubmatchIndex(line, -1) {
+		start, end := match[2], match[3]
+		name := line[start:end]
+
+		// Skip if preceded by '::' — this is a class constant (Foo::CONST).
+		if start >= 2 && line[start-2:start] == "::" {
+			continue
+		}
+		// A single ':' before means it's part of a ternary or label, not '::'.
+		// Skip '->CONST' — a property or method named with all-caps (unusual but valid).
+		if start >= 2 && line[start-2:start] == "->" {
+			continue
+		}
+
+		// Skip if followed by '(' — this is a function call, not a constant.
+		after := end
+		for after < len(line) && line[after] == ' ' {
+			after++
+		}
+		if after < len(line) && line[after] == '(' {
+			continue
+		}
+
+		// Skip leading `const NAME` declarations (class/namespace constants).
+		prefix := strings.TrimSpace(line[:start])
+		if strings.HasSuffix(prefix, "const") {
+			continue
+		}
+
+		// Strip a fully-qualified leading backslash (\JSON_THROW_ON_ERROR).
+		// builtinConstantRe won't include the backslash; the backslash sits one
+		// character before start. We look it up bare regardless.
+		avail, ok := symbols.LookupAvailability(name)
+		if !ok {
+			continue
+		}
+
+		if r.satisfies(avail) {
+			continue
+		}
+
+		findings = append(findings, Finding{
+			StartLine: lineNum,
+			StartCol:  start,
+			EndLine:   lineNum,
+			EndCol:    end,
+			Severity:  SeverityWarning,
+			Code:      "builtin-unavailable",
+			Message:   r.constantMessage(name, avail),
+		})
+	}
+	return findings
+}
+
+func (r *BuiltinUnavailableRule) constantMessage(name string, avail symbols.BuiltinAvailability) string {
+	if avail.Extension != "" {
+		return fmt.Sprintf("Constant '%s' requires ext-%s (PHP >= %s)", name, avail.Extension, avail.Since)
+	}
+	return fmt.Sprintf("Constant '%s' requires PHP >= %s", name, avail.Since)
 }
 
 // satisfies reports whether the rule's profile satisfies the given availability

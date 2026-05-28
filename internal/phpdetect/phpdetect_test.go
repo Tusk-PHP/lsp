@@ -74,13 +74,27 @@ func TestDetectTimesOut(t *testing.T) {
 	}
 }
 
+func TestDetectTimesOutWrapsErrTimeout(t *testing.T) {
+	dir := t.TempDir()
+	bin := writeFakeScript(t, dir, "php", `sleep 2`)
+
+	_, err := Detect(bin, 200*time.Millisecond)
+	if err == nil {
+		t.Fatal("expected error due to timeout, got nil")
+	}
+	if !errors.Is(err, ErrTimeout) {
+		t.Errorf("errors.Is(err, ErrTimeout) = false; err = %v", err)
+	}
+}
+
 func TestDetectEmptyBinaryPathDefaultsToPath(t *testing.T) {
 	got, err := Detect("", DefaultTimeout)
 	if err != nil {
-		// Acceptable: php not on $PATH in CI. Verify the error is exec-related.
+		// Acceptable: php not on $PATH in CI, or timed out. Verify the error is exec-related or a timeout.
 		if !strings.Contains(err.Error(), "executable file not found") &&
 			!strings.Contains(err.Error(), "exec") &&
-			!errors.Is(err, os.ErrNotExist) {
+			!errors.Is(err, os.ErrNotExist) &&
+			!errors.Is(err, ErrTimeout) {
 			t.Errorf("unexpected error kind for missing php: %v", err)
 		}
 		return
