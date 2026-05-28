@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-28
+
+### Added
+
+- Generated PHP built-in symbol registry covering functions, classes, interfaces, and traits from PHP's internal runtime tables, preventing known PHP symbols from being reported as unknown when no richer stub exists yet.
+- Embedded, versioned PHP stub layers for core symbols and extensions, including initial PHP 7.4/8.0 core stubs and JSON extension stubs through PHP 8.3.
+- Project-aware builtin profile selection from Composer platform data, Composer `require.php` constraints, required `ext-*` packages, local PHP detection, and the bundled default profile.
+- `builtin-unavailable` diagnostics for known PHP builtins that exist outside the project's selected PHP version or enabled extension set, such as PHP 8 functions used in a PHP 7.4 project.
+- Local PHP version detection via the `php` binary, with configurable timeout handling and fallback to bundled stubs when detection is unavailable.
+- PHP manual URL generation for builtin methods, properties, class constants, predefined constants, classes, interfaces, traits, enums, and functions.
+- Configurable PHP manual locale through `php_manual_locale`.
+- Optional browser opening for builtin definitions through `php_manual_open_on_definition`, using the LSP `window/showDocument` capability when supported by the client.
+- VS Code settings for PHP manual locale and builtin definition opening.
+- A builtin-generation helper script for registry, stub, and availability metadata generation.
+- Additional resolver support for `class-string<T>` constructor binding, typed access-chain walking, `foreach` element propagation, and Reflection generic metadata.
+- Unknown PHP attribute diagnostics, including detection for builtin attributes that are unavailable in the selected PHP profile.
+
+### Changed
+
+- Builtin registration now uses profile-aware stub layering, with generated fallback symbols loaded before richer curated stubs.
+- LSP initialization now resolves and logs the effective PHP builtin profile from Composer, local PHP, or bundled defaults.
+- Unknown-symbol diagnostics use a softer mode while indexing settles, reducing noisy false positives during startup.
+- Hover and definition resolution now use declaring classes for inherited builtin members so PHP manual links point to the correct manual page.
+- Hover resolution now prefers PHPDoc `@return` types over broad native placeholder types such as `object`, `mixed`, and `array` when that gives a more useful result.
+- Documentation was refreshed for project architecture, builtin navigation, and the new PHP manual settings.
+- Moved the Go module and repository references from `github.com/open-southeners/tusk-php` to `github.com/Tusk-PHP/lsp`, including internal Go imports, release/download URLs, and contributor documentation.
+
+### Fixed
+
+- Unknown-function and unknown-class diagnostics no longer flag broad PHP builtins such as `array_reverse`, `ReflectionObject`, `ReflectionMethod`, and `InvalidArgumentException`.
+- Builtin symbols are filtered from workspace navigation results where jumping to generated or embedded builtin declarations would be unhelpful.
+- Class properties are excluded from standalone name lookup, preventing property symbols from resolving as unrelated bare identifiers.
+- Manual links for receiver-class and inherited-member hovers now strip leading namespace separators and resolve against the correct owner class.
+- Hover and resolver behavior for unknown typed class variables, property access chains, and string-based variable assignments is more accurate.
+- Attribute syntax and local PHP detection timeout handling are covered by the resolved diagnostic follow-ups.
+
 ## [0.6.1] - 2026-05-25
 
 ### Added
