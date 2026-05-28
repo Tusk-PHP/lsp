@@ -6,16 +6,16 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/composer"
-	"github.com/open-southeners/tusk-php/internal/container"
-	frameworklaravel "github.com/open-southeners/tusk-php/internal/framework/laravel"
-	frameworksymfony "github.com/open-southeners/tusk-php/internal/framework/symfony"
-	"github.com/open-southeners/tusk-php/internal/parser"
-	"github.com/open-southeners/tusk-php/internal/protocol"
-	"github.com/open-southeners/tusk-php/internal/resolve"
-	"github.com/open-southeners/tusk-php/internal/scope"
-	sourcectx "github.com/open-southeners/tusk-php/internal/source"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/composer"
+	"github.com/Tusk-PHP/lsp/internal/container"
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
+	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
+	"github.com/Tusk-PHP/lsp/internal/scope"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 type Analyzer struct {

@@ -3,8 +3,8 @@ package analyzer
 import (
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/container"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/container"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 const unresolvedReceiverSource = `<?php

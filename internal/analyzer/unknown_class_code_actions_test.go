@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
 func unknownClassDiagnostic(line, start, end int, message string) protocol.Diagnostic {

@@ -17,9 +17,9 @@ import (
 	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 
-	"github.com/open-southeners/tusk-php/internal/config"
-	"github.com/open-southeners/tusk-php/internal/parser"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/config"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 const connectTimeout = 5 * time.Second

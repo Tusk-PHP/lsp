@@ -3,7 +3,7 @@ package symbols
 import (
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 func indexTypeAliases(owner *Symbol, doc *parser.DocBlock, resolve func(string) string) {

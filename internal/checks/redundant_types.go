@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/parser"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // RedundantNullsafeRule detects ?-> on expressions whose type is known

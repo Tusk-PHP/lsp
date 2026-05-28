@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func setupTestProject(t *testing.T) (string, *symbols.Index) {

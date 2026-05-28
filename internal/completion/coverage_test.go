@@ -3,8 +3,8 @@ package completion
 import (
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/protocol"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func setupCoverageCompletion() *Provider {

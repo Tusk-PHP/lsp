@@ -3,7 +3,7 @@ package completion
 import (
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
 func (p *Provider) completeLaravelRouteNames(partial, quote string) []protocol.CompletionItem {

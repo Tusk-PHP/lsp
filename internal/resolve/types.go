@@ -3,8 +3,8 @@ package resolve
 import (
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/phparray"
-	"github.com/open-southeners/tusk-php/internal/types"
+	"github.com/Tusk-PHP/lsp/internal/phparray"
+	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
 // ResolvedType represents a type with optional generic parameters.

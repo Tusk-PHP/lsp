@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/stubs"
+	"github.com/Tusk-PHP/lsp/internal/stubs"
 )
 
 type builtinFunction struct {

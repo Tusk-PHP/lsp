@@ -9,13 +9,13 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/analyzer"
-	"github.com/open-southeners/tusk-php/internal/completion"
-	"github.com/open-southeners/tusk-php/internal/container"
-	"github.com/open-southeners/tusk-php/internal/hover"
-	"github.com/open-southeners/tusk-php/internal/parser"
-	"github.com/open-southeners/tusk-php/internal/protocol"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/analyzer"
+	"github.com/Tusk-PHP/lsp/internal/completion"
+	"github.com/Tusk-PHP/lsp/internal/container"
+	"github.com/Tusk-PHP/lsp/internal/hover"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // corpusEntry holds a collected PHP file with its URI and source.

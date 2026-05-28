@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/open-southeners/tusk-php/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
 // initHarnessWithCaps creates an initialized harness using the given capabilities map.

@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
 type TranslationResolver struct {

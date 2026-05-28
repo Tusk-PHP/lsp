@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func setupDoctrineIndex(t *testing.T, entitySource string) (*symbols.Index, string) {

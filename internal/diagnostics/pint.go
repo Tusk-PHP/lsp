@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/config"
-	"github.com/open-southeners/tusk-php/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/config"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
 type pintRunner struct {

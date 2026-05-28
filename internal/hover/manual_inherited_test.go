@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/container"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/container"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // setupInheritedProvider builds an in-memory index with a Parent/Child class

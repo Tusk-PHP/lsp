@@ -3,10 +3,10 @@ package resolve
 import (
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/parser"
-	"github.com/open-southeners/tusk-php/internal/protocol"
-	"github.com/open-southeners/tusk-php/internal/scope"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/scope"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // inferClassStringBinding attempts to bind @template parameters for a generic

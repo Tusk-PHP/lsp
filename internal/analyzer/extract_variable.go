@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/parser"
-	"github.com/open-southeners/tusk-php/internal/protocol"
-	"github.com/open-southeners/tusk-php/internal/scope"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/scope"
 )
 
 func (a *Analyzer) extractVariableCodeAction(uri, source string, params protocol.CodeActionParams) *protocol.CodeAction {

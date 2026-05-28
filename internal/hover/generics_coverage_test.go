@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/parser"
-	"github.com/open-southeners/tusk-php/internal/protocol"
-	"github.com/open-southeners/tusk-php/internal/resolve"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func hoverLineContaining(t *testing.T, source, needle string) protocol.Position {

@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/protocol"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // TestM1NoEmptyLabels verifies that GetCompletions never returns a

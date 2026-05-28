@@ -3,10 +3,10 @@ package diagnostics
 import (
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/checks"
-	"github.com/open-southeners/tusk-php/internal/config"
-	"github.com/open-southeners/tusk-php/internal/parser"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/checks"
+	"github.com/Tusk-PHP/lsp/internal/config"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func TestAnalyzeOnSave(t *testing.T) {

@@ -3,7 +3,7 @@ package checks
 import (
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 func TestUnreachableCodeRule(t *testing.T) {

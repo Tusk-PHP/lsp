@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/config"
-	"github.com/open-southeners/tusk-php/internal/container"
-	"github.com/open-southeners/tusk-php/internal/models"
-	"github.com/open-southeners/tusk-php/internal/parser"
-	"github.com/open-southeners/tusk-php/internal/phparray"
-	"github.com/open-southeners/tusk-php/internal/protocol"
-	"github.com/open-southeners/tusk-php/internal/resolve"
-	sourcectx "github.com/open-southeners/tusk-php/internal/source"
-	"github.com/open-southeners/tusk-php/internal/symbols"
-	"github.com/open-southeners/tusk-php/internal/types"
+	"github.com/Tusk-PHP/lsp/internal/config"
+	"github.com/Tusk-PHP/lsp/internal/container"
+	"github.com/Tusk-PHP/lsp/internal/models"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/phparray"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
 type Provider struct {

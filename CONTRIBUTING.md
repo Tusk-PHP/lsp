@@ -17,7 +17,7 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 ### Development Setup
 
 ```bash
-git clone https://github.com/open-southeners/tusk-php.git
+git clone https://github.com/Tusk-PHP/lsp.git tusk-php
 cd tusk-php
 
 # Build the server
@@ -130,7 +130,7 @@ the Zed extension uses it and skips the online release download path.
 
 ### Before You Start
 
-- Check [existing issues](https://github.com/open-southeners/tusk-php/issues) to avoid duplicate work
+- Check [existing issues](https://github.com/Tusk-PHP/lsp/issues) to avoid duplicate work
 - For larger changes, open an issue first to discuss the approach
 
 ### Pull Request Process
@@ -156,7 +156,7 @@ Tests use `testdata/project/` which contains a mock PHP project with `composer.j
 
 ## Reporting Bugs
 
-- Use the [GitHub issue tracker](https://github.com/open-southeners/tusk-php/issues)
+- Use the [GitHub issue tracker](https://github.com/Tusk-PHP/lsp/issues)
 - Include your editor, OS, PHP version, and steps to reproduce
 - Attach the server log (`--log /tmp/tusk-php.log`) if relevant
 

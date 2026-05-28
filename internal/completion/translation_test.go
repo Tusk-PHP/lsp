@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/container"
-	frameworklaravel "github.com/open-southeners/tusk-php/internal/framework/laravel"
-	"github.com/open-southeners/tusk-php/internal/protocol"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/container"
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func TestLaravelTranslationCompletionInPHPHelper(t *testing.T) {

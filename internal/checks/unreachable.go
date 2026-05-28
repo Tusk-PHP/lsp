@@ -3,8 +3,8 @@ package checks
 import (
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/parser"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // UnreachableCodeRule detects statements after unconditional return, throw,

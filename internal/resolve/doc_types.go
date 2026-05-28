@@ -3,9 +3,9 @@ package resolve
 import (
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/parser"
-	"github.com/open-southeners/tusk-php/internal/symbols"
-	internaltypes "github.com/open-southeners/tusk-php/internal/types"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
+	internaltypes "github.com/Tusk-PHP/lsp/internal/types"
 )
 
 func (r *Resolver) resolveDocTypeWithAliases(raw string, parsed *internaltypes.Type, file *parser.FileNode, aliases map[string]*internaltypes.Type) ResolvedType {

@@ -3,7 +3,7 @@ package sourcectx
 import (
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
 func TestAnalyzeBuildsSharedCursorContext(t *testing.T) {

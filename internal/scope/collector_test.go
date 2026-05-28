@@ -3,7 +3,7 @@ package scope
 import (
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
 func TestCollectVariablesAndParameters(t *testing.T) {

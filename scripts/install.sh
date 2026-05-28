@@ -13,7 +13,7 @@ if command -v go &> /dev/null; then
     go build -ldflags="-s -w -X main.version=${VERSION}" -trimpath -o "${INSTALL_DIR}/tusk-php" ./cmd/tusk-php/
 else
     echo "Downloading binary..."
-    curl -fsSL -o "${INSTALL_DIR}/tusk-php" "https://github.com/open-southeners/tusk-php/releases/download/${VERSION}/tusk-php-${OS}-${ARCH}"
+    curl -fsSL -o "${INSTALL_DIR}/tusk-php" "https://github.com/Tusk-PHP/lsp/releases/download/${VERSION}/tusk-php-${OS}-${ARCH}"
     chmod +x "${INSTALL_DIR}/tusk-php"
 fi
 echo "Installed to ${INSTALL_DIR}/tusk-php"

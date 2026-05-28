@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/open-southeners/tusk-php/internal/stubs"
+	"github.com/Tusk-PHP/lsp/internal/stubs"
 )
 
 func testdataPath() string {

@@ -3,8 +3,8 @@ package diagnostics
 import (
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/checks"
-	"github.com/open-southeners/tusk-php/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/checks"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // NewIndexMemberChecker returns a MemberChecker backed by the symbol index.

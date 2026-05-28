@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	frameworklaravel "github.com/open-southeners/tusk-php/internal/framework/laravel"
-	"github.com/open-southeners/tusk-php/internal/protocol"
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
 func setupLaravelRouteCompletion(t *testing.T) *Provider {

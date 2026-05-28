@@ -3,8 +3,8 @@ package completion
 import (
 	"strings"
 
-	"github.com/open-southeners/tusk-php/internal/parser"
-	"github.com/open-southeners/tusk-php/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
 // buildAutoImportEdit returns a TextEdit that adds a `use` statement for the given FQN

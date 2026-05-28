@@ -3,8 +3,8 @@ package completion
 import (
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/parser"
-	"github.com/open-southeners/tusk-php/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
 // TestE2EArrayShapeInference tests array literal shape inference using real

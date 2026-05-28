@@ -5,10 +5,10 @@
 <h1 align="center">Tusk PHP</h1>
 
 <p align="center">
-  <a href="https://github.com/open-southeners/tusk-php/actions/workflows/test.yml"><img alt="CI" src="https://github.com/open-southeners/tusk-php/actions/workflows/test.yml/badge.svg"></a>
-  <a href="https://github.com/open-southeners/tusk-php/actions/workflows/release.yml"><img alt="Release" src="https://github.com/open-southeners/tusk-php/actions/workflows/release.yml/badge.svg"></a>
-  <a href="https://codecov.io/gh/open-southeners/tusk-php"><img alt="codecov" src="https://codecov.io/gh/open-southeners/tusk-php/graph/badge.svg?token=BgBvrfITKq"></a>
-  <a href="https://github.com/open-southeners/tusk-php/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/open-southeners/tusk-php"></a>
+  <a href="https://github.com/Tusk-PHP/lsp/actions/workflows/test.yml"><img alt="CI" src="https://github.com/Tusk-PHP/lsp/actions/workflows/test.yml/badge.svg"></a>
+  <a href="https://github.com/Tusk-PHP/lsp/actions/workflows/release.yml"><img alt="Release" src="https://github.com/Tusk-PHP/lsp/actions/workflows/release.yml/badge.svg"></a>
+  <a href="https://codecov.io/gh/Tusk-PHP/lsp"><img alt="codecov" src="https://codecov.io/gh/Tusk-PHP/lsp/graph/badge.svg?token=BgBvrfITKq"></a>
+  <a href="https://github.com/Tusk-PHP/lsp/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/Tusk-PHP/lsp"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
   <img alt="PHP 8.0-8.5" src="https://img.shields.io/badge/PHP-8.0--8.5-777BB4?logo=php&logoColor=white">
 </p>
@@ -220,18 +220,18 @@ tusk-php --transport stdio
 
 ### Binary Installation
 
-**Download** from [GitHub Releases](https://github.com/open-southeners/tusk-php/releases/latest) (Linux, macOS, Windows — amd64/arm64).
+**Download** from [GitHub Releases](https://github.com/Tusk-PHP/lsp/releases/latest) (Linux, macOS, Windows — amd64/arm64).
 
 **Quick install** (Linux / macOS):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/open-southeners/tusk-php/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Tusk-PHP/lsp/main/scripts/install.sh | bash
 ```
 
 **From source** (requires Go 1.22+):
 
 ```bash
-git clone https://github.com/open-southeners/tusk-php.git && cd tusk-php && make install
+git clone https://github.com/Tusk-PHP/lsp.git tusk-php && cd tusk-php && make install
 ```
 
 ## Configuration

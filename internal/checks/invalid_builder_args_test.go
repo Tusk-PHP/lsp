@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/open-southeners/tusk-php/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 // mockMemberChecker implements MemberChecker for testing.
