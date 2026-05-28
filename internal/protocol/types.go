@@ -284,6 +284,26 @@ type InitializationOptions struct {
 	InlayHints                   *InlayHintsClientOptions `json:"inlayHints,omitempty"`
 	PHPManualLocale              string                   `json:"phpManualLocale,omitempty"`
 	PHPManualOpenOnDefinition    *bool                    `json:"phpManualOpenOnDefinition,omitempty"`
+	Composer                     *ComposerClientOptions   `json:"composer,omitempty"`
+}
+
+// ComposerClientOptions mirrors config.ComposerConfig but uses pointers so
+// "unset" can be distinguished from "explicitly false" when merging over a
+// file-based default.
+type ComposerClientOptions struct {
+	Hover            *ComposerHoverClientOptions `json:"hover,omitempty"`
+	OpenOnDefinition *bool                       `json:"openOnDefinition,omitempty"`
+}
+
+// ComposerHoverClientOptions are the client-tunable hover knobs. v1 only
+// reads Enable; the remaining fields are accepted so v2/v3 client configs
+// don't need a server bump.
+type ComposerHoverClientOptions struct {
+	Enable           *bool `json:"enable,omitempty"`
+	FetchRemote      *bool `json:"fetchRemote,omitempty"`
+	FetchVCS         *bool `json:"fetchVCS,omitempty"`
+	CacheTTLHours    *int  `json:"cacheTTLHours,omitempty"`
+	RequestTimeoutMs *int  `json:"requestTimeoutMs,omitempty"`
 }
 
 // InitializeResult for the initialize response.
