@@ -850,18 +850,6 @@ function parseSinceFromDocComment(string $docComment): string
 }
 
 /**
- * Parse @removed X.Y from a doc-comment and return 'X.Y'.
- * Returns '' if no @removed tag is found.
- */
-function parseRemovedFromDocComment(string $docComment): string
-{
-    if (preg_match('/@removed\s+(\d+)\.(\d+)/', $docComment, $m)) {
-        return $m[1] . '.' . $m[2];
-    }
-    return '';
-}
-
-/**
  * Walk phpstorm-stubs and collect availability data from @since/@removed PHPDoc tags.
  *
  * @param array{stubs:?string, output:?string} $options
@@ -1012,9 +1000,8 @@ function generateGoAvailability(array $options): string
                 }
 
                 $since = parseSinceFromDocComment($lastDocComment);
-                $removed = parseRemovedFromDocComment($lastDocComment);
 
-                if ($since === '' && $removed === '') {
+                if ($since === '') {
                     // No version constraint — skip (not interesting for the availability map).
                     $lastDocComment = '';
                     $i++;
@@ -1046,20 +1033,13 @@ function generateGoAvailability(array $options): string
                     continue;
                 }
 
-                // Only record if we have a useful @since (ignore @removed-only entries
-                // unless they also have @since — callers can check removed separately).
-                if ($since !== '') {
-                    $entry = ['Since' => $since];
-                    if ($extension !== '') {
-                        $entry['Extension'] = $extension;
-                    }
-                    if ($removed !== '') {
-                        $entry['Removed'] = $removed;
-                    }
-                    // Later entries win (a symbol defined in multiple files gets the
-                    // last-seen version, which is usually the most informative).
-                    $availability[$name] = $entry;
+                $entry = ['Since' => $since];
+                if ($extension !== '') {
+                    $entry['Extension'] = $extension;
                 }
+                // Later entries win (a symbol defined in multiple files gets the
+                // last-seen version, which is usually the most informative).
+                $availability[$name] = $entry;
 
                 $lastDocComment = '';
                 $i++;

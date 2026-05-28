@@ -19,44 +19,16 @@ _None open._
 
 ## Medium
 
-### M12 — `builtin-unavailable` constants scope not yet implemented
-- **Where:** future `internal/checks/builtin_unavailable.go` (initial PR ships functions + class-likes only).
-- **What:** `BUILTIN_STUBS_PLAN.md` calls for diagnostics on built-in constants (`JSON_THROW_ON_ERROR`, `SORT_FLAG_CASE`) and class constants. Deferred so the initial rule lands with the highest-impact scopes first.
-- **Fix:** Extend `BuiltinUnavailableRule` with a constants scope and seed availability entries for those constants. Bitwise-or chains need per-token checking.
-
-### M13 — `resolveSymbolAtCursor` still falls back to `LookupByName` in `->`/`::` context
-- **Where:** `internal/analyzer/analyzer.go:665-666` (the broad `a.index.LookupByName(...)` + `PickBestStandalone` tail of `resolveSymbolAtCursor`).
-- **What:** The hover and `FindDefinition` / `FindTypeDefinition` paths were hardened to return nil when the cursor is in `->`/`::` access context but the receiver type cannot be resolved (see W1 of the stubs-generics work). `resolveSymbolAtCursor` — used by `FindReferences`, `PrepareRename`, and `Rename` — still has the same fallthrough: when the access chain can't be resolved, it ignores `ctx.AccessKind` and matches any project-wide symbol with the same short name. Rename is the worst case: invoking rename on `$x->name` where `$x` has an unknown type can match and edit unrelated `name` symbols across the project.
-- **Fix:** Mirror the W1 guard in `resolveSymbolAtCursor`: when `ctx.AccessKind != AccessNone` and the resolved chain FQN is empty, return `nil` rather than falling through to `LookupByName`. Add regression tests under `internal/analyzer/` covering `FindReferences`, `PrepareRename`, and `Rename` against the same "unresolved receiver, same-name unrelated symbol" fixture used by `unresolved_receiver_test.go`.
+_None open._
 
 ---
 
 ## Low / performance
 
-### L11 — `GetWorkspaceSymbols` still uses literal `"builtin"` URI check
-- **Where:** `internal/analyzer/analyzer.go:1028`.
-- **What:** Workspace symbols listing still filters with `sym.URI == "" || sym.URI == "builtin"`, which misses stub-loaded builtins whose URIs are `builtin://...`. Those leak into workspace-symbol results.
-- **Fix:** Replace with `sym.URI == "" || symbols.IsBuiltin(sym)` to match the rest of the analyzer post-Wave 1.
-
-### L12 — `PrepareRename` / `Rename` check `Source` directly instead of using `IsBuiltin`
-- **Where:** `internal/analyzer/analyzer.go:1233`, `:1336`.
-- **What:** Functionally correct (`sym.Source == symbols.SourceBuiltin`) but inconsistent with the new `symbols.IsBuiltin` helper used everywhere else.
-- **Fix:** Swap in `symbols.IsBuiltin(sym)`. Cosmetic.
-
-### L13 — `phpdetect.Detect` does not expose a timeout sentinel
-- **Where:** `internal/phpdetect/phpdetect.go`.
-- **What:** `errors.Is(err, context.DeadlineExceeded)` does not compose with the error returned by `cmd.Output()` after a deadline (varies by OS; macOS interacts with `WaitDelay`). Callers cannot distinguish "timed out" from "binary missing" or "bad output".
-- **Fix:** Export `var ErrTimeout = errors.New("phpdetect: timed out")` and wrap the returned error with it when the context deadline fires. Only useful once a caller surfaces the cause.
-
 ### L14 — Hand-authored availability entries overlap with the generated table
 - **Where:** `internal/symbols/builtins.go` (`builtinAvailabilityByName`) vs `internal/symbols/builtin_availability_generated.go` (`generatedBuiltinAvailability`).
 - **What:** `str_contains`, `str_starts_with`, `str_ends_with`, `json_validate`, `Fiber`, `WeakMap` are present in both with matching values. No correctness problem (precedence is well-defined and values agree), but the hand-authored entries become redundant once the real generator produces the comprehensive table.
 - **Fix:** After the real `phpstorm-stubs` generator run lands (license review pending), prune redundant hand-authored entries. Keep only ones that genuinely need to override the generator.
-
-### L15 — `generate-builtins.php availability` collects `@removed` but Go struct has no `Removed` field
-- **Where:** `scripts/generate-builtins.php` (`generateGoAvailability`).
-- **What:** PHP-side traversal parses `@removed X.Y` from PHPDoc but silently drops the value because `BuiltinAvailability` has no `Removed` field. Dead-end collection code; doc-rot risk.
-- **Fix:** Either add a `Removed string` field to `BuiltinAvailability` (and route it into a future "symbol was removed in PHP >= X" diagnostic) or drop the `@removed` branch until the struct catches up.
 
 ### L16 — `builtin-unavailable` method signature deltas scope deferred
 - **Where:** future `internal/checks/builtin_unavailable.go`.
@@ -76,6 +48,58 @@ _None open._
 ---
 
 ## Resolved
+
+### M12 — `builtin-unavailable` constants scope implemented
+- `internal/checks/builtin_unavailable.go` adds `checkConstants` with per-line scanning that skips
+  class constants (`Foo::CONST`), function calls (`name(`), and `const NAME` declaration contexts.
+  Bitwise-or chains are checked per-token so partially-unavailable chains flag only the unavailable
+  identifier.
+- `internal/symbols/builtins.go` seeds 10 well-known version-gated constants: `JSON_THROW_ON_ERROR`
+  (7.3), `T_FN` / `ARRAY_FILTER_USE_BOTH` (7.4), `FILTER_VALIDATE_BOOL` / `T_NAME_QUALIFIED` /
+  `T_NAME_FULLY_QUALIFIED` / `T_NAME_RELATIVE` (8.0), `MYSQLI_REFRESH_REPLICA` / `CURLOPT_DOH_URL`
+  (8.1), `SEEK_HOLE` / `SEEK_DATA` (8.3).
+- Regression coverage in `internal/checks/builtin_unavailable_test.go`:
+  `TestBuiltinUnavailableConstant`, `TestBuiltinUnavailableConstantBitwiseOr`,
+  `TestBuiltinUnavailableConstantClassConstantNotConfused`,
+  `TestBuiltinUnavailableConstantOnSufficientVersion`.
+
+### M13 — `resolveSymbolAtCursor` no longer falls back to `LookupByName` in `->`/`::` context
+- W1 guard mirrored into `resolveSymbolAtCursor` in `internal/analyzer/analyzer.go`: when
+  `ctx.AccessKind != AccessNone`, the function returns `nil` at the end of the access-chain branch
+  instead of falling through to direct-lookup / `LookupByName` fallbacks that could match unrelated
+  same-name symbols across the project.
+- Companion guards added to `FindAllReferences` (post-`resolveSymbolAtCursor` nil check) and
+  `PrepareRename` (the unresolvable `AccessKind != AccessNone` branch now returns `nil` instead of
+  advertising a rename target).
+- Regression coverage in `internal/analyzer/unresolved_receiver_test.go`:
+  `TestFindReferencesUnresolvedReceiverNoFalsePositive`,
+  `TestPrepareRenameUnresolvedReceiverNoFalsePositive`,
+  `TestRenameUnresolvedReceiverNoFalsePositive`.
+
+### L11 — `GetWorkspaceSymbols` now uses `IsBuiltin` helper
+- `internal/analyzer/analyzer.go::GetWorkspaceSymbols` filter changed from `sym.URI == "builtin"`
+  to `symbols.IsBuiltin(sym)`, so stub-loaded builtins with `builtin://...` URIs no longer leak
+  into workspace-symbol results.
+
+### L12 — `PrepareRename` / `Rename` now use `IsBuiltin` helper
+- `internal/analyzer/analyzer.go::PrepareRename` swaps `sym.Source == symbols.SourceBuiltin` for
+  `symbols.IsBuiltin(sym)`; `Rename` replaces the SourceBuiltin half of its guard with
+  `symbols.IsBuiltin(sym)` while preserving the existing SourceVendor check.
+
+### L13 — `phpdetect.Detect` now exposes `ErrTimeout` sentinel
+- `internal/phpdetect/phpdetect.go` exports `var ErrTimeout = errors.New("phpdetect: timed out")`.
+  After `cmd.Output()` returns an error, if `errors.Is(ctx.Err(), context.DeadlineExceeded)` is
+  true the error is wrapped so that `errors.Is(err, phpdetect.ErrTimeout)` composes correctly
+  across OSes.
+- New test `TestDetectTimesOutWrapsErrTimeout` in `internal/phpdetect/phpdetect_test.go`;
+  `TestDetectEmptyBinaryPathDefaultsToPath` extended to also accept `ErrTimeout` as a valid error
+  kind (a slow PATH-resolved `php` now surfaces as a timeout rather than as a missing binary).
+
+### L15 — `generate-builtins.php availability` no longer collects `@removed`
+- `scripts/generate-builtins.php` drops `parseRemovedFromDocComment` and the `Removed` entry
+  assembly path. The `@since` parsing path is unchanged. Will be re-added if/when
+  `symbols.BuiltinAvailability` gains a `Removed` field for a "symbol removed in PHP >= X"
+  diagnostic.
 
 ### L18 — PHP 8 attribute syntax (`#[Name]`) now visible to diagnostics
 - `internal/checks/unknown_symbols.go::maskPHPLine` now leaves `#[` intact while still masking the historical `#`-to-end-of-line comment form.

@@ -752,10 +752,17 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 
 	// Try to resolve as a symbol first — this handles properties ($name in declarations)
 	// and member access contexts before falling back to variable scope
+	ctx := sourcectx.Analyze(uri, source, pos)
 	sym := a.resolveSymbolAtCursor(uri, source, pos, word, file)
 
 	// Built-in symbols are opaque to navigation: do not scan the workspace for refs.
 	if symbols.IsBuiltin(sym) {
+		return nil
+	}
+
+	// W1 guard: if we were in a member access chain and the receiver/member couldn't
+	// be resolved, do not fall through to name-based lookups.
+	if sym == nil && ctx != nil && ctx.AccessKind != sourcectx.AccessNone {
 		return nil
 	}
 
@@ -782,7 +789,10 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 func (a *Analyzer) resolveSymbolAtCursor(uri, source string, pos protocol.Position, word string, file *parser.FileNode) *symbols.Symbol {
 	ctx := sourcectx.Analyze(uri, source, pos)
 
-	// Check for member access context (->method or ::method)
+	// Check for member access context (->method or ::method).
+	// W1 guard: if we're in an access chain but can't resolve the receiver or
+	// the member, return nil — do not fall through to name-based lookups that
+	// would match unrelated symbols across the project.
 	if ctx != nil && ctx.AccessKind != sourcectx.AccessNone {
 		classFQN := a.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
 		if classFQN != "" {
@@ -790,6 +800,7 @@ func (a *Analyzer) resolveSymbolAtCursor(uri, source string, pos protocol.Positi
 				return member
 			}
 		}
+		return nil
 	}
 
 	// Check if it's a class property declaration ($name on a property line)
@@ -1201,7 +1212,7 @@ func (a *Analyzer) GetWorkspaceSymbols(query string) []protocol.SymbolInformatio
 	lowerQuery := strings.ToLower(query)
 
 	for _, sym := range candidates {
-		if sym == nil || sym.FQN == "" || sym.Name == "" || sym.URI == "" || sym.URI == "builtin" {
+		if sym == nil || sym.FQN == "" || sym.Name == "" || sym.URI == "" || symbols.IsBuiltin(sym) {
 			continue
 		}
 		if seen[sym.FQN] {
@@ -1420,7 +1431,7 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 	sym := a.resolveSymbolAtCursor(uri, source, pos, word, file)
 
 	// Reject built-ins
-	if sym != nil && sym.Source == symbols.SourceBuiltin {
+	if sym != nil && symbols.IsBuiltin(sym) {
 		return nil
 	}
 
@@ -1449,9 +1460,11 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 		return &protocol.PrepareRenameResult{Range: wordRange, Placeholder: word}
 	}
 
-	// Check for member access context (method/property on -> or ::)
+	// Check for member access context (method/property on -> or ::).
+	// If we reach here with an access kind set, the receiver was unresolvable;
+	// return nil rather than allowing a rename that could affect wrong symbols.
 	if ctx.AccessKind != sourcectx.AccessNone {
-		return &protocol.PrepareRenameResult{Range: wordRange, Placeholder: word}
+		return nil
 	}
 
 	// Allow rename for identifiers declared in the current file's AST
@@ -1523,7 +1536,7 @@ func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName str
 
 	// If it's a known symbol, rename it across the workspace
 	if sym != nil {
-		if sym.Source == symbols.SourceBuiltin || sym.Source == symbols.SourceVendor {
+		if symbols.IsBuiltin(sym) || sym.Source == symbols.SourceVendor {
 			return nil
 		}
 		return a.renameSymbol(sym, newName, readDocument)

@@ -241,3 +241,124 @@ func TestBuiltinUnavailableAttribute(t *testing.T) {
 		t.Errorf("expected a finding mentioning 'Override' and 'PHP >= 8.3', got: %v", relevant)
 	}
 }
+
+// TestBuiltinUnavailableConstant verifies that a constant introduced in PHP 7.3
+// is flagged when the project profile targets PHP 7.1.
+func TestBuiltinUnavailableConstant(t *testing.T) {
+	source := `<?php
+$flags = JSON_THROW_ON_ERROR;
+json_encode($data, $flags);
+`
+	file := parser.ParseFile(source)
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.1"})
+
+	rule := &BuiltinUnavailableRule{PHPVersion: "7.1"}
+	findings := rule.Check(file, source, idx)
+
+	var relevant []Finding
+	for _, f := range findings {
+		if f.Code == "builtin-unavailable" {
+			relevant = append(relevant, f)
+		}
+	}
+	if len(relevant) == 0 {
+		t.Fatal("expected at least one builtin-unavailable finding for JSON_THROW_ON_ERROR, got none")
+	}
+	found := false
+	for _, f := range relevant {
+		if strings.Contains(f.Message, "JSON_THROW_ON_ERROR") && strings.Contains(f.Message, "PHP >= 7.3") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected a finding mentioning 'JSON_THROW_ON_ERROR' and 'PHP >= 7.3', got: %v", relevant)
+	}
+}
+
+// TestBuiltinUnavailableConstantBitwiseOr verifies that when two constants are
+// combined with '|', only the unavailable one is flagged.
+func TestBuiltinUnavailableConstantBitwiseOr(t *testing.T) {
+	// JSON_THROW_ON_ERROR requires PHP 7.3; FILTER_VALIDATE_BOOL requires 8.0.
+	// On PHP 7.3, only FILTER_VALIDATE_BOOL should be flagged.
+	source := `<?php
+$opts = JSON_THROW_ON_ERROR | FILTER_VALIDATE_BOOL;
+`
+	file := parser.ParseFile(source)
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.3"})
+
+	rule := &BuiltinUnavailableRule{PHPVersion: "7.3"}
+	findings := rule.Check(file, source, idx)
+
+	var relevant []Finding
+	for _, f := range findings {
+		if f.Code == "builtin-unavailable" {
+			relevant = append(relevant, f)
+		}
+	}
+
+	foundThrowOnError := false
+	foundValidateBool := false
+	for _, f := range relevant {
+		if strings.Contains(f.Message, "JSON_THROW_ON_ERROR") {
+			foundThrowOnError = true
+		}
+		if strings.Contains(f.Message, "FILTER_VALIDATE_BOOL") {
+			foundValidateBool = true
+		}
+	}
+	if foundThrowOnError {
+		t.Errorf("JSON_THROW_ON_ERROR should NOT be flagged on PHP 7.3 (it requires PHP >= 7.3), findings: %v", relevant)
+	}
+	if !foundValidateBool {
+		t.Errorf("FILTER_VALIDATE_BOOL should be flagged on PHP 7.3 (it requires PHP >= 8.0), findings: %v", relevant)
+	}
+}
+
+// TestBuiltinUnavailableConstantClassConstantNotConfused verifies that a class
+// constant access like Foo::BAR does not emit a builtin-unavailable finding even
+// if BAR happens to match an entry in the availability table.
+func TestBuiltinUnavailableConstantClassConstantNotConfused(t *testing.T) {
+	// JSON_THROW_ON_ERROR is in the availability table. If it appeared after '::',
+	// it must NOT be flagged — it is a class constant access, not a global constant.
+	source := `<?php
+class Foo {
+    const JSON_THROW_ON_ERROR = 128;
+}
+$v = Foo::JSON_THROW_ON_ERROR;
+`
+	file := parser.ParseFile(source)
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.1"})
+
+	rule := &BuiltinUnavailableRule{PHPVersion: "7.1"}
+	findings := rule.Check(file, source, idx)
+
+	for _, f := range findings {
+		if f.Code == "builtin-unavailable" && strings.Contains(f.Message, "JSON_THROW_ON_ERROR") {
+			t.Errorf("unexpected builtin-unavailable finding for class constant access Foo::JSON_THROW_ON_ERROR: %v", f)
+		}
+	}
+}
+
+// TestBuiltinUnavailableConstantOnSufficientVersion verifies that no finding is
+// emitted when the profile's PHP version satisfies the constant's requirement.
+func TestBuiltinUnavailableConstantOnSufficientVersion(t *testing.T) {
+	source := `<?php
+$flags = JSON_THROW_ON_ERROR;
+`
+	file := parser.ParseFile(source)
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
+
+	rule := &BuiltinUnavailableRule{PHPVersion: "7.4"}
+	findings := rule.Check(file, source, idx)
+
+	for _, f := range findings {
+		if f.Code == "builtin-unavailable" && strings.Contains(f.Message, "JSON_THROW_ON_ERROR") {
+			t.Errorf("unexpected builtin-unavailable finding for JSON_THROW_ON_ERROR on PHP 7.4: %v", f)
+		}
+	}
+}
