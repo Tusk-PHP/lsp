@@ -19,6 +19,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/composer"
+	"github.com/Tusk-PHP/lsp/internal/composer/cardhover"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
@@ -49,7 +50,8 @@ type Server struct {
 	index       *symbols.Index
 	container   *container.ContainerAnalyzer
 	completion  *completion.Provider
-	hover       *hover.Provider
+	hover         *hover.Provider
+	composerHover *cardhover.Provider
 	inlayHint   *inlayhint.Provider
 	diag        *diagnostics.Provider
 	analyzer    *analyzer.Analyzer
@@ -79,6 +81,10 @@ type Server struct {
 	// client does not support window/showDocument" warning is emitted at most once
 	// per session (logged during initialize).
 	manualFlagWarnedOnce sync.Once
+
+	// composerOpenFlagWarnedOnce mirrors manualFlagWarnedOnce for the
+	// composer.openOnDefinition flag.
+	composerOpenFlagWarnedOnce sync.Once
 }
 
 func NewServer(reader io.Reader, writer io.Writer, logger *log.Logger) *Server {
@@ -379,6 +385,17 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.hover.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
 	})
+	s.composerHover = cardhover.NewProvider(s.rootPath, profile.PHPVersion)
+	s.composerHover.SetEnabled(s.cfg.Composer.Hover.Enable)
+	s.composerHover.SetOpenOnDefinition(s.cfg.Composer.OpenOnDefinition)
+	if s.cfg.Composer.OpenOnDefinition && !s.clientSupportsShowDocument {
+		s.composerOpenFlagWarnedOnce.Do(func() {
+			s.sendNotification("window/logMessage", map[string]interface{}{
+				"type":    protocol.MessageTypeWarning,
+				"message": "PHP LSP: composer.openOnDefinition is enabled but the client does not advertise window/showDocument support; feature disabled",
+			})
+		})
+	}
 	s.diag = diagnostics.NewProvider(s.index, s.framework, s.rootPath, s.logger, s.cfg)
 	s.diag.TypeResolver = func(expr, source string, line int, file *parser.FileNode) string {
 		return s.completion.ResolveExpressionType(expr, source, protocol.Position{Line: line}, file)
@@ -534,6 +551,12 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 	s.docMu.Lock()
 	s.documents[uri] = text
 	s.docMu.Unlock()
+	if !isPHPDocument(uri) {
+		// Non-PHP documents (composer.json, tsconfig.json, …) are only
+		// stored so providers that read source — e.g. composer-hover —
+		// can serve them. We never PHP-parse or diagnose them.
+		return
+	}
 	s.indexDocumentMaybeAsync(uri, text)
 	if s.cfg.DiagnosticsEnabled {
 		s.publishDiagnostics(uri, text)
@@ -551,11 +574,22 @@ func (s *Server) handleDidChange(msg *jsonRPCMessage) {
 		s.docMu.Lock()
 		s.documents[uri] = source
 		s.docMu.Unlock()
+		if !isPHPDocument(uri) {
+			return
+		}
 		s.indexDocumentMaybeAsync(uri, source)
 		if s.cfg.DiagnosticsEnabled {
 			s.publishDiagnostics(uri, source)
 		}
 	}
+}
+
+// isPHPDocument reports whether the URI points at a PHP source file.
+// Used to gate PHP-only paths (indexing, diagnostics) so non-PHP
+// documents — composer.json, tsconfig.json, etc. — can be opened
+// without polluting the symbol index or generating diagnostics.
+func isPHPDocument(uri string) bool {
+	return strings.HasSuffix(strings.ToLower(uri), ".php")
 }
 
 // indexDocumentMaybeAsync indexes source synchronously for small documents
@@ -593,7 +627,12 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 		s.docMu.Lock()
 		s.documents[uri] = *params.Text
 		s.docMu.Unlock()
-		s.indexFileByURI(uri, *params.Text)
+		if isPHPDocument(uri) {
+			s.indexFileByURI(uri, *params.Text)
+		}
+	}
+	if !isPHPDocument(uri) {
+		return
 	}
 	s.goSafe("container.Analyze", s.container.Analyze)
 	if s.cfg.DiagnosticsEnabled {
@@ -623,8 +662,13 @@ func (s *Server) handleHover(msg *jsonRPCMessage) {
 		s.sendError(msg.ID, -32602, "Invalid params")
 		return
 	}
-	source := s.getDocument(params.TextDocument.URI)
-	s.sendResponse(msg.ID, s.hover.GetHover(params.TextDocument.URI, source, params.Position))
+	uri := params.TextDocument.URI
+	source := s.getDocument(uri)
+	if cardhover.IsComposerJSON(uri) {
+		s.sendResponse(msg.ID, s.composerHover.Hover(uri, source, params.Position))
+		return
+	}
+	s.sendResponse(msg.ID, s.hover.GetHover(uri, source, params.Position))
 }
 
 func (s *Server) handleDefinition(msg *jsonRPCMessage) {
@@ -633,10 +677,24 @@ func (s *Server) handleDefinition(msg *jsonRPCMessage) {
 		s.sendError(msg.ID, -32602, "Invalid params")
 		return
 	}
-	source := s.getDocument(params.TextDocument.URI)
+	uri := params.TextDocument.URI
+	source := s.getDocument(uri)
+
+	if cardhover.IsComposerJSON(uri) {
+		result := s.composerHover.Definition(uri, source, params.Position)
+		if result.ExternalURL != "" && s.clientSupportsShowDocument {
+			s.sendServerRequest("window/showDocument", protocol.ShowDocumentParams{
+				URI:       result.ExternalURL,
+				External:  true,
+				TakeFocus: true,
+			})
+		}
+		s.sendResponse(msg.ID, nil)
+		return
+	}
 
 	openManual := s.cfg.PHPManualOpenOnDefinition && s.clientSupportsShowDocument
-	result := s.analyzer.FindDefinitionWithManual(params.TextDocument.URI, source, params.Position, openManual, s.cfg.PHPManualLocale)
+	result := s.analyzer.FindDefinitionWithManual(uri, source, params.Position, openManual, s.cfg.PHPManualLocale)
 
 	if result.ExternalManualURL != "" {
 		s.sendServerRequest("window/showDocument", protocol.ShowDocumentParams{
