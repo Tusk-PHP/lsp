@@ -522,11 +522,10 @@ func TestComposerJSONHoverIntegration(t *testing.T) {
 	contents, _ := result["contents"].(map[string]interface{})
 	value, _ := contents["value"].(string)
 	for _, want := range []string{
-		"[laravel/framework](https://packagist.org/packages/laravel/framework)",
-		"`^10.0`",
+		"[laravel/framework](https://packagist.org/packages/laravel/framework) — ^10.0 (installed: v10.48.4)",
 		"The Laravel Framework.",
 		"Requires PHP ^8.1",
-		"Installed: `v10.48.4`",
+		"License: MIT",
 	} {
 		if !strings.Contains(value, want) {
 			t.Errorf("hover missing %q in:\n%s", want, value)
