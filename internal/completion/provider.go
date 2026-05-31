@@ -183,7 +183,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		return sanitizeCompletions(p.completePipe(currentNS))
 	}
 	if strings.Contains(trimmed, "#[") && !strings.Contains(trimmed, "]") {
-		return sanitizeCompletions(p.completeAttribute())
+		return sanitizeCompletions(p.completeAttribute(attributeNamePrefix(trimmed), currentNS, source, file))
 	}
 	words := strings.Fields(trimmed)
 	if len(words) >= 1 && (words[len(words)-1] == "new" || (len(words) >= 2 && words[len(words)-2] == "new")) {
@@ -1060,16 +1060,51 @@ func (p *Provider) completePipe(currentNS string) []protocol.CompletionItem {
 	return items
 }
 
-func (p *Provider) completeAttribute() []protocol.CompletionItem {
+// attributeNamePrefix extracts the partial attribute class name the user is
+// typing after the last `#[` on the line, e.g. `#[Ch` -> "Ch" and
+// `#[Unique(...), Ro` -> "Ro". Returns "" when no name has been started yet.
+func attributeNamePrefix(trimmed string) string {
+	idx := strings.LastIndex(trimmed, "#[")
+	if idx < 0 {
+		return ""
+	}
+	tail := trimmed[idx+2:]
+	// A new attribute starts after the last top-level comma in the group.
+	if comma := strings.LastIndex(tail, ","); comma >= 0 {
+		tail = tail[comma+1:]
+	}
+	return strings.TrimSpace(tail)
+}
+
+func (p *Provider) completeAttribute(prefix, currentNS, source string, file *parser.FileNode) []protocol.CompletionItem {
 	attrs := [][2]string{
 		{"Override", "PHP 8.3"}, {"Deprecated", "PHP 8.4"}, {"SensitiveParameter", "Sensitive in stack traces"}, {"AllowDynamicProperties", "Allow dynamic props"},
 	}
 	if p.framework == "symfony" {
 		attrs = append(attrs, [2]string{"Route", "Define route"}, [2]string{"AsController", "Register controller"}, [2]string{"AsCommand", "Register command"}, [2]string{"Autowire", "Autowire service"}, [2]string{"AsEventListener", "Event listener"}, [2]string{"AsMessageHandler", "Message handler"})
 	}
+	seen := map[string]bool{}
 	var items []protocol.CompletionItem
 	for _, a := range attrs {
+		seen[a[0]] = true
 		items = append(items, protocol.CompletionItem{Label: a[0], Kind: protocol.CompletionItemKindClass, Detail: a[1]})
+	}
+	// Once the user starts typing a name, surface matching attribute classes
+	// from the index (user-defined and vendor attributes like `Char`, `Unique`).
+	if prefix != "" && p.index != nil {
+		for _, sym := range p.index.SearchByPrefix(prefix) {
+			if sym == nil || sym.Kind != symbols.KindClass || seen[sym.Name] {
+				continue
+			}
+			seen[sym.Name] = true
+			items = append(items, protocol.CompletionItem{
+				Label:               sym.Name,
+				Kind:                protocol.CompletionItemKindClass,
+				Detail:              sym.FQN,
+				SortText:            sortPriority(sym, currentNS),
+				AdditionalTextEdits: buildAutoImportEdit(sym.FQN, source, file),
+			})
+		}
 	}
 	return items
 }

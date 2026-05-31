@@ -21,11 +21,6 @@ var unknownClassStaticRe = regexp.MustCompile(`(^|[^$A-Za-z0-9_\\])(\\?[A-Za-z_]
 var unknownClassCatchRe = regexp.MustCompile(`\bcatch\s*\(\s*([^)]+)\s+\$[A-Za-z_][A-Za-z0-9_]*`)
 var unknownClassImplementsRe = regexp.MustCompile(`\bimplements\s+([^{]+)`)
 
-// Matches PHP 8 attribute usage like `#[MyAttr]`, `#[MyAttr(args)]`, or
-// `#[A, B, C]`. The capture is the comma-separated list inside the brackets,
-// which the iterator splits and resolves per name.
-var unknownClassAttributeRe = regexp.MustCompile(`#\[\s*([^\]]+)\s*\]`)
-
 func (r *UnknownClassRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	if file == nil {
 		return nil
@@ -157,45 +152,133 @@ func checkUnknownImplementsClasses(line string, lineNum int, file *parser.FileNo
 	return findings
 }
 
-// checkUnknownAttributeClasses iterates `#[A, B(...), \\Ns\\C]` lists.
-// Each name is resolved via the standard class-like resolver and the same
-// presence checks; arguments inside `(...)` are stripped before resolution.
+// checkUnknownAttributeClasses resolves each attribute name in `#[A, B(...), \\Ns\\C]`
+// groups. Only the attribute class names are resolved — constructor arguments
+// (including named arguments like `nullable: true` and array literals with
+// their own commas) are skipped by the depth-aware scanner.
 func checkUnknownAttributeClasses(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
 	var findings []Finding
-	for _, match := range unknownClassAttributeRe.FindAllStringSubmatchIndex(line, -1) {
-		listStart, listEnd := match[2], match[3]
-		list := line[listStart:listEnd]
-		offset := 0
-		for _, part := range strings.Split(list, ",") {
-			trimmed := strings.TrimSpace(part)
-			// Strip a parenthesized argument list `Name(args)` -> `Name`.
-			if paren := strings.Index(trimmed, "("); paren > 0 {
-				trimmed = trimmed[:paren]
-			}
-			if trimmed == "" {
-				offset += len(part) + 1
-				continue
-			}
-			rel := strings.Index(part, trimmed)
-			start := listStart + offset + rel
-			end := start + len(trimmed)
-			if classLikeExists(trimmed, lineNum, file, index) {
-				offset += len(part) + 1
+	for _, g := range scanAttributeGroups(line) {
+		for _, tok := range g.names {
+			if classLikeExists(tok.name, lineNum, file, index) {
 				continue
 			}
 			findings = append(findings, Finding{
 				StartLine: lineNum,
-				StartCol:  start,
+				StartCol:  tok.start,
 				EndLine:   lineNum,
-				EndCol:    end,
+				EndCol:    tok.start + len(tok.name),
 				Severity:  SeverityWarning,
 				Code:      "unknown-class",
-				Message:   fmt.Sprintf("Unknown attribute '%s'", strings.TrimPrefix(trimmed, "\\")),
+				Message:   fmt.Sprintf("Unknown attribute '%s'", strings.TrimPrefix(tok.name, "\\")),
 			})
-			offset += len(part) + 1
 		}
 	}
 	return findings
+}
+
+// attrToken is an attribute class name and the column where it begins.
+type attrToken struct {
+	name  string
+	start int
+}
+
+// attrGroup is one PHP 8 attribute group `#[...]` on a line: its byte span
+// (from `#` through the matching `]`) and the class names it declares.
+type attrGroup struct {
+	start int // index of `#`
+	end   int // one past the closing `]` (or end of line if unterminated)
+	names []attrToken
+}
+
+// scanAttributeGroups finds every `#[...]` group on a (string/comment-masked)
+// line and extracts each attribute's class name. Commas, parentheses and
+// brackets inside an attribute's argument list are tracked so that constructor
+// arguments are never mistaken for additional attribute names — a single
+// attribute like `Char("name", nullable: true)` yields just `Char`, and
+// `Unique(["a", "b"])` yields just `Unique`.
+func scanAttributeGroups(line string) []attrGroup {
+	var groups []attrGroup
+	for i := 0; i+1 < len(line); i++ {
+		if line[i] != '#' || line[i+1] != '[' {
+			continue
+		}
+		g := attrGroup{start: i}
+		depth := 1 // inside the opening `[`
+		paren := 0 // depth inside an argument list `(...)`
+		segStart := i + 2
+		flush := func(end int) {
+			if end < segStart {
+				return
+			}
+			seg := line[segStart:end]
+			trimmed := strings.TrimSpace(seg)
+			if trimmed == "" {
+				return
+			}
+			name := trimmed
+			if p := strings.IndexByte(name, '('); p >= 0 {
+				name = strings.TrimSpace(name[:p])
+			}
+			if name == "" {
+				return
+			}
+			rel := strings.Index(seg, name)
+			g.names = append(g.names, attrToken{name: name, start: segStart + rel})
+		}
+		j := i + 2
+		for ; j < len(line); j++ {
+			c := line[j]
+			if paren > 0 {
+				switch c {
+				case '(':
+					paren++
+				case ')':
+					paren--
+				}
+				continue
+			}
+			switch c {
+			case '(':
+				paren++
+			case '[':
+				depth++
+			case ']':
+				depth--
+			case ',':
+				if depth == 1 {
+					flush(j)
+					segStart = j + 1
+				}
+			}
+			if depth == 0 {
+				flush(j)
+				break
+			}
+		}
+		if depth == 0 {
+			g.end = j + 1
+		} else {
+			// Unterminated on this line (multi-line attribute): resolve the
+			// trailing segment and treat the rest of the line as the group span.
+			flush(j)
+			g.end = len(line)
+		}
+		groups = append(groups, g)
+		i = j
+	}
+	return groups
+}
+
+// posInAttributeGroup reports whether byte offset pos falls inside any
+// attribute group span.
+func posInAttributeGroup(pos int, groups []attrGroup) bool {
+	for _, g := range groups {
+		if pos >= g.start && pos < g.end {
+			return true
+		}
+	}
+	return false
 }
 
 // UnknownFunctionRule detects unresolved plain function calls.
@@ -223,9 +306,16 @@ func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index 
 
 	for lineNum, raw := range lines {
 		line := maskPHPLine(raw, &inBlockComment)
+		attrGroups := scanAttributeGroups(line)
 		for _, match := range unknownFunctionCallRe.FindAllStringSubmatchIndex(line, -1) {
 			start, end := match[2], match[3]
 			name := line[start:end]
+			// `#[Char(...)]` looks like a `Char(` call to the regex; the name is
+			// an attribute class, not a function. Attribute argument lists are
+			// constant expressions and cannot contain real function calls.
+			if posInAttributeGroup(start, attrGroups) {
+				continue
+			}
 			if shouldSkipFunctionCall(line, start, name) {
 				continue
 			}

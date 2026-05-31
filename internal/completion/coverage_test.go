@@ -92,6 +92,24 @@ func TestCompleteAttribute(t *testing.T) {
 	}
 }
 
+func TestCompleteAttributeIndexedClass(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	idx.IndexFile("file:///vendor/Char.php", `<?php
+namespace Toramanlis\ImplicitMigrations\Attributes;
+#[\Attribute]
+class Char {}
+`)
+	p := NewProvider(idx, nil, "none")
+
+	source := "<?php\n#[Ch"
+	items := p.GetCompletions("file:///test.php", source, protocol.Position{Line: 1, Character: 4})
+	labels := collectLabels(items)
+	if !labels["Char"] {
+		t.Errorf("expected indexed attribute class 'Char' for prefix 'Ch', got: %v", labels)
+	}
+}
+
 func TestCompleteGlobalKeywords(t *testing.T) {
 	p := setupCoverageCompletion()
 	source := "<?php\nret"

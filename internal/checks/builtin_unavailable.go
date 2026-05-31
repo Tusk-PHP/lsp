@@ -170,25 +170,9 @@ func (r *BuiltinUnavailableRule) checkClassLikesImplements(line string, lineNum 
 
 func (r *BuiltinUnavailableRule) checkClassLikesAttribute(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
 	var findings []Finding
-	for _, match := range unknownClassAttributeRe.FindAllStringSubmatchIndex(line, -1) {
-		listStart, listEnd := match[2], match[3]
-		list := line[listStart:listEnd]
-		offset := 0
-		for _, part := range strings.Split(list, ",") {
-			trimmed := strings.TrimSpace(part)
-			// Strip a parenthesized argument list `Name(args)` -> `Name`.
-			if paren := strings.Index(trimmed, "("); paren > 0 {
-				trimmed = trimmed[:paren]
-			}
-			if trimmed == "" {
-				offset += len(part) + 1
-				continue
-			}
-			rel := strings.Index(part, trimmed)
-			start := listStart + offset + rel
-			end := start + len(trimmed)
-			findings = append(findings, r.attributeFinding(trimmed, lineNum, start, end, file, index)...)
-			offset += len(part) + 1
+	for _, g := range scanAttributeGroups(line) {
+		for _, tok := range g.names {
+			findings = append(findings, r.attributeFinding(tok.name, lineNum, tok.start, tok.start+len(tok.name), file, index)...)
 		}
 	}
 	return findings
