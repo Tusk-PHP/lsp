@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-01
+
+### Added
+
+- Hover cards for `composer.json` `require` and `require-dev` entries: hovering a package name shows its installed version (read from `composer.lock`), version constraint, PHP requirement with a compatibility glyph against the workspace PHP version, license, description, and a link to the package's Packagist or VCS page.
+- Go-to-Definition on a `composer.json` package name can open the package's Packagist (or configured repository) page in the browser, gated by the new `composer.openOnDefinition` setting and the editor's `window/showDocument` support.
+- New settings `tuskPhpLsp.composer.hover.enable` (default on) and `tuskPhpLsp.composer.openOnDefinition` (default off) in the VS Code extension.
+- VS Code extension now activates on workspaces containing a `composer.json` and routes JSON files matching that pattern to the server.
+- Zed extension now registers JSON as a handled language so `composer.json` files are routed to the server for hover and definition.
+- Attribute completion now surfaces indexed attribute classes (user-defined and from vendor) that match the typed prefix, with automatic `use`-import edits inserted alongside the existing built-in attribute suggestions.
+
+### Fixed
+
+- PHP 8 attributes with constructor arguments — such as `#[Char("name", nullable: true)]` — no longer generate spurious "unknown function" diagnostics for the call inside the attribute.
+- Named arguments inside attribute constructors — such as `nullable: true` — no longer generate spurious "unknown attribute" diagnostics.
+
 ## [0.7.0] - 2026-05-28
 
 ### Added
