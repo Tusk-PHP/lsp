@@ -24,11 +24,8 @@ func TestHoverRendersLinkedTitleAndConstraint(t *testing.T) {
 		t.Fatal("expected hover, got nil")
 	}
 	body := h.Contents.Value
-	if !strings.Contains(body, "[laravel/framework](https://packagist.org/packages/laravel/framework)") {
-		t.Errorf("missing linked title in:\n%s", body)
-	}
-	if !strings.Contains(body, "`^10.0`") {
-		t.Errorf("missing constraint in:\n%s", body)
+	if !strings.Contains(body, "[laravel/framework](https://packagist.org/packages/laravel/framework) — ^10.0") {
+		t.Errorf("missing linked title with constraint in:\n%s", body)
 	}
 }
 
@@ -59,12 +56,11 @@ func TestHoverWithLockfileShowsDescription(t *testing.T) {
 	}
 	body := h.Contents.Value
 	for _, want := range []string{
-		"The Laravel Framework.",
+		"[laravel/framework](https://packagist.org/packages/laravel/framework) — ^10.0 (installed: v10.48.4)",
 		"Requires PHP ^8.1 ✓",
 		"project targets 8.2",
-		"Installed: `v10.48.4`",
 		"License: MIT",
-		"Source: https://github.com/laravel/framework.git",
+		"The Laravel Framework.",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("hover missing %q\n--- body ---\n%s", want, body)
@@ -142,8 +138,8 @@ func TestHoverRespectsRepositoriesOverride(t *testing.T) {
 	if h == nil {
 		t.Fatal("expected hover, got nil")
 	}
-	if !strings.Contains(h.Contents.Value, "(https://github.com/acme/fork)") {
-		t.Errorf("expected GitHub link override, got:\n%s", h.Contents.Value)
+	if !strings.Contains(h.Contents.Value, "[acme/fork](https://github.com/acme/fork)") {
+		t.Errorf("expected linked name pointing to GitHub, got:\n%s", h.Contents.Value)
 	}
 }
 

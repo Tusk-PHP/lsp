@@ -23,44 +23,21 @@ type card struct {
 }
 
 func (c card) render() string {
-	var b strings.Builder
-
-	// Title: linked name + constraint.
-	b.WriteString("[")
-	b.WriteString(c.Name)
-	b.WriteString("]")
-	b.WriteString("(")
-	b.WriteString(c.ExternalURL)
-	b.WriteString(")")
-	if c.Constraint != "" {
-		b.WriteString(" — `")
-		b.WriteString(c.Constraint)
-		b.WriteString("`")
-	}
-	b.WriteString("\n")
-
-	if c.Description != "" {
-		b.WriteString("\n")
-		b.WriteString(c.Description)
-		b.WriteString("\n")
-	}
-
-	// Stats block: every present line on its own row.
-	stats := c.statsLines()
-	if len(stats) > 0 {
-		b.WriteString("\n")
-		for _, line := range stats {
-			b.WriteString(line)
-			b.WriteString("\n")
-		}
-	}
-
-	return strings.TrimRight(b.String(), "\n")
-}
-
-func (c card) statsLines() []string {
+	// Collect the header block lines; they are joined with hard line breaks
+	// ("  \n") so each renders on its own line in markdown.
 	var lines []string
 
+	// Title: [name](url) — constraint (installed: version)
+	title := "[" + c.Name + "](" + c.ExternalURL + ")"
+	if c.Constraint != "" {
+		title += " — " + c.Constraint
+	}
+	if c.InstalledVersion != "" {
+		title += " (installed: " + c.InstalledVersion + ")"
+	}
+	lines = append(lines, title)
+
+	// PHP requirement line.
 	if c.PHPRequire != "" {
 		glyph := compatGlyph(c.ProjectPHPVer, c.PHPRequire)
 		line := "Requires PHP " + c.PHPRequire
@@ -73,23 +50,20 @@ func (c card) statsLines() []string {
 		lines = append(lines, line)
 	}
 
-	if c.InstalledVersion != "" {
-		lines = append(lines, "Installed: `"+c.InstalledVersion+"`")
-	}
-
+	// License line.
 	if len(c.License) > 0 {
 		lines = append(lines, "License: "+strings.Join(c.License, ", "))
 	}
 
-	if c.SourceURL != "" {
-		lines = append(lines, "Source: "+c.SourceURL)
+	// Join with hard line breaks so each stat appears on its own line.
+	out := strings.Join(lines, "  \n")
+
+	// Description as a separate paragraph below the header block.
+	if c.Description != "" {
+		out += "\n\n" + c.Description
 	}
 
-	if c.Homepage != "" {
-		lines = append(lines, "Homepage: "+c.Homepage)
-	}
-
-	return lines
+	return out
 }
 
 // compatGlyph picks a small unicode marker indicating whether the project
