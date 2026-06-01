@@ -37,9 +37,6 @@ tusk-php/
 │   ├── models/                      # Eloquent, Doctrine, migrations, array shape inference
 │   │
 │   └── conformance/                 # Whole-stack invariants and corpus tests (build-tagged)
-├── editors/
-│   ├── vscode/                      # TypeScript extension
-│   └── zed/                         # Rust/WASM extension
 ├── testdata/project/                # Test fixtures (mock PHP project)
 ├── scripts/                         # Build, corpus fetch, builtin generators
 └── Makefile                         # Build, test, dev, conformance targets
@@ -361,11 +358,13 @@ Build-tagged (`//go:build conformance`) invariants and corpus tests that exercis
 
 ## Editor Extensions
 
-### VSCode (`editors/vscode/`)
+The editor extensions live in their own repositories and consume the released LSP binary; they are no longer part of this repo. Each pins a known-good LSP version and verifies the downloaded binary against the SHA-256 sums published with the release.
 
-TypeScript. Discovers binary from settings → bundled `bin/{platform}-{arch}/tusk-php` → PATH. Passes user settings as `initializationOptions`. Watches `.php` and `composer.json` files. Commands: restart, reindex.
+### VS Code — [`Tusk-PHP/vscode`](https://github.com/Tusk-PHP/vscode)
 
-### Zed (`editors/zed/`)
+TypeScript. Discovers binary from settings → bundled `bin/{os}-{arch}/tusk-php` → PATH. Passes user settings as `initializationOptions`. Watches `.php` and `composer.json` files. Commands: restart, reindex.
+
+### Zed — [`Tusk-PHP/zed`](https://github.com/Tusk-PHP/zed)
 
 Rust/WASM. Zero user configuration. Downloads binary from GitHub releases for current platform. Falls back to PATH. Server must have sensible defaults since Zed users cannot configure options.
 

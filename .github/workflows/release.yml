@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Derive release version
         id: version
@@ -33,47 +33,26 @@ jobs:
           echo "value=$version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: '24'
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-wasip2
-
-      - name: Sync release version into extension manifests
-        env:
-          VERSION: ${{ steps.version.outputs.value }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm --prefix editors/vscode version "$VERSION" --no-git-tag-version --allow-same-version
-          sed -i -E '0,/^version = ".*"$/s//version = "'"$VERSION"'"/' editors/zed/Cargo.toml
-          sed -i -E '0,/^version = ".*"$/s//version = "'"$VERSION"'"/' editors/zed/extension.toml
-
       - name: Get release info
         id: query-release-info
-        uses: release-flow/keep-a-changelog-action@v3
+        uses: release-flow/keep-a-changelog-action@74931dec7ecdbfc8e38ac9ae7e8dd84c08db2f32 # v3
         with:
           command: query
           changelog: CHANGELOG.md
           version: ${{ steps.version.outputs.value }}
 
-      - name: Build release artifacts
+      - name: Build release binaries
         env:
           VERSION: ${{ steps.version.outputs.value }}
         shell: bash
         run: |
           set -euo pipefail
           rm -rf dist
-          mkdir -p "dist/tusk-php-zed-${VERSION}"
-
+          mkdir -p dist
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
             IFS='/' read -r goos goarch <<< "$target"
             output="dist/tusk-php-${goos}-${goarch}"
@@ -84,45 +63,12 @@ jobs:
             GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
               go build -ldflags="-s -w -X main.version=${VERSION}" -trimpath -o "$output" ./cmd/tusk-php/
           done
+          # SHA-256 sums the editor extensions (Tusk-PHP/vscode, Tusk-PHP/zed) pin against.
+          ( cd dist && sha256sum tusk-php-* > checksums.txt )
+          echo "Checksums:"; cat dist/checksums.txt
 
-          # Bundle platform binaries into the VSCode extension
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
-            IFS='/' read -r goos goarch <<< "$target"
-            ext=""
-            if [[ "$goos" == "windows" ]]; then ext=".exe"; fi
-            vscode_dir="editors/vscode/bin/${goos}-${goarch}"
-            mkdir -p "$vscode_dir"
-            cp "dist/tusk-php-${goos}-${goarch}${ext}" "${vscode_dir}/tusk-php${ext}"
-          done
-
-          npm --prefix editors/vscode install
-          npm --prefix editors/vscode run compile
-          cp README.md editors/vscode/README.md
-          cp CHANGELOG.md editors/vscode/CHANGELOG.md
-          cp LICENSE editors/vscode/LICENSE
-          (
-            cd editors/vscode
-            npx --yes @vscode/vsce package \
-              --out "../../dist/tusk-php-vscode-${VERSION}.vsix"
-          )
-
-          cargo build \
-            --manifest-path editors/zed/Cargo.toml \
-            --target wasm32-wasip2 \
-            --release
-
-          cp editors/zed/extension.toml "dist/tusk-php-zed-${VERSION}/"
-          cp editors/zed/Cargo.toml "dist/tusk-php-zed-${VERSION}/"
-          cp editors/zed/Cargo.lock "dist/tusk-php-zed-${VERSION}/"
-          cp -R editors/zed/src "dist/tusk-php-zed-${VERSION}/"
-          cp editors/zed/target/wasm32-wasip2/release/tusk_php_zed.wasm "dist/tusk-php-zed-${VERSION}/"
-          (
-            cd dist
-            zip -r "tusk-php-zed-${VERSION}.zip" "tusk-php-zed-${VERSION}"
-          )
-
-      - name: Publish to Github releases
-        uses: softprops/action-gh-release@v2
+      - name: Publish to GitHub releases
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: ${{ github.ref_name }}
           body: ${{ steps.query-release-info.outputs.release-notes }}
@@ -132,22 +78,4 @@ jobs:
             dist/tusk-php-darwin-amd64
             dist/tusk-php-darwin-arm64
             dist/tusk-php-windows-amd64.exe
-            dist/tusk-php-vscode-${{ steps.version.outputs.value }}.vsix
-            dist/tusk-php-zed-${{ steps.version.outputs.value }}.zip
-
-      - name: Publish to VS Code Marketplace
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        if: env.VSCE_PAT != ''
-        run: |
-          npx --yes @vscode/vsce publish \
-            --packagePath "dist/tusk-php-vscode-${{ steps.version.outputs.value }}.vsix"
-
-      - name: Publish to Open VSX Registry
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        if: env.OVSX_PAT != ''
-        run: |
-          npx --yes ovsx publish \
-            "dist/tusk-php-vscode-${{ steps.version.outputs.value }}.vsix" \
-            -p "$OVSX_PAT"
+            dist/checksums.txt

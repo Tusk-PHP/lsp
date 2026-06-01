@@ -11,8 +11,8 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 ### Prerequisites
 
 - **Go 1.22+** — for the language server
-- **Node.js 20+** — for the VS Code extension
-- **Rust (stable)** with `wasm32-wasip1` target — for the Zed extension (optional)
+
+> The editor extensions live in separate repos ([`Tusk-PHP/vscode`](https://github.com/Tusk-PHP/vscode), [`Tusk-PHP/zed`](https://github.com/Tusk-PHP/zed)); their toolchains (Node.js, Rust) are documented there.
 
 ### Development Setup
 
@@ -35,8 +35,6 @@ make dev
 ```
 cmd/tusk-php/      Entry point
 internal/          All server packages (parser, symbols, hover, completion, etc.)
-editors/vscode/    VS Code extension (TypeScript)
-editors/zed/       Zed extension (Rust/WASM)
 testdata/          Test fixtures (mock PHP project)
 ```
 
@@ -59,13 +57,11 @@ go test -v -race ./internal/symbols/
 
 ### Building Editor Extensions
 
-```bash
-# VS Code
-make vscode-ext
-
-# VS Code .vsix package (includes cross-compiled binaries)
-make vscode-package
-```
+The editor extensions are built and released from their own repositories:
+[`Tusk-PHP/vscode`](https://github.com/Tusk-PHP/vscode) and
+[`Tusk-PHP/zed`](https://github.com/Tusk-PHP/zed). See each repo's README for its
+build steps; this repo only produces the `tusk-php` language server binary that
+those extensions download.
 
 ### Testing with an Editor
 
@@ -170,9 +166,9 @@ Releases are automated via GitHub Actions. Pushing a semver tag (e.g., `v0.5.0`)
 
 1. Full test suite
 2. Cross-platform binary builds
-3. VS Code extension packaging and publishing (Marketplace + Open VSX)
-4. Zed extension build
-5. GitHub Release with all artifacts and changelog notes
+3. GitHub Release with the binaries, `checksums.txt`, and changelog notes
+
+The editor extensions release independently from their own repos ([`Tusk-PHP/vscode`](https://github.com/Tusk-PHP/vscode), [`Tusk-PHP/zed`](https://github.com/Tusk-PHP/zed)), each pinning a known-good LSP version.
 
 ## License
 
