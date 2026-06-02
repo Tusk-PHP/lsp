@@ -198,6 +198,14 @@ abstract class Model {}
 	cache := NewSchemaCache()
 	AnalyzeDatabaseSchema(idx, tmpDir, "laravel", nil, nil, cache)
 
+	schema, err := ScanSchema(tmpDir, "laravel", nil, nil, cache)
+	if err != nil {
+		t.Fatalf("ScanSchema() error = %v", err)
+	}
+	if schema == nil {
+		t.Fatal("expected schema from ScanSchema")
+	}
+
 	t.Run("database columns injected", func(t *testing.T) {
 		sym := idx.Lookup("App\\Models\\User::$name")
 		if sym == nil {
@@ -240,6 +248,26 @@ abstract class Model {}
 			t.Errorf("expected 4 cached columns, got %d", len(cols))
 		}
 	})
+
+	t.Run("normalized schema returned", func(t *testing.T) {
+		if schema.Connection != "sqlite" {
+			t.Fatalf("expected sqlite connection, got %q", schema.Connection)
+		}
+		if schema.Source != SchemaSourceLive {
+			t.Fatalf("expected live schema source, got %q", schema.Source)
+		}
+		if !schema.Connected {
+			t.Fatal("expected connected live schema")
+		}
+		if schema.Database != dbPath {
+			t.Fatalf("expected database path %q, got %q", dbPath, schema.Database)
+		}
+		if got := schema.Table("users"); got == nil {
+			t.Fatal("expected users table in normalized schema")
+		} else if len(got.Columns) != 4 {
+			t.Fatalf("expected 4 columns in users table, got %d", len(got.Columns))
+		}
+	})
 }
 
 func TestDatabaseDisabled(t *testing.T) {
@@ -249,4 +277,42 @@ func TestDatabaseDisabled(t *testing.T) {
 
 	// Should return immediately without error
 	AnalyzeDatabaseSchema(idx, "/tmp", "laravel", cfg, nil, NewSchemaCache())
+}
+
+func TestScanSchemaDisabled(t *testing.T) {
+	disabled := false
+	cfg := &config.Config{DatabaseEnabled: &disabled}
+
+	schema, err := ScanSchema("/tmp", "laravel", cfg, nil, NewSchemaCache())
+	if err != nil {
+		t.Fatalf("ScanSchema() error = %v", err)
+	}
+	if schema == nil {
+		t.Fatal("expected none schema when database is disabled")
+	}
+	if schema.Source != SchemaSourceNone {
+		t.Fatalf("expected none source, got %q", schema.Source)
+	}
+}
+
+func TestScanSchemaFallsBackToMigrations(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "laravel")
+	cfg := &config.Config{Framework: "laravel", DatabaseSource: "migrations"}
+
+	schema, err := ScanSchema(root, "laravel", cfg, nil, NewSchemaCache())
+	if err != nil {
+		t.Fatalf("ScanSchema() error = %v", err)
+	}
+	if schema == nil {
+		t.Fatal("expected schema")
+	}
+	if schema.Source != SchemaSourceMigrations {
+		t.Fatalf("expected migrations source, got %q", schema.Source)
+	}
+	if schema.Connected {
+		t.Fatal("expected disconnected schema for migrations fallback")
+	}
+	if got := schema.Table("users"); got == nil {
+		t.Fatal("expected users table from migrations")
+	}
 }

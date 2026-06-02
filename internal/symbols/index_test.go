@@ -733,3 +733,25 @@ func TestIndexReadyStartsFalseAndCanBeMarkedReady(t *testing.T) {
 		t.Fatal("MarkReady must be idempotent")
 	}
 }
+
+func TestWarmSearchIndexesBuildsSortedCaches(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFileWithSource("file:///tmp/User.php", "<?php class User {}", SourceProject)
+	idx.IndexFileWithSource("file:///tmp/Admin.php", "<?php class Admin extends User {}", SourceProject)
+
+	if !idx.sortedNamesDirty || !idx.sortedFQNsDirty {
+		t.Fatal("expected new indexed symbols to mark sorted caches dirty")
+	}
+
+	idx.WarmSearchIndexes()
+
+	if idx.sortedNamesDirty {
+		t.Fatal("expected WarmSearchIndexes to clear sortedNamesDirty")
+	}
+	if idx.sortedFQNsDirty {
+		t.Fatal("expected WarmSearchIndexes to clear sortedFQNsDirty")
+	}
+	if len(idx.sortedNames) == 0 || len(idx.sortedFQNs) == 0 {
+		t.Fatal("expected warmed sorted caches to be populated")
+	}
+}

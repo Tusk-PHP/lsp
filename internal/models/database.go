@@ -26,11 +26,33 @@ const connectTimeout = 5 * time.Second
 
 // SchemaColumn represents a single column from the database schema.
 type SchemaColumn struct {
-	Name       string
-	DataType   string
-	IsNullable bool
-	ColumnType string // full type, e.g. "tinyint(1)"
+	Name       string `json:"name"`
+	DataType   string `json:"dataType"`
+	IsNullable bool   `json:"isNullable"`
+	ColumnType string `json:"columnType"` // full type, e.g. "tinyint(1)"
 }
+
+// SchemaTable represents a database table and its columns.
+type SchemaTable struct {
+	Name    string         `json:"name"`
+	Columns []SchemaColumn `json:"columns"`
+}
+
+// Schema is a normalized read model of the live database schema.
+type Schema struct {
+	Source     string        `json:"source"`
+	Connection string        `json:"connection"`
+	Database   string        `json:"database"`
+	Connected  bool          `json:"connected"`
+	Caveat     string        `json:"caveat,omitempty"`
+	Tables     []SchemaTable `json:"tables"`
+}
+
+const (
+	SchemaSourceLive       = "live"
+	SchemaSourceMigrations = "migrations"
+	SchemaSourceNone       = "none"
+)
 
 // SchemaCache holds cached schema results per table.
 type SchemaCache struct {
@@ -118,44 +140,83 @@ func mapSQLTypeToPhp(dataType, columnType string) string {
 // AnalyzeDatabaseSchema connects to the project's database and injects virtual
 // properties for model/entity columns discovered from the schema.
 func AnalyzeDatabaseSchema(index *symbols.Index, rootPath, framework string, cfg *config.Config, logger *log.Logger, cache *SchemaCache) {
-	if cfg != nil && !cfg.IsDatabaseEnabled() {
+	schema, err := ScanSchema(rootPath, framework, cfg, logger, cache)
+	if err != nil || schema == nil {
 		return
 	}
 
-	var dbCfg *config.DatabaseConfig
+	InjectDatabaseSchema(index, rootPath, framework, schema)
+}
+
+// InjectDatabaseSchema injects virtual members from a normalized schema into
+// framework model/entity symbols. It does not perform any database I/O.
+func InjectDatabaseSchema(index *symbols.Index, rootPath, framework string, schema *Schema) {
+	if schema == nil {
+		return
+	}
+
 	switch framework {
 	case "laravel":
-		dbCfg = config.ParseLaravelDatabaseConfig(rootPath)
+		injectLaravelSchemaProperties(index, schema, rootPath)
 	case "symfony":
-		dbCfg = config.ParseSymfonyDatabaseConfig(rootPath)
-	default:
-		return
+		injectSymfonySchemaProperties(index, schema, rootPath)
+	}
+}
+
+// ScanSchema connects to the project's configured database and returns a
+// normalized schema snapshot without mutating the symbol index.
+func ScanSchema(rootPath, framework string, cfg *config.Config, logger *log.Logger, cache *SchemaCache) (*Schema, error) {
+	if cfg != nil && !cfg.IsDatabaseEnabled() {
+		return &Schema{Source: SchemaSourceNone, Caveat: "database introspection disabled"}, nil
 	}
 
-	if dbCfg == nil || dbCfg.Database == "" {
-		return
+	dbCfg := resolveDatabaseConfig(rootPath, framework)
+	mode := "auto"
+	if cfg != nil {
+		mode = cfg.DatabaseSourceMode()
 	}
 
-	db, err := openDatabase(dbCfg)
-	if err != nil {
-		// Silently fail — database may not be running
+	base := &Schema{Source: SchemaSourceNone}
+	if dbCfg != nil {
+		base.Connection = dbCfg.Driver
+		base.Database = dbCfg.Database
+	}
+
+	if mode != "migrations" && dbCfg != nil && dbCfg.Database != "" {
+		db, err := openDatabase(dbCfg)
+		if err == nil {
+			defer db.Close()
+			if logger != nil {
+				logger.Printf("Connected to %s database: %s", dbCfg.Driver, dbCfg.Database)
+			}
+			schema, scanErr := scanSchemaFromDB(db, dbCfg, cache)
+			if scanErr != nil {
+				return nil, scanErr
+			}
+			schema.Source = SchemaSourceLive
+			schema.Connected = true
+			return schema, nil
+		}
 		if logger != nil {
 			logger.Printf("Database connection failed (will use fallback sources): %v", err)
 		}
-		return
-	}
-	defer db.Close()
-
-	if logger != nil {
-		logger.Printf("Connected to %s database: %s", dbCfg.Driver, dbCfg.Database)
+		if mode == "live" {
+			base.Caveat = "live database unavailable"
+			return base, nil
+		}
 	}
 
-	switch framework {
-	case "laravel":
-		injectLaravelSchemaProperties(index, db, dbCfg, rootPath, cache)
-	case "symfony":
-		injectSymfonySchemaProperties(index, db, dbCfg, rootPath, cache)
+	if framework == "laravel" && mode != "live" {
+		if schema := ScanMigrationSchema(rootPath); schema != nil {
+			schema.Connection = base.Connection
+			schema.Database = base.Database
+			return schema, nil
+		}
 	}
+	if base.Caveat == "" {
+		base.Caveat = "no live database or migration-derived schema available"
+	}
+	return base, nil
 }
 
 func openDatabase(cfg *config.DatabaseConfig) (*sql.DB, error) {
@@ -196,6 +257,17 @@ func openDatabase(cfg *config.DatabaseConfig) (*sql.DB, error) {
 	db.SetMaxIdleConns(0)
 
 	return db, nil
+}
+
+func resolveDatabaseConfig(rootPath, framework string) *config.DatabaseConfig {
+	switch framework {
+	case "laravel":
+		return config.ParseLaravelDatabaseConfig(rootPath)
+	case "symfony":
+		return config.ParseSymfonyDatabaseConfig(rootPath)
+	default:
+		return nil
+	}
 }
 
 func queryColumns(db *sql.DB, dbName, tableName string) ([]SchemaColumn, error) {
@@ -284,9 +356,99 @@ func queryColumnsSQLite(db *sql.DB, tableName string) ([]SchemaColumn, error) {
 	return cols, rows.Err()
 }
 
+func queryTableNames(db *sql.DB, cfg *config.DatabaseConfig) ([]string, error) {
+	switch cfg.Driver {
+	case "mysql":
+		return queryTableNamesMySQL(db, cfg.Database)
+	case "pgsql":
+		return queryTableNamesPostgres(db, cfg.Database)
+	case "sqlite":
+		return queryTableNamesSQLite(db)
+	default:
+		return nil, fmt.Errorf("unsupported driver: %s", cfg.Driver)
+	}
+}
+
+func queryTableNamesMySQL(db *sql.DB, dbName string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+	defer cancel()
+
+	rows, err := db.QueryContext(ctx,
+		`SELECT TABLE_NAME
+		 FROM INFORMATION_SCHEMA.TABLES
+		 WHERE TABLE_SCHEMA = ?
+		 ORDER BY TABLE_NAME`, dbName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var table string
+		if err := rows.Scan(&table); err != nil {
+			continue
+		}
+		tables = append(tables, table)
+	}
+	return tables, rows.Err()
+}
+
+func queryTableNamesPostgres(db *sql.DB, dbName string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+	defer cancel()
+
+	rows, err := db.QueryContext(ctx,
+		`SELECT table_name
+		 FROM information_schema.tables
+		 WHERE table_catalog = $1 AND table_schema = 'public'
+		 ORDER BY table_name`, dbName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var table string
+		if err := rows.Scan(&table); err != nil {
+			continue
+		}
+		tables = append(tables, table)
+	}
+	return tables, rows.Err()
+}
+
+func queryTableNamesSQLite(db *sql.DB) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+	defer cancel()
+
+	rows, err := db.QueryContext(ctx,
+		`SELECT name
+		 FROM sqlite_master
+		 WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+		 ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var table string
+		if err := rows.Scan(&table); err != nil {
+			continue
+		}
+		tables = append(tables, table)
+	}
+	return tables, rows.Err()
+}
+
 func getTableColumns(db *sql.DB, cfg *config.DatabaseConfig, tableName string, cache *SchemaCache) []SchemaColumn {
-	if cols, ok := cache.Get(tableName); ok {
-		return cols
+	if cache != nil {
+		if cols, ok := cache.Get(tableName); ok {
+			return cols
+		}
 	}
 
 	var cols []SchemaColumn
@@ -304,26 +466,82 @@ func getTableColumns(db *sql.DB, cfg *config.DatabaseConfig, tableName string, c
 		return nil
 	}
 
-	cache.Set(tableName, cols)
+	if cache != nil {
+		cache.Set(tableName, cols)
+	}
 	return cols
 }
 
+func scanSchemaFromDB(db *sql.DB, cfg *config.DatabaseConfig, cache *SchemaCache) (*Schema, error) {
+	tables, err := queryTableNames(db, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	schema := &Schema{
+		Source:     SchemaSourceLive,
+		Connection: cfg.Driver,
+		Database:   cfg.Database,
+		Connected:  true,
+		Tables:     make([]SchemaTable, 0, len(tables)),
+	}
+
+	for _, table := range tables {
+		cols := getTableColumns(db, cfg, table, cache)
+		if cols == nil {
+			continue
+		}
+		schema.Tables = append(schema.Tables, SchemaTable{
+			Name:    table,
+			Columns: cols,
+		})
+	}
+
+	return schema, nil
+}
+
+func (s *Schema) Table(name string) *SchemaTable {
+	if s == nil || name == "" {
+		return nil
+	}
+	for i := range s.Tables {
+		if s.Tables[i].Name == name {
+			return &s.Tables[i]
+		}
+	}
+	return nil
+}
+
+func (s *Schema) TableNames() []string {
+	if s == nil {
+		return nil
+	}
+	names := make([]string, 0, len(s.Tables))
+	for _, table := range s.Tables {
+		names = append(names, table.Name)
+	}
+	return names
+}
+
 // injectLaravelSchemaProperties resolves table names for Laravel models and injects columns.
-func injectLaravelSchemaProperties(index *symbols.Index, db *sql.DB, cfg *config.DatabaseConfig, rootPath string, cache *SchemaCache) {
+func injectLaravelSchemaProperties(index *symbols.Index, schema *Schema, rootPath string) {
 	models := index.GetDescendants("Illuminate\\Database\\Eloquent\\Model")
 	for _, model := range models {
-		tableName := resolveModelTableName(index, model, rootPath)
+		tableName := ResolveModelTableName(index, model, rootPath)
 		if tableName == "" {
 			continue
 		}
 
-		cols := getTableColumns(db, cfg, tableName, cache)
-		injectColumnsAsProperties(index, model, cols)
+		table := schema.Table(tableName)
+		if table == nil {
+			continue
+		}
+		injectColumnsAsProperties(index, model, table.Columns)
 	}
 }
 
 // injectSymfonySchemaProperties resolves table names for Doctrine entities and injects columns.
-func injectSymfonySchemaProperties(index *symbols.Index, db *sql.DB, cfg *config.DatabaseConfig, rootPath string, cache *SchemaCache) {
+func injectSymfonySchemaProperties(index *symbols.Index, schema *Schema, rootPath string) {
 	uris := index.GetAllFileURIs()
 	for _, uri := range uris {
 		path := symbols.URIToPath(uri)
@@ -352,8 +570,11 @@ func injectSymfonySchemaProperties(index *symbols.Index, db *sql.DB, cfg *config
 				continue
 			}
 
-			cols := getTableColumns(db, cfg, tableName, cache)
-			injectColumnsAsProperties(index, sym, cols)
+			table := schema.Table(tableName)
+			if table == nil {
+				continue
+			}
+			injectColumnsAsProperties(index, sym, table.Columns)
 		}
 	}
 }
@@ -386,7 +607,7 @@ func injectColumnsAsProperties(index *symbols.Index, classSym *symbols.Symbol, c
 }
 
 // resolveModelTableName determines the database table name for a Laravel Eloquent model.
-func resolveModelTableName(index *symbols.Index, model *symbols.Symbol, rootPath string) string {
+func ResolveModelTableName(index *symbols.Index, model *symbols.Symbol, rootPath string) string {
 	// Check for explicit $table property
 	tableProp := index.Lookup(model.FQN + "::$table")
 	if tableProp != nil && tableProp.Value != "" {

@@ -757,6 +757,27 @@ func (idx *Index) SearchByFQNPrefix(prefix string) ([]*Symbol, []string) {
 	return syms, nsSegments
 }
 
+// WarmSearchIndexes eagerly builds the sorted lookup slices used by prefix and
+// FQN-prefix search so serving reads can stay on the read lock path only.
+func (idx *Index) WarmSearchIndexes() {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+
+	if idx.sortedNamesDirty || len(idx.sortedNames) == 0 {
+		idx.sortedNames = make([]string, 0, len(idx.nameIndex))
+		for name := range idx.nameIndex {
+			idx.sortedNames = append(idx.sortedNames, name)
+		}
+		sort.Slice(idx.sortedNames, func(i, j int) bool {
+			return strings.ToLower(idx.sortedNames[i]) < strings.ToLower(idx.sortedNames[j])
+		})
+		idx.sortedNamesDirty = false
+	}
+	if idx.sortedFQNsDirty || len(idx.sortedFQNs) == 0 {
+		idx.rebuildSortedFQNs()
+	}
+}
+
 func (idx *Index) GetFileSymbols(uri string) []*Symbol {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()

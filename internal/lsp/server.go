@@ -28,11 +28,10 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/phpdetect"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
-	"github.com/Tusk-PHP/lsp/internal/stubs"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
 const ServerName = "tusk-php"
@@ -46,27 +45,28 @@ const ServerVersion = "0.5.0"
 const largeDocThreshold = 5000
 
 type Server struct {
-	cfg         *config.Config
-	index       *symbols.Index
-	container   *container.ContainerAnalyzer
-	completion  *completion.Provider
+	cfg           *config.Config
+	workspace     *workspace.Bootstrapped
+	index         *symbols.Index
+	container     *container.ContainerAnalyzer
+	completion    *completion.Provider
 	hover         *hover.Provider
 	composerHover *cardhover.Provider
-	inlayHint   *inlayhint.Provider
-	diag        *diagnostics.Provider
-	analyzer    *analyzer.Analyzer
-	routeIndex  *frameworklaravel.RouteIndex
-	schemaCache *models.SchemaCache
-	docMu       sync.RWMutex
-	documents   map[string]string
-	rootPath    string
-	framework   string
-	reader      *bufio.Reader
-	writer      io.Writer
-	logger      *log.Logger
-	shutdown    bool
-	strict      bool      // when true, recovered panics are re-raised after logging
-	exitFunc    func(int) // called by the "exit" notification handler; defaults to os.Exit
+	inlayHint     *inlayhint.Provider
+	diag          *diagnostics.Provider
+	analyzer      *analyzer.Analyzer
+	routeIndex    *frameworklaravel.RouteIndex
+	schemaCache   *models.SchemaCache
+	docMu         sync.RWMutex
+	documents     map[string]string
+	rootPath      string
+	framework     string
+	reader        *bufio.Reader
+	writer        io.Writer
+	logger        *log.Logger
+	shutdown      bool
+	strict        bool      // when true, recovered panics are re-raised after logging
+	exitFunc      func(int) // called by the "exit" notification handler; defaults to os.Exit
 
 	builtinPHPVersion string
 	builtinPHPSource  string // "composer" | "local" | "fallback"
@@ -355,16 +355,20 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	}
 	s.logger.Printf("Detected framework: %s", s.framework)
 	profile := s.resolveBuiltinProfile()
-	s.index.RegisterBuiltinsForProfile(profile)
-	s.container = container.NewContainerAnalyzer(s.index, s.rootPath, s.framework)
+	s.workspace = workspace.New(workspace.Options{
+		RootPath:       s.rootPath,
+		Framework:      s.framework,
+		Config:         s.cfg,
+		Logger:         s.logger,
+		BuiltinProfile: profile,
+	})
+	s.index = s.workspace.Index
+	s.container = s.workspace.Container
+	s.routeIndex = s.workspace.RouteIndex
+	s.schemaCache = s.workspace.SchemaCache
 	arrayResolver := models.NewFrameworkArrayResolver(s.index, s.rootPath, s.framework)
 	viewResolver := frameworklaravel.NewViews(s.rootPath)
 	translationResolver := frameworklaravel.NewTranslationResolver(s.rootPath)
-	if s.framework == "laravel" {
-		s.routeIndex = frameworklaravel.NewRouteIndex(s.rootPath)
-	} else {
-		s.routeIndex = nil
-	}
 	s.completion = completion.NewProvider(s.index, s.container, s.framework)
 	s.completion.SetArrayResolver(arrayResolver)
 	if s.routeIndex != nil {
@@ -447,41 +451,6 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	})
 }
 
-// resolvePHPProfile is the pure core of the PHP version fallback chain. It
-// applies the following priority order:
-//  1. composer.json (config.platform.php or require.php)
-//  2. locally installed php binary (via phpdetect)
-//  3. bundled default (stubs.DefaultProfile)
-//
-// It returns the resolved profile and a source string ("composer", "local", or
-// "fallback") so callers can log provenance. The logf callback receives a single
-// human-readable message for surfacing to the user; it may be nil. A timeout
-// <= 0 falls back to phpdetect.DefaultTimeout.
-func resolvePHPProfile(rootPath, phpBinary string, timeout time.Duration, logf func(string)) (symbols.BuiltinProfile, string) {
-	platform := composer.GetPlatform(rootPath)
-	profile := symbols.BuiltinProfile{Extensions: platform.Extensions}
-	var source string
-
-	switch {
-	case platform.PHPVersion != "":
-		profile.PHPVersion = platform.PHPVersion
-		source = "composer"
-	default:
-		if local, err := phpdetect.Detect(phpBinary, timeout); err == nil && local.Version != "" {
-			profile.PHPVersion = local.Version
-			source = "local"
-		} else {
-			profile.PHPVersion = stubs.DefaultProfile().PHPVersion
-			source = "fallback"
-		}
-	}
-
-	if logf != nil {
-		logf(fmt.Sprintf("PHP LSP: PHP %s (source: %s)", profile.PHPVersion, source))
-	}
-	return profile, source
-}
-
 // resolveBuiltinProfile applies the PHP profile fallback chain:
 //  1. composer.json (config.platform.php or require.php)
 //  2. locally installed php binary (via phpdetect)
@@ -490,7 +459,7 @@ func resolvePHPProfile(rootPath, phpBinary string, timeout time.Duration, logf f
 // The resolved profile is cached on the Server and surfaced via window/logMessage.
 func (s *Server) resolveBuiltinProfile() symbols.BuiltinProfile {
 	timeout := time.Duration(s.cfg.PHPDetectTimeoutMs) * time.Millisecond
-	profile, source := resolvePHPProfile(s.rootPath, s.cfg.PHPBinary, timeout, func(msg string) {
+	profile, source := workspace.ResolveBuiltinProfile(s.rootPath, s.cfg.PHPBinary, timeout, func(msg string) {
 		s.sendNotification("window/logMessage", map[string]interface{}{
 			"type":    protocol.MessageTypeInfo,
 			"message": msg,
@@ -506,38 +475,31 @@ func (s *Server) handleInitialized(msg *jsonRPCMessage) {
 	indexWg.Add(2)
 	s.goSafe("indexWorkspace", func() {
 		defer indexWg.Done()
-		s.indexWorkspace()
+		count := s.workspace.IndexWorkspace()
+		s.sendNotification("window/logMessage", map[string]interface{}{"type": protocol.MessageTypeInfo, "message": fmt.Sprintf("PHP LSP: Indexed %d files (%s framework)", count, s.framework)})
 	})
 	s.goSafe("indexComposerDeps", func() {
 		defer indexWg.Done()
-		s.indexComposerDependencies()
+		vendorCount := s.workspace.IndexComposerDependencies()
+		if vendorCount > 0 {
+			s.sendNotification("window/logMessage", map[string]interface{}{"type": protocol.MessageTypeInfo, "message": fmt.Sprintf("PHP LSP: Indexed %d vendor files", vendorCount)})
+		}
 	})
 	s.goSafe("postIndexSettle", func() {
 		indexWg.Wait()
 		s.index.MarkReady()
 		s.republishOpenDocuments()
 	})
-	s.goSafe("container.Analyze", s.container.Analyze)
+	s.goSafe("container.Analyze", s.workspace.Container.Analyze)
 	if s.routeIndex != nil {
 		s.goSafe("laravelRoutes.ScanWorkspace", func() {
-			_ = s.routeIndex.ScanWorkspace()
+			_ = s.workspace.ScanRoutes()
 		})
 	}
 	// Run model analysis after both workspace and vendor indexing complete
 	s.goSafe("analyzeModels", func() {
 		indexWg.Wait()
-		if s.framework == "laravel" {
-			models.AnalyzeEloquentModels(s.index, s.rootPath)
-		}
-		if s.framework == "symfony" {
-			models.AnalyzeDoctrineEntities(s.index, s.rootPath)
-		}
-		// Database schema introspection runs after model analysis — other sources get priority
-		models.AnalyzeDatabaseSchema(s.index, s.rootPath, s.framework, s.cfg, s.logger, s.schemaCache)
-		// Migration analysis is the last resort fallback
-		if s.framework == "laravel" {
-			models.AnalyzeMigrations(s.index, s.rootPath)
-		}
+		s.workspace.AnalyzeModels()
 	})
 }
 
@@ -966,127 +928,12 @@ func (s *Server) republishOpenDocuments() {
 // indexFileByURI indexes a file, using the IDE helper merge strategy for known IDE helper files.
 func (s *Server) indexFileByURI(uri string, source string) {
 	path := symbols.URIToPath(uri)
-	if isIDEHelperFile(path) {
+	if workspace.IsIDEHelperFile(path) {
 		s.index.IndexIDEHelperFile(uri, source)
 	} else {
 		s.index.IndexFile(uri, source)
 	}
 	if s.routeIndex != nil {
 		s.routeIndex.IndexFile(uri, source)
-	}
-}
-
-// isIDEHelperFile returns true if the filename matches known IDE helper file patterns.
-func isIDEHelperFile(path string) bool {
-	base := filepath.Base(path)
-	return base == "_ide_helper_models.php" || base == "_ide_helper.php"
-}
-
-func (s *Server) indexWorkspace() {
-	s.logger.Printf("Indexing workspace: %s", s.rootPath)
-	count := 0
-	var ideHelperFiles []string
-	filepath.Walk(s.rootPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if info.IsDir() {
-			for _, ex := range s.cfg.ExcludePaths {
-				if filepath.Base(path) == ex {
-					return filepath.SkipDir
-				}
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".php") {
-			return nil
-		}
-		if count >= s.cfg.MaxIndexFiles {
-			return filepath.SkipAll
-		}
-		// Defer IDE helper files so they merge into already-indexed model classes
-		if isIDEHelperFile(path) {
-			ideHelperFiles = append(ideHelperFiles, path)
-			return nil
-		}
-		if content, err := os.ReadFile(path); err == nil {
-			func() {
-				defer s.recoverPanic("indexWorkspace:" + path)
-				s.index.IndexFileWithSource("file://"+path, string(content), symbols.SourceProject)
-				count++
-			}()
-		}
-		return nil
-	})
-
-	// Index IDE helper files after all other project files so virtual members
-	// merge into existing class symbols rather than being overwritten.
-	for _, path := range ideHelperFiles {
-		if content, err := os.ReadFile(path); err == nil {
-			func() {
-				defer s.recoverPanic("indexIDEHelper:" + path)
-				s.index.IndexIDEHelperFile("file://"+path, string(content))
-				count++
-			}()
-			s.logger.Printf("Indexed IDE helper: %s", filepath.Base(path))
-		}
-	}
-
-	s.logger.Printf("Indexed %d PHP files", count)
-	s.sendNotification("window/logMessage", map[string]interface{}{"type": protocol.MessageTypeInfo, "message": fmt.Sprintf("PHP LSP: Indexed %d files (%s framework)", count, s.framework)})
-}
-
-func (s *Server) indexComposerDependencies() {
-	entries := composer.GetAutoloadPaths(s.rootPath)
-	if len(entries) == 0 {
-		return
-	}
-	vendorCount := 0
-	for _, entry := range entries {
-		src := symbols.SourceProject
-		if entry.IsVendor {
-			src = symbols.SourceVendor
-		}
-
-		if entry.IsFile {
-			if content, err := os.ReadFile(entry.Path); err == nil {
-				func() {
-					defer s.recoverPanic("indexFile:" + entry.Path)
-					s.index.IndexFileWithSource("file://"+entry.Path, string(content), src)
-					if entry.IsVendor {
-						vendorCount++
-					}
-				}()
-			}
-			continue
-		}
-
-		if !entry.IsVendor {
-			continue
-		}
-		info, err := os.Stat(entry.Path)
-		if err != nil || !info.IsDir() {
-			continue
-		}
-		filepath.Walk(entry.Path, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() {
-				return nil
-			}
-			if !strings.HasSuffix(path, ".php") {
-				return nil
-			}
-			if content, err := os.ReadFile(path); err == nil {
-				func() {
-					defer s.recoverPanic("indexVendor:" + path)
-					s.index.IndexFileWithSource("file://"+path, string(content), symbols.SourceVendor)
-					vendorCount++
-				}()
-			}
-			return nil
-		})
-	}
-	s.logger.Printf("Indexed %d vendor PHP files from Composer dependencies", vendorCount)
-	if vendorCount > 0 {
-		s.sendNotification("window/logMessage", map[string]interface{}{"type": protocol.MessageTypeInfo, "message": fmt.Sprintf("PHP LSP: Indexed %d vendor files", vendorCount)})
 	}
 }
