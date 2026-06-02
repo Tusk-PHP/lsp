@@ -13,9 +13,14 @@ import (
 )
 
 type RouteName struct {
-	Name  string
-	URI   string
-	Range protocol.Range
+	Name          string
+	Path          string
+	URI           string
+	Range         protocol.Range
+	TargetKind    string
+	Target        string
+	HandlerFQN    string
+	HandlerMethod string
 }
 
 type RouteIndex struct {
@@ -65,7 +70,7 @@ func (idx *RouteIndex) IndexFile(uri, source string) {
 		return
 	}
 
-	routes := parseRouteNames(uri, source)
+	routes := parseRouteDefinitions(uri, source)
 
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -113,6 +118,33 @@ func (idx *RouteIndex) Find(name string) *RouteName {
 	return &route
 }
 
+func (idx *RouteIndex) All() []RouteName {
+	if idx == nil {
+		return nil
+	}
+
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	var routes []RouteName
+	for _, entries := range idx.byName {
+		routes = append(routes, entries...)
+	}
+	sort.Slice(routes, func(i, j int) bool {
+		if routes[i].Name != routes[j].Name {
+			return routes[i].Name < routes[j].Name
+		}
+		if routes[i].URI != routes[j].URI {
+			return routes[i].URI < routes[j].URI
+		}
+		if routes[i].Range.Start.Line != routes[j].Range.Start.Line {
+			return routes[i].Range.Start.Line < routes[j].Range.Start.Line
+		}
+		return routes[i].Range.Start.Character < routes[j].Range.Start.Character
+	})
+	return routes
+}
+
 func (idx *RouteIndex) removeRouteLocked(route RouteName) {
 	entries := idx.byName[route.Name]
 	if len(entries) == 0 {
@@ -150,54 +182,112 @@ func (idx *RouteIndex) sortRouteDefsLocked(name string) {
 	})
 }
 
-func parseRouteNames(uri, source string) []RouteName {
+var supportedRouteMethods = map[string]bool{
+	"get":      true,
+	"post":     true,
+	"put":      true,
+	"patch":    true,
+	"delete":   true,
+	"options":  true,
+	"match":    true,
+	"any":      true,
+	"view":     true,
+	"livewire": true,
+	"redirect": true,
+}
+
+func parseRouteDefinitions(uri, source string) []RouteName {
 	result := parser.New().Parse(source)
+	file := parser.ParseFile(source)
 	var routes []RouteName
 
 	for i := 0; i < len(result.Tokens); i++ {
-		if result.Tokens[i].Kind != parser.TokenArrow {
+		if result.Tokens[i].Kind != parser.TokenIdentifier || result.Tokens[i].Value != "Route" {
 			continue
 		}
-
-		nameTok := nextSignificantToken(result.Tokens, i+1)
-		if nameTok < 0 || result.Tokens[nameTok].Kind != parser.TokenIdentifier || result.Tokens[nameTok].Value != "name" {
+		doubleColon := nextSignificantToken(result.Tokens, i+1)
+		if doubleColon < 0 || result.Tokens[doubleColon].Kind != parser.TokenDoubleColon {
 			continue
 		}
-
-		openTok := nextSignificantToken(result.Tokens, nameTok+1)
-		if openTok < 0 || result.Tokens[openTok].Kind != parser.TokenOpenParen {
+		methodTok := nextSignificantToken(result.Tokens, doubleColon+1)
+		if methodTok < 0 || result.Tokens[methodTok].Kind != parser.TokenIdentifier {
 			continue
 		}
-
-		valueTok := nextSignificantToken(result.Tokens, openTok+1)
-		if valueTok < 0 || result.Tokens[valueTok].Kind != parser.TokenStringLiteral {
+		method := result.Tokens[methodTok].Value
+		if !supportedRouteMethods[method] {
 			continue
 		}
-
-		raw := result.Tokens[valueTok].Value
-		name := trimQuotedLiteral(raw)
-		if name == "" {
+		route, _, ok := parseRouteDefinition(result.Tokens, uri, methodTok, method, file)
+		if !ok {
 			continue
 		}
-
-		startCol := result.Tokens[valueTok].Column
-		endCol := startCol + len(raw)
-		if len(raw) >= 2 {
-			startCol++
-			endCol--
-		}
-
-		routes = append(routes, RouteName{
-			Name: name,
-			URI:  uri,
-			Range: protocol.Range{
-				Start: protocol.Position{Line: result.Tokens[valueTok].Line, Character: startCol},
-				End:   protocol.Position{Line: result.Tokens[valueTok].Line, Character: endCol},
-			},
-		})
+		routes = append(routes, route)
 	}
 
 	return routes
+}
+
+func parseRouteDefinition(tokens []parser.Token, uri string, methodTok int, method string, file *parser.FileNode) (RouteName, int, bool) {
+	openTok := nextSignificantToken(tokens, methodTok+1)
+	if openTok < 0 || tokens[openTok].Kind != parser.TokenOpenParen {
+		return RouteName{}, -1, false
+	}
+	closeTok := findMatchingToken(tokens, openTok, parser.TokenOpenParen, parser.TokenCloseParen)
+	if closeTok < 0 {
+		return RouteName{}, -1, false
+	}
+
+	args := splitTopLevelArgs(tokens, openTok+1, closeTok)
+	route := RouteName{URI: uri}
+	if len(args) > 0 {
+		if path, ok := firstStringLiteral(args[0]); ok {
+			route.Path = path
+		}
+	}
+	route.TargetKind, route.Target, route.HandlerFQN, route.HandlerMethod = parseRouteTarget(method, args, file)
+
+	end := closeTok
+	for i := closeTok + 1; i < len(tokens); i++ {
+		switch tokens[i].Kind {
+		case parser.TokenSemicolon:
+			end = i
+			return route, end, route.Name != ""
+		case parser.TokenArrow:
+			nameTok := nextSignificantToken(tokens, i+1)
+			if nameTok < 0 || tokens[nameTok].Kind != parser.TokenIdentifier {
+				continue
+			}
+			if tokens[nameTok].Value != "name" {
+				continue
+			}
+			nameOpen := nextSignificantToken(tokens, nameTok+1)
+			if nameOpen < 0 || tokens[nameOpen].Kind != parser.TokenOpenParen {
+				continue
+			}
+			valueTok := nextSignificantToken(tokens, nameOpen+1)
+			if valueTok < 0 || tokens[valueTok].Kind != parser.TokenStringLiteral {
+				continue
+			}
+			raw := tokens[valueTok].Value
+			name := trimQuotedLiteral(raw)
+			if name == "" {
+				continue
+			}
+			startCol := tokens[valueTok].Column
+			endCol := startCol + len(raw)
+			if len(raw) >= 2 {
+				startCol++
+				endCol--
+			}
+			route.Name = name
+			route.Range = protocol.Range{
+				Start: protocol.Position{Line: tokens[valueTok].Line, Character: startCol},
+				End:   protocol.Position{Line: tokens[valueTok].Line, Character: endCol},
+			}
+		}
+	}
+
+	return route, end, route.Name != ""
 }
 
 func nextSignificantToken(tokens []parser.Token, start int) int {
@@ -217,6 +307,209 @@ func trimQuotedLiteral(raw string) string {
 		return raw[1 : len(raw)-1]
 	}
 	return raw
+}
+
+func findMatchingToken(tokens []parser.Token, openIdx int, openKind, closeKind parser.TokenKind) int {
+	depth := 0
+	for i := openIdx; i < len(tokens); i++ {
+		switch tokens[i].Kind {
+		case openKind:
+			depth++
+		case closeKind:
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func splitTopLevelArgs(tokens []parser.Token, start, end int) [][]parser.Token {
+	var args [][]parser.Token
+	argStart := start
+	parenDepth, bracketDepth, braceDepth := 0, 0, 0
+	for i := start; i < end; i++ {
+		switch tokens[i].Kind {
+		case parser.TokenOpenParen:
+			parenDepth++
+		case parser.TokenCloseParen:
+			parenDepth--
+		case parser.TokenOpenBracket:
+			bracketDepth++
+		case parser.TokenCloseBracket:
+			bracketDepth--
+		case parser.TokenOpenBrace:
+			braceDepth++
+		case parser.TokenCloseBrace:
+			braceDepth--
+		case parser.TokenComma:
+			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
+				args = append(args, trimInsignificantTokens(tokens[argStart:i]))
+				argStart = i + 1
+			}
+		}
+	}
+	if argStart <= end {
+		args = append(args, trimInsignificantTokens(tokens[argStart:end]))
+	}
+	return args
+}
+
+func trimInsignificantTokens(tokens []parser.Token) []parser.Token {
+	start := 0
+	for start < len(tokens) && isInsignificant(tokens[start].Kind) {
+		start++
+	}
+	end := len(tokens)
+	for end > start && isInsignificant(tokens[end-1].Kind) {
+		end--
+	}
+	return tokens[start:end]
+}
+
+func isInsignificant(kind parser.TokenKind) bool {
+	return kind == parser.TokenWhitespace || kind == parser.TokenComment || kind == parser.TokenDocComment
+}
+
+func firstStringLiteral(tokens []parser.Token) (string, bool) {
+	tokens = trimInsignificantTokens(tokens)
+	if len(tokens) == 0 || tokens[0].Kind != parser.TokenStringLiteral {
+		return "", false
+	}
+	return trimQuotedLiteral(tokens[0].Value), true
+}
+
+func parseRouteTarget(method string, args [][]parser.Token, file *parser.FileNode) (kind, target, handlerFQN, handlerMethod string) {
+	switch method {
+	case "view":
+		if len(args) > 1 {
+			if value, ok := firstStringLiteral(args[1]); ok {
+				return "view", value, "", ""
+			}
+		}
+		return "view", "", "", ""
+	case "livewire":
+		if len(args) > 1 {
+			if value, ok := firstStringLiteral(args[1]); ok {
+				return "livewire", value, "", ""
+			}
+		}
+		return "livewire", "", "", ""
+	case "redirect":
+		if len(args) > 1 {
+			if value, ok := firstStringLiteral(args[1]); ok {
+				return "redirect", value, "", ""
+			}
+		}
+		return "redirect", "", "", ""
+	default:
+		if len(args) < 2 {
+			return "route", "", "", ""
+		}
+		action := trimInsignificantTokens(args[1])
+		if className, methodName, ok := parseControllerArrayAction(action, file); ok {
+			return "controller", className + "@" + methodName, className, methodName
+		}
+		if value, ok := firstStringLiteral(action); ok {
+			if strings.Contains(value, "@") {
+				parts := strings.SplitN(value, "@", 2)
+				className := resolveRouteClassName(parts[0], file)
+				methodName := parts[1]
+				return "controller", className + "@" + methodName, className, methodName
+			}
+			return "string", value, "", ""
+		}
+		if className, ok := parseClassConstExpr(action, file); ok {
+			return "controller", className + "@__invoke", className, "__invoke"
+		}
+		return "route", tokenText(action), "", ""
+	}
+}
+
+func parseControllerArrayAction(tokens []parser.Token, file *parser.FileNode) (className, methodName string, ok bool) {
+	tokens = trimInsignificantTokens(tokens)
+	if len(tokens) < 5 || tokens[0].Kind != parser.TokenOpenBracket || tokens[len(tokens)-1].Kind != parser.TokenCloseBracket {
+		return "", "", false
+	}
+	body := trimInsignificantTokens(tokens[1 : len(tokens)-1])
+	commaIdx := -1
+	depth := 0
+	for i, tok := range body {
+		switch tok.Kind {
+		case parser.TokenOpenBracket, parser.TokenOpenParen, parser.TokenOpenBrace:
+			depth++
+		case parser.TokenCloseBracket, parser.TokenCloseParen, parser.TokenCloseBrace:
+			depth--
+		case parser.TokenComma:
+			if depth == 0 {
+				commaIdx = i
+				break
+			}
+		}
+	}
+	if commaIdx < 0 {
+		return "", "", false
+	}
+	classTokens := trimInsignificantTokens(body[:commaIdx])
+	methodTokens := trimInsignificantTokens(body[commaIdx+1:])
+	className, ok = parseClassConstExpr(classTokens, file)
+	if !ok {
+		return "", "", false
+	}
+	methodName, ok = firstStringLiteral(methodTokens)
+	if !ok || methodName == "" {
+		return "", "", false
+	}
+	return className, methodName, true
+}
+
+func parseClassConstExpr(tokens []parser.Token, file *parser.FileNode) (string, bool) {
+	tokens = trimInsignificantTokens(tokens)
+	if len(tokens) < 3 || tokens[len(tokens)-2].Kind != parser.TokenDoubleColon || tokens[len(tokens)-1].Kind != parser.TokenClass {
+		return "", false
+	}
+	classRef := tokenText(tokens[:len(tokens)-2])
+	if classRef == "" {
+		return "", false
+	}
+	return resolveRouteClassName(classRef, file), true
+}
+
+func tokenText(tokens []parser.Token) string {
+	var b strings.Builder
+	for _, tok := range tokens {
+		if isInsignificant(tok.Kind) {
+			continue
+		}
+		b.WriteString(tok.Value)
+	}
+	return b.String()
+}
+
+func resolveRouteClassName(name string, file *parser.FileNode) string {
+	name = strings.TrimSpace(name)
+	name = strings.TrimPrefix(name, `\`)
+	if name == "" {
+		return ""
+	}
+	if strings.Contains(name, `\`) {
+		return name
+	}
+	if file != nil {
+		for _, use := range file.Uses {
+			if use.Alias == name {
+				return use.FullName
+			}
+			if last := filepath.Base(strings.ReplaceAll(use.FullName, `\`, `/`)); last == name {
+				return use.FullName
+			}
+		}
+		if file.Namespace != "" {
+			return file.Namespace + `\` + name
+		}
+	}
+	return name
 }
 
 func isLaravelRouteFile(uri string) bool {
