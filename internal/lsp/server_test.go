@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/stubs"
+	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
 func testdataPath() string {
@@ -402,7 +403,7 @@ func TestResolveBuiltinProfilePrefersComposer(t *testing.T) {
 		t.Fatalf("failed to write composer.json: %v", err)
 	}
 
-	profile, source := resolvePHPProfile(dir, "", 500*time.Millisecond, nil)
+	profile, source := workspace.ResolveBuiltinProfile(dir, "", 500*time.Millisecond, nil)
 	if source != "composer" {
 		t.Errorf("expected source 'composer', got %q", source)
 	}
@@ -422,7 +423,7 @@ func TestResolveBuiltinProfileFallsBackToLocalPHP(t *testing.T) {
 		t.Fatalf("failed to write fake php script: %v", err)
 	}
 
-	profile, source := resolvePHPProfile(dir, scriptPath, 500*time.Millisecond, nil)
+	profile, source := workspace.ResolveBuiltinProfile(dir, scriptPath, 500*time.Millisecond, nil)
 	if source != "local" {
 		t.Errorf("expected source 'local', got %q", source)
 	}
@@ -436,7 +437,7 @@ func TestResolveBuiltinProfileUsesBundledDefault(t *testing.T) {
 	// No composer.json and a non-existent PHP binary path.
 	nonExistent := filepath.Join(dir, "nonexistent-php")
 
-	profile, source := resolvePHPProfile(dir, nonExistent, 500*time.Millisecond, nil)
+	profile, source := workspace.ResolveBuiltinProfile(dir, nonExistent, 500*time.Millisecond, nil)
 	if source != "fallback" {
 		t.Errorf("expected source 'fallback', got %q", source)
 	}

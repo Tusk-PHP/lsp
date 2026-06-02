@@ -171,6 +171,42 @@ func TestIsDatabaseEnabled(t *testing.T) {
 	})
 }
 
+func TestDatabaseSourceMode(t *testing.T) {
+	t.Run("default auto", func(t *testing.T) {
+		cfg := &Config{}
+		if got := cfg.DatabaseSourceMode(); got != "auto" {
+			t.Fatalf("DatabaseSourceMode() = %q", got)
+		}
+	})
+
+	t.Run("live", func(t *testing.T) {
+		cfg := &Config{DatabaseSource: "live"}
+		if got := cfg.DatabaseSourceMode(); got != "live" {
+			t.Fatalf("DatabaseSourceMode() = %q", got)
+		}
+	})
+
+	t.Run("migrations", func(t *testing.T) {
+		cfg := &Config{DatabaseSource: "migrations"}
+		if got := cfg.DatabaseSourceMode(); got != "migrations" {
+			t.Fatalf("DatabaseSourceMode() = %q", got)
+		}
+	})
+}
+
+func TestDefaultConfigAISafety(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.DB.Mode != "schema_only" {
+		t.Fatalf("expected schema_only DB mode, got %q", cfg.DB.Mode)
+	}
+	if cfg.AI.WriteTools != "disabled" {
+		t.Fatalf("expected disabled write tools, got %q", cfg.AI.WriteTools)
+	}
+	if len(cfg.AI.DenyPaths) == 0 {
+		t.Fatal("expected non-empty deny paths")
+	}
+}
+
 func TestDefaultConfigPHPManual(t *testing.T) {
 	cfg := DefaultConfig()
 	if cfg.PHPManualLocale != "" {

@@ -40,34 +40,51 @@ type ComposerConfig struct {
 	OpenOnDefinition bool                `json:"openOnDefinition,omitempty"`
 }
 
+type DBConfig struct {
+	Enabled       *bool    `json:"enabled,omitempty"`
+	Mode          string   `json:"mode,omitempty"`
+	Source        string   `json:"source,omitempty"`
+	RedactColumns []string `json:"redactColumns,omitempty"`
+}
+
+type AIConfig struct {
+	MCP          *bool    `json:"mcp,omitempty"`
+	WriteTools   string   `json:"writeTools,omitempty"`
+	AllowedRoots []string `json:"allowedRoots,omitempty"`
+	DenyPaths    []string `json:"denyPaths,omitempty"`
+}
+
 // Config holds the LSP server configuration.
 type Config struct {
-	PHPVersion         string           `json:"phpVersion"`
-	Framework          string           `json:"framework"`
-	ComposerPath       string           `json:"composerPath"`
-	IncludePaths       []string         `json:"includePaths"`
-	ExcludePaths       []string         `json:"excludePaths"`
-	ContainerAware     bool             `json:"containerAware"`
-	DiagnosticsEnabled bool             `json:"diagnosticsEnabled"`
-	PHPBinary          string           `json:"phpBinary,omitempty"`
-	PHPDetectTimeoutMs int              `json:"phpDetectTimeoutMs,omitempty"`
-	PHPStanEnabled     *bool            `json:"phpstanEnabled,omitempty"`
-	PHPStanPath        string           `json:"phpstanPath,omitempty"`
-	PHPStanLevel       string           `json:"phpstanLevel,omitempty"`
-	PHPStanConfig      string           `json:"phpstanConfig,omitempty"`
-	PintEnabled        *bool            `json:"pintEnabled,omitempty"`
-	PintPath           string           `json:"pintPath,omitempty"`
-	PintConfig         string           `json:"pintConfig,omitempty"`
-	DatabaseEnabled              *bool            `json:"databaseEnabled,omitempty"`
-	DiagnosticRules              map[string]bool  `json:"diagnosticRules,omitempty"`
-	MaxIndexFiles                int              `json:"maxIndexFiles"`
-	StubsPath                    string           `json:"stubsPath"`
-	LogLevel                     string           `json:"logLevel"`
-	LogFile                      string           `json:"logFile"`
-	InlayHints                   InlayHintsConfig `json:"inlayHints"`
-	PHPManualLocale              string           `json:"php_manual_locale,omitempty"`
-	PHPManualOpenOnDefinition    bool             `json:"php_manual_open_on_definition,omitempty"`
-	Composer                     ComposerConfig   `json:"composer,omitempty"`
+	PHPVersion                string           `json:"phpVersion"`
+	Framework                 string           `json:"framework"`
+	ComposerPath              string           `json:"composerPath"`
+	IncludePaths              []string         `json:"includePaths"`
+	ExcludePaths              []string         `json:"excludePaths"`
+	ContainerAware            bool             `json:"containerAware"`
+	DiagnosticsEnabled        bool             `json:"diagnosticsEnabled"`
+	PHPBinary                 string           `json:"phpBinary,omitempty"`
+	PHPDetectTimeoutMs        int              `json:"phpDetectTimeoutMs,omitempty"`
+	PHPStanEnabled            *bool            `json:"phpstanEnabled,omitempty"`
+	PHPStanPath               string           `json:"phpstanPath,omitempty"`
+	PHPStanLevel              string           `json:"phpstanLevel,omitempty"`
+	PHPStanConfig             string           `json:"phpstanConfig,omitempty"`
+	PintEnabled               *bool            `json:"pintEnabled,omitempty"`
+	PintPath                  string           `json:"pintPath,omitempty"`
+	PintConfig                string           `json:"pintConfig,omitempty"`
+	DatabaseEnabled           *bool            `json:"databaseEnabled,omitempty"`
+	DatabaseSource            string           `json:"databaseSource,omitempty"`
+	DiagnosticRules           map[string]bool  `json:"diagnosticRules,omitempty"`
+	MaxIndexFiles             int              `json:"maxIndexFiles"`
+	StubsPath                 string           `json:"stubsPath"`
+	LogLevel                  string           `json:"logLevel"`
+	LogFile                   string           `json:"logFile"`
+	InlayHints                InlayHintsConfig `json:"inlayHints"`
+	PHPManualLocale           string           `json:"php_manual_locale,omitempty"`
+	PHPManualOpenOnDefinition bool             `json:"php_manual_open_on_definition,omitempty"`
+	Composer                  ComposerConfig   `json:"composer,omitempty"`
+	DB                        DBConfig         `json:"db,omitempty"`
+	AI                        AIConfig         `json:"ai,omitempty"`
 }
 
 // IsRuleEnabled returns whether a diagnostic rule is enabled.
@@ -106,6 +123,13 @@ func DefaultConfig() *Config {
 		},
 		Composer: ComposerConfig{
 			Hover: ComposerHoverConfig{Enable: true, CacheTTLHours: 6, RequestTimeoutMs: 3000},
+		},
+		DB: DBConfig{
+			Mode: "schema_only",
+		},
+		AI: AIConfig{
+			WriteTools: "disabled",
+			DenyPaths:  []string{".env", "vendor", "storage"},
 		},
 	}
 }
@@ -230,7 +254,10 @@ func (c *Config) MergeClientOptions(opts *protocol.InitializationOptions) {
 // IsDatabaseEnabled returns whether database introspection is enabled (default: true).
 func (c *Config) IsDatabaseEnabled() bool {
 	if c.DatabaseEnabled == nil {
-		return true
+		if c.DB.Enabled == nil {
+			return true
+		}
+		return *c.DB.Enabled
 	}
 	return *c.DatabaseEnabled
 }
@@ -260,6 +287,46 @@ func DetectFramework(rootPath string) string {
 		}
 	}
 	return "none"
+}
+
+// DatabaseSourceMode returns the configured schema source mode:
+// "auto" (default), "live", or "migrations".
+func (c *Config) DatabaseSourceMode() string {
+	source := c.DatabaseSource
+	if source == "" {
+		source = c.DB.Source
+	}
+	switch source {
+	case "", "auto":
+		return "auto"
+	case "live":
+		return "live"
+	case "migrations":
+		return "migrations"
+	default:
+		return "auto"
+	}
+}
+
+func (c *Config) DatabaseMode() string {
+	switch c.DB.Mode {
+	case "", "schema_only":
+		return "schema_only"
+	case "sample_safe":
+		return "sample_safe"
+	case "full_query":
+		return "full_query"
+	default:
+		return "schema_only"
+	}
+}
+
+func (c *Config) AIRoots() []string {
+	return append([]string(nil), c.AI.AllowedRoots...)
+}
+
+func (c *Config) AIDenyPaths() []string {
+	return append([]string(nil), c.AI.DenyPaths...)
 }
 
 func fileExists(path string) bool {
