@@ -28,6 +28,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/symquery"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -745,41 +746,36 @@ func (s *Service) explainSymbol(sym *symbols.Symbol) SymbolExplanation {
 
 func (s *Service) findReferences(fqn string) ([]ReferenceLocation, error) {
 	rt := s.runtime()
-	sym := rt.Workspace.Index.Lookup(fqn)
-	if sym == nil {
-		return nil, fmt.Errorf("symbol %q not found", fqn)
-	}
-	if sym.URI == "" {
+
+	sym, ok := symquery.DeclarationByFQN(rt.Workspace.Index, fqn)
+	if !ok {
+		if rt.Workspace.Index.Lookup(fqn) == nil {
+			return nil, fmt.Errorf("symbol %q not found", fqn)
+		}
 		return nil, fmt.Errorf("symbol %q has no source URI", fqn)
 	}
 	if !s.isPathReadable(symbols.URIToPath(sym.URI)) {
 		return nil, fmt.Errorf("symbol %q is outside MCP allowed roots or inside denied paths", fqn)
 	}
 
-	source := rt.Workspace.Index.GetFileSource(sym.URI)
-	if source == "" {
-		data, err := os.ReadFile(symbols.URIToPath(sym.URI))
-		if err != nil {
-			return nil, err
-		}
-		source = string(data)
-	}
-
-	readDocument := func(uri string) string {
+	readSource := func(uri string) (string, bool) {
 		if !s.isPathReadable(symbols.URIToPath(uri)) {
-			return ""
+			return "", false
 		}
-		if source := rt.Workspace.Index.GetFileSource(uri); source != "" {
-			return source
+		if src := rt.Workspace.Index.GetFileSource(uri); src != "" {
+			return src, true
 		}
 		data, err := os.ReadFile(symbols.URIToPath(uri))
 		if err != nil {
-			return ""
+			return "", false
 		}
-		return string(data)
+		return string(data), true
 	}
 
-	locs := rt.Analyzer.FindAllReferences(sym.URI, source, sym.Range.Start, readDocument)
+	locs, ok := symquery.ReferencesByFQN(rt.Workspace.Index, rt.Analyzer, fqn, readSource)
+	if !ok {
+		return nil, fmt.Errorf("could not read source for symbol %q", fqn)
+	}
 	out := make([]ReferenceLocation, 0, len(locs))
 	for _, loc := range locs {
 		out = append(out, ReferenceLocation{URI: loc.URI, Range: loc.Range})
