@@ -42,6 +42,7 @@ func main() {
 		logger = log.New(os.Stderr, "[tusk-php] ", log.LstdFlags|log.Lshortfile)
 	}
 	logger.Printf("Starting tusk-php %s", version)
+	lsp.ServerVersion = version
 	server := lsp.NewServer(os.Stdin, os.Stdout, logger)
 	server.SetStrict(strict)
 	if err := server.Run(); err != nil {
