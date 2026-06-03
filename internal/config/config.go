@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
@@ -41,10 +42,12 @@ type ComposerConfig struct {
 }
 
 type DBConfig struct {
-	Enabled       *bool    `json:"enabled,omitempty"`
-	Mode          string   `json:"mode,omitempty"`
-	Source        string   `json:"source,omitempty"`
-	RedactColumns []string `json:"redactColumns,omitempty"`
+	Enabled           *bool    `json:"enabled,omitempty"`
+	Mode              string   `json:"mode,omitempty"`
+	Source            string   `json:"source,omitempty"`
+	AllowDataSampling *bool    `json:"allowDataSampling,omitempty"`
+	ConnectTimeoutMs  int      `json:"connectTimeoutMs,omitempty"`
+	RedactColumns     []string `json:"redactColumns,omitempty"`
 }
 
 type AIConfig struct {
@@ -319,6 +322,25 @@ func (c *Config) DatabaseMode() string {
 	default:
 		return "schema_only"
 	}
+}
+
+// AllowsDataSampling reports whether opt-in redacted row sampling is permitted.
+// Defaults to false — schema-only is the safe default.
+func (c *Config) AllowsDataSampling() bool {
+	return c.DB.AllowDataSampling != nil && *c.DB.AllowDataSampling
+}
+
+// DatabaseConnectTimeout returns the DB connect/query timeout. Defaults to 5s;
+// values below 1s are clamped up to avoid pathological near-zero timeouts.
+func (c *Config) DatabaseConnectTimeout() time.Duration {
+	if c.DB.ConnectTimeoutMs <= 0 {
+		return 5 * time.Second
+	}
+	d := time.Duration(c.DB.ConnectTimeoutMs) * time.Millisecond
+	if d < time.Second {
+		return time.Second
+	}
+	return d
 }
 
 func (c *Config) AIRoots() []string {

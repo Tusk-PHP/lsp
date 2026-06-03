@@ -22,7 +22,8 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-const connectTimeout = 5 * time.Second
+// defaultConnectTimeout is the fallback when no config is provided.
+const defaultConnectTimeout = 5 * time.Second
 
 // SchemaColumn represents a single column from the database schema.
 type SchemaColumn struct {
@@ -176,6 +177,11 @@ func ScanSchema(rootPath, framework string, cfg *config.Config, logger *log.Logg
 		mode = cfg.DatabaseSourceMode()
 	}
 
+	timeout := defaultConnectTimeout
+	if cfg != nil {
+		timeout = cfg.DatabaseConnectTimeout()
+	}
+
 	base := &Schema{Source: SchemaSourceNone}
 	if dbCfg != nil {
 		base.Connection = dbCfg.Driver
@@ -183,13 +189,13 @@ func ScanSchema(rootPath, framework string, cfg *config.Config, logger *log.Logg
 	}
 
 	if mode != "migrations" && dbCfg != nil && dbCfg.Database != "" {
-		db, err := openDatabase(dbCfg)
+		db, err := openDatabase(dbCfg, timeout)
 		if err == nil {
 			defer db.Close()
 			if logger != nil {
 				logger.Printf("Connected to %s database: %s", dbCfg.Driver, dbCfg.Database)
 			}
-			schema, scanErr := scanSchemaFromDB(db, dbCfg, cache)
+			schema, scanErr := scanSchemaFromDB(db, dbCfg, cache, timeout)
 			if scanErr != nil {
 				return nil, scanErr
 			}
@@ -219,7 +225,7 @@ func ScanSchema(rootPath, framework string, cfg *config.Config, logger *log.Logg
 	return base, nil
 }
 
-func openDatabase(cfg *config.DatabaseConfig) (*sql.DB, error) {
+func openDatabase(cfg *config.DatabaseConfig, timeout time.Duration) (*sql.DB, error) {
 	var dsn, driverName string
 
 	switch cfg.Driver {
@@ -227,11 +233,15 @@ func openDatabase(cfg *config.DatabaseConfig) (*sql.DB, error) {
 		driverName = "mysql"
 		dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?timeout=%s",
 			cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database,
-			connectTimeout.String())
+			timeout.String())
 	case "pgsql":
 		driverName = "postgres"
-		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable connect_timeout=5",
-			cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.Database)
+		secs := int(timeout.Seconds())
+		if secs < 1 {
+			secs = 1
+		}
+		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable connect_timeout=%d",
+			cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.Database, secs)
 	case "sqlite":
 		driverName = "sqlite"
 		dsn = cfg.Database
@@ -245,7 +255,7 @@ func openDatabase(cfg *config.DatabaseConfig) (*sql.DB, error) {
 	}
 
 	// Verify connection with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
@@ -270,8 +280,8 @@ func resolveDatabaseConfig(rootPath, framework string) *config.DatabaseConfig {
 	}
 }
 
-func queryColumns(db *sql.DB, dbName, tableName string) ([]SchemaColumn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+func queryColumns(db *sql.DB, dbName, tableName string, timeout time.Duration) ([]SchemaColumn, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	rows, err := db.QueryContext(ctx,
@@ -298,8 +308,8 @@ func queryColumns(db *sql.DB, dbName, tableName string) ([]SchemaColumn, error) 
 }
 
 // queryColumnsPostgres uses PostgreSQL's information_schema with $1/$2 params.
-func queryColumnsPostgres(db *sql.DB, dbName, tableName string) ([]SchemaColumn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+func queryColumnsPostgres(db *sql.DB, dbName, tableName string, timeout time.Duration) ([]SchemaColumn, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	rows, err := db.QueryContext(ctx,
@@ -326,8 +336,8 @@ func queryColumnsPostgres(db *sql.DB, dbName, tableName string) ([]SchemaColumn,
 }
 
 // queryColumnsSQLite uses PRAGMA to get column info.
-func queryColumnsSQLite(db *sql.DB, tableName string) ([]SchemaColumn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+func queryColumnsSQLite(db *sql.DB, tableName string, timeout time.Duration) ([]SchemaColumn, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	rows, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", tableName))
@@ -356,21 +366,21 @@ func queryColumnsSQLite(db *sql.DB, tableName string) ([]SchemaColumn, error) {
 	return cols, rows.Err()
 }
 
-func queryTableNames(db *sql.DB, cfg *config.DatabaseConfig) ([]string, error) {
+func queryTableNames(db *sql.DB, cfg *config.DatabaseConfig, timeout time.Duration) ([]string, error) {
 	switch cfg.Driver {
 	case "mysql":
-		return queryTableNamesMySQL(db, cfg.Database)
+		return queryTableNamesMySQL(db, cfg.Database, timeout)
 	case "pgsql":
-		return queryTableNamesPostgres(db, cfg.Database)
+		return queryTableNamesPostgres(db, cfg.Database, timeout)
 	case "sqlite":
-		return queryTableNamesSQLite(db)
+		return queryTableNamesSQLite(db, timeout)
 	default:
 		return nil, fmt.Errorf("unsupported driver: %s", cfg.Driver)
 	}
 }
 
-func queryTableNamesMySQL(db *sql.DB, dbName string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+func queryTableNamesMySQL(db *sql.DB, dbName string, timeout time.Duration) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	rows, err := db.QueryContext(ctx,
@@ -394,8 +404,8 @@ func queryTableNamesMySQL(db *sql.DB, dbName string) ([]string, error) {
 	return tables, rows.Err()
 }
 
-func queryTableNamesPostgres(db *sql.DB, dbName string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+func queryTableNamesPostgres(db *sql.DB, dbName string, timeout time.Duration) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	rows, err := db.QueryContext(ctx,
@@ -419,8 +429,8 @@ func queryTableNamesPostgres(db *sql.DB, dbName string) ([]string, error) {
 	return tables, rows.Err()
 }
 
-func queryTableNamesSQLite(db *sql.DB) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+func queryTableNamesSQLite(db *sql.DB, timeout time.Duration) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	rows, err := db.QueryContext(ctx,
@@ -444,7 +454,7 @@ func queryTableNamesSQLite(db *sql.DB) ([]string, error) {
 	return tables, rows.Err()
 }
 
-func getTableColumns(db *sql.DB, cfg *config.DatabaseConfig, tableName string, cache *SchemaCache) []SchemaColumn {
+func getTableColumns(db *sql.DB, cfg *config.DatabaseConfig, tableName string, cache *SchemaCache, timeout time.Duration) []SchemaColumn {
 	if cache != nil {
 		if cols, ok := cache.Get(tableName); ok {
 			return cols
@@ -455,11 +465,11 @@ func getTableColumns(db *sql.DB, cfg *config.DatabaseConfig, tableName string, c
 	var err error
 	switch cfg.Driver {
 	case "mysql":
-		cols, err = queryColumns(db, cfg.Database, tableName)
+		cols, err = queryColumns(db, cfg.Database, tableName, timeout)
 	case "pgsql":
-		cols, err = queryColumnsPostgres(db, cfg.Database, tableName)
+		cols, err = queryColumnsPostgres(db, cfg.Database, tableName, timeout)
 	case "sqlite":
-		cols, err = queryColumnsSQLite(db, tableName)
+		cols, err = queryColumnsSQLite(db, tableName, timeout)
 	}
 
 	if err != nil || cols == nil {
@@ -472,8 +482,8 @@ func getTableColumns(db *sql.DB, cfg *config.DatabaseConfig, tableName string, c
 	return cols
 }
 
-func scanSchemaFromDB(db *sql.DB, cfg *config.DatabaseConfig, cache *SchemaCache) (*Schema, error) {
-	tables, err := queryTableNames(db, cfg)
+func scanSchemaFromDB(db *sql.DB, cfg *config.DatabaseConfig, cache *SchemaCache, timeout time.Duration) (*Schema, error) {
+	tables, err := queryTableNames(db, cfg, timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -487,7 +497,7 @@ func scanSchemaFromDB(db *sql.DB, cfg *config.DatabaseConfig, cache *SchemaCache
 	}
 
 	for _, table := range tables {
-		cols := getTableColumns(db, cfg, table, cache)
+		cols := getTableColumns(db, cfg, table, cache, timeout)
 		if cols == nil {
 			continue
 		}
