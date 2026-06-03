@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -105,7 +106,7 @@ func TestSQLiteSchemaIntrospection(t *testing.T) {
 	}
 
 	// Query using our function
-	cols, err := queryColumnsSQLite(db, "users")
+	cols, err := queryColumnsSQLite(db, "users", 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
