@@ -1,6 +1,6 @@
-.PHONY: build install test clean dev cross-build conformance conformance-pr
+.PHONY: build install test clean dev cross-build wasm conformance conformance-pr
 
-VERSION ?= 0.5.0
+VERSION ?= 0.9.0
 BINARY  := tusk-php
 LDFLAGS := -ldflags="-s -w -X main.version=$(VERSION)"
 
@@ -21,6 +21,9 @@ clean:
 
 cross-build:
 	bash scripts/build.sh
+
+wasm:
+	GOOS=wasip1 GOARCH=wasm CGO_ENABLED=0 go build $(LDFLAGS) -trimpath -o build/$(BINARY).wasm ./cmd/tusk-php/
 
 conformance:
 	bash scripts/fetch-corpus.sh --tier all

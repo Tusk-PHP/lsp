@@ -11,7 +11,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/mcpserver"
 )
 
-var version = "0.5.0"
+var version = "0.9.0"
 
 func main() {
 	mcpserver.ServerVersion = version
