@@ -35,7 +35,9 @@ import (
 )
 
 const ServerName = "tusk-php"
-const ServerVersion = "0.5.0"
+
+// ServerVersion is overridden at startup from the binary's stamped version.
+var ServerVersion = "0.5.0"
 
 // largeDocThreshold is the line-count above which document indexing on
 // didOpen/didChange is offloaded to a background goroutine via goSafe so

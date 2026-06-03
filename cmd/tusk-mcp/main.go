@@ -11,7 +11,11 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/mcpserver"
 )
 
+var version = "0.5.0"
+
 func main() {
+	mcpserver.ServerVersion = version
+
 	if len(os.Args) > 1 && os.Args[1] == "dump" {
 		runDump(os.Args[2:])
 		return
@@ -26,7 +30,7 @@ func main() {
 	flag.Parse()
 
 	if showVersion {
-		fmt.Printf("%s %s\n", mcpserver.ServerName, mcpserver.ServerVersion)
+		fmt.Printf("%s %s\n", mcpserver.ServerName, version)
 		return
 	}
 

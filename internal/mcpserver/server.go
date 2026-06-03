@@ -32,10 +32,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const (
-	ServerName    = "tusk-mcp"
-	ServerVersion = "0.5.0"
-)
+const ServerName = "tusk-mcp"
+
+// ServerVersion is overridden at startup from the binary's stamped version.
+var ServerVersion = "0.5.0"
 
 type Service struct {
 	RootPath         string
