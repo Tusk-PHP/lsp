@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 
 	"github.com/Tusk-PHP/lsp/internal/lsp"
+	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 var (
@@ -16,6 +18,7 @@ var (
 	transport  = flag.String("transport", "stdio", "Transport: stdio")
 	stdioMode  = flag.Bool("stdio", false, "Use stdio transport")
 	strictMode = flag.Bool("strict", false, "Strict mode: re-panic after recovering (also enabled via TUSK_STRICT env var)")
+	parseFile  = flag.String("parse", "", "Parse a PHP file and print its AST as JSON, then exit")
 )
 
 func main() {
@@ -25,6 +28,21 @@ func main() {
 	}
 	if *showVer {
 		fmt.Printf("tusk-php %s\n", version)
+		os.Exit(0)
+	}
+	if *parseFile != "" {
+		src, err := os.ReadFile(*parseFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading file: %v\n", err)
+			os.Exit(1)
+		}
+		result := parser.New().Parse(string(src))
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(result); err != nil {
+			fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 	// Strict mode is enabled via flag OR the TUSK_STRICT environment variable.
