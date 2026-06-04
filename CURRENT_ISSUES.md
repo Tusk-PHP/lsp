@@ -25,6 +25,21 @@ _None open._
 
 ## Low / performance
 
+### L22 — Empty container graph serializes `nodes`/`edges` as JSON `null` instead of `[]`
+- **Where:** `internal/graph/container.go` (`BuildContainer`) → surfaced by `tusk-php graph container` on projects with no DI bindings (e.g. `testdata/project`).
+- **What:** When no bindings exist, `Graph.Nodes`/`Edges` stay nil and `EncodeJSON` emits `"nodes": null, "edges": null`. Valid JSON, but a downstream consumer expecting arrays must special-case null. The graph JSON is meant to be a stable API contract.
+- **Fix:** Initialize `Nodes`/`Edges` to empty (non-nil) slices in `BuildContainer` (or normalize in `EncodeJSON`) so they always marshal to `[]`.
+
+### L21 — No test seam to inject container bindings, leaving DepsBoundary Meta path conditionally covered
+- **Where:** `internal/container/analyzer.go` (`ContainerAnalyzer.bindings`, ~line 30); affects `internal/graph/container_test.go`.
+- **What:** Exercising `BuildContainer`'s `DepsBoundary` boundary-node Meta (`edgeCount`, `distinctSymbols`, `version`) end-to-end needs a *vendor-classified* FQN as a binding's Concrete. The only no-fixture path is writing a PHP provider into a temp dir and relying on regex `parseLaravelProvider`, which is fragile (path must match `app/Providers/*.php`). The test currently degrades to `t.Skip` when the binding isn't parsed, so the real boundary path is only conditionally covered.
+- **Fix:** Add a small seam — e.g. exported `func (ca *ContainerAnalyzer) AddBinding(b *ServiceBinding)` or an in-package `testAddBinding` helper — so tests can inject known bindings directly without filesystem parsing.
+
+### L20 — Duplicate installed.json unmarshal structs in composer package
+- **Where:** `internal/composer/composer.go` (`installedPackage`, ~line 41) vs `internal/composer/packages.go` (`installedPackageWithVersion`).
+- **What:** Unit 4 of the graph-container work needed the package `version` field but avoided editing `composer.go` (out of its scope), so it added a parallel `installedPackageWithVersion` struct duplicating `name`/`install-path`/autoload plus `version`. Both live in the same package.
+- **Fix:** Add `Version string \`json:"version"\`` to `installedPackage` in `composer.go` and drop `installedPackageWithVersion`, repointing `packages.go` at the unified struct.
+
 ### L14 — Hand-authored availability entries overlap with the generated table
 - **Where:** `internal/symbols/builtins.go` (`builtinAvailabilityByName`) vs `internal/symbols/builtin_availability_generated.go` (`generatedBuiltinAvailability`).
 - **What:** `str_contains`, `str_starts_with`, `str_ends_with`, `json_validate`, `Fiber`, `WeakMap` are present in both with matching values. No correctness problem (precedence is well-defined and values agree), but the hand-authored entries become redundant once the real generator produces the comprehensive table.
