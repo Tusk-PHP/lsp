@@ -235,6 +235,38 @@ as explicit `⚠ dynamic` nodes rather than being dropped.
 Insert after step 4 (renderers): build the reference-graph layer, then
 `graph trace` (flagship), then the `unused-deps` and `orphan` reports.
 
+### The reference graph is two tiers, not one
+
+Investigation found the parser **does not parse method bodies into expression
+nodes** — bodies are kept as raw line ranges + a flat token stream
+(`parser.go:1207`). The existing chain resolver (`hover.resolveAccessChain`)
+resolves a single cursor position via backward text walk; driving it across every
+call site project-wide would be re-running hover thousands of times — heuristic
+and fragile. So the "reference layer" splits by cost:
+
+- **Tier 1 — structural references (cheap, accurate, no body parsing).** Edges
+  from `use` imports, param/return/property type hints, `extends`/`implements`,
+  and `new X`. Crucially, the index **already resolves these type strings to
+  FQNs at index time** (`resolveTypeName` during `IndexFileWithSource`), so the
+  graph is built almost entirely by iterating the index — no re-parsing. Powers
+  **unused-dependencies** and a **class-level dependency graph**.
+- **Tier 2 — call/expression references (needs body parsing).** Edges from actual
+  calls inside method bodies. Required for **tracing** and **precise dead-code**.
+  Either a heuristic token scanner or — preferred — a foundational parser
+  investment to parse bodies into expression nodes (also benefits
+  hover/completion/diagnostics).
+
+**Decision: Tier 1 first.** Ship the structural reference graph + unused-deps +
+class dependency graph now (low risk, accurate). Defer Tier 2 (and the
+body-expression parser investment it implies, and the tracing/dead-code features
+that depend on it) to a later deliberate decision.
+
+The structural builder is a new `graph.BuildReferences(idx, opts)` that emits the
+same `Graph` DTO and reuses the renderers + the `--deps none|boundary|full`
+collapsing already built for `graph container`. Edge kinds: `extends`,
+`implements`, `param`, `returns`, `property`, `new`. Tracking issue for trait
+edges if the unexported `traitMap` accessor is deferred.
+
 ## Open questions
 
 - ERD detail level for `models` (relations only vs full column schema) — gate
