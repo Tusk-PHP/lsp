@@ -164,14 +164,14 @@ func buildWorkspace(root, logPrefix string) (*workspace.Bootstrapped, string, er
 // runGraph implements the `graph` subcommand.
 func runGraph(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: tusk-php graph <kind> [flags] (supported: container, references)")
+		return fmt.Errorf("usage: tusk-php graph <kind> [flags] (supported: container, references, models)")
 	}
 	kind := args[0]
 	switch kind {
-	case "container", "references":
+	case "container", "references", "models":
 		// valid
 	default:
-		return fmt.Errorf("unknown graph kind %q (supported: container, references)", kind)
+		return fmt.Errorf("unknown graph kind %q (supported: container, references, models)", kind)
 	}
 
 	fs := flag.NewFlagSet("graph "+kind, flag.ExitOnError)
@@ -208,7 +208,7 @@ func runGraph(args []string) error {
 		return fmt.Errorf("invalid --format %q: must be one of json, mermaid, dot", *formatFlag)
 	}
 
-	ws, _, err := buildWorkspace(root, "tusk-php graph")
+	ws, framework, err := buildWorkspace(root, "tusk-php graph")
 	if err != nil {
 		return err
 	}
@@ -225,6 +225,8 @@ func runGraph(args []string) error {
 		g = graph.BuildContainer(ws.Index, ws.Container, opts)
 	case "references":
 		g = graph.BuildReferences(ws.Index, opts)
+	case "models":
+		g = graph.BuildModels(ws.Index, root, framework, opts)
 	}
 
 	return emitGraph(g, *formatFlag)
