@@ -16,6 +16,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/lsp"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/unuseddeps"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
@@ -32,6 +33,13 @@ var (
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "graph" {
 		if err := runGraph(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "deps" {
+		if err := runDeps(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -114,16 +122,59 @@ func loadProjectMetadata(rootPath string) (*config.Config, string, symbols.Built
 	return cfg, framework, profile, nil
 }
 
+// emitGraph renders g to stdout according to format (json/mermaid/dot).
+func emitGraph(g *graph.Graph, format string) error {
+	switch format {
+	case "json":
+		return g.EncodeJSON(os.Stdout)
+	case "mermaid":
+		fmt.Fprintln(os.Stdout, graph.RenderMermaid(g))
+	case "dot":
+		fmt.Fprintln(os.Stdout, graph.RenderDOT(g))
+	}
+	return nil
+}
+
+// buildWorkspace loads project metadata and builds a fully-indexed workspace for
+// the given root directory. The logger prefix is used for the build logger that
+// writes to stderr. Both runGraph and runDeps use this shared helper so that the
+// workspace-build logic lives in one place.
+func buildWorkspace(root, logPrefix string) (*workspace.Bootstrapped, string, error) {
+	cfg, framework, profile, err := loadProjectMetadata(root)
+	if err != nil {
+		return nil, framework, fmt.Errorf("loading project metadata: %w", err)
+	}
+
+	// Use stderr for the build logger so stdout stays clean for command output.
+	logger := log.New(os.Stderr, "["+logPrefix+"] ", log.LstdFlags)
+
+	ws, err := workspace.Build(context.Background(), workspace.Options{
+		RootPath:       root,
+		Framework:      framework,
+		Config:         cfg,
+		Logger:         logger,
+		BuiltinProfile: profile,
+	})
+	if err != nil {
+		return nil, framework, fmt.Errorf("building workspace: %w", err)
+	}
+	return ws, framework, nil
+}
+
 // runGraph implements the `graph` subcommand.
 func runGraph(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: tusk-php graph <kind> [flags] (supported: container)")
+		return fmt.Errorf("usage: tusk-php graph <kind> [flags] (supported: container, references)")
 	}
-	if args[0] != "container" {
-		return fmt.Errorf("unknown graph kind %q (supported: container)", args[0])
+	kind := args[0]
+	switch kind {
+	case "container", "references":
+		// valid
+	default:
+		return fmt.Errorf("unknown graph kind %q (supported: container, references)", kind)
 	}
 
-	fs := flag.NewFlagSet("graph container", flag.ExitOnError)
+	fs := flag.NewFlagSet("graph "+kind, flag.ExitOnError)
 	depsFlag := fs.String("deps", "none", "Dependency mode: none|boundary|full")
 	formatFlag := fs.String("format", "json", "Output format: json|mermaid|dot")
 	rootFlag := fs.String("root", "", "Project root (default: current directory)")
@@ -157,40 +208,84 @@ func runGraph(args []string) error {
 		return fmt.Errorf("invalid --format %q: must be one of json, mermaid, dot", *formatFlag)
 	}
 
-	cfg, framework, profile, err := loadProjectMetadata(root)
+	ws, _, err := buildWorkspace(root, "tusk-php graph")
 	if err != nil {
-		return fmt.Errorf("loading project metadata: %w", err)
-	}
-
-	// Use stderr for the build logger so stdout stays clean for graph output.
-	logger := log.New(os.Stderr, "[tusk-php graph] ", log.LstdFlags)
-
-	ws, err := workspace.Build(context.Background(), workspace.Options{
-		RootPath:       root,
-		Framework:      framework,
-		Config:         cfg,
-		Logger:         logger,
-		BuiltinProfile: profile,
-	})
-	if err != nil {
-		return fmt.Errorf("building workspace: %w", err)
+		return err
 	}
 
 	var pkgs graph.PackageResolver = composer.NewPackageResolver(root)
-	mode := graph.DepsMode(*depsFlag)
-
-	g := graph.BuildContainer(ws.Index, ws.Container, graph.Options{
-		Deps:     mode,
+	opts := graph.Options{
+		Deps:     graph.DepsMode(*depsFlag),
 		Packages: pkgs,
-	})
+	}
+
+	var g *graph.Graph
+	switch kind {
+	case "container":
+		g = graph.BuildContainer(ws.Index, ws.Container, opts)
+	case "references":
+		g = graph.BuildReferences(ws.Index, opts)
+	}
+
+	return emitGraph(g, *formatFlag)
+}
+
+// runDeps implements the `deps` subcommand.
+func runDeps(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: tusk-php deps <subcommand> [flags] (supported: unused)")
+	}
+	sub := args[0]
+	if sub != "unused" {
+		return fmt.Errorf("unknown deps subcommand %q (supported: unused) — future subcommands may be added", sub)
+	}
+
+	fs := flag.NewFlagSet("deps unused", flag.ContinueOnError)
+	rootFlag := fs.String("root", "", "Project root (default: current directory)")
+	formatFlag := fs.String("format", "text", "Output format: text|json")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+
+	// Resolve root directory.
+	root := *rootFlag
+	if root == "" {
+		var err error
+		root, err = os.Getwd()
+		if err != nil {
+			return fmt.Errorf("unable to determine working directory: %w", err)
+		}
+	}
+
+	// Validate --format.
+	switch *formatFlag {
+	case "text", "json":
+		// valid
+	default:
+		return fmt.Errorf("invalid --format %q: must be one of text, json", *formatFlag)
+	}
+
+	ws, framework, err := buildWorkspace(root, "tusk-php deps")
+	if err != nil {
+		return err
+	}
+
+	rep := unuseddeps.Analyze(ws.Index, root, framework)
 
 	switch *formatFlag {
 	case "json":
-		return g.EncodeJSON(os.Stdout)
-	case "mermaid":
-		fmt.Fprintln(os.Stdout, graph.RenderMermaid(g))
-	case "dot":
-		fmt.Fprintln(os.Stdout, graph.RenderDOT(g))
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(rep)
+	default: // text
+		fmt.Fprintf(os.Stdout, "%d dependencies checked, %d candidates (framework: %s)\n",
+			rep.Checked, len(rep.Candidates), rep.Framework)
+		if len(rep.Candidates) == 0 {
+			fmt.Fprintln(os.Stdout, "no unused dependency candidates found")
+		}
+		for _, c := range rep.Candidates {
+			fmt.Fprintf(os.Stdout, "  %s — %s\n", c.Package, c.Reason)
+		}
 	}
 	return nil
 }
