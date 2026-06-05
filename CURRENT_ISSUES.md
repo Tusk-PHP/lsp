@@ -25,6 +25,11 @@ _None open._
 
 ## Low / performance
 
+### L26 — `graph models` misses Doctrine XML mappings and string-form targetEntity
+- **Where:** `internal/models/relations.go` (`ModelRelations` Symfony path); relies on `ormRelationRe` + `targetEntityRe` (doctrine.go:52,67).
+- **What:** Doctrine relation edges are only derived from PHP 8 attribute syntax with `targetEntity: Foo::class`. Two gaps: (1) entities mapped purely via XML (`config/doctrine/*.orm.xml`) emit no edges, though `doctrine.go` already parses that XML (`parseDoctrineXMLMapping`); (2) string-form targets (`targetEntity: 'App\Entity\Foo'`) aren't matched by `targetEntityRe`. Both produce missing edges (under-reporting) in `graph models` on Symfony/Doctrine projects.
+- **Fix:** Add an XML-relation path to the Symfony branch of `ModelRelations` (reuse the existing XML parse), and extend `targetEntityRe` to also accept quoted string targets.
+
 ### L25 — Symfony `bundles.php` exclusion not implemented for unused-deps
 - **Where:** `internal/unuseddeps/unuseddeps.go` (`Analyze`); analogous to `composer.LaravelAutoDiscoveredPackages`.
 - **What:** Unused-dependency analysis excludes Laravel auto-discovered packages (`extra.laravel.providers`/`aliases`) but has no Symfony equivalent. Symfony bundles registered in `config/bundles.php` are used via framework wiring, not static code refs, so their packages will be reported as unused-candidates (false positives) on Symfony projects.
