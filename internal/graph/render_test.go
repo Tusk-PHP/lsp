@@ -253,8 +253,8 @@ func TestRenderDOT_Determinism(t *testing.T) {
 // without panicking.
 func TestRenderDOT_NilGraph(t *testing.T) {
 	out := RenderDOT(nil)
-	if out != "digraph container {\n}\n" {
-		t.Errorf("RenderDOT(nil) = %q, want %q", out, "digraph container {\n}\n")
+	if out != "digraph {\n}\n" {
+		t.Errorf("RenderDOT(nil) = %q, want %q", out, "digraph {\n}\n")
 	}
 }
 

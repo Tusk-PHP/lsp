@@ -122,7 +122,7 @@ func dotShape(kind string) string {
 // skeleton without panicking.
 func RenderDOT(g *Graph) string {
 	if g == nil {
-		return "digraph container {\n}\n"
+		return "digraph {\n}\n"
 	}
 
 	// Work on a shallow copy so we do not mutate the caller's graph.
@@ -141,7 +141,14 @@ func RenderDOT(g *Graph) string {
 	}
 
 	var b strings.Builder
-	b.WriteString("digraph container {\n")
+	// Name the digraph after the graph kind (e.g. "container", "references").
+	// "graph"/"digraph" are DOT keywords, so an empty kind yields an anonymous
+	// digraph rather than an invalid name.
+	if work.Kind != "" {
+		b.WriteString("digraph " + work.Kind + " {\n")
+	} else {
+		b.WriteString("digraph {\n")
+	}
 
 	for _, n := range work.Nodes {
 		label := n.Label
