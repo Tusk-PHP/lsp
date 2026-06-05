@@ -270,3 +270,62 @@ func TestRenderDOT_EmptyGraph(t *testing.T) {
 		t.Errorf("RenderDOT empty: expected closing brace, got:\n%s", out)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Model node kind tests
+// ---------------------------------------------------------------------------
+
+// buildModelNodeGraph returns a graph that includes a "model" kind node alongside
+// the existing kinds, for testing model-specific shape rendering.
+func buildModelNodeGraph() *Graph {
+	return &Graph{
+		SchemaVersion: SchemaVersion,
+		Kind:          "container",
+		Nodes: []Node{
+			{
+				ID:    `App\Models\User`,
+				Kind:  "model",
+				Label: `App\Models\User`,
+			},
+			{
+				ID:    `App\Service`,
+				Kind:  "class",
+				Label: `App\Service`,
+			},
+		},
+		Edges: []Edge{
+			{From: `App\Service`, To: `App\Models\User`, Kind: "uses"},
+		},
+	}
+}
+
+// TestRenderMermaid_ModelShape checks that a "model" node is rendered with the
+// cylinder shape syntax  [(  )]  in Mermaid output.
+func TestRenderMermaid_ModelShape(t *testing.T) {
+	g := buildModelNodeGraph()
+	out := RenderMermaid(g)
+
+	// Cylinder form: [(" ... ")]
+	if !strings.Contains(out, `[("`) {
+		t.Errorf("RenderMermaid: model cylinder shape '[(\"%s' not found in output:\n%s", `"`, out)
+	}
+	// The model node label must appear in the output.
+	if !strings.Contains(out, `App\Models\User`) {
+		t.Errorf("RenderMermaid: model label 'App\\Models\\User' not found in output:\n%s", out)
+	}
+}
+
+// TestRenderDOT_ModelShape checks that a "model" node carries shape=cylinder in
+// DOT output.
+func TestRenderDOT_ModelShape(t *testing.T) {
+	g := buildModelNodeGraph()
+	out := RenderDOT(g)
+
+	if !strings.Contains(out, "shape=cylinder") {
+		t.Errorf("RenderDOT: 'shape=cylinder' not found in output:\n%s", out)
+	}
+	// The escaped model node ID must also be present.
+	if !strings.Contains(out, `App\\Models\\User`) {
+		t.Errorf("RenderDOT: model node id 'App\\\\Models\\\\User' not found in output:\n%s", out)
+	}
+}
