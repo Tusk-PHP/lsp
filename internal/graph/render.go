@@ -30,6 +30,7 @@ func escapeMermaidLabel(s string) string {
 //   - class            => id["label"]
 //   - binding          => id(["label"])
 //   - dependency-boundary => id[["label"]]
+//   - model            => id[("label")]
 //   - anything else    => id["label"]  (same as class)
 func mermaidNodeLine(mid, label, kind string) string {
 	escaped := escapeMermaidLabel(label)
@@ -38,6 +39,8 @@ func mermaidNodeLine(mid, label, kind string) string {
 		return fmt.Sprintf(`    %s(["%s"])`, mid, escaped)
 	case "dependency-boundary":
 		return fmt.Sprintf(`    %s[["%s"]]`, mid, escaped)
+	case "model":
+		return fmt.Sprintf(`    %s[("%s")]`, mid, escaped)
 	default: // "class" and unknown/empty
 		return fmt.Sprintf(`    %s["%s"]`, mid, escaped)
 	}
@@ -104,6 +107,7 @@ func escapeDOTString(s string) string {
 //   - class               => box
 //   - binding             => ellipse
 //   - dependency-boundary => box3d
+//   - model               => cylinder
 //   - anything else       => box
 func dotShape(kind string) string {
 	switch kind {
@@ -111,6 +115,8 @@ func dotShape(kind string) string {
 		return "ellipse"
 	case "dependency-boundary":
 		return "box3d"
+	case "model":
+		return "cylinder"
 	default: // "class" and unknown/empty
 		return "box"
 	}
