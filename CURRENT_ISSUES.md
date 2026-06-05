@@ -25,6 +25,21 @@ _None open._
 
 ## Low / performance
 
+### L25 — Symfony `bundles.php` exclusion not implemented for unused-deps
+- **Where:** `internal/unuseddeps/unuseddeps.go` (`Analyze`); analogous to `composer.LaravelAutoDiscoveredPackages`.
+- **What:** Unused-dependency analysis excludes Laravel auto-discovered packages (`extra.laravel.providers`/`aliases`) but has no Symfony equivalent. Symfony bundles registered in `config/bundles.php` are used via framework wiring, not static code refs, so their packages will be reported as unused-candidates (false positives) on Symfony projects.
+- **Fix:** Add `composer.SymfonyBundlePackages(rootPath)` (parse `config/bundles.php` bundle classes → owning packages via the package resolver) and union it into the `excluded` set in `Analyze`. The exclusion set is already structured additively.
+
+### L24 — `resolve.ResolveClassName` may return a bare short name when the FQN isn't indexed
+- **Where:** `internal/resolve/resolve.go` (`ResolveClassName`, ~line 106); affects `new X` edges in `internal/graph/references.go`.
+- **What:** When a `new X` target's namespace-qualified FQN isn't yet in the index, `ResolveClassName` falls back to the bare short name. In `graph references --deps full` this can surface as an orphan node with an unqualified ID. `DepsNone`/`DepsBoundary` are unaffected (such nodes classify as "unresolved" and are handled).
+- **Fix:** Have the references builder prefer the namespace-qualified candidate for unresolved `new` targets, or drop targets that don't resolve to an indexed symbol under DepsFull.
+
+### L23 — `ClassNode` (compat layer) does not expose `EndLine`
+- **Where:** `internal/parser/compat.go` (~line 524-534): `ClassNode` is built from `ClassDef` but only maps `Line`/`StartLine`, not `EndLine` (which exists on `ClassDef`, parser.go:38).
+- **What:** Callers using `FileNode.Classes` can't get a class's end line; `references.go`'s `new`-scan worked around it by using `parser.New().Parse().Classes` (`[]ClassDef`, which has `EndLine`). Anything needing enclosing-class ranges via the compat `FileNode` hits this gap.
+- **Fix:** Map `classDef.EndLine` onto `ClassNode` in the compat conversion.
+
 ### L21 — No test seam to inject container bindings, leaving DepsBoundary Meta path conditionally covered
 - **Where:** `internal/container/analyzer.go` (`ContainerAnalyzer.bindings`, ~line 30); affects `internal/graph/container_test.go`.
 - **What:** Exercising `BuildContainer`'s `DepsBoundary` boundary-node Meta (`edgeCount`, `distinctSymbols`, `version`) end-to-end needs a *vendor-classified* FQN as a binding's Concrete. The only no-fixture path is writing a PHP provider into a temp dir and relying on regex `parseLaravelProvider`, which is fragile (path must match `app/Providers/*.php`). The test currently degrades to `t.Skip` when the binding isn't parsed, so the real boundary path is only conditionally covered.
