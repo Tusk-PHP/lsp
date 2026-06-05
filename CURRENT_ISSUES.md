@@ -25,11 +25,6 @@ _None open._
 
 ## Low / performance
 
-### L22 — Empty container graph serializes `nodes`/`edges` as JSON `null` instead of `[]`
-- **Where:** `internal/graph/container.go` (`BuildContainer`) → surfaced by `tusk-php graph container` on projects with no DI bindings (e.g. `testdata/project`).
-- **What:** When no bindings exist, `Graph.Nodes`/`Edges` stay nil and `EncodeJSON` emits `"nodes": null, "edges": null`. Valid JSON, but a downstream consumer expecting arrays must special-case null. The graph JSON is meant to be a stable API contract.
-- **Fix:** Initialize `Nodes`/`Edges` to empty (non-nil) slices in `BuildContainer` (or normalize in `EncodeJSON`) so they always marshal to `[]`.
-
 ### L21 — No test seam to inject container bindings, leaving DepsBoundary Meta path conditionally covered
 - **Where:** `internal/container/analyzer.go` (`ContainerAnalyzer.bindings`, ~line 30); affects `internal/graph/container_test.go`.
 - **What:** Exercising `BuildContainer`'s `DepsBoundary` boundary-node Meta (`edgeCount`, `distinctSymbols`, `version`) end-to-end needs a *vendor-classified* FQN as a binding's Concrete. The only no-fixture path is writing a PHP provider into a temp dir and relying on regex `parseLaravelProvider`, which is fragile (path must match `app/Providers/*.php`). The test currently degrades to `t.Skip` when the binding isn't parsed, so the real boundary path is only conditionally covered.

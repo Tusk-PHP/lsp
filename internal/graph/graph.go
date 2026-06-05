@@ -78,8 +78,16 @@ func (g *Graph) Sort() {
 }
 
 // EncodeJSON calls Sort and then writes the graph as 2-space-indented JSON to w.
+// Nodes and Edges always serialise as arrays (never JSON null) so consumers can
+// treat them as a stable list contract even for empty graphs.
 func (g *Graph) EncodeJSON(w io.Writer) error {
 	g.Sort()
+	if g.Nodes == nil {
+		g.Nodes = []Node{}
+	}
+	if g.Edges == nil {
+		g.Edges = []Edge{}
+	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(g)

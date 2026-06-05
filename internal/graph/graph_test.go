@@ -103,6 +103,21 @@ func TestEncodeJSON_SchemaVersion(t *testing.T) {
 	}
 }
 
+func TestEncodeJSON_EmptyGraphArrays(t *testing.T) {
+	g := &Graph{SchemaVersion: SchemaVersion, Kind: "container"}
+	var buf bytes.Buffer
+	if err := g.EncodeJSON(&buf); err != nil {
+		t.Fatalf("EncodeJSON returned error: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "null") {
+		t.Errorf("empty graph must not serialise null fields, got:\n%s", out)
+	}
+	if !strings.Contains(out, `"nodes": []`) || !strings.Contains(out, `"edges": []`) {
+		t.Errorf("empty graph must serialise nodes/edges as [], got:\n%s", out)
+	}
+}
+
 func TestEncodeJSON_NodesSorted(t *testing.T) {
 	g := buildTestGraph()
 	var buf bytes.Buffer
