@@ -269,7 +269,11 @@ edges if the unexported `traitMap` accessor is deferred.
 
 ## Open questions
 
-- ERD detail level for `models` (relations only vs full column schema) — gate
-  behind a flag if schema introspection is expensive.
+- ERD detail level for `models` — **decided: v1 is relations-only** (model
+  nodes + relation edges). Column/cast ERD detail is deferred because schema
+  introspection can require a live DB / migration scan; add later behind a
+  `--columns` flag that reads `models.Schema`. Relations are re-derived from
+  source (not the post-`AnalyzeModels` virtual properties), because to-many
+  relations collapse their target to `Collection` and lose the target FQN.
 - Stable node IDs across runs (FQN is the natural key; confirm uniqueness for
   anonymous classes / closures).
