@@ -1066,6 +1066,15 @@ func (idx *Index) MarkReady() {
 	idx.ready.Store(true)
 }
 
+// TraitsOf returns a copy of the trait FQNs used by the class identified by
+// fqn. Returns nil when the class uses no traits or is not indexed. The
+// returned slice is safe to use after the lock is released.
+func (idx *Index) TraitsOf(fqn string) []string {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return append([]string(nil), idx.traitMap[fqn]...)
+}
+
 func URIToPath(uri string) string {
 	if u, err := url.Parse(uri); err == nil && u.Scheme == "file" {
 		// url.Parse decodes percent-encoding in the path (e.g. %3A → :)
