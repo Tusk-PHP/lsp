@@ -23,6 +23,14 @@ type composerJSON struct {
 	AutoloadDev autoloadBlock     `json:"autoload-dev"`
 	Require     map[string]string `json:"require"`
 	Config      composerConfig    `json:"config"`
+	Extra       composerExtra     `json:"extra"`
+}
+
+type composerExtra struct {
+	Laravel struct {
+		Providers []string          `json:"providers"`
+		Aliases   map[string]string `json:"aliases"`
+	} `json:"laravel"`
 }
 
 type composerConfig struct {
