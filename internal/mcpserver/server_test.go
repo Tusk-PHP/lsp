@@ -737,3 +737,306 @@ func structuredMap(t *testing.T, value any) map[string]any {
 	}
 	return out
 }
+
+// newInProcessClient sets up an in-process MCP client/server pair and returns
+// the client session (and a cleanup function). Callers must defer the cleanup.
+func newInProcessClient(t *testing.T, svc *Service) (*mcp.ClientSession, func()) {
+	t.Helper()
+	ctx := context.Background()
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
+	ct, st := mcp.NewInMemoryTransports()
+	serverSession, err := svc.Server.Connect(ctx, st, nil)
+	if err != nil {
+		t.Fatalf("Server.Connect() error = %v", err)
+	}
+	clientSession, err := client.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatalf("Client.Connect() error = %v", err)
+	}
+	return clientSession, func() {
+		clientSession.Close()
+		serverSession.Wait()
+	}
+}
+
+func TestSymfonyToolsVisible(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	svc, err := New(ctx, testdataPath(t, "symfony"), logger)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if svc.Framework != "symfony" {
+		t.Fatalf("expected symfony framework, got %q", svc.Framework)
+	}
+
+	clientSession, cleanup := newInProcessClient(t, svc)
+	defer cleanup()
+
+	tools, err := clientSession.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools() error = %v", err)
+	}
+	var toolNames []string
+	for _, tool := range tools.Tools {
+		toolNames = append(toolNames, tool.Name)
+	}
+
+	// Symfony-specific tools must be present.
+	if !slices.Contains(toolNames, "symfony_routes") {
+		t.Errorf("expected symfony_routes tool, got tools: %v", toolNames)
+	}
+	if !slices.Contains(toolNames, "symfony_route_to_controller") {
+		t.Errorf("expected symfony_route_to_controller tool, got tools: %v", toolNames)
+	}
+	// php_graph must always be present.
+	if !slices.Contains(toolNames, "php_graph") {
+		t.Errorf("expected php_graph tool, got tools: %v", toolNames)
+	}
+
+	// Also verify that a Laravel workspace does NOT get symfony_* tools.
+	laravelSvc, err := New(ctx, testdataPath(t, "laravel"), logger)
+	if err != nil {
+		t.Fatalf("New(laravel) error = %v", err)
+	}
+	laravelClient, laravelCleanup := newInProcessClient(t, laravelSvc)
+	defer laravelCleanup()
+
+	laravelTools, err := laravelClient.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools(laravel) error = %v", err)
+	}
+	var laravelToolNames []string
+	for _, tool := range laravelTools.Tools {
+		laravelToolNames = append(laravelToolNames, tool.Name)
+	}
+	if slices.Contains(laravelToolNames, "symfony_routes") {
+		t.Errorf("did not expect symfony_routes in laravel workspace, tools: %v", laravelToolNames)
+	}
+	if slices.Contains(laravelToolNames, "symfony_route_to_controller") {
+		t.Errorf("did not expect symfony_route_to_controller in laravel workspace, tools: %v", laravelToolNames)
+	}
+}
+
+func TestSymfonyRoutesResource(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	svc, err := New(ctx, testdataPath(t, "symfony"), logger)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	clientSession, cleanup := newInProcessClient(t, svc)
+	defer cleanup()
+
+	resources, err := clientSession.ListResources(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListResources() error = %v", err)
+	}
+	var uris []string
+	for _, r := range resources.Resources {
+		uris = append(uris, r.URI)
+	}
+	if !slices.Contains(uris, "tusk://symfony/routes") {
+		t.Errorf("expected tusk://symfony/routes resource, got: %v", uris)
+	}
+	if slices.Contains(uris, "tusk://laravel/routes") {
+		t.Errorf("did not expect tusk://laravel/routes resource in symfony workspace")
+	}
+
+	res, err := clientSession.ReadResource(ctx, &mcp.ReadResourceParams{URI: "tusk://symfony/routes"})
+	if err != nil {
+		t.Fatalf("ReadResource(symfony-routes) error = %v", err)
+	}
+	if len(res.Contents) != 1 || !json.Valid([]byte(res.Contents[0].Text)) {
+		t.Fatalf("expected valid JSON symfony-routes resource, got %#v", res.Contents)
+	}
+}
+
+func TestSymfonyRouteTools(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	svc, err := New(ctx, testdataPath(t, "symfony"), logger)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	clientSession, cleanup := newInProcessClient(t, svc)
+	defer cleanup()
+
+	// symfony_routes should return a list with at least one route from ProductController.
+	routesRes, err := clientSession.CallTool(ctx, &mcp.CallToolParams{Name: "symfony_routes"})
+	if err != nil {
+		t.Fatalf("CallTool(symfony_routes) error = %v", err)
+	}
+	routesMap := structuredMap(t, routesRes.StructuredContent)
+	routes, ok := routesMap["routes"].([]any)
+	if !ok || len(routes) == 0 {
+		t.Fatalf("expected non-empty symfony routes, got %#v", routesMap["routes"])
+	}
+	// At least one route should have a name.
+	firstRoute, ok := routes[0].(map[string]any)
+	if !ok || firstRoute["name"] == "" {
+		t.Fatalf("expected route with name, got %#v", routes[0])
+	}
+
+	// symfony_route_to_controller: look up a known route (product_index).
+	lookupRes, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "symfony_route_to_controller",
+		Arguments: map[string]any{"name": "product_index"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(symfony_route_to_controller) error = %v", err)
+	}
+	if lookupRes.IsError {
+		t.Fatalf("expected successful route lookup, got error: %#v", lookupRes.StructuredContent)
+	}
+	lookupMap := structuredMap(t, lookupRes.StructuredContent)
+	if got := lookupMap["name"]; got != "product_index" {
+		t.Fatalf("expected product_index route, got %#v", got)
+	}
+
+	// symfony_route_to_controller: unknown route should return error.
+	notFoundRes, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "symfony_route_to_controller",
+		Arguments: map[string]any{"name": "no_such_route"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(symfony_route_to_controller not-found) error = %v", err)
+	}
+	if !notFoundRes.IsError {
+		t.Fatal("expected error result for unknown route")
+	}
+}
+
+func TestPhpGraphTool(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	svc, err := New(ctx, testdataPath(t, "laravel"), logger)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	clientSession, cleanup := newInProcessClient(t, svc)
+	defer cleanup()
+
+	for _, kind := range []string{"container", "references", "models"} {
+		t.Run("json_"+kind, func(t *testing.T) {
+			res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+				Name:      "php_graph",
+				Arguments: map[string]any{"kind": kind, "format": "json"},
+			})
+			if err != nil {
+				t.Fatalf("CallTool(php_graph kind=%s) error = %v", kind, err)
+			}
+			if res.IsError {
+				t.Fatalf("expected success, got error payload: %#v", res.StructuredContent)
+			}
+			m := structuredMap(t, res.StructuredContent)
+			// Graph DTO must carry schemaVersion == 1 and matching kind.
+			if v, _ := m["schemaVersion"].(float64); int(v) != 1 {
+				t.Errorf("expected schemaVersion=1, got %v", m["schemaVersion"])
+			}
+			if m["kind"] != kind {
+				t.Errorf("expected kind=%s, got %v", kind, m["kind"])
+			}
+		})
+	}
+
+	t.Run("mermaid_container", func(t *testing.T) {
+		res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "php_graph",
+			Arguments: map[string]any{"kind": "container", "format": "mermaid"},
+		})
+		if err != nil {
+			t.Fatalf("CallTool(php_graph mermaid) error = %v", err)
+		}
+		if res.IsError {
+			t.Fatalf("expected success for mermaid format: %#v", res.StructuredContent)
+		}
+		m := structuredMap(t, res.StructuredContent)
+		if m["format"] != "mermaid" {
+			t.Errorf("expected format=mermaid, got %v", m["format"])
+		}
+		if text, _ := m["text"].(string); !strings.HasPrefix(text, "graph LR") {
+			t.Errorf("expected mermaid graph LR header, got %q", text)
+		}
+	})
+
+	t.Run("dot_references", func(t *testing.T) {
+		res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "php_graph",
+			Arguments: map[string]any{"kind": "references", "format": "dot"},
+		})
+		if err != nil {
+			t.Fatalf("CallTool(php_graph dot) error = %v", err)
+		}
+		if res.IsError {
+			t.Fatalf("expected success for dot format: %#v", res.StructuredContent)
+		}
+		m := structuredMap(t, res.StructuredContent)
+		if m["format"] != "dot" {
+			t.Errorf("expected format=dot, got %v", m["format"])
+		}
+		if text, _ := m["text"].(string); !strings.HasPrefix(text, "digraph") {
+			t.Errorf("expected digraph header, got %q", text)
+		}
+	})
+}
+
+func TestPhpGraphToolInvalidInput(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	svc, err := New(ctx, testdataPath(t, "laravel"), logger)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	clientSession, cleanup := newInProcessClient(t, svc)
+	defer cleanup()
+
+	cases := []struct {
+		name string
+		args map[string]any
+	}{
+		{name: "bad_kind", args: map[string]any{"kind": "bogus"}},
+		{name: "bad_deps", args: map[string]any{"kind": "container", "deps": "bogus"}},
+		{name: "bad_format", args: map[string]any{"kind": "container", "format": "bogus"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+				Name:      "php_graph",
+				Arguments: tc.args,
+			})
+			if err != nil {
+				t.Fatalf("CallTool(php_graph %s) unexpected transport error: %v", tc.name, err)
+			}
+			if !res.IsError {
+				t.Errorf("expected error result for invalid input %v, got %#v", tc.args, res.StructuredContent)
+			}
+		})
+	}
+}
+
+func TestProjectSummaryContractVersion(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	svc, err := New(ctx, testdataPath(t, "laravel"), logger)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	clientSession, cleanup := newInProcessClient(t, svc)
+	defer cleanup()
+
+	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{Name: "php_project_summary"})
+	if err != nil {
+		t.Fatalf("CallTool(php_project_summary) error = %v", err)
+	}
+	m := structuredMap(t, res.StructuredContent)
+	cv, ok := m["contractVersion"].(float64)
+	if !ok || int(cv) != 1 {
+		t.Errorf("expected contractVersion=1 in project summary, got %#v", m["contractVersion"])
+	}
+}
