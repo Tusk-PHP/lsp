@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Parser: match expression structures** — `ParseResult.Matches` now holds a `[]MatchDef` for every `match (subject) { cond => expr, default => expr }` expression found in the file, including those inside method and function bodies. Nested match expressions are each collected individually. The scanner is brace/paren-balance tolerant and recovers gracefully from malformed arms (records a `ParseError`, skips the arm, continues).
 - **Parser: call-site model** — `ParseResult.Calls` now holds a `[]CallSite` (capped at 5 000 per file) for function calls, method calls (`$var->method`), static calls (`Type::method`), and constructor calls (`new Type`) found in the file. Each `CallSite` records the callee text, line, and an `[]CallArg` list with per-argument name (named arguments), value text, and spread flag.
 - **Parser: first-class callable syntax** — `CallSite.IsFirstClassCallable` is set to `true` when the argument list consists solely of the `...` token (PHP 8.1 first-class callable syntax: `strlen(...)`, `$obj->method(...)`, `Type::method(...)`), distinguishing it from regular calls and from variadic spread arguments.
+- `textDocument/selectionRange` support: editors can now request hierarchical selection expansion (word → bracket region → method → class → document) via the LSP selection range protocol.
+- `textDocument/semanticTokens/full` support: the server now emits semantic tokens for keywords, strings, numbers, comments, variables, class/interface/enum/function/method declarations, and property names using the LSP relative-delta encoding.
+
+### Fixed
+
+- `workspace/executeCommand` capability advertisement now correctly lists all three handled commands (`tuskPhpLsp.namespaceForPath`, `tuskPhpLsp.copyNamespace`, `tuskPhpLsp.moveToNamespace`); previously only `tuskPhpLsp.namespaceForPath` was advertised.
 
 ## [0.8.0] - 2026-06-01
 
