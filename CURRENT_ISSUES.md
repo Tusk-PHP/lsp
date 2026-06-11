@@ -50,10 +50,10 @@ _None open._
 - **What:** Exercising `BuildContainer`'s `DepsBoundary` boundary-node Meta (`edgeCount`, `distinctSymbols`, `version`) end-to-end needs a *vendor-classified* FQN as a binding's Concrete. The only no-fixture path is writing a PHP provider into a temp dir and relying on regex `parseLaravelProvider`, which is fragile (path must match `app/Providers/*.php`). The test currently degrades to `t.Skip` when the binding isn't parsed, so the real boundary path is only conditionally covered.
 - **Fix:** Add a small seam — e.g. exported `func (ca *ContainerAnalyzer) AddBinding(b *ServiceBinding)` or an in-package `testAddBinding` helper — so tests can inject known bindings directly without filesystem parsing.
 
-### L20 — Duplicate installed.json unmarshal structs in composer package
-- **Where:** `internal/composer/composer.go` (`installedPackage`, ~line 41) vs `internal/composer/packages.go` (`installedPackageWithVersion`).
-- **What:** Unit 4 of the graph-container work needed the package `version` field but avoided editing `composer.go` (out of its scope), so it added a parallel `installedPackageWithVersion` struct duplicating `name`/`install-path`/autoload plus `version`. Both live in the same package.
-- **Fix:** Add `Version string \`json:"version"\`` to `installedPackage` in `composer.go` and drop `installedPackageWithVersion`, repointing `packages.go` at the unified struct.
+### ~~L20~~ — Duplicate installed.json unmarshal structs in composer package — **RESOLVED**
+- `installedPackage` in `composer.go` now includes `Version string \`json:"version"\``.
+  `installedPackageWithVersion` and `installedJSONWithVersion` removed from `packages.go`;
+  `InstalledPackages` repoints at the unified struct. Behaviour is identical.
 
 ### L14 — Hand-authored availability entries overlap with the generated table
 - **Where:** `internal/symbols/builtins.go` (`builtinAvailabilityByName`) vs `internal/symbols/builtin_availability_generated.go` (`generatedBuiltinAvailability`).
@@ -70,10 +70,14 @@ _None open._
 - **What:** The harness drives requests synchronously through a pipe and has no mechanism to wait deterministically for the `postIndexSettle` goroutine. Asserting "first publish is soft-moded, second publish carries unknown-* findings" would require a settle channel or injectable goroutine. Skipped during U5; the soft-mode and re-publish are covered by package-level tests in `internal/symbols/` and `internal/diagnostics/`.
 - **Fix:** Add a `WaitForSettle()` (or test-only callback) wired to the existing `indexWg` so harness tests can synchronize without sleeps.
 
-### L17 — `.tusk-php.json` project-level config override
-- **Where:** future config loader in `internal/config/` + resolution in `internal/lsp/server.go`.
-- **What:** `BUILTIN_STUBS_PLAN.md` lists `.tusk-php.json` as step 3 of the PHP-version resolution chain (between composer `require.php` and local-PHP detection). Not implemented; the chain currently skips that step and proceeds straight from composer to `phpdetect`.
-- **Fix:** Add a loader for `.tusk-php.json` at workspace root with `phpVersion` and optional `extensions` fields. Slot it into `resolveBuiltinProfile()`.
+### ~~L17~~ — `.tusk-php.json` project-level config override — **RESOLVED**
+- `config.Config` gains `Extensions []string` and an unexported `phpVersionExplicitlySet` flag
+  (exposed via `IsPHPVersionExplicitlySet()`). `LoadFromFile` detects the presence of the
+  `phpVersion` JSON key; `MergeClientOptions` sets the flag when `PHPVersion` is non-empty.
+- `workspace.ResolveBuiltinProfileWithConfig` implements the four-step chain:
+  (1) composer `config.platform.php` / `require.php`, (2) config `phpVersion` when explicitly
+  set, (3) phpdetect, (4) bundled default. Config `extensions` are merged additively with
+  composer extensions. `server.go` now calls `ResolveBuiltinProfileWithConfig` passing `s.cfg`.
 
 ---
 
