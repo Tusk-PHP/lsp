@@ -362,3 +362,48 @@ $flags = JSON_THROW_ON_ERROR;
 		}
 	}
 }
+
+// TestBuiltinUnavailableArrayIsListPHP74 verifies that array_is_list (PHP 8.1)
+// is flagged as unavailable on a PHP 7.4 profile.
+func TestBuiltinUnavailableArrayIsListPHP74(t *testing.T) {
+	source := `<?php
+$result = array_is_list([1, 2, 3]);
+`
+	file := parser.ParseFile(source)
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
+
+	rule := &BuiltinUnavailableRule{PHPVersion: "7.4"}
+	findings := rule.Check(file, source, idx)
+
+	found := false
+	for _, f := range findings {
+		if f.Code == "builtin-unavailable" && strings.Contains(f.Message, "array_is_list") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected builtin-unavailable finding for array_is_list on PHP 7.4")
+	}
+}
+
+// TestBuiltinUnavailableArrayIsListPHP81 verifies that array_is_list does NOT
+// produce a builtin-unavailable finding on a PHP 8.1 profile.
+func TestBuiltinUnavailableArrayIsListPHP81(t *testing.T) {
+	source := `<?php
+$result = array_is_list([1, 2, 3]);
+`
+	file := parser.ParseFile(source)
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.1"})
+
+	rule := &BuiltinUnavailableRule{PHPVersion: "8.1"}
+	findings := rule.Check(file, source, idx)
+
+	for _, f := range findings {
+		if f.Code == "builtin-unavailable" && strings.Contains(f.Message, "array_is_list") {
+			t.Errorf("unexpected builtin-unavailable finding for array_is_list on PHP 8.1: %v", f)
+		}
+	}
+}

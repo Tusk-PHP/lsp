@@ -89,6 +89,69 @@ func TestBuiltinPHPForProfileSelectsExtensionLayers(t *testing.T) {
 	}
 }
 
+// TestBuiltinPHPForProfileSelectsCoreDeltasFor81 verifies that the PHP 8.1
+// core delta is included for PHP 8.1+ profiles but excluded for PHP 8.0 and
+// earlier.
+func TestBuiltinPHPForProfileSelectsCoreDeltasFor81(t *testing.T) {
+	php80 := mustEntries(t, Profile{PHPVersion: "8.0"})
+	if hasEntry(php80, "php/core/php-8.1.php") {
+		t.Fatal("did not expect PHP 8.1 core delta for PHP 8.0 profile")
+	}
+
+	php81 := mustEntries(t, Profile{PHPVersion: "8.1"})
+	if !hasEntry(php81, "php/core/php-8.1.php") {
+		t.Fatal("expected PHP 8.1 core delta for PHP 8.1 profile")
+	}
+	if !containsSource(php81, "array_is_list") {
+		t.Fatal("expected array_is_list in PHP 8.1 profile")
+	}
+	if !containsSource(php81, "Fiber") {
+		t.Fatal("expected Fiber class in PHP 8.1 profile")
+	}
+	if !containsSource(php81, "ReflectionEnum") {
+		t.Fatal("expected ReflectionEnum in PHP 8.1 profile")
+	}
+}
+
+// TestBuiltinPHPForProfileSelectsCoreDeltasFor82 verifies that the PHP 8.2
+// core delta is included for PHP 8.2+ profiles but excluded for PHP 8.1 and
+// earlier.
+func TestBuiltinPHPForProfileSelectsCoreDeltasFor82(t *testing.T) {
+	php81 := mustEntries(t, Profile{PHPVersion: "8.1"})
+	if hasEntry(php81, "php/core/php-8.2.php") {
+		t.Fatal("did not expect PHP 8.2 core delta for PHP 8.1 profile")
+	}
+
+	php82 := mustEntries(t, Profile{PHPVersion: "8.2"})
+	if !hasEntry(php82, "php/core/php-8.2.php") {
+		t.Fatal("expected PHP 8.2 core delta for PHP 8.2 profile")
+	}
+	if !containsSource(php82, "ini_parse_quantity") {
+		t.Fatal("expected ini_parse_quantity in PHP 8.2 profile")
+	}
+	if !containsSource(php82, "SensitiveParameter") {
+		t.Fatal("expected SensitiveParameter attribute in PHP 8.2 profile")
+	}
+}
+
+// TestBuiltinPHPForProfileSelectsCoreDeltasFor83 verifies that the PHP 8.3
+// core delta is included for PHP 8.3+ profiles but excluded for PHP 8.2 and
+// earlier.
+func TestBuiltinPHPForProfileSelectsCoreDeltasFor83(t *testing.T) {
+	php82 := mustEntries(t, Profile{PHPVersion: "8.2"})
+	if hasEntry(php82, "php/core/php-8.3.php") {
+		t.Fatal("did not expect PHP 8.3 core delta for PHP 8.2 profile")
+	}
+
+	php83 := mustEntries(t, Profile{PHPVersion: "8.3"})
+	if !hasEntry(php83, "php/core/php-8.3.php") {
+		t.Fatal("expected PHP 8.3 core delta for PHP 8.3 profile")
+	}
+	if !containsSource(php83, "Override") {
+		t.Fatal("expected Override attribute in PHP 8.3 profile")
+	}
+}
+
 func mustEntries(t *testing.T, profile Profile) []Entry {
 	t.Helper()
 	entries, err := BuiltinPHPForProfile(profile)
