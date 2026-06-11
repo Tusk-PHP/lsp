@@ -190,27 +190,273 @@ type InjectedDependency struct {
 	TypeHint         string
 	ResolvedConcrete string
 	IsSingleton      bool
+	// AutowireKind describes the source of #[Autowire] on this parameter.
+	// Values: "service", "param", "env", or "" (none / type-hint autowire).
+	AutowireKind string
+	// AutowireValue holds the raw value from the #[Autowire(...)] attribute:
+	// the service ID, parameter name (with optional % wrapping), or env var name.
+	AutowireValue string
 }
 
+// AnalyzeConstructorInjection resolves constructor parameter types for classFQN
+// through the container bindings. For Symfony projects it additionally parses
+// #[Autowire(...)] attributes and uses them to override the resolution with the
+// explicitly declared service, parameter, or env binding.
 func (ca *ContainerAnalyzer) AnalyzeConstructorInjection(classFQN string) []InjectedDependency {
 	sym := ca.index.Lookup(classFQN)
 	if sym == nil {
 		return nil
 	}
+
+	// For Symfony projects, fetch the source file to parse Autowire attributes.
+	// The Autowire list is indexed by parameter position (0-based) so it is
+	// independent of whether the AST parser correctly captures param names.
+	var autowireList []autowireAttr
+	if ca.framework == "symfony" && sym.URI != "" && sym.URI != "builtin" {
+		path := symbols.URIToPath(sym.URI)
+		if data, err := os.ReadFile(path); err == nil {
+			autowireList = parseConstructorAutowireAttrsByPosition(string(data))
+		}
+	}
+
 	var deps []InjectedDependency
 	for _, child := range sym.Children {
-		if child.Kind == symbols.KindMethod && child.Name == "__construct" {
-			for _, param := range child.Params {
-				dep := InjectedDependency{ParamName: param.Name, TypeHint: param.Type}
-				if binding := ca.ResolveDependency(param.Type); binding != nil {
-					dep.ResolvedConcrete = binding.Concrete
-					dep.IsSingleton = binding.Singleton
+		if child.Kind != symbols.KindMethod || child.Name != "__construct" {
+			continue
+		}
+
+		for idx, param := range child.Params {
+			dep := InjectedDependency{ParamName: param.Name, TypeHint: param.Type}
+
+			// Check for an explicit #[Autowire] at this parameter position.
+			if idx < len(autowireList) && autowireList[idx].kind != "" {
+				aw := autowireList[idx]
+				dep.AutowireKind = aw.kind
+				dep.AutowireValue = aw.value
+				if aw.kind == "service" {
+					// Resolve through the container bindings using the service ID.
+					if binding := ca.ResolveDependency(aw.value); binding != nil {
+						dep.ResolvedConcrete = binding.Concrete
+						dep.IsSingleton = binding.Singleton
+					} else {
+						dep.ResolvedConcrete = aw.value
+					}
 				}
-				deps = append(deps, dep)
+				// For "param" and "env" kinds there's no container binding; leave
+				// ResolvedConcrete empty so callers can handle them specially.
+			} else if binding := ca.ResolveDependency(param.Type); binding != nil {
+				dep.ResolvedConcrete = binding.Concrete
+				dep.IsSingleton = binding.Singleton
 			}
+			deps = append(deps, dep)
 		}
 	}
 	return deps
+}
+
+// autowireAttr holds parsed #[Autowire] information for one constructor param.
+type autowireAttr struct {
+	kind  string // "service", "param", "env"
+	value string // raw value
+}
+
+// Regexes for #[Autowire(...)] attribute argument parsing.
+var (
+	// service: 'service.id' or service: "service.id"
+	autowireServicePattern = regexp.MustCompile(`service\s*:\s*['"]([^'"]+)['"]`)
+	// param: 'name' or param: "name"
+	autowireParamNamePattern = regexp.MustCompile(`param\s*:\s*['"]([^'"]+)['"]`)
+	// env: 'VAR' or env: "VAR"
+	autowireEnvPattern = regexp.MustCompile(`env\s*:\s*['"]([^'"]+)['"]`)
+	// bare %param% form: first string arg that starts/ends with %
+	autowirePercentParamPattern = regexp.MustCompile(`^\s*['"](%[^'"]+%)['"]`)
+)
+
+// parseConstructorAutowireAttrsByPosition scans source text for a __construct
+// method and returns a slice of autowireAttr indexed by parameter position.
+// Parameters without #[Autowire] get a zero-value entry (kind == "").
+// This position-based approach is robust to AST parsers that may not correctly
+// handle attributes in promoted constructor parameters.
+func parseConstructorAutowireAttrsByPosition(source string) []autowireAttr {
+	if source == "" {
+		return nil
+	}
+
+	// Find __construct in source
+	ctorIdx := strings.Index(source, "__construct")
+	if ctorIdx < 0 {
+		return nil
+	}
+
+	// Find the opening paren of the parameter list
+	parenIdx := strings.Index(source[ctorIdx:], "(")
+	if parenIdx < 0 {
+		return nil
+	}
+	parenIdx += ctorIdx
+
+	// Extract the constructor signature block (from open paren to close paren)
+	closeIdx := findMatchingParen(source, parenIdx)
+	if closeIdx < 0 {
+		return nil
+	}
+	ctorSignature := source[parenIdx+1 : closeIdx]
+
+	// Walk through lines of the constructor signature looking for #[Autowire]
+	// followed by a parameter declaration. Each parameter position gets one entry.
+	lines := strings.Split(ctorSignature, "\n")
+	var result []autowireAttr
+	var pendingAutowire *autowireAttr
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		// Detect #[Autowire(...)] on this line
+		if strings.Contains(trimmed, "#[") && strings.Contains(trimmed, "Autowire") {
+			attr := parseAutowireAttributeLine(trimmed)
+			pendingAutowire = attr
+			// Check if the param is also on the same line (inline attribute)
+			// by looking for a $ after the ']'
+			bracketEnd := strings.LastIndex(trimmed, "]")
+			if bracketEnd >= 0 {
+				rest := strings.TrimSpace(trimmed[bracketEnd+1:])
+				if extractParamName(rest) != "" {
+					// Same-line: add now
+					if pendingAutowire != nil {
+						result = append(result, *pendingAutowire)
+					} else {
+						result = append(result, autowireAttr{})
+					}
+					pendingAutowire = nil
+				}
+			}
+			continue
+		}
+
+		// Check if this line declares a parameter (has a $name token)
+		if extractParamName(trimmed) != "" {
+			if pendingAutowire != nil {
+				result = append(result, *pendingAutowire)
+				pendingAutowire = nil
+			} else {
+				result = append(result, autowireAttr{})
+			}
+		}
+	}
+	return result
+}
+
+// parseConstructorAutowireAttrs is kept as an alias for tests that call it
+// directly. It returns a map keyed by parameter name for unit test convenience.
+func parseConstructorAutowireAttrs(source string) map[string]autowireAttr {
+	if source == "" {
+		return nil
+	}
+
+	ctorIdx := strings.Index(source, "__construct")
+	if ctorIdx < 0 {
+		return nil
+	}
+	parenIdx := strings.Index(source[ctorIdx:], "(")
+	if parenIdx < 0 {
+		return nil
+	}
+	parenIdx += ctorIdx
+	closeIdx := findMatchingParen(source, parenIdx)
+	if closeIdx < 0 {
+		return nil
+	}
+	ctorSignature := source[parenIdx+1 : closeIdx]
+
+	lines := strings.Split(ctorSignature, "\n")
+	result := make(map[string]autowireAttr)
+	var pendingAutowire *autowireAttr
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		if strings.Contains(trimmed, "#[") && strings.Contains(trimmed, "Autowire") {
+			attr := parseAutowireAttributeLine(trimmed)
+			pendingAutowire = attr
+			continue
+		}
+
+		if pendingAutowire != nil {
+			if paramName := extractParamName(trimmed); paramName != "" {
+				result[paramName] = *pendingAutowire
+			}
+			pendingAutowire = nil
+		}
+	}
+	return result
+}
+
+// parseAutowireAttributeLine parses a single line containing #[Autowire(...)].
+func parseAutowireAttributeLine(line string) *autowireAttr {
+	open := strings.Index(line, "(")
+	close := strings.LastIndex(line, ")")
+	if open < 0 || close <= open {
+		return nil
+	}
+
+	// Verify attribute name is Autowire
+	namePart := strings.TrimSpace(line[strings.Index(line, "#[")+2 : open])
+	parts := strings.Split(namePart, "\\")
+	short := parts[len(parts)-1]
+	if short != "Autowire" {
+		return nil
+	}
+
+	args := line[open+1 : close]
+
+	// service: 'id'
+	if m := autowireServicePattern.FindStringSubmatch(args); len(m) >= 2 {
+		return &autowireAttr{kind: "service", value: m[1]}
+	}
+	// param: 'name'
+	if m := autowireParamNamePattern.FindStringSubmatch(args); len(m) >= 2 {
+		return &autowireAttr{kind: "param", value: m[1]}
+	}
+	// env: 'VAR'
+	if m := autowireEnvPattern.FindStringSubmatch(args); len(m) >= 2 {
+		return &autowireAttr{kind: "env", value: m[1]}
+	}
+	// %param% positional form
+	if m := autowirePercentParamPattern.FindStringSubmatch(args); len(m) >= 2 {
+		val := strings.Trim(m[1], "%")
+		return &autowireAttr{kind: "param", value: val}
+	}
+	return nil
+}
+
+// extractParamName extracts the PHP parameter name (e.g. "$logger") from a
+// constructor parameter line like "private LoggerInterface $logger,".
+// Returns the bare name without "$" prefix, or "" if not found.
+func extractParamName(line string) string {
+	// Find the last $name token on the line.
+	idx := strings.LastIndex(line, "$")
+	if idx < 0 {
+		return ""
+	}
+	rest := line[idx+1:]
+	end := 0
+	for end < len(rest) && (isAlphanumUnderscore(rest[end])) {
+		end++
+	}
+	if end == 0 {
+		return ""
+	}
+	return "$" + rest[:end]
+}
+
+func isAlphanumUnderscore(ch byte) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_'
 }
 
 var (
