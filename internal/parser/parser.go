@@ -26,6 +26,16 @@ type ParseResult struct {
 	Tokens     []Token
 	Errors     []ParseError
 	Lines      []string
+	// Matches holds all match expressions found in the file (including those
+	// inside function and method bodies). Populated by the expression scanner
+	// that runs after the declaration-level pass. Nested match expressions are
+	// each recorded individually; nesting depth is not tracked here.
+	Matches matchList
+	// Calls holds call sites collected from the file up to maxCallSitesPerFile.
+	// Only calls with recognisable callees are recorded (plain identifiers,
+	// $var->method chains, Type::method, new Type). The slice is populated by
+	// the expression scanner that runs after the declaration-level pass.
+	Calls callList
 }
 
 type UseStatement struct {
@@ -624,10 +634,16 @@ func identifierToKind(word string) TokenKind {
 	}
 }
 
-// parseStructure extracts top-level structural info from tokens.
+// parseStructure extracts top-level structural info from tokens, then runs
+// the expression scanner to collect match expressions and call sites.
 func parseStructure(tokens []Token, result *ParseResult) {
 	p := &structParser{tokens: tokens, pos: 0, result: result}
 	p.parse()
+	// Expression scanner is a separate single-pass over the token stream.
+	// It runs after declarations so it shares the same token slice without
+	// re-tokenising. Strings/comments are already collapsed, so keyword
+	// matches inside them cannot occur.
+	scanExpressions(tokens, result)
 }
 
 type structParser struct {
