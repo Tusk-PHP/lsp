@@ -1,0 +1,17 @@
+user:
+    profile:
+        title: User Profile
+        bio: Biography
+    login:
+        button: Log In
+        error: Invalid credentials
+
+nav:
+    home: Home
+    about: About Us
+    contact: Contact
+
+button:
+    save: Save
+    cancel: Cancel
+    delete: Delete

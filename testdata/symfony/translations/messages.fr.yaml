@@ -1,0 +1,17 @@
+user:
+    profile:
+        title: Profil Utilisateur
+        bio: Biographie
+    login:
+        button: Se Connecter
+        error: Identifiants invalides
+
+nav:
+    home: Accueil
+    about: À Propos
+    contact: Contact
+
+button:
+    save: Enregistrer
+    cancel: Annuler
+    delete: Supprimer
