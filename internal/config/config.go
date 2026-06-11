@@ -6,8 +6,81 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
+
+// RuleSeverityValue is the value stored per rule code in DiagnosticRules.
+// It accepts both the legacy boolean form and a string severity name:
+//
+//	true / "warning"  → use the rule's default severity
+//	false / "off"     → disable the rule
+//	"hint"            → override to hint
+//	"info"            → override to info
+//	"warning"         → override to warning (explicit)
+//	"error"           → override to error
+type RuleSeverityValue struct {
+	enabled  bool
+	override checks.Severity // 0 means "use default"
+	hasValue bool            // false → missing (treated as default)
+}
+
+// MarshalJSON emits the compact form used for writing config back.
+func (v RuleSeverityValue) MarshalJSON() ([]byte, error) {
+	if !v.hasValue {
+		return []byte("true"), nil
+	}
+	if !v.enabled {
+		return []byte(`"off"`), nil
+	}
+	switch v.override {
+	case checks.SeverityError:
+		return []byte(`"error"`), nil
+	case checks.SeverityWarning:
+		return []byte(`"warning"`), nil
+	case checks.SeverityInfo:
+		return []byte(`"info"`), nil
+	case checks.SeverityHint:
+		return []byte(`"hint"`), nil
+	}
+	return []byte("true"), nil
+}
+
+// UnmarshalJSON accepts both legacy bool and string severity forms.
+func (v *RuleSeverityValue) UnmarshalJSON(data []byte) error {
+	v.hasValue = true
+	// Boolean form: true / false
+	var b bool
+	if err := json.Unmarshal(data, &b); err == nil {
+		v.enabled = b
+		return nil
+	}
+	// String form: "off" | "hint" | "info" | "warning" | "error"
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	switch s {
+	case "off", "":
+		v.enabled = false
+	case "hint":
+		v.enabled = true
+		v.override = checks.SeverityHint
+	case "info":
+		v.enabled = true
+		v.override = checks.SeverityInfo
+	case "warning":
+		v.enabled = true
+		v.override = checks.SeverityWarning
+	case "error":
+		v.enabled = true
+		v.override = checks.SeverityError
+	default:
+		// Unknown string → treat as enabled with default severity
+		v.enabled = true
+	}
+	return nil
+}
 
 // InlayHintsConfig holds the configuration for inlay hint display.
 type InlayHintsConfig struct {
@@ -77,7 +150,7 @@ type Config struct {
 	PintConfig                string           `json:"pintConfig,omitempty"`
 	DatabaseEnabled           *bool            `json:"databaseEnabled,omitempty"`
 	DatabaseSource            string           `json:"databaseSource,omitempty"`
-	DiagnosticRules           map[string]bool  `json:"diagnosticRules,omitempty"`
+	DiagnosticRules           map[string]RuleSeverityValue `json:"diagnosticRules,omitempty"`
 	MaxIndexFiles             int              `json:"maxIndexFiles"`
 	StubsPath                 string           `json:"stubsPath"`
 	LogLevel                  string           `json:"logLevel"`
@@ -90,17 +163,43 @@ type Config struct {
 	AI                        AIConfig         `json:"ai,omitempty"`
 }
 
+// SetDiagnosticRulesJSON parses a JSON object of rule code → severity value
+// (bool or string) and stores it as DiagnosticRules. Returns any parse error.
+func (c *Config) SetDiagnosticRulesJSON(raw string) error {
+	var m map[string]RuleSeverityValue
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return err
+	}
+	c.DiagnosticRules = m
+	return nil
+}
+
 // IsRuleEnabled returns whether a diagnostic rule is enabled.
 // Rules default to enabled if not explicitly configured.
 func (c *Config) IsRuleEnabled(code string) bool {
 	if c.DiagnosticRules == nil {
 		return true
 	}
-	enabled, ok := c.DiagnosticRules[code]
+	v, ok := c.DiagnosticRules[code]
 	if !ok {
 		return true
 	}
-	return enabled
+	return v.enabled
+}
+
+// RuleSeverity returns the effective severity for a rule code.
+// If the config has an explicit severity override it is returned; otherwise
+// defaultSeverity is returned. If the rule is disabled, defaultSeverity is
+// still returned — callers should check IsRuleEnabled first.
+func (c *Config) RuleSeverity(code string, defaultSeverity checks.Severity) checks.Severity {
+	if c.DiagnosticRules == nil {
+		return defaultSeverity
+	}
+	v, ok := c.DiagnosticRules[code]
+	if !ok || v.override == 0 {
+		return defaultSeverity
+	}
+	return v.override
 }
 
 func DefaultConfig() *Config {
