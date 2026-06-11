@@ -308,6 +308,10 @@ func (s *Server) handleMessage(msg *jsonRPCMessage) {
 		s.handleCodeAction(msg)
 	case "textDocument/inlayHint":
 		s.handleInlayHint(msg)
+	case "textDocument/selectionRange":
+		s.handleSelectionRange(msg)
+	case "textDocument/semanticTokens/full":
+		s.handleSemanticTokensFull(msg)
 	case "workspace/symbol":
 		s.handleWorkspaceSymbol(msg)
 	case "workspace/executeCommand":
@@ -446,8 +450,17 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 				"source",
 				"source.organizeImports",
 			}},
-			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{Commands: []string{"tuskPhpLsp.namespaceForPath"}},
+			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{Commands: []string{
+					"tuskPhpLsp.namespaceForPath",
+					"tuskPhpLsp.copyNamespace",
+					"tuskPhpLsp.moveToNamespace",
+				}},
 			InlayHintProvider:      &protocol.InlayHintOptions{ResolveProvider: false},
+			SelectionRangeProvider: true,
+			SemanticTokensProvider: &protocol.SemanticTokensOptions{
+				Legend: SemanticTokensLegend,
+				Full:   true,
+			},
 		},
 		ServerInfo: protocol.ServerInfo{Name: ServerName, Version: ServerVersion},
 	})
