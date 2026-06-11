@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - feat(stubs): Curated core stub deltas for PHP 8.1 (`internal/stubs/php/core/php-8.1.php`): `array_is_list`, `enum_exists`, `memory_reset_peak_usage`, `UnitEnum`, `BackedEnum`, `ReflectionEnum`, `ReflectionEnumUnitCase`, `ReflectionEnumBackedCase`, `ReflectionFiber`, `Fiber`, `AllowDynamicProperties`, `ReturnTypeWillChange`, `CURLStringFile`.
 - feat(stubs): Curated core stub deltas for PHP 8.2 (`internal/stubs/php/core/php-8.2.php`): `ini_parse_quantity`, `SensitiveParameter`, `SensitiveParameterValue`.
 - feat(stubs): Curated core stub delta for PHP 8.3 (`internal/stubs/php/core/php-8.3.php`): `Override` attribute class. (`json_validate` is already in the ext-json delta; `mb_str_pad` is in the generated availability table.)
+- `symfony_routes` MCP tool: lists Symfony route names, paths, and declaration locations; gated to Symfony-detected workspaces.
+- `symfony_route_to_controller` MCP tool: looks up a Symfony route by name and returns its declaration location; gated to Symfony-detected workspaces.
+- `tusk://symfony/routes` MCP resource: JSON array of Symfony routes, mirroring the existing `tusk://laravel/routes` resource; Symfony workspaces only.
+- Symfony route discovery is now performed at workspace build time for Symfony projects and carried on `Bootstrapped.SymfonyRoutes`, keeping the MCP snapshot fully self-contained.
+- `php_graph` MCP tool: builds a PHP dependency/reference/model graph on demand. Accepts `kind` (`container`|`references`|`models`), `deps` (`none`|`boundary`|`full`, default `none`), and `format` (`json`|`mermaid`|`dot`, default `json`). Returns the graph DTO (schemaVersion 1) as structured JSON content, or `{ format, text }` for diagram formats. Invalid inputs return clean MCP errors.
+- `contractVersion: 1` field added to `php_project_summary` output so agents can detect breaking interface changes.
+- `docs/mcp-tools.md`: complete tool and resource reference documenting all 16 tools and 6 resources, including input schemas, output shapes, framework gating, contract version, and graph DTO schemaVersion.
 
 ### Changed
 
