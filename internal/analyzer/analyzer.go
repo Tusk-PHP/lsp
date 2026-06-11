@@ -19,13 +19,14 @@ import (
 )
 
 type Analyzer struct {
-	index        *symbols.Index
-	container    *container.ContainerAnalyzer
-	resolver     *resolve.Resolver
-	framework    string
-	routes       *frameworklaravel.RouteIndex
-	views        *frameworklaravel.Views
-	translations *frameworklaravel.TranslationResolver
+	index               *symbols.Index
+	container           *container.ContainerAnalyzer
+	resolver            *resolve.Resolver
+	framework           string
+	routes              *frameworklaravel.RouteIndex
+	views               *frameworklaravel.Views
+	translations        *frameworklaravel.TranslationResolver
+	symfonyTranslations *frameworksymfony.TranslationResolver
 }
 
 // DefinitionResult is the extended return shape from FindDefinitionWithManual.
@@ -74,6 +75,10 @@ func (a *Analyzer) SetTranslationResolver(resolver *frameworklaravel.Translation
 	a.translations = resolver
 }
 
+func (a *Analyzer) SetSymfonyTranslationResolver(resolver *frameworksymfony.TranslationResolver) {
+	a.symfonyTranslations = resolver
+}
+
 func (a *Analyzer) SetLaravelRouteIndex(routeIndex *frameworklaravel.RouteIndex) {
 	a.routes = routeIndex
 }
@@ -87,6 +92,11 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 		if routeName, _, ok := frameworksymfony.RouteNameAtPosition(source, pos); ok {
 			if route := frameworksymfony.FindRoute(a.index, routeName); route != nil {
 				return &protocol.Location{URI: route.URI, Range: route.DeclRange}
+			}
+		}
+		if a.symfonyTranslations != nil {
+			if loc := a.definitionForSymfonyTranslationKey(source, pos); loc != nil {
+				return loc
 			}
 		}
 	}
@@ -355,6 +365,24 @@ func (a *Analyzer) definitionForLaravelView(line string, character int) *protoco
 			End:   protocol.Position{Line: 0, Character: 0},
 		},
 	}
+}
+
+// definitionForSymfonyTranslationKey resolves a translation key to its source file
+// when the cursor is inside a Symfony translation call.
+func (a *Analyzer) definitionForSymfonyTranslationKey(source string, pos protocol.Position) *protocol.Location {
+	lines := strings.Split(source, "\n")
+	if pos.Line < 0 || pos.Line >= len(lines) {
+		return nil
+	}
+	line := lines[pos.Line]
+	ctx := frameworksymfony.DetectSymfonyTranslationContext(line, pos.Character)
+	if ctx == nil {
+		return nil
+	}
+	if ctx.Domain != "" {
+		return a.symfonyTranslations.DefinitionInDomain(ctx.Key, ctx.Domain)
+	}
+	return a.symfonyTranslations.Definition(ctx.Key)
 }
 
 // definitionForVariable resolves a $variable to its type's definition.
