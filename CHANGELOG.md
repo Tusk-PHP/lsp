@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Parser: match expression structures** — `ParseResult.Matches` now holds a `[]MatchDef` for every `match (subject) { cond => expr, default => expr }` expression found in the file, including those inside method and function bodies. Nested match expressions are each collected individually. The scanner is brace/paren-balance tolerant and recovers gracefully from malformed arms (records a `ParseError`, skips the arm, continues).
+- **Parser: call-site model** — `ParseResult.Calls` now holds a `[]CallSite` (capped at 5 000 per file) for function calls, method calls (`$var->method`), static calls (`Type::method`), and constructor calls (`new Type`) found in the file. Each `CallSite` records the callee text, line, and an `[]CallArg` list with per-argument name (named arguments), value text, and spread flag.
+- **Parser: first-class callable syntax** — `CallSite.IsFirstClassCallable` is set to `true` when the argument list consists solely of the `...` token (PHP 8.1 first-class callable syntax: `strlen(...)`, `$obj->method(...)`, `Type::method(...)`), distinguishing it from regular calls and from variadic spread arguments.
+
 ## [0.8.0] - 2026-06-01
 
 ### Added
