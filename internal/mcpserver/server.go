@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,10 +18,12 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/analyzer"
 	"github.com/Tusk-PHP/lsp/internal/checks"
+	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
+	"github.com/Tusk-PHP/lsp/internal/graph"
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/models"
@@ -37,6 +40,10 @@ const ServerName = "tusk-mcp"
 
 // ServerVersion is overridden at startup from the binary's stamped version.
 var ServerVersion = "0.5.0"
+
+// ContractVersion is the stable wire-format version for MCP tool contracts.
+// Increment when tool schemas or output shapes change incompatibly.
+const ContractVersion = 1
 
 type Service struct {
 	RootPath         string
@@ -61,6 +68,7 @@ type Service struct {
 	phpSymbolsURI     string
 	laravelRoutesURI  string
 	laravelModelsURI  string
+	symfonyRoutesURI  string
 }
 
 type serviceRuntime struct {
@@ -92,6 +100,7 @@ type ProjectSummary struct {
 	RouteCount       int      `json:"routeCount"`
 	SchemaSource     string   `json:"schemaSource,omitempty"`
 	SchemaTables     []string `json:"schemaTables,omitempty"`
+	ContractVersion  int      `json:"contractVersion"`
 }
 
 type SymbolMatch struct {
@@ -248,6 +257,29 @@ type LaravelModelSchemaOutput struct {
 	MemberCount int                 `json:"memberCount,omitempty"`
 }
 
+// SymfonyRouteRecord is a single Symfony route entry returned by the MCP tools.
+type SymfonyRouteRecord struct {
+	Name          string         `json:"name"`
+	Path          string         `json:"path,omitempty"`
+	URI           string         `json:"uri,omitempty"`
+	DeclRange     protocol.Range `json:"declRange"`
+}
+
+type SymfonyRoutesOutput struct {
+	Routes []SymfonyRouteRecord `json:"routes"`
+}
+
+type SymfonyRouteInput struct {
+	Name string `json:"name" jsonschema:"Symfony route name"`
+}
+
+// PhpGraphInput is the input schema for the php_graph MCP tool.
+type PhpGraphInput struct {
+	Kind   string `json:"kind"             jsonschema:"graph kind: container, references, or models"`
+	Deps   string `json:"deps,omitempty"   jsonschema:"dependency mode: none (default), boundary, or full"`
+	Format string `json:"format,omitempty" jsonschema:"output format: json (default), mermaid, or dot"`
+}
+
 func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, error) {
 	if rootPath == "" {
 		cwd, err := os.Getwd()
@@ -288,6 +320,7 @@ func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, e
 		phpSymbolsURI:     "tusk://php/symbols",
 		laravelRoutesURI:  "tusk://laravel/routes",
 		laravelModelsURI:  "tusk://laravel/models",
+		symfonyRoutesURI:  "tusk://symfony/routes",
 	}
 	svc.installRuntime(svc.buildRuntime(ws))
 
@@ -482,6 +515,33 @@ func (s *Service) registerTools() {
 		}
 		return nil, out, nil
 	})
+
+	if s.Framework == "symfony" {
+		mcp.AddTool(s.Server, &mcp.Tool{
+			Name:        "symfony_routes",
+			Description: "List known Symfony route names, paths, and declaration file locations.",
+		}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, SymfonyRoutesOutput, error) {
+			return nil, SymfonyRoutesOutput{Routes: s.symfonyRoutes()}, nil
+		})
+
+		mcp.AddTool(s.Server, &mcp.Tool{
+			Name:        "symfony_route_to_controller",
+			Description: "Look up a Symfony route by name and return its declaration location.",
+		}, func(_ context.Context, _ *mcp.CallToolRequest, in SymfonyRouteInput) (*mcp.CallToolResult, *SymfonyRouteRecord, error) {
+			record := s.findSymfonyRoute(in.Name)
+			if record == nil {
+				return nil, nil, fmt.Errorf("route %q not found", in.Name)
+			}
+			return nil, record, nil
+		})
+	}
+
+	mcp.AddTool(s.Server, &mcp.Tool{
+		Name:        "php_graph",
+		Description: "Build and return a PHP dependency graph. kind: container|references|models. deps: none (default)|boundary|full. format: json (default)|mermaid|dot.",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, in PhpGraphInput) (*mcp.CallToolResult, any, error) {
+		return s.phpGraph(in)
+	})
 }
 
 func (s *Service) registerResources() {
@@ -536,13 +596,27 @@ func (s *Service) registerResources() {
 			return jsonResource(s.laravelModelsURI, s.laravelModels())
 		})
 	}
+
+	if s.Framework == "symfony" {
+		s.Server.AddResource(&mcp.Resource{
+			Name:        "symfony-routes",
+			Title:       "Symfony Routes",
+			Description: "Symfony route names, paths, and declaration locations.",
+			MIMEType:    "application/json",
+			URI:         s.symfonyRoutesURI,
+		}, func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			return jsonResource(s.symfonyRoutesURI, s.symfonyRoutes())
+		})
+	}
 }
 
 func (s *Service) projectSummary() ProjectSummary {
 	ws := s.runtime().Workspace
-	var routeCount int
+	var rc int
 	if ws.RouteIndex != nil {
-		routeCount = len(ws.RouteIndex.Names())
+		rc = len(ws.RouteIndex.Names())
+	} else if ws.Framework == "symfony" {
+		rc = len(ws.SymfonyRoutes)
 	}
 	return ProjectSummary{
 		RootPath:         s.RootPath,
@@ -550,9 +624,10 @@ func (s *Service) projectSummary() ProjectSummary {
 		PHPVersion:       s.BuiltinProfile.PHPVersion,
 		PHPVersionSource: s.BuiltinPHPSource,
 		IndexedFiles:     len(ws.Index.GetAllFileURIs()),
-		RouteCount:       routeCount,
+		RouteCount:       rc,
 		SchemaSource:     schemaSource(ws.Schema),
 		SchemaTables:     sortedStrings(compactSchemaTableNames(ws.Schema)),
+		ContractVersion:  ContractVersion,
 	}
 }
 
@@ -921,6 +996,111 @@ func (s *Service) findLaravelRoute(name string) *LaravelRouteRecord {
 		HandlerMethod:     route.HandlerMethod,
 		HandlerDefinition: s.routeHandlerSymbol(route),
 		HandlerRange:      s.routeHandlerRange(route),
+	}
+}
+
+func (s *Service) symfonyRoutes() []SymfonyRouteRecord {
+	ws := s.runtime().Workspace
+	routes := ws.SymfonyRoutes
+	out := make([]SymfonyRouteRecord, 0, len(routes))
+	for _, r := range routes {
+		out = append(out, SymfonyRouteRecord{
+			Name:      r.Name,
+			Path:      r.Path,
+			URI:       r.URI,
+			DeclRange: r.DeclRange,
+		})
+	}
+	return out
+}
+
+func (s *Service) findSymfonyRoute(name string) *SymfonyRouteRecord {
+	ws := s.runtime().Workspace
+	for _, r := range ws.SymfonyRoutes {
+		if r.Name == name {
+			rec := SymfonyRouteRecord{
+				Name:      r.Name,
+				Path:      r.Path,
+				URI:       r.URI,
+				DeclRange: r.DeclRange,
+			}
+			return &rec
+		}
+	}
+	return nil
+}
+
+// phpGraph builds the requested graph and returns it as structured content (for
+// json format) or as a text result (for mermaid/dot). Input validation is done
+// before any expensive work so callers receive clean errors quickly.
+func (s *Service) phpGraph(in PhpGraphInput) (*mcp.CallToolResult, any, error) {
+	// Validate kind.
+	switch in.Kind {
+	case "container", "references", "models":
+		// valid
+	default:
+		return nil, nil, fmt.Errorf("invalid kind %q: must be container, references, or models", in.Kind)
+	}
+
+	// Validate deps (default "none").
+	deps := in.Deps
+	if deps == "" {
+		deps = "none"
+	}
+	switch deps {
+	case "none", "boundary", "full":
+		// valid
+	default:
+		return nil, nil, fmt.Errorf("invalid deps %q: must be none, boundary, or full", in.Deps)
+	}
+
+	// Validate format (default "json").
+	format := in.Format
+	if format == "" {
+		format = "json"
+	}
+	switch format {
+	case "json", "mermaid", "dot":
+		// valid
+	default:
+		return nil, nil, fmt.Errorf("invalid format %q: must be json, mermaid, or dot", in.Format)
+	}
+
+	rt := s.runtime()
+	ws := rt.Workspace
+
+	pkgs := composer.NewPackageResolver(s.RootPath)
+	opts := graph.Options{
+		Deps:     graph.DepsMode(deps),
+		Packages: pkgs,
+	}
+
+	var g *graph.Graph
+	switch in.Kind {
+	case "container":
+		g = graph.BuildContainer(ws.Index, ws.Container, opts)
+	case "references":
+		g = graph.BuildReferences(ws.Index, opts)
+	case "models":
+		g = graph.BuildModels(ws.Index, s.RootPath, s.Framework, opts)
+	}
+
+	switch format {
+	case "json":
+		// Return as structured content via a JSON-roundtrip so the SDK encodes it.
+		var buf bytes.Buffer
+		if err := g.EncodeJSON(&buf); err != nil {
+			return nil, nil, fmt.Errorf("encoding graph JSON: %w", err)
+		}
+		var structured any
+		if err := json.Unmarshal(buf.Bytes(), &structured); err != nil {
+			return nil, nil, fmt.Errorf("decoding graph JSON: %w", err)
+		}
+		return nil, structured, nil
+	case "mermaid":
+		return nil, map[string]any{"format": "mermaid", "text": graph.RenderMermaid(g)}, nil
+	default: // "dot"
+		return nil, map[string]any{"format": "dot", "text": graph.RenderDOT(g)}, nil
 	}
 }
 
