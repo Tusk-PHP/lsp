@@ -18,14 +18,15 @@ import (
 )
 
 type Provider struct {
-	index         *symbols.Index
-	container     *container.ContainerAnalyzer
-	resolver      *resolve.Resolver
-	framework     string
-	arrayResolver *models.FrameworkArrayResolver
-	routes        *frameworklaravel.RouteIndex
-	views         *frameworklaravel.Views
-	translations  *frameworklaravel.TranslationResolver
+	index                *symbols.Index
+	container            *container.ContainerAnalyzer
+	resolver             *resolve.Resolver
+	framework            string
+	arrayResolver        *models.FrameworkArrayResolver
+	routes               *frameworklaravel.RouteIndex
+	views                *frameworklaravel.Views
+	translations         *frameworklaravel.TranslationResolver
+	symfonyTranslations  *frameworksymfony.TranslationResolver
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
@@ -80,6 +81,10 @@ func (p *Provider) SetLaravelRouteIndex(routeIndex *frameworklaravel.RouteIndex)
 
 func (p *Provider) SetTranslationResolver(resolver *frameworklaravel.TranslationResolver) {
 	p.translations = resolver
+}
+
+func (p *Provider) SetSymfonyTranslationResolver(resolver *frameworksymfony.TranslationResolver) {
+	p.symfonyTranslations = resolver
 }
 
 // sanitizeCompletions is the authoritative post-processing step applied to every
@@ -223,6 +228,11 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 	if p.framework == "symfony" {
 		if partial, quote, ok := frameworksymfony.ExtractRouteNameContext(trimmed); ok {
 			return sanitizeCompletions(p.completeSymfonyRouteNames(partial, quote))
+		}
+		if p.symfonyTranslations != nil {
+			if txCtx := frameworksymfony.DetectSymfonyTranslationContext(line, pos.Character); txCtx != nil {
+				return sanitizeCompletions(p.symfonyTranslations.Complete(txCtx))
+			}
 		}
 	}
 	if filter, quoteCtx, ok := extractContainerArgContext(trimmed); ok {
