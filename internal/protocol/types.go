@@ -376,6 +376,41 @@ type InlayHintsClientOptions struct {
 	SuppressNameMatch   *bool `json:"suppressNameMatch,omitempty"`
 }
 
+// SelectionRangeParams is the params type for textDocument/selectionRange requests.
+type SelectionRangeParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Positions    []Position             `json:"positions"`
+}
+
+// SelectionRange represents a selection range with an optional parent.
+type SelectionRange struct {
+	Range  Range           `json:"range"`
+	Parent *SelectionRange `json:"parent,omitempty"`
+}
+
+// SemanticTokensLegend defines the token types and modifiers for semantic tokens.
+type SemanticTokensLegend struct {
+	TokenTypes     []string `json:"tokenTypes"`
+	TokenModifiers []string `json:"tokenModifiers"`
+}
+
+// SemanticTokensOptions configures semantic tokens support.
+type SemanticTokensOptions struct {
+	Legend SemanticTokensLegend `json:"legend"`
+	Full   bool                 `json:"full"`
+	Range  bool                 `json:"range"`
+}
+
+// SemanticTokens is the response for textDocument/semanticTokens/full.
+type SemanticTokens struct {
+	Data []uint32 `json:"data"`
+}
+
+// SemanticTokensParams is the params for textDocument/semanticTokens/full.
+type SemanticTokensParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
 // ServerCapabilities declares server capabilities.
 type ServerCapabilities struct {
 	TextDocumentSync           TextDocumentSyncOptions `json:"textDocumentSync"`
@@ -396,6 +431,8 @@ type ServerCapabilities struct {
 	CodeActionProvider         *CodeActionOptions      `json:"codeActionProvider,omitempty"`
 	ExecuteCommandProvider     *ExecuteCommandOptions  `json:"executeCommandProvider,omitempty"`
 	InlayHintProvider          *InlayHintOptions       `json:"inlayHintProvider,omitempty"`
+	SelectionRangeProvider     bool                    `json:"selectionRangeProvider,omitempty"`
+	SemanticTokensProvider     *SemanticTokensOptions  `json:"semanticTokensProvider,omitempty"`
 }
 
 // CompletionOptions for completion requests.
