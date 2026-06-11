@@ -132,35 +132,45 @@ type AIConfig struct {
 
 // Config holds the LSP server configuration.
 type Config struct {
-	PHPVersion                string           `json:"phpVersion"`
-	Framework                 string           `json:"framework"`
-	ComposerPath              string           `json:"composerPath"`
-	IncludePaths              []string         `json:"includePaths"`
-	ExcludePaths              []string         `json:"excludePaths"`
-	ContainerAware            bool             `json:"containerAware"`
-	DiagnosticsEnabled        bool             `json:"diagnosticsEnabled"`
-	PHPBinary                 string           `json:"phpBinary,omitempty"`
-	PHPDetectTimeoutMs        int              `json:"phpDetectTimeoutMs,omitempty"`
-	PHPStanEnabled            *bool            `json:"phpstanEnabled,omitempty"`
-	PHPStanPath               string           `json:"phpstanPath,omitempty"`
-	PHPStanLevel              string           `json:"phpstanLevel,omitempty"`
-	PHPStanConfig             string           `json:"phpstanConfig,omitempty"`
-	PintEnabled               *bool            `json:"pintEnabled,omitempty"`
-	PintPath                  string           `json:"pintPath,omitempty"`
-	PintConfig                string           `json:"pintConfig,omitempty"`
-	DatabaseEnabled           *bool            `json:"databaseEnabled,omitempty"`
-	DatabaseSource            string           `json:"databaseSource,omitempty"`
+	PHPVersion string `json:"phpVersion"`
+	// Extensions lists additional PHP extensions (e.g. ["json", "mbstring"])
+	// to include when resolving the builtin profile. When set in the file or
+	// via initializationOptions these are merged with the Composer-detected
+	// extension set; an empty slice is treated as "not set" so it does not
+	// suppress composer-derived extensions.
+	Extensions []string `json:"extensions,omitempty"`
+	// phpVersionExplicitlySet is true when PHPVersion was loaded from a file
+	// or set via initializationOptions, distinguishing it from the default
+	// "8.5" so the resolution chain can skip the default correctly.
+	phpVersionExplicitlySet   bool
+	Framework                 string                       `json:"framework"`
+	ComposerPath              string                       `json:"composerPath"`
+	IncludePaths              []string                     `json:"includePaths"`
+	ExcludePaths              []string                     `json:"excludePaths"`
+	ContainerAware            bool                         `json:"containerAware"`
+	DiagnosticsEnabled        bool                         `json:"diagnosticsEnabled"`
+	PHPBinary                 string                       `json:"phpBinary,omitempty"`
+	PHPDetectTimeoutMs        int                          `json:"phpDetectTimeoutMs,omitempty"`
+	PHPStanEnabled            *bool                        `json:"phpstanEnabled,omitempty"`
+	PHPStanPath               string                       `json:"phpstanPath,omitempty"`
+	PHPStanLevel              string                       `json:"phpstanLevel,omitempty"`
+	PHPStanConfig             string                       `json:"phpstanConfig,omitempty"`
+	PintEnabled               *bool                        `json:"pintEnabled,omitempty"`
+	PintPath                  string                       `json:"pintPath,omitempty"`
+	PintConfig                string                       `json:"pintConfig,omitempty"`
+	DatabaseEnabled           *bool                        `json:"databaseEnabled,omitempty"`
+	DatabaseSource            string                       `json:"databaseSource,omitempty"`
 	DiagnosticRules           map[string]RuleSeverityValue `json:"diagnosticRules,omitempty"`
-	MaxIndexFiles             int              `json:"maxIndexFiles"`
-	StubsPath                 string           `json:"stubsPath"`
-	LogLevel                  string           `json:"logLevel"`
-	LogFile                   string           `json:"logFile"`
-	InlayHints                InlayHintsConfig `json:"inlayHints"`
-	PHPManualLocale           string           `json:"php_manual_locale,omitempty"`
-	PHPManualOpenOnDefinition bool             `json:"php_manual_open_on_definition,omitempty"`
-	Composer                  ComposerConfig   `json:"composer,omitempty"`
-	DB                        DBConfig         `json:"db,omitempty"`
-	AI                        AIConfig         `json:"ai,omitempty"`
+	MaxIndexFiles             int                          `json:"maxIndexFiles"`
+	StubsPath                 string                       `json:"stubsPath"`
+	LogLevel                  string                       `json:"logLevel"`
+	LogFile                   string                       `json:"logFile"`
+	InlayHints                InlayHintsConfig             `json:"inlayHints"`
+	PHPManualLocale           string                       `json:"php_manual_locale,omitempty"`
+	PHPManualOpenOnDefinition bool                         `json:"php_manual_open_on_definition,omitempty"`
+	Composer                  ComposerConfig               `json:"composer,omitempty"`
+	DB                        DBConfig                     `json:"db,omitempty"`
+	AI                        AIConfig                     `json:"ai,omitempty"`
 }
 
 // SetDiagnosticRulesJSON parses a JSON object of rule code → severity value
@@ -172,6 +182,14 @@ func (c *Config) SetDiagnosticRulesJSON(raw string) error {
 	}
 	c.DiagnosticRules = m
 	return nil
+}
+
+// IsPHPVersionExplicitlySet reports whether PHPVersion was supplied by a
+// .tusk-php.json file or by client initializationOptions. When false the
+// value is the compiled-in default ("8.5") and must not shadow a Composer
+// or local-PHP detection result.
+func (c *Config) IsPHPVersionExplicitlySet() bool {
+	return c.phpVersionExplicitlySet
 }
 
 // IsRuleEnabled returns whether a diagnostic rule is enabled.
@@ -248,6 +266,14 @@ func LoadFromFile(path string) (*Config, error) {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
+	// Detect which keys were explicitly present in the file so the profile
+	// resolution chain can distinguish "file-set" from "default" values.
+	var keys map[string]json.RawMessage
+	if json.Unmarshal(data, &keys) == nil {
+		if _, ok := keys["phpVersion"]; ok {
+			cfg.phpVersionExplicitlySet = true
+		}
+	}
 	return cfg, nil
 }
 
@@ -256,6 +282,10 @@ func LoadFromFile(path string) (*Config, error) {
 func (c *Config) MergeClientOptions(opts *protocol.InitializationOptions) {
 	if opts.PHPVersion != "" {
 		c.PHPVersion = opts.PHPVersion
+		c.phpVersionExplicitlySet = true
+	}
+	if len(opts.Extensions) > 0 {
+		c.Extensions = opts.Extensions
 	}
 	if opts.Framework != "" {
 		c.Framework = opts.Framework

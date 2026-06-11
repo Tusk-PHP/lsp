@@ -268,6 +268,7 @@ type InitializeParams struct {
 // InitializationOptions sent by the client during initialization.
 type InitializationOptions struct {
 	PHPVersion         string                   `json:"phpVersion,omitempty"`
+	Extensions         []string                 `json:"extensions,omitempty"`
 	Framework          string                   `json:"framework,omitempty"`
 	ContainerAware     *bool                    `json:"containerAware,omitempty"`
 	DiagnosticsEnabled *bool                    `json:"diagnosticsEnabled,omitempty"`
