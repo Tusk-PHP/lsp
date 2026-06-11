@@ -55,10 +55,8 @@ class Foo {
 
 func TestFilterByConfig(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.DiagnosticRules = map[string]bool{
-		"unused-import":  true,
-		"unreachable-code": false,
-	}
+	// Use JSON round-trip to build the rules map (backward compatible with legacy bool values).
+	_ = cfg.SetDiagnosticRulesJSON(`{"unused-import":true,"unreachable-code":false}`)
 	p := NewProvider(symbols.NewIndex(), "none", "/tmp", nil, cfg)
 
 	source := `<?php

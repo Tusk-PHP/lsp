@@ -335,8 +335,9 @@ $name = "unterminated;
 	p.mu.Unlock()
 
 	diags := p.Analyze(uri, source)
-	if len(diags) != 4 {
-		t.Fatalf("expected 4 diagnostics, got %d: %#v", len(diags), diags)
+	// 4 pre-existing diagnostics + 1 unused-variable for $name (assigned but not read)
+	if len(diags) != 5 {
+		t.Fatalf("expected 5 diagnostics, got %d: %#v", len(diags), diags)
 	}
 
 	syntax := filterByCode(diags, "syntax-error")
