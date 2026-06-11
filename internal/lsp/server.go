@@ -468,13 +468,14 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 
 // resolveBuiltinProfile applies the PHP profile fallback chain:
 //  1. composer.json (config.platform.php or require.php)
-//  2. locally installed php binary (via phpdetect)
-//  3. bundled default
+//  2. .tusk-php.json / initializationOptions phpVersion (when explicitly set)
+//  3. locally installed php binary (via phpdetect)
+//  4. bundled default
 //
 // The resolved profile is cached on the Server and surfaced via window/logMessage.
 func (s *Server) resolveBuiltinProfile() symbols.BuiltinProfile {
 	timeout := time.Duration(s.cfg.PHPDetectTimeoutMs) * time.Millisecond
-	profile, source := workspace.ResolveBuiltinProfile(s.rootPath, s.cfg.PHPBinary, timeout, func(msg string) {
+	profile, source := workspace.ResolveBuiltinProfileWithConfig(s.rootPath, s.cfg.PHPBinary, timeout, s.cfg, func(msg string) {
 		s.sendNotification("window/logMessage", map[string]interface{}{
 			"type":    protocol.MessageTypeInfo,
 			"message": msg,

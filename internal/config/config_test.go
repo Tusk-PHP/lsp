@@ -374,6 +374,90 @@ func TestMergeClientOptionsPHPManual(t *testing.T) {
 	})
 }
 
+func TestIsPHPVersionExplicitlySet(t *testing.T) {
+	t.Run("DefaultConfig is not explicitly set", func(t *testing.T) {
+		cfg := DefaultConfig()
+		if cfg.IsPHPVersionExplicitlySet() {
+			t.Error("DefaultConfig() must not report phpVersion as explicitly set")
+		}
+	})
+
+	t.Run("LoadFromFile with phpVersion key marks explicitly set", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, ".tusk-php.json")
+		os.WriteFile(path, []byte(`{"phpVersion":"8.2"}`), 0644)
+		cfg, err := LoadFromFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !cfg.IsPHPVersionExplicitlySet() {
+			t.Error("expected IsPHPVersionExplicitlySet()=true after loading file with phpVersion")
+		}
+		if cfg.PHPVersion != "8.2" {
+			t.Errorf("PHPVersion = %q, want 8.2", cfg.PHPVersion)
+		}
+	})
+
+	t.Run("LoadFromFile without phpVersion key is not explicitly set", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, ".tusk-php.json")
+		os.WriteFile(path, []byte(`{"framework":"laravel"}`), 0644)
+		cfg, err := LoadFromFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.IsPHPVersionExplicitlySet() {
+			t.Error("expected IsPHPVersionExplicitlySet()=false when phpVersion not in file")
+		}
+	})
+
+	t.Run("MergeClientOptions with PHPVersion marks explicitly set", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.MergeClientOptions(&protocol.InitializationOptions{PHPVersion: "8.3"})
+		if !cfg.IsPHPVersionExplicitlySet() {
+			t.Error("expected IsPHPVersionExplicitlySet()=true after MergeClientOptions with PHPVersion")
+		}
+	})
+
+	t.Run("MergeClientOptions without PHPVersion does not mark explicitly set", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.MergeClientOptions(&protocol.InitializationOptions{})
+		if cfg.IsPHPVersionExplicitlySet() {
+			t.Error("expected IsPHPVersionExplicitlySet()=false after MergeClientOptions with empty options")
+		}
+	})
+}
+
+func TestConfigExtensionsField(t *testing.T) {
+	t.Run("LoadFromFile with extensions", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, ".tusk-php.json")
+		os.WriteFile(path, []byte(`{"extensions":["json","mbstring"]}`), 0644)
+		cfg, err := LoadFromFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(cfg.Extensions) != 2 {
+			t.Fatalf("expected 2 extensions, got %v", cfg.Extensions)
+		}
+	})
+
+	t.Run("MergeClientOptions with extensions", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.MergeClientOptions(&protocol.InitializationOptions{Extensions: []string{"pdo"}})
+		if len(cfg.Extensions) != 1 || cfg.Extensions[0] != "pdo" {
+			t.Errorf("expected [pdo], got %v", cfg.Extensions)
+		}
+	})
+
+	t.Run("DefaultConfig has no extensions", func(t *testing.T) {
+		cfg := DefaultConfig()
+		if len(cfg.Extensions) != 0 {
+			t.Errorf("DefaultConfig should have empty Extensions, got %v", cfg.Extensions)
+		}
+	})
+}
+
 func TestDetectFramework(t *testing.T) {
 	t.Run("laravel with artisan", func(t *testing.T) {
 		dir := t.TempDir()
