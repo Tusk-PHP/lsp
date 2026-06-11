@@ -1,0 +1,5 @@
+field:
+    required: This field is required.
+    min_length: This field must be at least %min% characters.
+    max_length: This field must be at most %max% characters.
+    invalid_email: Please enter a valid email address.
