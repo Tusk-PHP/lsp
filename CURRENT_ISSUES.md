@@ -19,11 +19,39 @@ _None open._
 
 ## Medium
 
-_None open._
+### M14 — compat layer drops parameter default-value information
+- **Where:** `internal/parser/compat.go` (`toParamNode`).
+- **What:** `ParamDef.HasDefault` is not mapped onto `ParamNode.DefaultValue`, so `symbols.ParamInfo.DefaultValue` is always empty for project symbols. This makes required-vs-optional parameter counting impossible; the new `argument-count-mismatch` check (ws/diagnostics-baseline) had to ship as too-many-args only.
+- **Fix:** Map `HasDefault` through the compat conversion (a sentinel value is enough), then enable the too-few-arguments branch in `internal/checks/argument_count.go`.
+
+### M15 — attributes in constructor parameter lists corrupt parameter names
+- **Where:** `internal/parser/` (parameter parsing when `#[Attr(...)]` precedes a promoted constructor parameter).
+- **What:** Parameters preceded by attributes can end up with empty or wrong `ParamName` in the symbol index. The `#[Autowire]` support (ws/symfony-parity) had to correlate attributes by parameter position instead of name as a workaround.
+- **Fix:** Skip balanced `#[...]` attribute groups when scanning parameter lists so names/types attach to the right parameter.
 
 ---
 
 ## Low / performance
+
+### L30 — `phpdetect` tests flake under parallel load
+- **Where:** `internal/phpdetect/` tests.
+- **What:** Tests spawn the real `php` binary with the 1 s default timeout; under heavy CPU contention (e.g. parallel package tests) detection times out and the package fails. Passes in isolation.
+- **Fix:** Use a generous test-only timeout (or a stub binary) for happy-path tests; keep the short timeout only for the dedicated timeout test.
+
+### L29 — `php_graph` MCP tool wraps mermaid/dot output in JSON instead of raw text
+- **Where:** `internal/mcpserver/server.go` (`phpGraph`, ws/mcp-maturation).
+- **What:** mermaid/dot formats return `{"format": ..., "text": ...}` structured content because `mcp.Content` in go-sdk v1.6.1 could not be constructed directly. Functional, but agents must unwrap the `text` field.
+- **Fix:** Revisit when the SDK exposes a text-content constructor; emit raw text content for non-JSON formats.
+
+### L28 — `laravel_*` MCP tools are not framework-gated
+- **Where:** `internal/mcpserver/server.go` (tool registration).
+- **What:** `symfony_*` tools register only for Symfony workspaces, but `laravel_routes` / `laravel_route_to_controller` / `laravel_model_schema` register unconditionally (pre-existing behavior). Inconsistent surface on non-Laravel projects.
+- **Fix:** Gate laravel_* registration on `s.Framework == "laravel"` and cover with the per-framework tool-listing test.
+
+### L27 — `parseParams` variadic detection is dead code
+- **Where:** `internal/parser/parser.go` (~line 1375).
+- **What:** `p.peek().Value == "..."` can never be true — the tokenizer emits `...` as three consecutive `TokenUnknown "."` tokens, so variadic parameter detection never fires. (The expression scanner from ws/parser-expressions has an `isThreeDots` helper for the same reason.)
+- **Fix:** Detect the three-dot sequence (or tokenize `...` as a single token) and set `ParamDef.IsVariadic` accordingly.
 
 ### L26 — `graph models` misses Doctrine XML mappings and string-form targetEntity
 - **Where:** `internal/models/relations.go` (`ModelRelations` Symfony path); relies on `ormRelationRe` + `targetEntityRe` (doctrine.go:52,67).
