@@ -49,6 +49,7 @@ type installedJSON struct {
 type installedPackage struct {
 	Name        string        `json:"name"`
 	InstallPath string        `json:"install-path"`
+	Version     string        `json:"version"`
 	Autoload    autoloadBlock `json:"autoload"`
 }
 

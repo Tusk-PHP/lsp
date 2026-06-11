@@ -16,20 +16,6 @@ type Package struct {
 	PSR4Prefixes []string
 }
 
-// installedPackageWithVersion extends the unexported installedPackage shape
-// used by GetAutoloadPaths and adds the version fields present in
-// vendor/composer/installed.json.
-type installedPackageWithVersion struct {
-	Name        string        `json:"name"`
-	InstallPath string        `json:"install-path"`
-	Version     string        `json:"version"`
-	Autoload    autoloadBlock `json:"autoload"`
-}
-
-type installedJSONWithVersion struct {
-	Packages []installedPackageWithVersion `json:"packages"`
-}
-
 // InstalledPackages reads vendor/composer/installed.json under rootPath and
 // returns one Package per installed entry. Both the Composer v2 object form
 // {"packages":[...]} and the legacy v1 top-level array form are supported.
@@ -41,10 +27,10 @@ func InstalledPackages(rootPath string) []Package {
 		return nil
 	}
 
-	var raw []installedPackageWithVersion
+	var raw []installedPackage
 
 	// Try Composer v2 object form first.
-	var v2 installedJSONWithVersion
+	var v2 installedJSON
 	if json.Unmarshal(data, &v2) == nil && v2.Packages != nil {
 		raw = v2.Packages
 	} else {
