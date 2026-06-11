@@ -1,10 +1,12 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -116,6 +118,9 @@ func TestMergeClientOptions(t *testing.T) {
 	})
 }
 
+func makeRuleSeverityEnabled() RuleSeverityValue  { return RuleSeverityValue{enabled: true, hasValue: true} }
+func makeRuleSeverityDisabled() RuleSeverityValue { return RuleSeverityValue{enabled: false, hasValue: true} }
+
 func TestIsRuleEnabled(t *testing.T) {
 	t.Run("nil map returns true", func(t *testing.T) {
 		cfg := &Config{}
@@ -125,23 +130,120 @@ func TestIsRuleEnabled(t *testing.T) {
 	})
 
 	t.Run("explicit true", func(t *testing.T) {
-		cfg := &Config{DiagnosticRules: map[string]bool{"unused-import": true}}
+		cfg := &Config{DiagnosticRules: map[string]RuleSeverityValue{"unused-import": makeRuleSeverityEnabled()}}
 		if !cfg.IsRuleEnabled("unused-import") {
 			t.Error("explicit true should return true")
 		}
 	})
 
 	t.Run("explicit false", func(t *testing.T) {
-		cfg := &Config{DiagnosticRules: map[string]bool{"unused-import": false}}
+		cfg := &Config{DiagnosticRules: map[string]RuleSeverityValue{"unused-import": makeRuleSeverityDisabled()}}
 		if cfg.IsRuleEnabled("unused-import") {
 			t.Error("explicit false should return false")
 		}
 	})
 
 	t.Run("missing key returns true", func(t *testing.T) {
-		cfg := &Config{DiagnosticRules: map[string]bool{"other-rule": false}}
+		cfg := &Config{DiagnosticRules: map[string]RuleSeverityValue{"other-rule": makeRuleSeverityDisabled()}}
 		if !cfg.IsRuleEnabled("unused-import") {
 			t.Error("missing key should default to true")
+		}
+	})
+}
+
+func TestRuleSeverity(t *testing.T) {
+	t.Run("nil map returns default", func(t *testing.T) {
+		cfg := &Config{}
+		if got := cfg.RuleSeverity("unused-import", checks.SeverityWarning); got != checks.SeverityWarning {
+			t.Errorf("expected SeverityWarning, got %d", got)
+		}
+	})
+
+	t.Run("missing key returns default", func(t *testing.T) {
+		cfg := &Config{DiagnosticRules: map[string]RuleSeverityValue{}}
+		if got := cfg.RuleSeverity("unused-import", checks.SeverityHint); got != checks.SeverityHint {
+			t.Errorf("expected SeverityHint, got %d", got)
+		}
+	})
+
+	t.Run("override error from JSON string", func(t *testing.T) {
+		var m map[string]RuleSeverityValue
+		_ = json.Unmarshal([]byte(`{"unknown-class":"error"}`), &m)
+		cfg := &Config{DiagnosticRules: m}
+		if got := cfg.RuleSeverity("unknown-class", checks.SeverityWarning); got != checks.SeverityError {
+			t.Errorf("expected SeverityError, got %d", got)
+		}
+	})
+
+	t.Run("override hint from JSON string", func(t *testing.T) {
+		var m map[string]RuleSeverityValue
+		_ = json.Unmarshal([]byte(`{"unused-import":"hint"}`), &m)
+		cfg := &Config{DiagnosticRules: m}
+		if got := cfg.RuleSeverity("unused-import", checks.SeverityHint); got != checks.SeverityHint {
+			t.Errorf("expected SeverityHint, got %d", got)
+		}
+	})
+}
+
+func TestRuleSeverityValueJSON(t *testing.T) {
+	t.Run("legacy true JSON is enabled", func(t *testing.T) {
+		var m map[string]RuleSeverityValue
+		if err := json.Unmarshal([]byte(`{"unused-import":true}`), &m); err != nil {
+			t.Fatal(err)
+		}
+		v := m["unused-import"]
+		if !v.enabled {
+			t.Error("true should be enabled")
+		}
+	})
+
+	t.Run("legacy false JSON is disabled", func(t *testing.T) {
+		var m map[string]RuleSeverityValue
+		if err := json.Unmarshal([]byte(`{"unused-import":false}`), &m); err != nil {
+			t.Fatal(err)
+		}
+		v := m["unused-import"]
+		if v.enabled {
+			t.Error("false should be disabled")
+		}
+	})
+
+	t.Run("string off is disabled", func(t *testing.T) {
+		var m map[string]RuleSeverityValue
+		if err := json.Unmarshal([]byte(`{"unused-import":"off"}`), &m); err != nil {
+			t.Fatal(err)
+		}
+		v := m["unused-import"]
+		if v.enabled {
+			t.Error("off should be disabled")
+		}
+	})
+
+	t.Run("string warning is enabled with warning override", func(t *testing.T) {
+		var m map[string]RuleSeverityValue
+		if err := json.Unmarshal([]byte(`{"unused-import":"warning"}`), &m); err != nil {
+			t.Fatal(err)
+		}
+		v := m["unused-import"]
+		if !v.enabled {
+			t.Error("warning should be enabled")
+		}
+		if v.override != checks.SeverityWarning {
+			t.Errorf("expected SeverityWarning override, got %d", v.override)
+		}
+	})
+
+	t.Run("string error enables with error override", func(t *testing.T) {
+		var m map[string]RuleSeverityValue
+		if err := json.Unmarshal([]byte(`{"unknown-class":"error"}`), &m); err != nil {
+			t.Fatal(err)
+		}
+		v := m["unknown-class"]
+		if !v.enabled {
+			t.Error("error should be enabled")
+		}
+		if v.override != checks.SeverityError {
+			t.Errorf("expected SeverityError override, got %d", v.override)
 		}
 	})
 }
