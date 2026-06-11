@@ -68,28 +68,47 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 		diags = append(diags, p.checkDeprecations(source)...)
 		diags = append(diags, p.checkClassStructure(file)...)
 		if p.cfg.IsRuleEnabled("unknown-class") {
-			diags = append(diags, findingsToDiagnostics((&checks.UnknownClassRule{}).Check(file, source, p.index))...)
+			fs := (&checks.UnknownClassRule{}).Check(file, source, p.index)
+			diags = append(diags, p.applyRuleSeverity("unknown-class", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("unknown-function") {
-			diags = append(diags, findingsToDiagnostics((&checks.UnknownFunctionRule{}).Check(file, source, p.index))...)
+			fs := (&checks.UnknownFunctionRule{}).Check(file, source, p.index)
+			diags = append(diags, p.applyRuleSeverity("unknown-function", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.TypeResolver != nil && p.cfg.IsRuleEnabled("unknown-member") {
-			diags = append(diags, findingsToDiagnostics((&checks.UnknownMemberRule{TypeResolver: p.TypeResolver}).Check(file, source, p.index))...)
+			fs := (&checks.UnknownMemberRule{TypeResolver: p.TypeResolver}).Check(file, source, p.index)
+			diags = append(diags, p.applyRuleSeverity("unknown-member", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.BuiltinUnavailableRule != nil && p.cfg.IsRuleEnabled("builtin-unavailable") {
-			diags = append(diags, findingsToDiagnostics(p.BuiltinUnavailableRule.Check(file, source, p.index))...)
+			fs := p.BuiltinUnavailableRule.Check(file, source, p.index)
+			diags = append(diags, p.applyRuleSeverity("builtin-unavailable", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("unused-import") {
-			diags = append(diags, p.checkUnusedImports(file, source)...)
+			fs := (&checks.UnusedImportsRule{}).Check(file, source, p.index)
+			diags = append(diags, p.applyRuleSeverity("unused-import", checks.SeverityHint, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("unused-private-method") || p.cfg.IsRuleEnabled("unused-private-property") {
-			diags = append(diags, p.filterByConfig(findingsToDiagnostics((&checks.UnusedPrivateRule{}).Check(file, source, p.index)))...)
+			diags = append(diags, p.filterByConfig(p.applyUnusedPrivateSeverity(findingsToDiagnostics((&checks.UnusedPrivateRule{}).Check(file, source, p.index))))...)
 		}
 		if p.cfg.IsRuleEnabled("unreachable-code") {
-			diags = append(diags, findingsToDiagnostics((&checks.UnreachableCodeRule{}).Check(file, source, p.index))...)
+			fs := (&checks.UnreachableCodeRule{}).Check(file, source, p.index)
+			diags = append(diags, p.applyRuleSeverity("unreachable-code", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("redundant-union-member") {
-			diags = append(diags, findingsToDiagnostics((&checks.RedundantUnionRule{}).Check(file, source, p.index))...)
+			fs := (&checks.RedundantUnionRule{}).Check(file, source, p.index)
+			diags = append(diags, p.applyRuleSeverity("redundant-union-member", checks.SeverityWarning, findingsToDiagnostics(fs))...)
+		}
+		if p.cfg.IsRuleEnabled("undefined-variable") {
+			fs := (&checks.UndefinedVariableRule{}).Check(file, source, p.index)
+			diags = append(diags, p.applyRuleSeverity("undefined-variable", checks.SeverityWarning, findingsToDiagnostics(fs))...)
+		}
+		if p.cfg.IsRuleEnabled("unused-variable") {
+			fs := (&checks.UnusedVariableRule{}).Check(file, source, p.index)
+			diags = append(diags, p.applyRuleSeverity("unused-variable", checks.SeverityHint, findingsToDiagnostics(fs))...)
+		}
+		if p.cfg.IsRuleEnabled("argument-count-mismatch") {
+			fs := (&checks.ArgumentCountRule{}).Check(file, source, p.index)
+			diags = append(diags, p.applyRuleSeverity("argument-count-mismatch", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 	}
 	p.mu.RLock()
@@ -124,7 +143,8 @@ func (p *Provider) AnalyzeOnSave(uri, source string) {
 	// Redundant nullsafe — needs type resolution
 	if p.TypeResolver != nil && p.cfg.IsRuleEnabled("redundant-nullsafe") {
 		rule := &checks.RedundantNullsafeRule{TypeResolver: p.TypeResolver}
-		diags = append(diags, findingsToDiagnostics(rule.Check(file, source, p.index))...)
+		fs := rule.Check(file, source, p.index)
+		diags = append(diags, p.applyRuleSeverity("redundant-nullsafe", checks.SeverityInfo, findingsToDiagnostics(fs))...)
 	}
 	// Invalid builder args — needs model resolution + member checking
 	if p.BuilderModelResolver != nil && p.BuilderMemberChecker != nil {
@@ -176,6 +196,33 @@ func (p *Provider) filterByConfig(diags []protocol.Diagnostic) []protocol.Diagno
 	return filtered
 }
 
+// applyRuleSeverity overrides the severity of diagnostics for a specific rule
+// code if the config has an explicit severity set. If no override is configured
+// the default severity is used (diagnostics are returned as-is).
+func (p *Provider) applyRuleSeverity(code string, defaultSeverity checks.Severity, diags []protocol.Diagnostic) []protocol.Diagnostic {
+	override := p.cfg.RuleSeverity(code, defaultSeverity)
+	if override == defaultSeverity {
+		return diags
+	}
+	var lspSev protocol.DiagnosticSeverity
+	switch override {
+	case checks.SeverityError:
+		lspSev = protocol.DiagnosticSeverityError
+	case checks.SeverityWarning:
+		lspSev = protocol.DiagnosticSeverityWarning
+	case checks.SeverityInfo:
+		lspSev = protocol.DiagnosticSeverityInformation
+	default:
+		lspSev = protocol.DiagnosticSeverityHint
+	}
+	out := make([]protocol.Diagnostic, len(diags))
+	copy(out, diags)
+	for i := range out {
+		out[i].Severity = lspSev
+	}
+	return out
+}
+
 func (p *Provider) checkDeprecations(source string) []protocol.Diagnostic {
 	var diags []protocol.Diagnostic
 	lines := strings.Split(source, "\n")
@@ -216,6 +263,39 @@ func (p *Provider) checkClassStructure(file *parser.FileNode) []protocol.Diagnos
 		}
 	}
 	return diags
+}
+
+// applyUnusedPrivateSeverity applies per-code severity overrides for
+// unused-private-method and unused-private-property diagnostics.
+func (p *Provider) applyUnusedPrivateSeverity(diags []protocol.Diagnostic) []protocol.Diagnostic {
+	if len(diags) == 0 {
+		return diags
+	}
+	out := make([]protocol.Diagnostic, len(diags))
+	copy(out, diags)
+	for i, d := range out {
+		switch d.Code {
+		case "unused-private-method":
+			out[i].Severity = severityToLSP(p.cfg.RuleSeverity("unused-private-method", checks.SeverityInfo))
+		case "unused-private-property":
+			out[i].Severity = severityToLSP(p.cfg.RuleSeverity("unused-private-property", checks.SeverityHint))
+		}
+	}
+	return out
+}
+
+// severityToLSP converts a checks.Severity to an LSP DiagnosticSeverity.
+func severityToLSP(s checks.Severity) protocol.DiagnosticSeverity {
+	switch s {
+	case checks.SeverityError:
+		return protocol.DiagnosticSeverityError
+	case checks.SeverityWarning:
+		return protocol.DiagnosticSeverityWarning
+	case checks.SeverityInfo:
+		return protocol.DiagnosticSeverityInformation
+	default:
+		return protocol.DiagnosticSeverityHint
+	}
 }
 
 func (p *Provider) checkUnusedImports(file *parser.FileNode, source string) []protocol.Diagnostic {
