@@ -11,6 +11,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/container"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
+	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -30,11 +31,12 @@ type Bootstrapped struct {
 	Logger         *log.Logger
 	BuiltinProfile symbols.BuiltinProfile
 
-	Index       *symbols.Index
-	Container   *container.ContainerAnalyzer
-	RouteIndex  *frameworklaravel.RouteIndex
-	SchemaCache *models.SchemaCache
-	Schema      *models.Schema
+	Index          *symbols.Index
+	Container      *container.ContainerAnalyzer
+	RouteIndex     *frameworklaravel.RouteIndex
+	SymfonyRoutes  []frameworksymfony.Route
+	SchemaCache    *models.SchemaCache
+	Schema         *models.Schema
 }
 
 func New(opts Options) *Bootstrapped {
@@ -201,10 +203,18 @@ func (ws *Bootstrapped) IndexComposerDependencies() int {
 }
 
 func (ws *Bootstrapped) ScanRoutes() error {
-	if ws == nil || ws.RouteIndex == nil {
+	if ws == nil {
 		return nil
 	}
-	return ws.RouteIndex.ScanWorkspace()
+	if ws.RouteIndex != nil {
+		if err := ws.RouteIndex.ScanWorkspace(); err != nil {
+			return err
+		}
+	}
+	if ws.Framework == "symfony" {
+		ws.SymfonyRoutes = frameworksymfony.DiscoverRoutes(ws.Index)
+	}
+	return nil
 }
 
 func (ws *Bootstrapped) AnalyzeModels() {
