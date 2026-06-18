@@ -25,6 +25,36 @@ _None open._
 
 ## Low / performance
 
+### L40 — `InterfaceNode`/`TraitNode`/`EnumNode`/`FunctionNode` (compat layer) lack `EndLine`
+- **Where:** `internal/parser/compat.go` (struct defs ~80-128; `toFileNode` conversion ~550-617).
+- **What:** Same gap L23 fixed for `ClassNode`: the compat nodes for interfaces, traits, enums, and functions don't expose `EndLine`, although `InterfaceDef`/`TraitDef`/`EnumDef`/`FunctionDef` all carry it. (Discovered while fixing L23.)
+- **Fix:** Add `EndLine` to those four compat node types and map it through `toFileNode`, mirroring the `ClassNode` fix.
+
+### L38 — Document introspection dumps only the first top-level symbol
+- **Where:** `internal/introspect/dump.go` (`pickPrimarySymbol` / `Document`); consumed by `tuskPhpLsp.debugDocument` and `tusk-php introspect`.
+- **What:** When a file declares several top-level classes/interfaces/traits, the parsed-state dump reports only the first one. The design (`docs/lsp-document-introspection-design.md`, open questions) leans "dump all, cursor-first when a position is provided," but `Document` has no `Position` parameter.
+- **Fix:** Accept an optional cursor position (the in-server command already has it available from the client) and either dump all symbols ordered, or the cursor's symbol first. Keep the CLI defaulting to "all".
+
+### L37 — `introspect` CLI URI derivation won't match index keys on Windows
+- **Where:** `cmd/tusk-php/main.go` (`runIntrospect`, URI = `"file://" + absFile`).
+- **What:** On Unix this yields `file:///abs/path` and matches the index keys, but on Windows `absFile` is `C:\...` so the URI diverges from the workspace-build key form, and `GetFileSymbols(uri)` returns nothing (empty dump). Unix is correct (verified).
+- **Fix:** Derive the URI the way `workspace`/`IndexFile` does — `"file://" + filepath.ToSlash(absFile)` with a leading `/` before the drive letter (or percent-encode via `url.URL`). Share one path→URI helper.
+
+### L36 — `tuskPhpLsp.debugDocument` lacks test coverage
+- **Where:** `internal/lsp/execute_command_test.go` (`TestExecuteCommandAdvertisement`, `wantCmds`).
+- **What:** The new `tuskPhpLsp.debugDocument` command is not asserted in the advertised-commands test, and there is no round-trip test exercising the handler (the handler path is only indirectly covered).
+- **Fix:** Add `"tuskPhpLsp.debugDocument"` to `wantCmds` and a round-trip test that invokes the command and asserts a non-empty string result (mirror the `copyNamespace` block).
+
+### L35 — Introspection dump header omits the PHP profile string
+- **Where:** `internal/introspect/Input.Profile` is left empty by both callers — `cmd/tusk-php/main.go` (`runIntrospect`) and `internal/lsp/server.go` (`debugDocument`).
+- **What:** The dump header's Server line is designed to show `PHP <version> (ext: …)` but `Input.Profile` is never populated, though the resolved `BuiltinProfile` is available in both contexts (`loadProjectMetadata` returns it; the server holds `s.workspace.BuiltinProfile`).
+- **Fix:** Format the profile (`PHP <PHPVersion> (ext: <Extensions joined>)`) and pass it as `Input.Profile` in both callers.
+
+### L34 — Native check-rule set duplicated across three call sites
+- **Where:** `internal/diagnostics/provider.go` (`Analyze`), `internal/lsp/server.go` (`nativeCheckRules`, debugDocument), `cmd/tusk-php/main.go` (`nativeCheckRules`, introspect).
+- **What:** The list of native (non-external) check rules is now assembled independently in three places (a known v1 tradeoff from the introspection work). They can drift, so the dump's diagnostics could diverge from what the editor publishes.
+- **Fix:** Extract a single shared constructor (e.g. `checks.NativeRules(...)` or `diagnostics.NativeRules(...)`) returning `[]checks.Rule`, and use it at all three sites.
+
 ### L33 — `deps usage` exposed-class denominator under-counts (capped, not fixed); no lockfile fixture for `deps tree` on testdata/project
 - **Where:** `internal/deps/usage.go` (`Usage` denominator pass); `testdata/project/` (no `composer.lock`); `internal/composer/packages.go` (`InstalledPackages` empty `Version` for stub vendors).
 - **What:** Because vendor is indexed by-need, the per-package exposed-class count can fall below the touched count, which produced nonsensical >100% usage (observed `monolog/monolog 200.0% (2/1)` on `testdata/project`). It is now **clamped** by flooring the denominator at the touched count (Percent ∈ [0,100]), but the underlying denominator is still a briefing-grade under-count (the real fix is the L31 exhaustive-surface pass). Separately, `testdata/project` has no `composer.lock`, so `deps tree` cannot be exercised against that canonical fixture (only `testdata/laravel` works), and `InstalledPackages` returns an empty `Version` for the manually-placed monolog stub.
@@ -37,11 +67,6 @@ _None open._
 - **Where:** `internal/composer` + `internal/symbols`; consumed by `internal/deps/usage.go` (`deps usage`).
 - **What:** Usage-% needs a denominator = distinct public classes a package exposes under its `autoload` PSR-4 roots (excluding `autoload-dev`). Vendor symbols are indexed lazily/by-need (`SourceVendor`), so the current `SearchByFQNPrefix`-based count under-reports (see L33). The briefing-grade approximation is **shipped and accepted for v1**; this entry tracks the exhaustive version.
 - **Fix:** Add a dedicated "enumerate autoload roots" pass over `install-path` + PSR-4 prefixes (or fully index a package's autoload roots on demand) so the denominator reflects the real exposed surface, not just by-need-indexed classes.
-
-### L40 — `InterfaceNode`/`TraitNode`/`EnumNode`/`FunctionNode` (compat layer) lack `EndLine`
-- **Where:** `internal/parser/compat.go` (struct defs ~80-128; `toFileNode` conversion ~550-617).
-- **What:** Same gap L23 fixed for `ClassNode`: the compat nodes for interfaces, traits, enums, and functions don't expose `EndLine`, although `InterfaceDef`/`TraitDef`/`EnumDef`/`FunctionDef` all carry it. (Discovered while fixing L23.)
-- **Fix:** Add `EndLine` to those four compat node types and map it through `toFileNode`, mirroring the `ClassNode` fix.
 
 ### ~~L30~~ — `phpdetect` tests flake under parallel load — **RESOLVED**
 - Happy-path tests now use a generous `testDetectTimeout = 5s` instead of the production `DefaultTimeout`; the dedicated timeout-assertion tests keep their short 200ms value. Stable under `-count=3`.
