@@ -9,6 +9,13 @@ import (
 	"time"
 )
 
+// testDetectTimeout is a generous timeout used for happy-path tests. It is
+// intentionally larger than DefaultTimeout so that tests remain stable under
+// CPU contention (e.g. when the full test suite runs packages in parallel).
+// The dedicated timeout tests (TestDetectTimesOut, TestDetectTimesOutWrapsErrTimeout)
+// keep their own short durations to verify timeout behaviour.
+const testDetectTimeout = 5 * time.Second
+
 // writeFakeScript writes a small shell script to dir/name with the given body
 // and makes it executable. It returns the absolute path to the script.
 func writeFakeScript(t *testing.T, dir, name, body string) string {
@@ -26,7 +33,7 @@ func TestDetectParsesValidOutput(t *testing.T) {
 	dir := t.TempDir()
 	bin := writeFakeScript(t, dir, "php", `echo 8.2`)
 
-	got, err := Detect(bin, DefaultTimeout)
+	got, err := Detect(bin, testDetectTimeout)
 	if err != nil {
 		t.Fatalf("Detect returned unexpected error: %v", err)
 	}
@@ -40,7 +47,7 @@ func TestDetectRejectsMalformedOutput(t *testing.T) {
 	dir := t.TempDir()
 	bin := writeFakeScript(t, dir, "php", `echo "not a version"`)
 
-	got, err := Detect(bin, DefaultTimeout)
+	got, err := Detect(bin, testDetectTimeout)
 	if err == nil {
 		t.Fatalf("expected error for malformed output, got nil (Version=%q)", got.Version)
 	}
@@ -52,7 +59,7 @@ func TestDetectRejectsMalformedOutput(t *testing.T) {
 func TestDetectFailsWhenBinaryMissing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nonexistent-php")
 
-	_, err := Detect(path, DefaultTimeout)
+	_, err := Detect(path, testDetectTimeout)
 	if err == nil {
 		t.Fatal("expected error for missing binary, got nil")
 	}
@@ -88,7 +95,7 @@ func TestDetectTimesOutWrapsErrTimeout(t *testing.T) {
 }
 
 func TestDetectEmptyBinaryPathDefaultsToPath(t *testing.T) {
-	got, err := Detect("", DefaultTimeout)
+	got, err := Detect("", testDetectTimeout)
 	if err != nil {
 		// Acceptable: php not on $PATH in CI, or timed out. Verify the error is exec-related or a timeout.
 		if !strings.Contains(err.Error(), "executable file not found") &&
