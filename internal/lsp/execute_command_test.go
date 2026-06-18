@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -43,6 +44,7 @@ func TestExecuteCommandAdvertisement(t *testing.T) {
 		"tuskPhpLsp.namespaceForPath": false,
 		"tuskPhpLsp.copyNamespace":    false,
 		"tuskPhpLsp.moveToNamespace":  false,
+		"tuskPhpLsp.debugDocument":    false,
 	}
 	for _, raw := range rawCmds {
 		cmd, _ := raw.(string)
@@ -103,5 +105,64 @@ class User {}
 	moveResp := h.readResponse(moveID)
 	if moveResp["error"] != nil {
 		t.Errorf("tuskPhpLsp.moveToNamespace returned error: %v", moveResp["error"])
+	}
+}
+
+// TestExecuteCommandDebugDocument verifies the round-trip behaviour of the
+// tuskPhpLsp.debugDocument command: it must return a non-empty string that
+// contains the dump header marker and the class name of the seeded document.
+func TestExecuteCommandDebugDocument(t *testing.T) {
+	h := newHarness(t)
+	defer h.close()
+
+	root := testdataPath()
+	h.send("initialize", map[string]interface{}{
+		"rootUri":      "file://" + root,
+		"capabilities": map[string]interface{}{},
+		"processId":    nil,
+	})
+	// Drain the initialize response — we don't need its contents here.
+	h.readResponse(1)
+
+	h.notify("initialized", map[string]interface{}{})
+	time.Sleep(200 * time.Millisecond)
+
+	uri := "file:///tmp/test_debug_document.php"
+	source := `<?php
+namespace App\Services;
+class PaymentService {}
+`
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri":        uri,
+			"languageId": "php",
+			"version":    1,
+			"text":       source,
+		},
+	})
+	time.Sleep(100 * time.Millisecond)
+
+	debugID := h.send("workspace/executeCommand", map[string]interface{}{
+		"command":   "tuskPhpLsp.debugDocument",
+		"arguments": []interface{}{uri},
+	})
+	debugResp := h.readResponse(debugID)
+
+	if debugResp["error"] != nil {
+		t.Fatalf("tuskPhpLsp.debugDocument returned error: %v", debugResp["error"])
+	}
+
+	result, ok := debugResp["result"].(string)
+	if !ok || result == "" {
+		t.Fatalf("tuskPhpLsp.debugDocument: expected non-empty string result, got %T(%v)", debugResp["result"], debugResp["result"])
+	}
+
+	const dumpHeader = "Parsed-State Dump"
+	if !strings.Contains(result, dumpHeader) {
+		t.Errorf("tuskPhpLsp.debugDocument result missing %q\ngot:\n%s", dumpHeader, result)
+	}
+
+	if !strings.Contains(result, "PaymentService") {
+		t.Errorf("tuskPhpLsp.debugDocument result missing class name %q\ngot:\n%s", "PaymentService", result)
 	}
 }
