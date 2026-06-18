@@ -904,10 +904,26 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 
 				// Run native checks synchronously for a self-consistent dump.
 				file := parser.ParseFile(source)
-				rules := s.nativeCheckRules()
+				var typeRes func(string, string, int, *parser.FileNode) string
+				var builtinRule *checks.BuiltinUnavailableRule
+				if s.diag != nil {
+					typeRes = s.diag.TypeResolver
+					builtinRule = s.diag.BuiltinUnavailableRule
+				}
+				rules := diagnostics.NativeRules(diagnostics.NativeRulesOptions{
+					TypeResolver:           typeRes,
+					BuiltinUnavailableRule: builtinRule,
+				})
 				findings := checks.CheckFile(file, source, s.index, rules)
 
 				v := introspect.ParseVerbosity(s.cfg.Introspection.Verbosity)
+
+				var profile string
+				if s.workspace != nil {
+					bp := s.workspace.BuiltinProfile
+					profile = introspect.FormatProfile(bp.PHPVersion, bp.Extensions)
+				}
+
 				in := introspect.Input{
 					URI:           uri,
 					Source:        source,
@@ -915,6 +931,7 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 					Container:     s.container,
 					Framework:     s.framework,
 					ServerVersion: ServerVersion,
+					Profile:       profile,
 					BufferState:   bufferState,
 					Diagnostics:   findings,
 					Verbosity:     v,
@@ -1007,40 +1024,3 @@ func (s *Server) indexFileByURI(uri string, source string) {
 	}
 }
 
-// nativeCheckRules returns the set of native (non-external) check rules used
-// by the debugDocument command to produce a self-consistent diagnostics section
-// in the parsed-state dump.
-//
-// This mirrors the NATIVE rules instantiated in internal/diagnostics/provider.go
-// (Analyze + AnalyzeOnSave), skipping external tools (PHPStan/Pint) and rules
-// that require optional dependencies not guaranteed to be set at call time
-// (BuilderModelResolver/BuilderMemberChecker for InvalidBuilderArgRule).
-//
-// NOTE: this duplicates provider.go's rule list — that is a known v1 tradeoff;
-// a follow-up will unify the two lists into a shared constructor helper.
-func (s *Server) nativeCheckRules() []checks.Rule {
-	rules := []checks.Rule{
-		&checks.UnknownClassRule{},
-		&checks.UnknownFunctionRule{},
-		&checks.UnusedImportsRule{},
-		&checks.UnusedPrivateRule{},
-		&checks.UnreachableCodeRule{},
-		&checks.RedundantUnionRule{},
-		&checks.UndefinedVariableRule{},
-		&checks.UnusedVariableRule{},
-		&checks.ArgumentCountRule{},
-	}
-	// UnknownMemberRule requires a TypeResolver; include it when available.
-	if s.diag != nil && s.diag.TypeResolver != nil {
-		rules = append(rules, &checks.UnknownMemberRule{TypeResolver: s.diag.TypeResolver})
-	}
-	// BuiltinUnavailableRule requires a resolved PHP profile; include it when set.
-	if s.diag != nil && s.diag.BuiltinUnavailableRule != nil {
-		rules = append(rules, s.diag.BuiltinUnavailableRule)
-	}
-	// RedundantNullsafeRule requires a TypeResolver; include it when available.
-	if s.diag != nil && s.diag.TypeResolver != nil {
-		rules = append(rules, &checks.RedundantNullsafeRule{TypeResolver: s.diag.TypeResolver})
-	}
-	return rules
-}
