@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/composer"
+	"github.com/Tusk-PHP/lsp/internal/composer/lockfile"
 	"github.com/Tusk-PHP/lsp/internal/config"
+	"github.com/Tusk-PHP/lsp/internal/deps"
 	"github.com/Tusk-PHP/lsp/internal/graph"
 	"github.com/Tusk-PHP/lsp/internal/lsp"
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -235,17 +237,27 @@ func runGraph(args []string) error {
 // runDeps implements the `deps` subcommand.
 func runDeps(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: tusk-php deps <subcommand> [flags] (supported: unused)")
+		return fmt.Errorf("usage: tusk-php deps <subcommand> [flags] (supported: unused, tree, usage)")
 	}
 	sub := args[0]
-	if sub != "unused" {
-		return fmt.Errorf("unknown deps subcommand %q (supported: unused) — future subcommands may be added", sub)
+	switch sub {
+	case "unused":
+		return runDepsUnused(args[1:])
+	case "tree":
+		return runDepsTree(args[1:])
+	case "usage":
+		return runDepsUsage(args[1:])
+	default:
+		return fmt.Errorf("unknown deps subcommand %q (supported: unused, tree, usage)", sub)
 	}
+}
 
+// runDepsUnused is the original `deps unused` handler, preserved exactly.
+func runDepsUnused(args []string) error {
 	fs := flag.NewFlagSet("deps unused", flag.ContinueOnError)
 	rootFlag := fs.String("root", "", "Project root (default: current directory)")
 	formatFlag := fs.String("format", "text", "Output format: text|json")
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
@@ -287,6 +299,110 @@ func runDeps(args []string) error {
 		}
 		for _, c := range rep.Candidates {
 			fmt.Fprintf(os.Stdout, "  %s — %s\n", c.Package, c.Reason)
+		}
+	}
+	return nil
+}
+
+// runDepsTree implements `deps tree`.
+func runDepsTree(args []string) error {
+	fs := flag.NewFlagSet("deps tree", flag.ContinueOnError)
+	rootFlag := fs.String("root", "", "Project root (default: current directory)")
+	depthFlag := fs.Int("depth", -1, "Maximum traversal depth (<0 = unlimited)")
+	fullFlag := fs.Bool("full", false, "Expand all transitive dependencies regardless of --depth")
+	formatFlag := fs.String("format", "mermaid", "Output format: mermaid|dot|json")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// Resolve root directory.
+	root := *rootFlag
+	if root == "" {
+		var err error
+		root, err = os.Getwd()
+		if err != nil {
+			return fmt.Errorf("unable to determine working directory: %w", err)
+		}
+	}
+
+	// Validate --format.
+	switch *formatFlag {
+	case "mermaid", "dot", "json":
+		// valid
+	default:
+		return fmt.Errorf("invalid --format %q: must be one of mermaid, dot, json", *formatFlag)
+	}
+
+	lf, err := lockfile.Load(root)
+	if err != nil {
+		return fmt.Errorf("loading composer.lock: %w", err)
+	}
+	if lf == nil {
+		return fmt.Errorf("no composer.lock found at %s", root)
+	}
+
+	direct := composer.DirectRequires(root)
+	g := deps.BuildTree(lf, direct, deps.TreeOptions{Depth: *depthFlag, Full: *fullFlag})
+	return emitGraph(g, *formatFlag)
+}
+
+// runDepsUsage implements `deps usage`.
+func runDepsUsage(args []string) error {
+	fs := flag.NewFlagSet("deps usage", flag.ContinueOnError)
+	rootFlag := fs.String("root", "", "Project root (default: current directory)")
+	formatFlag := fs.String("format", "text", "Output format: text|json")
+	verboseFlag := fs.Bool("verbose", false, "Include touched/exposed class counts and version in text output")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// Resolve root directory.
+	root := *rootFlag
+	if root == "" {
+		var err error
+		root, err = os.Getwd()
+		if err != nil {
+			return fmt.Errorf("unable to determine working directory: %w", err)
+		}
+	}
+
+	// Validate --format.
+	switch *formatFlag {
+	case "text", "json":
+		// valid
+	default:
+		return fmt.Errorf("invalid --format %q: must be one of text, json", *formatFlag)
+	}
+
+	ws, _, err := buildWorkspace(root, "tusk-php deps")
+	if err != nil {
+		return err
+	}
+
+	rows := deps.Usage(ws.Index, root)
+
+	switch *formatFlag {
+	case "json":
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(rows)
+	default: // text
+		if len(rows) == 0 {
+			fmt.Fprintln(os.Stdout, "no packages with a PSR-4 surface found")
+			return nil
+		}
+		fmt.Fprintf(os.Stdout, "%d packages analysed (briefing-grade; no code executed)\n", len(rows))
+		for _, r := range rows {
+			if *verboseFlag {
+				ver := ""
+				if r.Version != "" {
+					ver = ", v" + r.Version
+				}
+				fmt.Fprintf(os.Stdout, "  %s  %.1f%% (%d/%d classes touched%s)\n",
+					r.Package, r.Percent, r.TouchedClasses, r.ExposedClasses, ver)
+			} else {
+				fmt.Fprintf(os.Stdout, "  %s  %.1f%%\n", r.Package, r.Percent)
+			}
 		}
 	}
 	return nil
