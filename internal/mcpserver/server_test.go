@@ -670,17 +670,48 @@ func TestReindexToolRebuildsWorkspace(t *testing.T) {
 }
 
 func TestConcurrentReadsRemainStableDuringReindex(t *testing.T) {
+	// Use a minimal temp project so that each Reindex call is fast (no
+	// large vendor tree to walk).  The full laravel testdata fixture has
+	// ~9 600 vendor PHP files, which makes three reindex cycles exceed the
+	// CI test timeout when race detection is enabled.
+	root := t.TempDir()
+	for _, dir := range []string{
+		filepath.Join(root, "app", "Models"),
+		filepath.Join(root, "app", "Http", "Controllers"),
+		filepath.Join(root, "app", "Providers"),
+		filepath.Join(root, "routes"),
+	} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "artisan"), []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "composer.json"), []byte(`{"autoload":{"psr-4":{"App\\":"app/"}}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".tusk-php.json"), []byte(`{"framework":"laravel","databaseEnabled":false}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "app", "Providers", "AppServiceProvider.php"), []byte("<?php\nnamespace App\\Providers;\nclass AppServiceProvider {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "app", "Models", "Product.php"), []byte("<?php\nnamespace App\\Models;\nclass Product {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "routes", "web.php"), []byte("<?php\nuse Illuminate\\Support\\Facades\\Route;\nRoute::get('/', fn() => null);\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc, err := New(ctx, testdataPath(t, "laravel"), logger)
+	svc, err := New(ctx, root, logger)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	root := filepath.Join(testdataPath(t, "laravel"), "app", "Http", "Controllers")
-	tempFile := filepath.Join(root, "ReindexProbe.php")
-	_ = os.Remove(tempFile)
-	defer os.Remove(tempFile)
+	probeFile := filepath.Join(root, "app", "Http", "Controllers", "ReindexProbe.php")
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, 16)
@@ -705,7 +736,7 @@ func TestConcurrentReadsRemainStableDuringReindex(t *testing.T) {
 		defer wg.Done()
 		for j := 0; j < 3; j++ {
 			body := "<?php\nnamespace App\\Http\\Controllers;\nclass ReindexProbe" + strings.Repeat("X", j) + " {}\n"
-			if err := os.WriteFile(tempFile, []byte(body), 0644); err != nil {
+			if err := os.WriteFile(probeFile, []byte(body), 0644); err != nil {
 				errCh <- err
 				return
 			}
