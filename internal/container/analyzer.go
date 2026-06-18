@@ -185,6 +185,19 @@ func (ca *ContainerAnalyzer) GetBindings() map[string]*ServiceBinding {
 	return result
 }
 
+// AddBinding inserts or overwrites a binding in the analyzer's bindings map,
+// keyed by b.Abstract (the same key used by LookupBinding and GetBindings).
+// A nil b is silently ignored. This method is intended primarily for tests
+// and programmatic seeding of bindings without filesystem parsing.
+func (ca *ContainerAnalyzer) AddBinding(b *ServiceBinding) {
+	if ca == nil || b == nil {
+		return
+	}
+	ca.mu.Lock()
+	defer ca.mu.Unlock()
+	ca.bindings[b.Abstract] = b
+}
+
 type InjectedDependency struct {
 	ParamName        string
 	TypeHint         string

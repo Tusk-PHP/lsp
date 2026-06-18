@@ -1,8 +1,6 @@
 package graph
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/container"
@@ -118,8 +116,8 @@ class ServiceClient {}
 //
 // Vendor binding is arranged by:
 //  1. Indexing a concrete PHP class as SourceVendor in the symbol index.
-//  2. Writing a Laravel provider file that calls $this->app->bind() with the
-//     vendor concrete, which the ContainerAnalyzer provider parser will pick up.
+//  2. Injecting the binding directly via AddBinding so the test does not rely
+//     on filesystem-based provider parsing.
 //
 // The PackageResolver stub always returns pkg="monolog/monolog", version="2.0.0".
 func TestBuildContainer_DepsBoundary(t *testing.T) {
@@ -136,27 +134,15 @@ class Logger {}
 		symbols.SourceVendor,
 	)
 
-	// Write a Laravel provider file so ContainerAnalyzer picks up the binding.
-	tmpDir := t.TempDir()
-	providerDir := filepath.Join(tmpDir, "app", "Providers")
-	if err := os.MkdirAll(providerDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	providerContent := []byte(`<?php
-namespace App\Providers;
-use Illuminate\Support\ServiceProvider;
-class AppServiceProvider extends ServiceProvider {
-    public function register() {
-        $this->app->bind('App\Contracts\LoggerInterface', 'Monolog\Logger');
-    }
-}
-`)
-	if err := os.WriteFile(filepath.Join(providerDir, "AppServiceProvider.php"), providerContent, 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	ca := container.NewContainerAnalyzer(idx, tmpDir, "laravel")
+	ca := container.NewContainerAnalyzer(idx, t.TempDir(), "laravel")
 	ca.Analyze()
+
+	// Inject the binding directly so the test is not fragile against filesystem parsing.
+	ca.AddBinding(&container.ServiceBinding{
+		Abstract:  `App\Contracts\LoggerInterface`,
+		Concrete:  vendorConcrete,
+		Singleton: true,
+	})
 
 	resolverCalls := map[string]int{}
 	resolver := func(fqn string) (string, string, bool) {
@@ -185,33 +171,27 @@ class AppServiceProvider extends ServiceProvider {
 		}
 	}
 
-	// If the provider file was parsed (binding present), assert boundary node.
-	bindings := ca.GetBindings()
-	if _, hasBinding := bindings["App\\Contracts\\LoggerInterface"]; hasBinding {
-		var boundary *Node
-		for i := range g.Nodes {
-			if g.Nodes[i].Kind == "dependency-boundary" && g.Nodes[i].ID == "monolog/monolog" {
-				boundary = &g.Nodes[i]
-				break
-			}
+	// Binding is always present (injected above); assert boundary node unconditionally.
+	var boundary *Node
+	for i := range g.Nodes {
+		if g.Nodes[i].Kind == "dependency-boundary" && g.Nodes[i].ID == "monolog/monolog" {
+			boundary = &g.Nodes[i]
+			break
 		}
-		if boundary == nil {
-			t.Error("DepsBoundary: expected 'monolog/monolog' boundary node, not found")
-		} else {
-			if boundary.Meta["package"] != "monolog/monolog" {
-				t.Errorf("boundary Meta[package] = %v, want %q", boundary.Meta["package"], "monolog/monolog")
-			}
-			if boundary.Meta["version"] != "2.0.0" {
-				t.Errorf("boundary Meta[version] = %v, want %q", boundary.Meta["version"], "2.0.0")
-			}
-			ds, _ := boundary.Meta["distinctSymbols"].(int)
-			if ds < 1 {
-				t.Errorf("boundary Meta[distinctSymbols] = %v, want >= 1", boundary.Meta["distinctSymbols"])
-			}
-		}
+	}
+	if boundary == nil {
+		t.Error("DepsBoundary: expected 'monolog/monolog' boundary node, not found")
 	} else {
-		// Provider file was not parsed — record as testability gap but do not fail.
-		t.Logf("NOTICE: provider binding not found in ContainerAnalyzer; vendor boundary path not exercised end-to-end")
+		if boundary.Meta["package"] != "monolog/monolog" {
+			t.Errorf("boundary Meta[package] = %v, want %q", boundary.Meta["package"], "monolog/monolog")
+		}
+		if boundary.Meta["version"] != "2.0.0" {
+			t.Errorf("boundary Meta[version] = %v, want %q", boundary.Meta["version"], "2.0.0")
+		}
+		ds, _ := boundary.Meta["distinctSymbols"].(int)
+		if ds < 1 {
+			t.Errorf("boundary Meta[distinctSymbols] = %v, want >= 1", boundary.Meta["distinctSymbols"])
+		}
 	}
 }
 
@@ -230,29 +210,15 @@ class Client {}
 		symbols.SourceVendor,
 	)
 
-	tmpDir := t.TempDir()
-	providerDir := filepath.Join(tmpDir, "app", "Providers")
-	if err := os.MkdirAll(providerDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(providerDir, "AppServiceProvider.php"),
-		[]byte(`<?php
-namespace App\Providers;
-use Illuminate\Support\ServiceProvider;
-class AppServiceProvider extends ServiceProvider {
-    public function register() {
-        $this->app->bind('App\Contracts\ClientInterface', 'UnknownPkg\Client');
-    }
-}
-`),
-		0o644,
-	); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	ca := container.NewContainerAnalyzer(idx, tmpDir, "laravel")
+	ca := container.NewContainerAnalyzer(idx, t.TempDir(), "laravel")
 	ca.Analyze()
+
+	// Inject the binding directly so the test does not rely on filesystem parsing.
+	ca.AddBinding(&container.ServiceBinding{
+		Abstract:  `App\Contracts\ClientInterface`,
+		Concrete:  `UnknownPkg\Client`,
+		Singleton: true,
+	})
 
 	// Resolver returns ok=false → boundary ID should fall back to "UnknownPkg".
 	resolver := func(fqn string) (string, string, bool) {
@@ -263,12 +229,6 @@ class AppServiceProvider extends ServiceProvider {
 		Deps:     DepsBoundary,
 		Packages: resolver,
 	})
-
-	bindings := ca.GetBindings()
-	if _, hasBinding := bindings["App\\Contracts\\ClientInterface"]; !hasBinding {
-		t.Logf("NOTICE: provider binding not found; fallback namespace path not exercised end-to-end")
-		return
-	}
 
 	found := false
 	for _, n := range g.Nodes {
