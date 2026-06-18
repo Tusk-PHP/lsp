@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 // LockedPackage is the subset of composer.lock package data the hover
@@ -20,6 +21,9 @@ type LockedPackage struct {
 	Homepage    string
 	SourceURL   string // source.url
 	SourceType  string // source.type (e.g. "git")
+	// Require is the package→constraint map from the lock entry's require
+	// block, e.g. {"psr/log":"^3.0"}; includes platform reqs like php/ext-*.
+	Require map[string]string
 }
 
 // Lockfile is the parsed view of one composer.lock.
@@ -34,6 +38,23 @@ func (l *Lockfile) Find(name string) (LockedPackage, bool) {
 	}
 	pkg, ok := l.byName[name]
 	return pkg, ok
+}
+
+// All returns every locked package (from both packages and packages-dev)
+// sorted by Name ascending for deterministic output. It is nil-safe: a nil
+// receiver or an empty/nil map returns an empty (non-nil) slice.
+func (l *Lockfile) All() []LockedPackage {
+	if l == nil || len(l.byName) == 0 {
+		return []LockedPackage{}
+	}
+	pkgs := make([]LockedPackage, 0, len(l.byName))
+	for _, p := range l.byName {
+		pkgs = append(pkgs, p)
+	}
+	sort.Slice(pkgs, func(i, j int) bool {
+		return pkgs[i].Name < pkgs[j].Name
+	})
+	return pkgs
 }
 
 // Load reads composer.lock from the given workspace root. Returns nil when
@@ -87,5 +108,6 @@ func toLocked(p rawPackage) LockedPackage {
 		Homepage:    p.Homepage,
 		SourceURL:   p.Source.URL,
 		SourceType:  p.Source.Type,
+		Require:     p.Require,
 	}
 }
