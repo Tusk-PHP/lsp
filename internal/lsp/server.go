@@ -26,6 +26,7 @@ import (
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
+	"github.com/Tusk-PHP/lsp/internal/introspect"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -454,6 +455,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 					"tuskPhpLsp.namespaceForPath",
 					"tuskPhpLsp.copyNamespace",
 					"tuskPhpLsp.moveToNamespace",
+					"tuskPhpLsp.debugDocument",
 				}},
 			InlayHintProvider:      &protocol.InlayHintOptions{ResolveProvider: false},
 			SelectionRangeProvider: true,
@@ -884,6 +886,57 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 			}
 		}
 		s.sendResponse(msg.ID, nil)
+	case "tuskPhpLsp.debugDocument":
+		if len(params.Arguments) > 0 {
+			var uri string
+			if json.Unmarshal(params.Arguments[0], &uri) == nil {
+				source := s.getDocument(uri)
+
+				// Determine buffer state: "live-buffer" when the document is
+				// open in the editor (present in s.documents), otherwise "disk".
+				s.docMu.RLock()
+				_, inBuffer := s.documents[uri]
+				s.docMu.RUnlock()
+				bufferState := "disk"
+				if inBuffer {
+					bufferState = "live-buffer"
+				}
+
+				// Run native checks synchronously for a self-consistent dump.
+				file := parser.ParseFile(source)
+				rules := s.nativeCheckRules()
+				findings := checks.CheckFile(file, source, s.index, rules)
+
+				v := introspect.ParseVerbosity(s.cfg.Introspection.Verbosity)
+				in := introspect.Input{
+					URI:           uri,
+					Source:        source,
+					Index:         s.index,
+					Container:     s.container,
+					Framework:     s.framework,
+					ServerVersion: ServerVersion,
+					BufferState:   bufferState,
+					Diagnostics:   findings,
+					Verbosity:     v,
+				}
+				text := introspect.Render(introspect.Document(in), v)
+
+				s.sendResponse(msg.ID, text)
+
+				// Zed display path: emit the dump to the LSP log panel and
+				// show a toast pointing the user there.
+				s.sendNotification("window/logMessage", map[string]interface{}{
+					"type":    protocol.MessageTypeInfo,
+					"message": text,
+				})
+				s.sendNotification("window/showMessage", map[string]interface{}{
+					"type":    protocol.MessageTypeInfo,
+					"message": "Tusk PHP: parsed-state dump written to the language server logs.",
+				})
+				return
+			}
+		}
+		s.sendResponse(msg.ID, nil)
 	default:
 		s.sendError(msg.ID, -32601, fmt.Sprintf("Unknown command: %s", params.Command))
 	}
@@ -952,4 +1005,42 @@ func (s *Server) indexFileByURI(uri string, source string) {
 	if s.routeIndex != nil {
 		s.routeIndex.IndexFile(uri, source)
 	}
+}
+
+// nativeCheckRules returns the set of native (non-external) check rules used
+// by the debugDocument command to produce a self-consistent diagnostics section
+// in the parsed-state dump.
+//
+// This mirrors the NATIVE rules instantiated in internal/diagnostics/provider.go
+// (Analyze + AnalyzeOnSave), skipping external tools (PHPStan/Pint) and rules
+// that require optional dependencies not guaranteed to be set at call time
+// (BuilderModelResolver/BuilderMemberChecker for InvalidBuilderArgRule).
+//
+// NOTE: this duplicates provider.go's rule list — that is a known v1 tradeoff;
+// a follow-up will unify the two lists into a shared constructor helper.
+func (s *Server) nativeCheckRules() []checks.Rule {
+	rules := []checks.Rule{
+		&checks.UnknownClassRule{},
+		&checks.UnknownFunctionRule{},
+		&checks.UnusedImportsRule{},
+		&checks.UnusedPrivateRule{},
+		&checks.UnreachableCodeRule{},
+		&checks.RedundantUnionRule{},
+		&checks.UndefinedVariableRule{},
+		&checks.UnusedVariableRule{},
+		&checks.ArgumentCountRule{},
+	}
+	// UnknownMemberRule requires a TypeResolver; include it when available.
+	if s.diag != nil && s.diag.TypeResolver != nil {
+		rules = append(rules, &checks.UnknownMemberRule{TypeResolver: s.diag.TypeResolver})
+	}
+	// BuiltinUnavailableRule requires a resolved PHP profile; include it when set.
+	if s.diag != nil && s.diag.BuiltinUnavailableRule != nil {
+		rules = append(rules, s.diag.BuiltinUnavailableRule)
+	}
+	// RedundantNullsafeRule requires a TypeResolver; include it when available.
+	if s.diag != nil && s.diag.TypeResolver != nil {
+		rules = append(rules, &checks.RedundantNullsafeRule{TypeResolver: s.diag.TypeResolver})
+	}
+	return rules
 }
