@@ -73,6 +73,7 @@ type ClassNode struct {
 	IsFinal    bool
 	IsReadonly bool
 	StartLine  int
+	EndLine    int
 	StartCol   int
 	DocComment string
 }
@@ -532,6 +533,7 @@ func toFileNode(result *ParseResult) *FileNode {
 			IsFinal:    classDef.IsFinal,
 			IsReadonly: classDef.IsReadonly,
 			StartLine:  classDef.Line,
+			EndLine:    classDef.EndLine,
 			StartCol:   startColumnForDeclaration(result, classDef.Name, classDef.Line, TokenClass),
 			DocComment: classDef.DocComment,
 		}
