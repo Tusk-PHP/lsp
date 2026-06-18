@@ -62,9 +62,11 @@ type Input struct {
 	Verbosity Verbosity
 }
 
-// SymbolSection summarises the file's primary class/interface/trait/enum.
+// SymbolSection summarises one top-level class/interface/trait/enum declared
+// in the file. A single file may declare multiple top-level types; each gets
+// its own SymbolSection in Dump.Symbols, ordered by declaration line.
 type SymbolSection struct {
-	// FQN is the fully-qualified name of the primary symbol.
+	// FQN is the fully-qualified name of the symbol.
 	FQN string
 	// Kind is the symbol kind label ("class", "interface", "trait", "enum").
 	Kind string
@@ -76,6 +78,19 @@ type SymbolSection struct {
 	Implements []SymbolRef
 	// Traits lists used traits with resolution status.
 	Traits []SymbolRef
+
+	// DeclaredMembers are the non-virtual members for this symbol.
+	DeclaredMembers []MemberEntry
+	// InferredMembers are the virtual members for this symbol.
+	InferredMembers []MemberEntry
+
+	// ReferenceEdges are structural edges for this symbol (Full verbosity only).
+	ReferenceEdges []ReferenceEdge
+
+	// ContainerBindings are DI bindings that relate to this symbol (Full only).
+	ContainerBindings []ContainerEntry
+	// InjectedDeps is the constructor injection analysis for this symbol (Full only).
+	InjectedDeps []InjectedDep
 }
 
 // SymbolRef is a single reference to another type with its resolution status.
@@ -123,8 +138,8 @@ const (
 	RefEdgeImplements RefEdgeKind = "implements"
 )
 
-// ReferenceEdge is a structural Tier-1 edge from the primary symbol to another
-// type, as stored in the index.
+// ReferenceEdge is a structural Tier-1 edge from a symbol to another type,
+// as stored in the index.
 type ReferenceEdge struct {
 	// Kind labels the edge relationship.
 	Kind RefEdgeKind
@@ -184,21 +199,33 @@ type Dump struct {
 	// or a disk-built index (for the fidelity annotation in the header).
 	DumpSource string
 
-	// PrimarySymbol holds the file's primary class/interface/trait/enum.
-	// Nil when no primary symbol was found.
+	// Symbols holds ALL top-level class/interface/trait/enum declarations in
+	// the file, ordered by declaration line. Each SymbolSection carries its own
+	// DeclaredMembers, InferredMembers, ReferenceEdges, ContainerBindings, and
+	// InjectedDeps so that multi-class files are fully represented.
+	// Empty when no top-level symbols were found.
+	Symbols []*SymbolSection
+
+	// PrimarySymbol is the first element of Symbols, kept for backward
+	// compatibility. Nil when Symbols is empty.
 	PrimarySymbol *SymbolSection
 
-	// DeclaredMembers are the non-virtual members from GetClassMembers.
+	// DeclaredMembers are the non-virtual members of PrimarySymbol.
+	// Kept for backward compatibility; mirrors PrimarySymbol.DeclaredMembers.
 	DeclaredMembers []MemberEntry
-	// InferredMembers are the virtual members from GetClassMembers.
+	// InferredMembers are the virtual members of PrimarySymbol.
+	// Kept for backward compatibility; mirrors PrimarySymbol.InferredMembers.
 	InferredMembers []MemberEntry
 
-	// ReferenceEdges are structural edges (Full verbosity only).
+	// ReferenceEdges are structural edges of PrimarySymbol (Full verbosity only).
+	// Kept for backward compatibility; mirrors PrimarySymbol.ReferenceEdges.
 	ReferenceEdges []ReferenceEdge
 
-	// ContainerBindings are DI bindings that relate to the primary symbol.
+	// ContainerBindings are DI bindings that relate to PrimarySymbol (Full only).
+	// Kept for backward compatibility; mirrors PrimarySymbol.ContainerBindings.
 	ContainerBindings []ContainerEntry
-	// InjectedDeps is the constructor injection analysis for the primary symbol.
+	// InjectedDeps is the constructor injection analysis for PrimarySymbol (Full only).
+	// Kept for backward compatibility; mirrors PrimarySymbol.InjectedDeps.
 	InjectedDeps []InjectedDep
 
 	// Diagnostics are the native-check findings for this file.
@@ -231,14 +258,16 @@ func Document(in Input) *Dump {
 		return d
 	}
 
-	// ── SYMBOL ──────────────────────────────────────────────────────────────
+	// ── SYMBOLS ─────────────────────────────────────────────────────────────
+	// Collect every top-level class/interface/trait/enum in declaration order.
 	fileSyms := in.Index.GetFileSymbols(in.URI)
-	primary := pickPrimarySymbol(fileSyms)
-	if primary != nil {
-		d.PrimarySymbol = buildSymbolSection(primary, in.Index)
+	topLevel := collectTopLevelSymbols(fileSyms)
+
+	for _, sym := range topLevel {
+		sec := buildSymbolSection(sym, in.Index)
 
 		// ── MEMBERS ─────────────────────────────────────────────────────────
-		members := in.Index.GetClassMembers(primary.FQN)
+		members := in.Index.GetClassMembers(sym.FQN)
 		sort.Slice(members, func(i, j int) bool {
 			if members[i].Range.Start.Line != members[j].Range.Start.Line {
 				return members[i].Range.Start.Line < members[j].Range.Start.Line
@@ -249,21 +278,35 @@ func Document(in Input) *Dump {
 		for _, m := range members {
 			entry := buildMemberEntry(m)
 			if m.IsVirtual {
-				d.InferredMembers = append(d.InferredMembers, entry)
+				sec.InferredMembers = append(sec.InferredMembers, entry)
 			} else {
-				d.DeclaredMembers = append(d.DeclaredMembers, entry)
+				sec.DeclaredMembers = append(sec.DeclaredMembers, entry)
 			}
 		}
 
 		// ── REFERENCE EDGES (Full only) ──────────────────────────────────────
 		if in.Verbosity == Full {
-			d.ReferenceEdges = buildReferenceEdges(primary, members, in.Index)
+			sec.ReferenceEdges = buildReferenceEdges(sym, members, in.Index)
 		}
 
 		// ── CONTAINER (Full only) ────────────────────────────────────────────
 		if in.Verbosity == Full && in.Container != nil {
-			d.ContainerBindings, d.InjectedDeps = buildContainerSection(primary.FQN, in.Container)
+			sec.ContainerBindings, sec.InjectedDeps = buildContainerSection(sym.FQN, in.Container)
 		}
+
+		d.Symbols = append(d.Symbols, sec)
+	}
+
+	// Populate PrimarySymbol and the flat backward-compat fields from the first
+	// symbol so that existing callers referencing d.PrimarySymbol,
+	// d.DeclaredMembers, etc. continue to work unchanged.
+	if len(d.Symbols) > 0 {
+		d.PrimarySymbol = d.Symbols[0]
+		d.DeclaredMembers = d.PrimarySymbol.DeclaredMembers
+		d.InferredMembers = d.PrimarySymbol.InferredMembers
+		d.ReferenceEdges = d.PrimarySymbol.ReferenceEdges
+		d.ContainerBindings = d.PrimarySymbol.ContainerBindings
+		d.InjectedDeps = d.PrimarySymbol.InjectedDeps
 	}
 
 	// ── DIAGNOSTICS ──────────────────────────────────────────────────────────
@@ -272,19 +315,33 @@ func Document(in Input) *Dump {
 	return d
 }
 
-// pickPrimarySymbol returns the first class, interface, trait, or enum from
-// the file's symbol list, preferring them over functions and members.
-func pickPrimarySymbol(fileSyms []*symbols.Symbol) *symbols.Symbol {
+// collectTopLevelSymbols returns all class, interface, trait, and enum symbols
+// from fileSyms, in the order they appear (declaration order). Functions and
+// member symbols (methods, properties, constants) are excluded.
+func collectTopLevelSymbols(fileSyms []*symbols.Symbol) []*symbols.Symbol {
+	var out []*symbols.Symbol
 	for _, s := range fileSyms {
 		switch s.Kind {
 		case symbols.KindClass, symbols.KindInterface, symbols.KindTrait, symbols.KindEnum:
-			return s
+			out = append(out, s)
 		}
 	}
-	return nil
+	return out
 }
 
-// buildSymbolSection constructs the SYMBOL section for a primary symbol.
+// pickPrimarySymbol returns the first class, interface, trait, or enum from
+// the file's symbol list, preferring them over functions and members.
+// Deprecated: use collectTopLevelSymbols to iterate all top-level symbols.
+func pickPrimarySymbol(fileSyms []*symbols.Symbol) *symbols.Symbol {
+	syms := collectTopLevelSymbols(fileSyms)
+	if len(syms) == 0 {
+		return nil
+	}
+	return syms[0]
+}
+
+// buildSymbolSection constructs the base SYMBOL section for a symbol.
+// Per-symbol members, edges, and container data are populated by Document.
 func buildSymbolSection(sym *symbols.Symbol, idx *symbols.Index) *SymbolSection {
 	sec := &SymbolSection{
 		FQN:  sym.FQN,
@@ -364,8 +421,8 @@ func collectionFidelityNote(sym *symbols.Symbol) string {
 	return ""
 }
 
-// buildReferenceEdges derives Tier-1 structural reference edges from the
-// primary symbol and its members, resolving each type via Lookup.
+// buildReferenceEdges derives Tier-1 structural reference edges from a symbol
+// and its members, resolving each type via Lookup.
 func buildReferenceEdges(primary *symbols.Symbol, members []*symbols.Symbol, idx *symbols.Index) []ReferenceEdge {
 	seen := make(map[string]bool)
 	var edges []ReferenceEdge
@@ -396,7 +453,7 @@ func buildReferenceEdges(primary *symbols.Symbol, members []*symbols.Symbol, idx
 		edges = append(edges, edge)
 	}
 
-	// Extends and implements edges from the primary symbol.
+	// Extends and implements edges from the symbol.
 	if primary.Extends != "" {
 		addEdge(RefEdgeExtends, primary.Extends, "")
 	}
@@ -440,7 +497,7 @@ func buildReferenceEdges(primary *symbols.Symbol, members []*symbols.Symbol, idx
 	return edges
 }
 
-// buildContainerSection returns DI bindings relevant to the primary FQN and
+// buildContainerSection returns DI bindings relevant to a symbol FQN and
 // its constructor injection analysis.
 func buildContainerSection(fqn string, ca *container.ContainerAnalyzer) ([]ContainerEntry, []InjectedDep) {
 	var entries []ContainerEntry
@@ -572,4 +629,21 @@ func formatParam(p symbols.ParamInfo) string {
 		b.WriteString(p.DefaultValue)
 	}
 	return b.String()
+}
+
+// FormatProfile formats a PHP builtin profile as a human-readable string
+// suitable for the dump header's Server line.
+//
+// Rules:
+//   - Empty PHPVersion → returns ""
+//   - No extensions → returns "PHP <version>" (e.g. "PHP 8.2")
+//   - With extensions → returns "PHP <version> (ext: <a>, <b>)" (e.g. "PHP 8.2 (ext: pdo, mbstring)")
+func FormatProfile(version string, exts []string) string {
+	if strings.TrimSpace(version) == "" {
+		return ""
+	}
+	if len(exts) == 0 {
+		return "PHP " + version
+	}
+	return "PHP " + version + " (ext: " + strings.Join(exts, ", ") + ")"
 }

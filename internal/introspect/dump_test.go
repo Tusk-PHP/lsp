@@ -651,6 +651,184 @@ func TestDocument_ExtendsResolution(t *testing.T) {
 	}
 }
 
+// TestDocument_MultiClassFile verifies that when a PHP file declares multiple
+// top-level classes, Document populates Dump.Symbols with all of them in
+// declaration order, and Render outputs each class's SYMBOL block.
+func TestDocument_MultiClassFile(t *testing.T) {
+	const multiURI = "file:///app/Repo/MultiClass.php"
+
+	idx := symbols.NewIndex()
+	idx.IndexFile(multiURI, `<?php
+namespace App\Repo;
+
+class Alpha {
+    public function doAlpha(): void {}
+}
+
+interface BetaInterface {
+    public function doBeta(): void;
+}
+`)
+
+	d := Document(Input{
+		URI:         multiURI,
+		Index:       idx,
+		Verbosity:   Full,
+		BufferState: "disk",
+	})
+
+	// Both top-level types must be present.
+	if len(d.Symbols) != 2 {
+		t.Fatalf("expected 2 symbols, got %d: %v", len(d.Symbols), func() []string {
+			names := make([]string, len(d.Symbols))
+			for i, s := range d.Symbols {
+				names[i] = s.FQN
+			}
+			return names
+		}())
+	}
+
+	// Order: declaration order (Alpha before BetaInterface).
+	if d.Symbols[0].FQN != `App\Repo\Alpha` {
+		t.Errorf("Symbols[0].FQN = %q, want App\\Repo\\Alpha", d.Symbols[0].FQN)
+	}
+	if d.Symbols[1].FQN != `App\Repo\BetaInterface` {
+		t.Errorf("Symbols[1].FQN = %q, want App\\Repo\\BetaInterface", d.Symbols[1].FQN)
+	}
+
+	// Kind labels are correct.
+	if d.Symbols[0].Kind != "class" {
+		t.Errorf("Symbols[0].Kind = %q, want class", d.Symbols[0].Kind)
+	}
+	if d.Symbols[1].Kind != "interface" {
+		t.Errorf("Symbols[1].Kind = %q, want interface", d.Symbols[1].Kind)
+	}
+
+	// PrimarySymbol backward-compat field is the first symbol.
+	if d.PrimarySymbol == nil {
+		t.Fatal("PrimarySymbol is nil; expected Symbols[0]")
+	}
+	if d.PrimarySymbol.FQN != `App\Repo\Alpha` {
+		t.Errorf("PrimarySymbol.FQN = %q, want App\\Repo\\Alpha", d.PrimarySymbol.FQN)
+	}
+
+	// Render must contain both FQNs.
+	out := Render(d, Full)
+	if !strings.Contains(out, `App\Repo\Alpha`) {
+		t.Errorf("Render output missing App\\Repo\\Alpha:\n%s", out)
+	}
+	if !strings.Contains(out, `App\Repo\BetaInterface`) {
+		t.Errorf("Render output missing App\\Repo\\BetaInterface:\n%s", out)
+	}
+
+	// Render must contain two SYMBOL headings.
+	count := strings.Count(out, "SYMBOL\n")
+	if count != 2 {
+		t.Errorf("expected 2 SYMBOL sections in render output, got %d:\n%s", count, out)
+	}
+
+	// Each symbol's members appear in their own section.
+	if !strings.Contains(out, "doAlpha") {
+		t.Errorf("Render output missing doAlpha method:\n%s", out)
+	}
+	if !strings.Contains(out, "doBeta") {
+		t.Errorf("Render output missing doBeta method:\n%s", out)
+	}
+}
+
+// TestFormatProfile verifies the FormatProfile helper covers all documented
+// cases: empty version, no extensions, and one or more extensions.
+func TestFormatProfile(t *testing.T) {
+	cases := []struct {
+		version string
+		exts    []string
+		want    string
+	}{
+		// Empty version always returns "".
+		{"", nil, ""},
+		{"", []string{"pdo"}, ""},
+		{"  ", []string{"pdo"}, ""},
+		// Version with no extensions.
+		{"8.2", nil, "PHP 8.2"},
+		{"8.2", []string{}, "PHP 8.2"},
+		// Version with one extension.
+		{"8.1", []string{"pdo"}, "PHP 8.1 (ext: pdo)"},
+		// Version with multiple extensions (order preserved).
+		{"8.3", []string{"pdo", "mbstring", "intl"}, "PHP 8.3 (ext: pdo, mbstring, intl)"},
+		// 7.4 baseline.
+		{"7.4", nil, "PHP 7.4"},
+	}
+	for _, tc := range cases {
+		got := FormatProfile(tc.version, tc.exts)
+		if got != tc.want {
+			t.Errorf("FormatProfile(%q, %v) = %q, want %q", tc.version, tc.exts, got, tc.want)
+		}
+	}
+}
+
+// TestRender_ProfileInHeader verifies that a non-empty Profile is included in
+// the rendered Server header line.
+func TestRender_ProfileInHeader(t *testing.T) {
+	d := &Dump{
+		URI:           testURI,
+		FilePath:      "/app/Models/Order.php",
+		BufferState:   "disk",
+		DumpSource:    "disk-built index — disk fidelity",
+		ServerVersion: "tusk-php 0.9.0",
+		Profile:       "PHP 8.2 (ext: pdo, mbstring)",
+		Framework:     "laravel",
+	}
+
+	out := Render(d, Compact)
+
+	if !strings.Contains(out, "PHP 8.2 (ext: pdo, mbstring)") {
+		t.Errorf("header should contain profile string; got:\n%s", out)
+	}
+	// Confirm it's on the Server line alongside version and framework.
+	if !strings.Contains(out, "tusk-php 0.9.0") {
+		t.Errorf("header missing ServerVersion; got:\n%s", out)
+	}
+	if !strings.Contains(out, "framework laravel") {
+		t.Errorf("header missing framework; got:\n%s", out)
+	}
+}
+
+// TestRender_ProfileOmittedWhenEmpty verifies that an empty Profile does NOT
+// add a spurious separator to the Server line.
+func TestRender_ProfileOmittedWhenEmpty(t *testing.T) {
+	d := &Dump{
+		URI:           testURI,
+		FilePath:      "/app/Models/Order.php",
+		BufferState:   "disk",
+		DumpSource:    "disk-built index — disk fidelity",
+		ServerVersion: "tusk-php 0.9.0",
+		Profile:       "", // explicitly empty
+		Framework:     "laravel",
+	}
+
+	out := Render(d, Compact)
+
+	// Should contain version and framework but no stray " · " from an empty part.
+	serverLine := ""
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "Server") {
+			serverLine = line
+			break
+		}
+	}
+	if serverLine == "" {
+		t.Fatalf("no Server line in output:\n%s", out)
+	}
+	// Must not contain two consecutive " · " (which would indicate an empty slot).
+	if strings.Contains(serverLine, " ·  · ") {
+		t.Errorf("Server line has consecutive separators (empty profile leaked): %q", serverLine)
+	}
+	// Must not end with " · ".
+	if strings.HasSuffix(strings.TrimSpace(serverLine), "·") {
+		t.Errorf("Server line ends with dangling separator: %q", serverLine)
+	}
+}
+
 // TestDocument_DeterministicOrder verifies that two calls to Document on the
 // same input produce identically-ordered members.
 func TestDocument_DeterministicOrder(t *testing.T) {
