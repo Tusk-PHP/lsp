@@ -458,6 +458,89 @@ func TestConfigExtensionsField(t *testing.T) {
 	})
 }
 
+func TestDefaultConfigIntrospection(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Introspection.Verbosity != "compact" {
+		t.Errorf("Introspection.Verbosity should default to %q, got %q", "compact", cfg.Introspection.Verbosity)
+	}
+}
+
+func TestLoadFromFileIntrospection(t *testing.T) {
+	t.Run("file sets verbosity full", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, ".tusk-php.json")
+		os.WriteFile(path, []byte(`{"introspection":{"verbosity":"full"}}`), 0644)
+		cfg, err := LoadFromFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Introspection.Verbosity != "full" {
+			t.Errorf("Introspection.Verbosity = %q, want %q", cfg.Introspection.Verbosity, "full")
+		}
+	})
+
+	t.Run("file without introspection key preserves default", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, ".tusk-php.json")
+		os.WriteFile(path, []byte(`{"framework":"laravel"}`), 0644)
+		cfg, err := LoadFromFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Introspection.Verbosity != "compact" {
+			t.Errorf("Introspection.Verbosity = %q, want %q", cfg.Introspection.Verbosity, "compact")
+		}
+	})
+}
+
+func TestMergeClientOptionsIntrospection(t *testing.T) {
+	t.Run("verbosity full overrides default", func(t *testing.T) {
+		cfg := DefaultConfig()
+		v := "full"
+		opts := &protocol.InitializationOptions{
+			Introspection: &protocol.IntrospectionClientOptions{Verbosity: &v},
+		}
+		cfg.MergeClientOptions(opts)
+		if cfg.Introspection.Verbosity != "full" {
+			t.Errorf("Introspection.Verbosity = %q, want %q", cfg.Introspection.Verbosity, "full")
+		}
+	})
+
+	t.Run("nil introspection does not override file value", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Introspection.Verbosity = "full"
+		cfg.MergeClientOptions(&protocol.InitializationOptions{})
+		if cfg.Introspection.Verbosity != "full" {
+			t.Errorf("Introspection.Verbosity = %q, want %q", cfg.Introspection.Verbosity, "full")
+		}
+	})
+
+	t.Run("nil verbosity pointer does not override", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Introspection.Verbosity = "full"
+		opts := &protocol.InitializationOptions{
+			Introspection: &protocol.IntrospectionClientOptions{},
+		}
+		cfg.MergeClientOptions(opts)
+		if cfg.Introspection.Verbosity != "full" {
+			t.Errorf("Introspection.Verbosity = %q, want %q (nil pointer should not override)", cfg.Introspection.Verbosity, "full")
+		}
+	})
+
+	t.Run("verbosity compact overrides full", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Introspection.Verbosity = "full"
+		v := "compact"
+		opts := &protocol.InitializationOptions{
+			Introspection: &protocol.IntrospectionClientOptions{Verbosity: &v},
+		}
+		cfg.MergeClientOptions(opts)
+		if cfg.Introspection.Verbosity != "compact" {
+			t.Errorf("Introspection.Verbosity = %q, want %q", cfg.Introspection.Verbosity, "compact")
+		}
+	})
+}
+
 func TestDetectFramework(t *testing.T) {
 	t.Run("laravel with artisan", func(t *testing.T) {
 		dir := t.TempDir()

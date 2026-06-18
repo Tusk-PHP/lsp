@@ -285,7 +285,8 @@ type InitializationOptions struct {
 	InlayHints                   *InlayHintsClientOptions `json:"inlayHints,omitempty"`
 	PHPManualLocale              string                   `json:"phpManualLocale,omitempty"`
 	PHPManualOpenOnDefinition    *bool                    `json:"phpManualOpenOnDefinition,omitempty"`
-	Composer                     *ComposerClientOptions   `json:"composer,omitempty"`
+	Composer                     *ComposerClientOptions        `json:"composer,omitempty"`
+	Introspection                *IntrospectionClientOptions   `json:"introspection,omitempty"`
 }
 
 // ComposerClientOptions mirrors config.ComposerConfig but uses pointers so
@@ -305,6 +306,14 @@ type ComposerHoverClientOptions struct {
 	FetchVCS         *bool `json:"fetchVCS,omitempty"`
 	CacheTTLHours    *int  `json:"cacheTTLHours,omitempty"`
 	RequestTimeoutMs *int  `json:"requestTimeoutMs,omitempty"`
+}
+
+// IntrospectionClientOptions carries the verbosity setting for the document
+// introspection feature. The Verbosity field uses a pointer so "unset" is
+// distinguishable from an explicit value when merging over a file-based
+// default.
+type IntrospectionClientOptions struct {
+	Verbosity *string `json:"verbosity,omitempty"`
 }
 
 // InitializeResult for the initialize response.
