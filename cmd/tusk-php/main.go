@@ -10,11 +10,13 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/composer/lockfile"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/deps"
 	"github.com/Tusk-PHP/lsp/internal/graph"
+	"github.com/Tusk-PHP/lsp/internal/introspect"
 	"github.com/Tusk-PHP/lsp/internal/lsp"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -42,6 +44,13 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "deps" {
 		if err := runDeps(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "introspect" {
+		if err := runIntrospect(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -232,6 +241,104 @@ func runGraph(args []string) error {
 	}
 
 	return emitGraph(g, *formatFlag)
+}
+
+// nativeCheckRules returns the set of native (non-external) check rules for the
+// introspect subcommand. It mirrors the rules run by internal/diagnostics/provider.go
+// but skips rules that require optional dependencies (TypeResolver, model resolver).
+// NOTE: this duplicates provider.go's rule list — known v1 tradeoff; a follow-up
+// will unify the two lists into a shared constructor helper.
+func nativeCheckRules() []checks.Rule {
+	return []checks.Rule{
+		&checks.UnknownClassRule{},
+		&checks.UnknownFunctionRule{},
+		&checks.UnusedImportsRule{},
+		&checks.UnusedPrivateRule{},
+		&checks.UnreachableCodeRule{},
+		&checks.RedundantUnionRule{},
+		&checks.UndefinedVariableRule{},
+		&checks.UnusedVariableRule{},
+		&checks.ArgumentCountRule{},
+	}
+}
+
+// runIntrospect implements the `introspect` subcommand.
+func runIntrospect(args []string) error {
+	fs := flag.NewFlagSet("introspect", flag.ContinueOnError)
+	rootFlag := fs.String("root", "", "Project root (default: directory containing <file>)")
+	verbosityFlag := fs.String("verbosity", "compact", "Verbosity level: compact|full")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// Require exactly one positional argument: the file to introspect.
+	if fs.NArg() < 1 {
+		return fmt.Errorf("usage: tusk-php introspect <file> [--root=.] [--verbosity=compact|full]")
+	}
+	filePath := fs.Arg(0)
+
+	// Validate --verbosity.
+	switch *verbosityFlag {
+	case "compact", "full":
+		// valid
+	default:
+		return fmt.Errorf("invalid --verbosity %q: must be one of compact, full", *verbosityFlag)
+	}
+
+	// Resolve the file to an absolute path.
+	absFile, err := filepath.Abs(filePath)
+	if err != nil {
+		return fmt.Errorf("resolving file path: %w", err)
+	}
+
+	// Determine the project root: use --root if given, otherwise the directory
+	// containing the file (mirrors runGraph/runDeps convention).
+	root := *rootFlag
+	if root == "" {
+		root = filepath.Dir(absFile)
+	} else {
+		root, err = filepath.Abs(root)
+		if err != nil {
+			return fmt.Errorf("resolving root path: %w", err)
+		}
+	}
+
+	ws, framework, err := buildWorkspace(root, "tusk-php introspect")
+	if err != nil {
+		return err
+	}
+
+	// Read the file source from disk.
+	srcBytes, err := os.ReadFile(absFile)
+	if err != nil {
+		return fmt.Errorf("reading file %s: %w", absFile, err)
+	}
+	source := string(srcBytes)
+
+	// Derive the URI that the index uses as a key.
+	// workspace.Build indexes files with "file://" + absPath, which on Unix
+	// produces "file:///abs/path/file.php".
+	uri := "file://" + absFile
+
+	// Parse and run native checks synchronously for a self-consistent dump.
+	file := parser.ParseFile(source)
+	rules := nativeCheckRules()
+	findings := checks.CheckFile(file, source, ws.Index, rules)
+
+	v := introspect.ParseVerbosity(*verbosityFlag)
+	in := introspect.Input{
+		URI:           uri,
+		Source:        source,
+		Index:         ws.Index,
+		Container:     ws.Container,
+		Framework:     framework,
+		ServerVersion: version,
+		BufferState:   "disk",
+		Diagnostics:   findings,
+		Verbosity:     v,
+	}
+	fmt.Print(introspect.Render(introspect.Document(in), v))
+	return nil
 }
 
 // runDeps implements the `deps` subcommand.
