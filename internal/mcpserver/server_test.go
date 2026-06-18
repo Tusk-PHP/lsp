@@ -849,6 +849,71 @@ func TestSymfonyToolsVisible(t *testing.T) {
 	}
 }
 
+func TestLaravelToolsVisible(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	svc, err := New(ctx, testdataPath(t, "laravel"), logger)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if svc.Framework != "laravel" {
+		t.Fatalf("expected laravel framework, got %q", svc.Framework)
+	}
+
+	clientSession, cleanup := newInProcessClient(t, svc)
+	defer cleanup()
+
+	tools, err := clientSession.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools() error = %v", err)
+	}
+	var toolNames []string
+	for _, tool := range tools.Tools {
+		toolNames = append(toolNames, tool.Name)
+	}
+
+	// Laravel-specific tools must be present for a Laravel workspace.
+	if !slices.Contains(toolNames, "laravel_routes") {
+		t.Errorf("expected laravel_routes tool, got tools: %v", toolNames)
+	}
+	if !slices.Contains(toolNames, "laravel_route_to_controller") {
+		t.Errorf("expected laravel_route_to_controller tool, got tools: %v", toolNames)
+	}
+	if !slices.Contains(toolNames, "laravel_model_schema") {
+		t.Errorf("expected laravel_model_schema tool, got tools: %v", toolNames)
+	}
+	// php_graph must always be present.
+	if !slices.Contains(toolNames, "php_graph") {
+		t.Errorf("expected php_graph tool, got tools: %v", toolNames)
+	}
+
+	// Also verify that a Symfony workspace does NOT get laravel_* tools.
+	symfonySvc, err := New(ctx, testdataPath(t, "symfony"), logger)
+	if err != nil {
+		t.Fatalf("New(symfony) error = %v", err)
+	}
+	symfonyClient, symfonyCleanup := newInProcessClient(t, symfonySvc)
+	defer symfonyCleanup()
+
+	symfonyTools, err := symfonyClient.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools(symfony) error = %v", err)
+	}
+	var symfonyToolNames []string
+	for _, tool := range symfonyTools.Tools {
+		symfonyToolNames = append(symfonyToolNames, tool.Name)
+	}
+	if slices.Contains(symfonyToolNames, "laravel_routes") {
+		t.Errorf("did not expect laravel_routes in symfony workspace, tools: %v", symfonyToolNames)
+	}
+	if slices.Contains(symfonyToolNames, "laravel_route_to_controller") {
+		t.Errorf("did not expect laravel_route_to_controller in symfony workspace, tools: %v", symfonyToolNames)
+	}
+	if slices.Contains(symfonyToolNames, "laravel_model_schema") {
+		t.Errorf("did not expect laravel_model_schema in symfony workspace, tools: %v", symfonyToolNames)
+	}
+}
+
 func TestSymfonyRoutesResource(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

@@ -487,34 +487,36 @@ func (s *Service) registerTools() {
 		return nil, s.findColumn(in.Name), nil
 	})
 
-	mcp.AddTool(s.Server, &mcp.Tool{
-		Name:        "laravel_routes",
-		Description: "List known Laravel route names and their definition locations.",
-	}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, LaravelRoutesOutput, error) {
-		return nil, LaravelRoutesOutput{Routes: s.laravelRoutes()}, nil
-	})
+	if s.Framework == "laravel" {
+		mcp.AddTool(s.Server, &mcp.Tool{
+			Name:        "laravel_routes",
+			Description: "List known Laravel route names and their definition locations.",
+		}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, LaravelRoutesOutput, error) {
+			return nil, LaravelRoutesOutput{Routes: s.laravelRoutes()}, nil
+		})
 
-	mcp.AddTool(s.Server, &mcp.Tool{
-		Name:        "laravel_route_to_controller",
-		Description: "Best-effort Laravel route definition lookup by route name. Returns the route definition location; controller extraction is not available in the current index.",
-	}, func(_ context.Context, _ *mcp.CallToolRequest, in LaravelRouteInput) (*mcp.CallToolResult, *LaravelRouteRecord, error) {
-		record := s.findLaravelRoute(in.Name)
-		if record == nil {
-			return nil, nil, fmt.Errorf("route %q not found", in.Name)
-		}
-		return nil, record, nil
-	})
+		mcp.AddTool(s.Server, &mcp.Tool{
+			Name:        "laravel_route_to_controller",
+			Description: "Best-effort Laravel route definition lookup by route name. Returns the route definition location; controller extraction is not available in the current index.",
+		}, func(_ context.Context, _ *mcp.CallToolRequest, in LaravelRouteInput) (*mcp.CallToolResult, *LaravelRouteRecord, error) {
+			record := s.findLaravelRoute(in.Name)
+			if record == nil {
+				return nil, nil, fmt.Errorf("route %q not found", in.Name)
+			}
+			return nil, record, nil
+		})
 
-	mcp.AddTool(s.Server, &mcp.Tool{
-		Name:        "laravel_model_schema",
-		Description: "Describe a Laravel Eloquent model, its resolved table, and known members.",
-	}, func(_ context.Context, _ *mcp.CallToolRequest, in LaravelModelInput) (*mcp.CallToolResult, LaravelModelSchemaOutput, error) {
-		out, err := s.laravelModelSchema(in.FQN)
-		if err != nil {
-			return nil, LaravelModelSchemaOutput{}, err
-		}
-		return nil, out, nil
-	})
+		mcp.AddTool(s.Server, &mcp.Tool{
+			Name:        "laravel_model_schema",
+			Description: "Describe a Laravel Eloquent model, its resolved table, and known members.",
+		}, func(_ context.Context, _ *mcp.CallToolRequest, in LaravelModelInput) (*mcp.CallToolResult, LaravelModelSchemaOutput, error) {
+			out, err := s.laravelModelSchema(in.FQN)
+			if err != nil {
+				return nil, LaravelModelSchemaOutput{}, err
+			}
+			return nil, out, nil
+		})
+	}
 
 	if s.Framework == "symfony" {
 		mcp.AddTool(s.Server, &mcp.Tool{
