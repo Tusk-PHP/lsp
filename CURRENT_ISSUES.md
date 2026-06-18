@@ -25,15 +25,18 @@ _None open._
 
 ## Low / performance
 
-### L32 — `lockfile.toLocked` discards the transitive `require` map
-- **Where:** `internal/composer/lockfile/lockfile.go` (`toLocked`, `LockedPackage`); only `Find(name)` is exposed, no iterate-all accessor.
-- **What:** `composer.lock` packages carry a full `require` map (package→package edges), but `toLocked` keeps only `Require["php"]` as `PHPRequire` and drops the rest. The dependency-tree map in the planned `deps tree` command (see `docs/dependency-usage-analysis-design.md`) needs these edges plus a way to iterate all locked packages.
-- **Fix:** Add a `Require map[string]string` field to `LockedPackage`, carry it through `toLocked`, and add an iterate-all accessor (and dev/non-dev distinction if needed). Cheap — data is already parsed into `rawPackage.Require`.
+### L33 — `deps usage` exposed-class denominator under-counts (capped, not fixed); no lockfile fixture for `deps tree` on testdata/project
+- **Where:** `internal/deps/usage.go` (`Usage` denominator pass); `testdata/project/` (no `composer.lock`); `internal/composer/packages.go` (`InstalledPackages` empty `Version` for stub vendors).
+- **What:** Because vendor is indexed by-need, the per-package exposed-class count can fall below the touched count, which produced nonsensical >100% usage (observed `monolog/monolog 200.0% (2/1)` on `testdata/project`). It is now **clamped** by flooring the denominator at the touched count (Percent ∈ [0,100]), but the underlying denominator is still a briefing-grade under-count (the real fix is the L31 exhaustive-surface pass). Separately, `testdata/project` has no `composer.lock`, so `deps tree` cannot be exercised against that canonical fixture (only `testdata/laravel` works), and `InstalledPackages` returns an empty `Version` for the manually-placed monolog stub.
+- **Fix:** Implement the exhaustive per-package surface count from L31 so the denominator is real; add a minimal `composer.lock` to `testdata/project` mirroring its `composer.json` so `deps tree` has a canonical fixture; optionally backfill `version` on the stub vendor or its `installed.json`.
 
-### L31 — No per-package exposed-surface count for dependency usage-%
-- **Where:** `internal/composer` + `internal/symbols`; consumed by the planned `deps usage` command (`docs/dependency-usage-analysis-design.md`).
-- **What:** Usage-% needs a denominator = distinct public classes a package exposes under its `autoload` PSR-4 roots (excluding `autoload-dev`). Vendor symbols are indexed lazily/by-need (`SourceVendor`), so the index may not hold a package's full public surface, making a naive count under-report.
-- **Fix:** Add a briefing-grade per-package surface count — either a dedicated "enumerate autoload roots" pass over `install-path` + PSR-4 prefixes, or a flag to fully index a package's autoload roots on demand. Briefing-grade approximation is acceptable for v1.
+### ~~L32~~ — `lockfile.toLocked` discards the transitive `require` map — **RESOLVED**
+- `LockedPackage` now carries `Require map[string]string` (full package→package edges), and `(*Lockfile).All()` returns every locked package sorted by name. Consumed by `deps.BuildTree`.
+
+### L31 — Exhaustive per-package exposed-surface count for dependency usage-% (briefing-grade shipped)
+- **Where:** `internal/composer` + `internal/symbols`; consumed by `internal/deps/usage.go` (`deps usage`).
+- **What:** Usage-% needs a denominator = distinct public classes a package exposes under its `autoload` PSR-4 roots (excluding `autoload-dev`). Vendor symbols are indexed lazily/by-need (`SourceVendor`), so the current `SearchByFQNPrefix`-based count under-reports (see L33). The briefing-grade approximation is **shipped and accepted for v1**; this entry tracks the exhaustive version.
+- **Fix:** Add a dedicated "enumerate autoload roots" pass over `install-path` + PSR-4 prefixes (or fully index a package's autoload roots on demand) so the denominator reflects the real exposed surface, not just by-need-indexed classes.
 
 ### L40 — `InterfaceNode`/`TraitNode`/`EnumNode`/`FunctionNode` (compat layer) lack `EndLine`
 - **Where:** `internal/parser/compat.go` (struct defs ~80-128; `toFileNode` conversion ~550-617).
@@ -59,10 +62,8 @@ _None open._
 - **What:** Doctrine relation edges are only derived from PHP 8 attribute syntax with `targetEntity: Foo::class`. Two gaps: (1) entities mapped purely via XML (`config/doctrine/*.orm.xml`) emit no edges, though `doctrine.go` already parses that XML (`parseDoctrineXMLMapping`); (2) string-form targets (`targetEntity: 'App\Entity\Foo'`) aren't matched by `targetEntityRe`. Both produce missing edges (under-reporting) in `graph models` on Symfony/Doctrine projects.
 - **Fix:** Add an XML-relation path to the Symfony branch of `ModelRelations` (reuse the existing XML parse), and extend `targetEntityRe` to also accept quoted string targets.
 
-### L25 — Symfony `bundles.php` exclusion not implemented for unused-deps
-- **Where:** `internal/unuseddeps/unuseddeps.go` (`Analyze`); analogous to `composer.LaravelAutoDiscoveredPackages`.
-- **What:** Unused-dependency analysis excludes Laravel auto-discovered packages (`extra.laravel.providers`/`aliases`) but has no Symfony equivalent. Symfony bundles registered in `config/bundles.php` are used via framework wiring, not static code refs, so their packages will be reported as unused-candidates (false positives) on Symfony projects.
-- **Fix:** Add `composer.SymfonyBundlePackages(rootPath)` (parse `config/bundles.php` bundle classes → owning packages via the package resolver) and union it into the `excluded` set in `Analyze`. The exclusion set is already structured additively.
+### ~~L25~~ — Symfony `bundles.php` exclusion not implemented for unused-deps — **RESOLVED**
+- `composer.SymfonyBundlePackages(rootPath)` now parses `config/bundles.php` → bundle class FQNs → owning packages via the resolver, and `unuseddeps.Analyze` unions them into the excluded set (alongside Laravel auto-discovery). `Analyze` also now folds `composer.DirectDevRequires` into the checked universe.
 
 ### L24 — `resolve.ResolveClassName` may return a bare short name when the FQN isn't indexed
 - **Where:** `internal/resolve/resolve.go` (`ResolveClassName`, ~line 106); affects `new X` edges in `internal/graph/references.go`.
