@@ -30,30 +30,27 @@ _None open._
 - **What:** Same gap L23 fixed for `ClassNode`: the compat nodes for interfaces, traits, enums, and functions don't expose `EndLine`, although `InterfaceDef`/`TraitDef`/`EnumDef`/`FunctionDef` all carry it. (Discovered while fixing L23.)
 - **Fix:** Add `EndLine` to those four compat node types and map it through `toFileNode`, mirroring the `ClassNode` fix.
 
-### L38 — Document introspection dumps only the first top-level symbol
-- **Where:** `internal/introspect/dump.go` (`pickPrimarySymbol` / `Document`); consumed by `tuskPhpLsp.debugDocument` and `tusk-php introspect`.
-- **What:** When a file declares several top-level classes/interfaces/traits, the parsed-state dump reports only the first one. The design (`docs/lsp-document-introspection-design.md`, open questions) leans "dump all, cursor-first when a position is provided," but `Document` has no `Position` parameter.
-- **Fix:** Accept an optional cursor position (the in-server command already has it available from the client) and either dump all symbols ordered, or the cursor's symbol first. Keep the CLI defaulting to "all".
+### L39 — `checks.AllRules()` is stale dead code
+- **Where:** `internal/checks/checks.go` (`AllRules`, ~line 58).
+- **What:** `AllRules()` returns only three rules (UnusedImports/UnusedPrivate/UnreachableCode) and was never updated as new rules were added; it has zero production callers, so it silently misrepresents the rule set. (Discovered during the L34 unification.)
+- **Fix:** Delete `AllRules()` — the canonical native set now lives in `diagnostics.NativeRules`. (`checks` cannot import `diagnostics`, so don't delegate; just remove.)
 
-### L37 — `introspect` CLI URI derivation won't match index keys on Windows
-- **Where:** `cmd/tusk-php/main.go` (`runIntrospect`, URI = `"file://" + absFile`).
-- **What:** On Unix this yields `file:///abs/path` and matches the index keys, but on Windows `absFile` is `C:\...` so the URI diverges from the workspace-build key form, and `GetFileSymbols(uri)` returns nothing (empty dump). Unix is correct (verified).
-- **Fix:** Derive the URI the way `workspace`/`IndexFile` does — `"file://" + filepath.ToSlash(absFile)` with a leading `/` before the drive letter (or percent-encode via `url.URL`). Share one path→URI helper.
+### ~~L38~~ — Document introspection dumps only the first top-level symbol — **RESOLVED**
+- `introspect.Document` now builds a section for every top-level class/interface/trait/enum (`Dump.Symbols`), rendered with dividers; `PrimarySymbol` retained as the first element for back-compat. Cursor-first ordering deferred (no Position plumbing needed for "dump all").
 
-### L36 — `tuskPhpLsp.debugDocument` lacks test coverage
-- **Where:** `internal/lsp/execute_command_test.go` (`TestExecuteCommandAdvertisement`, `wantCmds`).
-- **What:** The new `tuskPhpLsp.debugDocument` command is not asserted in the advertised-commands test, and there is no round-trip test exercising the handler (the handler path is only indirectly covered).
-- **Fix:** Add `"tuskPhpLsp.debugDocument"` to `wantCmds` and a round-trip test that invokes the command and asserts a non-empty string result (mirror the `copyNamespace` block).
+### L37 — `introspect` CLI URI derivation: not a bug (corrected)
+- **Where:** `cmd/tusk-php/main.go` (`runIntrospect`) vs `internal/workspace/workspace.go`.
+- **What:** CORRECTION — `workspace` keys files as `"file://"+path` (raw OS path, no `ToSlash`), and `runIntrospect` uses the same `"file://"+absFile` convention, so the two MATCH on every OS and the dump works (verified on Unix). The earlier "empty dump on Windows" premise was wrong.
+- **Fix:** No introspect-specific fix needed. The shared non-standard `file://` form on Windows (backslashes) is a pre-existing, workspace-wide concern; if proper RFC-8089 `file://` URIs are wanted, normalise in ONE shared path→URI helper used by both `workspace` and the CLI. Low-priority hygiene, not a correctness bug.
 
-### L35 — Introspection dump header omits the PHP profile string
-- **Where:** `internal/introspect/Input.Profile` is left empty by both callers — `cmd/tusk-php/main.go` (`runIntrospect`) and `internal/lsp/server.go` (`debugDocument`).
-- **What:** The dump header's Server line is designed to show `PHP <version> (ext: …)` but `Input.Profile` is never populated, though the resolved `BuiltinProfile` is available in both contexts (`loadProjectMetadata` returns it; the server holds `s.workspace.BuiltinProfile`).
-- **Fix:** Format the profile (`PHP <PHPVersion> (ext: <Extensions joined>)`) and pass it as `Input.Profile` in both callers.
+### ~~L36~~ — `tuskPhpLsp.debugDocument` lacks test coverage — **RESOLVED**
+- `execute_command_test.go` now asserts `tuskPhpLsp.debugDocument` in the advertised set and adds `TestExecuteCommandDebugDocument` (round-trip: invokes the command, asserts a non-empty string containing the dump header + class name).
 
-### L34 — Native check-rule set duplicated across three call sites
-- **Where:** `internal/diagnostics/provider.go` (`Analyze`), `internal/lsp/server.go` (`nativeCheckRules`, debugDocument), `cmd/tusk-php/main.go` (`nativeCheckRules`, introspect).
-- **What:** The list of native (non-external) check rules is now assembled independently in three places (a known v1 tradeoff from the introspection work). They can drift, so the dump's diagnostics could diverge from what the editor publishes.
-- **Fix:** Extract a single shared constructor (e.g. `checks.NativeRules(...)` or `diagnostics.NativeRules(...)`) returning `[]checks.Rule`, and use it at all three sites.
+### ~~L35~~ — Introspection dump header omits the PHP profile string — **RESOLVED**
+- Added `introspect.FormatProfile`; both callers (`server.go` debugDocument via `s.workspace.BuiltinProfile`, `main.go` runIntrospect via `ws.BuiltinProfile`) now populate `Input.Profile`. Header renders e.g. `Server  0.9.0 · PHP 8.3 · framework laravel`.
+
+### ~~L34~~ — Native check-rule set duplicated across three call sites — **RESOLVED**
+- Added `diagnostics.NativeRules(opts)` as the single constructor; `server.go` and `cmd/tusk-php/main.go` now call it (duplicate `nativeCheckRules` helpers removed). `provider.go` keeps its per-rule-severity model, guarded by `TestNativeRulesParityWithProvider` so the lists can't drift.
 
 ### L33 — `deps usage` exposed-class denominator under-counts (capped, not fixed); no lockfile fixture for `deps tree` on testdata/project
 - **Where:** `internal/deps/usage.go` (`Usage` denominator pass); `testdata/project/` (no `composer.lock`); `internal/composer/packages.go` (`InstalledPackages` empty `Version` for stub vendors).
