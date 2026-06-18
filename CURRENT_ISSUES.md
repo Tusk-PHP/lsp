@@ -25,6 +25,35 @@ _None open._
 
 ## Low / performance
 
+### L32 — `lockfile.toLocked` discards the transitive `require` map
+- **Where:** `internal/composer/lockfile/lockfile.go` (`toLocked`, `LockedPackage`); only `Find(name)` is exposed, no iterate-all accessor.
+- **What:** `composer.lock` packages carry a full `require` map (package→package edges), but `toLocked` keeps only `Require["php"]` as `PHPRequire` and drops the rest. The dependency-tree map in the planned `deps tree` command (see `docs/dependency-usage-analysis-design.md`) needs these edges plus a way to iterate all locked packages.
+- **Fix:** Add a `Require map[string]string` field to `LockedPackage`, carry it through `toLocked`, and add an iterate-all accessor (and dev/non-dev distinction if needed). Cheap — data is already parsed into `rawPackage.Require`.
+
+### L31 — No per-package exposed-surface count for dependency usage-%
+- **Where:** `internal/composer` + `internal/symbols`; consumed by the planned `deps usage` command (`docs/dependency-usage-analysis-design.md`).
+- **What:** Usage-% needs a denominator = distinct public classes a package exposes under its `autoload` PSR-4 roots (excluding `autoload-dev`). Vendor symbols are indexed lazily/by-need (`SourceVendor`), so the index may not hold a package's full public surface, making a naive count under-report.
+- **Fix:** Add a briefing-grade per-package surface count — either a dedicated "enumerate autoload roots" pass over `install-path` + PSR-4 prefixes, or a flag to fully index a package's autoload roots on demand. Briefing-grade approximation is acceptable for v1.
+
+### L40 — `InterfaceNode`/`TraitNode`/`EnumNode`/`FunctionNode` (compat layer) lack `EndLine`
+- **Where:** `internal/parser/compat.go` (struct defs ~80-128; `toFileNode` conversion ~550-617).
+- **What:** Same gap L23 fixed for `ClassNode`: the compat nodes for interfaces, traits, enums, and functions don't expose `EndLine`, although `InterfaceDef`/`TraitDef`/`EnumDef`/`FunctionDef` all carry it. (Discovered while fixing L23.)
+- **Fix:** Add `EndLine` to those four compat node types and map it through `toFileNode`, mirroring the `ClassNode` fix.
+
+### ~~L30~~ — `phpdetect` tests flake under parallel load — **RESOLVED**
+- Happy-path tests now use a generous `testDetectTimeout = 5s` instead of the production `DefaultTimeout`; the dedicated timeout-assertion tests keep their short 200ms value. Stable under `-count=3`.
+
+### L29 — `php_graph` MCP tool wraps mermaid/dot output in JSON instead of raw text
+- **Where:** `internal/mcpserver/server.go` (`phpGraph`, ws/mcp-maturation).
+- **What:** mermaid/dot formats return `{"format": ..., "text": ...}` structured content because `mcp.Content` in go-sdk v1.6.1 could not be constructed directly. Functional, but agents must unwrap the `text` field.
+- **Fix:** Revisit when the SDK exposes a text-content constructor; emit raw text content for non-JSON formats.
+
+### ~~L28~~ — `laravel_*` MCP tools are not framework-gated — **RESOLVED**
+- `laravel_routes` / `laravel_route_to_controller` / `laravel_model_schema` registration is now gated on `s.Framework == "laravel"` (mirroring the Symfony gate); covered by `TestLaravelToolsVisible`.
+
+### ~~L27~~ — `parseParams` variadic detection is dead code — **RESOLVED**
+- `parseParams` now detects the three-consecutive-`TokenUnknown "."` sequence (the real tokenization of `...`) and sets `ParamDef.IsVariadic` for both `...$x` and `Type ...$x`. Covered by `TestParseVariadicParams`.
+
 ### L26 — `graph models` misses Doctrine XML mappings and string-form targetEntity
 - **Where:** `internal/models/relations.go` (`ModelRelations` Symfony path); relies on `ormRelationRe` + `targetEntityRe` (doctrine.go:52,67).
 - **What:** Doctrine relation edges are only derived from PHP 8 attribute syntax with `targetEntity: Foo::class`. Two gaps: (1) entities mapped purely via XML (`config/doctrine/*.orm.xml`) emit no edges, though `doctrine.go` already parses that XML (`parseDoctrineXMLMapping`); (2) string-form targets (`targetEntity: 'App\Entity\Foo'`) aren't matched by `targetEntityRe`. Both produce missing edges (under-reporting) in `graph models` on Symfony/Doctrine projects.
@@ -40,15 +69,11 @@ _None open._
 - **What:** When a `new X` target's namespace-qualified FQN isn't yet in the index, `ResolveClassName` falls back to the bare short name. In `graph references --deps full` this can surface as an orphan node with an unqualified ID. `DepsNone`/`DepsBoundary` are unaffected (such nodes classify as "unresolved" and are handled).
 - **Fix:** Have the references builder prefer the namespace-qualified candidate for unresolved `new` targets, or drop targets that don't resolve to an indexed symbol under DepsFull.
 
-### L23 — `ClassNode` (compat layer) does not expose `EndLine`
-- **Where:** `internal/parser/compat.go` (~line 524-534): `ClassNode` is built from `ClassDef` but only maps `Line`/`StartLine`, not `EndLine` (which exists on `ClassDef`, parser.go:38).
-- **What:** Callers using `FileNode.Classes` can't get a class's end line; `references.go`'s `new`-scan worked around it by using `parser.New().Parse().Classes` (`[]ClassDef`, which has `EndLine`). Anything needing enclosing-class ranges via the compat `FileNode` hits this gap.
-- **Fix:** Map `classDef.EndLine` onto `ClassNode` in the compat conversion.
+### ~~L23~~ — `ClassNode` (compat layer) does not expose `EndLine` — **RESOLVED**
+- `ClassNode` gained an `EndLine` field, mapped from `classDef.EndLine` in `toFileNode`. Covered by `TestClassNodeEndLine`. (The same gap for interface/trait/enum/function nodes is tracked in L40.)
 
-### L21 — No test seam to inject container bindings, leaving DepsBoundary Meta path conditionally covered
-- **Where:** `internal/container/analyzer.go` (`ContainerAnalyzer.bindings`, ~line 30); affects `internal/graph/container_test.go`.
-- **What:** Exercising `BuildContainer`'s `DepsBoundary` boundary-node Meta (`edgeCount`, `distinctSymbols`, `version`) end-to-end needs a *vendor-classified* FQN as a binding's Concrete. The only no-fixture path is writing a PHP provider into a temp dir and relying on regex `parseLaravelProvider`, which is fragile (path must match `app/Providers/*.php`). The test currently degrades to `t.Skip` when the binding isn't parsed, so the real boundary path is only conditionally covered.
-- **Fix:** Add a small seam — e.g. exported `func (ca *ContainerAnalyzer) AddBinding(b *ServiceBinding)` or an in-package `testAddBinding` helper — so tests can inject known bindings directly without filesystem parsing.
+### ~~L21~~ — No test seam to inject container bindings, leaving DepsBoundary Meta path conditionally covered — **RESOLVED**
+- Added exported `(*ContainerAnalyzer).AddBinding(*ServiceBinding)`; `graph/container_test.go` now injects a vendor-classified binding directly and asserts the `DepsBoundary` Meta (`edgeCount`/`distinctSymbols`/`version`) unconditionally (the `t.Skip` escape hatch is gone).
 
 ### ~~L20~~ — Duplicate installed.json unmarshal structs in composer package — **RESOLVED**
 - `installedPackage` in `composer.go` now includes `Version string \`json:"version"\``.
