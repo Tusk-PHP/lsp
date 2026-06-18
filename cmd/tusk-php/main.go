@@ -15,6 +15,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/composer/lockfile"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/deps"
+	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	"github.com/Tusk-PHP/lsp/internal/graph"
 	"github.com/Tusk-PHP/lsp/internal/introspect"
 	"github.com/Tusk-PHP/lsp/internal/lsp"
@@ -243,25 +244,6 @@ func runGraph(args []string) error {
 	return emitGraph(g, *formatFlag)
 }
 
-// nativeCheckRules returns the set of native (non-external) check rules for the
-// introspect subcommand. It mirrors the rules run by internal/diagnostics/provider.go
-// but skips rules that require optional dependencies (TypeResolver, model resolver).
-// NOTE: this duplicates provider.go's rule list — known v1 tradeoff; a follow-up
-// will unify the two lists into a shared constructor helper.
-func nativeCheckRules() []checks.Rule {
-	return []checks.Rule{
-		&checks.UnknownClassRule{},
-		&checks.UnknownFunctionRule{},
-		&checks.UnusedImportsRule{},
-		&checks.UnusedPrivateRule{},
-		&checks.UnreachableCodeRule{},
-		&checks.RedundantUnionRule{},
-		&checks.UndefinedVariableRule{},
-		&checks.UnusedVariableRule{},
-		&checks.ArgumentCountRule{},
-	}
-}
-
 // runIntrospect implements the `introspect` subcommand.
 func runIntrospect(args []string) error {
 	fs := flag.NewFlagSet("introspect", flag.ContinueOnError)
@@ -322,7 +304,7 @@ func runIntrospect(args []string) error {
 
 	// Parse and run native checks synchronously for a self-consistent dump.
 	file := parser.ParseFile(source)
-	rules := nativeCheckRules()
+	rules := diagnostics.NativeRules(diagnostics.NativeRulesOptions{})
 	findings := checks.CheckFile(file, source, ws.Index, rules)
 
 	v := introspect.ParseVerbosity(*verbosityFlag)
@@ -333,6 +315,7 @@ func runIntrospect(args []string) error {
 		Container:     ws.Container,
 		Framework:     framework,
 		ServerVersion: version,
+		Profile:       introspect.FormatProfile(ws.BuiltinProfile.PHPVersion, ws.BuiltinProfile.Extensions),
 		BufferState:   "disk",
 		Diagnostics:   findings,
 		Verbosity:     v,
