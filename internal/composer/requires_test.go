@@ -82,3 +82,90 @@ func TestDirectRequiresEmptyRequire(t *testing.T) {
 		t.Fatalf("DirectRequires() = %v, want empty/nil", got)
 	}
 }
+
+func TestDirectDevRequires(t *testing.T) {
+	root := t.TempDir()
+	writeComposerJSON(t, root, `{
+		"require": {
+			"vendor/a": "^1.0"
+		},
+		"require-dev": {
+			"phpunit/phpunit": "^10",
+			"vendor/dev-tool": "^2.0",
+			"php": ">=8.1",
+			"ext-xdebug": "*"
+		}
+	}`)
+
+	got := DirectDevRequires(root)
+	want := []string{"phpunit/phpunit", "vendor/dev-tool"}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("DirectDevRequires() = %v, want %v", got, want)
+	}
+}
+
+func TestDirectDevRequiresMissingFile(t *testing.T) {
+	got := DirectDevRequires(t.TempDir())
+	if got != nil {
+		t.Fatalf("DirectDevRequires() = %v, want nil", got)
+	}
+}
+
+func TestDirectDevRequiresMalformedJSON(t *testing.T) {
+	root := t.TempDir()
+	writeComposerJSON(t, root, `{ not valid json }`)
+
+	got := DirectDevRequires(root)
+	if got != nil {
+		t.Fatalf("DirectDevRequires() = %v, want nil", got)
+	}
+}
+
+func TestDirectDevRequiresExcludesPlatformPackages(t *testing.T) {
+	root := t.TempDir()
+	writeComposerJSON(t, root, `{
+		"require-dev": {
+			"php": "^8.0",
+			"ext-pcov": "*",
+			"php-64bit": "*",
+			"vendor/testing": "^1.0"
+		}
+	}`)
+
+	got := DirectDevRequires(root)
+	want := []string{"vendor/testing"}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("DirectDevRequires() = %v, want %v", got, want)
+	}
+}
+
+func TestDirectDevRequiresEmptyBlock(t *testing.T) {
+	root := t.TempDir()
+	writeComposerJSON(t, root, `{
+		"require": {
+			"vendor/a": "^1.0"
+		},
+		"require-dev": {}
+	}`)
+
+	got := DirectDevRequires(root)
+	if len(got) != 0 {
+		t.Fatalf("DirectDevRequires() = %v, want empty/nil", got)
+	}
+}
+
+func TestDirectDevRequiresMissingBlock(t *testing.T) {
+	root := t.TempDir()
+	writeComposerJSON(t, root, `{
+		"require": {
+			"vendor/a": "^1.0"
+		}
+	}`)
+
+	got := DirectDevRequires(root)
+	if len(got) != 0 {
+		t.Fatalf("DirectDevRequires() = %v, want empty/nil when require-dev is absent", got)
+	}
+}
