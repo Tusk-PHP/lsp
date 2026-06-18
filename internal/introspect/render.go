@@ -16,6 +16,9 @@ const (
 // Compact verbosity renders header + symbol + inferred members + diagnostics.
 // Full verbosity adds declared members, reference edges, and container.
 // A nil Dump returns an empty string.
+// When the file declares multiple top-level symbols each symbol gets its own
+// block separated by a divider line; files with no symbols still render the
+// header and diagnostics.
 func Render(d *Dump, v Verbosity) string {
 	if d == nil {
 		return ""
@@ -32,35 +35,41 @@ func Render(d *Dump, v Verbosity) string {
 	b.WriteString(divider)
 	b.WriteByte('\n')
 
-	// SYMBOL section
-	if d.PrimarySymbol != nil {
-		writeSymbolSection(&b, d.PrimarySymbol)
+	// Render each top-level symbol with a divider between them.
+	for i, sec := range d.Symbols {
+		if i > 0 {
+			b.WriteString(divider)
+			b.WriteByte('\n')
+		}
+
+		// SYMBOL section
+		writeSymbolSection(&b, sec)
 		b.WriteByte('\n')
+
+		// DECLARED MEMBERS — Full only
+		if v == Full {
+			writeDeclaredMembers(&b, sec.DeclaredMembers)
+			b.WriteByte('\n')
+		}
+
+		// INFERRED MEMBERS — always
+		writeInferredMembers(&b, sec.InferredMembers)
+		b.WriteByte('\n')
+
+		// REFERENCE EDGES — Full only
+		if v == Full {
+			writeReferenceEdges(&b, sec.ReferenceEdges)
+			b.WriteByte('\n')
+		}
+
+		// CONTAINER — Full only
+		if v == Full {
+			writeContainerSection(&b, sec.ContainerBindings, sec.InjectedDeps)
+			b.WriteByte('\n')
+		}
 	}
 
-	// DECLARED MEMBERS — Full only
-	if v == Full {
-		writeDeclaredMembers(&b, d.DeclaredMembers)
-		b.WriteByte('\n')
-	}
-
-	// INFERRED MEMBERS — always
-	writeInferredMembers(&b, d.InferredMembers)
-	b.WriteByte('\n')
-
-	// REFERENCE EDGES — Full only
-	if v == Full {
-		writeReferenceEdges(&b, d.ReferenceEdges)
-		b.WriteByte('\n')
-	}
-
-	// CONTAINER — Full only
-	if v == Full {
-		writeContainerSection(&b, d.ContainerBindings, d.InjectedDeps)
-		b.WriteByte('\n')
-	}
-
-	// DIAGNOSTICS — always
+	// DIAGNOSTICS — always (file-level, after all symbols)
 	writeDiagnostics(&b, d.Diagnostics)
 
 	b.WriteString(footerLine)
