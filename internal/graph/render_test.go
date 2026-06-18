@@ -329,3 +329,62 @@ func TestRenderDOT_ModelShape(t *testing.T) {
 		t.Errorf("RenderDOT: model node id 'App\\\\Models\\\\User' not found in output:\n%s", out)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Package node kind tests
+// ---------------------------------------------------------------------------
+
+// buildPackageNodeGraph returns a graph that includes a "package" kind node
+// alongside a "class" node, for testing package-specific shape rendering.
+func buildPackageNodeGraph() *Graph {
+	return &Graph{
+		SchemaVersion: SchemaVersion,
+		Kind:          "deps-tree",
+		Nodes: []Node{
+			{
+				ID:    "vendor/a",
+				Kind:  "package",
+				Label: "vendor/a@1.0.0",
+			},
+			{
+				ID:    "vendor/b",
+				Kind:  "package",
+				Label: "vendor/b@2.0.0",
+			},
+		},
+		Edges: []Edge{
+			{From: "vendor/a", To: "vendor/b", Kind: "requires"},
+		},
+	}
+}
+
+// TestRenderMermaid_PackageShape checks that a "package" node is rendered with
+// the stadium/rounded shape syntax  ([  ])  in Mermaid output.
+func TestRenderMermaid_PackageShape(t *testing.T) {
+	g := buildPackageNodeGraph()
+	out := RenderMermaid(g)
+
+	// Stadium form: (["..."]) — same open sequence as "binding".
+	if !strings.Contains(out, `(["`) {
+		t.Errorf("RenderMermaid: package stadium shape '([\"' not found in output:\n%s", out)
+	}
+	// The package node labels must appear in the output.
+	if !strings.Contains(out, "vendor/a@1.0.0") {
+		t.Errorf("RenderMermaid: package label 'vendor/a@1.0.0' not found in output:\n%s", out)
+	}
+}
+
+// TestRenderDOT_PackageShape checks that a "package" node carries
+// shape=component in DOT output.
+func TestRenderDOT_PackageShape(t *testing.T) {
+	g := buildPackageNodeGraph()
+	out := RenderDOT(g)
+
+	if !strings.Contains(out, "shape=component") {
+		t.Errorf("RenderDOT: 'shape=component' not found in output:\n%s", out)
+	}
+	// At least one package node ID must be present.
+	if !strings.Contains(out, "vendor/a") {
+		t.Errorf("RenderDOT: package node id 'vendor/a' not found in output:\n%s", out)
+	}
+}
