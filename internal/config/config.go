@@ -82,6 +82,16 @@ func (v *RuleSeverityValue) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// IntrospectionConfig holds configuration for the document introspection
+// feature (tuskPhpLsp.debugDocument / tusk-php introspect).
+type IntrospectionConfig struct {
+	// Verbosity controls how much detail is included in the parsed-state dump.
+	// Allowed values: "compact" (default) | "full".
+	// "compact" renders header + symbol + inferred members + diagnostics.
+	// "full" additionally renders declared members, reference edges, and container.
+	Verbosity string `json:"verbosity"`
+}
+
 // InlayHintsConfig holds the configuration for inlay hint display.
 type InlayHintsConfig struct {
 	Enabled             bool `json:"enabled"`
@@ -171,6 +181,7 @@ type Config struct {
 	Composer                  ComposerConfig               `json:"composer,omitempty"`
 	DB                        DBConfig                     `json:"db,omitempty"`
 	AI                        AIConfig                     `json:"ai,omitempty"`
+	Introspection             IntrospectionConfig          `json:"introspection,omitempty"`
 }
 
 // SetDiagnosticRulesJSON parses a JSON object of rule code → severity value
@@ -250,6 +261,9 @@ func DefaultConfig() *Config {
 		AI: AIConfig{
 			WriteTools: "disabled",
 			DenyPaths:  []string{".env", "vendor", "storage"},
+		},
+		Introspection: IntrospectionConfig{
+			Verbosity: "compact",
 		},
 	}
 }
@@ -379,6 +393,11 @@ func (c *Config) MergeClientOptions(opts *protocol.InitializationOptions) {
 			if h.RequestTimeoutMs != nil {
 				c.Composer.Hover.RequestTimeoutMs = *h.RequestTimeoutMs
 			}
+		}
+	}
+	if opts.Introspection != nil {
+		if opts.Introspection.Verbosity != nil {
+			c.Introspection.Verbosity = *opts.Introspection.Verbosity
 		}
 	}
 }
