@@ -39,6 +39,33 @@ func DirectRequires(rootPath string) []string {
 	return pkgs
 }
 
+// DirectDevRequires returns the package names listed under the "require-dev"
+// key of composer.json at rootPath, excluding platform pseudo-packages
+// (same filtering rules as DirectRequires). The slice is sorted for
+// determinism. If composer.json is missing or malformed, nil is returned.
+func DirectDevRequires(rootPath string) []string {
+	composerPath := filepath.Join(rootPath, "composer.json")
+	data, err := os.ReadFile(composerPath)
+	if err != nil {
+		return nil
+	}
+
+	var cj composerJSON
+	if err := json.Unmarshal(data, &cj); err != nil {
+		return nil
+	}
+
+	var pkgs []string
+	for pkg := range cj.RequireDev {
+		if isPlatformPackage(pkg) {
+			continue
+		}
+		pkgs = append(pkgs, pkg)
+	}
+	sort.Strings(pkgs)
+	return pkgs
+}
+
 // isPlatformPackage reports whether pkg is a Composer platform pseudo-package:
 // "php", "php-*", or "ext-*" (all matched case-insensitively).
 func isPlatformPackage(pkg string) bool {

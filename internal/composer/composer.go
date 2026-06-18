@@ -22,6 +22,7 @@ type composerJSON struct {
 	Autoload    autoloadBlock     `json:"autoload"`
 	AutoloadDev autoloadBlock     `json:"autoload-dev"`
 	Require     map[string]string `json:"require"`
+	RequireDev  map[string]string `json:"require-dev"`
 	Config      composerConfig    `json:"config"`
 	Extra       composerExtra     `json:"extra"`
 }

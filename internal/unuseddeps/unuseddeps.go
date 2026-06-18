@@ -27,15 +27,18 @@ type Report struct {
 }
 
 // Analyze inspects idx for first-party→vendor edges and returns the set of
-// direct composer require packages that appear to have no static reference.
+// direct composer require and require-dev packages that appear to have no
+// static reference.
 //
 // Logic:
-//  1. Load the universe of direct (non-platform) requires from composer.json.
+//  1. Load the universe of direct (non-platform) requires from composer.json,
+//     unioning in require-dev packages (deduplicated).
 //  2. Build a dependency-boundary reference graph; every boundary node whose
 //     Meta["package"] is reached by at least one first-party edge is "referenced".
-//  3. Exclude packages registered via Laravel auto-discovery
-//     (extra.laravel.providers / extra.laravel.aliases) — they are consumed
-//     through framework mechanisms that are invisible to static analysis.
+//  3. Exclude packages registered via framework auto-discovery mechanisms that
+//     are invisible to static analysis:
+//     - Laravel: extra.laravel.providers / extra.laravel.aliases
+//     - Symfony: config/bundles.php bundle class registrations
 //  4. Any required package that is neither referenced nor excluded is a candidate.
 //
 // A nil idx is handled gracefully (returns an empty report with Checked=0).
@@ -45,7 +48,11 @@ func Analyze(idx *symbols.Index, rootPath, framework string) Report {
 		Candidates: []Candidate{},
 	}
 
-	required := composer.DirectRequires(rootPath)
+	// Union require + require-dev into a single deduplicated, sorted universe.
+	required := unionRequires(
+		composer.DirectRequires(rootPath),
+		composer.DirectDevRequires(rootPath),
+	)
 	rep.Checked = len(required)
 	if len(required) == 0 || idx == nil {
 		return rep
@@ -81,11 +88,15 @@ func Analyze(idx *symbols.Index, rootPath, framework string) Report {
 		}
 	}
 
-	// Packages excluded via framework auto-discovery (Laravel service providers /
-	// facade aliases, and any similar mechanism). Calling this unconditionally is
-	// harmless for non-Laravel projects — it will just return nil.
+	// Packages excluded via framework auto-discovery mechanisms that are
+	// invisible to static analysis.  Each call is unconditional and nil-safe —
+	// on projects that don't use the corresponding framework the helpers return
+	// nil and contribute nothing to the exclusion set.
 	excluded := make(map[string]struct{})
 	for _, pkg := range composer.LaravelAutoDiscoveredPackages(rootPath) {
+		excluded[pkg] = struct{}{}
+	}
+	for _, pkg := range composer.SymfonyBundlePackages(rootPath) {
 		excluded[pkg] = struct{}{}
 	}
 
@@ -103,11 +114,38 @@ func Analyze(idx *symbols.Index, rootPath, framework string) Report {
 		})
 	}
 
-	// Candidates are already in sorted order because DirectRequires is sorted,
+	// Candidates are already in sorted order because unionRequires is sorted,
 	// but sort explicitly to be safe.
 	sort.Slice(rep.Candidates, func(i, j int) bool {
 		return rep.Candidates[i].Package < rep.Candidates[j].Package
 	})
 
 	return rep
+}
+
+// unionRequires merges two sorted, deduplication-ready package slices (e.g.
+// DirectRequires and DirectDevRequires) into a single sorted, deduplicated
+// slice. Either argument may be nil.
+func unionRequires(a, b []string) []string {
+	if len(b) == 0 {
+		return a
+	}
+	if len(a) == 0 {
+		return b
+	}
+
+	seen := make(map[string]struct{}, len(a)+len(b))
+	for _, p := range a {
+		seen[p] = struct{}{}
+	}
+	for _, p := range b {
+		seen[p] = struct{}{}
+	}
+
+	merged := make([]string, 0, len(seen))
+	for p := range seen {
+		merged = append(merged, p)
+	}
+	sort.Strings(merged)
+	return merged
 }
