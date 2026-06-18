@@ -1372,8 +1372,17 @@ func (p *structParser) parseParams() []ParamDef {
 				param.Type += op + p.readTypeName()
 			}
 		}
-		if p.peek().Value == "..." {
+		// The tokenizer emits "..." as three consecutive TokenUnknown "." tokens,
+		// never as a single three-character token. Detect the triple-dot sequence
+		// and consume all three tokens so that IsVariadic is correctly set for
+		// both "...$x" and "Type ...$x" forms.
+		if p.pos+2 < len(p.tokens) &&
+			p.tokens[p.pos].Kind == TokenUnknown && p.tokens[p.pos].Value == "." &&
+			p.tokens[p.pos+1].Kind == TokenUnknown && p.tokens[p.pos+1].Value == "." &&
+			p.tokens[p.pos+2].Kind == TokenUnknown && p.tokens[p.pos+2].Value == "." {
 			param.IsVariadic = true
+			p.advance()
+			p.advance()
 			p.advance()
 		}
 		if p.peek().Kind == TokenVariable {

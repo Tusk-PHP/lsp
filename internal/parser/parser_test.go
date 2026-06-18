@@ -422,6 +422,97 @@ func TestParseDocBlockEmptyDeprecated(t *testing.T) {
 	}
 }
 
+func TestParseVariadicParams(t *testing.T) {
+	// The tokenizer emits "..." as three consecutive TokenUnknown "." tokens,
+	// so IsVariadic must be detected via the triple-dot sequence, not a single
+	// "..." token value comparison.
+	tests := []struct {
+		name        string
+		source      string
+		paramIndex  int
+		wantName    string
+		wantType    string
+		wantVariadic bool
+	}{
+		{
+			name: "variadic_no_type",
+			source: `<?php
+function f(...$args) {}
+`,
+			paramIndex:  0,
+			wantName:    "$args",
+			wantType:    "",
+			wantVariadic: true,
+		},
+		{
+			name: "variadic_with_type",
+			source: `<?php
+function f(int ...$nums) {}
+`,
+			paramIndex:  0,
+			wantName:    "$nums",
+			wantType:    "int",
+			wantVariadic: true,
+		},
+		{
+			name: "non_variadic_plain",
+			source: `<?php
+function f(string $name) {}
+`,
+			paramIndex:  0,
+			wantName:    "$name",
+			wantType:    "string",
+			wantVariadic: false,
+		},
+		{
+			name: "mixed_regular_then_variadic",
+			source: `<?php
+function f(string $prefix, int ...$nums) {}
+`,
+			paramIndex:  1,
+			wantName:    "$nums",
+			wantType:    "int",
+			wantVariadic: true,
+		},
+		{
+			name: "mixed_regular_is_not_variadic",
+			source: `<?php
+function f(string $prefix, int ...$nums) {}
+`,
+			paramIndex:  0,
+			wantName:    "$prefix",
+			wantType:    "string",
+			wantVariadic: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := New().Parse(tc.source)
+			if result == nil {
+				t.Fatal("expected non-nil parse result")
+			}
+			if len(result.Functions) == 0 {
+				t.Fatal("expected at least one function")
+			}
+			fn := result.Functions[0]
+			if tc.paramIndex >= len(fn.Params) {
+				t.Fatalf("expected at least %d params, got %d", tc.paramIndex+1, len(fn.Params))
+			}
+			param := fn.Params[tc.paramIndex]
+			if param.Name != tc.wantName {
+				t.Errorf("param name: got %q, want %q", param.Name, tc.wantName)
+			}
+			if param.Type != tc.wantType {
+				t.Errorf("param type: got %q, want %q", param.Type, tc.wantType)
+			}
+			if param.IsVariadic != tc.wantVariadic {
+				t.Errorf("IsVariadic: got %v, want %v", param.IsVariadic, tc.wantVariadic)
+			}
+		})
+	}
+}
+
 func TestParseReservedWordMethodNames(t *testing.T) {
 	source := `<?php
 namespace App;
