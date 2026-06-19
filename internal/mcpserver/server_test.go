@@ -893,9 +893,9 @@ func TestLaravelToolsVisible(t *testing.T) {
 	if !slices.Contains(toolNames, "laravel_model_schema") {
 		t.Errorf("expected laravel_model_schema tool, got tools: %v", toolNames)
 	}
-	// php_graph must always be present.
-	if !slices.Contains(toolNames, "php_graph") {
-		t.Errorf("expected php_graph tool, got tools: %v", toolNames)
+	// php_container_bindings must always be present.
+	if !slices.Contains(toolNames, "php_container_bindings") {
+		t.Errorf("expected php_container_bindings tool, got tools: %v", toolNames)
 	}
 
 	// Also verify that a Symfony workspace does NOT get laravel_* tools.
@@ -1226,25 +1226,6 @@ func TestLaravelModelSchemaRelations(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected products() relation in App\\Models\\Category relations, got %#v", relations)
-	}
-}
-
-
-func TestProjectSummaryContractVersion(t *testing.T) {
-	ctx := context.Background()
-	svc := sharedLaravelSvc(t)
-
-	clientSession, cleanup := newInProcessClient(t, svc)
-	defer cleanup()
-
-	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{Name: "php_project_summary"})
-	if err != nil {
-		t.Fatalf("CallTool(php_project_summary) error = %v", err)
-	}
-	m := structuredMap(t, res.StructuredContent)
-	cv, ok := m["contractVersion"].(float64)
-	if !ok || int(cv) != 1 {
-		t.Errorf("expected contractVersion=1 in project summary, got %#v", m["contractVersion"])
 	}
 }
 

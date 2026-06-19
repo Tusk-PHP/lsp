@@ -247,11 +247,54 @@ type LaravelModelInput struct {
 }
 
 type LaravelModelSchemaOutput struct {
-	Model       *SymbolMatch        `json:"model,omitempty"`
-	TableName   string              `json:"tableName,omitempty"`
-	Table       *models.SchemaTable `json:"table,omitempty"`
-	Members     []SymbolMember      `json:"members,omitempty"`
-	MemberCount int                 `json:"memberCount,omitempty"`
+	Model       *SymbolMatch          `json:"model,omitempty"`
+	TableName   string                `json:"tableName,omitempty"`
+	Table       *models.SchemaTable   `json:"table,omitempty"`
+	Members     []SymbolMember        `json:"members,omitempty"`
+	MemberCount int                   `json:"memberCount,omitempty"`
+	Relations   []ModelRelationRecord `json:"relations,omitempty"`
+}
+
+// ModelRelationRecord is a single resolved Eloquent/Doctrine relation declared
+// on a model, returned by the laravel_model_schema MCP tool.
+type ModelRelationRecord struct {
+	Method      string `json:"method"`
+	Kind        string `json:"kind"`
+	Target      string `json:"target,omitempty"`
+	Cardinality string `json:"cardinality,omitempty"`
+}
+
+type PhpContainerBindingsInput struct {
+	Class string `json:"class,omitempty" jsonschema:"optional fully qualified class to resolve constructor injection for"`
+}
+
+// ContainerBindingRecord is a single resolved DI container binding returned by
+// the php_container_bindings MCP tool.
+type ContainerBindingRecord struct {
+	Abstract      string         `json:"abstract"`
+	Concrete      string         `json:"concrete,omitempty"`
+	Singleton     bool           `json:"singleton,omitempty"`
+	Source        string         `json:"source,omitempty"`
+	Alias         string         `json:"alias,omitempty"`
+	Tags          []string       `json:"tags,omitempty"`
+	DefinitionURI string         `json:"definitionUri,omitempty"`
+	Range         protocol.Range `json:"range"`
+}
+
+// ConstructorInjectionRecord describes one resolved constructor parameter for a
+// class, returned by the php_container_bindings MCP tool when `class` is set.
+type ConstructorInjectionRecord struct {
+	ParamName        string `json:"paramName"`
+	TypeHint         string `json:"typeHint,omitempty"`
+	ResolvedConcrete string `json:"resolvedConcrete,omitempty"`
+	IsSingleton      bool   `json:"isSingleton,omitempty"`
+	AutowireKind     string `json:"autowireKind,omitempty"`
+	AutowireValue    string `json:"autowireValue,omitempty"`
+}
+
+type PhpContainerBindingsOutput struct {
+	Bindings  []ContainerBindingRecord     `json:"bindings"`
+	Injection []ConstructorInjectionRecord `json:"injection,omitempty"`
 }
 
 // SymfonyRouteRecord is a single Symfony route entry returned by the MCP tools.
@@ -507,14 +550,16 @@ func (s *Service) registerTools() {
 			}
 			return nil, out, nil
 		})
+	}
 
+	// php_container_bindings is framework-agnostic: it surfaces resolved DI
+	// container bindings for both Laravel and Symfony workspaces.
 	mcp.AddTool(s.Server, &mcp.Tool{
 		Name:        "php_container_bindings",
 		Description: "List resolved DI container bindings (interface→concrete, singleton, source, alias, tags). Optional `class` returns that class's resolved constructor injection.",
 	}, func(_ context.Context, _ *mcp.CallToolRequest, in PhpContainerBindingsInput) (*mcp.CallToolResult, PhpContainerBindingsOutput, error) {
 		return nil, s.phpContainerBindings(in.Class), nil
 	})
-	}
 
 	if s.Framework == "symfony" {
 		mcp.AddTool(s.Server, &mcp.Tool{
