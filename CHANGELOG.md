@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Symfony `#[Autowire]` support**: constructor injection now resolves `service:`, `param:`, and `env:` attribute forms.
 - **Symfony console command discovery**: indexes `#[AsCommand]` attributes and legacy `protected static $defaultName` declarations.
 - `symfony_routes` and `symfony_route_to_controller` MCP tools, plus `tusk://symfony/routes` resource — Symfony workspaces only. Routes are indexed at workspace build time for instant responses.
+- `php_container_bindings` MCP tool: lists all resolved DI container bindings (`abstract`, `concrete`, `singleton`, `source`, `alias`, `tags`, `definitionUri`, `range`). Optional `class` input also returns the class's resolved constructor injection (`paramName`, `typeHint`, `resolvedConcrete`, `isSingleton`, plus Symfony `autowireKind`/`autowireValue`). Always registered — returns empty `bindings` on non-framework projects.
+- `laravel_model_schema` now includes a `relations[]` list, each entry with `method`, `kind` (e.g. `HasMany`, `BelongsTo`), resolved target FQN (`target`), and `cardinality` (`one`/`many`).
 - `contractVersion: 1` field in `php_project_summary` so agents can detect breaking interface changes.
 - Standalone `tusk-mcp` binary distributed alongside `tusk-php` for MCP tool hosting.
 - `deps tree`, `deps usage`, and `deps unused` CLI subcommands for visualising Composer dependency trees, measuring symbol usage, and finding unused packages.
@@ -260,4 +262,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - VS Code extension packaging for the bundled LSP client.
 - Zed extension packaging for the WebAssembly-based extension.
 - Cross-platform release artifacts for Linux, macOS, and Windows.
+
 

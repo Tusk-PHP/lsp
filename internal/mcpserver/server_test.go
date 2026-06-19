@@ -844,7 +844,6 @@ func TestSymfonyToolsVisible(t *testing.T) {
 	if !slices.Contains(toolNames, "php_container_bindings") {
 		t.Errorf("expected php_container_bindings tool, got tools: %v", toolNames)
 	}
-
 	// Also verify that a Laravel workspace does NOT get symfony_* tools.
 	laravelClient, laravelCleanup := newInProcessClient(t, sharedLaravelSvc(t))
 	defer laravelCleanup()
@@ -894,9 +893,9 @@ func TestLaravelToolsVisible(t *testing.T) {
 	if !slices.Contains(toolNames, "laravel_model_schema") {
 		t.Errorf("expected laravel_model_schema tool, got tools: %v", toolNames)
 	}
-	// php_container_bindings is always registered regardless of framework.
-	if !slices.Contains(toolNames, "php_container_bindings") {
-		t.Errorf("expected php_container_bindings tool, got tools: %v", toolNames)
+	// php_graph must always be present.
+	if !slices.Contains(toolNames, "php_graph") {
+		t.Errorf("expected php_graph tool, got tools: %v", toolNames)
 	}
 
 	// Also verify that a Symfony workspace does NOT get laravel_* tools.
@@ -1005,6 +1004,230 @@ func TestSymfonyRouteTools(t *testing.T) {
 	}
 }
 
+func TestProjectSummaryContractVersion(t *testing.T) {
+	ctx := context.Background()
+	svc := sharedLaravelSvc(t)
+
+	clientSession, cleanup := newInProcessClient(t, svc)
+	defer cleanup()
+
+	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{Name: "php_project_summary"})
+	if err != nil {
+		t.Fatalf("CallTool(php_project_summary) error = %v", err)
+	}
+	m := structuredMap(t, res.StructuredContent)
+	cv, ok := m["contractVersion"].(float64)
+	if !ok || int(cv) != 1 {
+		t.Errorf("expected contractVersion=1 in project summary, got %#v", m["contractVersion"])
+	}
+}
+
+
+func TestPhpContainerBindings(t *testing.T) {
+	ctx := context.Background()
+	svc := sharedLaravelSvc(t)
+
+	clientSession, cleanup := newInProcessClient(t, svc)
+	defer cleanup()
+
+	// Without class: expect default Laravel bindings to be returned.
+	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{Name: "php_container_bindings"})
+	if err != nil {
+		t.Fatalf("CallTool(php_container_bindings) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected successful result, got error: %#v", res.StructuredContent)
+	}
+	out := structuredMap(t, res.StructuredContent)
+	bindings, ok := out["bindings"].([]any)
+	if !ok || len(bindings) == 0 {
+		t.Fatalf("expected non-empty bindings, got %#v", out["bindings"])
+	}
+	// Verify at least one binding has abstract and concrete fields.
+	first, ok := bindings[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected binding to be a map, got %T", bindings[0])
+	}
+	if first["abstract"] == "" {
+		t.Errorf("expected non-empty abstract in first binding, got %#v", first)
+	}
+	if first["concrete"] == "" {
+		t.Errorf("expected non-empty concrete in first binding, got %#v", first)
+	}
+	// Verify a known default binding is present (e.g. abstract=cache).
+	found := false
+	for _, raw := range bindings {
+		b, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if b["abstract"] == "cache" {
+			found = true
+			if b["concrete"] != "Illuminate\\Cache\\CacheManager" {
+				t.Errorf("expected cache binding concrete=Illuminate\\Cache\\CacheManager, got %#v", b["concrete"])
+			}
+			if singleton, ok := b["singleton"].(bool); !ok || !singleton {
+				t.Errorf("expected cache binding to be singleton, got %#v", b["singleton"])
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected cache binding in laravel container bindings, got %v bindings", len(bindings))
+	}
+	// Verify injection is absent when class is not specified.
+	if _, present := out["injection"]; present {
+		t.Errorf("expected injection to be absent when class is not specified, got %#v", out["injection"])
+	}
+}
+
+func TestPhpContainerBindingsWithSymfony(t *testing.T) {
+	ctx := context.Background()
+	svc := sharedSymfonySvc(t)
+
+	clientSession, cleanup := newInProcessClient(t, svc)
+	defer cleanup()
+
+	// php_container_bindings must be reachable from a Symfony workspace too.
+	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{Name: "php_container_bindings"})
+	if err != nil {
+		t.Fatalf("CallTool(php_container_bindings) symfony error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected successful result for symfony, got error: %#v", res.StructuredContent)
+	}
+	out := structuredMap(t, res.StructuredContent)
+	if _, ok := out["bindings"]; !ok {
+		t.Fatalf("expected bindings key in output, got %#v", out)
+	}
+}
+
+func TestPhpContainerBindingsWithClass(t *testing.T) {
+	ctx := context.Background()
+	svc := sharedLaravelSvc(t)
+
+	clientSession, cleanup := newInProcessClient(t, svc)
+	defer cleanup()
+
+	// Call php_container_bindings with class=App\Services\Checkout.
+	// App\Services\Checkout has a constructor that injects PaymentGateway,
+	// which is bound to StripeGateway via $this->app->singleton(...) in AppServiceProvider.
+	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "php_container_bindings",
+		Arguments: map[string]any{"class": `App\Services\Checkout`},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(php_container_bindings with class) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected successful result, got error: %#v", res.StructuredContent)
+	}
+	out := structuredMap(t, res.StructuredContent)
+
+	// Verify that the PaymentGateway binding is present in the bindings list.
+	bindings, ok := out["bindings"].([]any)
+	if !ok || len(bindings) == 0 {
+		t.Fatalf("expected non-empty bindings, got %#v", out["bindings"])
+	}
+	foundBinding := false
+	for _, raw := range bindings {
+		b, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if b["abstract"] == `App\Services\PaymentGateway` {
+			foundBinding = true
+			if b["concrete"] != `App\Services\StripeGateway` {
+				t.Errorf("expected concrete=App\\Services\\StripeGateway, got %#v", b["concrete"])
+			}
+			if singleton, ok := b["singleton"].(bool); !ok || !singleton {
+				t.Errorf("expected PaymentGateway binding to be singleton, got %#v", b["singleton"])
+			}
+			break
+		}
+	}
+	if !foundBinding {
+		t.Errorf("expected App\\Services\\PaymentGateway binding in bindings list, got %d bindings", len(bindings))
+	}
+
+	// Verify injection is populated and resolves the gateway parameter.
+	injection, ok := out["injection"].([]any)
+	if !ok || len(injection) == 0 {
+		t.Fatalf("expected non-empty injection for App\\Services\\Checkout, got %#v", out["injection"])
+	}
+	foundParam := false
+	for _, raw := range injection {
+		dep, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if dep["paramName"] == "gateway" {
+			foundParam = true
+			if dep["typeHint"] != `App\Services\PaymentGateway` {
+				t.Errorf("expected typeHint=App\\Services\\PaymentGateway, got %#v", dep["typeHint"])
+			}
+			if dep["resolvedConcrete"] != `App\Services\StripeGateway` {
+				t.Errorf("expected resolvedConcrete=App\\Services\\StripeGateway, got %#v", dep["resolvedConcrete"])
+			}
+			if singleton, ok := dep["isSingleton"].(bool); !ok || !singleton {
+				t.Errorf("expected isSingleton=true for gateway param, got %#v", dep["isSingleton"])
+			}
+			break
+		}
+	}
+	if !foundParam {
+		t.Errorf("expected gateway parameter in injection, got %#v", injection)
+	}
+}
+
+func TestLaravelModelSchemaRelations(t *testing.T) {
+	ctx := context.Background()
+	svc := sharedLaravelSvc(t)
+
+	clientSession, cleanup := newInProcessClient(t, svc)
+	defer cleanup()
+
+	// App\Models\Category has a products() hasMany relation to App\Models\Product.
+	res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "laravel_model_schema",
+		Arguments: map[string]any{"fqn": `App\Models\Category`},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(laravel_model_schema) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected successful result, got error: %#v", res.StructuredContent)
+	}
+	out := structuredMap(t, res.StructuredContent)
+	relations, ok := out["relations"].([]any)
+	if !ok || len(relations) == 0 {
+		t.Fatalf("expected relations for App\\Models\\Category, got %#v", out["relations"])
+	}
+	// Verify the products() hasMany relation to App\Models\Product is present.
+	found := false
+	for _, raw := range relations {
+		rel, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if rel["method"] == "products" {
+			found = true
+			if rel["kind"] != "HasMany" {
+				t.Errorf("expected HasMany kind, got %#v", rel["kind"])
+			}
+			if rel["target"] != `App\Models\Product` {
+				t.Errorf("expected target=App\\Models\\Product, got %#v", rel["target"])
+			}
+			if rel["cardinality"] != "many" {
+				t.Errorf("expected cardinality=many, got %#v", rel["cardinality"])
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected products() relation in App\\Models\\Category relations, got %#v", relations)
+	}
+}
 
 
 func TestProjectSummaryContractVersion(t *testing.T) {

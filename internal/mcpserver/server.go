@@ -507,6 +507,13 @@ func (s *Service) registerTools() {
 			}
 			return nil, out, nil
 		})
+
+	mcp.AddTool(s.Server, &mcp.Tool{
+		Name:        "php_container_bindings",
+		Description: "List resolved DI container bindings (interface→concrete, singleton, source, alias, tags). Optional `class` returns that class's resolved constructor injection.",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, in PhpContainerBindingsInput) (*mcp.CallToolResult, PhpContainerBindingsOutput, error) {
+		return nil, s.phpContainerBindings(in.Class), nil
+	})
 	}
 
 	if s.Framework == "symfony" {
@@ -1034,7 +1041,63 @@ func (s *Service) laravelModelSchema(fqn string) (LaravelModelSchemaOutput, erro
 	if ws.Schema != nil {
 		out.Table = ws.Schema.Table(tableName)
 	}
+	allRelations := models.ModelRelations(ws.Index, s.RootPath, s.Framework)
+	for _, rel := range allRelations {
+		if rel.SourceModel != fqn {
+			continue
+		}
+		out.Relations = append(out.Relations, ModelRelationRecord{
+			Method:      rel.MethodName,
+			Kind:        rel.RelationType,
+			Target:      rel.TargetModel,
+			Cardinality: rel.Cardinality,
+		})
+	}
 	return out, nil
+}
+
+func (s *Service) phpContainerBindings(class string) PhpContainerBindingsOutput {
+	ws := s.runtime().Workspace
+	out := PhpContainerBindingsOutput{
+		Bindings: []ContainerBindingRecord{},
+	}
+	if ws.Container == nil {
+		return out
+	}
+	rawBindings := ws.Container.GetBindings()
+	keys := make([]string, 0, len(rawBindings))
+	for k := range rawBindings {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, abstract := range keys {
+		b := rawBindings[abstract]
+		out.Bindings = append(out.Bindings, ContainerBindingRecord{
+			Abstract:      b.Abstract,
+			Concrete:      b.Concrete,
+			Singleton:     b.Singleton,
+			Source:        b.Source,
+			Alias:         b.Alias,
+			Tags:          b.Tags,
+			DefinitionURI: b.DefinitionURI,
+			Range:         b.Definition,
+		})
+	}
+	if class != "" {
+		deps := ws.Container.AnalyzeConstructorInjection(class)
+		out.Injection = make([]ConstructorInjectionRecord, 0, len(deps))
+		for _, dep := range deps {
+			out.Injection = append(out.Injection, ConstructorInjectionRecord{
+				ParamName:        strings.TrimPrefix(dep.ParamName, "$"),
+				TypeHint:         dep.TypeHint,
+				ResolvedConcrete: dep.ResolvedConcrete,
+				IsSingleton:      dep.IsSingleton,
+				AutowireKind:     dep.AutowireKind,
+				AutowireValue:    dep.AutowireValue,
+			})
+		}
+	}
+	return out
 }
 
 func (s *Service) symbolCatalog() []SymbolMatch {
@@ -1378,4 +1441,5 @@ func (w *slogWriter) Write(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
+
 

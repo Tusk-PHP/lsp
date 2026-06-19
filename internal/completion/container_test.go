@@ -366,8 +366,10 @@ class TestController {
 	items := p.GetCompletions("file:///test.php", source, protocol.Position{Line: 5, Character: 19})
 	labels := collectLabels(items)
 
-	if !labels["PaymentGateway::class"] {
-		t.Errorf("expected 'PaymentGateway::class' via resolve(), got labels: %v", labels)
+	// PaymentGateway is now bound in AppServiceProvider as a container abstract,
+	// so it surfaces as a string-binding label (FQN) rather than a class reference.
+	if !labels[`App\Services\PaymentGateway`] {
+		t.Errorf("expected 'App\\Services\\PaymentGateway' via resolve(), got labels: %v", labels)
 	}
 }
 
