@@ -27,13 +27,45 @@ func testdataPath(t *testing.T, parts ...string) string {
 	return filepath.Join(all...)
 }
 
+var (
+	sharedLaravelOnce sync.Once
+	sharedLaravelSvc_ *Service
+	sharedLaravelErr  error
+
+	sharedSymfonyOnce sync.Once
+	sharedSymfonySvc_ *Service
+	sharedSymfonyErr  error
+)
+
+func sharedLaravelSvc(t *testing.T) *Service {
+	t.Helper()
+	sharedLaravelOnce.Do(func() {
+		_, file, _, _ := runtime.Caller(0)
+		root := filepath.Join(filepath.Dir(file), "..", "..", "testdata", "laravel")
+		sharedLaravelSvc_, sharedLaravelErr = New(context.Background(), root, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	})
+	if sharedLaravelErr != nil {
+		t.Fatalf("shared laravel workspace: %v", sharedLaravelErr)
+	}
+	return sharedLaravelSvc_
+}
+
+func sharedSymfonySvc(t *testing.T) *Service {
+	t.Helper()
+	sharedSymfonyOnce.Do(func() {
+		_, file, _, _ := runtime.Caller(0)
+		root := filepath.Join(filepath.Dir(file), "..", "..", "testdata", "symfony")
+		sharedSymfonySvc_, sharedSymfonyErr = New(context.Background(), root, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	})
+	if sharedSymfonyErr != nil {
+		t.Fatalf("shared symfony workspace: %v", sharedSymfonyErr)
+	}
+	return sharedSymfonySvc_
+}
+
 func TestServiceToolsAndResources(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc, err := New(ctx, testdataPath(t, "laravel"), logger)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svc := sharedLaravelSvc(t)
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	ct, st := mcp.NewInMemoryTransports()
@@ -208,11 +240,7 @@ func TestDescribeTableTool(t *testing.T) {
 
 func TestLaravelToolsAndDBList(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc, err := New(ctx, testdataPath(t, "laravel"), logger)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svc := sharedLaravelSvc(t)
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
 	ct, st := mcp.NewInMemoryTransports()
@@ -505,11 +533,7 @@ class Hidden {}
 
 func TestDumpWritesContextPackFiles(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc, err := New(ctx, testdataPath(t, "laravel"), logger)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svc := sharedLaravelSvc(t)
 
 	outDir := filepath.Join(t.TempDir(), "ai-context")
 	if err := svc.Dump(ctx, outDir); err != nil {
@@ -792,11 +816,7 @@ func newInProcessClient(t *testing.T, svc *Service) (*mcp.ClientSession, func())
 
 func TestSymfonyToolsVisible(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc, err := New(ctx, testdataPath(t, "symfony"), logger)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svc := sharedSymfonySvc(t)
 	if svc.Framework != "symfony" {
 		t.Fatalf("expected symfony framework, got %q", svc.Framework)
 	}
@@ -826,11 +846,7 @@ func TestSymfonyToolsVisible(t *testing.T) {
 	}
 
 	// Also verify that a Laravel workspace does NOT get symfony_* tools.
-	laravelSvc, err := New(ctx, testdataPath(t, "laravel"), logger)
-	if err != nil {
-		t.Fatalf("New(laravel) error = %v", err)
-	}
-	laravelClient, laravelCleanup := newInProcessClient(t, laravelSvc)
+	laravelClient, laravelCleanup := newInProcessClient(t, sharedLaravelSvc(t))
 	defer laravelCleanup()
 
 	laravelTools, err := laravelClient.ListTools(ctx, nil)
@@ -851,11 +867,7 @@ func TestSymfonyToolsVisible(t *testing.T) {
 
 func TestLaravelToolsVisible(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc, err := New(ctx, testdataPath(t, "laravel"), logger)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svc := sharedLaravelSvc(t)
 	if svc.Framework != "laravel" {
 		t.Fatalf("expected laravel framework, got %q", svc.Framework)
 	}
@@ -888,11 +900,7 @@ func TestLaravelToolsVisible(t *testing.T) {
 	}
 
 	// Also verify that a Symfony workspace does NOT get laravel_* tools.
-	symfonySvc, err := New(ctx, testdataPath(t, "symfony"), logger)
-	if err != nil {
-		t.Fatalf("New(symfony) error = %v", err)
-	}
-	symfonyClient, symfonyCleanup := newInProcessClient(t, symfonySvc)
+	symfonyClient, symfonyCleanup := newInProcessClient(t, sharedSymfonySvc(t))
 	defer symfonyCleanup()
 
 	symfonyTools, err := symfonyClient.ListTools(ctx, nil)
@@ -916,11 +924,7 @@ func TestLaravelToolsVisible(t *testing.T) {
 
 func TestSymfonyRoutesResource(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc, err := New(ctx, testdataPath(t, "symfony"), logger)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svc := sharedSymfonySvc(t)
 
 	clientSession, cleanup := newInProcessClient(t, svc)
 	defer cleanup()
@@ -951,11 +955,7 @@ func TestSymfonyRoutesResource(t *testing.T) {
 
 func TestSymfonyRouteTools(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc, err := New(ctx, testdataPath(t, "symfony"), logger)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svc := sharedSymfonySvc(t)
 
 	clientSession, cleanup := newInProcessClient(t, svc)
 	defer cleanup()
@@ -1007,11 +1007,7 @@ func TestSymfonyRouteTools(t *testing.T) {
 
 func TestPhpGraphTool(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc, err := New(ctx, testdataPath(t, "laravel"), logger)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svc := sharedLaravelSvc(t)
 
 	clientSession, cleanup := newInProcessClient(t, svc)
 	defer cleanup()
@@ -1082,11 +1078,7 @@ func TestPhpGraphTool(t *testing.T) {
 
 func TestPhpGraphToolInvalidInput(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc, err := New(ctx, testdataPath(t, "laravel"), logger)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svc := sharedLaravelSvc(t)
 
 	clientSession, cleanup := newInProcessClient(t, svc)
 	defer cleanup()
@@ -1117,11 +1109,7 @@ func TestPhpGraphToolInvalidInput(t *testing.T) {
 
 func TestProjectSummaryContractVersion(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc, err := New(ctx, testdataPath(t, "laravel"), logger)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svc := sharedLaravelSvc(t)
 
 	clientSession, cleanup := newInProcessClient(t, svc)
 	defer cleanup()
