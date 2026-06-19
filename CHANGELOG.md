@@ -9,38 +9,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Parser: match expression structures** — `ParseResult.Matches` now holds a `[]MatchDef` for every `match (subject) { cond => expr, default => expr }` expression found in the file, including those inside method and function bodies. Nested match expressions are each collected individually. The scanner is brace/paren-balance tolerant and recovers gracefully from malformed arms (records a `ParseError`, skips the arm, continues).
-- **Parser: call-site model** — `ParseResult.Calls` now holds a `[]CallSite` (capped at 5 000 per file) for function calls, method calls (`$var->method`), static calls (`Type::method`), and constructor calls (`new Type`) found in the file. Each `CallSite` records the callee text, line, and an `[]CallArg` list with per-argument name (named arguments), value text, and spread flag.
-- **Parser: first-class callable syntax** — `CallSite.IsFirstClassCallable` is set to `true` when the argument list consists solely of the `...` token (PHP 8.1 first-class callable syntax: `strlen(...)`, `$obj->method(...)`, `Type::method(...)`), distinguishing it from regular calls and from variadic spread arguments.
-- `textDocument/selectionRange` support: editors can now request hierarchical selection expansion (word → bracket region → method → class → document) via the LSP selection range protocol.
-- `textDocument/semanticTokens/full` support: the server now emits semantic tokens for keywords, strings, numbers, comments, variables, class/interface/enum/function/method declarations, and property names using the LSP relative-delta encoding.
-- `undefined-variable` diagnostic: flags reads of variables that have no binding in scope. Skips superglobals, `$this`, parameters, foreach/catch/closure-use/destructure bindings, and scopes that call `extract()`, `include`, `require`, or `eval` where analysis would be unreliable (severity: warning, code: `undefined-variable`).
-- `unused-variable` diagnostic: flags local variable assignments whose value is never read. Does not flag parameters, underscore-prefixed variables (`$_`, `$_foo`), foreach/catch/closure-use bindings, by-reference bindings, or scopes tainted by `extract()`/`include`/`require` (severity: hint with Unnecessary tag, code: `unused-variable`).
-- `argument-count-mismatch` diagnostic: flags calls with more arguments than a project function or static method accepts, when the callee has no variadic parameter and no `__call`/`__callStatic` magic. Skips calls with spread expressions, named argument syntax, builtins, and arrow/instance method calls that require type resolution (severity: warning, code: `argument-count-mismatch`).
-- Per-rule severity configuration: `diagnosticRules` in `.tusk-php.json` now accepts either the legacy boolean form (`true`/`false`) or a string severity name (`"off"`, `"hint"`, `"info"`, `"warning"`, `"error"`). Boolean values remain 100% backward compatible. A new `RuleSeverity(code, default)` method on `Config` returns the effective severity for a rule, and all built-in rules now respect severity overrides.
-- **Symfony translation key completion and go-to-definition** (`internal/framework/symfony/translation.go`): scans the project `translations/` directory for Symfony YAML (`.yaml`/`.yml`), PHP array, and XLIFF (`.xlf`/`.xliff`) translation files. Nested YAML keys are flattened with dots (`user.profile.title`). Detects translation call contexts — `$translator->trans('...')`, `t('...')`, `new TranslatableMessage('...')`, and the domain-argument form — to provide completion and go-to-definition on translation keys. Wire-up added to `completion.Provider` and `analyzer.Analyzer` via `SetSymfonyTranslationResolver`; gated on framework == "symfony".
-- **`#[Autowire]` attribute parsing** (`internal/container/analyzer.go`): `AnalyzeConstructorInjection` now recognises `#[Autowire(service: 'id')]`, `#[Autowire(param: 'name')]`/`#[Autowire('%param%')]`, and `#[Autowire(env: 'VAR')]` on Symfony constructor parameters. Resolved service-form bindings go through the existing container bindings map; `InjectedDependency` gains `AutowireKind` and `AutowireValue` fields for callers to handle param/env kinds.
-- **Symfony console command discovery** (`internal/framework/symfony/commands.go`): `DiscoverCommands` scans indexed project sources for `#[AsCommand(name: '...')]` attributes and legacy `protected static $defaultName` declarations, returning a `CommandIndex` with entries carrying `Name`, `Description`, `ClassFQN`, `URI`, and `Range`. `ExtractCommandNameContext` enables optional `->find()`/`->get()` completion wiring.
-- feat(config): `phpVersion` and `extensions` fields in `.tusk-php.json` now slot into the builtin profile resolution chain between Composer constraints and local PHP detection. An explicit `phpVersion` in the config file (or via `initializationOptions`) wins over phpdetect/fallback when no Composer PHP constraint is present. The `extensions` list is merged additively with Composer-derived extensions.
-- feat(lsp): PHP profile resolution chain extended to four steps: (1) `composer.json` `config.platform.php` / `require.php`, (2) `.tusk-php.json` `phpVersion` when explicitly set, (3) local PHP binary via phpdetect, (4) bundled default. The winning source is still logged via `window/logMessage`.
-- feat(stubs): Curated core stub deltas for PHP 8.1 (`internal/stubs/php/core/php-8.1.php`): `array_is_list`, `enum_exists`, `memory_reset_peak_usage`, `UnitEnum`, `BackedEnum`, `ReflectionEnum`, `ReflectionEnumUnitCase`, `ReflectionEnumBackedCase`, `ReflectionFiber`, `Fiber`, `AllowDynamicProperties`, `ReturnTypeWillChange`, `CURLStringFile`.
-- feat(stubs): Curated core stub deltas for PHP 8.2 (`internal/stubs/php/core/php-8.2.php`): `ini_parse_quantity`, `SensitiveParameter`, `SensitiveParameterValue`.
-- feat(stubs): Curated core stub delta for PHP 8.3 (`internal/stubs/php/core/php-8.3.php`): `Override` attribute class. (`json_validate` is already in the ext-json delta; `mb_str_pad` is in the generated availability table.)
-- `symfony_routes` MCP tool: lists Symfony route names, paths, and declaration locations; gated to Symfony-detected workspaces.
-- `symfony_route_to_controller` MCP tool: looks up a Symfony route by name and returns its declaration location; gated to Symfony-detected workspaces.
-- `tusk://symfony/routes` MCP resource: JSON array of Symfony routes, mirroring the existing `tusk://laravel/routes` resource; Symfony workspaces only.
-- Symfony route discovery is now performed at workspace build time for Symfony projects and carried on `Bootstrapped.SymfonyRoutes`, keeping the MCP snapshot fully self-contained.
-- `php_graph` MCP tool: builds a PHP dependency/reference/model graph on demand. Accepts `kind` (`container`|`references`|`models`), `deps` (`none`|`boundary`|`full`, default `none`), and `format` (`json`|`mermaid`|`dot`, default `json`). Returns the graph DTO (schemaVersion 1) as structured JSON content, or `{ format, text }` for diagram formats. Invalid inputs return clean MCP errors.
-- `contractVersion: 1` field added to `php_project_summary` output so agents can detect breaking interface changes.
-- `docs/mcp-tools.md`: complete tool and resource reference documenting all 16 tools and 6 resources, including input schemas, output shapes, framework gating, contract version, and graph DTO schemaVersion.
+- **Undefined variable** diagnostic: warns on reads of unbound variables; skips superglobals, `$this`, parameters, foreach/catch/closure bindings, and scopes using `extract()`, `include`, or `eval`.
+- **Unused variable** diagnostic: hints on local assignments whose value is never read; ignores underscore-prefixed names (`$_`, `$_foo`) and by-reference bindings.
+- **Argument count mismatch** diagnostic: warns when a call passes too many arguments to a project function or static method with a fixed parameter list; skips variadic, spread, and named-argument calls.
+- Per-rule severity in `.tusk-php.json`: `diagnosticRules` now accepts `"off"` / `"hint"` / `"info"` / `"warning"` / `"error"` in addition to the existing `true`/`false` toggle.
+- `textDocument/selectionRange`: hierarchical selection expansion from word → brackets → method → class → document.
+- `textDocument/semanticTokens/full`: semantic highlighting for keywords, strings, numbers, comments, variables, declarations, and property names.
+- Match expression parsing: `ParseResult.Matches` captures every `match` structure in a file, including nested matches; recovers gracefully from malformed arms.
+- Call-site model: `ParseResult.Calls` records every function, method, static, and constructor call with per-argument names, values, and spread flags (capped at 5 000/file).
+- First-class callable detection: `strlen(...)` / `$obj->method(...)` syntax sets `CallSite.IsFirstClassCallable`, distinguishing it from regular and variadic calls.
+- **Symfony translation intelligence**: completion and go-to-definition for translation keys across YAML, PHP array, and XLIFF files; understands `$translator->trans()`, `t()`, `new TranslatableMessage()`, and domain-argument forms.
+- **Symfony `#[Autowire]` support**: constructor injection now resolves `service:`, `param:`, and `env:` attribute forms.
+- **Symfony console command discovery**: indexes `#[AsCommand]` attributes and legacy `protected static $defaultName` declarations.
+- `symfony_routes` and `symfony_route_to_controller` MCP tools, plus `tusk://symfony/routes` resource — Symfony workspaces only. Routes are indexed at workspace build time for instant responses.
+- `php_graph` MCP tool: builds container, reference, or model dependency graphs in JSON, Mermaid, or DOT format (`kind`, `deps`, `format` inputs).
+- `contractVersion: 1` field in `php_project_summary` so agents can detect breaking interface changes.
+- Standalone `tusk-mcp` binary distributed alongside `tusk-php` for MCP tool hosting.
+- `graph container`, `graph references`, and `graph models` CLI subcommands for exporting PHP dependency graphs.
+- `deps tree`, `deps usage`, and `deps unused` CLI subcommands for visualising Composer dependency trees, measuring symbol usage, and finding unused packages.
+- `--parse` flag: dumps a PHP file's parsed AST as JSON from the command line.
+- `introspect` subcommand: dumps parsed state (symbols, diagnostics, active profile) for a file; also available in editors as `tuskPhpLsp.debugDocument`.
+- `phpVersion` and `extensions` in `.tusk-php.json` now slot into the builtin profile chain between Composer constraints and local PHP detection.
+- Four-step PHP version resolution: Composer platform → `.tusk-php.json` → local `php` binary → bundled default; the winning source is logged on startup.
+- `db.allowDataSampling` and `db.connectTimeoutMs` configuration options for database introspection.
+- PHP 8.1 stubs: `Fiber`, `array_is_list`, `enum_exists`, `UnitEnum`/`BackedEnum`, Reflection enums/fibers, `AllowDynamicProperties`, `ReturnTypeWillChange`, `CURLStringFile`.
+- PHP 8.2 stubs: `ini_parse_quantity`, `SensitiveParameter`/`SensitiveParameterValue`.
+- PHP 8.3 stubs: `Override` attribute.
+- WASM (`wasip1`) build target for browser-based editors such as vscode.dev.
+- `docs/mcp-tools.md`: reference for all 16 MCP tools and 6 resources, including schemas, output shapes, framework gating, and contract/schema versions.
 
 ### Changed
 
-- refactor(composer): unified `installedPackage` struct in `internal/composer/composer.go` now includes `Version string` (previously only in the duplicate `installedPackageWithVersion` in `packages.go`). The duplicate struct is removed; `InstalledPackages` and `NewPackageResolver` repoint at the shared type.
+- Unified Composer `installedPackage` struct now includes `Version`; removed the `installedPackageWithVersion` duplicate.
 
 ### Fixed
 
-- `workspace/executeCommand` capability advertisement now correctly lists all three handled commands (`tuskPhpLsp.namespaceForPath`, `tuskPhpLsp.copyNamespace`, `tuskPhpLsp.moveToNamespace`); previously only `tuskPhpLsp.namespaceForPath` was advertised.
+- `workspace/executeCommand` capability now lists all three handled commands (`tuskPhpLsp.namespaceForPath`, `tuskPhpLsp.copyNamespace`, `tuskPhpLsp.moveToNamespace`); previously only the first was advertised.
+- `laravel_*` MCP tools are now gated on Laravel framework detection and no longer appear in non-Laravel workspaces.
+- Variadic parameters (`...$args`) are now correctly detected via the triple-dot token sequence.
+- `ClassNode.EndLine` is now exposed in the compatibility layer.
 
 ## [0.8.0] - 2026-06-01
 
