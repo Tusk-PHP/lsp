@@ -25,6 +25,11 @@ _None open._
 
 ## Low / performance
 
+### L41 — `laravel_model_schema` re-derives all project relations per single-model call
+- **Where:** `internal/mcpserver/server.go` (`laravelModelSchema` handler); `internal/models/relations.go` (`ModelRelations`).
+- **What:** The handler calls `models.ModelRelations` over the whole project and then filters to the requested model FQN — O(all project relations) per single-model query. Accepted per the graph-cli-removal plan ("revisit only if it shows up in profiling"); not a correctness issue.
+- **Fix:** Add a per-model relation derivation (filter during iteration, or index relations by `SourceModel`) if profiling shows it matters.
+
 ### L40 — `InterfaceNode`/`TraitNode`/`EnumNode`/`FunctionNode` (compat layer) lack `EndLine`
 - **Where:** `internal/parser/compat.go` (struct defs ~80-128; `toFileNode` conversion ~550-617).
 - **What:** Same gap L23 fixed for `ClassNode`: the compat nodes for interfaces, traits, enums, and functions don't expose `EndLine`, although `InterfaceDef`/`TraitDef`/`EnumDef`/`FunctionDef` all carry it. (Discovered while fixing L23.)
