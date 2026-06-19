@@ -1,7 +1,6 @@
 package mcpserver
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,12 +17,10 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/analyzer"
 	"github.com/Tusk-PHP/lsp/internal/checks"
-	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
-	"github.com/Tusk-PHP/lsp/internal/graph"
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/models"
@@ -273,12 +270,6 @@ type SymfonyRouteInput struct {
 	Name string `json:"name" jsonschema:"Symfony route name"`
 }
 
-// PhpGraphInput is the input schema for the php_graph MCP tool.
-type PhpGraphInput struct {
-	Kind   string `json:"kind"             jsonschema:"graph kind: container, references, or models"`
-	Deps   string `json:"deps,omitempty"   jsonschema:"dependency mode: none (default), boundary, or full"`
-	Format string `json:"format,omitempty" jsonschema:"output format: json (default), mermaid, or dot"`
-}
 
 func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, error) {
 	if rootPath == "" {
@@ -538,12 +529,6 @@ func (s *Service) registerTools() {
 		})
 	}
 
-	mcp.AddTool(s.Server, &mcp.Tool{
-		Name:        "php_graph",
-		Description: "Build and return a PHP dependency graph. kind: container|references|models. deps: none (default)|boundary|full. format: json (default)|mermaid|dot.",
-	}, func(_ context.Context, _ *mcp.CallToolRequest, in PhpGraphInput) (*mcp.CallToolResult, any, error) {
-		return s.phpGraph(in)
-	})
 }
 
 func (s *Service) registerResources() {
@@ -1032,79 +1017,6 @@ func (s *Service) findSymfonyRoute(name string) *SymfonyRouteRecord {
 	return nil
 }
 
-// phpGraph builds the requested graph and returns it as structured content (for
-// json format) or as a text result (for mermaid/dot). Input validation is done
-// before any expensive work so callers receive clean errors quickly.
-func (s *Service) phpGraph(in PhpGraphInput) (*mcp.CallToolResult, any, error) {
-	// Validate kind.
-	switch in.Kind {
-	case "container", "references", "models":
-		// valid
-	default:
-		return nil, nil, fmt.Errorf("invalid kind %q: must be container, references, or models", in.Kind)
-	}
-
-	// Validate deps (default "none").
-	deps := in.Deps
-	if deps == "" {
-		deps = "none"
-	}
-	switch deps {
-	case "none", "boundary", "full":
-		// valid
-	default:
-		return nil, nil, fmt.Errorf("invalid deps %q: must be none, boundary, or full", in.Deps)
-	}
-
-	// Validate format (default "json").
-	format := in.Format
-	if format == "" {
-		format = "json"
-	}
-	switch format {
-	case "json", "mermaid", "dot":
-		// valid
-	default:
-		return nil, nil, fmt.Errorf("invalid format %q: must be json, mermaid, or dot", in.Format)
-	}
-
-	rt := s.runtime()
-	ws := rt.Workspace
-
-	pkgs := composer.NewPackageResolver(s.RootPath)
-	opts := graph.Options{
-		Deps:     graph.DepsMode(deps),
-		Packages: pkgs,
-	}
-
-	var g *graph.Graph
-	switch in.Kind {
-	case "container":
-		g = graph.BuildContainer(ws.Index, ws.Container, opts)
-	case "references":
-		g = graph.BuildReferences(ws.Index, opts)
-	case "models":
-		g = graph.BuildModels(ws.Index, s.RootPath, s.Framework, opts)
-	}
-
-	switch format {
-	case "json":
-		// Return as structured content via a JSON-roundtrip so the SDK encodes it.
-		var buf bytes.Buffer
-		if err := g.EncodeJSON(&buf); err != nil {
-			return nil, nil, fmt.Errorf("encoding graph JSON: %w", err)
-		}
-		var structured any
-		if err := json.Unmarshal(buf.Bytes(), &structured); err != nil {
-			return nil, nil, fmt.Errorf("decoding graph JSON: %w", err)
-		}
-		return nil, structured, nil
-	case "mermaid":
-		return nil, map[string]any{"format": "mermaid", "text": graph.RenderMermaid(g)}, nil
-	default: // "dot"
-		return nil, map[string]any{"format": "dot", "text": graph.RenderDOT(g)}, nil
-	}
-}
 
 func (s *Service) laravelModelSchema(fqn string) (LaravelModelSchemaOutput, error) {
 	ws := s.runtime().Workspace
@@ -1466,3 +1378,4 @@ func (w *slogWriter) Write(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
+

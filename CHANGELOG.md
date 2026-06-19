@@ -22,10 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Symfony `#[Autowire]` support**: constructor injection now resolves `service:`, `param:`, and `env:` attribute forms.
 - **Symfony console command discovery**: indexes `#[AsCommand]` attributes and legacy `protected static $defaultName` declarations.
 - `symfony_routes` and `symfony_route_to_controller` MCP tools, plus `tusk://symfony/routes` resource — Symfony workspaces only. Routes are indexed at workspace build time for instant responses.
-- `php_graph` MCP tool: builds container, reference, or model dependency graphs in JSON, Mermaid, or DOT format (`kind`, `deps`, `format` inputs).
 - `contractVersion: 1` field in `php_project_summary` so agents can detect breaking interface changes.
 - Standalone `tusk-mcp` binary distributed alongside `tusk-php` for MCP tool hosting.
-- `graph container`, `graph references`, and `graph models` CLI subcommands for exporting PHP dependency graphs.
 - `deps tree`, `deps usage`, and `deps unused` CLI subcommands for visualising Composer dependency trees, measuring symbol usage, and finding unused packages.
 - `--parse` flag: dumps a PHP file's parsed AST as JSON from the command line.
 - `introspect` subcommand: dumps parsed state (symbols, diagnostics, active profile) for a file; also available in editors as `tuskPhpLsp.debugDocument`.
@@ -262,3 +260,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - VS Code extension packaging for the bundled LSP client.
 - Zed extension packaging for the WebAssembly-based extension.
 - Cross-platform release artifacts for Linux, macOS, and Windows.
+

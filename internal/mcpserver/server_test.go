@@ -840,9 +840,9 @@ func TestSymfonyToolsVisible(t *testing.T) {
 	if !slices.Contains(toolNames, "symfony_route_to_controller") {
 		t.Errorf("expected symfony_route_to_controller tool, got tools: %v", toolNames)
 	}
-	// php_graph must always be present.
-	if !slices.Contains(toolNames, "php_graph") {
-		t.Errorf("expected php_graph tool, got tools: %v", toolNames)
+	// php_container_bindings is always registered regardless of framework.
+	if !slices.Contains(toolNames, "php_container_bindings") {
+		t.Errorf("expected php_container_bindings tool, got tools: %v", toolNames)
 	}
 
 	// Also verify that a Laravel workspace does NOT get symfony_* tools.
@@ -894,9 +894,9 @@ func TestLaravelToolsVisible(t *testing.T) {
 	if !slices.Contains(toolNames, "laravel_model_schema") {
 		t.Errorf("expected laravel_model_schema tool, got tools: %v", toolNames)
 	}
-	// php_graph must always be present.
-	if !slices.Contains(toolNames, "php_graph") {
-		t.Errorf("expected php_graph tool, got tools: %v", toolNames)
+	// php_container_bindings is always registered regardless of framework.
+	if !slices.Contains(toolNames, "php_container_bindings") {
+		t.Errorf("expected php_container_bindings tool, got tools: %v", toolNames)
 	}
 
 	// Also verify that a Symfony workspace does NOT get laravel_* tools.
@@ -1005,107 +1005,7 @@ func TestSymfonyRouteTools(t *testing.T) {
 	}
 }
 
-func TestPhpGraphTool(t *testing.T) {
-	ctx := context.Background()
-	svc := sharedLaravelSvc(t)
 
-	clientSession, cleanup := newInProcessClient(t, svc)
-	defer cleanup()
-
-	for _, kind := range []string{"container", "references", "models"} {
-		t.Run("json_"+kind, func(t *testing.T) {
-			res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
-				Name:      "php_graph",
-				Arguments: map[string]any{"kind": kind, "format": "json"},
-			})
-			if err != nil {
-				t.Fatalf("CallTool(php_graph kind=%s) error = %v", kind, err)
-			}
-			if res.IsError {
-				t.Fatalf("expected success, got error payload: %#v", res.StructuredContent)
-			}
-			m := structuredMap(t, res.StructuredContent)
-			// Graph DTO must carry schemaVersion == 1 and matching kind.
-			if v, _ := m["schemaVersion"].(float64); int(v) != 1 {
-				t.Errorf("expected schemaVersion=1, got %v", m["schemaVersion"])
-			}
-			if m["kind"] != kind {
-				t.Errorf("expected kind=%s, got %v", kind, m["kind"])
-			}
-		})
-	}
-
-	t.Run("mermaid_container", func(t *testing.T) {
-		res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
-			Name:      "php_graph",
-			Arguments: map[string]any{"kind": "container", "format": "mermaid"},
-		})
-		if err != nil {
-			t.Fatalf("CallTool(php_graph mermaid) error = %v", err)
-		}
-		if res.IsError {
-			t.Fatalf("expected success for mermaid format: %#v", res.StructuredContent)
-		}
-		m := structuredMap(t, res.StructuredContent)
-		if m["format"] != "mermaid" {
-			t.Errorf("expected format=mermaid, got %v", m["format"])
-		}
-		if text, _ := m["text"].(string); !strings.HasPrefix(text, "graph LR") {
-			t.Errorf("expected mermaid graph LR header, got %q", text)
-		}
-	})
-
-	t.Run("dot_references", func(t *testing.T) {
-		res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
-			Name:      "php_graph",
-			Arguments: map[string]any{"kind": "references", "format": "dot"},
-		})
-		if err != nil {
-			t.Fatalf("CallTool(php_graph dot) error = %v", err)
-		}
-		if res.IsError {
-			t.Fatalf("expected success for dot format: %#v", res.StructuredContent)
-		}
-		m := structuredMap(t, res.StructuredContent)
-		if m["format"] != "dot" {
-			t.Errorf("expected format=dot, got %v", m["format"])
-		}
-		if text, _ := m["text"].(string); !strings.HasPrefix(text, "digraph") {
-			t.Errorf("expected digraph header, got %q", text)
-		}
-	})
-}
-
-func TestPhpGraphToolInvalidInput(t *testing.T) {
-	ctx := context.Background()
-	svc := sharedLaravelSvc(t)
-
-	clientSession, cleanup := newInProcessClient(t, svc)
-	defer cleanup()
-
-	cases := []struct {
-		name string
-		args map[string]any
-	}{
-		{name: "bad_kind", args: map[string]any{"kind": "bogus"}},
-		{name: "bad_deps", args: map[string]any{"kind": "container", "deps": "bogus"}},
-		{name: "bad_format", args: map[string]any{"kind": "container", "format": "bogus"}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
-				Name:      "php_graph",
-				Arguments: tc.args,
-			})
-			if err != nil {
-				t.Fatalf("CallTool(php_graph %s) unexpected transport error: %v", tc.name, err)
-			}
-			if !res.IsError {
-				t.Errorf("expected error result for invalid input %v, got %#v", tc.args, res.StructuredContent)
-			}
-		})
-	}
-}
 
 func TestProjectSummaryContractVersion(t *testing.T) {
 	ctx := context.Background()
@@ -1124,3 +1024,4 @@ func TestProjectSummaryContractVersion(t *testing.T) {
 		t.Errorf("expected contractVersion=1 in project summary, got %#v", m["contractVersion"])
 	}
 }
+
