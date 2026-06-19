@@ -36,13 +36,6 @@ var (
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "graph" {
-		if err := runGraph(os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
 	if len(os.Args) > 1 && os.Args[1] == "deps" {
 		if err := runDeps(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -149,8 +142,8 @@ func emitGraph(g *graph.Graph, format string) error {
 
 // buildWorkspace loads project metadata and builds a fully-indexed workspace for
 // the given root directory. The logger prefix is used for the build logger that
-// writes to stderr. Both runGraph and runDeps use this shared helper so that the
-// workspace-build logic lives in one place.
+// writes to stderr. Both runDeps and runIntrospect use this shared helper so that
+// the workspace-build logic lives in one place.
 func buildWorkspace(root, logPrefix string) (*workspace.Bootstrapped, string, error) {
 	cfg, framework, profile, err := loadProjectMetadata(root)
 	if err != nil {
@@ -171,77 +164,6 @@ func buildWorkspace(root, logPrefix string) (*workspace.Bootstrapped, string, er
 		return nil, framework, fmt.Errorf("building workspace: %w", err)
 	}
 	return ws, framework, nil
-}
-
-// runGraph implements the `graph` subcommand.
-func runGraph(args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: tusk-php graph <kind> [flags] (supported: container, references, models)")
-	}
-	kind := args[0]
-	switch kind {
-	case "container", "references", "models":
-		// valid
-	default:
-		return fmt.Errorf("unknown graph kind %q (supported: container, references, models)", kind)
-	}
-
-	fs := flag.NewFlagSet("graph "+kind, flag.ExitOnError)
-	depsFlag := fs.String("deps", "none", "Dependency mode: none|boundary|full")
-	formatFlag := fs.String("format", "json", "Output format: json|mermaid|dot")
-	rootFlag := fs.String("root", "", "Project root (default: current directory)")
-	if err := fs.Parse(args[1:]); err != nil {
-		return err
-	}
-
-	// Resolve root directory.
-	root := *rootFlag
-	if root == "" {
-		var err error
-		root, err = os.Getwd()
-		if err != nil {
-			return fmt.Errorf("unable to determine working directory: %w", err)
-		}
-	}
-
-	// Validate --deps.
-	switch *depsFlag {
-	case "none", "boundary", "full":
-		// valid
-	default:
-		return fmt.Errorf("invalid --deps %q: must be one of none, boundary, full", *depsFlag)
-	}
-
-	// Validate --format.
-	switch *formatFlag {
-	case "json", "mermaid", "dot":
-		// valid
-	default:
-		return fmt.Errorf("invalid --format %q: must be one of json, mermaid, dot", *formatFlag)
-	}
-
-	ws, framework, err := buildWorkspace(root, "tusk-php graph")
-	if err != nil {
-		return err
-	}
-
-	var pkgs graph.PackageResolver = composer.NewPackageResolver(root)
-	opts := graph.Options{
-		Deps:     graph.DepsMode(*depsFlag),
-		Packages: pkgs,
-	}
-
-	var g *graph.Graph
-	switch kind {
-	case "container":
-		g = graph.BuildContainer(ws.Index, ws.Container, opts)
-	case "references":
-		g = graph.BuildReferences(ws.Index, opts)
-	case "models":
-		g = graph.BuildModels(ws.Index, root, framework, opts)
-	}
-
-	return emitGraph(g, *formatFlag)
 }
 
 // runIntrospect implements the `introspect` subcommand.
@@ -274,7 +196,7 @@ func runIntrospect(args []string) error {
 	}
 
 	// Determine the project root: use --root if given, otherwise the directory
-	// containing the file (mirrors runGraph/runDeps convention).
+	// containing the file (mirrors runDeps convention).
 	root := *rootFlag
 	if root == "" {
 		root = filepath.Dir(absFile)

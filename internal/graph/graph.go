@@ -53,7 +53,7 @@ const (
 // Returns ok=false when the FQN cannot be resolved to a known package.
 type PackageResolver func(fqn string) (pkg, version string, ok bool)
 
-// Options parameterise graph builders (e.g. BuildContainer).
+// Options parameterise graph builders (e.g. BuildReferences).
 type Options struct {
 	Deps     DepsMode
 	Packages PackageResolver // may be nil; required only for DepsBoundary
