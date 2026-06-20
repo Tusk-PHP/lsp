@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `tuskPhpLsp.createObject` command: given a directory URI, an object kind (`class`, `trait`, `interface`, or `enum`), and a name, returns a `WorkspaceEdit` that creates the PHP file and inserts a namespace-aware skeleton. Namespace is derived from PSR-4 autoload mappings; omitted when the path falls outside any mapped root.
+- `tuskPhpLsp.copyReference` command: given a URI and cursor position, resolves the symbol under the cursor and returns labeled reference strings — FQN, short name, `Class::method()`, and `Class::method(Type $param): ReturnType` — so the editor can present a pick-list for the user to copy.
+- **Copy reference, copy/move namespace as code actions**: `tuskPhpLsp.copyReference`, `tuskPhpLsp.copyNamespace`, and `tuskPhpLsp.moveToNamespace` are now surfaced as standard LSP code actions (`refactor` / `refactor.move` / `source` kinds), making them accessible in Zed, Neovim, and other editors that expose the code-action menu but not custom command palettes. Clipboard writing remains a client responsibility — editors without clipboard handling will trigger the command but not copy text.
 - **Undefined variable** diagnostic: warns on reads of unbound variables; skips superglobals, `$this`, parameters, foreach/catch/closure bindings, and scopes using `extract()`, `include`, or `eval`.
 - **Unused variable** diagnostic: hints on local assignments whose value is never read; ignores underscore-prefixed names (`$_`, `$_foo`) and by-reference bindings.
 - **Argument count mismatch** diagnostic: warns when a call passes too many arguments to a project function or static method with a fixed parameter list; skips variadic, spread, and named-argument calls.
