@@ -1413,7 +1413,10 @@ found:
 	return prefix[start:end], activeParam
 }
 
-func formatParamLabel(sym *symbols.Symbol) string {
+// formatParams returns the parenthesized parameter list for a symbol, e.g.
+// "(Type $a, $b)". Each parameter is rendered as "Type $name" when a type is
+// present, or just "$name" otherwise. The return type is not included.
+func formatParams(sym *symbols.Symbol) string {
 	var ps []string
 	for _, p := range sym.Params {
 		s := ""
@@ -1423,11 +1426,90 @@ func formatParamLabel(sym *symbols.Symbol) string {
 		s += p.Name
 		ps = append(ps, s)
 	}
+	return "(" + strings.Join(ps, ", ") + ")"
+}
+
+func formatParamLabel(sym *symbols.Symbol) string {
 	ret := sym.ReturnType
 	if ret == "" {
 		ret = "mixed"
 	}
-	return "(" + strings.Join(ps, ", ") + "): " + ret
+	return formatParams(sym) + ": " + ret
+}
+
+// ReferenceVariant is one labeled copy-reference format option.
+type ReferenceVariant struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+// CopyReference resolves the symbol under the cursor and returns a set of
+// labeled reference-string formats (FQN/short × bare/call/full-signature) for
+// the editor to present and copy. Returns nil when the cursor is not on a
+// resolvable named symbol.
+func (a *Analyzer) CopyReference(uri, source string, pos protocol.Position) []ReferenceVariant {
+	ctx := sourcectx.Analyze(uri, source, pos)
+	if ctx == nil || ctx.SymbolText == "" {
+		return nil
+	}
+	word := ctx.SymbolText
+	file := ctx.File
+
+	sym := a.resolveSymbolAtCursor(uri, source, pos, word, file)
+	if sym == nil {
+		return nil
+	}
+
+	// Determine whether this is a type-level symbol (class/interface/enum/trait)
+	// or a member-level symbol (method/property/constant/etc.).
+	isTypeKind := sym.Kind == symbols.KindClass ||
+		sym.Kind == symbols.KindInterface ||
+		sym.Kind == symbols.KindEnum ||
+		sym.Kind == symbols.KindTrait
+
+	var classFQN string
+	if isTypeKind {
+		classFQN = sym.FQN
+	} else {
+		classFQN = sym.ParentFQN
+	}
+
+	// Fall back to treating the symbol itself as the class when ParentFQN is
+	// absent (e.g. standalone functions have no parent).
+	if !isTypeKind && classFQN == "" {
+		classFQN = sym.FQN
+		isTypeKind = true // emit class variants only
+	}
+
+	// Derive the short (unqualified) class name from the FQN.
+	shortName := classFQN
+	if i := strings.LastIndex(classFQN, "\\"); i >= 0 {
+		shortName = classFQN[i+1:]
+	}
+
+	if isTypeKind {
+		return []ReferenceVariant{
+			{Label: "FQN", Value: classFQN},
+			{Label: "Short name", Value: shortName},
+		}
+	}
+
+	// Member symbol: build call/signature variants.
+	m := sym.Name
+	params := formatParams(sym)
+	ret := ""
+	if sym.ReturnType != "" {
+		ret = ": " + sym.ReturnType
+	}
+
+	return []ReferenceVariant{
+		{Label: "FQN::member()", Value: classFQN + "::" + m + "()"},
+		{Label: "FQN::member(signature)", Value: classFQN + "::" + m + params + ret},
+		{Label: "Short::member()", Value: shortName + "::" + m + "()"},
+		{Label: "Short::member(signature)", Value: shortName + "::" + m + params + ret},
+		{Label: "FQN", Value: classFQN},
+		{Label: "Short name", Value: shortName},
+	}
 }
 
 func mkRange(line int) protocol.Range {
@@ -1798,6 +1880,25 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 					},
 				})
 			}
+		}
+	}
+
+	// Offer "Copy reference..." when cursor is on a resolvable named symbol.
+	// Note: writing to the clipboard is a client capability — this action triggers the
+	// command, but editors without clipboard handling won't actually copy anything.
+	if codeActionKindAllowed(params.Context.Only, "refactor") {
+		if refs := a.CopyReference(uri, source, params.Range.Start); len(refs) > 0 {
+			uriJSON, _ := json.Marshal(uri)
+			posJSON, _ := json.Marshal(params.Range.Start)
+			actions = append(actions, protocol.CodeAction{
+				Title: "Copy reference...",
+				Kind:  "refactor",
+				Command: &protocol.Command{
+					Title:     "Copy reference",
+					Command:   "tuskPhpLsp.copyReference",
+					Arguments: []json.RawMessage{uriJSON, posJSON},
+				},
+			})
 		}
 	}
 
