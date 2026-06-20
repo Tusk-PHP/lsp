@@ -452,11 +452,13 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 				"source.organizeImports",
 			}},
 			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{Commands: []string{
-					"tuskPhpLsp.namespaceForPath",
-					"tuskPhpLsp.copyNamespace",
-					"tuskPhpLsp.moveToNamespace",
-					"tuskPhpLsp.debugDocument",
-				}},
+				"tuskPhpLsp.namespaceForPath",
+				"tuskPhpLsp.copyNamespace",
+				"tuskPhpLsp.moveToNamespace",
+				"tuskPhpLsp.createObject",
+				"tuskPhpLsp.copyReference",
+				"tuskPhpLsp.debugDocument",
+			}},
 			InlayHintProvider:      &protocol.InlayHintOptions{ResolveProvider: false},
 			SelectionRangeProvider: true,
 			SemanticTokensProvider: &protocol.SemanticTokensOptions{
@@ -886,6 +888,34 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 			}
 		}
 		s.sendResponse(msg.ID, nil)
+	case "tuskPhpLsp.createObject":
+		// Arguments: [dirUri, kind, name]
+		if len(params.Arguments) >= 3 {
+			var dirURI, kind, name string
+			if json.Unmarshal(params.Arguments[0], &dirURI) == nil &&
+				json.Unmarshal(params.Arguments[1], &kind) == nil &&
+				json.Unmarshal(params.Arguments[2], &name) == nil {
+				autoload := composer.GetAutoloadPaths(s.rootPath)
+				edit := buildCreateObjectEdit(dirURI, kind, name, autoload)
+				s.sendResponse(msg.ID, edit)
+				return
+			}
+		}
+		s.sendResponse(msg.ID, nil)
+	case "tuskPhpLsp.copyReference":
+		// Arguments: [uri (string), position ({"line":N,"character":N})]
+		if len(params.Arguments) >= 2 {
+			var uri string
+			var position protocol.Position
+			if json.Unmarshal(params.Arguments[0], &uri) == nil &&
+				json.Unmarshal(params.Arguments[1], &position) == nil {
+				source := s.getDocument(uri)
+				variants := s.analyzer.CopyReference(uri, source, position)
+				s.sendResponse(msg.ID, variants)
+				return
+			}
+		}
+		s.sendResponse(msg.ID, nil)
 	case "tuskPhpLsp.debugDocument":
 		if len(params.Arguments) > 0 {
 			var uri string
@@ -1023,4 +1053,3 @@ func (s *Server) indexFileByURI(uri string, source string) {
 		s.routeIndex.IndexFile(uri, source)
 	}
 }
-

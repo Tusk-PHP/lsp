@@ -45,6 +45,7 @@ func TestExecuteCommandAdvertisement(t *testing.T) {
 		"tuskPhpLsp.copyNamespace":    false,
 		"tuskPhpLsp.moveToNamespace":  false,
 		"tuskPhpLsp.debugDocument":    false,
+		"tuskPhpLsp.createObject":     false,
 	}
 	for _, raw := range rawCmds {
 		cmd, _ := raw.(string)
