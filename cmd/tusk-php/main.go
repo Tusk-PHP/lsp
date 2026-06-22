@@ -50,6 +50,10 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		runMCP(os.Args[2:])
+		return
+	}
 	flag.Parse()
 	if *stdioMode {
 		*transport = "stdio"
