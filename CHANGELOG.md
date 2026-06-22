@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PHP 8.3 stubs: `Override` attribute.
 - WASM (`wasip1`) build target for browser-based editors such as vscode.dev.
 - `docs/mcp-tools.md`: reference for all 16 MCP tools and 6 resources, including schemas, output shapes, framework gating, and contract/schema versions.
+- README **AI Agents (MCP)** section: setup instructions for hosting `tusk-mcp` in Claude Code, Codex, and other stdio MCP clients, with a summary of the available tools and resources.
 
 ### Changed
 
