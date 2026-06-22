@@ -1,3 +1,5 @@
+//go:build !wasm
+
 package main
 
 import (
@@ -11,23 +13,25 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/mcpserver"
 )
 
-var version = "0.9.0"
-
-func main() {
+// runMCP implements the `mcp` subcommand, folding the former tusk-mcp binary
+// into the main tusk-php binary. It dispatches to the `dump` sub-subcommand
+// when args[0] == "dump", and otherwise starts the MCP server over stdio.
+func runMCP(args []string) {
 	mcpserver.ServerVersion = version
 
-	if len(os.Args) > 1 && os.Args[1] == "dump" {
-		runDump(os.Args[2:])
+	if len(args) > 0 && args[0] == "dump" {
+		runMCPDump(args[1:])
 		return
 	}
 
+	fs := flag.NewFlagSet("mcp", flag.ExitOnError)
 	var (
 		showVersion bool
 		rootPath    string
 	)
-	flag.BoolVar(&showVersion, "version", false, "show version")
-	flag.StringVar(&rootPath, "root", "", "workspace root path (defaults to cwd)")
-	flag.Parse()
+	fs.BoolVar(&showVersion, "version", false, "show version")
+	fs.StringVar(&rootPath, "root", "", "workspace root path (defaults to cwd)")
+	_ = fs.Parse(args)
 
 	if showVersion {
 		fmt.Printf("%s %s\n", mcpserver.ServerName, version)
@@ -46,8 +50,10 @@ func main() {
 	}
 }
 
-func runDump(args []string) {
-	fs := flag.NewFlagSet("dump", flag.ExitOnError)
+// runMCPDump implements the `mcp dump` sub-subcommand, writing an AI context
+// pack to the output directory.
+func runMCPDump(args []string) {
+	fs := flag.NewFlagSet("mcp dump", flag.ExitOnError)
 	var (
 		rootPath string
 		outDir   string
