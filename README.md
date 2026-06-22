@@ -236,16 +236,16 @@ git clone https://github.com/Tusk-PHP/lsp.git tusk-php && cd tusk-php && make in
 
 ## AI Agents (MCP)
 
-Tusk PHP ships a second binary, `tusk-mcp`, that exposes the project's indexed intelligence — symbols, native diagnostics, container bindings, live database schema, and framework routes/models — to AI coding agents over the [Model Context Protocol](https://modelcontextprotocol.io). An agent can query the same understanding the language server has, without re-parsing the codebase itself.
+`tusk-php mcp` exposes the project's indexed intelligence — symbols, native diagnostics, container bindings, live database schema, and framework routes/models — to AI coding agents over the [Model Context Protocol](https://modelcontextprotocol.io). It is a subcommand of the same `tusk-php` binary the editor already uses; there is no separate binary or extra download.
 
-`tusk-mcp` is published alongside `tusk-php` on [GitHub Releases](https://github.com/Tusk-PHP/lsp/releases/latest) for the same platforms (Linux, macOS, Windows — amd64/arm64). Download it and put it on your `PATH` — there's nothing to launch manually. The agent spawns `tusk-mcp` itself over **stdio** using the command and arguments in your config, and shuts it down when it disconnects. It indexes the project at `--root` (defaults to the current working directory).
+There's nothing to launch manually. The agent spawns `tusk-php mcp` itself over **stdio** using the command and arguments in your config, and shuts it down when it disconnects. It indexes the project at `--root` (defaults to the current working directory).
 
 ### Claude Code
 
 Register the server for the current project (writes a project-scoped `.mcp.json`):
 
 ```bash
-claude mcp add tusk-php --scope project -- tusk-mcp --root "$(pwd)"
+claude mcp add tusk-php --scope project -- tusk-php mcp --root "$(pwd)"
 ```
 
 Or add it by hand to `.mcp.json` in the project root:
@@ -254,8 +254,8 @@ Or add it by hand to `.mcp.json` in the project root:
 {
   "mcpServers": {
     "tusk-php": {
-      "command": "tusk-mcp",
-      "args": ["--root", "."]
+      "command": "tusk-php",
+      "args": ["mcp", "--root", "."]
     }
   }
 }
@@ -269,8 +269,8 @@ Add the server to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.tusk-php]
-command = "tusk-mcp"
-args = ["--root", "/absolute/path/to/your/php-project"]
+command = "tusk-php"
+args = ["mcp", "--root", "/absolute/path/to/your/php-project"]
 ```
 
 ### Other Agents (Cursor, Windsurf, generic MCP clients)
@@ -281,8 +281,8 @@ Any client that launches stdio MCP servers uses the same shape — a command plu
 {
   "mcpServers": {
     "tusk-php": {
-      "command": "tusk-mcp",
-      "args": ["--root", "/absolute/path/to/your/php-project"]
+      "command": "tusk-php",
+      "args": ["mcp", "--root", "/absolute/path/to/your/php-project"]
     }
   }
 }
