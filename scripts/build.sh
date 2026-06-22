@@ -21,21 +21,18 @@ manifest_entries=()
 for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
     IFS='/' read -r GOOS GOARCH <<< "$target"
     ext=""; [ "$GOOS" = "windows" ] && ext=".exe"
-    for binary in tusk-php tusk-mcp; do
-        out="${OUTPUT_DIR}/${binary}-${GOOS}-${GOARCH}${ext}"
-        echo "Building ${binary} ${GOOS}/${GOARCH}..."
-        GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${VERSION}" -trimpath -o "${out}" ./cmd/${binary}/
+    out="${OUTPUT_DIR}/tusk-php-${GOOS}-${GOARCH}${ext}"
+    echo "Building tusk-php ${GOOS}/${GOARCH}..."
+    GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${VERSION}" -trimpath -o "${out}" ./cmd/tusk-php/
 
-        # Collect manifest entry for this artifact.
-        filename="${binary}-${GOOS}-${GOARCH}${ext}"
-        digest="$(sha256_of "${out}")"
-        manifest_entries+=("  { \"os\": \"${GOOS}\", \"arch\": \"${GOARCH}\", \"file\": \"${filename}\", \"sha256\": \"${digest}\" }")
-    done
+    # Collect manifest entry for this artifact.
+    filename="tusk-php-${GOOS}-${GOARCH}${ext}"
+    digest="$(sha256_of "${out}")"
+    manifest_entries+=("  { \"os\": \"${GOOS}\", \"arch\": \"${GOARCH}\", \"file\": \"${filename}\", \"sha256\": \"${digest}\" }")
 done
 echo "Build complete. Binaries in: ${OUTPUT_DIR}/"
 
 # Build tusk-php for wasip1/wasm (browser / vscode.dev target).
-# tusk-mcp is native-only (DB-coupled) and is intentionally excluded.
 wasm_out="${OUTPUT_DIR}/tusk-php.wasm"
 echo "Building tusk-php wasip1/wasm..."
 GOOS=wasip1 GOARCH=wasm CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${VERSION}" -trimpath -o "${wasm_out}" ./cmd/tusk-php/
