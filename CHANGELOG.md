@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `tuskPhpLsp.createObject` command: given a directory URI, an object kind (`class`, `trait`, `interface`, or `enum`), and a name, returns a `WorkspaceEdit` that creates the PHP file and inserts a namespace-aware skeleton. Namespace is derived from PSR-4 autoload mappings; omitted when the path falls outside any mapped root.
+- `tuskPhpLsp.copyReference` command: given a URI and cursor position, resolves the symbol under the cursor and returns labeled reference strings — FQN, short name, `Class::method()`, and `Class::method(Type $param): ReturnType` — so the editor can present a pick-list for the user to copy.
+- **Copy reference, copy/move namespace as code actions**: `tuskPhpLsp.copyReference`, `tuskPhpLsp.copyNamespace`, and `tuskPhpLsp.moveToNamespace` are now surfaced as standard LSP code actions (`refactor` / `refactor.move` / `source` kinds), making them accessible in Zed, Neovim, and other editors that expose the code-action menu but not custom command palettes. Clipboard writing remains a client responsibility — editors without clipboard handling will trigger the command but not copy text.
 - **Undefined variable** diagnostic: warns on reads of unbound variables; skips superglobals, `$this`, parameters, foreach/catch/closure bindings, and scopes using `extract()`, `include`, or `eval`.
 - **Unused variable** diagnostic: hints on local assignments whose value is never read; ignores underscore-prefixed names (`$_`, `$_foo`) and by-reference bindings.
 - **Argument count mismatch** diagnostic: warns when a call passes too many arguments to a project function or static method with a fixed parameter list; skips variadic, spread, and named-argument calls.
@@ -25,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `php_container_bindings` MCP tool: lists all resolved DI container bindings (`abstract`, `concrete`, `singleton`, `source`, `alias`, `tags`, `definitionUri`, `range`). Optional `class` input also returns the class's resolved constructor injection (`paramName`, `typeHint`, `resolvedConcrete`, `isSingleton`, plus Symfony `autowireKind`/`autowireValue`). Always registered — returns empty `bindings` on non-framework projects.
 - `laravel_model_schema` now includes a `relations[]` list, each entry with `method`, `kind` (e.g. `HasMany`, `BelongsTo`), resolved target FQN (`target`), and `cardinality` (`one`/`many`).
 - `contractVersion: 1` field in `php_project_summary` so agents can detect breaking interface changes.
-- Standalone `tusk-mcp` binary distributed alongside `tusk-php` for MCP tool hosting.
+- **Built-in MCP server**: run `tusk-php mcp` to host the MCP tools for AI agents (Claude Code, Codex, and other stdio MCP clients) over stdio; `tusk-php mcp dump` writes a static context pack. No separate binary to install — it's the same `tusk-php` binary the editor already uses.
 - `deps tree`, `deps usage`, and `deps unused` CLI subcommands for visualising Composer dependency trees, measuring symbol usage, and finding unused packages.
 - `--parse` flag: dumps a PHP file's parsed AST as JSON from the command line.
 - `introspect` subcommand: dumps parsed state (symbols, diagnostics, active profile) for a file; also available in editors as `tuskPhpLsp.debugDocument`.
@@ -37,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PHP 8.3 stubs: `Override` attribute.
 - WASM (`wasip1`) build target for browser-based editors such as vscode.dev.
 - `docs/mcp-tools.md`: reference for all 16 MCP tools and 6 resources, including schemas, output shapes, framework gating, and contract/schema versions.
+- README **AI Agents (MCP)** section: setup instructions for running `tusk-php mcp` in Claude Code, Codex, and other stdio MCP clients, with a summary of the available tools and resources.
 
 ### Changed
 
