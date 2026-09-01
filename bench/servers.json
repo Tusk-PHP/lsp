@@ -1,0 +1,82 @@
+[
+  {
+    "id": "tusk-php",
+    "name": "Tusk PHP",
+    "homepage": "https://github.com/Tusk-PHP/lsp",
+    "license": "MIT",
+    "cmd": ["{{root}}/build/tusk-php", "--stdio"],
+    "versionCmd": ["{{root}}/build/tusk-php", "--version"],
+    "readySignals": [
+      { "type": "logMessage", "pattern": "Indexed [0-9]+ files" }
+    ],
+    "readyTimeoutSec": 180,
+    "notes": "This repository. Build it first with `make build`. Holds its index in memory only, so there is no cache directory to reset."
+  },
+  {
+    "id": "intelephense",
+    "name": "Intelephense",
+    "homepage": "https://intelephense.com",
+    "license": "proprietary, free tier",
+    "cmd": ["{{tools}}/intelephense/node_modules/.bin/intelephense", "--stdio"],
+    "versionCmd": ["node", "-p", "require('{{tools}}/intelephense/node_modules/intelephense/package.json').version"],
+    "initializationOptions": {
+      "storagePath": "{{storage}}",
+      "clearCache": true,
+      "globalStoragePath": "{{storage}}"
+    },
+    "resetPaths": ["{{storage}}"],
+    "readySignals": [
+      { "type": "notification", "method": "indexingEnded" }
+    ],
+    "readyTimeoutSec": 300,
+    "notes": "Run without a licence key, so only free-tier features are measured. Premium adds rename, code actions and finding implementations."
+  },
+  {
+    "id": "phpactor",
+    "name": "Phpactor",
+    "homepage": "https://github.com/phpactor/phpactor",
+    "license": "MIT",
+    "cmd": ["php", "{{tools}}/phpactor.phar", "language-server"],
+    "versionCmd": ["php", "{{tools}}/phpactor.phar", "--version"],
+    "env": { "XDG_CACHE_HOME": "{{storage}}" },
+    "resetPaths": ["{{storage}}"],
+    "readyTimeoutSec": 300,
+    "notes": "Indexes lazily in the background; it publishes no 'done' signal, which is why readiness is probed rather than listened for."
+  },
+  {
+    "id": "php-lsp-rs",
+    "name": "php-lsp (Rust)",
+    "homepage": "https://github.com/jorgsowa/php-lsp",
+    "license": "MIT",
+    "cmd": ["{{tools}}/php-lsp"],
+    "versionCmd": ["{{tools}}/php-lsp", "--version"],
+    "env": { "XDG_CACHE_HOME": "{{storage}}", "XDG_DATA_HOME": "{{storage}}" },
+    "resetPaths": ["{{storage}}"],
+    "readyTimeoutSec": 300,
+    "notes": "Rust server by jorgsowa. Speaks stdio with no arguments. Configuration is available through initializationOptions (phpVersion, excludePaths, diagnostics) but is left at defaults here so it auto-detects the PHP version from composer.json like the others."
+  },
+  {
+    "id": "phpantom",
+    "name": "PHPantom",
+    "homepage": "https://github.com/PHPantom-dev/phpantom_lsp",
+    "license": "MIT",
+    "cmd": ["{{tools}}/phpantom_lsp", "--stdio"],
+    "versionCmd": ["{{tools}}/phpantom_lsp", "--version"],
+    "env": { "XDG_CACHE_HOME": "{{storage}}", "XDG_DATA_HOME": "{{storage}}" },
+    "resetPaths": ["{{storage}}"],
+    "readyTimeoutSec": 300,
+    "notes": "Rust server. Reads an optional .phpantom.toml from the workspace; none is added here, so it runs on its defaults."
+  },
+  {
+    "id": "psalm",
+    "name": "Psalm language server",
+    "homepage": "https://psalm.dev",
+    "license": "MIT",
+    "disabled": true,
+    "cmd": ["php", "{{tools}}/psalm/vendor/bin/psalm-language-server", "--root={{workspace}}"],
+    "versionCmd": ["php", "{{tools}}/psalm/vendor/bin/psalm", "--version"],
+    "resetPaths": ["{{storage}}"],
+    "readyTimeoutSec": 600,
+    "notes": "Disabled by default: it refuses to start without a psalm.xml in the workspace, and it is a static analyser with a language-server front end rather than an editor-first server. Enable it by adding a psalm.xml to the workspace and setting disabled to false."
+  }
+]
