@@ -1,4 +1,4 @@
-.PHONY: build install test clean dev cross-build wasm conformance conformance-pr
+.PHONY: build install test clean dev cross-build wasm conformance conformance-pr bench bench-install bench-self
 
 VERSION ?= 0.9.0
 BINARY  := tusk-php
@@ -32,3 +32,12 @@ conformance:
 conformance-pr:
 	bash scripts/fetch-corpus.sh --tier pr
 	go test -tags=conformance -race ./internal/conformance/...
+
+bench-install:
+	bash bench/tools/install.sh
+
+bench: build
+	go run ./bench/lspbench
+
+bench-self: build
+	go run ./bench/lspbench -servers tusk-php
