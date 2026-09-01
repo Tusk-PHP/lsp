@@ -1,0 +1,116 @@
+{
+  "workspace": "symfony",
+  "root": "testdata/symfony",
+  "description": "Symfony app with framework-bundle, routing and DI in vendor/",
+  "readyProbe": "def.vendor-base-class",
+  "openFiles": [
+    "src/Controller/ProductController.php",
+    "src/Repository/ProductRepository.php",
+    "src/Entity/Product.php"
+  ],
+  "cases": [
+    {
+      "id": "def.vendor-base-class",
+      "feature": "definition",
+      "desc": "jump from `extends AbstractController` into vendor/symfony",
+      "file": "src/Controller/ProductController.php",
+      "anchor": "extends AbstractController",
+      "offset": 10,
+      "expect": { "targetFile": "Controller/AbstractController.php", "targetSymbol": "class AbstractController" },
+      "tags": ["vendor", "cross-file"]
+    },
+    {
+      "id": "def.injected-service-method",
+      "feature": "definition",
+      "desc": "method call on an autowired constructor dependency",
+      "file": "src/Controller/ProductController.php",
+      "anchor": "$this->notifier->notify(",
+      "offset": 19,
+      "expect": { "targetFile": "src/Service/NotificationService.php", "targetSymbol": "function notify" },
+      "tags": ["symfony", "cross-file"]
+    },
+    {
+      "id": "def.repository-method",
+      "feature": "definition",
+      "desc": "method call on an injected repository",
+      "file": "src/Controller/ProductController.php",
+      "anchor": "$this->repo->findAll()",
+      "offset": 15,
+      "expect": { "targetFile": "src/Repository/ProductRepository.php", "targetSymbol": "function findAll" }
+    },
+    {
+      "id": "hover.docblock-return-type",
+      "feature": "hover",
+      "desc": "variable typed by a nullable entity return",
+      "file": "src/Controller/ProductController.php",
+      "anchor": "$first = $this",
+      "offset": 3,
+      "expect": { "contains": ["Product"] },
+      "tags": ["inference"]
+    },
+    {
+      "id": "hover.php-builtin",
+      "feature": "hover",
+      "desc": "a PHP builtin function",
+      "file": "src/Repository/ProductRepository.php",
+      "anchor": "array_filter(",
+      "offset": 6,
+      "expect": { "contains": ["array_filter"] },
+      "tags": ["builtin"]
+    },
+    {
+      "id": "completion.entity-member",
+      "feature": "completion",
+      "desc": "members after -> on a locally constructed entity",
+      "file": "src/Controller/ProductController.php",
+      "anchor": "$product->setName('Test')",
+      "offset": 10,
+      "expect": { "items": ["setName", "getName", "getPrice"] }
+    },
+    {
+      "id": "completion.injected-service-member",
+      "feature": "completion",
+      "desc": "members after -> on an injected repository",
+      "file": "src/Controller/ProductController.php",
+      "anchor": "$this->repo->findAll()",
+      "offset": 13,
+      "expect": { "items": ["find", "findAll", "findByName", "save"] }
+    },
+    {
+      "id": "refs.entity-class",
+      "feature": "references",
+      "desc": "every reference to an entity class",
+      "file": "src/Entity/Product.php",
+      "anchor": "class Product",
+      "offset": 8,
+      "expect": {
+        "minCount": 3,
+        "files": ["src/Repository/ProductRepository.php", "src/Controller/ProductController.php"]
+      }
+    },
+    {
+      "id": "symbols.entity",
+      "feature": "documentSymbol",
+      "desc": "accessors of an entity",
+      "file": "src/Entity/Product.php",
+      "expect": { "items": ["Product", "getName", "setName", "getPrice"] }
+    },
+    {
+      "id": "wsym.repository",
+      "feature": "workspaceSymbol",
+      "desc": "find a repository class by name",
+      "file": "src/Entity/Product.php",
+      "query": "ProductRepository",
+      "expect": { "items": ["ProductRepository"] }
+    },
+    {
+      "id": "sig.entity-setter",
+      "feature": "signatureHelp",
+      "desc": "parameter help inside a setter call",
+      "file": "src/Controller/ProductController.php",
+      "anchor": "setName('Test')",
+      "offset": 8,
+      "expect": { "contains": ["name"] }
+    }
+  ]
+}
