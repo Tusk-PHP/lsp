@@ -1,0 +1,14 @@
+{
+    "name": "tusk/bench-diagnostics",
+    "description": "Fixture project for benchmarking native diagnostics across PHP language servers.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    }
+}
