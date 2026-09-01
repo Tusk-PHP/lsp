@@ -122,6 +122,23 @@ After changing the binary path or rebuilding the server, run Zed's
 `lsp: restart language servers` action. If the configured `binary.path` exists,
 the Zed extension uses it and skips the online release download path.
 
+## Benchmarking Against Other Servers
+
+`bench/` holds a harness that asks tusk-php and four other PHP language servers
+— Intelephense, Phpactor, php-lsp and PHPantom — the same editor questions in
+the same fixture workspaces, then reports start-up time, memory, latency and how
+many answers were correct.
+
+```bash
+make bench-install   # fetch the other servers into bench/.tools/ (gitignored)
+make bench           # run everything; writes bench/results/<timestamp>/report.md
+make bench-self      # tusk-php only, e.g. to check a change did not regress latency
+```
+
+Adding a case is a JSON entry in `bench/suite/*.json`; adding a server is a JSON
+entry in `bench/servers.json`. See `bench/README.md` for the methodology and the
+fairness rules the harness enforces.
+
 ## Making Changes
 
 ### Before You Start
