@@ -1,0 +1,68 @@
+{
+  "workspace": "diagnostics",
+  "root": "bench/workspaces/diagnostics",
+  "description": "Small project with one deliberate defect per file, plus a clean file to measure false positives",
+  "readyProbe": "def.cross-file",
+  "comment": "Every 'bad' file contains exactly one intended defect on the line the anchor points at. messageAny lists the wordings different servers use for the same finding.",
+  "openFiles": ["src/Support/Mailer.php", "src/Clean/Newsletter.php"],
+  "cases": [
+    {
+      "id": "def.cross-file",
+      "feature": "definition",
+      "desc": "readiness probe: resolve a PSR-4 class from another file",
+      "file": "src/Clean/Newsletter.php",
+      "anchor": "private Mailer $mailer",
+      "offset": 10,
+      "expect": { "targetFile": "src/Support/Mailer.php", "targetSymbol": "class Mailer" }
+    },
+    {
+      "id": "diag.clean-file",
+      "feature": "diagnostics",
+      "desc": "false positives: a correct file must produce no error or warning",
+      "file": "src/Clean/Newsletter.php",
+      "anchor": "public function sendDigest",
+      "expect": { "clean": true },
+      "tags": ["false-positive"]
+    },
+    {
+      "id": "diag.undefined-variable",
+      "feature": "diagnostics",
+      "desc": "reading a variable that was never assigned",
+      "file": "src/Bad/UndefinedVariable.php",
+      "anchor": "return $greetingText;",
+      "expect": {
+        "messageAny": ["undefined variable", "undefined var", "not defined", "undefined symbol", "unknown variable"]
+      }
+    },
+    {
+      "id": "diag.unknown-class",
+      "feature": "diagnostics",
+      "desc": "instantiating a class that does not exist",
+      "file": "src/Bad/UnknownClass.php",
+      "anchor": "new \\App\\Support\\PostmarkMailer()",
+      "expect": {
+        "messageAny": ["undefined type", "not found", "unknown class", "undefined class", "does not exist", "could not be resolved", "undefined symbol"]
+      }
+    },
+    {
+      "id": "diag.unknown-method",
+      "feature": "diagnostics",
+      "desc": "calling a method the class does not declare",
+      "file": "src/Bad/UnknownMethod.php",
+      "anchor": "$mailer->sendMessage(",
+      "expect": {
+        "messageAny": ["undefined method", "unknown method", "not found", "does not exist", "undefined symbol"]
+      }
+    },
+    {
+      "id": "diag.argument-count",
+      "feature": "diagnostics",
+      "desc": "calling a two-parameter method with one argument",
+      "file": "src/Bad/ArgumentCount.php",
+      "anchor": "$mailer->send('someone@example.test')",
+      "expect": {
+        "messageAny": ["argument", "parameter", "expects", "required", "too few"]
+      }
+    }
+  ]
+}

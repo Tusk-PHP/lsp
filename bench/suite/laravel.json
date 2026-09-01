@@ -1,0 +1,198 @@
+{
+  "workspace": "laravel",
+  "root": "testdata/laravel",
+  "description": "Laravel starter kit with a full vendor/ tree — the realistic large-workspace case",
+  "readyProbe": "def.vendor-base-class",
+  "openFiles": [
+    "app/Http/Controllers/CategoryController.php",
+    "app/Models/Category.php",
+    "app/Services/Checkout.php",
+    "app/Models/User.php"
+  ],
+  "cases": [
+    {
+      "id": "def.vendor-base-class",
+      "feature": "definition",
+      "desc": "jump from `extends Model` into vendor/laravel/framework",
+      "file": "app/Models/Category.php",
+      "anchor": "extends Model",
+      "offset": 10,
+      "expect": { "targetFile": "Illuminate/Database/Eloquent/Model.php", "targetSymbol": "class Model" },
+      "tags": ["vendor", "cross-file"]
+    },
+    {
+      "id": "def.interface-method",
+      "feature": "definition",
+      "desc": "method call through a promoted constructor property typed by an interface",
+      "file": "app/Services/Checkout.php",
+      "anchor": "$this->gateway->charge",
+      "offset": 18,
+      "expect": { "targetFile": "app/Services/PaymentGateway.php", "targetSymbol": "function charge" },
+      "tags": ["cross-file"]
+    },
+    {
+      "id": "def.type-hint",
+      "feature": "definition",
+      "desc": "type hint in a promoted constructor parameter",
+      "file": "app/Services/Checkout.php",
+      "anchor": "private PaymentGateway $gateway",
+      "offset": 10,
+      "expect": { "targetFile": "app/Services/PaymentGateway.php", "targetSymbol": "interface PaymentGateway" }
+    },
+    {
+      "id": "def.eloquent-relation",
+      "feature": "definition",
+      "desc": "property access that resolves to an Eloquent relation method",
+      "file": "app/Http/Controllers/CategoryController.php",
+      "anchor": "$category->products;",
+      "offset": 13,
+      "expect": { "targetFile": "app/Models/Category.php", "targetSymbol": "function products" },
+      "tags": ["laravel", "eloquent"]
+    },
+    {
+      "id": "def.vendor-static-method",
+      "feature": "definition",
+      "desc": "static call into a vendor helper class",
+      "file": "app/Models/User.php",
+      "anchor": "Str::of(",
+      "offset": 5,
+      "expect": { "targetFile": "Illuminate/Support/Str.php", "targetSymbol": "function of" },
+      "tags": ["vendor"]
+    },
+    {
+      "id": "hover.promoted-property",
+      "feature": "hover",
+      "desc": "type of a promoted constructor property",
+      "file": "app/Services/Checkout.php",
+      "anchor": "$this->gateway->charge",
+      "offset": 8,
+      "expect": { "contains": ["PaymentGateway"] }
+    },
+    {
+      "id": "hover.vendor-method",
+      "feature": "hover",
+      "desc": "method on a query builder chain",
+      "file": "app/Http/Controllers/CategoryController.php",
+      "anchor": "->orderBy('name')",
+      "offset": 4,
+      "expect": { "contains": ["orderBy"] },
+      "tags": ["vendor"]
+    },
+    {
+      "id": "hover.query-chain-type",
+      "feature": "hover",
+      "desc": "variable holding Category::query()->where()->orderBy()->get()",
+      "file": "app/Http/Controllers/CategoryController.php",
+      "anchor": "return $queried;",
+      "offset": 10,
+      "expect": { "contains": ["Collection"] },
+      "tags": ["laravel", "eloquent", "inference"]
+    },
+    {
+      "id": "hover.eloquent-magic-static",
+      "feature": "hover",
+      "desc": "Category::find() — forwarded from the model to the query builder",
+      "file": "app/Http/Controllers/CategoryController.php",
+      "anchor": "Category::find(1)",
+      "offset": 12,
+      "expect": { "contains": ["find"] },
+      "tags": ["laravel", "eloquent"]
+    },
+    {
+      "id": "completion.eloquent-instance-member",
+      "feature": "completion",
+      "desc": "members after -> on a variable typed by Category::first()",
+      "file": "app/Http/Controllers/CategoryController.php",
+      "anchor": "$category->products;",
+      "offset": 11,
+      "expect": { "items": ["products"] },
+      "tags": ["laravel", "eloquent", "framework-depth"]
+    },
+    {
+      "id": "completion.instance-member",
+      "feature": "completion",
+      "desc": "members after -> on a variable typed by a plain `new`",
+      "file": "app/Http/Controllers/CategoryController.php",
+      "anchor": "$col->first();",
+      "offset": 6,
+      "expect": { "items": ["first", "map", "filter"] },
+      "tags": ["vendor"]
+    },
+    {
+      "id": "completion.model-static",
+      "feature": "completion",
+      "desc": "real static methods after Model::",
+      "file": "app/Http/Controllers/CategoryController.php",
+      "anchor": "Category::all();",
+      "offset": 10,
+      "expect": { "items": ["query", "all"] },
+      "tags": ["laravel", "eloquent"]
+    },
+    {
+      "id": "completion.eloquent-magic-static",
+      "feature": "completion",
+      "desc": "builder methods forwarded through Model::__callStatic",
+      "file": "app/Http/Controllers/CategoryController.php",
+      "anchor": "Category::first();",
+      "offset": 10,
+      "expect": { "items": ["where"] },
+      "tags": ["laravel", "eloquent", "framework-depth"]
+    },
+    {
+      "id": "completion.config-key",
+      "feature": "completion",
+      "desc": "dot-notation config key inside config()",
+      "file": "app/Http/Controllers/CategoryController.php",
+      "anchor": "config('app.name')",
+      "offset": 12,
+      "comment": "caret sits just after 'app.', so the expected items are the leaf keys of config/app.php",
+      "expect": { "items": ["name", "fallback_locale"] },
+      "tags": ["laravel", "framework-depth"]
+    },
+    {
+      "id": "refs.interface",
+      "feature": "references",
+      "desc": "every reference to an application interface",
+      "file": "app/Services/PaymentGateway.php",
+      "anchor": "interface PaymentGateway",
+      "offset": 15,
+      "expect": {
+        "minCount": 2,
+        "files": ["app/Services/Checkout.php", "app/Services/StripeGateway.php"]
+      }
+    },
+    {
+      "id": "symbols.controller",
+      "feature": "documentSymbol",
+      "desc": "class and methods of a controller",
+      "file": "app/Http/Controllers/CategoryController.php",
+      "expect": { "items": ["CategoryController", "index", "show"] }
+    },
+    {
+      "id": "wsym.app-class",
+      "feature": "workspaceSymbol",
+      "desc": "find an application class by name",
+      "file": "app/Models/Category.php",
+      "query": "CategoryController",
+      "expect": { "items": ["CategoryController"] }
+    },
+    {
+      "id": "wsym.vendor-trait",
+      "feature": "workspaceSymbol",
+      "desc": "find a vendor trait by name",
+      "file": "app/Models/Category.php",
+      "query": "TwoFactorAuthenticatable",
+      "expect": { "items": ["TwoFactorAuthenticatable"] },
+      "tags": ["vendor"]
+    },
+    {
+      "id": "sig.local-method",
+      "feature": "signatureHelp",
+      "desc": "parameter help inside a call on an interface-typed property",
+      "file": "app/Services/Checkout.php",
+      "anchor": "charge($amount)",
+      "offset": 7,
+      "expect": { "contains": ["amount"] }
+    }
+  ]
+}
