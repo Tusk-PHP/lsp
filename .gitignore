@@ -13,3 +13,8 @@ CLAUDE.md
 /tusk-php
 *.wasm
 testdata/corpus/_repos/
+
+# benchmark harness artifacts
+bench/.tools/
+bench/.work/
+bench/results/
