@@ -17,6 +17,40 @@
   A high-performance PHP language server written in Go, with framework-aware Laravel and Symfony intelligence.
 </p>
 
+> [!NOTE]
+> Tusk PHP is in active development. Completion, navigation, refactoring, and native diagnostics are used daily on Laravel and Symfony codebases. Some resolution paths — noted in the [correctness benchmarks](#correctness) below — are still catching up to more mature engines; closing them is ongoing work in the shared [`resolve/`](internal/resolve) type-resolution layer, not a fundamental limitation.
+
+## Benchmarks
+
+Measured with the repository's own [`bench/`](bench/) harness: every server gets the identical LSP requests at the identical caret positions in the identical workspaces, over stdio, with a cold cache and one server running at a time. See [`bench/README.md`](bench/README.md) for the full methodology, including how correctness is graded and why "ready" — not `initialize` — is the only start-up number comparable across servers.
+
+> [!TIP]
+> **Want to verify?** `bash bench/tools/install.sh && go run ./bench/lspbench` fetches the other servers and runs the whole suite, writing `results.json` and `report.md` to `bench/results/<timestamp>/`. Add `-v` to see the request/response for any single case, or `-servers tusk-php -workspaces laravel` to scope a run.
+
+### Startup and memory
+
+Time to `ready` (first correct cross-file answer) and peak RSS, per workspace. Measured on an Apple M3 Max, PHP 8.5.10, cold cache.
+
+| workspace | Tusk PHP | Intelephense | Phpactor | php-lsp (Rust) | PHPantom (Rust) |
+| --- | --- | --- | --- | --- | --- |
+| `diagnostics` (6 files) | 29 ms / 25 MB | 199 ms / 293 MB | 3325 ms / 159 MB | 155 ms / 118 MB | 114 ms / 32 MB |
+| `symfony` (1.1k files) | 285 ms / 54 MB | 695 ms / 362 MB | 3530 ms / 111 MB | 207 ms / 171 MB | 438 ms / 56 MB |
+| `laravel` (9.7k files) | 283 ms / 162 MB | 2226 ms / 686 MB | 4391 ms / 198 MB | 260 ms / 272 MB | 847 ms / 88 MB |
+
+<sub>Format: ready time / peak RSS. Tusk PHP and PHPantom are the two lowest-memory servers across every workspace; php-lsp is occasionally faster to ready on the larger ones, and every Go/Rust server beats the Node (Intelephense) and PHP (Phpactor) runtimes by a wide margin on both counts.</sub>
+
+### Correctness
+
+Cases passed / cases graded, per workspace, across completion, definition, hover, references, signature help, document/workspace symbols, and diagnostics. A case only counts against a server if that server advertises the capability; `err` means it advertised support and then failed to answer before the timeout.
+
+| workspace | Tusk PHP | Intelephense | Phpactor | php-lsp (Rust) | PHPantom (Rust) |
+| --- | --- | --- | --- | --- | --- |
+| `diagnostics` | 4/6 | 6/6 | 5/6 | 6/6 | 6/6 |
+| `laravel` | 11/19 | 12/19 | 14/19 | 7/15 (+4 err) | 16/19 |
+| `symfony` | 7/11 | 11/11 | 11/11 | 6/8 (+3 err) | 9/11 |
+
+<sub>Full per-case breakdowns are written to <code>bench/results/&lt;timestamp&gt;/report.md</code> after a run. Tusk PHP's current gaps cluster around Eloquent/query-builder hover resolution and a handful of completion edge cases — see the note above.</sub>
+
 ## Intelligent Completions
 
 Context-aware suggestions that understand your code. Method chains resolve through return types and `@return` docblocks, so `Category::query()->with('tags')->where()->` shows the right `Builder` methods, not random matches from vendor.
