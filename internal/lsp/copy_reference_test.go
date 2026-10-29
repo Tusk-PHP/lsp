@@ -101,6 +101,62 @@ class User {
 	}
 }
 
+func TestCopyReferenceMemberKinds(t *testing.T) {
+	idx := symbols.NewIndex()
+	uri := "file:///tmp/copy_ref_members.php"
+	src := `<?php
+namespace App\Models;
+
+class User {
+    const MAX_LOGINS = 3;
+    public string $email;
+}
+
+enum Status: string {
+    case Active = 'active';
+}
+`
+	idx.IndexFile(uri, src)
+	a := analyzer.NewAnalyzer(idx, nil)
+
+	cases := []struct {
+		needle string
+		want   []struct{ label, value string }
+	}{
+		{"$email", []struct{ label, value string }{
+			{"FQN::$property", `App\Models\User::$email`},
+			{"Short::$property", "User::$email"},
+			{"FQN", `App\Models\User`},
+			{"Short name", "User"},
+		}},
+		{"MAX_LOGINS", []struct{ label, value string }{
+			{"FQN::CONSTANT", `App\Models\User::MAX_LOGINS`},
+			{"Short::CONSTANT", "User::MAX_LOGINS"},
+			{"FQN", `App\Models\User`},
+			{"Short name", "User"},
+		}},
+		{"Active", []struct{ label, value string }{
+			{"FQN::CONSTANT", `App\Models\Status::Active`},
+			{"Short::CONSTANT", "Status::Active"},
+			{"FQN", `App\Models\Status`},
+			{"Short name", "Status"},
+		}},
+	}
+	for _, c := range cases {
+		line, char := posInSource(src, c.needle)
+		variants := a.CopyReference(uri, src, protocol.Position{Line: line, Character: char + 1})
+		if len(variants) != len(c.want) {
+			t.Errorf("%s: expected %d variants, got %d: %v", c.needle, len(c.want), len(variants), variants)
+			continue
+		}
+		for i, w := range c.want {
+			if variants[i].Label != w.label || variants[i].Value != w.value {
+				t.Errorf("%s: variant[%d] = {%q, %q}, want {%q, %q}", c.needle, i, variants[i].Label, variants[i].Value, w.label, w.value)
+			}
+		}
+	}
+}
+
 func TestCopyReferenceMethodNoReturnType(t *testing.T) {
 	idx := symbols.NewIndex()
 	uri := "file:///tmp/copy_ref_no_ret.php"

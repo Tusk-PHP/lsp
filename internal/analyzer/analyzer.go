@@ -1494,7 +1494,28 @@ func (a *Analyzer) CopyReference(uri, source string, pos protocol.Position) []Re
 		}
 	}
 
-	// Member symbol: build call/signature variants.
+	switch sym.Kind {
+	case symbols.KindProperty:
+		prop := sym.Name
+		if !strings.HasPrefix(prop, "$") {
+			prop = "$" + prop
+		}
+		return []ReferenceVariant{
+			{Label: "FQN::$property", Value: classFQN + "::" + prop},
+			{Label: "Short::$property", Value: shortName + "::" + prop},
+			{Label: "FQN", Value: classFQN},
+			{Label: "Short name", Value: shortName},
+		}
+	case symbols.KindConstant, symbols.KindEnumCase:
+		return []ReferenceVariant{
+			{Label: "FQN::CONSTANT", Value: classFQN + "::" + sym.Name},
+			{Label: "Short::CONSTANT", Value: shortName + "::" + sym.Name},
+			{Label: "FQN", Value: classFQN},
+			{Label: "Short name", Value: shortName},
+		}
+	}
+
+	// Method symbol: build call/signature variants.
 	m := sym.Name
 	params := formatParams(sym)
 	ret := ""
