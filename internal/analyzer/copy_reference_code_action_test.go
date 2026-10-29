@@ -17,6 +17,7 @@ class Widget {
 }
 `
 	a, _ := setupRenameAnalyzer(map[string]string{"file:///app/Widget.php": source})
+	a.SetClientCommands([]string{"tuskPhpLsp.copyReference"})
 
 	// Cursor on the class name "Widget" (line 3, character 6).
 	actions := a.GetCodeActions("file:///app/Widget.php", source, protocol.CodeActionParams{
@@ -64,6 +65,7 @@ class Widget {
 
 `
 	a, _ := setupRenameAnalyzer(map[string]string{"file:///app/Widget.php": source})
+	a.SetClientCommands([]string{"tuskPhpLsp.copyReference"})
 
 	// Cursor on a blank line (line 8) — not a symbol.
 	actions := a.GetCodeActions("file:///app/Widget.php", source, protocol.CodeActionParams{
@@ -93,6 +95,7 @@ class Widget {
 }
 `
 	a, _ := setupRenameAnalyzer(map[string]string{"file:///app/Widget.php": source})
+	a.SetClientCommands([]string{"tuskPhpLsp.copyReference"})
 
 	// Request only "quickfix" — refactor actions must not appear.
 	actions := a.GetCodeActions("file:///app/Widget.php", source, protocol.CodeActionParams{
@@ -107,6 +110,31 @@ class Widget {
 	for _, action := range actions {
 		if action.Title == "Copy reference..." {
 			t.Fatalf("'Copy reference...' must not appear when Only=[quickfix]: %#v", action)
+		}
+	}
+}
+
+func TestGetCodeActionsCopyReferenceRequiresClientCommand(t *testing.T) {
+	source := `<?php
+namespace App;
+
+class Widget {
+}
+`
+	// No SetClientCommands: the client hasn't said it can copy the result.
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///app/Widget.php": source})
+
+	actions := a.GetCodeActions("file:///app/Widget.php", source, protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///app/Widget.php"},
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 3, Character: 6},
+			End:   protocol.Position{Line: 3, Character: 12},
+		},
+		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+	})
+	for _, action := range actions {
+		if action.Title == "Copy reference..." {
+			t.Fatalf("'Copy reference...' must not appear unless the client lists tuskPhpLsp.copyReference in clientCommands: %#v", action)
 		}
 	}
 }
