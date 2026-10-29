@@ -44,8 +44,8 @@ func TestBuildCreateObjectEdit_ClassInSubdir(t *testing.T) {
 	if !strings.HasSuffix(createOp.URI, "/User.php") {
 		t.Errorf("CreateFile.URI = %q, expected suffix /User.php", createOp.URI)
 	}
-	if createOp.Options == nil || !createOp.Options.IgnoreIfExists {
-		t.Errorf("expected CreateFile.Options.IgnoreIfExists = true")
+	if createOp.Options != nil {
+		t.Errorf("expected no CreateFile.Options (create must fail if the file exists), got %#v", createOp.Options)
 	}
 
 	// Second element: TextDocumentEdit with skeleton.
@@ -177,5 +177,22 @@ func TestBuildCreateObjectEdit_NoNamespaceOutsidePSR4(t *testing.T) {
 	}
 	if !strings.Contains(text, "class Foo") {
 		t.Errorf("skeleton missing 'class Foo', got:\n%s", text)
+	}
+}
+
+func TestBuildCreateObjectEdit_ExistingFile(t *testing.T) {
+	// testdata/project/src/Service.php already exists; inserting a skeleton
+	// into it would corrupt the file.
+	edit := buildCreateObjectEdit(testdataSrcDirURI(), "class", "Service", testdataAutoload())
+	if edit != nil {
+		t.Fatalf("expected nil edit for an existing file, got %#v", edit)
+	}
+}
+
+func TestBuildCreateObjectEdit_InvalidNames(t *testing.T) {
+	for _, name := range []string{"../Foo", "Foo/Bar", "my-class", "Foo Bar", "1Foo", "Foo.php"} {
+		if edit := buildCreateObjectEdit(testdataSrcDirURI(), "class", name, testdataAutoload()); edit != nil {
+			t.Errorf("name %q: expected nil edit, got %#v", name, edit)
+		}
 	}
 }
