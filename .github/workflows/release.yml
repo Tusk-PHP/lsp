@@ -79,3 +79,17 @@ jobs:
             dist/tusk-php-darwin-arm64
             dist/tusk-php-windows-amd64.exe
             dist/checksums.txt
+
+  announce:
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    permissions:
+      contents: read
+    uses: Pepebits/release-announce/.github/workflows/announce.yml@v1
+    with:
+      tag: ${{ github.ref_name }}
+      project_name: Tusk PHP
+      notes_source: changelog
+    secrets:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
