@@ -417,6 +417,9 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		Extensions: profile.Extensions,
 	}
 	s.analyzer = analyzer.NewAnalyzer(s.index, s.container)
+	if opts := params.InitializationOptions; opts != nil {
+		s.analyzer.SetClientCommands(opts.ClientCommands)
+	}
 	s.analyzer.SetChainResolver(s.completion.ResolveExpressionType)
 	s.analyzer.SetTypedChainResolver(s.completion.ResolveExpressionTypeTyped)
 	if s.routeIndex != nil {

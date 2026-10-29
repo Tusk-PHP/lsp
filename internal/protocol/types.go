@@ -287,6 +287,10 @@ type InitializationOptions struct {
 	PHPManualOpenOnDefinition    *bool                    `json:"phpManualOpenOnDefinition,omitempty"`
 	Composer                     *ComposerClientOptions        `json:"composer,omitempty"`
 	Introspection                *IntrospectionClientOptions   `json:"introspection,omitempty"`
+	// ClientCommands lists the tuskPhpLsp.* commands the client handles itself
+	// (e.g. by copying the result to the clipboard). Code actions that depend on
+	// that are only offered for commands listed here.
+	ClientCommands []string `json:"clientCommands,omitempty"`
 }
 
 // ComposerClientOptions mirrors config.ComposerConfig but uses pointers so
