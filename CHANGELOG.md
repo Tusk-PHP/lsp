@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The server now stops if its input stream keeps failing, instead of retrying forever and logging each failure. After 100 read errors in a row it exits with an error.
+- The WebAssembly build (`make wasm`) can now run under VS Code's WASI host, where it used to fail every read of its input, and it uses little CPU while idle.
+
 ## [0.10.0] - 2026-10-30
 
 ### Added
