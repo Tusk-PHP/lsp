@@ -77,6 +77,7 @@ type Server struct {
 	builtinPHPSource  string // "composer" | "local" | "fallback"
 
 	clientSupportsShowDocument bool
+	coverageNotifications      bool
 
 	// requestIDCounter generates unique IDs for server-to-client requests.
 	// Accessed via atomic operations.
@@ -272,6 +273,9 @@ func (s *Server) handleMessage(msg *jsonRPCMessage) {
 		s.handleInitialized(msg)
 	case "shutdown":
 		s.shutdown = true
+		if s.coverage != nil {
+			s.coverage.Stop()
+		}
 		s.sendResponse(msg.ID, nil)
 	case "exit":
 		s.exitFunc(0)
@@ -319,6 +323,10 @@ func (s *Server) handleMessage(msg *jsonRPCMessage) {
 		s.handleWorkspaceSymbol(msg)
 	case "workspace/executeCommand":
 		s.handleExecuteCommand(msg)
+	case "tusk/coverageReport":
+		s.handleCoverageReport(msg)
+	case "tusk/fileCoverage":
+		s.handleFileCoverage(msg)
 	default:
 		if msg.ID != nil {
 			s.sendError(msg.ID, -32601, fmt.Sprintf("Method not found: %s", msg.Method))
@@ -394,6 +402,10 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.hover.SetConfig(s.cfg)
 	s.coverage = coverage.NewStore(s.rootPath, s.cfg.CoverageReportPath, s.logger)
 	s.hover.SetCoverage(s.coverage)
+	s.coverageNotifications = params.InitializationOptions != nil && params.InitializationOptions.CoverageNotifications
+	if s.coverageNotifications {
+		s.coverage.OnChange(func() { s.sendNotification("tusk/coverageChanged", nil) })
+	}
 	s.hover.GenericExprResolver = func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
 	}
@@ -472,6 +484,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 				Legend: SemanticTokensLegend,
 				Full:   true,
 			},
+			Experimental: &protocol.ExperimentalCapabilities{TuskCoverage: true},
 		},
 		ServerInfo: protocol.ServerInfo{Name: ServerName, Version: ServerVersion},
 	})
@@ -519,6 +532,9 @@ func (s *Server) handleInitialized(msg *jsonRPCMessage) {
 	})
 	s.goSafe("container.Analyze", s.workspace.Container.Analyze)
 	s.goSafe("coverage.Refresh", s.coverage.Refresh)
+	if s.coverageNotifications {
+		s.goSafe("coverage.Watch", s.coverage.Watch)
+	}
 	if s.routeIndex != nil {
 		s.goSafe("laravelRoutes.ScanWorkspace", func() {
 			_ = s.workspace.ScanRoutes()

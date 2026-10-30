@@ -48,36 +48,60 @@ type Store struct {
 	refreshMu  sync.Mutex
 	refreshing atomic.Bool
 	lastCheck  atomic.Int64
+
+	onChange func()
+
+	// The last report that failed to parse, so it's only retried once it changes.
+	failedPath    string
+	failedModTime time.Time
+
+	stop     chan struct{}
+	stopOnce sync.Once
 }
 
 // NewStore creates an empty store. Nothing is read until Refresh is called.
 func NewStore(rootPath, configuredPath string, logger *log.Logger) *Store {
-	return &Store{rootPath: rootPath, configured: configuredPath, logger: logger}
+	return &Store{rootPath: rootPath, configured: configuredPath, logger: logger, stop: make(chan struct{})}
+}
+
+// OnChange sets a function to call after a different report loads or the report
+// goes away. Set it before the first Refresh.
+func (s *Store) OnChange(fn func()) {
+	s.onChange = fn
 }
 
 // Refresh loads the newest report if it changed since the last load. It reads
 // from disk, so callers on a request path should use RefreshAsync.
 func (s *Store) Refresh() {
+	if s.refresh() && s.onChange != nil {
+		s.onChange()
+	}
+}
+
+// refresh reports whether the loaded report changed.
+func (s *Store) refresh() bool {
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
 	s.lastCheck.Store(time.Now().UnixNano())
 	if s.rootPath == "" {
-		return
+		return false
 	}
 
 	reportPath, modTime := s.findReport()
 	if reportPath == "" {
-		s.current.Store(nil)
-		return
+		return s.current.Swap(nil) != nil
 	}
 	if cur := s.current.Load(); cur != nil && cur.path == reportPath && cur.modTime.Equal(modTime) {
-		return
+		return false
+	}
+	if s.failedPath == reportPath && s.failedModTime.Equal(modTime) {
+		return false
 	}
 
 	f, err := os.Open(reportPath)
 	if err != nil {
 		s.logf("coverage: can't open %s: %v", reportPath, err)
-		return
+		return false
 	}
 	defer f.Close()
 
@@ -86,9 +110,31 @@ func (s *Store) Refresh() {
 		// A test run may still be writing the report; keep what we have and
 		// retry when the file next changes.
 		s.logf("coverage: can't read %s: %v", reportPath, err)
-		return
+		s.failedPath, s.failedModTime = reportPath, modTime
+		return false
 	}
 	s.current.Store(&snapshot{path: reportPath, modTime: modTime, report: report, prefix: s.reportRoot(report)})
+	return true
+}
+
+// Watch refreshes on a timer until Stop is called, for clients that want to hear
+// about a new report without asking for coverage first.
+func (s *Store) Watch() {
+	ticker := time.NewTicker(refreshInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.stop:
+			return
+		case <-ticker.C:
+			s.Refresh()
+		}
+	}
+}
+
+// Stop ends Watch.
+func (s *Store) Stop() {
+	s.stopOnce.Do(func() { close(s.stop) })
 }
 
 // RefreshAsync checks for a newer report in the background, at most once every
@@ -191,6 +237,19 @@ func (s *Store) Relative(f *File) string {
 		return strings.TrimPrefix(reportPath, cur.prefix)
 	}
 	return reportPath
+}
+
+// LocalPath returns where a report's file is on this machine, or "" if it isn't
+// here, such as a file from a container path outside the workspace.
+func (s *Store) LocalPath(f *File) string {
+	p := filepath.FromSlash(s.Relative(f))
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(s.rootPath, p)
+	}
+	if info, err := os.Stat(p); err != nil || info.IsDir() {
+		return ""
+	}
+	return p
 }
 
 // reportRoot works out what report paths have in place of the workspace root.
