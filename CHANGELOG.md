@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-30
+
 ### Added
 
 - **Test coverage in hover cards**: methods and functions show a coverage bar with their lines and CRAP score, such as `🟡 ████████░░ 80% · 12/15 lines · CRAP 5`, from the Clover report your tests last wrote (`--coverage-clover`, or `<clover>` in `phpunit.xml`), and note when the file changed since that report. Nothing runs your tests, and nothing is shown when there's no report or the code isn't in it. Reports written inside Docker or Sail are matched automatically. Set `coverageReportPath` if the report is somewhere the server won't find it.
