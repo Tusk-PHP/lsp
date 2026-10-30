@@ -795,3 +795,92 @@ func labelsOf(hints []protocol.InlayHint) []string {
 func labelsOnLine(hints []protocol.InlayHint) []string {
 	return labelsOf(hints)
 }
+
+func TestVarType_ScalarFromCallShown(t *testing.T) {
+	source := `<?php
+function count_it(): int { return 1; }
+$fromCall = count_it();
+$literal = 42;
+$cast = (int) $fromCall;
+$nothing = null;
+`
+	labels := map[string]bool{}
+	for _, h := range setupProvider(t, "file:///test.php", source).GetInlayHints("file:///test.php", source, allCfg()) {
+		if h.Kind == protocol.InlayHintKindType && h.Position.Line >= 2 {
+			labels[h.Label] = true
+		}
+	}
+	if !labels[": int"] {
+		t.Errorf("want a hint for the call's int, got %v", labels)
+	}
+	if len(labels) != 1 {
+		t.Errorf("want only the call hinted, got %v", labels)
+	}
+}
+
+func TestVarType_ParameterDefaultsNotHinted(t *testing.T) {
+	source := `<?php
+class C {
+    public function f(array $a = [], ?int $b = null) {
+        return function (array $c = []) { return 1; };
+    }
+}
+`
+	for _, h := range setupProvider(t).GetInlayHints("file:///test.php", source, allCfg()) {
+		if h.Kind == protocol.InlayHintKindType {
+			t.Errorf("unexpected hint %q at %+v", h.Label, h.Position)
+		}
+	}
+}
+
+func TestVarType_TraitsClosuresAndChains(t *testing.T) {
+	source := `<?php
+namespace App;
+
+class Other {
+    public function name(): string { return ''; }
+}
+
+trait T {
+    /** @return string|null */
+    protected function maybe() { return null; }
+    public function inTrait() {
+        $traitLocal = $this->maybe();
+        return $traitLocal;
+    }
+}
+
+class K {
+    protected function other(): Other { return new Other; }
+    public function chain() {
+        $chained = $this->other()
+            ->name();
+        return $chained;
+    }
+    public function closures() {
+        return function (Other $typed) {
+            $inClosure = $typed->name();
+            return $inClosure;
+        };
+    }
+}
+`
+	want := map[string]string{"$traitLocal": ": ?string", "$chained": ": string", "$inClosure": ": string"}
+	lines := strings.Split(source, "\n")
+	got := map[string]string{}
+	for _, h := range setupProvider(t, "file:///test.php", source).GetInlayHints("file:///test.php", source, allCfg()) {
+		if h.Kind != protocol.InlayHintKindType {
+			continue
+		}
+		for name := range want {
+			if strings.HasSuffix(lines[h.Position.Line][:h.Position.Character], name) {
+				got[name] = h.Label
+			}
+		}
+	}
+	for name, label := range want {
+		if got[name] != label {
+			t.Errorf("%s: want %q, got %q", name, label, got[name])
+		}
+	}
+}
