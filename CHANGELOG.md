@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Easier-to-read hover cards**: PHP signatures are now syntax highlighted, type names are shortened (`JsonResponse` rather than `Illuminate\Http\JsonResponse`), long signatures put each parameter on its own line, and the description comes after the signature. The code block starts with a `<?php` line, because editors only highlight PHP after an opening tag.
+
 ### Fixed
 
 - Hovering a method's name where it's declared now shows that method, instead of a method with the same name from another class.

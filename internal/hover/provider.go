@@ -430,7 +430,7 @@ func (p *Provider) hoverVariable(lines []string, pos protocol.Position, file *pa
 		if !resolvedType.IsGeneric() && resolvedType.Shape == "" {
 			displayShort = shortName(typeName)
 		}
-		sb.WriteString(fmt.Sprintf("\n```php\n%s %s\n```\n", displayShort, varName))
+		sb.WriteString("\n" + phpFence(shortTypes(displayShort)+" "+varName))
 		p.appendContainerBinding(&sb, typeName)
 		return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: sb.String()}}
 	}
@@ -446,7 +446,7 @@ func (p *Provider) hoverVariable(lines []string, pos protocol.Position, file *pa
 					}
 					var sb strings.Builder
 					sb.WriteString(fmt.Sprintf("**%s**\n", varName))
-					sb.WriteString(fmt.Sprintf("\n```php\n%s %s\n```\n", t, varName))
+					sb.WriteString("\n" + phpFence(shortTypes(t)+" "+varName))
 					p.appendContainerBinding(&sb, t)
 					return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: sb.String()}}
 				}
@@ -462,16 +462,14 @@ func (p *Provider) formatHover(sym *symbols.Symbol) string {
 	// === 1. Header: bold FQN ===
 	sb.WriteString("**" + sym.FQN + "**\n")
 
-	// === 2. Summary (from docblock, shown right after header) ===
+	// === 2. Code block: PHP declaration ===
+	sb.WriteString("\n" + phpFence(p.formatHoverDeclaration(sym)))
+
+	// === 3. Summary (from docblock) ===
 	doc := p.getEffectiveDocBlock(sym)
 	if doc != nil && doc.Summary != "" {
 		sb.WriteString("\n" + doc.Summary + "\n")
 	}
-
-	// === 3. Code block: PHP declaration ===
-	sb.WriteString("\n```php\n")
-	sb.WriteString(p.formatHoverDeclaration(sym))
-	sb.WriteString("\n```\n")
 
 	// === 4. Context line (parent class, override info) ===
 	sb.WriteString(p.formatHoverContext(sym))
@@ -544,8 +542,7 @@ func (p *Provider) appendMethodOrigin(sb *strings.Builder, sym *symbols.Symbol) 
 			}
 		}
 	}
-	// Default: show defined in
-	sb.WriteString(fmt.Sprintf("\nDefined in `%s`\n", sym.ParentFQN))
+	// No origin to report: the header already names the declaring class.
 }
 
 // getEffectiveDocBlock returns the docblock for a symbol, falling back to parent/interface docs.

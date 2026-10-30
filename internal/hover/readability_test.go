@@ -77,3 +77,32 @@ func TestHoverBareWordIgnoresOtherClassMembers(t *testing.T) {
 		t.Fatalf("expected no hover for a bare word, got:\n%s", h.Contents.Value)
 	}
 }
+
+func TestHoverCodeBlockCanBeHighlighted(t *testing.T) {
+	val := hoverAt(t, readabilityProvider(), readabilityController, "function show", "show")
+	if !strings.Contains(val, "```php\n<?php\npublic function show(") {
+		t.Fatalf("expected a PHP opening tag so editors colour the block, got:\n%s", val)
+	}
+}
+
+func TestHoverSignatureUsesShortTypes(t *testing.T) {
+	val := hoverAt(t, readabilityProvider(), readabilityController, "function show", "show")
+	if !strings.Contains(val, "public function show(Category | null $category): JsonResponse") {
+		t.Fatalf("expected short type names, got:\n%s", val)
+	}
+}
+
+func TestHoverLongSignatureWraps(t *testing.T) {
+	val := hoverAt(t, readabilityProvider(), readabilityController, "function index", "index")
+	want := "public function index(\n    IndexCategoriesRequest $request,\n    JsonApiResponse $response\n): mixed"
+	if !strings.Contains(val, want) {
+		t.Fatalf("expected one parameter per line, got:\n%s", val)
+	}
+}
+
+func TestHoverSummaryFollowsSignature(t *testing.T) {
+	val := hoverAt(t, readabilityProvider(), readabilityController, "function index", "index")
+	if strings.Index(val, "```php") > strings.Index(val, "Display a listing") {
+		t.Fatalf("expected the signature before the summary, got:\n%s", val)
+	}
+}
