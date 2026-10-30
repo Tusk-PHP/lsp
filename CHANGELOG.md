@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The server no longer freezes on a `match` expression with a stray `)` or `]` in an arm, as can happen while typing one.
 - `workspace/executeCommand` capability now lists all three handled commands (`tuskPhpLsp.namespaceForPath`, `tuskPhpLsp.copyNamespace`, `tuskPhpLsp.moveToNamespace`); previously only the first was advertised.
 - `laravel_*` MCP tools are now gated on Laravel framework detection and no longer appear in non-Laravel workspaces.
 - Variadic parameters (`...$args`) are now correctly detected via the triple-dot token sequence.
