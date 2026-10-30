@@ -3,6 +3,7 @@ package parser
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -246,6 +247,38 @@ $v = match ($x) {
 	}
 	if !hasDefault {
 		t.Error("expected default arm to be recovered after garbage arm")
+	}
+}
+
+// TestMatchStrayCloseParenInArm verifies that a stray ')' or ']' in an arm
+// condition is recovered from instead of looping forever (found by fuzzing).
+func TestMatchStrayCloseParenInArm(t *testing.T) {
+	t.Helper()
+	src := `<?php
+$v = match () {$value) => 'null',
+    is_int($value) => 'integer',
+    $x] => 'array',
+    default => 'other',
+};
+`
+	done := make(chan *ParseResult, 1)
+	go func() { done <- New().Parse(src) }()
+	select {
+	case r := <-done:
+		if len(r.Matches) == 0 {
+			t.Fatal("expected at least 1 match expression, got 0")
+		}
+		hasDefault := false
+		for _, arm := range r.Matches[0].Arms {
+			if arm.IsDefault {
+				hasDefault = true
+			}
+		}
+		if !hasDefault {
+			t.Error("expected default arm to be recovered after the stray ')'")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("parser hung on a stray ')' in a match arm")
 	}
 }
 

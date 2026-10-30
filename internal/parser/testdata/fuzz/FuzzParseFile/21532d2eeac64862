@@ -1,0 +1,2 @@
+go test fuzz v1
+string("''''''''''''match(){$value)   => 'null',\n        is_bool($value)   => 'boolean',\n        is_int($value)    => 'integer',\n        is_float($value)  => 'float',\n        is_string($value) => 'string',\n        is_array($value)  => 'array',\n        default       \n\n/ =>")

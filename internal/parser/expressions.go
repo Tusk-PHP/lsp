@@ -665,6 +665,9 @@ func (s *exprScanner) parseMatchArm() (MatchArm, bool) {
 		if s.peek().Kind == TokenDoubleArrow {
 			break
 		}
+		// Stray ')' or ']' stopped the condition: let the caller recover,
+		// otherwise this loop never advances.
+		return arm, false
 	}
 
 	// Consume '=>'
