@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Hovering a method's name where it's declared now shows that method, instead of a method with the same name from another class.
+
 ## [0.9.0] - 2026-10-30
 
 ### Added

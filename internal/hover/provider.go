@@ -220,7 +220,14 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 	if idx := strings.LastIndex(word, "\\"); idx >= 0 {
 		lookupName = word[idx+1:]
 	}
-	syms := p.index.LookupByName(lookupName)
+	// A bare word can't reach another class's members, so a method declaration
+	// here must never show a same-named method from elsewhere.
+	var syms []*symbols.Symbol
+	for _, s := range p.index.LookupByName(lookupName) {
+		if s.ParentFQN == "" || s.ParentFQN == ctx.EnclosingFQN {
+			syms = append(syms, s)
+		}
+	}
 	if len(syms) == 0 {
 		return nil
 	}
