@@ -93,7 +93,7 @@ func main() {
 	}
 	logger.Printf("Starting tusk-php %s", version)
 	lsp.ServerVersion = version
-	server := lsp.NewServer(os.Stdin, os.Stdout, logger)
+	server := lsp.NewServer(serverStdin(), os.Stdout, logger)
 	server.SetStrict(strict)
 	if err := server.Run(); err != nil {
 		logger.Fatalf("Server error: %v", err)
