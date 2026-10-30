@@ -112,17 +112,28 @@ func (s *Server) SetStrict(strict bool) {
 	s.strict = strict
 }
 
+// maxConsecutiveReadErrors is how many reads in a row can fail before Run stops.
+const maxConsecutiveReadErrors = 100
+
 func (s *Server) Run() error {
 	s.logger.Println("PHP LSP server starting...")
+	readErrors := 0
 	for {
 		msg, err := s.readMessage()
 		if err != nil {
 			if err == io.EOF {
 				return nil
 			}
+			// A malformed message is worth skipping, but a stream that keeps failing
+			// would otherwise spin here and log without end.
+			readErrors++
+			if readErrors >= maxConsecutiveReadErrors {
+				return fmt.Errorf("giving up after %d read errors in a row: %w", readErrors, err)
+			}
 			s.logger.Printf("Read error: %v", err)
 			continue
 		}
+		readErrors = 0
 		func() {
 			defer s.recoverPanic("handleMessage")
 			s.handleMessage(msg)
