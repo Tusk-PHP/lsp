@@ -433,32 +433,17 @@ func (p *Provider) hoverVariable(lines []string, pos protocol.Position, file *pa
 				}
 			}
 		}
-		displayShort := typeDisplay
-		if !resolvedType.IsGeneric() && resolvedType.Shape == "" {
-			displayShort = shortName(typeName)
-		}
-		sb.WriteString("\n" + phpFence(shortTypes(displayShort)+" "+varName))
+		sb.WriteString("\n" + phpFence(shortTypes(typeDisplay)+" "+varName))
 		p.appendContainerBinding(&sb, typeName)
 		return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: sb.String()}}
 	}
 
-	// Fallback: search all method params in file
-	for _, cls := range file.Classes {
-		for _, m := range cls.Methods {
-			for _, param := range m.Params {
-				if param.Name == varName {
-					t := param.Type.Name
-					if t == "" {
-						t = "mixed"
-					}
-					var sb strings.Builder
-					sb.WriteString(fmt.Sprintf("**%s**\n", varName))
-					sb.WriteString("\n" + phpFence(shortTypes(t)+" "+varName))
-					p.appendContainerBinding(&sb, t)
-					return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: sb.String()}}
-				}
-			}
-		}
+	// A variable that exists but whose type can't be worked out.
+	if p.resolver.IsLocalVariable(varName, lines, pos) {
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("**%s**\n", varName))
+		sb.WriteString("\n" + phpFence("mixed "+varName))
+		return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: sb.String()}}
 	}
 	return nil
 }

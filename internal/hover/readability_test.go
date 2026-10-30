@@ -106,3 +106,108 @@ func TestHoverSummaryFollowsSignature(t *testing.T) {
 		t.Fatalf("expected the signature before the summary, got:\n%s", val)
 	}
 }
+
+func TestHoverVariableTypes(t *testing.T) {
+	source := `<?php
+namespace App;
+
+class Other {
+    public function name(): string { return ''; }
+}
+
+trait T {
+    /** @return string|null */
+    protected function maybe() { return null; }
+    public function inTrait($untyped) {
+        $traitLocal = $this->maybe();
+        return [$traitLocal, $this, $untyped];
+    }
+}
+
+class K {
+    protected string $shadowed;
+    protected function other(): Other { return new Other; }
+    public function previous() {
+        $leaked = new Other;
+        return $leaked;
+    }
+    public function next() {
+        echo $leaked;
+    }
+    public function chain() {
+        $chained = $this->other()
+            ->name();
+        $cast = (int) $chained;
+        $shadowed = $cast + 1;
+        return [$chained, $cast, $shadowed];
+    }
+    public function closures(Other $param) {
+        /**
+         * @param  array<string>  $documented
+         */
+        return function (Other $typed, $untypedInClosure, null|int|string $union = null, ?int $nullable = null, array $documented = []) use ($param) {
+            $fromParam = $typed->name();
+            $inner = fn (Other $arrow) => [$arrow, $param, $fromParam];
+            return [$typed, $untypedInClosure, $union, $nullable, $documented, $inner];
+        };
+    }
+    public function noCapture(Other $outer) {
+        return function () {
+            return $outer;
+        };
+    }
+}
+`
+	index := symbols.NewIndex()
+	index.IndexFile("file:///Foo.php", source)
+	provider := NewProvider(index, nil, "laravel")
+
+	lines := strings.Split(source, "\n")
+	hoverAt := func(lineContains, variable string) string {
+		t.Helper()
+		for i, line := range lines {
+			if !strings.Contains(line, lineContains) {
+				continue
+			}
+			col := strings.Index(line, variable)
+			if col < 0 {
+				t.Fatalf("%s not on line %q", variable, line)
+			}
+			hover := provider.GetHover("file:///Foo.php", source, protocol.Position{Line: i, Character: col + 1})
+			if hover == nil {
+				return ""
+			}
+			return hover.Contents.Value
+		}
+		t.Fatalf("no line contains %q", lineContains)
+		return ""
+	}
+
+	cases := []struct{ line, variable, want string }{
+		{"return [$traitLocal", "$untyped", "mixed $untyped"},
+		{"return [$traitLocal", "$this", "T $this"},
+		{"$cast = (int)", "$cast", "int $cast"},
+		{"return function (Other $typed", "$typed", "Other $typed"},
+		{"return function (Other $typed", "$untypedInClosure", "mixed $untypedInClosure"},
+		{"return function (Other $typed", "$union", "null|int|string $union"},
+		{"return function (Other $typed", "$nullable", "?int $nullable"},
+		{"return function (Other $typed", "$documented", "array<string> $documented"},
+		{"$inner = fn", "$arrow", "Other $arrow"},
+		{"$inner = fn", "$param", "Other $param"},
+		{"$shadowed = $cast", "$shadowed", "mixed $shadowed"},
+	}
+	for _, c := range cases {
+		if got := hoverAt(c.line, c.variable); !strings.Contains(got, c.want) {
+			t.Errorf("%s on %q: want %q in %q", c.variable, c.line, c.want, got)
+		}
+	}
+
+	for _, c := range []struct{ line, variable string }{
+		{"echo $leaked", "$leaked"},
+		{"return $outer", "$outer"},
+	} {
+		if got := hoverAt(c.line, c.variable); got != "" {
+			t.Errorf("%s on %q: want no hover, got %q", c.variable, c.line, got)
+		}
+	}
+}

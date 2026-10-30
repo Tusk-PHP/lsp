@@ -7,6 +7,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
+	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -82,6 +83,15 @@ func (p *Provider) collectVarTypeHints(
 	tokens := result.Tokens
 	var hints []protocol.InlayHint
 
+	// Parameters with default values look like assignments, but their types are
+	// already written next to them.
+	params := map[protocol.Position]bool{}
+	for _, b := range scope.Collect(source).Bindings {
+		if b.Kind == scope.BindingParameter {
+			params[b.Decl.Start] = true
+		}
+	}
+
 	// parenDepth tracks whether we are inside (...) that opened after the most
 	// recent statement boundary (semicolon or open-brace).  When parenDepth > 0
 	// the assignment is inside a condition / call argument and we skip it for
@@ -95,7 +105,7 @@ func (p *Provider) collectVarTypeHints(
 
 	for i := 0; i < len(tokens)-2; i++ {
 		tok := tokens[i]
-		if tok.Kind != parser.TokenVariable {
+		if tok.Kind != parser.TokenVariable || params[protocol.Position{Line: tok.Line, Character: tok.Column}] {
 			continue
 		}
 
@@ -143,7 +153,8 @@ func (p *Provider) collectVarTypeHints(
 		if typStr == "" || typStr == "mixed" {
 			continue
 		}
-		if isScalarType(typStr) {
+		// A literal or cast already says what its type is, but a call doesn't.
+		if (isScalarType(typStr) || typStr == "null") && isObviousValue(tokens, j+1) {
 			continue
 		}
 
@@ -157,6 +168,25 @@ func (p *Provider) collectVarTypeHints(
 		})
 	}
 	return hints
+}
+
+// isObviousValue reports whether the expression at i starts with a literal or a
+// cast, whose type needs no hint.
+func isObviousValue(tokens []parser.Token, i int) bool {
+	i = skipNonSig(tokens, i)
+	if i >= len(tokens) {
+		return false
+	}
+	switch tokens[i].Kind {
+	case parser.TokenStringLiteral, parser.TokenString, parser.TokenNumber, parser.TokenOpenParen:
+		return true
+	case parser.TokenIdentifier:
+		switch strings.ToLower(tokens[i].Value) {
+		case "true", "false", "null":
+			return true
+		}
+	}
+	return false
 }
 
 // skipBackNonSig scans backwards from i skipping whitespace/comments and

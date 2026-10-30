@@ -6,6 +6,7 @@ package resolve
 
 import (
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/phparray"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
@@ -44,6 +46,11 @@ type Resolver struct {
 	// without unrelated concurrent requests sharing the same depth budget.
 	stateMu sync.Mutex
 	states  map[uint64]*resolutionState
+
+	// The last source's scopes, since one request asks about many variables.
+	scopeMu     sync.Mutex
+	scopeSource string
+	scopeDoc    *scope.Document
 }
 
 // NewResolver creates a resolver with the given symbol index.
@@ -134,19 +141,48 @@ func (r *Resolver) ResolveClassName(name string, file *parser.FileNode) string {
 	return name
 }
 
-// FindEnclosingClass returns the FQN of the class that contains the given position.
+// classLike is the part of a class, trait, interface or enum that positions are
+// matched against.
+type classLike struct {
+	fqn       string
+	startLine int
+	methods   []parser.MethodNode
+}
+
+// classLikes returns the file's class-likes, latest declared first.
+func classLikes(file *parser.FileNode) []classLike {
+	fqn := func(fullName, name string) string {
+		if fullName != "" {
+			return fullName
+		}
+		return BuildFQN(file.Namespace, name)
+	}
+	var all []classLike
+	for _, c := range file.Classes {
+		all = append(all, classLike{fqn(c.FullName, c.Name), c.StartLine, c.Methods})
+	}
+	for _, c := range file.Traits {
+		all = append(all, classLike{fqn(c.FullName, c.Name), c.StartLine, c.Methods})
+	}
+	for _, c := range file.Interfaces {
+		all = append(all, classLike{fqn(c.FullName, c.Name), c.StartLine, c.Methods})
+	}
+	for _, c := range file.Enums {
+		all = append(all, classLike{fqn(c.FullName, c.Name), c.StartLine, c.Methods})
+	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].startLine > all[j].startLine })
+	return all
+}
+
+// FindEnclosingClass returns the FQN of the class, trait, interface or enum that
+// contains the given position.
 func FindEnclosingClass(file *parser.FileNode, pos protocol.Position) string {
 	if file == nil {
 		return ""
 	}
-	for i := len(file.Classes) - 1; i >= 0; i-- {
-		cls := file.Classes[i]
-		if pos.Line >= cls.StartLine {
-			fqn := cls.FullName
-			if fqn == "" {
-				fqn = BuildFQN(file.Namespace, cls.Name)
-			}
-			return fqn
+	for _, c := range classLikes(file) {
+		if pos.Line >= c.startLine {
+			return c.fqn
 		}
 	}
 	return ""
@@ -157,14 +193,13 @@ func FindEnclosingMethod(file *parser.FileNode, pos protocol.Position) *parser.M
 	if file == nil {
 		return nil
 	}
-	for ci := len(file.Classes) - 1; ci >= 0; ci-- {
-		cls := file.Classes[ci]
-		if pos.Line < cls.StartLine {
+	for _, c := range classLikes(file) {
+		if pos.Line < c.startLine {
 			continue
 		}
 		var best *parser.MethodNode
-		for mi := range cls.Methods {
-			m := &cls.Methods[mi]
+		for mi := range c.methods {
+			m := &c.methods[mi]
 			if pos.Line >= m.StartLine {
 				if best == nil || m.StartLine > best.StartLine {
 					best = m
@@ -198,6 +233,7 @@ func (r *Resolver) MemberTypeResolved(member *symbols.Symbol, file *parser.FileN
 	// 1. Check if the member's return type has generic syntax or needs
 	//    late static binding resolution.
 	rawType := r.rawMemberReturnType(member)
+	returnsNull := false
 	if rawType != "" && rawType != "void" && rawType != "mixed" {
 		staticFQN := callerFQN
 		if staticFQN == "" {
@@ -218,6 +254,7 @@ func (r *Resolver) MemberTypeResolved(member *symbols.Symbol, file *parser.FileN
 			}
 			resolvedRaw = PickBestUnionPart(resolvedRaw)
 		}
+		returnsNull = nullable
 
 		if resolvedRaw == "self" || resolvedRaw == "static" || resolvedRaw == "$this" {
 			return ResolvedType{FQN: staticFQN, Params: typeContext, Nullable: nullable}
@@ -267,7 +304,7 @@ func (r *Resolver) MemberTypeResolved(member *symbols.Symbol, file *parser.FileN
 	if fqn == "" {
 		return ResolvedType{}
 	}
-	return ResolvedType{FQN: fqn}
+	return ResolvedType{FQN: fqn, Nullable: returnsNull}
 }
 
 // pickBestUnionPart selects the most informative part from a union type string.
@@ -710,7 +747,7 @@ func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) str
 // Used by the typed chain resolver so that $categories = Category::query()->get()
 // results in $categories having type Collection<int, Category>.
 func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
-	exit, ok := r.enterResolution("typed|" + varName + "|" + strconv.Itoa(pos.Line))
+	exit, ok := r.enterResolution("typed|" + varName + "|" + strconv.Itoa(pos.Line) + ":" + strconv.Itoa(pos.Character))
 	if !ok {
 		return ResolvedType{}
 	}
@@ -725,17 +762,27 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 		return ResolvedType{FQN: FindEnclosingClass(file, pos)}
 	}
 
-	// Check parameter types
-	enclosingMethod := FindEnclosingMethod(file, pos)
-	if enclosingMethod != nil {
-		if rt := r.resolveMethodParamTypeTyped(enclosingMethod, varName, file); !rt.IsEmpty() {
-			return rt
-		}
+	vs := r.variableScopeAt(varName, lines, pos)
+	if vs.param != nil {
+		return r.closureParamType(vs.param, lines, file)
 	}
-	for _, fn := range file.Functions {
-		if pos.Line >= fn.StartLine {
-			if rt := r.resolveFunctionParamTypeTyped(&fn, varName, file); !rt.IsEmpty() {
+	if vs.capturedAt != nil {
+		return r.ResolveVariableTypeTyped(varName, lines, *vs.capturedAt, file)
+	}
+
+	// Check parameter types
+	if !vs.inClosure {
+		enclosingMethod := FindEnclosingMethod(file, pos)
+		if enclosingMethod != nil {
+			if rt := r.resolveMethodParamTypeTyped(enclosingMethod, varName, file); !rt.IsEmpty() {
 				return rt
+			}
+		}
+		for _, fn := range file.Functions {
+			if pos.Line >= fn.StartLine {
+				if rt := r.resolveFunctionParamTypeTyped(&fn, varName, file); !rt.IsEmpty() {
+					return rt
+				}
 			}
 		}
 	}
@@ -744,24 +791,19 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	varPrefix := "$" + bare
 
 	// Check foreach loop value bindings: foreach ($iterable as $v) or foreach ($iterable as $k => $v)
-	if rt := r.resolveForeachValueType(varPrefix, lines, pos, file); !rt.IsEmpty() {
+	if rt := r.resolveForeachValueType(varPrefix, lines, pos, file, vs.firstLine); !rt.IsEmpty() {
 		return rt
 	}
 
 	// Look for assignments with chain expressions
-	for i := pos.Line; i >= 0 && i >= pos.Line-200; i-- {
+	for i := pos.Line; i >= vs.firstLine && i >= pos.Line-200; i-- {
 		if i >= len(lines) {
 			continue
 		}
-		trimmed := strings.TrimSpace(lines[i])
-		if !strings.HasPrefix(trimmed, varPrefix) {
+		rhs, firstLine, isAssignment := assignmentValue(lines, i, varPrefix)
+		if !isAssignment {
 			continue
 		}
-		rest := strings.TrimSpace(trimmed[len(varPrefix):])
-		if !strings.HasPrefix(rest, "=") {
-			continue
-		}
-		rhs := strings.TrimSpace(rest[1:])
 		rhs = strings.TrimSuffix(rhs, ";")
 		rhs = strings.TrimSpace(rhs)
 
@@ -837,10 +879,16 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 			}
 		}
 
-		// Use typed chain resolver if available
+		// Use typed chain resolver if available. If a chain over several lines can't
+		// be followed to its end, what the first line gives is the best guess.
 		if r.TypedChainResolver != nil && (strings.Contains(rhs, "->") || strings.Contains(rhs, "::")) {
 			if rt := r.TypedChainResolver(rhs, strings.Join(lines, "\n"), pos, file); !rt.IsEmpty() {
 				return rt
+			}
+			if first := strings.TrimSuffix(firstLine, ";"); first != rhs {
+				if rt := r.TypedChainResolver(first, strings.Join(lines, "\n"), pos, file); !rt.IsEmpty() {
+					return rt
+				}
 			}
 		}
 
@@ -862,9 +910,9 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 // resolveForeachValueType looks backward for a foreach loop that binds varPrefix
 // as its value variable and returns the element type of the iterable.
 // Handles both "foreach ($x as $v)" and "foreach ($x as $k => $v)".
-func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos protocol.Position, file *parser.FileNode, firstLine int) ResolvedType {
 	source := strings.Join(lines, "\n")
-	for i := pos.Line; i >= 0 && i >= pos.Line-200; i-- {
+	for i := pos.Line; i >= firstLine && i >= pos.Line-200; i-- {
 		if i >= len(lines) {
 			continue
 		}
@@ -982,7 +1030,7 @@ func arrayElementType(rt ResolvedType) ResolvedType {
 // method/function parameters, class properties, $var = new ClassName(...),
 // @var annotations, and literal type inference.
 func (r *Resolver) ResolveVariableType(varName string, lines []string, pos protocol.Position, file *parser.FileNode) string {
-	exit, ok := r.enterResolution("plain|" + varName + "|" + strconv.Itoa(pos.Line))
+	exit, ok := r.enterResolution("plain|" + varName + "|" + strconv.Itoa(pos.Line) + ":" + strconv.Itoa(pos.Character))
 	if !ok {
 		return ""
 	}
@@ -997,27 +1045,39 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 		return FindEnclosingClass(file, pos)
 	}
 
-	// 1. Check enclosing method/function parameter type hints
-	enclosingMethod := FindEnclosingMethod(file, pos)
-	if enclosingMethod != nil {
-		if typ := r.resolveMethodParamType(enclosingMethod, varName, file); typ != "" {
-			return typ
-		}
+	vs := r.variableScopeAt(varName, lines, pos)
+	if vs.param != nil {
+		return r.closureParamType(vs.param, lines, file).String()
 	}
-	// Also check standalone function parameters
-	for _, fn := range file.Functions {
-		if pos.Line >= fn.StartLine {
-			if typ := r.resolveFunctionParamType(&fn, varName, file); typ != "" {
+	if vs.capturedAt != nil {
+		return r.ResolveVariableType(varName, lines, *vs.capturedAt, file)
+	}
+
+	// 1. Check enclosing method/function parameter type hints
+	if !vs.inClosure {
+		enclosingMethod := FindEnclosingMethod(file, pos)
+		if enclosingMethod != nil {
+			if typ := r.resolveMethodParamType(enclosingMethod, varName, file); typ != "" {
 				return typ
+			}
+		}
+		// Also check standalone function parameters
+		for _, fn := range file.Functions {
+			if pos.Line >= fn.StartLine {
+				if typ := r.resolveFunctionParamType(&fn, varName, file); typ != "" {
+					return typ
+				}
 			}
 		}
 	}
 
-	// 2. Check class properties
-	for _, cls := range file.Classes {
-		for _, prop := range cls.Properties {
-			if "$"+prop.Name == varName && prop.Type.Name != "" {
-				return r.ResolveClassName(prop.Type.Name, file)
+	// 2. Check class properties, unless a local variable has this name
+	if !vs.isLocal && !vs.inClosure {
+		for _, cls := range file.Classes {
+			for _, prop := range cls.Properties {
+				if "$"+prop.Name == varName && prop.Type.Name != "" {
+					return r.ResolveClassName(prop.Type.Name, file)
+				}
 			}
 		}
 	}
@@ -1026,19 +1086,14 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 	varPrefix := "$" + bare
 
 	// 3. Look for $var = new ClassName(...) and literal assignments
-	for i := pos.Line; i >= 0 && i >= pos.Line-200; i-- {
+	for i := pos.Line; i >= vs.firstLine && i >= pos.Line-200; i-- {
 		if i >= len(lines) {
 			continue
 		}
-		trimmed := strings.TrimSpace(lines[i])
-		if !strings.HasPrefix(trimmed, varPrefix) {
+		rhs, _, isAssignment := assignmentValue(lines, i, varPrefix)
+		if !isAssignment {
 			continue
 		}
-		rest := strings.TrimSpace(trimmed[len(varPrefix):])
-		if !strings.HasPrefix(rest, "=") {
-			continue
-		}
-		rhs := strings.TrimSpace(rest[1:])
 		// $var = new ClassName(...)
 		if strings.HasPrefix(rhs, "new ") {
 			className := strings.TrimSpace(rhs[4:])
@@ -1107,6 +1162,9 @@ func InferLiteralType(expr string) string {
 	if expr[0] == '\'' || expr[0] == '"' {
 		return "string"
 	}
+	if t := castType(expr); t != "" {
+		return t
+	}
 	lower := strings.ToLower(expr)
 	if lower == "true" || lower == "false" {
 		return "bool"
@@ -1122,6 +1180,32 @@ func InferLiteralType(expr string) string {
 			return "float"
 		}
 		return "int"
+	}
+	return ""
+}
+
+// castType returns the type an expression like `(int) $x` is cast to.
+func castType(expr string) string {
+	if expr[0] != '(' {
+		return ""
+	}
+	end := strings.IndexByte(expr, ')')
+	if end < 0 {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(expr[1:end])) {
+	case "int", "integer":
+		return "int"
+	case "float", "double":
+		return "float"
+	case "string":
+		return "string"
+	case "bool", "boolean":
+		return "bool"
+	case "array":
+		return "array"
+	case "object":
+		return "object"
 	}
 	return ""
 }

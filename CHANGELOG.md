@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `undefined-variable` no longer flags variables that a call may write to, such as `$matches` in `preg_match()`. Functions are checked against their signatures where those are known. Method, constructor and unresolved function calls, and builtins without a full signature, get the benefit of the doubt, so an undefined variable passed straight to one of those isn't reported.
 - `unused-variable` no longer flags parameters with default values, class properties, `self::$name` writes, or variables only read in a double-quoted string (`"{$name}"`), used as an array key, compared, or captured by `use (...)` after an arrow function.
 - Renaming a local variable now also updates its reassignments and its uses inside double-quoted strings.
+- **Variable types in hover and inlay hints** now work in more places: closure and arrow function parameters and locals (using `@param` tags in a docblock above the closure), code in traits and enums, casts such as `(int) $x`, and method chains over several lines, which used to show the type of the first line. A variable whose type can't be worked out now hovers as `mixed` instead of showing nothing.
+- Variable types no longer come from a same-named variable in the method above, a parameter of the enclosing method when inside a closure, or a same-named property. `$this` inside a trait no longer resolves to the class declared before it.
+- Hover keeps a variable's whole type, such as `?string` rather than `string`, including when a method's return type allows `null`.
+- Inlay hints now show scalar types when the value comes from a call (`$n = count($a)`), since only literals and casts make them obvious, and no longer appear on parameters with default values.
 
 ## [0.9.0] - 2026-10-30
 

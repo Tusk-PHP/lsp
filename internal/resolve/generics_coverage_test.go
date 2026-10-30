@@ -369,3 +369,52 @@ class Category {}
 		t.Fatalf("plain type got %q", got)
 	}
 }
+
+func TestDeclaredParamType(t *testing.T) {
+	cases := map[string]string{
+		"return function (":          "",
+		"function (int ":             "int",
+		"function ($a, null|string ": "null|string",
+		"    ?Foo &":                 "?Foo",
+		"function (\\App\\Foo ...":   "\\App\\Foo",
+		"function (A&B ":             "A&B",
+		"function ($a, ":             "",
+	}
+	for before, want := range cases {
+		if got := declaredParamType(before); got != want {
+			t.Errorf("declaredParamType(%q) = %q, want %q", before, got, want)
+		}
+	}
+}
+
+func TestAssignmentValue(t *testing.T) {
+	lines := []string{
+		"$a = 1;",
+		"$a ??= 2;",
+		"$a == 3;",
+		"$a === 3;",
+		"$a => 3,",
+		"$ab = 4;",
+		"$a = $b->c()",
+		"    ->d()",
+		"    ?->e();",
+		"$a = f(",
+		"    $g,",
+		")->h();",
+		"$a = i(function () {",
+		"    return 1;",
+		"});",
+		"$a = $b",
+		"    ?? 1;",
+	}
+	want := map[int]string{
+		0: "1;", 1: "2;", 6: "$b->c()->d()?->e();", 9: "f($g,)->h();", 12: "i(function () {", 15: "$b",
+	}
+	for i := range lines {
+		got, _, ok := assignmentValue(lines, i, "$a")
+		w, wantOK := want[i]
+		if ok != wantOK || got != w {
+			t.Errorf("line %d: got %q, %v; want %q, %v", i, got, ok, w, wantOK)
+		}
+	}
+}
