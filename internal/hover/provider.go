@@ -6,6 +6,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/container"
+	"github.com/Tusk-PHP/lsp/internal/coverage"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/phparray"
@@ -23,6 +24,7 @@ type Provider struct {
 	framework     string
 	arrayResolver *models.FrameworkArrayResolver
 	cfg           *config.Config
+	coverage      *coverage.Store
 	// GenericExprResolver resolves the type of a full expression preserving generics.
 	// E.g., "Category::query()->get()" → Collection<int, Category>.
 	// Set by the LSP server after initialization by wiring to the completion provider.
@@ -34,6 +36,11 @@ func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framewor
 	p.resolver.ChainResolver = p.resolveExpressionType
 	p.resolver.TypedChainResolver = p.resolveExpressionTypeTyped
 	return p
+}
+
+// SetCoverage wires the workspace's test coverage reports into hover cards.
+func (p *Provider) SetCoverage(store *coverage.Store) {
+	p.coverage = store
 }
 
 // SetTypedChainResolver wires the generic-aware chain resolver for variable
@@ -477,13 +484,16 @@ func (p *Provider) formatHover(sym *symbols.Symbol) string {
 	// === 5. Extended docblock details ===
 	sb.WriteString(p.formatDocBlockDetails(doc))
 
-	// === 6. Container binding ===
+	// === 6. Test coverage ===
+	sb.WriteString(p.formatCoverage(sym))
+
+	// === 7. Container binding ===
 	switch sym.Kind {
 	case symbols.KindInterface, symbols.KindClass:
 		p.appendContainerBinding(&sb, sym.FQN)
 	}
 
-	// === 7. PHP Manual link ===
+	// === 8. PHP Manual link ===
 	// Owner is the *declaring* class — that's how php.net documents methods,
 	// properties, and class constants. Inherited members link to the parent
 	// (e.g. ReflectionMethod::getParameters → reflectionfunctionabstract.*).

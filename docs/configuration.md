@@ -33,6 +33,7 @@ Create `.tusk-php.json` in your project root to override settings per project:
   "maxIndexFiles": 10000,
   "php_manual_locale": "",
   "php_manual_open_on_definition": false,
+  "coverageReportPath": "",
   "diagnosticRules": {
     "unused-import": true,
     "unused-private-method": true,
@@ -58,3 +59,17 @@ Create `.tusk-php.json` in your project root to override settings per project:
 ```
 
 All diagnostic rules are enabled by default. Set a rule to `false` to disable it. Framework is auto-detected from `artisan` (Laravel), `bin/console` (Symfony), or `composer.json`.
+
+## Test coverage
+
+Hover cards and the `php_coverage` MCP tool read the Clover report your tests last wrote. Tusk PHP never runs your tests, so create the report yourself:
+
+```bash
+vendor/bin/phpunit --coverage-clover clover.xml
+```
+
+Pest and `php artisan test` take the same flag. You need the PCOV or Xdebug extension for any of them.
+
+The report is picked up from the `<clover outputFile="...">` in any `phpunit*.xml*` file in your project root, or from `clover.xml`, `build/logs/clover.xml`, `build/coverage/clover.xml`, `coverage/clover.xml` or `tests/coverage/clover.xml`. If several exist, the newest wins. To use another location, set `coverageReportPath` in `.tusk-php.json`, either absolute or relative to the project root; discovery is then skipped.
+
+Reports written inside Docker or Sail work without any path mapping. A new report is noticed within a few seconds of your next hover.
