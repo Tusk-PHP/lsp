@@ -276,3 +276,85 @@ func TestStoreWithNoReport(t *testing.T) {
 		t.Fatalf("expected no files, got %v", files)
 	}
 }
+
+func TestLocalPath(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "app/Service.php"), "<?php\n")
+	writeFile(t, filepath.Join(root, "clover.xml"), cloverFixture)
+	store := NewStore(root, "", nil)
+	store.Refresh()
+
+	byName := map[string]string{}
+	for _, f := range store.Files() {
+		byName[filepath.Base(f.Path)] = store.LocalPath(f)
+	}
+	if byName["Service.php"] != filepath.Join(root, "app/Service.php") {
+		t.Errorf("expected the workspace path, got %q", byName["Service.php"])
+	}
+	if byName["Other.php"] != "" {
+		t.Errorf("expected nothing for a file not on this machine, got %q", byName["Other.php"])
+	}
+}
+
+func TestMethodEndLine(t *testing.T) {
+	report, err := ParseClover(strings.NewReader(cloverFixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := report.Files["/var/www/html/app/Other.php"]
+	if other.Methods[0].EndLine != 6 {
+		t.Errorf("expected the last executable line, got %d", other.Methods[0].EndLine)
+	}
+	if other.Methods[2].EndLine != 30 {
+		t.Errorf("expected the declaration line for a method with no lines, got %d", other.Methods[2].EndLine)
+	}
+}
+
+func TestOnChangeFiresOncePerReport(t *testing.T) {
+	root := t.TempDir()
+	reportPath := filepath.Join(root, "clover.xml")
+	writeFile(t, reportPath, cloverFixture)
+	store := NewStore(root, "", nil)
+	changes := 0
+	store.OnChange(func() { changes++ })
+
+	store.Refresh()
+	store.Refresh()
+	if changes != 1 {
+		t.Fatalf("expected 1 change for the first load, got %d", changes)
+	}
+
+	setTime(t, reportPath, time.Now().Add(time.Minute))
+	store.Refresh()
+	if changes != 2 {
+		t.Fatalf("expected a change for a newer report, got %d", changes)
+	}
+
+	if err := os.Remove(reportPath); err != nil {
+		t.Fatal(err)
+	}
+	store.Refresh()
+	store.Refresh()
+	if changes != 3 {
+		t.Fatalf("expected one change when the report goes away, got %d", changes)
+	}
+}
+
+func TestBadReportIsOnlyReadOnce(t *testing.T) {
+	root := t.TempDir()
+	reportPath := filepath.Join(root, "clover.xml")
+	writeFile(t, reportPath, "<coverage><project>")
+	store := NewStore(root, "", nil)
+	store.Refresh()
+	if store.failedPath != reportPath {
+		t.Fatalf("expected the bad report to be remembered, got %q", store.failedPath)
+	}
+
+	// A good report written over it is picked up once its time changes.
+	writeFile(t, reportPath, cloverFixture)
+	setTime(t, reportPath, time.Now().Add(time.Minute))
+	store.Refresh()
+	if _, _, ok := store.ReportInfo(); !ok {
+		t.Fatal("expected the rewritten report to load")
+	}
+}

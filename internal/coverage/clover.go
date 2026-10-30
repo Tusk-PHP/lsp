@@ -19,6 +19,7 @@ var ErrNotClover = errors.New("not a Clover coverage report")
 type Method struct {
 	Name       string
 	Line       int // 1-based line of the declaration, as written in the report
+	EndLine    int // 1-based last executable line assigned to it, or Line if it has none
 	Hits       int
 	Complexity int
 	CRAP       float64
@@ -103,6 +104,7 @@ func addLine(f *File, el xml.StartElement) {
 		f.Methods = append(f.Methods, Method{
 			Name:       attr(el, "name"),
 			Line:       num,
+			EndLine:    num,
 			Hits:       count,
 			Complexity: complexity,
 			CRAP:       crap,
@@ -134,6 +136,7 @@ func finishFile(f *File) {
 		}
 		m := &f.Methods[i]
 		m.Executable++
+		m.EndLine = line
 		if count > 0 {
 			m.Covered++
 		} else {

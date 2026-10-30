@@ -292,6 +292,9 @@ type InitializationOptions struct {
 	// (e.g. by copying the result to the clipboard). Code actions that depend on
 	// that are only offered for commands listed here.
 	ClientCommands []string `json:"clientCommands,omitempty"`
+	// CoverageNotifications asks the server to watch for new coverage reports and
+	// send tusk/coverageChanged, instead of only noticing them on the next request.
+	CoverageNotifications bool `json:"coverageNotifications,omitempty"`
 }
 
 // ComposerClientOptions mirrors config.ComposerConfig but uses pointers so
@@ -448,6 +451,65 @@ type ServerCapabilities struct {
 	InlayHintProvider          *InlayHintOptions       `json:"inlayHintProvider,omitempty"`
 	SelectionRangeProvider     bool                    `json:"selectionRangeProvider,omitempty"`
 	SemanticTokensProvider     *SemanticTokensOptions  `json:"semanticTokensProvider,omitempty"`
+	Experimental               *ExperimentalCapabilities `json:"experimental,omitempty"`
+}
+
+// ExperimentalCapabilities advertises the server's requests outside the LSP spec.
+type ExperimentalCapabilities struct {
+	// TuskCoverage means tusk/coverageReport, tusk/fileCoverage and
+	// tusk/coverageChanged are available.
+	TuskCoverage bool `json:"tuskCoverage,omitempty"`
+}
+
+// FileCoverageParams are the params of a tusk/fileCoverage request.
+type FileCoverageParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+// FileCoverage is the result of tusk/fileCoverage. The result is null when
+// coverage is unknown, which isn't the same as a file with no hits. Lines and
+// methods that aren't listed are unknown too. Stale means the file changed after
+// the report was written, so the line numbers may no longer match. Lines are
+// 0-based, like LSP positions.
+type FileCoverage struct {
+	URI     string           `json:"uri"`
+	Stale   bool             `json:"stale"`
+	Lines   []LineCoverage   `json:"lines"`
+	Methods []MethodCoverage `json:"methods"`
+}
+
+// LineCoverage is one executable line and how many tests reached it.
+type LineCoverage struct {
+	Line int `json:"line"`
+	Hits int `json:"hits"`
+}
+
+// MethodCoverage is one method or function with executable lines.
+type MethodCoverage struct {
+	Name       string `json:"name"`
+	Line       int    `json:"line"`
+	EndLine    int    `json:"endLine"`
+	Hits       int    `json:"hits"`
+	Covered    int    `json:"covered"`
+	Executable int    `json:"executable"`
+}
+
+// CoverageReport is the result of tusk/coverageReport, or null with no report.
+// Files lists the report's files that exist on this machine.
+type CoverageReport struct {
+	Path      string                `json:"path"`
+	Generated string                `json:"generated"` // RFC 3339; when the report was written
+	Files     []CoverageFileSummary `json:"files"`
+}
+
+// CoverageFileSummary is one file's totals in a CoverageReport.
+type CoverageFileSummary struct {
+	URI             string `json:"uri"`
+	Stale           bool   `json:"stale"`
+	CoveredLines    int    `json:"coveredLines"`
+	ExecutableLines int    `json:"executableLines"`
+	CoveredMethods  int    `json:"coveredMethods"`
+	Methods         int    `json:"methods"`
 }
 
 // CompletionOptions for completion requests.

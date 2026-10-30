@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Test coverage in hover cards**: methods and functions show a coverage bar with their lines and CRAP score, such as `🟡 ████████░░ 80% · 12/15 lines · CRAP 5`, from the Clover report your tests last wrote (`--coverage-clover`, or `<clover>` in `phpunit.xml`), and note when the file changed since that report. Nothing runs your tests, and nothing is shown when there's no report or the code isn't in it. Reports written inside Docker or Sail are matched automatically. Set `coverageReportPath` if the report is somewhere the server won't find it.
 - `php_coverage` MCP tool: gives AI agents a file's uncovered lines and untested methods, or project totals and the least covered files.
+- **Line-level coverage for editors**: new `tusk/coverageReport` and `tusk/fileCoverage` requests return a report's files with their totals, and a file's executable lines with hit counts and its methods, each marked when the file changed since the report. Coverage that isn't known comes back as `null` or simply isn't listed, so it can't read as untested. Clients that set the `coverageNotifications` initialization option also get `tusk/coverageChanged` when a report appears, changes or goes away. Advertised as `experimental.tuskCoverage`.
 
 ### Changed
 
