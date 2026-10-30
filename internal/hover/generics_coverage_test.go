@@ -128,7 +128,7 @@ func TestHoverVariableShowsGenericType(t *testing.T) {
 	if hover == nil {
 		t.Fatal("expected hover result")
 	}
-	if !strings.Contains(hover.Contents.Value, "App\\Collection<int, App\\User> $items") {
+	if !strings.Contains(hover.Contents.Value, "Collection<int, User> $items") {
 		t.Fatalf("expected generic variable hover, got:\n%s", hover.Contents.Value)
 	}
 }
