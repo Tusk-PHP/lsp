@@ -17,240 +17,203 @@ func (r *UnreachableCodeRule) Check(file *parser.FileNode, source string, _ *sym
 	if file == nil {
 		return nil
 	}
-	lines := strings.Split(source, "\n")
-	var findings []Finding
+	result := parser.New().Parse(source)
+	if result == nil {
+		return nil
+	}
+	tokens := make([]parser.Token, 0, len(result.Tokens))
+	for _, tok := range result.Tokens {
+		switch tok.Kind {
+		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
+		default:
+			tokens = append(tokens, tok)
+		}
+	}
 
+	var findings []Finding
 	for _, cls := range file.Classes {
 		for _, m := range cls.Methods {
 			if m.EndLine <= m.StartLine {
 				continue
 			}
-			findings = append(findings, findUnreachable(lines, m.StartLine, m.EndLine)...)
+			findings = append(findings, findUnreachable(tokens, m.StartLine, m.EndLine)...)
 		}
 	}
 	return findings
 }
 
 // terminalKeywords are statements that unconditionally transfer control.
-var terminalKeywords = []string{"return", "throw", "exit", "die"}
+var terminalKeywords = map[string]bool{
+	"return": true, "throw": true, "exit": true, "die": true, "continue": true, "break": true,
+}
 
-// loopTerminals only apply inside loop/switch scopes.
-var loopTerminals = []string{"continue", "break"}
+// blockBoundaryKeywords end a run of statements without a closing brace, in
+// switch cases and alternative syntax (`if (...): ... endif;`).
+var blockBoundaryKeywords = map[string]bool{
+	"case": true, "default": true, "endif": true, "endfor": true, "endforeach": true,
+	"endwhile": true, "endswitch": true, "enddeclare": true,
+}
 
-// findUnreachable scans lines within a method body for code after terminal
-// statements at the same brace depth.
-func findUnreachable(lines []string, startLine, endLine int) []Finding {
-	if startLine < 0 || endLine >= len(lines) {
-		return nil
-	}
-
+// findUnreachable scans a method's tokens, which must exclude trivia, for code
+// after terminal statements in the same block. Closures nested in the method are
+// scanned the same way, since only their own statements can follow their returns.
+func findUnreachable(tokens []parser.Token, startLine, endLine int) []Finding {
 	var findings []Finding
 
-	// Find the opening brace of the method body
-	bodyStart := -1
-	for i := startLine; i <= endLine && i < len(lines); i++ {
-		if strings.Contains(lines[i], "{") {
-			bodyStart = i
+	for i, tok := range tokens {
+		if tok.Line < startLine {
+			continue
+		}
+		if tok.Line > endLine {
 			break
 		}
-	}
-	if bodyStart < 0 {
-		return nil
-	}
-
-	// Scan line by line tracking brace depth relative to the method body.
-	// depth=0 means we're at the method body level.
-	depth := 0
-	inTerminal := false
-	pendingTerminal := false
-	terminalDepth := -1
-	unreachableStart := -1
-
-	for i := bodyStart; i <= endLine && i < len(lines); i++ {
-		line := lines[i]
-		trimmed := strings.TrimSpace(line)
-
-		// Track brace depth changes on this line
-		openBraces := strings.Count(line, "{")
-		closeBraces := strings.Count(line, "}")
-
-		prevDepth := depth
-
-		// Process opens first, then closes for this line
-		// But we need to handle the line's content at the depth BEFORE closes
-		contentDepth := depth + openBraces
-
-		// If we're tracking unreachable code and hit a close brace at the
-		// terminal's depth, the unreachable region ends.
-		if inTerminal && unreachableStart >= 0 {
-			// Check if this line is just a closing brace
-			if trimmed == "}" || trimmed == "};" {
-				// End of block — stop tracking
-				depth = depth + openBraces - closeBraces
-				if depth <= terminalDepth {
-					if unreachableStart > 0 {
-						findings = append(findings, Finding{
-							StartLine: unreachableStart,
-							StartCol:  0,
-							EndLine:   i - 1,
-							EndCol:    len(lines[i-1]),
-							Severity:  SeverityWarning,
-							Code:      "unreachable-code",
-							Message:   "Unreachable code detected",
-						})
-					}
-					inTerminal = false
-					unreachableStart = -1
-				}
-				continue
-			}
-		}
-
-		depth = depth + openBraces - closeBraces
-		_ = contentDepth
-		_ = prevDepth
-
-		// Skip empty/comment lines
-		if trimmed == "" || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") || strings.HasPrefix(trimmed, "*") {
+		if !isTerminalKeyword(tok) || !startsStatement(tokens, i) {
 			continue
 		}
 
-		if pendingTerminal {
-			if statementComplete(trimmed) {
-				pendingTerminal = false
-				inTerminal = true
-			}
+		end := statementEnd(tokens, i+1)
+		if end < 0 || end+1 >= len(tokens) || isBlockEnd(tokens, end+1) || isLabel(tokens, end+1) {
+			continue
+		}
+		first := tokens[end+1]
+		if first.Line > endLine {
 			continue
 		}
 
-		// If we found a terminal statement and now see real code at same depth
-		if inTerminal && depth >= terminalDepth {
-			if trimmed == "}" || trimmed == "};" {
-				// Close of the block — end the unreachable region
-				if unreachableStart >= 0 {
-					findings = append(findings, Finding{
-						StartLine: unreachableStart,
-						StartCol:  0,
-						EndLine:   i - 1,
-						EndCol:    len(lines[i-1]),
-						Severity:  SeverityWarning,
-						Code:      "unreachable-code",
-						Message:   "Unreachable code detected",
-					})
-				}
-				inTerminal = false
-				unreachableStart = -1
-				continue
-			}
-			// This is actual unreachable code
-			if unreachableStart < 0 {
-				unreachableStart = i
-			}
+		last := tokens[lastInBlock(tokens, end+1)]
+		// A nested terminal can report again, so each region is reported from
+		// its outermost terminal only.
+		if len(findings) > 0 && !isAfter(first, findings[len(findings)-1]) {
 			continue
 		}
-
-		// If depth dropped below terminal depth, the block ended
-		if inTerminal && depth < terminalDepth {
-			if unreachableStart >= 0 {
-				findings = append(findings, Finding{
-					StartLine: unreachableStart,
-					StartCol:  0,
-					EndLine:   i - 1,
-					EndCol:    len(lines[i-1]),
-					Severity:  SeverityWarning,
-					Code:      "unreachable-code",
-					Message:   "Unreachable code detected",
-				})
-			}
-			inTerminal = false
-			unreachableStart = -1
-		}
-
-		// Check if this line contains a terminal statement
-		if !inTerminal && isTerminalLine(trimmed) {
-			terminalDepth = depth
-			if statementComplete(trimmed) {
-				inTerminal = true
-			} else {
-				pendingTerminal = true
-			}
-		}
+		findings = append(findings, Finding{
+			StartLine: first.Line,
+			StartCol:  first.Column,
+			EndLine:   last.Line,
+			EndCol:    last.Column + len(last.Value),
+			Severity:  SeverityWarning,
+			Code:      "unreachable-code",
+			Message:   "Unreachable code detected",
+		})
 	}
 
 	return findings
 }
 
-// isTerminalLine checks if a trimmed line starts with a terminal keyword.
-func isTerminalLine(trimmed string) bool {
-	for _, kw := range terminalKeywords {
-		if strings.HasPrefix(trimmed, kw+" ") || strings.HasPrefix(trimmed, kw+";") || trimmed == kw {
-			return true
-		}
-		// Handle "return;" or "throw new Exception();"
-		if strings.HasPrefix(trimmed, kw+"(") {
-			return true
-		}
-	}
-	for _, kw := range loopTerminals {
-		if strings.HasPrefix(trimmed, kw+";") || strings.HasPrefix(trimmed, kw+" ") || trimmed == kw {
-			return true
-		}
-	}
-	return false
+func isTerminalKeyword(tok parser.Token) bool {
+	return (tok.Kind == parser.TokenReturn || tok.Kind == parser.TokenIdentifier) &&
+		terminalKeywords[strings.ToLower(tok.Value)]
 }
 
-func statementComplete(trimmed string) bool {
-	line := stripTrailingLineComment(trimmed)
-	if strings.HasSuffix(line, ";") {
+// startsStatement reports whether the token at i begins a statement that always
+// runs when its block is reached. `if ($x) return;` and `$a ?? throw $e;` don't.
+func startsStatement(tokens []parser.Token, i int) bool {
+	if i == 0 {
 		return true
 	}
-	if blockStart := commentStart(line, true); blockStart >= 0 {
-		return strings.HasSuffix(strings.TrimSpace(line[:blockStart]), ";")
+	switch tokens[i-1].Kind {
+	case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace:
+		return true
+	case parser.TokenColon:
+		return colonOpensBlock(tokens, i-1)
 	}
 	return false
 }
 
-func stripTrailingLineComment(line string) string {
-	if commentStart := commentStart(line, false); commentStart >= 0 {
-		return strings.TrimSpace(line[:commentStart])
+// colonOpensBlock tells the colon of `case 1:` or `else:` from a ternary's, or a
+// named argument's, by looking at what the statement it's part of starts with.
+func colonOpensBlock(tokens []parser.Token, colon int) bool {
+	depth := 0
+	for i := colon - 1; i >= 0; i-- {
+		switch tokens[i].Kind {
+		case parser.TokenCloseParen, parser.TokenCloseBracket:
+			depth++
+		case parser.TokenOpenParen, parser.TokenOpenBracket:
+			if depth == 0 {
+				return false
+			}
+			depth--
+		case parser.TokenQuestion:
+			if depth == 0 {
+				return false
+			}
+		case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace, parser.TokenColon:
+			if depth == 0 {
+				return opensBlockKeyword(tokens[i+1])
+			}
+		}
 	}
-	return strings.TrimSpace(line)
+	return opensBlockKeyword(tokens[0])
 }
 
-func commentStart(line string, includeBlock bool) int {
-	inSingle := false
-	inDouble := false
-	escaped := false
+func opensBlockKeyword(tok parser.Token) bool {
+	switch strings.ToLower(tok.Value) {
+	case "case", "default", "if", "elseif", "else", "for", "foreach", "while", "switch":
+		return true
+	}
+	return false
+}
 
-	for i := 0; i < len(line); i++ {
-		ch := line[i]
-
-		if escaped {
-			escaped = false
-			continue
-		}
-		if (inSingle || inDouble) && ch == '\\' {
-			escaped = true
-			continue
-		}
-		if !inDouble && ch == '\'' {
-			inSingle = !inSingle
-			continue
-		}
-		if !inSingle && ch == '"' {
-			inDouble = !inDouble
-			continue
-		}
-		if inSingle || inDouble {
-			continue
-		}
-		if ch == '#' || (ch == '/' && i+1 < len(line) && line[i+1] == '/') {
-			return i
-		}
-		if includeBlock && ch == '/' && i+1 < len(line) && line[i+1] == '*' {
-			return i
+// statementEnd returns the index of the semicolon ending the statement that
+// continues at start, skipping anything nested such as a closure's body or a
+// match. It returns -1 if the enclosing block closes first.
+func statementEnd(tokens []parser.Token, start int) int {
+	depth := 0
+	for i := start; i < len(tokens); i++ {
+		switch tokens[i].Kind {
+		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
+			depth++
+		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
+			if depth == 0 {
+				return -1
+			}
+			depth--
+		case parser.TokenSemicolon:
+			if depth == 0 {
+				return i
+			}
 		}
 	}
-
 	return -1
+}
+
+// isBlockEnd reports whether the token at i ends the statements of its block.
+func isBlockEnd(tokens []parser.Token, i int) bool {
+	tok := tokens[i]
+	if tok.Kind == parser.TokenCloseBrace || tok.Kind == parser.TokenEOF {
+		return true
+	}
+	lower := strings.ToLower(tok.Value)
+	if blockBoundaryKeywords[lower] {
+		return true
+	}
+	// The else of alternative syntax. After a closing brace, it belongs to an
+	// if statement inside the block.
+	return (lower == "else" || lower == "elseif") && i > 0 && tokens[i-1].Kind != parser.TokenCloseBrace
+}
+
+// isLabel reports whether a goto label starts at i, which can be jumped to.
+func isLabel(tokens []parser.Token, i int) bool {
+	return tokens[i].Kind == parser.TokenIdentifier && i+1 < len(tokens) && tokens[i+1].Kind == parser.TokenColon
+}
+
+// lastInBlock returns the index of the last token before the block ends.
+func lastInBlock(tokens []parser.Token, start int) int {
+	depth := 0
+	for i := start; i < len(tokens); i++ {
+		if depth == 0 && isBlockEnd(tokens, i) {
+			return i - 1
+		}
+		switch tokens[i].Kind {
+		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
+			depth++
+		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
+			depth--
+		}
+	}
+	return len(tokens) - 1
+}
+
+func isAfter(tok parser.Token, f Finding) bool {
+	return tok.Line > f.EndLine || (tok.Line == f.EndLine && tok.Column >= f.EndCol)
 }

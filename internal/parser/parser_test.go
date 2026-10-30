@@ -697,3 +697,28 @@ func TestParseDocBlockStructuredTypeAliases(t *testing.T) {
 		t.Fatalf("unexpected parsed return %+v", doc.Return.ParsedType)
 	}
 }
+
+func TestParseReferenceParameters(t *testing.T) {
+	file := ParseFile(`<?php
+function f(&$a, array &$b, ?array &$c, A&B &$d, A&B $e, int &...$f, $g) {}
+`)
+	if len(file.Functions) != 1 {
+		t.Fatalf("want one function, got %d", len(file.Functions))
+	}
+	want := []struct {
+		name, typ string
+		reference bool
+	}{
+		{"$a", "", true}, {"$b", "array", true}, {"$c", "?array", true},
+		{"$d", "A&B", true}, {"$e", "A&B", false}, {"$f", "int", true}, {"$g", "", false},
+	}
+	params := file.Functions[0].Params
+	if len(params) != len(want) {
+		t.Fatalf("want %d params, got %+v", len(want), params)
+	}
+	for i, w := range want {
+		if params[i].Name != w.name || params[i].Type.Name != w.typ || params[i].IsReference != w.reference {
+			t.Errorf("param %d: want %+v, got %+v", i, w, params[i])
+		}
+	}
+}

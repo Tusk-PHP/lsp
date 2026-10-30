@@ -27,6 +27,9 @@ const (
 	BindingDestructure  BindingKind = "destructure"
 	BindingImport       BindingKind = "import"
 	BindingClosureUse   BindingKind = "closure-use"
+	// BindingImplicit is a variable first written by something other than an
+	// assignment: `$a[] = 1`, or an argument the callee may write to.
+	BindingImplicit BindingKind = "implicit"
 )
 
 type Scope struct {
@@ -46,6 +49,7 @@ type Binding struct {
 	Origin      *Binding
 	Assignments []*Assignment
 	References  []protocol.Range
+	Writes      []protocol.Range // later assignments; Decl is the first
 }
 
 type Assignment struct {
@@ -59,10 +63,18 @@ type Assignment struct {
 type Document struct {
 	Scopes   []*Scope
 	Bindings []*Binding
-	root     *Scope
+	// Properties lists `$name` tokens that are class properties rather than
+	// variables: declarations, and static accesses such as `self::$name`.
+	Properties []protocol.Range
+	root       *Scope
 }
 
-type Collector struct{}
+type Collector struct {
+	// OutArg, if set, reports whether a call may write to its arg'th argument
+	// (0-based). callee is the function's name as written, or "" when it can't be
+	// told from the source alone, such as for methods.
+	OutArg func(callee string, arg int) bool
+}
 
 func NewCollector() *Collector {
 	return &Collector{}
@@ -111,6 +123,15 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 	var pending []pendingScope
 	declByToken := map[int]*Binding{}
 	braceDepth := 0
+	var classBodies []classBody
+	pendingClassBody := -1
+
+	popFinishedExpressions := func(i int) {
+		for len(active) > 1 && active[len(active)-1].exprEnd == i {
+			active[len(active)-1].scope.Range.End = tokenRange(result.Tokens[i]).End
+			active = active[:len(active)-1]
+		}
+	}
 
 	for idx, binding := range parseUseBindings(result.Tokens, doc, root) {
 		declByToken[idx] = binding
@@ -122,6 +143,18 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 		for len(pending) > 0 && pending[0].bodyOpenIndex == i && pending[0].expressionBody {
 			active = append(active, scopeFrame{scope: pending[0].scope, braceDepth: braceDepth, exprEnd: pending[0].bodyCloseIndex})
 			pending = pending[1:]
+		}
+
+		if isClassKeyword(result.Tokens, i) {
+			pendingClassBody = classBodyOpen(result.Tokens, i)
+		}
+
+		inClassBody := len(classBodies) > 0 && classBodies[len(classBodies)-1].braceDepth == braceDepth && classBodies[len(classBodies)-1].activeLen == len(active)
+
+		if !inClassBody && isGlobalOrStaticKeyword(tok) {
+			for idx, binding := range parseGlobalOrStaticBindings(result.Tokens, i, active[len(active)-1].scope, doc) {
+				declByToken[idx] = binding
+			}
 		}
 
 		if tok.Kind == parser.TokenFunction {
@@ -158,7 +191,16 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 		}
 
 		if tok.Kind == parser.TokenVariable {
-			if next := nextSignificant(result.Tokens, i+1); next >= 0 && result.Tokens[next].Kind == parser.TokenEquals {
+			if _, isDecl := declByToken[i]; !isDecl && (inClassBody || isStaticPropertyAccess(result.Tokens, i)) {
+				doc.Properties = append(doc.Properties, tokenRange(tok))
+				popFinishedExpressions(i)
+				continue
+			}
+		}
+
+		if tok.Kind == parser.TokenVariable {
+			_, isDecl := declByToken[i]
+			if next := nextSignificant(result.Tokens, i+1); !isDecl && next >= 0 && result.Tokens[next].Kind == parser.TokenEquals {
 				current := active[len(active)-1]
 				binding := ensureBinding(doc, current.scope, tok.Value, BindingVariable, tokenRange(tok))
 				declByToken[i] = binding
@@ -174,16 +216,27 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 				active = append(active, scopeFrame{scope: pending[0].scope, braceDepth: braceDepth, exprEnd: -1})
 				pending = pending[1:]
 			}
+			if i == pendingClassBody {
+				classBodies = append(classBodies, classBody{braceDepth: braceDepth, activeLen: len(active)})
+			}
 			continue
 		}
 
+		if tok.Kind == parser.TokenStringLiteral {
+			addInterpolatedReferences(tok, active)
+		}
+
 		if tok.Kind == parser.TokenVariable {
-			if _, ok := declByToken[i]; ok {
-				continue
-			}
-			if binding := resolveVariable(active, tok.Value); binding != nil {
+			if binding, ok := declByToken[i]; ok {
+				if binding.Decl != tokenRange(tok) {
+					binding.Writes = append(binding.Writes, tokenRange(tok))
+				}
+			} else if binding := resolveVariable(active, tok.Value); binding != nil {
 				binding.References = append(binding.References, tokenRange(tok))
+			} else if isSubscriptWrite(result.Tokens, i) || isOutArgument(result.Tokens, i, c.OutArg) {
+				doc.addBinding(active[len(active)-1].scope, tok.Value, BindingImplicit, tokenRange(tok), nil)
 			}
+			popFinishedExpressions(i)
 			continue
 		}
 
@@ -192,15 +245,15 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 				active[len(active)-1].scope.Range.End = tokenRange(tok).End
 				active = active[:len(active)-1]
 			}
+			if len(classBodies) > 0 && classBodies[len(classBodies)-1].braceDepth == braceDepth {
+				classBodies = classBodies[:len(classBodies)-1]
+			}
 			if braceDepth > 0 {
 				braceDepth--
 			}
 		}
 
-		for len(active) > 1 && active[len(active)-1].exprEnd == i {
-			active[len(active)-1].scope.Range.End = tokenRange(tok).End
-			active = active[:len(active)-1]
-		}
+		popFinishedExpressions(i)
 	}
 
 	for _, ps := range pending {
@@ -219,6 +272,11 @@ func (d *Document) BindingAt(pos protocol.Position) *Binding {
 		}
 		for _, ref := range binding.References {
 			if containsPos(ref, pos) {
+				return binding
+			}
+		}
+		for _, write := range binding.Writes {
+			if containsPos(write, pos) {
 				return binding
 			}
 		}
@@ -251,6 +309,7 @@ func (d *Document) Occurrences(binding *Binding) []protocol.Range {
 		}
 		ranges = append(ranges, candidate.Decl)
 		ranges = append(ranges, candidate.References...)
+		ranges = append(ranges, candidate.Writes...)
 	}
 	return dedupeRanges(ranges)
 }
@@ -447,6 +506,9 @@ func parseDestructureBindings(tokens []parser.Token, start int, scope *Scope, do
 		switch tokens[prev].Kind {
 		case parser.TokenEquals, parser.TokenDoubleArrow, parser.TokenArrow, parser.TokenDoubleColon:
 			return decls
+		// A subscript, as in `$a[$key] = 1`, rather than a destructuring.
+		case parser.TokenVariable, parser.TokenIdentifier, parser.TokenCloseBracket, parser.TokenCloseParen:
+			return decls
 		}
 	}
 	close := findMatching(tokens, start, parser.TokenOpenBracket, parser.TokenCloseBracket)
@@ -485,6 +547,251 @@ func parseListDestructureBindings(tokens []parser.Token, start int, scope *Scope
 		}
 	}
 	return decls
+}
+
+// classBody is a class-like's open body. A variable directly inside one, with no
+// function opened since, is a property.
+type classBody struct {
+	braceDepth int
+	activeLen  int
+}
+
+func isClassKeyword(tokens []parser.Token, i int) bool {
+	switch tokens[i].Kind {
+	case parser.TokenClass, parser.TokenInterface, parser.TokenTrait, parser.TokenEnum:
+	default:
+		return false
+	}
+	if prev := prevSignificant(tokens, i-1); prev >= 0 {
+		switch tokens[prev].Kind {
+		case parser.TokenDoubleColon, parser.TokenArrow, parser.TokenFunction:
+			return false
+		}
+	}
+	return true
+}
+
+// classBodyOpen returns the index of the brace opening the body of the class-like
+// declared at start, or -1 if it's not a declaration. Only an anonymous class can
+// have an argument list.
+func classBodyOpen(tokens []parser.Token, start int) int {
+	for i := nextSignificant(tokens, start+1); i >= 0 && i < len(tokens); i = nextSignificant(tokens, i+1) {
+		switch tokens[i].Kind {
+		case parser.TokenOpenBrace:
+			return i
+		case parser.TokenOpenParen:
+			if tokens[start].Kind != parser.TokenClass {
+				return -1
+			}
+			if i = findMatching(tokens, i, parser.TokenOpenParen, parser.TokenCloseParen); i < 0 {
+				return -1
+			}
+		case parser.TokenSemicolon, parser.TokenCloseBrace, parser.TokenCloseParen, parser.TokenEquals:
+			return -1
+		}
+	}
+	return -1
+}
+
+// isStaticPropertyAccess matches `self::$name`, but not `self::$name()`, which
+// calls the method named by the variable.
+func isStaticPropertyAccess(tokens []parser.Token, i int) bool {
+	prev := prevSignificant(tokens, i-1)
+	if prev < 0 || tokens[prev].Kind != parser.TokenDoubleColon {
+		return false
+	}
+	next := nextSignificant(tokens, i+1)
+	return next < 0 || tokens[next].Kind != parser.TokenOpenParen
+}
+
+func isGlobalOrStaticKeyword(tok parser.Token) bool {
+	return tok.Kind == parser.TokenStatic || (tok.Kind == parser.TokenIdentifier && strings.EqualFold(tok.Value, "global"))
+}
+
+// parseGlobalOrStaticBindings declares the variables of `global $a, $b;` and
+// `static $a, $b = 1;`. Those with an initializer are left to the assignment path.
+func parseGlobalOrStaticBindings(tokens []parser.Token, start int, scope *Scope, doc *Document) map[int]*Binding {
+	decls := map[int]*Binding{}
+	i := nextSignificant(tokens, start+1)
+	for i >= 0 && tokens[i].Kind == parser.TokenVariable {
+		next := nextSignificant(tokens, i+1)
+		if next < 0 {
+			break
+		}
+		if tokens[next].Kind != parser.TokenEquals {
+			decls[i] = ensureBinding(doc, scope, tokens[i].Value, BindingVariable, tokenRange(tokens[i]))
+		}
+		depth := 0
+		for next < len(tokens) && (depth > 0 || (tokens[next].Kind != parser.TokenComma && tokens[next].Kind != parser.TokenSemicolon)) {
+			switch tokens[next].Kind {
+			case parser.TokenOpenParen, parser.TokenOpenBracket:
+				depth++
+			case parser.TokenCloseParen, parser.TokenCloseBracket:
+				depth--
+			}
+			next++
+		}
+		if next >= len(tokens) || tokens[next].Kind == parser.TokenSemicolon {
+			break
+		}
+		i = nextSignificant(tokens, next+1)
+	}
+	return decls
+}
+
+// addInterpolatedReferences records the `$name` and `{$name` reads inside a
+// double-quoted string. `${name}` isn't recorded, because a reference's range
+// includes the dollar sign, which renaming would put in the wrong place.
+func addInterpolatedReferences(tok parser.Token, active []scopeFrame) {
+	if len(tok.Value) < 2 || tok.Value[0] != '"' {
+		return
+	}
+	line, col := tok.Line, tok.Column
+	for i := 0; i < len(tok.Value); i++ {
+		switch ch := tok.Value[i]; {
+		case ch == '\\':
+			i++
+			col++
+		case ch == '\n':
+			line++
+			col = -1
+		case ch == '$':
+			end := i + 1
+			for end < len(tok.Value) && isVariableChar(tok.Value[end], end == i+1) {
+				end++
+			}
+			if end > i+1 {
+				if binding := resolveVariable(active, tok.Value[i:end]); binding != nil {
+					binding.References = append(binding.References, protocol.Range{
+						Start: protocol.Position{Line: line, Character: col},
+						End:   protocol.Position{Line: line, Character: col + end - i},
+					})
+				}
+			}
+		}
+		col++
+	}
+}
+
+func isVariableChar(ch byte, first bool) bool {
+	return ch == '_' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch >= 0x80 || (!first && ch >= '0' && ch <= '9')
+}
+
+// isSubscriptWrite matches `$a[] = 1` and `$a['b'][$c] = 1`, which create $a.
+func isSubscriptWrite(tokens []parser.Token, i int) bool {
+	next := nextSignificant(tokens, i+1)
+	if next < 0 || tokens[next].Kind != parser.TokenOpenBracket {
+		return false
+	}
+	for next >= 0 && tokens[next].Kind == parser.TokenOpenBracket {
+		end := findMatching(tokens, next, parser.TokenOpenBracket, parser.TokenCloseBracket)
+		if end < 0 {
+			return false
+		}
+		next = nextSignificant(tokens, end+1)
+	}
+	return next >= 0 && tokens[next].Kind == parser.TokenEquals
+}
+
+// notCalls are keywords that take a parenthesized list without being a call, so
+// their variables are only ever read.
+var notCalls = map[string]bool{
+	"if": true, "elseif": true, "while": true, "for": true, "foreach": true, "switch": true,
+	"catch": true, "match": true, "isset": true, "empty": true, "unset": true, "array": true,
+	"list": true, "echo": true, "print": true, "exit": true, "die": true, "eval": true,
+	"include": true, "include_once": true, "require": true, "require_once": true,
+	"and": true, "or": true, "xor": true, "clone": true, "declare": true,
+}
+
+// isOutArgument reports whether the variable at i is a whole argument of a call
+// that may write to it.
+func isOutArgument(tokens []parser.Token, i int, outArg func(string, int) bool) bool {
+	if outArg == nil {
+		return false
+	}
+	prev, next := prevSignificant(tokens, i-1), nextSignificant(tokens, i+1)
+	if prev < 0 || next < 0 {
+		return false
+	}
+	if tokens[prev].Kind != parser.TokenOpenParen && tokens[prev].Kind != parser.TokenComma {
+		return false
+	}
+	if tokens[next].Kind != parser.TokenCloseParen && tokens[next].Kind != parser.TokenComma {
+		return false
+	}
+
+	arg, depth := 0, 0
+	open := prev
+	for ; open >= 0; open = prevSignificant(tokens, open-1) {
+		kind := tokens[open].Kind
+		if depth == 0 && kind == parser.TokenOpenParen {
+			break
+		}
+		switch kind {
+		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
+			depth++
+		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
+			if depth == 0 {
+				return false
+			}
+			depth--
+		case parser.TokenComma:
+			if depth == 0 {
+				arg++
+			}
+		case parser.TokenSemicolon:
+			if depth == 0 {
+				return false
+			}
+		}
+	}
+	if open < 0 {
+		return false
+	}
+
+	callee := prevSignificant(tokens, open-1)
+	if callee < 0 {
+		return false
+	}
+	switch tokens[callee].Kind {
+	case parser.TokenVariable, parser.TokenCloseParen, parser.TokenCloseBracket:
+		return outArg("", arg)
+	case parser.TokenStatic:
+		before := prevSignificant(tokens, callee-1)
+		return before >= 0 && tokens[before].Kind == parser.TokenNew && outArg("", arg)
+	case parser.TokenIdentifier:
+	default:
+		return false
+	}
+
+	name := tokens[callee].Value
+	first := callee
+	for {
+		sep := prevSignificant(tokens, first-1)
+		if sep < 0 || tokens[sep].Kind != parser.TokenBackslash {
+			break
+		}
+		first = sep
+		name = "\\" + name
+		part := prevSignificant(tokens, sep-1)
+		if part < 0 || tokens[part].Kind != parser.TokenIdentifier {
+			break
+		}
+		first = part
+		name = tokens[part].Value + name
+	}
+	if notCalls[strings.ToLower(name)] {
+		return false
+	}
+	if before := prevSignificant(tokens, first-1); before >= 0 {
+		switch tokens[before].Kind {
+		case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenNew:
+			return outArg("", arg)
+		case parser.TokenFunction:
+			return false
+		}
+	}
+	return outArg(name, arg)
 }
 
 func parseUseBindings(tokens []parser.Token, doc *Document, scope *Scope) map[int]*Binding {

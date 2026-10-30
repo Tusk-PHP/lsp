@@ -48,11 +48,11 @@ type UndefinedVariableRule struct{}
 
 func (r *UndefinedVariableRule) Code() string { return "undefined-variable" }
 
-func (r *UndefinedVariableRule) Check(file *parser.FileNode, source string, _ *symbols.Index) []Finding {
+func (r *UndefinedVariableRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	if file == nil {
 		return nil
 	}
-	return checkUndefinedVariables(source)
+	return checkUndefinedVariables(source, outArgChecker(file, index))
 }
 
 // UnusedVariableRule flags local variable assignments with no subsequent read.
@@ -67,9 +67,62 @@ func (r *UnusedVariableRule) Check(file *parser.FileNode, source string, _ *symb
 	return checkUnusedVariables(source)
 }
 
+// outArgChecker reports whether a call's argument may be written to, as $matches
+// is by preg_match. Calls that can't be looked up may do so, since reporting a
+// variable they define would be wrong.
+func outArgChecker(file *parser.FileNode, index *symbols.Index) func(string, int) bool {
+	return func(callee string, arg int) bool {
+		if callee == "" {
+			return true
+		}
+		fqns, ok := resolveFunctionNames(callee, file)
+		if !ok {
+			return true
+		}
+		for _, fqn := range fqns {
+			if file != nil {
+				for _, fn := range file.Functions {
+					if functionNodeFQN(&fn, file) != fqn {
+						continue
+					}
+					params := make([]symbols.ParamInfo, 0, len(fn.Params))
+					for _, p := range fn.Params {
+						params = append(params, symbols.ParamInfo{IsVariadic: p.IsVariadic, IsReference: p.IsReference})
+					}
+					return argIsReference(params, arg, true)
+				}
+			}
+			if index == nil {
+				continue
+			}
+			if sym := index.Lookup(fqn); sym != nil && sym.Kind == symbols.KindFunction {
+				return argIsReference(sym.Params, arg, sym.URI != "builtin")
+			}
+		}
+		return true
+	}
+}
+
+// argIsReference looks up an argument's parameter. Builtin signatures can be
+// missing or leave out trailing parameters, so past the end of one (complete is
+// false) the argument may still be a reference.
+func argIsReference(params []symbols.ParamInfo, arg int, complete bool) bool {
+	if arg < len(params) {
+		return params[arg].IsReference
+	}
+	if !complete {
+		return true
+	}
+	if len(params) == 0 {
+		return false
+	}
+	last := params[len(params)-1]
+	return last.IsVariadic && last.IsReference
+}
+
 // checkUndefinedVariables detects reads of undefined variables.
-func checkUndefinedVariables(source string) []Finding {
-	doc := scope.Collect(source)
+func checkUndefinedVariables(source string, outArg func(string, int) bool) []Finding {
+	doc := (&scope.Collector{OutArg: outArg}).Collect(source)
 	if doc == nil {
 		return nil
 	}
@@ -83,6 +136,12 @@ func checkUndefinedVariables(source string) []Finding {
 		for _, ref := range b.References {
 			knownPositions[posKey{ref.Start.Line, ref.Start.Character}] = true
 		}
+		for _, write := range b.Writes {
+			knownPositions[posKey{write.Start.Line, write.Start.Character}] = true
+		}
+	}
+	for _, property := range doc.Properties {
+		knownPositions[posKey{property.Start.Line, property.Start.Character}] = true
 	}
 
 	// Parse tokens to find all variable occurrences not tracked by the scope collector.
