@@ -67,6 +67,7 @@ Framework-specific tools appear only when that framework is detected:
 | `php_explain_symbol` | Explain a symbol by FQN — members, inheritance, interfaces |
 | `php_find_references` | Find references to a symbol by FQN |
 | `php_diagnostics` | Native in-process diagnostics for one file or the whole project (excludes PHPStan/Pint) |
+| `php_coverage` | Test coverage from your last Clover report: a file's uncovered lines and untested methods, or project totals and the least covered files. Doesn't run tests. |
 | `php_container_bindings` | Resolved DI bindings (interface→concrete, singletons, tags); optionally a class's constructor injection |
 | `db_list_tables`, `db_describe_table`, `db_find_column` | Query the live database schema snapshot |
 | `laravel_routes`, `laravel_route_to_controller`, `laravel_model_schema` | Laravel route and Eloquent model intelligence |
