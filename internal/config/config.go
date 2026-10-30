@@ -165,6 +165,7 @@ type Config struct {
 	PHPStanPath               string                       `json:"phpstanPath,omitempty"`
 	PHPStanLevel              string                       `json:"phpstanLevel,omitempty"`
 	PHPStanConfig             string                       `json:"phpstanConfig,omitempty"`
+	CoverageReportPath        string                       `json:"coverageReportPath,omitempty"`
 	PintEnabled               *bool                        `json:"pintEnabled,omitempty"`
 	PintPath                  string                       `json:"pintPath,omitempty"`
 	PintConfig                string                       `json:"pintConfig,omitempty"`
@@ -321,6 +322,9 @@ func (c *Config) MergeClientOptions(opts *protocol.InitializationOptions) {
 	}
 	if opts.PHPStanConfig != "" {
 		c.PHPStanConfig = opts.PHPStanConfig
+	}
+	if opts.CoverageReportPath != "" {
+		c.CoverageReportPath = opts.CoverageReportPath
 	}
 	if opts.PintEnabled != nil {
 		c.PintEnabled = opts.PintEnabled

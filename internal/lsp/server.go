@@ -22,6 +22,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/composer/cardhover"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/container"
+	"github.com/Tusk-PHP/lsp/internal/coverage"
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/hover"
@@ -54,6 +55,7 @@ type Server struct {
 	container     *container.ContainerAnalyzer
 	completion    *completion.Provider
 	hover         *hover.Provider
+	coverage      *coverage.Store
 	composerHover *cardhover.Provider
 	inlayHint     *inlayhint.Provider
 	diag          *diagnostics.Provider
@@ -390,6 +392,8 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.hover = hover.NewProvider(s.index, s.container, s.framework)
 	s.hover.SetArrayResolver(arrayResolver)
 	s.hover.SetConfig(s.cfg)
+	s.coverage = coverage.NewStore(s.rootPath, s.cfg.CoverageReportPath, s.logger)
+	s.hover.SetCoverage(s.coverage)
 	s.hover.GenericExprResolver = func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
 	}
@@ -514,6 +518,7 @@ func (s *Server) handleInitialized(msg *jsonRPCMessage) {
 		s.republishOpenDocuments()
 	})
 	s.goSafe("container.Analyze", s.workspace.Container.Analyze)
+	s.goSafe("coverage.Refresh", s.coverage.Refresh)
 	if s.routeIndex != nil {
 		s.goSafe("laravelRoutes.ScanWorkspace", func() {
 			_ = s.workspace.ScanRoutes()

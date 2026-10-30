@@ -3,6 +3,7 @@ package hover
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -170,6 +171,52 @@ func (p *Provider) formatHoverContext(sym *symbols.Symbol) string {
 	}
 
 	return sb.String()
+}
+
+// formatCoverage renders a method or function's line coverage. It only reads
+// what's already loaded, and renders nothing when coverage is unknown: a missing
+// line must never read as untested code.
+func (p *Provider) formatCoverage(sym *symbols.Symbol) string {
+	if p.coverage == nil || (sym.Kind != symbols.KindMethod && sym.Kind != symbols.KindFunction) {
+		return ""
+	}
+	p.coverage.RefreshAsync()
+
+	m, stale := p.coverage.Method(symbols.URIToPath(sym.URI), sym.Name, sym.Range.Start.Line+1)
+	if m == nil {
+		return ""
+	}
+	line := "\nCoverage: " + coverageBar(m.Covered, m.Executable) + fmt.Sprintf(" · %d/%d lines", m.Covered, m.Executable)
+	if m.CRAP > 0 {
+		line += " · CRAP " + strconv.FormatFloat(m.CRAP, 'f', -1, 64)
+	}
+	if stale {
+		line += " (file changed since the report, may be out of date)"
+	}
+	return line + "\n"
+}
+
+// coverageBar draws coverage as a coloured dot, a bar and a percentage, using
+// only text because hover cards are markdown. The bar is inline code so it's
+// monospaced. Partial coverage never rounds to an empty or a full bar, or to 0%
+// or 100%. The colour bands are the defaults of PHPUnit's HTML report.
+func coverageBar(covered, total int) string {
+	const width = 10
+	filled := (covered*width + total/2) / total
+	percent := covered * 100 / total
+	if covered > 0 && covered < total {
+		filled = max(1, min(filled, width-1))
+		percent = max(1, min(percent, 99))
+	}
+
+	dot := "🟢"
+	switch {
+	case percent < 50:
+		dot = "🔴"
+	case percent < 90:
+		dot = "🟡"
+	}
+	return fmt.Sprintf("%s `%s%s` %d%%", dot, strings.Repeat("█", filled), strings.Repeat("░", width-filled), percent)
 }
 
 func (p *Provider) formatDocBlockDetails(doc *parser.DocBlock) string {

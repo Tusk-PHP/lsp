@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Test coverage in hover cards**: methods and functions show a coverage bar with their lines and CRAP score, such as `🟡 ████████░░ 80% · 12/15 lines · CRAP 5`, from the Clover report your tests last wrote (`--coverage-clover`, or `<clover>` in `phpunit.xml`), and note when the file changed since that report. Nothing runs your tests, and nothing is shown when there's no report or the code isn't in it. Reports written inside Docker or Sail are matched automatically. Set `coverageReportPath` if the report is somewhere the server won't find it.
+
 ### Changed
 
 - **Easier-to-read hover cards**: PHP signatures are now syntax highlighted, type names are shortened (`JsonResponse` rather than `Illuminate\Http\JsonResponse`), long signatures put each parameter on its own line, and the description comes after the signature. The code block starts with a `<?php` line, because editors only highlight PHP after an opening tag.

@@ -32,7 +32,7 @@
 | ⚡ **Ready in under a third of a second** | On a 9,700-file Laravel app, Tusk PHP answers its first cross-file request in 283 ms using 162 MB. Intelephense needs 2.2 s and 686 MB. [See the benchmarks](#benchmarks). |
 | 🧠 **Understands your container** | `app('request')->`, `$container->get(...)`, `#[Autowire]` and interface bindings resolve to the concrete class, for completion, hover and go-to-definition. |
 | 🌍 **Works where you work** | Local projects, **Remote SSH** in VS Code and Zed, and any editor that speaks LSP. **vscode.dev** (in the browser, through WebAssembly) is coming soon. |
-| 🤖 **Talks to your AI agent** | `tusk-php mcp` gives Claude Code, Codex and Cursor the same index your editor uses: symbols, diagnostics, routes, models and your database schema. |
+| 🤖 **Talks to your AI agent** | `tusk-php mcp` gives Claude Code, Codex and Cursor the same index your editor uses: symbols, diagnostics, routes, models, test coverage and your database schema. |
 
 ## Get it
 
@@ -64,6 +64,9 @@ Setup for each editor is in [docs/editors.md](docs/editors.md), and every settin
 - Built-in checks for unknown classes, functions and members, undefined and unused variables, argument count, unused imports and private members, unreachable code, redundant types, deprecated functions, and abstract methods in concrete classes.
 - Fast checks run as you type; heavier ones run on save. Every rule can be turned off or given its own severity.
 - PHPStan and Laravel Pint results on save, when they're installed in your project.
+
+**Test coverage**
+- Hover shows how much of a method your tests reach, with its CRAP score, from the Clover report PHPUnit or Pest last wrote. Works with reports from Docker and Sail. [Setup](docs/configuration.md#test-coverage).
 
 **Laravel**
 - Service container bindings from your providers, plus 25+ core framework bindings.
