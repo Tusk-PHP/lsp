@@ -19,6 +19,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/config"
+	"github.com/Tusk-PHP/lsp/internal/coverage"
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/hover"
@@ -59,6 +60,7 @@ type Service struct {
 	Diagnostics  *diagnostics.Provider
 	Server       *mcp.Server
 	runtimeState atomic.Pointer[serviceRuntime]
+	coverage     *coverage.Store
 
 	projectSummaryURI string
 	dbSchemaURI       string
@@ -355,6 +357,7 @@ func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, e
 		laravelRoutesURI:  "tusk://laravel/routes",
 		laravelModelsURI:  "tusk://laravel/models",
 		symfonyRoutesURI:  "tusk://symfony/routes",
+		coverage:          coverage.NewStore(rootPath, cfg.CoverageReportPath, newStdLogger(logger)),
 	}
 	svc.installRuntime(svc.buildRuntime(ws))
 
@@ -551,6 +554,13 @@ func (s *Service) registerTools() {
 			return nil, out, nil
 		})
 	}
+
+	mcp.AddTool(s.Server, &mcp.Tool{
+		Name:        "php_coverage",
+		Description: "Read test coverage from the Clover report your tests last wrote; never runs tests. With `path`, returns that file's uncovered lines and its untested and partly tested methods. Without it, returns project totals and the least covered files.",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, in PhpCoverageInput) (*mcp.CallToolResult, PhpCoverageOutput, error) {
+		return nil, s.phpCoverage(in.Path), nil
+	})
 
 	// php_container_bindings is framework-agnostic: it surfaces resolved DI
 	// container bindings for both Laravel and Symfony workspaces.
