@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-30
+
 ### Added
 
 - `tuskPhpLsp.createObject` command: given a directory URI, an object kind (`class`, `trait`, `interface`, or `enum`), and a name, returns a `WorkspaceEdit` that creates the PHP file and inserts a namespace-aware skeleton. Namespace is derived from PSR-4 autoload mappings; omitted when the path falls outside any mapped root. Returns nothing when the name isn't a valid PHP identifier or the file already exists.
@@ -40,11 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PHP 8.2 stubs: `ini_parse_quantity`, `SensitiveParameter`/`SensitiveParameterValue`.
 - PHP 8.3 stubs: `Override` attribute.
 - WASM (`wasip1`) build target for browser-based editors such as vscode.dev.
-- `docs/mcp-tools.md`: reference for all 16 MCP tools and 6 resources, including schemas, output shapes, framework gating, and contract/schema versions.
-- README **AI Agents (MCP)** section: setup instructions for running `tusk-php mcp` in Claude Code, Codex, and other stdio MCP clients, with a summary of the available tools and resources.
+- **AI agents guide** (`docs/ai-agents.md`): setup instructions for running `tusk-php mcp` in Claude Code, Codex, Cursor and other stdio MCP clients, with a summary of the available tools and resources.
 
 ### Changed
 
+- `tusk-php mcp` now introduces itself to MCP clients as `tusk-php` instead of the old `tusk-mcp` name.
 - Unified Composer `installedPackage` struct now includes `Version`; removed the `installedPackageWithVersion` duplicate.
 
 ### Fixed
