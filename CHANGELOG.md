@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Hovering a method's name where it's declared now shows that method, instead of a method with the same name from another class.
+- Anonymous functions no longer report `Unknown function 'function'`. The same goes for other keywords written before a parenthesis, such as `use (`, `fn (`, `return (` and `and (`, and for calling a variable (`$callback()`).
+- `unreachable-code` no longer flags the body of a returned closure or anything else in a multi-line `return`, and no longer flags code after a braceless `if ($x) return;`.
+- `undefined-variable` no longer flags reassignments, variables compared with `==` or `===`, array keys on write (`$a[$key] = 1`), reused `foreach` variables, `global` and `static` variables, class properties, or variables first created by `$a[] = 1`. Comparisons also stop counting as assignments, so `undefined-variable` now reports a comparison with a variable that really is undefined.
+- `undefined-variable` no longer flags variables that a call may write to, such as `$matches` in `preg_match()`. Functions are checked against their signatures where those are known. Method, constructor and unresolved function calls, and builtins without a full signature, get the benefit of the doubt, so an undefined variable passed straight to one of those isn't reported.
+- `unused-variable` no longer flags parameters with default values, class properties, `self::$name` writes, or variables only read in a double-quoted string (`"{$name}"`), used as an array key, compared, or captured by `use (...)` after an arrow function.
+- Renaming a local variable now also updates its reassignments and its uses inside double-quoted strings.
 
 ## [0.9.0] - 2026-10-30
 

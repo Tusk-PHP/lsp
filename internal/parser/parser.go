@@ -142,13 +142,14 @@ type PropertyDef struct {
 }
 
 type ParamDef struct {
-	Name       string
-	Type       string
-	HasDefault bool
-	IsVariadic bool
-	IsPromoted bool
-	Visibility string
-	IsReadonly bool
+	Name        string
+	Type        string
+	HasDefault  bool
+	IsVariadic  bool
+	IsReference bool
+	IsPromoted  bool
+	Visibility  string
+	IsReadonly  bool
 }
 
 type ConstantDef struct {
@@ -516,6 +517,14 @@ func tokenize(source string) ([]Token, []ParseError) {
 			continue
 		}
 
+		// Comparison operators, so that their '=' can't be read as an assignment
+		if op := comparisonOperatorAt(source, offset); op != "" {
+			tokens = append(tokens, Token{TokenUnknown, op, line, col, offset})
+			offset += len(op)
+			col += len(op)
+			continue
+		}
+
 		// Multi-char operators
 		if offset+1 < len(source) {
 			two := source[offset : offset+2]
@@ -585,6 +594,16 @@ func tokenize(source string) ([]Token, []ParseError) {
 
 	tokens = append(tokens, Token{TokenEOF, "", line, col, offset})
 	return tokens, errors
+}
+
+// comparisonOperatorAt returns the comparison operator starting at offset, or "".
+func comparisonOperatorAt(source string, offset int) string {
+	for _, op := range []string{"===", "!==", "<=>", "==", "!=", "<=", ">="} {
+		if strings.HasPrefix(source[offset:], op) {
+			return op
+		}
+	}
+	return ""
 }
 
 func identifierToKind(word string) TokenKind {
@@ -1371,6 +1390,16 @@ func (p *structParser) parseParams() []ParamDef {
 				p.advance()
 				param.Type += op + p.readTypeName()
 			}
+		}
+		// A by-reference marker reads like the start of an intersection type, so
+		// it may already be on the end of the type.
+		if strings.HasSuffix(param.Type, "&") {
+			param.Type = strings.TrimSuffix(param.Type, "&")
+			param.IsReference = true
+		}
+		if p.peek().Kind == TokenAmpersand {
+			param.IsReference = true
+			p.advance()
 		}
 		// The tokenizer emits "..." as three consecutive TokenUnknown "." tokens,
 		// never as a single three-character token. Detect the triple-dot sequence

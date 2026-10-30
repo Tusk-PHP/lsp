@@ -663,9 +663,10 @@ func toMethodNode(result *ParseResult, methodDef MethodDef) MethodNode {
 
 func toParamNode(paramDef ParamDef) ParamNode {
 	return ParamNode{
-		Name:       paramDef.Name,
-		Type:       TypeNode{Name: paramDef.Type},
-		IsVariadic: paramDef.IsVariadic,
+		Name:        paramDef.Name,
+		Type:        TypeNode{Name: paramDef.Type},
+		IsVariadic:  paramDef.IsVariadic,
+		IsReference: paramDef.IsReference,
 	}
 }
 

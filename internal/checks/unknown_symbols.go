@@ -293,7 +293,10 @@ var skippedFunctionLikeKeywords = map[string]bool{
 	"switch": true, "catch": true, "echo": true, "empty": true, "isset": true,
 	"unset": true, "include": true, "include_once": true, "require": true,
 	"require_once": true, "array": true, "match": true, "clone": true,
-	"eval": true, "print": true, "die": true, "exit": true,
+	"eval": true, "print": true, "die": true, "exit": true, "function": true,
+	"fn": true, "use": true, "return": true, "list": true, "case": true,
+	"and": true, "or": true, "xor": true, "instanceof": true, "throw": true,
+	"yield": true, "static": true, "declare": true,
 }
 
 func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
@@ -340,6 +343,10 @@ func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index 
 func shouldSkipFunctionCall(line string, start int, name string) bool {
 	lower := strings.ToLower(name)
 	if skippedFunctionLikeKeywords[lower] {
+		return true
+	}
+	// `$callback()` calls a variable, not a function named callback.
+	if start >= 1 && line[start-1] == '$' {
 		return true
 	}
 	if start >= 2 && line[start-2:start] == "->" {

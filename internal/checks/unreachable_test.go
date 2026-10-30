@@ -213,3 +213,82 @@ class Foo {
 		assertFindingCodes(t, findings, []string{"unreachable-code", "unreachable-code"})
 	})
 }
+
+func TestUnreachableCodeRuleDoesNotFlag(t *testing.T) {
+	bodies := map[string]string{
+		"returned closure": `return function ($table) {
+            $joins = $this->query()->joins;
+
+            if ($joins === null) {
+                return false;
+            }
+
+            return true;
+        };`,
+		"closure argument in a multi-line return": `return $items->map(function ($item) {
+            $name = $item->name;
+            return $name;
+        });`,
+		"closure inside a returned array": `return [
+            'a' => function () {
+                $b = 1;
+                return $b;
+            },
+        ];`,
+		"returned match": `return match ($x) {
+            1 => 'a',
+            default => 'b',
+        };`,
+		"braceless if":          "if ($x) return;\n        echo 'reached';",
+		"braceless else":        "if ($x) echo 'a'; else return;\n        echo 'reached';",
+		"throw in a ternary":    "$a = $b ? $c : throw new \\Exception();\n        echo 'reached';",
+		"exit in a ternary":     "$b ? $c : exit;\n        echo 'reached';",
+		"exit in a condition":   "if ($b ? $c : exit) {\n            echo 'a';\n        }\n        echo 'reached';",
+		"throw after coalesce":  "$a = $b ?? throw new \\Exception();\n        echo 'reached';",
+		"switch cases":          "switch ($x) {\n            case 1:\n                return 1;\n            case 2:\n                break;\n            default:\n                echo 'a';\n        }",
+		"alternative syntax":    "if ($x):\n            return 1;\n        else:\n            echo 'a';\n        endif;\n        echo 'reached';",
+		"goto label":            "goto done;\n        done:\n        echo 'reached';",
+		"brace in a string":     "if ($x) {\n            return '}';\n        }\n        echo 'reached';",
+		"keyword as a property": "$this->return;\n        echo 'reached';",
+	}
+	for name, body := range bodies {
+		t.Run(name, func(t *testing.T) {
+			source := "<?php\nclass Foo {\n    public function bar() {\n        " + body + "\n    }\n}\n"
+			if findings := (&UnreachableCodeRule{}).Check(parser.ParseFile(source), source, nil); len(findings) != 0 {
+				t.Errorf("unexpected findings: %+v", findings)
+			}
+		})
+	}
+}
+
+func TestUnreachableCodeRuleInsideClosures(t *testing.T) {
+	cases := map[string]struct {
+		body string
+		line int
+	}{
+		"after a closure's return": {`return function () {
+            return 1;
+            echo 'unreachable';
+        };`, 5},
+		"after a returned closure": {`return function () {
+            return 1;
+        };
+        echo 'unreachable';`, 6},
+		"after a case's return": {`switch ($x) {
+            case 1:
+                return 1;
+                echo 'unreachable';
+            case 2:
+                echo 'reached';
+        }`, 6},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			source := "<?php\nclass Foo {\n    public function bar() {\n        " + c.body + "\n    }\n}\n"
+			findings := (&UnreachableCodeRule{}).Check(parser.ParseFile(source), source, nil)
+			if len(findings) != 1 || findings[0].StartLine != c.line || findings[0].EndLine != c.line {
+				t.Errorf("want one finding on line %d, got %+v", c.line, findings)
+			}
+		})
+	}
+}

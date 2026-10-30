@@ -86,3 +86,40 @@ class Foo {
 		t.Errorf("expected a finding mentioning 'NeverHeardOfThisAttribute' and 'attribute', got: %v", relevant)
 	}
 }
+
+func TestUnknownFunctionRuleSkipsKeywords(t *testing.T) {
+	source := `<?php
+class B {
+    public function a($p, $x)
+    {
+        $f = function ($t) use ($x) { return $t; };
+        $g = fn ($v) => $v;
+        $h = (1 and (2)) or (3) xor (4);
+        list($c) = $p;
+        switch ($c) { case (1): break; }
+        $y = $c instanceof ($p);
+        $p($c);
+        static($c);
+        yield ($c);
+        declare(strict_types=1);
+        throw ($c);
+        return (1);
+    }
+    public function b()
+    {
+        return function ($joinTable) {
+            return $joinTable;
+        };
+    }
+}
+`
+	if findings := (&UnknownFunctionRule{}).Check(parser.ParseFile(source), source, symbols.NewIndex()); len(findings) != 0 {
+		t.Errorf("unexpected findings: %+v", findings)
+	}
+
+	source = "<?php\nmissing_function(1);\n"
+	findings := (&UnknownFunctionRule{}).Check(parser.ParseFile(source), source, symbols.NewIndex())
+	if len(findings) != 1 {
+		t.Errorf("want missing_function reported, got %+v", findings)
+	}
+}
