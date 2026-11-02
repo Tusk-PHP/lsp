@@ -63,6 +63,10 @@ jobs:
             GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
               go build -ldflags="-s -w -X main.version=${VERSION}" -trimpath -o "$output" ./cmd/tusk-php/
           done
+          # The VS Code extension runs this one in the browser.
+          echo "Building wasip1/wasm"
+          GOOS=wasip1 GOARCH=wasm CGO_ENABLED=0 \
+            go build -ldflags="-s -w -X main.version=${VERSION}" -trimpath -o dist/tusk-php-wasip1-wasm.wasm ./cmd/tusk-php/
           # SHA-256 sums the editor extensions (Tusk-PHP/vscode, Tusk-PHP/zed) pin against.
           ( cd dist && sha256sum tusk-php-* > checksums.txt )
           echo "Checksums:"; cat dist/checksums.txt
@@ -78,6 +82,7 @@ jobs:
             dist/tusk-php-darwin-amd64
             dist/tusk-php-darwin-arm64
             dist/tusk-php-windows-amd64.exe
+            dist/tusk-php-wasip1-wasm.wasm
             dist/checksums.txt
 
   announce:
