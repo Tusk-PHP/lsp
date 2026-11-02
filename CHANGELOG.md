@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Releases now include a WebAssembly build, `tusk-php-wasip1-wasm.wasm`, with its SHA-256 in `checksums.txt`. It keeps its memory under about 448 MB by collecting garbage harder as it gets close.
+
 ## [0.11.0] - 2026-11-02
 
 ### Added
