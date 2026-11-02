@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-02
+
 ### Added
 
 - **Full PHP 7.4 to 8.5 syntax coverage**: completion, hover, go-to-definition and diagnostics now understand `??=`, array spread, `throw` expressions, `new` in initializers, DNF types such as `(A&B)|null`, constants in traits and interfaces, typed class constants, and `clone($a, [...])`.
