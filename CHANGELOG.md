@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `unreachable-code` now also checks functions, traits and enums, not only classes.
 - A `set` hook's implicit `$value` is no longer reported as an undefined variable.
 - A variable first assigned with `??=` is no longer reported as undefined.
+- `unknown-member` now checks variables in namespaced files, which it used to skip without saying, and a union such as `Post|Thread` is only reported when no class in it has the member. Calling a method on a typed parameter or a chained result now reports a real typo.
+- `unknown-member` no longer reports `Foo::class`, methods written in a different case, or anything `__call`, `__callStatic`, `__get`, `__set` or `@mixin` could answer, which covers Eloquent models, facades and macros, though a typo on one of those isn't reported either. It also stays quiet when a parent class isn't indexed, on builtins with no known members, inside traits, on vendor interfaces such as `Storage::disk()`'s `Filesystem`, and when the variable was tested with `instanceof`.
 - The server now stops if its input stream keeps failing, instead of retrying forever and logging each failure. After 100 read errors in a row it exits with an error.
 - The WebAssembly build (`make wasm`) can now run under VS Code's WASI host, where it used to fail every read of its input, and it uses little CPU while idle.
 

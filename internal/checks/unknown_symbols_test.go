@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -121,5 +122,149 @@ class B {
 	findings := (&UnknownFunctionRule{}).Check(parser.ParseFile(source), source, symbols.NewIndex())
 	if len(findings) != 1 {
 		t.Errorf("want missing_function reported, got %+v", findings)
+	}
+}
+
+// checkUnknownMembers indexes the fixtures, then runs the rule over the last one
+// with $vars typed as the resolver answers, in fully qualified names.
+func checkUnknownMembers(t *testing.T, vars map[string]string, sources ...string) []Finding {
+	t.Helper()
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	for i, source := range sources {
+		src := symbols.SourceProject
+		if strings.Contains(source, "namespace Vendor") {
+			src = symbols.SourceVendor
+		}
+		idx.IndexFileWithSource("file:///f"+strconv.Itoa(i)+".php", source, src)
+	}
+	source := sources[len(sources)-1]
+	rule := &UnknownMemberRule{TypeResolver: func(expr, _ string, _ int, _ *parser.FileNode) string {
+		return vars[expr]
+	}}
+	return rule.Check(parser.ParseFile(source), source, idx)
+}
+
+func unknownMemberMessages(findings []Finding) []string {
+	messages := []string{}
+	for _, f := range findings {
+		messages = append(messages, f.Message)
+	}
+	return messages
+}
+
+func TestUnknownMemberResolvedTypes(t *testing.T) {
+	post := `<?php
+namespace App;
+class Post { public string $title = ''; public function publish(): void {} }
+`
+	thread := `<?php
+namespace App;
+class Thread { public function lock(): void {} }
+`
+	cases := []struct {
+		name string
+		typ  string
+		use  string
+		want []string
+	}{
+		{"fully qualified, member exists", `App\Post`, `$v->publish();`, nil},
+		{"fully qualified, member missing", `App\Post`, `$v->missing();`, []string{"Unknown member 'missing' on 'Post'"}},
+		{"leading backslash", `\App\Post`, `$v->missing();`, []string{"Unknown member 'missing' on 'Post'"}},
+		{"nullable", `?App\Post`, `$v?->missing();`, []string{"Unknown member 'missing' on 'Post'"}},
+		{"or null", `App\Post|null`, `$v->missing();`, []string{"Unknown member 'missing' on 'Post'"}},
+		{"generic", `App\Post<int, App\Thread>`, `$v->missing();`, []string{"Unknown member 'missing' on 'Post'"}},
+		{"union, on the first", `App\Post|App\Thread`, `$v->publish();`, nil},
+		{"union, on the second", `App\Post|App\Thread`, `$v->lock();`, nil},
+		{"union, on neither", `App\Post|App\Thread`, `$v->missing();`, []string{"Unknown member 'missing' on 'Post|Thread'"}},
+		{"union with generics", `App\Post<int, string>|App\Thread`, `$v->lock();`, nil},
+		{"union with a scalar", `App\Post|string`, `$v->missing();`, []string{"Unknown member 'missing' on 'Post'"}},
+		{"union with an unknown class", `App\Post|App\Gone`, `$v->missing();`, nil},
+		{"union with mixed", `App\Post|mixed`, `$v->missing();`, nil},
+		{"intersection, on the second", `App\Post&App\Thread`, `$v->lock();`, nil},
+		{"unknown class", `App\Gone`, `$v->missing();`, nil},
+		{"a relative answer from a call", `static`, `$v->missing();`, nil},
+		{"method names ignore case", `App\Post`, `$v->PUBLISH();`, nil},
+		{"property names don't", `App\Post`, `$v->TITLE;`, []string{"Unknown member 'TITLE' on 'Post'"}},
+		{"chain continued from an earlier line", `App\Post`, `})->missing();`, nil},
+		{"class name", `App\Post`, `$v::class;`, nil},
+		{"tested with instanceof", `App\Post`, "if ($v instanceof \\App\\Thread) {\n$v->lock();\n}", nil},
+		{"tested with instanceof, on neither", `App\Post`, "if ($v instanceof \\App\\Thread) {\n$v->missing();\n}", []string{"Unknown member 'missing' on 'Post|Thread'"}},
+		{"tested against an unknown class", `App\Post`, "if ($v instanceof \\App\\Gone) {\n$v->missing();\n}", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			source := "<?php\nnamespace App\\Http;\n" + tc.use + "\n"
+			got := unknownMemberMessages(checkUnknownMembers(t, map[string]string{"$v": tc.typ}, post, thread, source))
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Errorf("type %q: got %v, want %v", tc.typ, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUnknownMemberOwnersThatCanAnswerForMore(t *testing.T) {
+	cases := []struct {
+		name  string
+		owner string
+		decl  string
+		use   string
+		want  []string
+	}{
+		{"__call answers calls", `App\Owner`, `class Owner { public function __call($n, $a) {} }`, `$v->anything();`, nil},
+		{"__call doesn't answer properties", `App\Owner`, `class Owner { public function __call($n, $a) {} }`, `$v->anything;`, []string{"Unknown member 'anything' on 'Owner'"}},
+		{"__get answers properties", `App\Owner`, `class Owner { public function __get($n) {} }`, `$v->anything;`, nil},
+		{"__get doesn't answer calls", `App\Owner`, `class Owner { public function __get($n) {} }`, `$v->anything();`, []string{"Unknown member 'anything' on 'Owner'"}},
+		{"inherited __callStatic", `App\Owner`, `class Base { public static function __callStatic($n, $a) {} } class Owner extends Base {}`, `\App\Owner::anything();`, nil},
+		{"@mixin", `App\Owner`, "/** @mixin \\App\\Other */\nclass Owner {}", `$v->anything();`, nil},
+		{"@method tag", `App\Owner`, "/** @method void tagged() */\nclass Owner {}", `$v->tagged();`, nil},
+		{"unknown parent", `App\Owner`, `class Owner extends Gone {}`, `$v->anything();`, nil},
+		{"known parent", `App\Owner`, `class Base { public function up() {} } class Owner extends Base {}`, `$v->up(); $v->anything();`, []string{"Unknown member 'anything' on 'Owner'"}},
+		{"promoted property", `App\Owner`, `class Owner { public function __construct(private int $id) {} }`, `$v->id;`, nil},
+		{"member of a parent interface", `App\Owner`, `interface Up { function up(); } interface Owner extends Up {}`, `$v->up(); $v->anything();`, []string{"Unknown member 'anything' on 'Owner'"}},
+		{"abstract class relying on its interface", `App\Owner`, `interface Up { function up(); } abstract class Owner implements Up {}`, `$v->up();`, nil},
+		{"trait", `App\Owner`, `trait Owner {}`, `$v->anything();`, nil},
+		{"member from a trait", `App\Owner`, `trait Up { public function up() {} } class Owner { use Up; }`, `$v->up(); $v->anything();`, []string{"Unknown member 'anything' on 'Owner'"}},
+		{"enum basics", `App\Owner`, `enum Owner: string { case A = 'a'; }`, `$v->name; $v->value; $v::from('a'); $v::tryFrom('a'); $v::cases(); $v->anything;`, []string{"Unknown member 'anything' on 'Owner'"}},
+		{"pure enum has no value", `App\Owner`, `enum Owner { case A; }`, `$v->name; $v->value;`, []string{"Unknown member 'value' on 'Owner'"}},
+		{"enum method", `App\Owner`, `enum Owner { case A; public function up() {} }`, `$v->up();`, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			decl := "<?php\nnamespace App;\n" + tc.decl + "\n"
+			source := "<?php\nnamespace App\\Http;\n" + tc.use + "\n"
+			got := unknownMemberMessages(checkUnknownMembers(t, map[string]string{"$v": tc.owner}, decl, source))
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Errorf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUnknownMemberInterfaces(t *testing.T) {
+	vendor := "<?php\nnamespace Vendor;\ninterface Contract { function up(); }\n"
+	source := "<?php\nnamespace App;\ninterface Own { function up(); }\nclass Impl implements \\Vendor\\Contract { function up() {} }\n$v->anything();\n"
+
+	if got := checkUnknownMembers(t, map[string]string{"$v": `Vendor\Contract`}, vendor, source); len(got) != 0 {
+		t.Errorf("a vendor's interface can't show a member is missing, got %v", unknownMemberMessages(got))
+	}
+	if got := checkUnknownMembers(t, map[string]string{"$v": `App\Own`}, vendor, source); len(got) != 1 {
+		t.Errorf("the project's own interface should be checked, got %v", unknownMemberMessages(got))
+	}
+	if got := checkUnknownMembers(t, map[string]string{"$v": `App\Impl`}, vendor, source); len(got) != 1 {
+		t.Errorf("a class should be checked even if it implements a vendor's interface, got %v", unknownMemberMessages(got))
+	}
+}
+
+func TestUnknownMemberBuiltinWithoutMembersIsNotFlagged(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	source := "<?php\nnamespace App;\n$v->open();\n"
+	rule := &UnknownMemberRule{TypeResolver: func(string, string, int, *parser.FileNode) string { return "ZipArchive" }}
+	if sym := idx.Lookup("ZipArchive"); sym == nil || len(sym.Children) != 0 {
+		t.Skip("ZipArchive now has its members listed")
+	}
+	if got := rule.Check(parser.ParseFile(source), source, idx); len(got) != 0 {
+		t.Errorf("got %v", unknownMemberMessages(got))
 	}
 }

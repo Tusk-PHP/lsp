@@ -221,23 +221,15 @@ func memberUses(file *parser.FileNode, source string, index *symbols.Index, type
 	return uses
 }
 
-// resolveMemberOwner returns the class-like a member is accessed on. The type
-// resolver answers in fully qualified names, so they're looked up as they are.
+// resolveMemberOwner returns the class-like a member is accessed on.
 func resolveMemberOwner(ownerExpr string, line int, source string, file *parser.FileNode, index *symbols.Index, typeResolver func(string, string, int, *parser.FileNode) string) string {
 	if !strings.HasPrefix(ownerExpr, "$") && !strings.HasSuffix(ownerExpr, ")") && !strings.HasSuffix(ownerExpr, "]") {
 		if fqn, ok := resolveClassLikeName(ownerExpr, line, file); ok && isClassLikeSymbol(index.Lookup(fqn)) {
 			return fqn
 		}
 	}
-	resolved := typeResolver(ownerExpr, source, line, file)
-	if i := strings.IndexByte(resolved, '<'); i >= 0 {
-		resolved = resolved[:i]
-	}
-	for _, part := range strings.FieldsFunc(resolved, func(r rune) bool { return strings.ContainsRune("|&()?", r) }) {
-		fqn := strings.TrimPrefix(part, "\\")
-		if isClassLikeSymbol(index.Lookup(fqn)) {
-			return fqn
-		}
+	if owners := resolvedClassLikes(typeResolver(ownerExpr, source, line, file), file, index); len(owners) > 0 {
+		return owners[0]
 	}
 	return ""
 }
