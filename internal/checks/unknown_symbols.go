@@ -7,6 +7,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
 // UnknownClassRule detects unresolved class-like references in a narrow set of
@@ -391,64 +392,156 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 	lines := strings.Split(source, "\n")
 	var findings []Finding
 	inBlockComment := false
+	hierarchies := map[string]*memberHierarchy{}
 
 	for lineNum, raw := range lines {
 		line := maskPHPLine(raw, &inBlockComment)
 		for _, match := range unknownMemberAccessRe.FindAllStringSubmatchIndex(line, -1) {
-			opStart := match[2]
+			opStart, opEnd := match[2], match[3]
 			nameStart, nameEnd := match[4], match[5]
 			member := line[nameStart:nameEnd]
+			isStatic := line[opStart:opEnd] == "::"
+			// `Foo::class` and `$foo::class` are part of the language, not members.
+			if isStatic && strings.EqualFold(member, "class") {
+				continue
+			}
 			ownerExpr := strings.TrimSpace(line[backwardExprStart(line, opStart):opStart])
-			if ownerExpr == "" {
+			// A line like `})->name('x')->middleware()` continues a chain begun on
+			// an earlier line, so its owner can't be worked out from this line.
+			if ownerExpr == "" || strings.Count(ownerExpr, ")") > strings.Count(ownerExpr, "(") {
 				continue
 			}
 
-			ownerFQN, ok := r.resolveOwnerFQN(ownerExpr, lineNum, source, file, index)
-			if !ok || ownerFQN == "" {
+			owners := r.resolveOwners(ownerExpr, lineNum, source, file, index)
+			if len(owners) == 0 {
 				continue
 			}
-			if !memberExists(ownerFQN, member, file, index) {
-				findings = append(findings, Finding{
-					StartLine: lineNum,
-					StartCol:  nameStart,
-					EndLine:   lineNum,
-					EndCol:    nameEnd,
-					Severity:  SeverityWarning,
-					Code:      "unknown-member",
-					Message:   fmt.Sprintf("Unknown member '%s' on '%s'", member, unknownSymbolShortName(ownerFQN)),
-				})
+			narrowed, ok := instanceofOwners(ownerExpr, lines[:lineNum+1], lineNum, file, index)
+			if !ok {
+				continue
 			}
+			owners = append(owners, narrowed...)
+			access := memberAccess{name: member, isStatic: isStatic, isCall: isCallAfter(line, nameEnd)}
+			if anyOwnerMayHaveMember(owners, access, file, index, hierarchies) {
+				continue
+			}
+			names := make([]string, len(owners))
+			for i, owner := range owners {
+				names[i] = unknownSymbolShortName(owner)
+			}
+			findings = append(findings, Finding{
+				StartLine: lineNum,
+				StartCol:  nameStart,
+				EndLine:   lineNum,
+				EndCol:    nameEnd,
+				Severity:  SeverityWarning,
+				Code:      "unknown-member",
+				Message:   fmt.Sprintf("Unknown member '%s' on '%s'", member, strings.Join(names, "|")),
+			})
 		}
 	}
 
 	return findings
 }
 
-func (r *UnknownMemberRule) resolveOwnerFQN(ownerExpr string, lineNum int, source string, file *parser.FileNode, index *symbols.Index) (string, bool) {
+// resolveOwners returns every class-like a member may be accessed on. It returns
+// nothing when any part of the type isn't known, since the member could be there.
+func (r *UnknownMemberRule) resolveOwners(ownerExpr string, lineNum int, source string, file *parser.FileNode, index *symbols.Index) []string {
 	if !strings.HasPrefix(ownerExpr, "$") && !strings.HasSuffix(ownerExpr, ")") && !strings.HasSuffix(ownerExpr, "]") {
 		fqn, ok := resolveClassLikeName(ownerExpr, lineNum, file)
 		if ok && fqn != "" {
 			if localClassLikeExists(fqn, file) {
-				return fqn, true
+				return []string{fqn}
 			}
 			if index != nil && isClassLikeSymbol(index.Lookup(fqn)) {
-				return fqn, true
+				return []string{fqn}
 			}
 		}
 	}
 
-	resolved := r.TypeResolver(ownerExpr, source, lineNum, file)
-	fqn, ok := normalizeResolvedClassLike(resolved, lineNum, file)
-	if !ok || fqn == "" {
-		return "", false
+	return resolvedClassLikes(r.TypeResolver(ownerExpr, source, lineNum, file), file, index)
+}
+
+// instanceofOwners adds the classes an expression is tested against before the
+// access, since the code may be relying on that check. The whole file so far is
+// searched, which can only spare a finding. ok is false when a tested class is
+// unknown, as the member could be on it.
+func instanceofOwners(ownerExpr string, lines []string, lineNum int, file *parser.FileNode, index *symbols.Index) (owners []string, ok bool) {
+	if !strings.HasPrefix(ownerExpr, "$") {
+		return nil, true
 	}
-	if localClassLikeExists(fqn, file) {
-		return fqn, true
+	var re *regexp.Regexp
+	for _, line := range lines {
+		if !strings.Contains(line, ownerExpr) || !strings.Contains(line, "instanceof") {
+			continue
+		}
+		if re == nil {
+			re = regexp.MustCompile(regexp.QuoteMeta(ownerExpr) + `\s+instanceof\s+(\\?[A-Za-z_][A-Za-z0-9_\\]*)`)
+		}
+		for _, match := range re.FindAllStringSubmatch(line, -1) {
+			fqn, resolved := resolveClassLikeName(match[1], lineNum, file)
+			if !resolved || fqn == "" || (!localClassLikeExists(fqn, file) && (index == nil || !isClassLikeSymbol(index.Lookup(fqn)))) {
+				return nil, false
+			}
+			owners = append(owners, fqn)
+		}
 	}
-	if index == nil || !isClassLikeSymbol(index.Lookup(fqn)) {
-		return "", false
+	return owners, true
+}
+
+// resolvedClassLikes lists the class-likes in a type from the type resolver,
+// which answers in fully qualified names, so they're looked up as they are.
+// null and scalars are left out, as they have no members to find.
+func resolvedClassLikes(typ string, file *parser.FileNode, index *symbols.Index) []string {
+	typ = strings.TrimSpace(typ)
+	if typ == "" {
+		return nil
 	}
-	return fqn, true
+	var owners []string
+	if !collectClassLikes(types.ParseTypeExpr(typ), file, index, &owners) {
+		return nil
+	}
+	return owners
+}
+
+func collectClassLikes(expr types.TypeExpr, file *parser.FileNode, index *symbols.Index, owners *[]string) bool {
+	switch expr.Kind {
+	case types.TypeKindUnion, types.TypeKindIntersection:
+		for _, part := range expr.Types {
+			if !collectClassLikes(part, file, index, owners) {
+				return false
+			}
+		}
+		return true
+	case types.TypeKindLiteral:
+		return true
+	case types.TypeKindNamed, types.TypeKindGeneric:
+	default:
+		return false
+	}
+
+	name := strings.TrimSpace(expr.Name)
+	lower := strings.ToLower(name)
+	switch lower {
+	// `static` and friends are relative to the class that was called, which
+	// isn't known here, and isn't necessarily the one being edited.
+	case "mixed", "object", "callable", "iterable", "self", "static", "parent", "$this":
+		return false
+	}
+	if symbols.IsPHPBuiltinType(lower) {
+		return true
+	}
+	name = strings.TrimPrefix(name, "\\")
+	if !localClassLikeExists(name, file) && (index == nil || !isClassLikeSymbol(index.Lookup(name))) {
+		return false
+	}
+	for _, owner := range *owners {
+		if owner == name {
+			return true
+		}
+	}
+	*owners = append(*owners, name)
+	return true
 }
 
 func maskPHPLine(line string, inBlockComment *bool) string {
@@ -576,19 +669,151 @@ func functionExists(name string, file *parser.FileNode, index *symbols.Index) bo
 	return false
 }
 
-func memberExists(ownerFQN, member string, file *parser.FileNode, index *symbols.Index) bool {
-	if localMemberExists(ownerFQN, member, file) {
-		return true
-	}
-	if index == nil {
-		return false
-	}
-	for _, sym := range index.GetClassMembers(ownerFQN) {
-		if sym.Name == member || sym.Name == "$"+member {
+// memberAccess describes how a member is used, which decides the magic methods
+// that could answer it.
+type memberAccess struct {
+	name     string
+	isStatic bool
+	isCall   bool
+}
+
+// memberHierarchy is everything a class-like gets from its parents, traits and
+// interfaces. It's open when something in it can answer for members we can't
+// see, such as an unknown parent or an `@mixin`.
+type memberHierarchy struct {
+	members []*symbols.Symbol
+	open    bool
+	visited map[string]bool
+}
+
+func anyOwnerMayHaveMember(owners []string, access memberAccess, file *parser.FileNode, index *symbols.Index, hierarchies map[string]*memberHierarchy) bool {
+	for _, owner := range owners {
+		if ownerMayHaveMember(owner, access, file, index, hierarchies) {
 			return true
 		}
 	}
 	return false
+}
+
+func ownerMayHaveMember(owner string, access memberAccess, file *parser.FileNode, index *symbols.Index, hierarchies map[string]*memberHierarchy) bool {
+	if localMemberExists(owner, access.name, file) {
+		return true
+	}
+	h, ok := hierarchies[owner]
+	if !ok {
+		h = buildMemberHierarchy(owner, file, index)
+		hierarchies[owner] = h
+	}
+	if h.open {
+		return true
+	}
+	return h.answers(access)
+}
+
+func buildMemberHierarchy(owner string, file *parser.FileNode, index *symbols.Index) *memberHierarchy {
+	h := &memberHierarchy{visited: map[string]bool{}}
+	var sym *symbols.Symbol
+	if index != nil {
+		sym = index.Lookup(owner)
+	}
+	if sym == nil {
+		// Declared in this file but not indexed yet: all we can vouch for is a
+		// class standing on its own.
+		h.open = !localClassStandsAlone(owner, file)
+		return h
+	}
+	// An object typed by a vendor's interface usually does more than the interface
+	// promises, as with `Storage::disk()` returning a Filesystem contract.
+	if sym.Kind == symbols.KindInterface && sym.Source != symbols.SourceProject {
+		h.open = true
+		return h
+	}
+	h.walk(owner, index)
+	return h
+}
+
+func (h *memberHierarchy) walk(fqn string, index *symbols.Index) {
+	if h.visited[fqn] {
+		return
+	}
+	h.visited[fqn] = true
+	sym := index.Lookup(fqn)
+	if !isClassLikeSymbol(sym) {
+		h.open = true
+		return
+	}
+	// A trait's `$this` is whichever class uses it, and builtins registered by
+	// name alone have no members listed. Neither can show a member is missing.
+	if sym.Kind == symbols.KindTrait || (symbols.IsBuiltin(sym) && len(sym.Children) == 0 && sym.Extends == "" && len(sym.Implements) == 0) {
+		h.open = true
+		return
+	}
+	if strings.Contains(sym.DocComment, "@mixin") {
+		h.open = true
+		return
+	}
+	h.members = append(h.members, sym.Children...)
+	if sym.Kind == symbols.KindEnum {
+		h.members = append(h.members, enumBuiltinMembers(sym)...)
+	}
+	if sym.Extends != "" {
+		h.walk(sym.Extends, index)
+	}
+	for _, tr := range index.TraitsOf(fqn) {
+		if isClassLikeSymbol(index.Lookup(tr)) {
+			h.members = append(h.members, index.GetClassMembers(tr)...)
+		} else {
+			h.open = true
+		}
+	}
+	for _, iface := range sym.Implements {
+		h.walk(iface, index)
+	}
+}
+
+func enumBuiltinMembers(sym *symbols.Symbol) []*symbols.Symbol {
+	members := []*symbols.Symbol{
+		{Name: "name", Kind: symbols.KindProperty},
+		{Name: "cases", Kind: symbols.KindMethod},
+	}
+	if sym.BackedType != "" {
+		members = append(members,
+			&symbols.Symbol{Name: "value", Kind: symbols.KindProperty},
+			&symbols.Symbol{Name: "from", Kind: symbols.KindMethod},
+			&symbols.Symbol{Name: "tryFrom", Kind: symbols.KindMethod},
+		)
+	}
+	return members
+}
+
+func (h *memberHierarchy) answers(access memberAccess) bool {
+	for _, sym := range h.members {
+		switch {
+		case sym.Name == access.name || sym.Name == "$"+access.name:
+			return true
+		case sym.Kind == symbols.KindMethod && strings.EqualFold(sym.Name, access.name):
+			// Method names are case-insensitive in PHP.
+			return true
+		case sym.Kind != symbols.KindMethod:
+			continue
+		}
+		switch strings.ToLower(sym.Name) {
+		case "__call", "__callstatic":
+			if access.isCall {
+				return true
+			}
+		case "__get", "__set":
+			if !access.isCall && !access.isStatic {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isCallAfter(line string, pos int) bool {
+	rest := strings.TrimLeft(line[pos:], " \t")
+	return strings.HasPrefix(rest, "(")
 }
 
 func resolveClassLikeName(name string, line int, file *parser.FileNode) (string, bool) {
@@ -695,6 +920,36 @@ func localClassLikeExists(fqn string, file *parser.FileNode) bool {
 	return false
 }
 
+func localClassStandsAlone(fqn string, file *parser.FileNode) bool {
+	if file == nil {
+		return false
+	}
+	for i := range file.Classes {
+		cls := &file.Classes[i]
+		if classNodeFQN(cls, file) != fqn {
+			continue
+		}
+		if cls.Extends != "" || len(cls.Implements) > 0 || len(cls.Traits) > 0 || strings.Contains(cls.DocComment, "@mixin") {
+			return false
+		}
+		for _, m := range cls.Methods {
+			if strings.HasPrefix(m.Name, "__") {
+				switch strings.ToLower(m.Name) {
+				case "__call", "__callstatic", "__get", "__set":
+					return false
+				}
+			}
+		}
+		return true
+	}
+	for i := range file.Enums {
+		if enumNodeFQN(&file.Enums[i], file) == fqn {
+			return len(file.Enums[i].Implements) == 0
+		}
+	}
+	return false
+}
+
 func localFunctionExists(fqn string, file *parser.FileNode) bool {
 	if file == nil {
 		return false
@@ -716,7 +971,7 @@ func localMemberExists(ownerFQN, member string, file *parser.FileNode) bool {
 			continue
 		}
 		for _, m := range cls.Methods {
-			if m.Name == member {
+			if strings.EqualFold(m.Name, member) {
 				return true
 			}
 		}
@@ -736,7 +991,7 @@ func localMemberExists(ownerFQN, member string, file *parser.FileNode) bool {
 			continue
 		}
 		for _, m := range en.Methods {
-			if m.Name == member {
+			if strings.EqualFold(m.Name, member) {
 				return true
 			}
 		}
@@ -838,32 +1093,6 @@ func isClassLikeSymbol(sym *symbols.Symbol) bool {
 	default:
 		return false
 	}
-}
-
-func normalizeResolvedClassLike(typ string, line int, file *parser.FileNode) (string, bool) {
-	typ = strings.TrimSpace(typ)
-	if typ == "" || typ == "mixed" || typ == "null" {
-		return "", false
-	}
-	if strings.HasPrefix(typ, "?") {
-		typ = typ[1:]
-	}
-	if idx := strings.Index(typ, "<"); idx >= 0 {
-		typ = typ[:idx]
-	}
-	if strings.Contains(typ, "|") {
-		for _, part := range strings.Split(typ, "|") {
-			part = strings.TrimSpace(part)
-			if part == "" || part == "null" || part == "mixed" {
-				continue
-			}
-			if fqn, ok := resolveClassLikeName(part, line, file); ok {
-				return fqn, true
-			}
-		}
-		return "", false
-	}
-	return resolveClassLikeName(typ, line, file)
 }
 
 func backwardExprStart(line string, end int) int {
