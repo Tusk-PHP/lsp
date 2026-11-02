@@ -71,3 +71,22 @@ func TestLookupAvailabilityHandOverridesGenerated(t *testing.T) {
 			got, handAuthored, generated)
 	}
 }
+
+func TestVersionDeltaAddsToEarlierClass(t *testing.T) {
+	hasMember := func(version, member string) bool {
+		idx := NewIndex()
+		idx.RegisterBuiltinsForProfile(BuiltinProfile{PHPVersion: version})
+		for _, m := range idx.GetClassMembers("ReflectionClass") {
+			if m.Name == member {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasMember("8.4", "getName") || !hasMember("8.4", "newLazyGhost") {
+		t.Error("PHP 8.4 should have ReflectionClass's earlier members and its lazy object ones")
+	}
+	if hasMember("8.3", "newLazyGhost") {
+		t.Error("PHP 8.3 shouldn't have lazy object members")
+	}
+}

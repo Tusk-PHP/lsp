@@ -200,12 +200,21 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 
 		if tok.Kind == parser.TokenVariable {
 			_, isDecl := declByToken[i]
-			if next := nextSignificant(result.Tokens, i+1); !isDecl && next >= 0 && result.Tokens[next].Kind == parser.TokenEquals {
+			if next := assignmentOperator(result.Tokens, i); !isDecl && next >= 0 {
 				current := active[len(active)-1]
 				binding := ensureBinding(doc, current.scope, tok.Value, BindingVariable, tokenRange(tok))
 				declByToken[i] = binding
 				if assignment := buildAssignment(result.Tokens, i, next, braceDepth-current.braceDepth); assignment != nil {
 					binding.Assignments = append(binding.Assignments, assignment)
+				}
+			}
+		}
+
+		if inPropertyHookBlock(classBodies, braceDepth, len(active)) && isPropertyHook(result.Tokens, i) {
+			if ps, decls := parsePropertyHook(result.Tokens, i, active[len(active)-1].scope, doc); ps != nil {
+				pending = append(pending, *ps)
+				for idx, binding := range decls {
+					declByToken[idx] = binding
 				}
 			}
 		}
@@ -678,6 +687,90 @@ func isVariableChar(ch byte, first bool) bool {
 }
 
 // isSubscriptWrite matches `$a[] = 1` and `$a['b'][$c] = 1`, which create $a.
+// assignmentOperator returns the index of the `=` when the variable at i is
+// assigned to, by `=` or by `??=`, which reads as `?`, `?`, `=`. It returns -1
+// otherwise.
+func assignmentOperator(tokens []parser.Token, i int) int {
+	next := nextSignificant(tokens, i+1)
+	if next < 0 {
+		return -1
+	}
+	if tokens[next].Kind == parser.TokenEquals {
+		return next
+	}
+	if next+2 < len(tokens) && tokens[next].Kind == parser.TokenQuestion && tokens[next+1].Kind == parser.TokenQuestion && tokens[next+2].Kind == parser.TokenEquals {
+		return next + 2
+	}
+	return -1
+}
+
+// inPropertyHookBlock reports whether this is directly inside the braces after
+// a property's name: one level into a class body, and not in a function.
+func inPropertyHookBlock(bodies []classBody, braceDepth, activeLen int) bool {
+	if len(bodies) == 0 {
+		return false
+	}
+	body := bodies[len(bodies)-1]
+	return body.braceDepth+1 == braceDepth && body.activeLen == activeLen
+}
+
+func isPropertyHook(tokens []parser.Token, i int) bool {
+	tok := tokens[i]
+	if tok.Kind != parser.TokenIdentifier || (!strings.EqualFold(tok.Value, "get") && !strings.EqualFold(tok.Value, "set")) {
+		return false
+	}
+	next := nextSignificant(tokens, i+1)
+	if next < 0 {
+		return false
+	}
+	switch tokens[next].Kind {
+	case parser.TokenOpenBrace, parser.TokenDoubleArrow, parser.TokenOpenParen:
+		return true
+	}
+	return false
+}
+
+// parsePropertyHook gives a PHP 8.4 `get` or `set` hook its own scope. A `set`
+// hook has its parameter, which is an implicit $value unless it names its own.
+func parsePropertyHook(tokens []parser.Token, start int, parent *Scope, doc *Document) (*pendingScope, map[int]*Binding) {
+	scope := &Scope{Kind: ScopeMethod, Name: tokens[start].Value, Parent: parent, Range: protocol.Range{Start: tokenRange(tokens[start]).Start}}
+	doc.Scopes = append(doc.Scopes, scope)
+	decls := map[int]*Binding{}
+
+	j := nextSignificant(tokens, start+1)
+	if j >= 0 && tokens[j].Kind == parser.TokenOpenParen {
+		closeParen := findMatching(tokens, j, parser.TokenOpenParen, parser.TokenCloseParen)
+		if closeParen < 0 {
+			return nil, nil
+		}
+		for i := j + 1; i < closeParen; i++ {
+			if tokens[i].Kind == parser.TokenVariable {
+				decls[i] = doc.addBinding(scope, tokens[i].Value, BindingParameter, tokenRange(tokens[i]), nil)
+			}
+		}
+		j = nextSignificant(tokens, closeParen+1)
+	} else if strings.EqualFold(tokens[start].Value, "set") {
+		doc.addBinding(scope, "$value", BindingParameter, tokenRange(tokens[start]), nil)
+	}
+	if j < 0 {
+		return nil, nil
+	}
+	switch tokens[j].Kind {
+	case parser.TokenOpenBrace:
+		return &pendingScope{scope: scope, bodyOpenIndex: j}, decls
+	case parser.TokenDoubleArrow:
+		bodyStart := nextSignificant(tokens, j+1)
+		bodyEnd := findArrowExpressionEnd(tokens, bodyStart)
+		if bodyStart < 0 || bodyEnd < 0 {
+			return nil, nil
+		}
+		scope.ExprBody = true
+		scope.Range.End = tokenRange(tokens[bodyEnd]).End
+		return &pendingScope{scope: scope, bodyOpenIndex: bodyStart, bodyCloseIndex: bodyEnd, expressionBody: true}, decls
+	}
+	return nil, nil
+}
+
 func isSubscriptWrite(tokens []parser.Token, i int) bool {
 	next := nextSignificant(tokens, i+1)
 	if next < 0 || tokens[next].Kind != parser.TokenOpenBracket {

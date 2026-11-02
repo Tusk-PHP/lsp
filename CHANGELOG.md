@@ -7,8 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Full PHP 7.4 to 8.5 syntax coverage**: completion, hover, go-to-definition and diagnostics now understand `??=`, array spread, `throw` expressions, `new` in initializers, DNF types such as `(A&B)|null`, constants in traits and interfaces, typed class constants, and `clone($a, [...])`.
+- **Enums are complete**: methods, constants and traits used by an enum now show up, along with what PHP gives every enum (`name`, `value`, `cases()`, `from()` and `tryFrom()`), and these no longer report as unknown members.
+- **Promoted constructor properties** now complete, resolve their type and go to their declaration, as other properties do. Hover also shows when a property is `readonly`.
+- **Types flow through the pipe operator**: `$x = 'a' |> make(...) |> other(...)` takes the type of the last stage, including method callables and closures with a declared return type.
+- **Attributes in hover**: hover shows a symbol's attributes as written, such as `#[\Deprecated('use other')]`.
+- `invalid-override` diagnostic: an error on a method with `#[\Override]` that overrides nothing. It stays quiet if a parent class or interface isn't indexed.
+- `deprecated` diagnostic now also covers your own functions, methods, constants and enum cases marked `#[\Deprecated]`.
+- `unused-result` diagnostic: a warning when the result of something marked `#[\NoDiscard]` is thrown away. Cast to `(void)` to do so on purpose.
+- Signatures for `array_find()`, `array_find_key()`, `array_any()`, `array_all()`, `array_first()` and `array_last()`, and the PHP 8.4 lazy object methods on `ReflectionClass` and `ReflectionProperty`.
+
 ### Fixed
 
+- `?Foo` is no longer reported as `redundant-union-member`. Only a real `?Foo|null` is, and that can't be written in valid PHP.
+- `$this->` completion now includes the class's own private methods and properties.
+- Union and intersection types keep their shape in hover, and completion offers the members of every class in them rather than only the first.
+- `unreachable-code` now also checks functions, traits and enums, not only classes.
+- A `set` hook's implicit `$value` is no longer reported as an undefined variable.
+- A variable first assigned with `??=` is no longer reported as undefined.
 - The server now stops if its input stream keeps failing, instead of retrying forever and logging each failure. After 100 read errors in a row it exits with an error.
 - The WebAssembly build (`make wasm`) can now run under VS Code's WASI host, where it used to fail every read of its input, and it uses little CPU while idle.
 

@@ -133,6 +133,10 @@ func declaredParamType(before string) string {
 // variable and `=`.
 func assignmentValue(lines []string, i int, varPrefix string) (full, firstLine string, ok bool) {
 	trimmed := strings.TrimSpace(lines[i])
+	// `static $x = new Foo();` assigns the same way.
+	if rest, ok := cutKeyword(trimmed, "static"); ok && strings.HasPrefix(rest, "$") {
+		trimmed = rest
+	}
 	if !strings.HasPrefix(trimmed, varPrefix) {
 		return "", "", false
 	}

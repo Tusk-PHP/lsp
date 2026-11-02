@@ -150,6 +150,34 @@ class ReflectionClass
     public function hasMethod(string $name): bool {}
 }
 
+class ReflectionProperty
+{
+    public string $name = '';
+    public string $class = '';
+
+    public function __construct(object|string $class, string $property) {}
+
+    public function getName(): string {}
+
+    public function getValue(?object $object = null): mixed {}
+
+    public function setValue(mixed $objectOrValue, mixed $value = null): void {}
+
+    public function isInitialized(?object $object = null): bool {}
+
+    public function isPublic(): bool {}
+
+    public function isPrivate(): bool {}
+
+    public function isProtected(): bool {}
+
+    public function isStatic(): bool {}
+
+    public function getType(): ?ReflectionType {}
+
+    public function getDocComment(): string|false {}
+}
+
 class ReflectionObject extends ReflectionClass
 {
     public function __construct(object $object) {}

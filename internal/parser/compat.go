@@ -32,6 +32,8 @@ type PropertyNode struct {
 	Visibility    string
 	SetVisibility string // PHP 8.4 asymmetric visibility (e.g. "private" in public private(set))
 	IsStatic      bool
+	IsReadonly    bool
+	Attributes    []AttributeDef
 	DocComment    string
 	StartLine     int
 	StartCol      int
@@ -39,6 +41,7 @@ type PropertyNode struct {
 }
 
 type MethodNode struct {
+	Attributes []AttributeDef
 	Name       string
 	Params     []ParamNode
 	ReturnType TypeNode
@@ -53,14 +56,17 @@ type MethodNode struct {
 }
 
 type ConstantNode struct {
-	Name      string
-	Value     string
-	Type      TypeNode
-	StartLine int
-	StartCol  int
+	Name       string
+	Value      string
+	Type       TypeNode
+	Visibility string
+	Attributes []AttributeDef
+	StartLine  int
+	StartCol   int
 }
 
 type ClassNode struct {
+	Attributes []AttributeDef
 	Name       string
 	FullName   string
 	Extends    string
@@ -79,16 +85,21 @@ type ClassNode struct {
 }
 
 type InterfaceNode struct {
+	Attributes []AttributeDef
 	Name       string
 	FullName   string
 	Extends    []string
 	Methods    []MethodNode
+	Properties []PropertyNode
+	Constants  []ConstantNode
 	StartLine  int
 	StartCol   int
 	DocComment string
 }
 
 type TraitNode struct {
+	Attributes []AttributeDef
+	Constants  []ConstantNode
 	Name       string
 	FullName   string
 	Properties []PropertyNode
@@ -100,10 +111,12 @@ type TraitNode struct {
 }
 
 type EnumCaseNode struct {
-	Name      string
-	Value     string
-	StartLine int
-	StartCol  int
+	Name       string
+	Value      string
+	Attributes []AttributeDef
+	DocComment string
+	StartLine  int
+	StartCol   int
 }
 
 type EnumNode struct {
@@ -112,13 +125,20 @@ type EnumNode struct {
 	BackedType string
 	Cases      []EnumCaseNode
 	Methods    []MethodNode
+	Properties []PropertyNode
+	Constants  []ConstantNode
+	Traits     []string
 	Implements []string
+	Attributes []AttributeDef
 	StartLine  int
+	EndLine    int
 	StartCol   int
 	DocComment string
 }
 
 type FunctionNode struct {
+	Attributes []AttributeDef
+	EndLine    int
 	Name       string
 	FullName   string
 	Params     []ParamNode
@@ -524,6 +544,7 @@ func toFileNode(result *ParseResult) *FileNode {
 
 	for _, classDef := range result.Classes {
 		classNode := ClassNode{
+			Attributes: classDef.Attributes,
 			Name:       classDef.Name,
 			FullName:   classDef.FullName,
 			Extends:    classDef.Extends,
@@ -551,31 +572,42 @@ func toFileNode(result *ParseResult) *FileNode {
 
 	for _, interfaceDef := range result.Interfaces {
 		ifaceNode := InterfaceNode{
-			Name:      interfaceDef.Name,
-			FullName:  interfaceDef.FullName,
-			Extends:   append([]string(nil), interfaceDef.Extends...),
-			StartLine: interfaceDef.Line,
-			StartCol:  startColumnForDeclaration(result, interfaceDef.Name, interfaceDef.Line, TokenInterface),
+			Attributes: interfaceDef.Attributes,
+			Name:       interfaceDef.Name,
+			FullName:   interfaceDef.FullName,
+			Extends:    append([]string(nil), interfaceDef.Extends...),
+			StartLine:  interfaceDef.Line,
+			StartCol:   startColumnForDeclaration(result, interfaceDef.Name, interfaceDef.Line, TokenInterface),
 		}
 		for _, methodDef := range interfaceDef.Methods {
 			ifaceNode.Methods = append(ifaceNode.Methods, toMethodNode(result, methodDef))
+		}
+		for _, propertyDef := range interfaceDef.Properties {
+			ifaceNode.Properties = append(ifaceNode.Properties, toPropertyNode(result, propertyDef))
+		}
+		for _, constantDef := range interfaceDef.Constants {
+			ifaceNode.Constants = append(ifaceNode.Constants, toConstantNode(result, constantDef))
 		}
 		file.Interfaces = append(file.Interfaces, ifaceNode)
 	}
 
 	for _, traitDef := range result.Traits {
 		traitNode := TraitNode{
-			Name:      traitDef.Name,
-			FullName:  traitDef.FullName,
-			Traits:    append([]string(nil), traitDef.Traits...),
-			StartLine: traitDef.Line,
-			StartCol:  startColumnForDeclaration(result, traitDef.Name, traitDef.Line, TokenTrait),
+			Attributes: traitDef.Attributes,
+			Name:       traitDef.Name,
+			FullName:   traitDef.FullName,
+			Traits:     append([]string(nil), traitDef.Traits...),
+			StartLine:  traitDef.Line,
+			StartCol:   startColumnForDeclaration(result, traitDef.Name, traitDef.Line, TokenTrait),
 		}
 		for _, propertyDef := range traitDef.Properties {
 			traitNode.Properties = append(traitNode.Properties, toPropertyNode(result, propertyDef))
 		}
 		for _, methodDef := range traitDef.Methods {
 			traitNode.Methods = append(traitNode.Methods, toMethodNode(result, methodDef))
+		}
+		for _, constantDef := range traitDef.Constants {
+			traitNode.Constants = append(traitNode.Constants, toConstantNode(result, constantDef))
 		}
 		file.Traits = append(file.Traits, traitNode)
 	}
@@ -586,25 +618,39 @@ func toFileNode(result *ParseResult) *FileNode {
 			FullName:   enumDef.FullName,
 			BackedType: enumDef.BackedType,
 			Implements: append([]string(nil), enumDef.Implements...),
+			Traits:     append([]string(nil), enumDef.Traits...),
+			Attributes: enumDef.Attributes,
+			DocComment: enumDef.DocComment,
+			EndLine:    enumDef.EndLine,
 			StartLine:  enumDef.Line,
 			StartCol:   startColumnForDeclaration(result, enumDef.Name, enumDef.Line, TokenEnum),
 		}
 		for _, enumCase := range enumDef.Cases {
 			enumNode.Cases = append(enumNode.Cases, EnumCaseNode{
-				Name:      enumCase.Name,
-				Value:     enumCase.Value,
-				StartLine: enumCase.Line,
-				StartCol:  nameColumnOnLine(result, enumCase.Name, enumCase.Line),
+				Name:       enumCase.Name,
+				Value:      enumCase.Value,
+				Attributes: enumCase.Attributes,
+				DocComment: enumCase.DocComment,
+				StartLine:  enumCase.Line,
+				StartCol:   nameColumnOnLine(result, enumCase.Name, enumCase.Line),
 			})
 		}
 		for _, methodDef := range enumDef.Methods {
 			enumNode.Methods = append(enumNode.Methods, toMethodNode(result, methodDef))
+		}
+		for _, propertyDef := range enumDef.Properties {
+			enumNode.Properties = append(enumNode.Properties, toPropertyNode(result, propertyDef))
+		}
+		for _, constantDef := range enumDef.Constants {
+			enumNode.Constants = append(enumNode.Constants, toConstantNode(result, constantDef))
 		}
 		file.Enums = append(file.Enums, enumNode)
 	}
 
 	for _, functionDef := range result.Functions {
 		fnNode := FunctionNode{
+			Attributes: functionDef.Attributes,
+			EndLine:    functionDef.EndLine,
 			Name:       functionDef.Name,
 			FullName:   functionDef.FullName,
 			ReturnType: TypeNode{Name: functionDef.ReturnType},
@@ -632,6 +678,8 @@ func toPropertyNode(result *ParseResult, propertyDef PropertyDef) PropertyNode {
 		Visibility:    propertyDef.Visibility,
 		SetVisibility: propertyDef.SetVisibility,
 		IsStatic:      propertyDef.IsStatic,
+		IsReadonly:    propertyDef.IsReadonly,
+		Attributes:    propertyDef.Attributes,
 		DocComment:    propertyDef.DocComment,
 		StartLine:     propertyDef.Line,
 		StartCol:      nameColumnOnLine(result, propertyDef.Name, propertyDef.Line),
@@ -644,6 +692,7 @@ func toPropertyNode(result *ParseResult, propertyDef PropertyDef) PropertyNode {
 
 func toMethodNode(result *ParseResult, methodDef MethodDef) MethodNode {
 	methodNode := MethodNode{
+		Attributes: methodDef.Attributes,
 		Name:       methodDef.Name,
 		ReturnType: TypeNode{Name: methodDef.ReturnType},
 		Visibility: methodDef.Visibility,
@@ -663,20 +712,23 @@ func toMethodNode(result *ParseResult, methodDef MethodDef) MethodNode {
 
 func toParamNode(paramDef ParamDef) ParamNode {
 	return ParamNode{
-		Name:        paramDef.Name,
-		Type:        TypeNode{Name: paramDef.Type},
-		IsVariadic:  paramDef.IsVariadic,
-		IsReference: paramDef.IsReference,
+		Name:         paramDef.Name,
+		Type:         TypeNode{Name: paramDef.Type},
+		DefaultValue: paramDef.DefaultValue,
+		IsVariadic:   paramDef.IsVariadic,
+		IsReference:  paramDef.IsReference,
 	}
 }
 
 func toConstantNode(result *ParseResult, constantDef ConstantDef) ConstantNode {
 	return ConstantNode{
-		Name:      constantDef.Name,
-		Value:     constantDef.Value,
-		Type:      TypeNode{Name: constantDef.Type},
-		StartLine: constantDef.Line,
-		StartCol:  nameColumnOnLine(result, constantDef.Name, constantDef.Line),
+		Name:       constantDef.Name,
+		Value:      constantDef.Value,
+		Type:       TypeNode{Name: constantDef.Type},
+		Visibility: constantDef.Visibility,
+		Attributes: constantDef.Attributes,
+		StartLine:  constantDef.Line,
+		StartCol:   nameColumnOnLine(result, constantDef.Name, constantDef.Line),
 	}
 }
 

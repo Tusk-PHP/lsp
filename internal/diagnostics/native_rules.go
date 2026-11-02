@@ -49,6 +49,9 @@ func NativeRules(opts NativeRulesOptions) []checks.Rule {
 		&checks.UndefinedVariableRule{},
 		&checks.UnusedVariableRule{},
 		&checks.ArgumentCountRule{},
+		&checks.InvalidOverrideRule{},
+		&checks.DeprecatedUsageRule{TypeResolver: opts.TypeResolver},
+		&checks.UnusedResultRule{TypeResolver: opts.TypeResolver},
 	}
 	// Rules that require optional deps follow in a stable order.
 	if opts.TypeResolver != nil {
