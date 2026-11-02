@@ -31,7 +31,7 @@
 |---|---|
 | ⚡ **Ready in under a third of a second** | On a 9,700-file Laravel app, Tusk PHP answers its first cross-file request in 283 ms using 162 MB. Intelephense needs 2.2 s and 686 MB. [See the benchmarks](#benchmarks). |
 | 🧠 **Understands your container** | `app('request')->`, `$container->get(...)`, `#[Autowire]` and interface bindings resolve to the concrete class, for completion, hover and go-to-definition. |
-| 🌍 **Works where you work** | Local projects, **Remote SSH** in VS Code and Zed, and any editor that speaks LSP. **vscode.dev** (in the browser, through WebAssembly) is coming soon. |
+| 🌍 **Works where you work** | Local projects, **Remote SSH** in VS Code and Zed, **vscode.dev** (in the browser, through WebAssembly), and any editor that speaks LSP. |
 | 🤖 **Talks to your AI agent** | `tusk-php mcp` gives Claude Code, Codex and Cursor the same index your editor uses: symbols, diagnostics, routes, models, test coverage and your database schema. |
 
 ## Get it
