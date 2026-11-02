@@ -64,6 +64,24 @@ type Symbol struct {
 	Templates     []TemplateParam
 	TypeAliases   map[string]TypeAlias
 	Hooks         []parser.PropertyHook // PHP 8.4 property hooks (get/set accessors)
+	Attributes    []Attribute
+}
+
+// Attribute is a PHP 8 attribute on a symbol.
+type Attribute struct {
+	Name string   // as written
+	FQN  string   // what the name resolves to
+	Args []string // each argument as written
+}
+
+// Attribute returns the attribute with this fully qualified name, if it has one.
+func (s *Symbol) Attribute(fqn string) *Attribute {
+	for i := range s.Attributes {
+		if strings.EqualFold(s.Attributes[i].FQN, fqn) {
+			return &s.Attributes[i]
+		}
+	}
+	return nil
 }
 
 // TemplateParam represents a generic type parameter on a class: @template T of Model
@@ -95,6 +113,7 @@ type ParamInfo struct {
 }
 
 type Index struct {
+	attributedSymbols    atomic.Bool
 	mu                   sync.RWMutex
 	symbols              map[string]*Symbol
 	nameIndex            map[string][]string
@@ -279,8 +298,9 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 		}
 		sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: c.DocComment,
 			IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly,
-			Implements: resolvedImpls,
-			Range:      symRange(c.StartLine, c.StartCol, len(c.Name))}
+			Implements: resolvedImpls, Attributes: indexAttributes(c.Attributes, resolve),
+			Range: symRange(c.StartLine, c.StartCol, len(c.Name))}
+		previous := idx.symbols[fqn]
 		if c.Extends != "" {
 			sym.Extends = resolve(c.Extends)
 		}
@@ -295,33 +315,31 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 		for _, tr := range c.Traits {
 			idx.traitMap[fqn] = append(idx.traitMap[fqn], resolve(tr))
 		}
-		for _, prop := range c.Properties {
-			ps := &Symbol{Name: prop.Name, FQN: fqn + "::" + prop.Name, Kind: KindProperty, URI: uri,
-				Visibility: prop.Visibility, SetVisibility: prop.SetVisibility,
-				IsStatic: prop.IsStatic, Type: resolve(prop.Type.Name),
-				DocComment: prop.DocComment, ParentFQN: fqn,
-				Hooks: append([]parser.PropertyHook(nil), prop.Hooks...),
-				Range: symRange(prop.StartLine, prop.StartCol, len(prop.Name))}
-			sym.Children = append(sym.Children, ps)
-			idx.addSymbolWithSource(uri, ps, src)
-		}
+		idx.indexProperties(uri, sym, fqn, c.Properties, src, resolve)
 		idx.indexMethods(uri, sym, fqn, c.Methods, src, resolve)
-		for _, co := range c.Constants {
-			cs := &Symbol{Name: co.Name, FQN: fqn + "::" + co.Name, Kind: KindConstant, URI: uri, ParentFQN: fqn,
-				Value: co.Value,
-				Range: symRange(co.StartLine, co.StartCol, len(co.Name))}
-			sym.Children = append(sym.Children, cs)
-			idx.addSymbolWithSource(uri, cs, src)
-		}
+		idx.indexConstants(uri, sym, fqn, c.Constants, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
+		if src == SourceBuiltin {
+			mergeEarlierLayer(sym, previous)
+		}
 	}
 
 	for _, iface := range file.Interfaces {
 		fqn := buildFQN(ns, iface.Name)
+		var resolvedParents []string
+		for _, parent := range iface.Extends {
+			resolvedParents = append(resolvedParents, resolve(parent))
+		}
 		sym := &Symbol{Name: iface.Name, FQN: fqn, Kind: KindInterface, URI: uri, DocComment: iface.DocComment,
+			Implements: resolvedParents, Attributes: indexAttributes(iface.Attributes, resolve),
 			Range: symRange(iface.StartLine, iface.StartCol, len(iface.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
+		for _, parent := range resolvedParents {
+			idx.implementsMap[fqn] = append(idx.implementsMap[fqn], parent)
+		}
+		idx.indexProperties(uri, sym, fqn, iface.Properties, src, resolve)
 		idx.indexMethods(uri, sym, fqn, iface.Methods, src, resolve)
+		idx.indexConstants(uri, sym, fqn, iface.Constants, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 	}
 
@@ -333,17 +351,9 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 		for _, usedTrait := range tr.Traits {
 			idx.traitMap[fqn] = append(idx.traitMap[fqn], resolve(usedTrait))
 		}
-		for _, prop := range tr.Properties {
-			ps := &Symbol{Name: prop.Name, FQN: fqn + "::" + prop.Name, Kind: KindProperty, URI: uri,
-				Visibility: prop.Visibility, SetVisibility: prop.SetVisibility,
-				IsStatic: prop.IsStatic, Type: resolve(prop.Type.Name),
-				DocComment: prop.DocComment, ParentFQN: fqn,
-				Hooks: append([]parser.PropertyHook(nil), prop.Hooks...),
-				Range: symRange(prop.StartLine, prop.StartCol, len(prop.Name))}
-			sym.Children = append(sym.Children, ps)
-			idx.addSymbolWithSource(uri, ps, src)
-		}
+		idx.indexProperties(uri, sym, fqn, tr.Properties, src, resolve)
 		idx.indexMethods(uri, sym, fqn, tr.Methods, src, resolve)
+		idx.indexConstants(uri, sym, fqn, tr.Constants, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 	}
 
@@ -354,7 +364,7 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 			resolvedEnumImpls = append(resolvedEnumImpls, resolve(impl))
 		}
 		sym := &Symbol{Name: en.Name, FQN: fqn, Kind: KindEnum, URI: uri, DocComment: en.DocComment,
-			BackedType: en.BackedType, Implements: resolvedEnumImpls,
+			BackedType: en.BackedType, Implements: resolvedEnumImpls, Attributes: indexAttributes(en.Attributes, resolve),
 			Range: symRange(en.StartLine, en.StartCol, len(en.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
 		for _, impl := range resolvedEnumImpls {
@@ -363,16 +373,24 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 		}
 		for _, ec := range en.Cases {
 			cs := &Symbol{Name: ec.Name, FQN: fqn + "::" + ec.Name, Kind: KindEnumCase, URI: uri, ParentFQN: fqn, Value: ec.Value,
+				DocComment: ec.DocComment, Attributes: indexAttributes(ec.Attributes, resolve),
 				Range: symRange(ec.StartLine, ec.StartCol, len(ec.Name))}
 			sym.Children = append(sym.Children, cs)
 			idx.addSymbolWithSource(uri, cs, src)
 		}
+		for _, tr := range en.Traits {
+			idx.traitMap[fqn] = append(idx.traitMap[fqn], resolve(tr))
+		}
+		idx.indexProperties(uri, sym, fqn, en.Properties, src, resolve)
 		idx.indexMethods(uri, sym, fqn, en.Methods, src, resolve)
+		idx.indexConstants(uri, sym, fqn, en.Constants, src, resolve)
+		idx.indexEnumMembers(uri, sym, src)
 	}
 
 	for _, fn := range file.Functions {
 		fqn := buildFQN(ns, fn.Name)
 		sym := &Symbol{Name: fn.Name, FQN: fqn, Kind: KindFunction, URI: uri, ReturnType: resolve(fn.ReturnType.Name),
+			Attributes: indexAttributes(fn.Attributes, resolve),
 			DocComment: fn.DocComment, Range: symRange(fn.StartLine, fn.StartCol, len(fn.Name))}
 		for _, p := range fn.Params {
 			sym.Params = append(sym.Params, ParamInfo{Name: p.Name, Type: resolve(p.Type.Name), IsVariadic: p.IsVariadic, IsReference: p.IsReference})
@@ -383,6 +401,9 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 
 func (idx *Index) addSymbol(uri string, sym *Symbol) {
 	idx.symbols[sym.FQN] = sym
+	if len(sym.Attributes) > 0 {
+		idx.attributedSymbols.Store(true)
+	}
 	idx.nameIndex[sym.Name] = appendUnique(idx.nameIndex[sym.Name], sym.FQN)
 	idx.fileSymbols[uri] = append(idx.fileSymbols[uri], sym)
 	idx.sortedNamesDirty = true
@@ -444,6 +465,7 @@ func (idx *Index) indexMethods(uri string, parent *Symbol, parentFQN string, met
 			Name:       m.Name,
 			FQN:        parentFQN + "::" + m.Name,
 			Kind:       KindMethod,
+			Attributes: indexAttributes(m.Attributes, resolve),
 			URI:        uri,
 			Visibility: m.Visibility,
 			IsStatic:   m.IsStatic,
@@ -466,6 +488,94 @@ func (idx *Index) indexMethods(uri string, parent *Symbol, parentFQN string, met
 		parent.Children = append(parent.Children, ms)
 		idx.addSymbolWithSource(uri, ms, src)
 	}
+}
+
+func (idx *Index) indexProperties(uri string, parent *Symbol, parentFQN string, props []parser.PropertyNode, src SymbolSource, resolve func(string) string) {
+	for _, prop := range props {
+		ps := &Symbol{Name: prop.Name, FQN: parentFQN + "::" + prop.Name, Kind: KindProperty, URI: uri,
+			Visibility: prop.Visibility, SetVisibility: prop.SetVisibility,
+			IsStatic: prop.IsStatic, IsReadonly: prop.IsReadonly, Type: resolve(prop.Type.Name),
+			DocComment: prop.DocComment, ParentFQN: parentFQN, Attributes: indexAttributes(prop.Attributes, resolve),
+			Hooks: append([]parser.PropertyHook(nil), prop.Hooks...),
+			Range: symRange(prop.StartLine, prop.StartCol, len(prop.Name))}
+		parent.Children = append(parent.Children, ps)
+		idx.addSymbolWithSource(uri, ps, src)
+	}
+}
+
+func (idx *Index) indexConstants(uri string, parent *Symbol, parentFQN string, consts []parser.ConstantNode, src SymbolSource, resolve func(string) string) {
+	for _, co := range consts {
+		cs := &Symbol{Name: co.Name, FQN: parentFQN + "::" + co.Name, Kind: KindConstant, URI: uri, ParentFQN: parentFQN,
+			Value: co.Value, Type: resolve(co.Type.Name), Visibility: co.Visibility,
+			Attributes: indexAttributes(co.Attributes, resolve),
+			Range:      symRange(co.StartLine, co.StartCol, len(co.Name))}
+		parent.Children = append(parent.Children, cs)
+		idx.addSymbolWithSource(uri, cs, src)
+	}
+}
+
+// indexEnumMembers adds what PHP gives every enum: `name` and `cases()`, and for
+// backed enums `value`, `from()` and `tryFrom()`. They point at the enum itself.
+func (idx *Index) indexEnumMembers(uri string, enum *Symbol, src SymbolSource) {
+	add := func(member *Symbol) {
+		member.FQN = enum.FQN + "::" + member.Name
+		member.URI = uri
+		member.ParentFQN = enum.FQN
+		member.Visibility = "public"
+		member.Range = enum.Range
+		enum.Children = append(enum.Children, member)
+		idx.addSymbolWithSource(uri, member, src)
+	}
+	add(&Symbol{Name: "$name", Kind: KindProperty, Type: "string", IsReadonly: true})
+	add(&Symbol{Name: "cases", Kind: KindMethod, IsStatic: true, ReturnType: "array",
+		DocComment: "/** @return " + enum.FQN + "[] */"})
+	if enum.BackedType == "" {
+		return
+	}
+	value := []ParamInfo{{Name: "$value", Type: "int|string"}}
+	add(&Symbol{Name: "$value", Kind: KindProperty, Type: enum.BackedType, IsReadonly: true})
+	add(&Symbol{Name: "from", Kind: KindMethod, IsStatic: true, ReturnType: enum.FQN, Params: value})
+	add(&Symbol{Name: "tryFrom", Kind: KindMethod, IsStatic: true, ReturnType: "?" + enum.FQN, Params: value})
+}
+
+// mergeEarlierLayer keeps what an earlier stub layer declared when a later one
+// only adds members to the same class, as version deltas do.
+func mergeEarlierLayer(sym, previous *Symbol) {
+	if previous == nil || previous.URI == sym.URI || previous.Kind != sym.Kind {
+		return
+	}
+	declared := make(map[string]bool, len(sym.Children))
+	for _, child := range sym.Children {
+		declared[child.Name] = true
+	}
+	for _, child := range previous.Children {
+		if !declared[child.Name] {
+			sym.Children = append(sym.Children, child)
+		}
+	}
+	if sym.DocComment == "" {
+		sym.DocComment = previous.DocComment
+	}
+	if len(sym.Templates) == 0 {
+		sym.Templates = previous.Templates
+	}
+	if sym.Extends == "" {
+		sym.Extends = previous.Extends
+	}
+	if len(sym.Implements) == 0 {
+		sym.Implements = previous.Implements
+	}
+}
+
+func indexAttributes(attrs []parser.AttributeDef, resolve func(string) string) []Attribute {
+	if len(attrs) == 0 {
+		return nil
+	}
+	out := make([]Attribute, 0, len(attrs))
+	for _, attr := range attrs {
+		out = append(out, Attribute{Name: attr.Name, FQN: resolve(attr.Name), Args: attr.Args})
+	}
+	return out
 }
 
 // indexVirtualMembers parses @property/@method docblock tags on a class-level
@@ -791,6 +901,14 @@ func (idx *Index) GetClassMembers(classFQN string) []*Symbol {
 }
 
 func (idx *Index) getClassMembersRecursive(fqn string, visited map[string]bool) []*Symbol {
+	// A union, intersection or DNF type has the members of each class in it.
+	if strings.ContainsAny(fqn, "|&(") {
+		var members []*Symbol
+		for _, part := range strings.FieldsFunc(fqn, func(r rune) bool { return strings.ContainsRune("|&()", r) }) {
+			members = append(members, idx.getClassMembersRecursive(strings.TrimPrefix(strings.TrimPrefix(part, "?"), "\\"), visited)...)
+		}
+		return members
+	}
 	if visited[fqn] {
 		return nil
 	}
@@ -807,7 +925,67 @@ func (idx *Index) getClassMembersRecursive(fqn string, visited map[string]bool) 
 			members = append(members, idx.getClassMembersRecursive(tr, visited)...)
 		}
 	}
+	// Interfaces are read for their constants only: the methods they declare are
+	// the class's own to implement.
+	if interfaces, ok := idx.implementsMap[fqn]; ok {
+		for _, iface := range interfaces {
+			for _, member := range idx.getClassMembersRecursive(iface, visited) {
+				if member.Kind == KindConstant {
+					members = append(members, member)
+				}
+			}
+		}
+	}
 	return members
+}
+
+// HasAttributedSymbols reports whether anything indexed so far has attributes.
+func (idx *Index) HasAttributedSymbols() bool {
+	return idx.attributedSymbols.Load()
+}
+
+// OverridesInherited reports whether a class-like inherits a method of this name
+// from a parent, interface or trait. known is false when one of those isn't
+// indexed, so the answer can't be trusted.
+func (idx *Index) OverridesInherited(classFQN, method string) (overrides, known bool) {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	known = true
+	visited := map[string]bool{classFQN: true}
+	var walk func(fqn string, viaTrait bool)
+	walk = func(fqn string, viaTrait bool) {
+		if visited[fqn] {
+			return
+		}
+		visited[fqn] = true
+		sym, ok := idx.symbols[fqn]
+		if !ok {
+			known = false
+			return
+		}
+		for _, child := range sym.Children {
+			// Of a trait's methods, only abstract ones are overridden rather than
+			// just being the same method.
+			if child.Kind == KindMethod && strings.EqualFold(child.Name, method) && child.Visibility != "private" && (!viaTrait || child.IsAbstract) {
+				overrides = true
+			}
+		}
+		idx.walkAncestors(fqn, func(next string, isTrait bool) { walk(next, viaTrait || isTrait) })
+	}
+	idx.walkAncestors(classFQN, func(next string, isTrait bool) { walk(next, isTrait) })
+	return overrides, known
+}
+
+func (idx *Index) walkAncestors(fqn string, visit func(next string, isTrait bool)) {
+	if parent, ok := idx.inheritanceMap[fqn]; ok {
+		visit(parent, false)
+	}
+	for _, iface := range idx.implementsMap[fqn] {
+		visit(iface, false)
+	}
+	for _, tr := range idx.traitMap[fqn] {
+		visit(tr, true)
+	}
 }
 
 func (idx *Index) GetInheritanceChain(classFQN string) []string {
@@ -965,13 +1143,23 @@ func resolveTypeName(name string, currentNs string, uses []parser.UseNode) strin
 		prefix = "?"
 		name = name[1:]
 	}
-	// Handle union/intersection types
-	if strings.ContainsAny(name, "|&") {
-		var parts []string
-		for _, part := range splitTypeExpr(name) {
-			parts = append(parts, resolveTypeName(part, currentNs, uses))
+	// Union, intersection and DNF types keep their shape: (App\A&App\B)|null.
+	if strings.ContainsAny(name, "|&(") {
+		var sb strings.Builder
+		start := 0
+		for i := 0; i <= len(name); i++ {
+			if i < len(name) && !strings.ContainsRune("|&()", rune(name[i])) {
+				continue
+			}
+			if i > start {
+				sb.WriteString(resolveTypeName(name[start:i], currentNs, uses))
+			}
+			if i < len(name) {
+				sb.WriteByte(name[i])
+			}
+			start = i + 1
 		}
-		return prefix + strings.Join(parts, "|")
+		return prefix + sb.String()
 	}
 	// Built-in types are never namespace-qualified
 	if phpBuiltinTypes[strings.ToLower(name)] {
@@ -999,7 +1187,8 @@ func splitTypeExpr(name string) []string {
 	var parts []string
 	start := 0
 	for i := 0; i < len(name); i++ {
-		if name[i] == '|' || name[i] == '&' {
+		// A DNF type's parentheses, as in (A&B)|null, only group its parts.
+		if name[i] == '|' || name[i] == '&' || name[i] == '(' || name[i] == ')' {
 			if i > start {
 				parts = append(parts, name[start:i])
 			}

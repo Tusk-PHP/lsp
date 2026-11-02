@@ -5,6 +5,7 @@
 package resolve
 
 import (
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -123,6 +124,11 @@ func (r *Resolver) ResolveClassName(name string, file *parser.FileNode) string {
 	if strings.HasPrefix(name, "?") {
 		name = name[1:]
 	}
+	if strings.ContainsAny(name, "|&(") {
+		return typeNamePartRe.ReplaceAllStringFunc(name, func(part string) string {
+			return r.ResolveClassName(part, file)
+		})
+	}
 	parts := strings.SplitN(name, "\\", 2)
 	for _, u := range file.Uses {
 		if u.Alias == parts[0] {
@@ -140,6 +146,9 @@ func (r *Resolver) ResolveClassName(name string, file *parser.FileNode) string {
 	}
 	return name
 }
+
+// typeNamePartRe matches each name in a union, intersection or DNF type.
+var typeNamePartRe = regexp.MustCompile(`[^|&()\s]+`)
 
 // classLike is the part of a class, trait, interface or enum that positions are
 // matched against.
@@ -558,7 +567,7 @@ func (r *Resolver) resolveMethodParamTypeTyped(method *parser.MethodNode, varNam
 				return rt
 			}
 		}
-		return ResolvedType{FQN: r.ResolveClassName(param.Type.Name, file)}
+		return ResolvedType{FQN: r.ResolveClassName(paramTypeName(param), file)}
 	}
 	return ResolvedType{}
 }
@@ -573,7 +582,7 @@ func (r *Resolver) resolveFunctionParamTypeTyped(fn *parser.FunctionNode, varNam
 				return rt
 			}
 		}
-		return ResolvedType{FQN: r.ResolveClassName(param.Type.Name, file)}
+		return ResolvedType{FQN: r.ResolveClassName(paramTypeName(param), file)}
 	}
 	return ResolvedType{}
 }
@@ -704,6 +713,10 @@ func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) str
 				}
 			}
 		}
+	case symbols.KindConstant:
+		typeName = member.Type
+	case symbols.KindEnumCase:
+		typeName = member.ParentFQN
 	case symbols.KindMethod:
 		typeName = member.ReturnType
 		if typeName == "" && member.DocComment != "" {
@@ -779,7 +792,7 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 			}
 		}
 		for _, fn := range file.Functions {
-			if pos.Line >= fn.StartLine {
+			if pos.Line >= fn.StartLine && (fn.EndLine == 0 || pos.Line <= fn.EndLine) {
 				if rt := r.resolveFunctionParamTypeTyped(&fn, varName, file); !rt.IsEmpty() {
 					return rt
 				}
@@ -804,11 +817,20 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 		if !isAssignment {
 			continue
 		}
-		rhs = strings.TrimSuffix(rhs, ";")
-		rhs = strings.TrimSpace(rhs)
+		rhs, declaredType := assignedExpression(rhs)
+		if declaredType != "" {
+			return r.resolveDocType(declaredType, file)
+		}
+
+		// $var = [...$other] — keeps the elements of what it spreads.
+		if spread := spreadOnlyVariable(rhs); spread != "" && spread != varName {
+			if rt := r.ResolveVariableTypeTyped(spread, lines, pos, file); !rt.IsEmpty() {
+				return rt
+			}
+		}
 
 		// $var = new ClassName(...) — with constructor generic inference
-		if strings.HasPrefix(rhs, "new ") {
+		if strings.HasPrefix(rhs, "new ") && !newHasChain(rhs) {
 			className := strings.TrimSpace(rhs[4:])
 			argStr := ""
 			if idx := strings.IndexByte(className, '('); idx >= 0 {
@@ -1063,7 +1085,7 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 		}
 		// Also check standalone function parameters
 		for _, fn := range file.Functions {
-			if pos.Line >= fn.StartLine {
+			if pos.Line >= fn.StartLine && (fn.EndLine == 0 || pos.Line <= fn.EndLine) {
 				if typ := r.resolveFunctionParamType(&fn, varName, file); typ != "" {
 					return typ
 				}
@@ -1094,8 +1116,12 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 		if !isAssignment {
 			continue
 		}
+		rhs, declaredType := assignedExpression(rhs)
+		if declaredType != "" {
+			return r.resolveDocType(declaredType, file).String()
+		}
 		// $var = new ClassName(...)
-		if strings.HasPrefix(rhs, "new ") {
+		if strings.HasPrefix(rhs, "new ") && !newHasChain(rhs) {
 			className := strings.TrimSpace(rhs[4:])
 			if idx := strings.IndexByte(className, '('); idx >= 0 {
 				className = className[:idx]

@@ -106,6 +106,18 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 			fs := (&checks.UnusedVariableRule{}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("unused-variable", checks.SeverityHint, findingsToDiagnostics(fs))...)
 		}
+		if p.cfg.IsRuleEnabled("deprecated") {
+			fs := (&checks.DeprecatedUsageRule{TypeResolver: p.TypeResolver}).Check(file, source, p.index)
+			diags = append(diags, p.applyRuleSeverity("deprecated", checks.SeverityWarning, findingsToDiagnostics(fs))...)
+		}
+		if p.cfg.IsRuleEnabled("unused-result") {
+			fs := (&checks.UnusedResultRule{TypeResolver: p.TypeResolver}).Check(file, source, p.index)
+			diags = append(diags, p.applyRuleSeverity("unused-result", checks.SeverityWarning, findingsToDiagnostics(fs))...)
+		}
+		if p.cfg.IsRuleEnabled("invalid-override") {
+			fs := (&checks.InvalidOverrideRule{}).Check(file, source, p.index)
+			diags = append(diags, p.applyRuleSeverity("invalid-override", checks.SeverityError, findingsToDiagnostics(fs))...)
+		}
 		if p.cfg.IsRuleEnabled("argument-count-mismatch") {
 			fs := (&checks.ArgumentCountRule{}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("argument-count-mismatch", checks.SeverityWarning, findingsToDiagnostics(fs))...)
@@ -125,7 +137,7 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 	// findings depend on cross-file symbol presence and produce false positives
 	// during the warm-up window.
 	if p.index != nil && !p.index.Ready() {
-		diags = filterOutCodes(diags, "unknown-class", "unknown-function", "unknown-member")
+		diags = filterOutCodes(diags, "unknown-class", "unknown-function", "unknown-member", "invalid-override")
 	}
 
 	return diags

@@ -131,7 +131,11 @@ func (p *Provider) formatHoverDeclaration(sym *symbols.Symbol) string {
 			sb.WriteString(" = " + sym.Value)
 		}
 	case symbols.KindConstant:
-		sb.WriteString("const " + sym.Name)
+		sb.WriteString("const ")
+		if sym.Type != "" {
+			sb.WriteString(shortTypes(types.RenderTypeExpr(sym.Type)) + " ")
+		}
+		sb.WriteString(sym.Name)
 		if sym.Value != "" {
 			sb.WriteString(" = " + sym.Value)
 		}
@@ -139,6 +143,19 @@ func (p *Provider) formatHoverDeclaration(sym *symbols.Symbol) string {
 		sb.WriteString("trait " + sym.Name)
 	}
 
+	return formatAttributes(sym.Attributes) + sb.String()
+}
+
+// formatAttributes renders a symbol's attributes as written, one to a line.
+func formatAttributes(attrs []symbols.Attribute) string {
+	var sb strings.Builder
+	for _, attr := range attrs {
+		sb.WriteString("#[" + attr.Name)
+		if len(attr.Args) > 0 {
+			sb.WriteString("(" + strings.Join(attr.Args, ", ") + ")")
+		}
+		sb.WriteString("]\n")
+	}
 	return sb.String()
 }
 

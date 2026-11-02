@@ -184,8 +184,9 @@ func checkUnionType(typeStr string, line int, index *symbols.Index) []Finding {
 
 	// Check ?Type|null redundancy (the ? already makes it nullable)
 	if strings.HasPrefix(typeStr, "?") {
-		for _, p := range parts {
-			if strings.ToLower(p) == "null" {
+		// Only what's written counts, not the |null this function adds for the `?`.
+		for _, p := range strings.Split(typeStr[1:], "|") {
+			if strings.ToLower(strings.TrimSpace(p)) == "null" {
 				findings = append(findings, Finding{
 					StartLine: line,
 					StartCol:  0,

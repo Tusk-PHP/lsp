@@ -18,15 +18,18 @@ func TestNativeRulesParityWithProvider(t *testing.T) {
 	// provider.go manually; the test alerts when they drift.
 	providerRuleCodes := map[string]bool{
 		// Analyze() — parameterless
-		"unknown-class":          true,
-		"unknown-function":       true,
-		"unused-import":          true,
-		"unused-private":         true,
-		"unreachable-code":       true,
-		"redundant-union-member": true,
-		"undefined-variable":     true,
-		"unused-variable":        true,
+		"unknown-class":           true,
+		"unknown-function":        true,
+		"unused-import":           true,
+		"unused-private":          true,
+		"unreachable-code":        true,
+		"redundant-union-member":  true,
+		"undefined-variable":      true,
+		"unused-variable":         true,
 		"argument-count-mismatch": true,
+		"invalid-override":        true,
+		"deprecated":              true,
+		"unused-result":           true,
 		// Analyze() — requires TypeResolver
 		"unknown-member": true,
 		// Analyze() — requires BuiltinUnavailableRule
@@ -93,6 +96,9 @@ func TestNativeRulesDeterministicOrder(t *testing.T) {
 		"undefined-variable",
 		"unused-variable",
 		"argument-count-mismatch",
+		"invalid-override",
+		"deprecated",
+		"unused-result",
 	}
 	if len(rules) != len(wantOrder) {
 		t.Fatalf("expected %d parameterless rules, got %d", len(wantOrder), len(rules))
@@ -107,7 +113,7 @@ func TestNativeRulesDeterministicOrder(t *testing.T) {
 // stubMemberChecker is a no-op MemberChecker for test use.
 type stubMemberChecker struct{}
 
-func (s *stubMemberChecker) IsColumn(modelFQN, name string) bool        { return false }
-func (s *stubMemberChecker) IsDBColumn(modelFQN, name string) bool      { return false }
-func (s *stubMemberChecker) IsRelation(modelFQN, name string) bool      { return false }
+func (s *stubMemberChecker) IsColumn(modelFQN, name string) bool          { return false }
+func (s *stubMemberChecker) IsDBColumn(modelFQN, name string) bool        { return false }
+func (s *stubMemberChecker) IsRelation(modelFQN, name string) bool        { return false }
 func (s *stubMemberChecker) RelatedModelFQN(modelFQN, name string) string { return "" }

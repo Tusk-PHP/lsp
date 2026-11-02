@@ -31,12 +31,26 @@ func (r *UnreachableCodeRule) Check(file *parser.FileNode, source string, _ *sym
 	}
 
 	var findings []Finding
-	for _, cls := range file.Classes {
-		for _, m := range cls.Methods {
+	check := func(methods []parser.MethodNode) {
+		for _, m := range methods {
 			if m.EndLine <= m.StartLine {
 				continue
 			}
 			findings = append(findings, findUnreachable(tokens, m.StartLine, m.EndLine)...)
+		}
+	}
+	for _, cls := range file.Classes {
+		check(cls.Methods)
+	}
+	for _, tr := range file.Traits {
+		check(tr.Methods)
+	}
+	for _, en := range file.Enums {
+		check(en.Methods)
+	}
+	for _, fn := range file.Functions {
+		if fn.EndLine > fn.StartLine {
+			findings = append(findings, findUnreachable(tokens, fn.StartLine, fn.EndLine)...)
 		}
 	}
 	return findings

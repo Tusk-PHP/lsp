@@ -81,17 +81,17 @@ Setup for each editor is in [docs/editors.md](docs/editors.md), and every settin
 
 Tusk PHP indexes PHP 7.4 through 8.5. It picks the version from your Composer platform, `.tusk-php.json` or your local `php`, and defaults to 8.5.
 
-| Version | Understood | Partly understood | Not yet |
-|---|---|---|---|
-| **7.4** | typed properties, arrow functions, numeric separators | | `??=`, array spread |
-| **8.0** | union types, named arguments, `match`, `?->`, `static` / `mixed` | constructor promotion, attributes | `throw` expressions |
-| **8.1** | intersection types, first-class callables, `never`, fibers | enums (cases only, not methods), `readonly` properties | `new` in initializers |
-| **8.2** | `readonly` classes, `true` / `false` / `null` types | | DNF types, constants in traits |
-| **8.3** | `json_validate()` | `#[\Override]`, dynamic constant fetch | typed class constants |
-| **8.4** | property hooks, asymmetric visibility | `new` without parentheses, `#[\Deprecated]`, `array_find()` and friends | lazy objects |
-| **8.5** | | pipe operator `\|>`, `#[\NoDiscard]` | `clone` with |
+| Version | Understood |
+|---|---|
+| **7.4** | typed properties, arrow functions, numeric separators, `??=`, array spread |
+| **8.0** | union types, named arguments, `match`, `?->`, `static` / `mixed`, constructor promotion, attributes, `throw` expressions |
+| **8.1** | intersection types, first-class callables, `never`, fibers, enums and their methods, `readonly` properties, `new` in initializers |
+| **8.2** | `readonly` classes, `true` / `false` / `null` types, DNF types, constants in traits |
+| **8.3** | `json_validate()`, typed class constants, `#[\Override]`, dynamic constant fetch |
+| **8.4** | property hooks, asymmetric visibility, `new` without parentheses, `#[\Deprecated]`, `array_find()` and friends, lazy objects |
+| **8.5** | pipe operator `\|>`, `#[\NoDiscard]`, `clone` with |
 
-"Partly understood" means the syntax parses cleanly but not every feature sees it yet: for example, enum methods don't show in completion, and types don't flow through `|>`.
+Every entry is checked through the running server by `internal/lsp/php_versions_test.go`, so it means completion, hover, go-to-definition and diagnostics see the feature, not just that it parses.
 
 PHPDoc is well covered: `@template` generics, `@phpstan-type` / `@psalm-type` aliases, array shapes and `Collection<int, User>` all resolve. Conditional return types fall back to the union of both branches.
 

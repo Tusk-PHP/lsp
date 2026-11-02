@@ -336,8 +336,10 @@ func (p *Provider) completeMemberAccess(uri, source string, pos protocol.Positio
 		}
 	}
 	var items []protocol.CompletionItem
+	enclosing := resolve.FindEnclosingClass(file, pos)
 	for _, m := range p.index.GetClassMembers(typeName) {
-		if m.IsStatic || m.Visibility == "private" {
+		// A class can reach its own private members, on any instance of itself.
+		if m.IsStatic || (m.Visibility == "private" && (enclosing == "" || m.ParentFQN != enclosing)) {
 			continue
 		}
 		item := protocol.CompletionItem{Label: m.Name, Detail: formatDetail(m), Documentation: formatDocumentation(m)}
