@@ -467,6 +467,27 @@ func tokenize(source string) ([]Token, []ParseError) {
 			continue
 		}
 
+		// Heredoc / nowdoc: <<<LABEL, <<<"LABEL" or <<<'LABEL' through the
+		// closing label, which may be indented (PHP 7.3+). Emitted as one
+		// string literal token so the body is never read as code.
+		if ch == '<' && strings.HasPrefix(source[offset:], "<<<") {
+			if end, ok := heredocEnd(source, offset); ok {
+				start := offset
+				startLine, startCol := line, col
+				for offset < end {
+					if source[offset] == '\n' {
+						line++
+						col = 0
+					} else {
+						col++
+					}
+					offset++
+				}
+				tokens = append(tokens, Token{TokenStringLiteral, source[start:end], startLine, startCol, start})
+				continue
+			}
+		}
+
 		// String literals
 		if ch == '"' || ch == '\'' {
 			start := offset
@@ -621,6 +642,66 @@ func tokenize(source string) ([]Token, []ParseError) {
 }
 
 // comparisonOperatorAt returns the comparison operator starting at offset, or "".
+// heredocEnd returns the offset just past the closing label of the heredoc or
+// nowdoc opening at start (which points at `<<<`). ok is false when this is
+// not a heredoc opener or the closing label is missing, so the caller falls
+// back to ordinary tokenizing.
+func heredocEnd(source string, start int) (int, bool) {
+	i := start + 3
+	for i < len(source) && (source[i] == ' ' || source[i] == '\t') {
+		i++
+	}
+	quote := byte(0)
+	if i < len(source) && (source[i] == '\'' || source[i] == '"') {
+		quote = source[i]
+		i++
+	}
+	labelStart := i
+	for i < len(source) && isIdentChar(rune(source[i])) {
+		i++
+	}
+	label := source[labelStart:i]
+	if label == "" || (label[0] >= '0' && label[0] <= '9') {
+		return 0, false
+	}
+	if quote != 0 {
+		if i >= len(source) || source[i] != quote {
+			return 0, false
+		}
+		i++
+	}
+	if i < len(source) && source[i] == '\r' {
+		i++
+	}
+	if i >= len(source) || source[i] != '\n' {
+		return 0, false
+	}
+	// Scan the body line by line for the closing label.
+	for pos := i + 1; pos <= len(source); {
+		lineEnd := strings.IndexByte(source[pos:], '\n')
+		if lineEnd < 0 {
+			lineEnd = len(source)
+		} else {
+			lineEnd += pos
+		}
+		j := pos
+		for j < lineEnd && (source[j] == ' ' || source[j] == '\t') {
+			j++
+		}
+		if strings.HasPrefix(source[j:lineEnd], label) {
+			after := j + len(label)
+			if after >= len(source) || !isIdentChar(rune(source[after])) {
+				return after, true
+			}
+		}
+		if lineEnd >= len(source) {
+			break
+		}
+		pos = lineEnd + 1
+	}
+	return 0, false
+}
+
 func comparisonOperatorAt(source string, offset int) string {
 	for _, op := range []string{"===", "!==", "<=>", "==", "!=", "<=", ">="} {
 		if strings.HasPrefix(source[offset:], op) {

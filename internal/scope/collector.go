@@ -652,7 +652,13 @@ func parseGlobalOrStaticBindings(tokens []parser.Token, start int, scope *Scope,
 // double-quoted string. `${name}` isn't recorded, because a reference's range
 // includes the dollar sign, which renaming would put in the wrong place.
 func addInterpolatedReferences(tok parser.Token, active []scopeFrame) {
-	if len(tok.Value) < 2 || tok.Value[0] != '"' {
+	// Double-quoted strings and heredocs interpolate; single-quoted strings
+	// and nowdocs (<<<'LABEL') don't.
+	interpolates := len(tok.Value) >= 2 && tok.Value[0] == '"'
+	if strings.HasPrefix(tok.Value, "<<<") {
+		interpolates = !strings.HasPrefix(strings.TrimLeft(tok.Value[3:], " \t"), "'")
+	}
+	if !interpolates {
 		return
 	}
 	line, col := tok.Line, tok.Column

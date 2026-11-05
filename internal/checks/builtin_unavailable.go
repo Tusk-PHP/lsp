@@ -43,9 +43,9 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 	}
 	lines := strings.Split(source, "\n")
 	var findings []Finding
-	inBlockComment := false
+	var mask maskState
 	for lineNum, raw := range lines {
-		line := maskPHPLine(raw, &inBlockComment)
+		line := maskPHPLine(raw, &mask)
 		findings = append(findings, r.checkFunctions(line, lineNum, file, index)...)
 		findings = append(findings, r.checkClassLikesNew(line, lineNum, file, index)...)
 		findings = append(findings, r.checkClassLikesSingleRef(line, lineNum, file, index)...)

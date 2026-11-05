@@ -28,10 +28,10 @@ func (r *UnknownClassRule) Check(file *parser.FileNode, source string, index *sy
 	}
 	lines := strings.Split(source, "\n")
 	var findings []Finding
-	inBlockComment := false
+	var mask maskState
 
 	for lineNum, raw := range lines {
-		line := maskPHPLine(raw, &inBlockComment)
+		line := maskPHPLine(raw, &mask)
 		findings = append(findings, checkUnknownClassMatches(line, lineNum, file, index, unknownClassNewRe)...)
 		findings = append(findings, checkUnknownClassMatches(line, lineNum, file, index, unknownClassSingleRefRe)...)
 		findings = append(findings, checkUnknownStaticClassMatches(line, lineNum, file, index)...)
@@ -306,10 +306,10 @@ func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index 
 	}
 	lines := strings.Split(source, "\n")
 	var findings []Finding
-	inBlockComment := false
+	var mask maskState
 
 	for lineNum, raw := range lines {
-		line := maskPHPLine(raw, &inBlockComment)
+		line := maskPHPLine(raw, &mask)
 		attrGroups := scanAttributeGroups(line)
 		for _, match := range unknownFunctionCallRe.FindAllStringSubmatchIndex(line, -1) {
 			start, end := match[2], match[3]
@@ -391,11 +391,11 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 	}
 	lines := strings.Split(source, "\n")
 	var findings []Finding
-	inBlockComment := false
+	var mask maskState
 	hierarchies := map[string]*memberHierarchy{}
 
 	for lineNum, raw := range lines {
-		line := maskPHPLine(raw, &inBlockComment)
+		line := maskPHPLine(raw, &mask)
 		for _, match := range unknownMemberAccessRe.FindAllStringSubmatchIndex(line, -1) {
 			opStart, opEnd := match[2], match[3]
 			nameStart, nameEnd := match[4], match[5]
@@ -544,26 +544,56 @@ func collectClassLikes(expr types.TypeExpr, file *parser.FileNode, index *symbol
 	return true
 }
 
-func maskPHPLine(line string, inBlockComment *bool) string {
+// maskState carries what maskPHPLine is inside of from one line to the next:
+// a block comment, a quoted string or a heredoc/nowdoc body.
+type maskState struct {
+	inBlockComment bool
+	quote          byte   // '\'' or '"' while inside a string spanning lines
+	heredocLabel   string // closing label while inside a heredoc/nowdoc body
+}
+
+// maskPHPLine blanks comments and string contents on one line so text
+// scanners only see code. Feed it every line of a file in order with the same
+// state, so strings, heredocs and comments spanning lines stay masked.
+func maskPHPLine(line string, st *maskState) string {
 	if line == "" {
 		return line
 	}
 	buf := []byte(line)
-	inSingle := false
-	inDouble := false
-	escaped := false
+	i := 0
 
-	for i := 0; i < len(buf); i++ {
-		if *inBlockComment {
+	if st.heredocLabel != "" {
+		// Heredoc/nowdoc body: masked until a line starting (after
+		// indentation) with the closing label.
+		trimmed := strings.TrimLeft(line, " \t")
+		indent := len(line) - len(trimmed)
+		if strings.HasPrefix(trimmed, st.heredocLabel) &&
+			(len(trimmed) == len(st.heredocLabel) || !isIdentChar(trimmed[len(st.heredocLabel)])) {
+			for j := 0; j < indent+len(st.heredocLabel); j++ {
+				buf[j] = ' '
+			}
+			i = indent + len(st.heredocLabel)
+			st.heredocLabel = ""
+		} else {
+			for j := range buf {
+				buf[j] = ' '
+			}
+			return string(buf)
+		}
+	}
+
+	escaped := false
+	for ; i < len(buf); i++ {
+		if st.inBlockComment {
 			buf[i] = ' '
 			if i+1 < len(buf) && line[i] == '*' && line[i+1] == '/' {
 				buf[i+1] = ' '
-				*inBlockComment = false
+				st.inBlockComment = false
 				i++
 			}
 			continue
 		}
-		if inSingle {
+		if st.quote != 0 {
 			buf[i] = ' '
 			if escaped {
 				escaped = false
@@ -573,23 +603,8 @@ func maskPHPLine(line string, inBlockComment *bool) string {
 				escaped = true
 				continue
 			}
-			if line[i] == '\'' {
-				inSingle = false
-			}
-			continue
-		}
-		if inDouble {
-			buf[i] = ' '
-			if escaped {
-				escaped = false
-				continue
-			}
-			if line[i] == '\\' {
-				escaped = true
-				continue
-			}
-			if line[i] == '"' {
-				inDouble = false
+			if line[i] == st.quote {
+				st.quote = 0
 			}
 			continue
 		}
@@ -597,43 +612,53 @@ func maskPHPLine(line string, inBlockComment *bool) string {
 		if i+1 < len(buf) && line[i] == '/' && line[i+1] == '*' {
 			buf[i] = ' '
 			buf[i+1] = ' '
-			*inBlockComment = true
+			st.inBlockComment = true
 			i++
 			continue
 		}
-		if i+1 < len(buf) && line[i] == '/' && line[i+1] == '/' {
+		if (i+1 < len(buf) && line[i] == '/' && line[i+1] == '/') || (line[i] == '#' && (i+1 >= len(buf) || line[i+1] != '[')) {
+			// `//` and `#` comments run to the end of the line. PHP 8 attribute
+			// syntax `#[Name]` stays visible.
 			for j := i; j < len(buf); j++ {
 				buf[j] = ' '
 			}
 			break
 		}
-		if line[i] == '#' {
-			// PHP 8 attribute syntax `#[Name]` must remain visible — only treat
-			// standalone `#` (followed by anything other than `[`) as a line
-			// comment. Attribute brackets pair with `]` later on the same line or
-			// a subsequent line; we leave their contents in the masked buffer.
-			if i+1 < len(buf) && line[i+1] == '[' {
-				// leave the `#[` and everything after it intact, fall through
-				continue
+		if strings.HasPrefix(line[i:], "<<<") {
+			if label, ok := heredocOpenLabel(line[i+3:]); ok {
+				for j := i; j < len(buf); j++ {
+					buf[j] = ' '
+				}
+				st.heredocLabel = label
+				break
 			}
-			for j := i; j < len(buf); j++ {
-				buf[j] = ' '
-			}
-			break
 		}
-		if line[i] == '\'' {
+		if line[i] == '\'' || line[i] == '"' {
 			buf[i] = ' '
-			inSingle = true
-			continue
-		}
-		if line[i] == '"' {
-			buf[i] = ' '
-			inDouble = true
+			st.quote = line[i]
 			continue
 		}
 	}
 
 	return string(buf)
+}
+
+// heredocOpenLabel reads the label after `<<<` (`SQL`, `'SQL'` or `"SQL"`)
+// when it is the last thing on the line.
+func heredocOpenLabel(rest string) (string, bool) {
+	rest = strings.TrimSpace(rest)
+	if len(rest) >= 2 && (rest[0] == '\'' || rest[0] == '"') && rest[len(rest)-1] == rest[0] {
+		rest = rest[1 : len(rest)-1]
+	}
+	if rest == "" || (rest[0] >= '0' && rest[0] <= '9') {
+		return "", false
+	}
+	for k := 0; k < len(rest); k++ {
+		if !isIdentChar(rest[k]) {
+			return "", false
+		}
+	}
+	return rest, true
 }
 
 func classLikeExists(name string, line int, file *parser.FileNode, index *symbols.Index) bool {
@@ -835,6 +860,9 @@ func resolveClassLikeName(name string, line int, file *parser.FileNode) (string,
 		if cls := enclosingClassAtLine(file, line); cls != nil && cls.Extends != "" {
 			return resolveImportedName(cls.Extends, file.Namespace, file.Uses, ""), true
 		}
+		return "", false
+	case "class", "readonly":
+		// `new class ...` / `new readonly class ...` declare an anonymous class.
 		return "", false
 	}
 	if symbols.IsPHPBuiltinType(lower) {

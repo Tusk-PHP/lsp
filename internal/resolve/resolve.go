@@ -1265,10 +1265,13 @@ func JoinChainLines(lines []string, lineNum, character int) (string, int) {
 	offset := character
 
 	// Walk backward, prepending lines as long as the current joined line
-	// starts with a chain continuation operator (-> or ::).
-	for i := lineNum - 1; i >= 0; i-- {
+	// starts with a chain continuation operator (-> or ::), or the code before
+	// the cursor closes brackets opened on earlier lines — e.g. `])->each(`
+	// ending a multi-line `Collection::make([...])` argument list.
+	for i := lineNum - 1; i >= 0 && lineNum-i <= maxChainJoinLines; i-- {
 		trimmed := strings.TrimSpace(joined)
-		if !strings.HasPrefix(trimmed, "->") && !strings.HasPrefix(trimmed, "::") && !strings.HasPrefix(trimmed, "?->") {
+		continuation := strings.HasPrefix(trimmed, "->") || strings.HasPrefix(trimmed, "::") || strings.HasPrefix(trimmed, "?->")
+		if !continuation && !hasUnmatchedClosingBracket(joined[:min(offset, len(joined))]) {
 			break
 		}
 		prev := strings.TrimRight(lines[i], " \t")
@@ -1276,6 +1279,40 @@ func JoinChainLines(lines []string, lineNum, character int) (string, int) {
 		joined = prev + joined
 	}
 	return joined, offset
+}
+
+// maxChainJoinLines bounds how far JoinChainLines walks back, so a stray
+// closing bracket cannot pull in a whole file.
+const maxChainJoinLines = 200
+
+// hasUnmatchedClosingBracket reports whether s contains a `)` or `]` whose
+// opening bracket is not in s. Quoted strings are skipped.
+func hasUnmatchedClosingBracket(s string) bool {
+	depth := 0
+	var quote byte
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if quote != 0 {
+			if c == '\\' {
+				i++
+			} else if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch c {
+		case '\'', '"':
+			quote = c
+		case '(', '[':
+			depth++
+		case ')', ']':
+			depth--
+			if depth < 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // SplitLines splits source into lines. Use this once per request,

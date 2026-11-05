@@ -17,6 +17,20 @@ func indexWithFunctions(php string) *symbols.Index {
 func TestArgumentCountRule(t *testing.T) {
 	rule := &ArgumentCountRule{}
 
+	t.Run("trailing comma is not an extra argument", func(t *testing.T) {
+		idx := indexWithFunctions(`<?php
+function env(string $key, mixed $default = null): mixed {}
+`)
+		source := `<?php
+$a = env(
+    'HORIZON_PREFIX',
+    strtolower('x') . '_horizon:',
+);
+`
+		file := parser.ParseFile(source)
+		assertNoFindings(t, rule.Check(file, source, idx))
+	})
+
 	t.Run("correct arg count not flagged", func(t *testing.T) {
 		idx := indexWithFunctions(`<?php
 function greet(string $name): string {

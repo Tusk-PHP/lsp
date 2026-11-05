@@ -185,8 +185,8 @@ func memberUses(file *parser.FileNode, source string, index *symbols.Index, type
 			if typeResolver == nil || tok.Line >= len(lines) {
 				continue
 			}
-			inBlockComment := false
-			line := maskPHPLine(lines[tok.Line], &inBlockComment)
+			var mask maskState
+			line := maskPHPLine(lines[tok.Line], &mask)
 			opStart := tokens[i-1].Column
 			if i > 1 && tokens[i-2].Kind == parser.TokenQuestion {
 				opStart = tokens[i-2].Column

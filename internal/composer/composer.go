@@ -39,8 +39,9 @@ type composerConfig struct {
 }
 
 type autoloadBlock struct {
-	PSR4  map[string]interface{} `json:"psr-4"`
-	Files []string               `json:"files"`
+	PSR4     map[string]interface{} `json:"psr-4"`
+	Files    []string               `json:"files"`
+	Classmap []string               `json:"classmap"`
 }
 
 type installedJSON struct {
@@ -148,6 +149,9 @@ func GetAutoloadPaths(rootPath string) []AutoloadEntry {
 		if len(pkg.Autoload.Files) > 0 {
 			entries = append(entries, parseFiles(pkg.Autoload.Files, pkgDir, true)...)
 		}
+		if len(pkg.Autoload.Classmap) > 0 {
+			entries = append(entries, parseClassmap(pkg.Autoload.Classmap, pkgDir)...)
+		}
 	}
 
 	return appendComposerAutoloadFiles(entries, rootPath)
@@ -185,6 +189,22 @@ func appendComposerAutoloadFiles(entries []AutoloadEntry, rootPath string) []Aut
 			Path:     path,
 			IsVendor: strings.HasPrefix(path, vendorDir+string(filepath.Separator)),
 			IsFile:   true,
+		})
+	}
+	return entries
+}
+
+// parseClassmap turns a vendor package's `classmap` paths (PHPUnit uses one,
+// for example) into entries without a namespace: directories are walked and
+// files indexed as they are. Namespace-based lookups skip these entries.
+func parseClassmap(paths []string, basePath string) []AutoloadEntry {
+	var entries []AutoloadEntry
+	for _, p := range paths {
+		abs := filepath.Join(basePath, p)
+		entries = append(entries, AutoloadEntry{
+			Path:     abs,
+			IsVendor: true,
+			IsFile:   strings.HasSuffix(strings.ToLower(p), ".php"),
 		})
 	}
 	return entries
