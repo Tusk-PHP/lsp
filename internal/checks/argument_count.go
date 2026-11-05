@@ -253,7 +253,8 @@ func countArguments(tokens []parser.Token, openIdx, closeIdx int) (int, bool) {
 				}
 			}
 		case parser.TokenComma:
-			if depth == 0 {
+			// A trailing comma before `)` (PHP 7.3+) doesn't start another argument.
+			if depth == 0 && nextSignificantTokenIdx(tokens, i+1) != closeIdx {
 				count++
 			}
 		case parser.TokenIdentifier:

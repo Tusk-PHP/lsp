@@ -549,8 +549,9 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 		return p.resolver.ResolveVariableTypeTyped(target, resolve.SplitLines(source), pos, file)
 	}
 
-	// Try as class name — this is the chain origin (e.g., Category::)
-	if fqn := p.resolveClassNameFromSource(target, source, file); fqn != "" {
+	// Try as class name — this is the chain origin (e.g., Category::). A word
+	// after -> or :: is a member (UserRole::Client, $x->Client), never a class.
+	if fqn := p.chainOriginClassName(line, i, target, source, file); fqn != "" {
 		if sym := p.index.Lookup(fqn); sym != nil {
 			switch sym.Kind {
 			case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
@@ -867,8 +868,9 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 		return p.resolver.ResolveVariableType(target, resolve.SplitLines(source), pos, file)
 	}
 
-	// Try as a class name (for static access or direct use)
-	if fqn := p.resolveClassNameFromSource(target, source, file); fqn != "" {
+	// Try as a class name (for static access or direct use). A word after
+	// -> or :: is a member (UserRole::Client, $x->Client), never a class.
+	if fqn := p.chainOriginClassName(line, i, target, source, file); fqn != "" {
 		if sym := p.index.Lookup(fqn); sym != nil {
 			switch sym.Kind {
 			case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
@@ -896,6 +898,17 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 		return ""
 	}
 	return p.resolver.MemberType(member, file)
+}
+
+// chainOriginClassName resolves target, which starts at line[start], as a
+// class name, unless it follows a member operator (-> or ::) and so names a
+// member such as an enum case, constant or property.
+func (p *Provider) chainOriginClassName(line string, start int, target, source string, file *parser.FileNode) string {
+	before := strings.TrimRight(line[:start], " \t")
+	if strings.HasSuffix(before, "->") || strings.HasSuffix(before, "::") {
+		return ""
+	}
+	return p.resolveClassNameFromSource(target, source, file)
 }
 
 // resolveClassNameFromSource resolves a short or FQN class name using

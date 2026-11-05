@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The `deprecated` diagnostic no longer flags methods that share a name with a deprecated PHP function, such as Laravel's `$collection->each(...)` or `Arr::each(...)`, nor matches inside `foreach(`, strings or comments. Only real calls to the global `each()`, `create_function()`, `utf8_encode()` and `utf8_decode()` are reported.
+- Hover now works on a method chained after a multi-line argument list, such as `->each` in `Collection::make([...])->each(...)` where the array spans several lines.
+- Heredoc and nowdoc strings are now read as strings. Their contents (SQL, braces, words followed by `(`) no longer cause `unknown-function` or `unreachable-code` warnings, nor throw off where a class or method ends. Variables interpolated in a heredoc count as used.
+- Diagnostics no longer look inside strings that span several lines.
+- An enum case or constant that shares its name with a class, such as `UserRole::Client->value` next to a `Client` model, now resolves to the enum. This fixes false `unknown-member` warnings and wrong completion and hover.
+- Anonymous classes (`new class extends Migration`, `new readonly class`) are no longer reported as an unknown class named `class`.
+- Classes from packages that autoload by `classmap`, such as PHPUnit's `#[CoversClass]`, `#[Group]` and `#[DataProvider]` attributes, are now indexed instead of being reported as unknown.
+- `argument-count-mismatch` no longer counts a trailing comma in a multi-line call as an extra argument.
+- The global-function `deprecated` warnings now respect the `deprecated` rule's enable and severity settings.
+
 ## [0.11.1] - 2026-11-02
 
 ### Added
