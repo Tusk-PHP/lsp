@@ -107,7 +107,11 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 		}
 		if p.cfg.IsRuleEnabled("deprecated") {
 			fs := (&checks.DeprecatedUsageRule{TypeResolver: p.TypeResolver}).Check(file, source, p.index)
-			fs = append(fs, (&checks.DeprecatedFunctionRule{}).Check(file, source, p.index)...)
+			deprecatedFns := &checks.DeprecatedFunctionRule{}
+			if p.BuiltinUnavailableRule != nil {
+				deprecatedFns.PHPVersion = p.BuiltinUnavailableRule.PHPVersion
+			}
+			fs = append(fs, deprecatedFns.Check(file, source, p.index)...)
 			diags = append(diags, p.applyRuleSeverity("deprecated", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("unused-result") {

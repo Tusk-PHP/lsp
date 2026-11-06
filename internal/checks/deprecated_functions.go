@@ -7,20 +7,31 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-// deprecatedFunctions maps lowercase global PHP function names to the message
-// reported when they are called.
-var deprecatedFunctions = map[string]string{
-	"each":            "each() is deprecated since PHP 7.2",
-	"create_function": "create_function() is deprecated since PHP 7.2",
-	"utf8_encode":     "utf8_encode() is deprecated since PHP 8.2, use mb_convert_encoding()",
-	"utf8_decode":     "utf8_decode() is deprecated since PHP 8.2, use mb_convert_encoding()",
+// deprecatedFunction is a global PHP function deprecated from a PHP version.
+type deprecatedFunction struct {
+	since   string // PHP major.minor that deprecated it
+	message string
+}
+
+// deprecatedFunctions maps lowercase global PHP function names to when they
+// were deprecated and the message reported when they are called.
+var deprecatedFunctions = map[string]deprecatedFunction{
+	"each":            {"7.2", "each() is deprecated since PHP 7.2"},
+	"create_function": {"7.2", "create_function() is deprecated since PHP 7.2"},
+	"utf8_encode":     {"8.2", "utf8_encode() is deprecated since PHP 8.2, use mb_convert_encoding()"},
+	"utf8_decode":     {"8.2", "utf8_decode() is deprecated since PHP 8.2, use mb_convert_encoding()"},
 }
 
 // DeprecatedFunctionRule flags calls to deprecated global PHP functions.
 // Only real global function calls count: method and static calls with the
 // same name (`$collection->each(...)`, `Arr::each(...)`), declarations,
 // namespace-qualified names, strings and comments are ignored.
-type DeprecatedFunctionRule struct{}
+type DeprecatedFunctionRule struct {
+	// PHPVersion is the project's lowest supported PHP major.minor. A function
+	// deprecated in a later version isn't reported: the project still supports
+	// PHP versions where it is fine. Empty reports every deprecation.
+	PHPVersion string
+}
 
 func (r *DeprecatedFunctionRule) Code() string { return "deprecated" }
 
@@ -37,8 +48,8 @@ func (r *DeprecatedFunctionRule) Check(file *parser.FileNode, source string, ind
 		for _, match := range unknownFunctionCallRe.FindAllStringSubmatchIndex(line, -1) {
 			start, end := match[2], match[3]
 			name := strings.TrimPrefix(line[start:end], "\\")
-			msg, ok := deprecatedFunctions[strings.ToLower(name)]
-			if !ok {
+			dep, ok := deprecatedFunctions[strings.ToLower(name)]
+			if !ok || (r.PHPVersion != "" && compareBuiltinVersionsStrings(r.PHPVersion, dep.since) < 0) {
 				continue
 			}
 			if shouldSkipFunctionCall(line, start, name) || isMemberAccessBefore(line[:start], prevTail) {
@@ -51,7 +62,7 @@ func (r *DeprecatedFunctionRule) Check(file *parser.FileNode, source string, ind
 				EndCol:    end,
 				Severity:  SeverityWarning,
 				Code:      "deprecated",
-				Message:   msg,
+				Message:   dep.message,
 				Tags:      []Tag{TagDeprecated},
 			})
 		}
