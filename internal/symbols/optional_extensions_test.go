@@ -192,3 +192,14 @@ func BenchmarkRegisterOptionalExtensionBuiltins(b *testing.B) {
 		})
 	}
 }
+
+func TestGlobalConstantsHaveNoOwner(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///c.php", "<?php\nnamespace Foo;\nconst BAR = 1;\nclass Baz { const QUX = 2; }\n")
+	if sym := idx.Lookup("Foo\\BAR"); sym == nil || sym.ParentFQN != "" {
+		t.Errorf("namespaced global constant should be indexed without an owner, got %+v", sym)
+	}
+	if sym := idx.Lookup("Foo\\Baz::QUX"); sym == nil || sym.ParentFQN != "Foo\\Baz" {
+		t.Errorf("class constant should keep its owner, got %+v", sym)
+	}
+}
