@@ -46,6 +46,9 @@ func (r *UnknownClassRule) Check(file *parser.FileNode, source string, index *sy
 func checkUnknownClassMatches(line string, lineNum int, file *parser.FileNode, index *symbols.Index, re *regexp.Regexp) []Finding {
 	var findings []Finding
 	for _, match := range re.FindAllStringSubmatchIndex(line, -1) {
+		if !isKeywordAt(line, match[0]) {
+			continue
+		}
 		start, end := match[2], match[3]
 		name := line[start:end]
 		if classLikeExists(name, lineNum, file, index) {
@@ -62,6 +65,24 @@ func checkUnknownClassMatches(line string, lineNum int, file *parser.FileNode, i
 		})
 	}
 	return findings
+}
+
+// isKeywordAt reports whether the word starting at line[i] is a keyword rather
+// than part of a variable or member name: `$new as`, `$this->extends`,
+// `Foo::catch`. The regexes' \b treats `$` and `>` as word boundaries.
+func isKeywordAt(line string, i int) bool {
+	if i <= 0 {
+		return true
+	}
+	switch line[i-1] {
+	case '$':
+		return false
+	case '>':
+		return i < 2 || line[i-2] != '-'
+	case ':':
+		return i < 2 || line[i-2] != ':'
+	}
+	return true
 }
 
 func checkUnknownStaticClassMatches(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
@@ -88,6 +109,9 @@ func checkUnknownStaticClassMatches(line string, lineNum int, file *parser.FileN
 func checkUnknownCatchClasses(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
 	var findings []Finding
 	for _, match := range unknownClassCatchRe.FindAllStringSubmatchIndex(line, -1) {
+		if !isKeywordAt(line, match[0]) {
+			continue
+		}
 		listStart, listEnd := match[2], match[3]
 		list := line[listStart:listEnd]
 		offset := 0
@@ -122,6 +146,9 @@ func checkUnknownCatchClasses(line string, lineNum int, file *parser.FileNode, i
 func checkUnknownImplementsClasses(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
 	var findings []Finding
 	for _, match := range unknownClassImplementsRe.FindAllStringSubmatchIndex(line, -1) {
+		if !isKeywordAt(line, match[0]) {
+			continue
+		}
 		listStart, listEnd := match[2], match[3]
 		list := line[listStart:listEnd]
 		offset := 0

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Diagnostics no longer look inside strings that span several lines.
 - An enum case or constant that shares its name with a class, such as `UserRole::Client->value` next to a `Client` model, now resolves to the enum. This fixes false `unknown-member` warnings and wrong completion and hover.
 - Anonymous classes (`new class extends Migration`, `new readonly class`) are no longer reported as an unknown class named `class`.
+- Variables and properties named like a keyword no longer look like one to `unknown-class`: `foreach ( $new as $key => $value )` was reported as an unknown class `as`, and the same could happen with `$extends`, `$catch`, `$implements` or `$this->new`.
 - Classes from packages that autoload by `classmap`, such as PHPUnit's `#[CoversClass]`, `#[Group]` and `#[DataProvider]` attributes, are now indexed instead of being reported as unknown.
 - `argument-count-mismatch` no longer counts a trailing comma in a multi-line call as an extra argument.
 - The global-function `deprecated` warnings now respect the `deprecated` rule's enable and severity settings.
