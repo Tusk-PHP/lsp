@@ -609,7 +609,7 @@ func (s *Server) handleDidChange(msg *jsonRPCMessage) {
 // documents — composer.json, tsconfig.json, etc. — can be opened
 // without polluting the symbol index or generating diagnostics.
 func isPHPDocument(uri string) bool {
-	return strings.HasSuffix(strings.ToLower(uri), ".php")
+	return workspace.IsPHPSource(uri)
 }
 
 // indexDocumentMaybeAsync indexes source synchronously for small documents
@@ -658,7 +658,11 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 	if s.cfg.DiagnosticsEnabled {
 		s.goSafe("diagnostics.RunTools", func() {
 			filePath := symbols.URIToPath(uri)
-			s.diag.RunTools(uri, filePath)
+			// PHPStan and Pint run on .php files only: Pint would reformat a
+			// template, and PHPStan doesn't analyse .phtml unless configured to.
+			if !workspace.IsTemplate(uri) {
+				s.diag.RunTools(uri, filePath)
+			}
 			source := s.getDocument(uri)
 			s.diag.AnalyzeOnSave(uri, source)
 			s.publishDiagnostics(uri, source)

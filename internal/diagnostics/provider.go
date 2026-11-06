@@ -11,6 +11,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
 type Provider struct {
@@ -98,7 +99,7 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 			diags = append(diags, p.applyRuleSeverity("redundant-union-member", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("undefined-variable") {
-			fs := (&checks.UndefinedVariableRule{}).Check(file, source, p.index)
+			fs := (&checks.UndefinedVariableRule{IncludedFile: workspace.IsTemplate(uri)}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("undefined-variable", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("unused-variable") {

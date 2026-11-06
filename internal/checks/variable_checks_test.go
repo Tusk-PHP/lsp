@@ -388,12 +388,12 @@ function f($p) {
     return $y;
 }
 `
-	if findings := checkUndefinedVariables(source, nil); len(findings) != 0 {
+	if findings := checkUndefinedVariables(source, nil, false); len(findings) != 0 {
 		t.Errorf("unexpected findings: %+v", findings)
 	}
 
 	source = "<?php\nfunction f() {\n    return $missing === 1;\n}\n"
-	findings := checkUndefinedVariables(source, nil)
+	findings := checkUndefinedVariables(source, nil, false)
 	if len(findings) != 1 || findings[0].Message != "Undefined variable $missing" {
 		t.Errorf("want $missing reported, got %+v", findings)
 	}

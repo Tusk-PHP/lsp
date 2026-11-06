@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Completion, hover and extension availability diagnostics for Imagick, SSH2, Redis, Memcached, APCu and igbinary. Extensions listed in Composer's `suggest` now count as available alongside `require` and `config.platform`.
 - Global constants declared with `const` at file level (`const MAX_ITEMS = 10;`, also inside a namespace) are now indexed as symbols, as class constants already were. This is what makes the SSH2 constants above known.
+- **`.phtml` templates** are now read as PHP: they are indexed and get diagnostics, hover, completion and navigation like `.php` files. A template is always included by other code that sets its variables, so its top-level `$block`, `$escaper` and similar are not reported as undefined; variables inside its functions and closures still are. PHPStan and Pint keep running on `.php` files only.
 
 ### Changed
 
