@@ -669,6 +669,25 @@ func IndexOutsideBrackets(s string, ch byte) int {
 // rawMemberReturnType extracts the raw return type string from a member
 // without any resolution or stripping. Used by MemberTypeResolved to check
 // for generic syntax before falling back to MemberType.
+// ReturnsCallingClass reports whether a method returns the class it was called
+// on: `static`, `$this`, or `self` (possibly nullable). For `$child->copy()`
+// declared in Base as `: self`, that's the object's own class at runtime, so
+// callers treat all three alike and use the class the method was called on.
+func (r *Resolver) ReturnsCallingClass(member *symbols.Symbol) bool {
+	if member == nil || member.Kind != symbols.KindMethod {
+		return false
+	}
+	t := strings.TrimPrefix(strings.TrimSpace(r.rawMemberReturnType(member)), "?")
+	if strings.Contains(t, "|") {
+		t = PickBestUnionPart(t)
+	}
+	switch strings.TrimPrefix(t, "?") {
+	case "static", "self", "$this":
+		return true
+	}
+	return false
+}
+
 func (r *Resolver) rawMemberReturnType(member *symbols.Symbol) string {
 	ownerFQN := ownerScopeFQN(member, protocol.Position{}, nil)
 	switch member.Kind {
