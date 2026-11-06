@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Completion, hover and extension availability diagnostics for Imagick, SSH2, Redis, Memcached, APCu and igbinary. Extensions listed in Composer's `suggest` now count as available alongside `require` and `config.platform`.
 - Global constants declared with `const` at file level (`const MAX_ITEMS = 10;`, also inside a namespace) are now indexed as symbols, as class constants already were. This is what makes the SSH2 constants above known.
 
+### Changed
+
+- `maxIndexFiles` now defaults to `0`, meaning no limit, so large projects such as Magento 2 (about 25,000 files) are indexed in full instead of stopping at 10,000 files with the rest reported as unknown. Set a limit if memory is tight: all of Magento 2 takes about 600 MB. When the limit is reached, the server now logs a warning saying how to change it. The WebAssembly build keeps `10000` as its default to stay within browser memory.
+
 ### Fixed
 
 - The `deprecated` diagnostic no longer flags methods that share a name with a deprecated PHP function, such as Laravel's `$collection->each(...)` or `Arr::each(...)`, nor matches inside `foreach(`, strings or comments. Only real calls to the global `each()`, `create_function()`, `utf8_encode()` and `utf8_decode()` are reported.

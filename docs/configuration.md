@@ -15,7 +15,7 @@ Back to the [README](../README.md).
 | `tuskPhpLsp.diagnostics.phpstan.enable` | `true` | Run PHPStan on save |
 | `tuskPhpLsp.diagnostics.pint.enable` | `true` | Run Laravel Pint on save |
 | `tuskPhpLsp.coverage.reportPath` | `""` | Clover report to read, absolute or relative to the workspace. Empty finds it automatically. |
-| `tuskPhpLsp.maxIndexFiles` | `10000` | Maximum PHP files to index |
+| `tuskPhpLsp.maxIndexFiles` | `0` | Maximum workspace PHP files to index; `0` indexes all of them. Set a limit only if the server uses too much memory: indexing all of Magento 2 (about 25,000 files) takes about 600 MB. Composer dependencies aren't counted. The WebAssembly build (vscode.dev) defaults to `10000` to stay within browser memory. |
 | `tuskPhpLsp.excludePaths` | `["vendor", ...]` | Paths to skip when indexing |
 | `tuskPhpLsp.phpManual.locale` | `""` | Locale for php.net manual links (`en`, `de`, `es`, `fr`, `it`, `ja`, `pt_BR`, `ru`, `tr`, `zh`). Empty = English. |
 | `tuskPhpLsp.phpManual.openOnDefinition` | `false` | Cmd+Click on a built-in opens its php.net page in your browser. |
@@ -31,7 +31,7 @@ Create `.tusk-php.json` in your project root to override settings per project:
   "containerAware": true,
   "diagnosticsEnabled": true,
   "excludePaths": ["vendor", "node_modules", ".git"],
-  "maxIndexFiles": 10000,
+  "maxIndexFiles": 0,
   "php_manual_locale": "",
   "php_manual_open_on_definition": false,
   "coverageReportPath": "",

@@ -24,7 +24,7 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.ContainerAware {
 		t.Error("ContainerAware should default to true")
 	}
-	if cfg.MaxIndexFiles != 10000 {
+	if cfg.MaxIndexFiles != defaultMaxIndexFiles {
 		t.Errorf("MaxIndexFiles = %d", cfg.MaxIndexFiles)
 	}
 }
@@ -576,4 +576,12 @@ func TestDetectFramework(t *testing.T) {
 			t.Errorf("expected none, got %q", f)
 		}
 	})
+}
+
+func TestMaxIndexFilesUnlimitedByDefaultOnNative(t *testing.T) {
+	// The native server indexes the whole workspace unless told otherwise;
+	// the WebAssembly build keeps a cap for its memory budget (limits_wasip1.go).
+	if defaultMaxIndexFiles != 0 {
+		t.Errorf("native default maxIndexFiles = %d, want 0 (no limit)", defaultMaxIndexFiles)
+	}
 }

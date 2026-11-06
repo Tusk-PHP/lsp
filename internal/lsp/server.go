@@ -528,6 +528,9 @@ func (s *Server) handleInitialized(msg *jsonRPCMessage) {
 		defer indexWg.Done()
 		count := s.workspace.IndexWorkspace()
 		s.sendNotification("window/logMessage", map[string]interface{}{"type": protocol.MessageTypeInfo, "message": fmt.Sprintf("PHP LSP: Indexed %d files (%s framework)", count, s.framework)})
+		if limit := s.cfg.MaxIndexFiles; limit > 0 && count >= limit {
+			s.sendNotification("window/logMessage", map[string]interface{}{"type": protocol.MessageTypeWarning, "message": fmt.Sprintf("PHP LSP: stopped indexing at maxIndexFiles (%d files), so classes in the rest of the workspace will be reported as unknown. Set maxIndexFiles to 0 to index everything.", limit)})
+		}
 	})
 	s.goSafe("indexComposerDeps", func() {
 		defer indexWg.Done()
