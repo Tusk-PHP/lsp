@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Completion, hover and extension availability diagnostics for Imagick, SSH2, Redis, Memcached, APCu and igbinary. Extensions listed in Composer's `suggest` now count as available alongside `require` and `config.platform`.
+
 ### Fixed
 
 - The `deprecated` diagnostic no longer flags methods that share a name with a deprecated PHP function, such as Laravel's `$collection->each(...)` or `Arr::each(...)`, nor matches inside `foreach(`, strings or comments. Only real calls to the global `each()`, `create_function()`, `utf8_encode()` and `utf8_decode()` are reported.
