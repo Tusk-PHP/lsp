@@ -158,3 +158,26 @@ class Foo {
 		assertNoFindings(t, findings)
 	})
 }
+
+func TestUnusedPrivateSeesUsesAfterBracesInStrings(t *testing.T) {
+	// WordPress's WP_Block_Processor compares characters with '{' and '}' in
+	// strings; counting those braces ended the class early, so later reads of
+	// a private property or calls of a private method were missed.
+	src := `<?php
+class WP_Block_Processor {
+    private $last_json_error = 0;
+    private function parse_json() {}
+    public function scan( $text ) {
+        $has_json = '{' === $text[0];
+        $closes   = "}}" === substr( $text, -2 );
+    }
+    public function get_last_json_error(): int {
+        $this->parse_json();
+        return $this->last_json_error;
+    }
+}
+`
+	if got := (&UnusedPrivateRule{}).Check(parser.ParseFile(src), src, nil); len(got) != 0 {
+		t.Errorf("used private members reported unused: %+v", got)
+	}
+}
