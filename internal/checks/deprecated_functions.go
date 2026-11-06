@@ -29,7 +29,7 @@ func (r *DeprecatedFunctionRule) Check(file *parser.FileNode, source string, ind
 		return nil
 	}
 	var findings []Finding
-	var mask maskState
+	mask := newMaskState(source)
 	prevTail := "" // last non-blank code of the previous line, for chains split across lines
 
 	for lineNum, raw := range strings.Split(source, "\n") {

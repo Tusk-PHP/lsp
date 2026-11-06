@@ -28,7 +28,7 @@ func (r *UnknownClassRule) Check(file *parser.FileNode, source string, index *sy
 	}
 	lines := strings.Split(source, "\n")
 	var findings []Finding
-	var mask maskState
+	mask := newMaskState(source)
 
 	for lineNum, raw := range lines {
 		line := maskPHPLine(raw, &mask)
@@ -306,7 +306,7 @@ func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index 
 	}
 	lines := strings.Split(source, "\n")
 	var findings []Finding
-	var mask maskState
+	mask := newMaskState(source)
 
 	for lineNum, raw := range lines {
 		line := maskPHPLine(raw, &mask)
@@ -391,7 +391,7 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 	}
 	lines := strings.Split(source, "\n")
 	var findings []Finding
-	var mask maskState
+	mask := newMaskState(source)
 	hierarchies := map[string]*memberHierarchy{}
 
 	for lineNum, raw := range lines {
@@ -545,11 +545,18 @@ func collectClassLikes(expr types.TypeExpr, file *parser.FileNode, index *symbol
 }
 
 // maskState carries what maskPHPLine is inside of from one line to the next:
-// a block comment, a quoted string or a heredoc/nowdoc body.
+// inline HTML, a block comment, a quoted string or a heredoc/nowdoc body.
 type maskState struct {
+	inHTML         bool   // outside <?php … ?>
 	inBlockComment bool
 	quote          byte   // '\'' or '"' while inside a string spanning lines
 	heredocLabel   string // closing label while inside a heredoc/nowdoc body
+}
+
+// newMaskState returns the state for the first line of source. Text before
+// the first open tag is inline HTML; a source with no open tag is all PHP.
+func newMaskState(source string) maskState {
+	return maskState{inHTML: parser.HasOpenTag(source)}
 }
 
 // maskPHPLine blanks comments and string contents on one line so text
@@ -584,6 +591,20 @@ func maskPHPLine(line string, st *maskState) string {
 
 	escaped := false
 	for ; i < len(buf); i++ {
+		if st.inHTML {
+			// Inline HTML (and any <script> in it) is not PHP: blank it up to
+			// and including the next open tag.
+			if n := parser.OpenTagLen(line, i); n > 0 {
+				for j := i; j < i+n && j < len(buf); j++ {
+					buf[j] = ' '
+				}
+				i += n - 1
+				st.inHTML = false
+				continue
+			}
+			buf[i] = ' '
+			continue
+		}
 		if st.inBlockComment {
 			buf[i] = ' '
 			if i+1 < len(buf) && line[i] == '*' && line[i+1] == '/' {
@@ -616,13 +637,24 @@ func maskPHPLine(line string, st *maskState) string {
 			i++
 			continue
 		}
+		if line[i] == '?' && i+1 < len(buf) && line[i+1] == '>' {
+			// Close tag: back to inline HTML.
+			buf[i] = ' '
+			buf[i+1] = ' '
+			i++
+			st.inHTML = true
+			continue
+		}
 		if (i+1 < len(buf) && line[i] == '/' && line[i+1] == '/') || (line[i] == '#' && (i+1 >= len(buf) || line[i+1] != '[')) {
-			// `//` and `#` comments run to the end of the line. PHP 8 attribute
-			// syntax `#[Name]` stays visible.
-			for j := i; j < len(buf); j++ {
+			// `//` and `#` comments run to the end of the line or to a close
+			// tag, whichever comes first. PHP 8 attribute syntax `#[Name]`
+			// stays visible.
+			j := i
+			for ; j < len(buf) && !(line[j] == '?' && j+1 < len(buf) && line[j+1] == '>'); j++ {
 				buf[j] = ' '
 			}
-			break
+			i = j - 1
+			continue
 		}
 		if strings.HasPrefix(line[i:], "<<<") {
 			if label, ok := heredocOpenLabel(line[i+3:]); ok {

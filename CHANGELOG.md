@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Classes from packages that autoload by `classmap`, such as PHPUnit's `#[CoversClass]`, `#[Group]` and `#[DataProvider]` attributes, are now indexed instead of being reported as unknown.
 - `argument-count-mismatch` no longer counts a trailing comma in a multi-line call as an extra argument.
 - The global-function `deprecated` warnings now respect the `deprecated` rule's enable and severity settings.
+- Text outside `<?php … ?>`, such as the HTML and `<script>` blocks in WordPress templates and admin pages, is no longer read as PHP. JavaScript like `jQuery(...)`, `new URL()` or `_.each()` no longer triggers `unknown-function`, `unknown-class`, `deprecated` or `argument-count-mismatch`, and variables set before a `?>` count as defined after the next `<?php`. A file with no `<?php` tag at all is still read as PHP.
+- Functions declared inside another function, such as WordPress's `wxr_cdata()` inside `export_wp()`, are now indexed, so calls to them are no longer reported as unknown.
 
 ## [0.11.1] - 2026-11-02
 

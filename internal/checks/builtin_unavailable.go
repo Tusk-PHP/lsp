@@ -43,7 +43,7 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 	}
 	lines := strings.Split(source, "\n")
 	var findings []Finding
-	var mask maskState
+	mask := newMaskState(source)
 	for lineNum, raw := range lines {
 		line := maskPHPLine(raw, &mask)
 		findings = append(findings, r.checkFunctions(line, lineNum, file, index)...)
