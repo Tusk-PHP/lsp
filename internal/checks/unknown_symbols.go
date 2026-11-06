@@ -40,7 +40,7 @@ func (r *UnknownClassRule) Check(file *parser.FileNode, source string, index *sy
 		findings = append(findings, checkUnknownAttributeClasses(line, lineNum, file, index)...)
 	}
 
-	return findings
+	return dropGuarded(findings, lines, findExtensionGuards(source))
 }
 
 func checkUnknownClassMatches(line string, lineNum int, file *parser.FileNode, index *symbols.Index, re *regexp.Regexp) []Finding {
@@ -365,7 +365,7 @@ func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index 
 		}
 	}
 
-	return findings
+	return dropGuarded(findings, lines, findExtensionGuards(source))
 }
 
 func shouldSkipFunctionCall(line string, start int, name string) bool {
