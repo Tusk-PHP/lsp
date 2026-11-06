@@ -118,12 +118,18 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		return nil
 	}
 
-	// Handle $variable hover
-	if strings.HasPrefix(word, "$") {
+	// Handle $variable hover. After `::` a $name is a static property
+	// (self::$cache, static::$count), handled with the other members below.
+	if strings.HasPrefix(word, "$") && ctx.AccessKind != sourcectx.AccessStatic {
 		return p.hoverVariable(lines, pos, file, word)
 	}
 
-	// Handle self/static/parent keywords — resolve to enclosing class
+	// Handle self/static/parent keywords — resolve to enclosing class. They
+	// are keywords, so any letter case counts.
+	switch strings.ToLower(word) {
+	case "self", "static", "parent":
+		word = strings.ToLower(word)
+	}
 	if word == "self" || word == "static" || word == "parent" {
 		if file != nil {
 			var classFQN string
