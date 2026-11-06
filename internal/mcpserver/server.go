@@ -923,7 +923,7 @@ func (s *Service) projectDiagnostics(path string) (DiagnosticsOutput, error) {
 		if !filepath.IsAbs(absPath) {
 			absPath = filepath.Join(s.RootPath, relPath)
 		}
-		if !strings.HasSuffix(strings.ToLower(absPath), ".php") {
+		if !workspace.IsPHPSource(absPath) {
 			continue
 		}
 		data, err := os.ReadFile(absPath)

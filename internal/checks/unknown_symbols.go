@@ -592,7 +592,7 @@ func collectClassLikes(expr types.TypeExpr, file *parser.FileNode, index *symbol
 // maskState carries what maskPHPLine is inside of from one line to the next:
 // inline HTML, a block comment, a quoted string or a heredoc/nowdoc body.
 type maskState struct {
-	inHTML         bool   // outside <?php … ?>
+	inHTML         bool // outside <?php … ?>
 	inBlockComment bool
 	quote          byte   // '\'' or '"' while inside a string spanning lines
 	heredocLabel   string // closing label while inside a heredoc/nowdoc body

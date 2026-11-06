@@ -44,7 +44,13 @@ var skipScopeKeywords = map[string]bool{
 }
 
 // UndefinedVariableRule flags reads of variables that have no binding in scope.
-type UndefinedVariableRule struct{}
+type UndefinedVariableRule struct {
+	// IncludedFile marks a file that other code includes, such as a .phtml
+	// template: its top-level variables ($block, $escaper in Magento) are set
+	// by the includer, so they aren't reported there. Functions and closures
+	// in the file are still checked.
+	IncludedFile bool
+}
 
 func (r *UndefinedVariableRule) Code() string { return "undefined-variable" }
 
@@ -52,7 +58,7 @@ func (r *UndefinedVariableRule) Check(file *parser.FileNode, source string, inde
 	if file == nil {
 		return nil
 	}
-	return checkUndefinedVariables(source, outArgChecker(file, index))
+	return checkUndefinedVariables(source, outArgChecker(file, index), r.IncludedFile)
 }
 
 // UnusedVariableRule flags local variable assignments with no subsequent read.
@@ -121,7 +127,7 @@ func argIsReference(params []symbols.ParamInfo, arg int, complete bool) bool {
 }
 
 // checkUndefinedVariables detects reads of undefined variables.
-func checkUndefinedVariables(source string, outArg func(string, int) bool) []Finding {
+func checkUndefinedVariables(source string, outArg func(string, int) bool, includedFile bool) []Finding {
 	doc := (&scope.Collector{OutArg: outArg}).Collect(source)
 	if doc == nil {
 		return nil
@@ -163,6 +169,9 @@ func checkUndefinedVariables(source string, outArg func(string, int) bool) []Fin
 			continue
 		}
 		if isExistenceCheck(result.Tokens, ti) {
+			continue
+		}
+		if includedFile && inIncluderScope(doc.ScopeAt(protocol.Position{Line: tok.Line, Character: tok.Column})) {
 			continue
 		}
 		// Skip variables inside tainted scopes.
@@ -485,4 +494,13 @@ func skipBalanced(tokens []parser.Token, i int, open, close parser.TokenKind) in
 		}
 	}
 	return len(tokens)
+}
+
+// inIncluderScope reports whether a scope sees the including code's variables:
+// the file's top level, or an arrow function there, which captures them.
+func inIncluderScope(s *scope.Scope) bool {
+	for s != nil && s.Kind == scope.ScopeClosure && s.ExprBody {
+		s = s.Parent
+	}
+	return s == nil || s.Kind == scope.ScopeFile
 }

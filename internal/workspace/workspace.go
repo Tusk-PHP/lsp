@@ -120,7 +120,7 @@ func (ws *Bootstrapped) IndexWorkspace() int {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".php") {
+		if !IsPHPSource(path) {
 			return nil
 		}
 		if limit := ws.Config.MaxIndexFiles; limit > 0 && count >= limit {
