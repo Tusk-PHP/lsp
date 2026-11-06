@@ -365,6 +365,11 @@ func (r *BuiltinUnavailableRule) classMessage(name string, avail symbols.Builtin
 // when the name resolves to a known PHP builtin that the project's profile
 // cannot use. Returns nil if the name is already resolved or is in-profile.
 func (r *BuiltinUnavailableRule) attributeFinding(name string, lineNum, start, end int, file *parser.FileNode, index *symbols.Index) []Finding {
+	// Before PHP 8.0, `#[...]` is a comment, so no attribute can fail there.
+	// Code that targets PHP 7 adds them on purpose, for when it runs on 8.x.
+	if compareBuiltinVersionsStrings(r.PHPVersion, "8.0") < 0 {
+		return nil
+	}
 	// If the class-like is already resolved (locally defined or indexed), skip.
 	if classLikeExists(name, lineNum, file, index) {
 		return nil
@@ -386,12 +391,15 @@ func (r *BuiltinUnavailableRule) attributeFinding(name string, lineNum, start, e
 		return nil
 	}
 
+	// PHP's own attributes are forward-compatible: an older PHP ignores one it
+	// doesn't know rather than failing. So this is a hint that it does nothing
+	// yet, not a warning.
 	return []Finding{{
 		StartLine: lineNum,
 		StartCol:  start,
 		EndLine:   lineNum,
 		EndCol:    end,
-		Severity:  SeverityWarning,
+		Severity:  SeverityHint,
 		Code:      "builtin-unavailable",
 		Message:   r.attributeMessage(bare, avail),
 	}}
@@ -399,7 +407,7 @@ func (r *BuiltinUnavailableRule) attributeFinding(name string, lineNum, start, e
 
 func (r *BuiltinUnavailableRule) attributeMessage(name string, avail symbols.BuiltinAvailability) string {
 	if avail.Extension != "" {
-		return fmt.Sprintf("Attribute '%s' requires ext-%s (PHP >= %s)", name, avail.Extension, avail.Since)
+		return fmt.Sprintf("Attribute '%s' has no effect without ext-%s (PHP >= %s); it is ignored until then", name, avail.Extension, avail.Since)
 	}
-	return fmt.Sprintf("Attribute '%s' requires PHP >= %s", name, avail.Since)
+	return fmt.Sprintf("Attribute '%s' has no effect before PHP >= %s; PHP %s ignores it", name, avail.Since, r.PHPVersion)
 }
