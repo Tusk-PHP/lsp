@@ -94,3 +94,26 @@ SQL;
 		}
 	}
 }
+
+func TestDeprecatedFunctionRuleFollowsPHPVersion(t *testing.T) {
+	src := "<?php\n$a = utf8_encode($s);\n$b = each($arr);\n"
+	file := parser.ParseFile(src)
+	names := func(version string) []string {
+		var out []string
+		for _, f := range (&DeprecatedFunctionRule{PHPVersion: version}).Check(file, src, nil) {
+			out = append(out, f.Message[:strings.Index(f.Message, "(")])
+		}
+		return out
+	}
+	// A project that still supports PHP 7.4 can't move off utf8_encode() yet,
+	// but each() was already deprecated in 7.2.
+	if got := names("7.4"); len(got) != 1 || got[0] != "each" {
+		t.Errorf("PHP 7.4: want only each(), got %v", got)
+	}
+	if got := names("8.2"); len(got) != 2 {
+		t.Errorf("PHP 8.2: want utf8_encode() and each(), got %v", got)
+	}
+	if got := names(""); len(got) != 2 {
+		t.Errorf("unknown version: want every deprecation, got %v", got)
+	}
+}
