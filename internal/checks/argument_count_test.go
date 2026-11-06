@@ -31,6 +31,33 @@ $a = env(
 		assertNoFindings(t, rule.Check(file, source, idx))
 	})
 
+	t.Run("declarations sharing a global function's name are not calls", func(t *testing.T) {
+		// WordPress defines a global init() in rss.php; WP_User::init() takes two
+		// parameters and must not be checked against it.
+		idx := indexWithFunctions(`<?php
+function init() {}
+function __construct() {}
+class Item {}
+`)
+		source := `<?php
+class WP_User {
+    public function init( $data, $site_id = 0 ) {}
+    public function __construct( $id = 0, $name = '', $site_id = '' ) {}
+    public static function &init_ref( $a, $b ) {}
+}
+function &init( $a, $b ) {}
+$item = new Item( 1, 2, 3 );
+`
+		file := parser.ParseFile(source)
+		assertNoFindings(t, rule.Check(file, source, idx))
+
+		// A real call to the global function is still checked.
+		call := "<?php\ninit( 1, 2 );\n"
+		if got := rule.Check(parser.ParseFile(call), call, idx); len(got) != 1 {
+			t.Errorf("expected the real init() call to be flagged, got %+v", got)
+		}
+	})
+
 	t.Run("correct arg count not flagged", func(t *testing.T) {
 		idx := indexWithFunctions(`<?php
 function greet(string $name): string {

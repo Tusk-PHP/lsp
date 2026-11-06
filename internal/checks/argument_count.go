@@ -97,16 +97,19 @@ func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.In
 		if tokens[next].Kind != parser.TokenOpenParen {
 			continue
 		}
-		// Skip: preceded by -> or :: — it's a method call we can't resolve without types
+		// Skip names that aren't calls to a global function:
+		//   $obj->name( / Foo::name(   method calls we can't resolve without types
+		//   function name( / function &name(   declarations, including methods
+		//   new name(   a class, not a function
 		prev := prevSignificantTokenIdx(tokens, i-1)
 		if prev >= 0 {
 			switch tokens[prev].Kind {
-			case parser.TokenArrow, parser.TokenDoubleColon:
+			case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenFunction, parser.TokenNew:
 				continue
-			}
-			// ?-> nullsafe arrow: TokenQuestion + TokenArrow preceding the identifier
-			if tokens[prev].Kind == parser.TokenArrow {
-				continue
+			case parser.TokenAmpersand:
+				if pp := prevSignificantTokenIdx(tokens, prev-1); pp >= 0 && tokens[pp].Kind == parser.TokenFunction {
+					continue
+				}
 			}
 		}
 		// Resolve function FQN
