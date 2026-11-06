@@ -864,7 +864,10 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 			if className == "" {
 				break
 			}
-			classFQN := r.ResolveClassName(className, file)
+			classFQN, isKeyword := r.ClassKeywordFQN(className, pos, file)
+			if !isKeyword {
+				classFQN = r.ResolveClassName(className, file)
+			}
 
 			// Try to infer generic params from constructor argument
 			if argStr != "" {
@@ -1147,6 +1150,9 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 			}
 			className = strings.TrimSuffix(className, ";")
 			className = strings.TrimSpace(className)
+			if fqn, isKeyword := r.ClassKeywordFQN(className, pos, file); isKeyword {
+				return fqn
+			}
 			if className != "" {
 				return r.ResolveClassName(className, file)
 			}
@@ -1200,6 +1206,26 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 }
 
 // InferLiteralType returns the PHP type for a literal expression value.
+var classConstantRe = regexp.MustCompile(`^\\?[A-Za-z_][A-Za-z0-9_\\]*::class$`)
+
+// ClassKeywordFQN resolves self, static and parent (any letter case) to the
+// class they stand for at pos. ok is false when name isn't one of them; fqn is
+// empty when there is no enclosing class or, for parent, no parent class.
+func (r *Resolver) ClassKeywordFQN(name string, pos protocol.Position, file *parser.FileNode) (fqn string, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "self", "static":
+		return FindEnclosingClass(file, pos), true
+	case "parent":
+		if enclosing := FindEnclosingClass(file, pos); enclosing != "" && r.Index != nil {
+			if chain := r.Index.GetInheritanceChain(enclosing); len(chain) > 0 {
+				return chain[0], true
+			}
+		}
+		return "", true
+	}
+	return "", false
+}
+
 func InferLiteralType(expr string) string {
 	if expr == "" {
 		return ""
@@ -1219,6 +1245,10 @@ func InferLiteralType(expr string) string {
 	}
 	if expr[0] == '[' || strings.HasPrefix(lower, "array(") {
 		return "array"
+	}
+	// Foo::class, self::class, static::class are class-name strings.
+	if strings.HasSuffix(lower, "::class") && classConstantRe.MatchString(expr) {
+		return "string"
 	}
 	if expr[0] >= '0' && expr[0] <= '9' || expr[0] == '-' {
 		if strings.ContainsAny(expr, ".eE") {
