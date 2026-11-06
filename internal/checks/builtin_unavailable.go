@@ -55,7 +55,9 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 		findings = append(findings, r.checkClassLikesAttribute(line, lineNum, file, index)...)
 		findings = append(findings, r.checkConstants(line, lineNum)...)
 	}
-	return findings
+	// Code that checks for an extension or symbol first runs only where it
+	// exists, so it is fine on a profile without it.
+	return dropGuarded(findings, lines, findExtensionGuards(source))
 }
 
 func (r *BuiltinUnavailableRule) checkFunctions(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
