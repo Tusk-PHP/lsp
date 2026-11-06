@@ -188,7 +188,7 @@ func checkUnknownAttributeClasses(line string, lineNum int, file *parser.FileNod
 	var findings []Finding
 	for _, g := range scanAttributeGroups(line) {
 		for _, tok := range g.names {
-			if classLikeExists(tok.name, lineNum, file, index) {
+			if classLikeExists(tok.name, lineNum, file, index) || isPHPBuiltinAttribute(tok.name, lineNum, file) {
 				continue
 			}
 			findings = append(findings, Finding{
@@ -203,6 +203,20 @@ func checkUnknownAttributeClasses(line string, lineNum int, file *parser.FileNod
 		}
 	}
 	return findings
+}
+
+// isPHPBuiltinAttribute reports whether an attribute resolves to one of PHP's
+// own, such as #[AllowDynamicProperties] or #[\SensitiveParameter], from any
+// PHP version. Those are forward-compatible: a PHP that doesn't know one
+// ignores it, so it is never an unknown class. builtin-unavailable says when
+// it has no effect yet. A name that resolves into a namespace is not PHP's.
+func isPHPBuiltinAttribute(name string, line int, file *parser.FileNode) bool {
+	fqn, ok := resolveClassLikeName(name, line, file)
+	if !ok || fqn == "" || strings.Contains(fqn, "\\") {
+		return false
+	}
+	_, known := symbols.LookupAvailability(fqn)
+	return known
 }
 
 // attrToken is an attribute class name and the column where it begins.
