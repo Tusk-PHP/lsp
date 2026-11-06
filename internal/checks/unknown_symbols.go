@@ -466,6 +466,9 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 			if anyOwnerMayHaveMember(owners, access, file, index, hierarchies) {
 				continue
 			}
+			if isLateBoundOwner(ownerExpr) && anySubclassHasMember(owners, access, file, index, hierarchies) {
+				continue
+			}
 			names := make([]string, len(owners))
 			for i, owner := range owners {
 				names[i] = unknownSymbolShortName(owner)
@@ -917,6 +920,31 @@ func (h *memberHierarchy) answers(access memberAccess) bool {
 			}
 		case "__get", "__set":
 			if !access.isCall && !access.isStatic {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isLateBoundOwner reports whether an access is resolved against the object's
+// actual class at runtime, which can be any subclass: `$this->x` and
+// `static::x`. `self::x` and `parent::x` are bound to the class written.
+func isLateBoundOwner(ownerExpr string) bool {
+	return ownerExpr == "$this" || strings.EqualFold(ownerExpr, "static")
+}
+
+// anySubclassHasMember reports whether a subclass of one of the owners
+// declares the member. A base class may call methods only its subclasses
+// define, as WordPress's ftp_base does with _exec() from ftp_sockets and
+// ftp_pure: through $this, the call works whichever subclass is in use.
+func anySubclassHasMember(owners []string, access memberAccess, file *parser.FileNode, index *symbols.Index, hierarchies map[string]*memberHierarchy) bool {
+	if index == nil {
+		return false
+	}
+	for _, owner := range owners {
+		for _, sub := range index.Subclasses(owner) {
+			if ownerMayHaveMember(sub, access, file, index, hierarchies) {
 				return true
 			}
 		}
