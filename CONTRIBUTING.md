@@ -38,7 +38,7 @@ internal/          All server packages (parser, symbols, hover, completion, etc.
 testdata/          Test fixtures (mock PHP project)
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed documentation of internals.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed documentation of internals, and [AGENTS.md](AGENTS.md) for the project's structure, performance and correctness rules. Every change, with or without AI tools, is reviewed against them.
 
 ## Development Workflow
 
