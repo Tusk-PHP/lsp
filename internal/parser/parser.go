@@ -371,13 +371,92 @@ func isIdentChar(r rune) bool {
 
 // --- Tokenizer ---
 
+// OpenTagLen returns the length of the PHP open tag at s[i:] (`<?php`, `<?=`,
+// or a short `<?` followed by whitespace), or 0 when there is none.
+func OpenTagLen(s string, i int) int {
+	if i+1 >= len(s) || s[i] != '<' || s[i+1] != '?' {
+		return 0
+	}
+	rest := s[i+2:]
+	if len(rest) >= 3 && strings.EqualFold(rest[:3], "php") && (len(rest) == 3 || !isIdentByte(rest[3])) {
+		return 5
+	}
+	if len(rest) >= 1 && rest[0] == '=' {
+		return 3
+	}
+	if len(rest) == 0 || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' || rest[0] == '\r' {
+		return 2
+	}
+	return 0
+}
+
+// HasOpenTag reports whether source contains a PHP open tag. Sources without
+// one are snippets and are treated as PHP from the first byte.
+func HasOpenTag(source string) bool {
+	_, n := nextOpenTag(source, 0)
+	return n > 0
+}
+
+// nextOpenTag finds the next open tag at or after from. It returns its offset
+// and length, or len(source) and 0 when there is none.
+func nextOpenTag(source string, from int) (int, int) {
+	for i := from; i+1 < len(source); i++ {
+		j := strings.Index(source[i:], "<?")
+		if j < 0 {
+			break
+		}
+		i += j
+		if n := OpenTagLen(source, i); n > 0 {
+			return i, n
+		}
+	}
+	return len(source), 0
+}
+
+func isIdentByte(b byte) bool {
+	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b >= 0x80
+}
+
 func tokenize(source string) ([]Token, []ParseError) {
 	var errors []ParseError
 	tokens := make([]Token, 0, len(source)/4)
 	line, col, offset := 0, 0, 0
+	// Text outside <?php … ?> is inline HTML and produces no tokens. A source
+	// with no open tag at all (a snippet) is read as PHP throughout.
+	inHTML := HasOpenTag(source)
 
 	for offset < len(source) {
+		if inHTML {
+			next, tagLen := nextOpenTag(source, offset)
+			for offset < next {
+				if source[offset] == '\n' {
+					line++
+					col = 0
+				} else {
+					col++
+				}
+				offset++
+			}
+			if tagLen == 0 {
+				break
+			}
+			tokens = append(tokens, Token{TokenPHP, source[offset : offset+tagLen], line, col, offset})
+			offset += tagLen
+			col += tagLen
+			inHTML = false
+			continue
+		}
+
 		ch := source[offset]
+
+		// Close tag: ends the statement and switches back to inline HTML.
+		if ch == '?' && offset+1 < len(source) && source[offset+1] == '>' {
+			tokens = append(tokens, Token{TokenSemicolon, "?>", line, col, offset})
+			offset += 2
+			col += 2
+			inHTML = true
+			continue
+		}
 
 		// Whitespace
 		if ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' {
@@ -451,7 +530,9 @@ func tokenize(source string) ([]Token, []ParseError) {
 		if (offset+1 < len(source) && source[offset:offset+2] == "//") || (ch == '#' && !(offset+1 < len(source) && source[offset+1] == '[')) {
 			start := offset
 			startCol := col
-			for offset < len(source) && source[offset] != '\n' {
+			// A line comment also ends at a close tag, which is left for the
+			// next iteration.
+			for offset < len(source) && source[offset] != '\n' && !(source[offset] == '?' && offset+1 < len(source) && source[offset+1] == '>') {
 				offset++
 				col++
 			}
@@ -1253,9 +1334,57 @@ func (p *structParser) parseFunction(docComment string) {
 		p.advance()
 		fn.ReturnType = p.readTypeName()
 	}
+	bodyStart := p.pos
 	p.skipBlock()
+	bodyEnd := p.pos
 	fn.EndLine = p.peek().Line
 	p.result.Functions = append(p.result.Functions, fn)
+	p.collectNestedFunctions(bodyStart, bodyEnd)
+}
+
+// collectNestedFunctions indexes named functions declared inside a function
+// body, such as WordPress's helpers in export_wp(). PHP makes them global once
+// the outer function runs. Closures and methods of anonymous classes are not
+// named functions and are skipped.
+func (p *structParser) collectNestedFunctions(start, end int) {
+	saved := p.pos
+	defer func() { p.pos = saved }()
+	for i := start; i < end && i < len(p.tokens); i++ {
+		switch p.tokens[i].Kind {
+		case TokenClass:
+			// Anonymous class: skip its body, whose functions are methods.
+			j := i + 1
+			for j < end && p.tokens[j].Kind != TokenOpenBrace {
+				j++
+			}
+			depth := 0
+			for ; j < end; j++ {
+				if p.tokens[j].Kind == TokenOpenBrace {
+					depth++
+				} else if p.tokens[j].Kind == TokenCloseBrace {
+					depth--
+					if depth == 0 {
+						break
+					}
+				}
+			}
+			i = j
+		case TokenFunction:
+			if i+2 >= len(p.tokens) || p.tokens[i+1].Kind != TokenIdentifier || p.tokens[i+2].Kind != TokenOpenParen {
+				continue
+			}
+			doc := ""
+			if i > 0 && p.tokens[i-1].Kind == TokenDocComment {
+				doc = p.tokens[i-1].Value
+			}
+			p.pos = i
+			p.parseFunction(doc)
+			if p.pos <= i {
+				continue // no progress; keep scanning
+			}
+			i = p.pos - 1
+		}
+	}
 }
 
 func (p *structParser) parseConst() {
