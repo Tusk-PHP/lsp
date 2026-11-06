@@ -149,9 +149,18 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 		return nil
 	}
 
-	// Handle $variable → go to its type definition
-	if strings.HasPrefix(word, "$") {
+	// Handle $variable → go to its type definition. After `::` a $name is a
+	// static property (self::$cache), found with the other members below.
+	if strings.HasPrefix(word, "$") && ctx.AccessKind != sourcectx.AccessStatic {
 		return a.definitionForVariable(word, source, pos, file)
+	}
+
+	// self, static and parent go to the class they stand for.
+	if fqn := a.classKeywordFQN(word, ctx); fqn != "" {
+		if sym := a.index.Lookup(fqn); sym != nil {
+			return symbolLocation(sym)
+		}
+		return nil
 	}
 
 	// Check for -> or :: access (method/property on a class)
@@ -203,6 +212,24 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 	}
 
 	return nil
+}
+
+// classKeywordFQN returns the class that self, static or parent stands for at
+// the cursor (in any letter case), or "" when word isn't one of them or there
+// is no enclosing class. A word after -> or :: is a member, never the keyword.
+func (a *Analyzer) classKeywordFQN(word string, ctx *sourcectx.CursorContext) string {
+	if ctx == nil || ctx.AccessKind != sourcectx.AccessNone || ctx.EnclosingFQN == "" {
+		return ""
+	}
+	switch strings.ToLower(word) {
+	case "self", "static":
+		return ctx.EnclosingFQN
+	case "parent":
+		if chain := a.index.GetInheritanceChain(ctx.EnclosingFQN); len(chain) > 0 {
+			return chain[0]
+		}
+	}
+	return ""
 }
 
 // FindDefinitionWithManual is like FindDefinition but, when openManualEnabled
@@ -277,9 +304,18 @@ func (a *Analyzer) resolveDefinitionSymbol(uri, source string, pos protocol.Posi
 		return nil, nil, nil
 	}
 
-	// Handle $variable → go to its type definition
-	if strings.HasPrefix(word, "$") {
+	// Handle $variable → go to its type definition. After `::` a $name is a
+	// static property (self::$cache), found with the other members below.
+	if strings.HasPrefix(word, "$") && ctx.AccessKind != sourcectx.AccessStatic {
 		return nil, nil, a.definitionForVariable(word, source, pos, file)
+	}
+
+	// self, static and parent go to the class they stand for.
+	if fqn := a.classKeywordFQN(word, ctx); fqn != "" {
+		if s := a.index.Lookup(fqn); s != nil {
+			return s, nil, symbolLocation(s)
+		}
+		return nil, nil, nil
 	}
 
 	// Check for -> or :: access (method/property on a class)

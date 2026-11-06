@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `unused-private-property` and `unused-private-method` no longer miss uses further down a class whose code contains `{` or `}` inside strings or comments, such as WordPress's `WP_Block_Processor`, which compares characters with `'{'`. Its `$last_json_error` property was reported unused although it is read.
 - `parent::`, `self::` and `static::` are no longer reported as unknown classes. When the parent class is missing, it is reported once, where the class `extends` it, instead of at every `parent::__construct()`.
 - Methods returning `static`, `$this` or `self` now give back the class they were called on everywhere, so `unknown-member` no longer reports methods of a subclass after a fluent or factory call such as `static::create()->childOnly()` or `$this->withName('x')->childOnly()`. Calls through `self::`, `parent::` and `static::` keep the calling class, as in PHP, and these keywords now resolve in any letter case.
+- `self`, `static` and `parent` now work fully in the editor. Hover and go-to-definition work on `self::$prop` and `static::$prop`, and on the keywords themselves (`new self`, `parent::`, `instanceof self`). `$x = new self()`, `new static()` and `new parent()` are typed as the class they create, and `self::class` and `static::class` as `string`. Completion after `parent::`, `self::` and `static::` inside an instance method now offers instance methods, such as `parent::__construct()`, but not the parent's private members.
 
 ## [0.11.1] - 2026-11-02
 

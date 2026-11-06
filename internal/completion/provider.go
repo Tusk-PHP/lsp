@@ -18,15 +18,15 @@ import (
 )
 
 type Provider struct {
-	index                *symbols.Index
-	container            *container.ContainerAnalyzer
-	resolver             *resolve.Resolver
-	framework            string
-	arrayResolver        *models.FrameworkArrayResolver
-	routes               *frameworklaravel.RouteIndex
-	views                *frameworklaravel.Views
-	translations         *frameworklaravel.TranslationResolver
-	symfonyTranslations  *frameworksymfony.TranslationResolver
+	index               *symbols.Index
+	container           *container.ContainerAnalyzer
+	resolver            *resolve.Resolver
+	framework           string
+	arrayResolver       *models.FrameworkArrayResolver
+	routes              *frameworklaravel.RouteIndex
+	views               *frameworklaravel.Views
+	translations        *frameworklaravel.TranslationResolver
+	symfonyTranslations *frameworksymfony.TranslationResolver
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
@@ -372,6 +372,17 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 	if p.container != nil && p.framework == "laravel" {
 		facadeConcrete = p.container.ResolveFacade(typeName)
 	}
+	// Inside an instance method, self::, static:: and parent:: can also call
+	// instance methods (parent::__construct(), parent::setData()), since they
+	// keep $this. Private members of another class stay out of reach.
+	instanceCalls := false
+	enclosing := ""
+	if op := strings.LastIndex(prefix, "::"); op >= 0 && forwardsCallingClass(prefix[:op+2]) {
+		enclosing = resolve.FindEnclosingClass(file, pos)
+		if m := resolve.FindEnclosingMethod(file, pos); m != nil && !m.IsStatic {
+			instanceCalls = true
+		}
+	}
 	var items []protocol.CompletionItem
 	seen := map[string]bool{}
 	memberSets := []string{typeName}
@@ -381,7 +392,11 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 	for _, fqn := range memberSets {
 		for _, m := range p.index.GetClassMembers(fqn) {
 			isFacadeForwarded := fqn == facadeConcrete && m.Kind == symbols.KindMethod
-			if !isFacadeForwarded && !m.IsStatic && m.Kind != symbols.KindConstant && m.Kind != symbols.KindEnumCase {
+			isInstanceCall := instanceCalls && m.Kind == symbols.KindMethod
+			if !isFacadeForwarded && !isInstanceCall && !m.IsStatic && m.Kind != symbols.KindConstant && m.Kind != symbols.KindEnumCase {
+				continue
+			}
+			if enclosing != "" && m.Visibility == "private" && m.ParentFQN != enclosing {
 				continue
 			}
 			if seen[m.Name] {

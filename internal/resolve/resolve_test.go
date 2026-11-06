@@ -509,3 +509,14 @@ func TestGetWordAt(t *testing.T) {
 		t.Errorf("got %q", w)
 	}
 }
+
+func TestInferLiteralTypeClassConstant(t *testing.T) {
+	for expr, want := range map[string]string{
+		"self::class": "string", "static::class": "string", "parent::class": "string",
+		"Foo::class": "string", "\\App\\Foo::class": "string", "Foo::CLASS_NAME": "",
+	} {
+		if got := InferLiteralType(expr); got != want {
+			t.Errorf("InferLiteralType(%q) = %q, want %q", expr, got, want)
+		}
+	}
+}
