@@ -154,12 +154,15 @@ func checkUndefinedVariables(source string, outArg func(string, int) bool) []Fin
 	taintedScopes := findTaintedScopes(doc, result.Tokens)
 
 	var findings []Finding
-	for _, tok := range result.Tokens {
+	for ti, tok := range result.Tokens {
 		if tok.Kind != parser.TokenVariable {
 			continue
 		}
 		name := tok.Value
 		if superglobals[name] {
+			continue
+		}
+		if isExistenceCheck(result.Tokens, ti) {
 			continue
 		}
 		// Skip variables inside tainted scopes.
@@ -392,4 +395,94 @@ func prevSignificantTokenIdx(tokens []parser.Token, i int) int {
 		}
 	}
 	return -1
+}
+
+// isExistenceCheck reports whether the variable at tokens[i] is the subject of
+// a construct that accepts an undefined variable: isset(), empty(), unset(),
+// or the left side of ?? and ??=. Only the variable being tested counts, with
+// any [...], ->prop or ::prop after it: in isset( $a[ $key ] ), an undefined
+// $key still warns.
+func isExistenceCheck(tokens []parser.Token, i int) bool {
+	// isset( $x, $y ) / empty( $x ) / unset( $x, $y )
+	if prev := prevSignificantTokenIdx(tokens, i-1); prev >= 0 {
+		switch tokens[prev].Kind {
+		case parser.TokenOpenParen, parser.TokenComma:
+			if open := enclosingOpenParen(tokens, prev); open > 0 {
+				if callee := prevSignificantTokenIdx(tokens, open-1); callee >= 0 && tokens[callee].Kind == parser.TokenIdentifier {
+					switch strings.ToLower(tokens[callee].Value) {
+					case "isset", "unset":
+						return true
+					case "empty":
+						return tokens[prev].Kind == parser.TokenOpenParen
+					}
+				}
+			}
+		}
+	}
+	// $x ?? … / $x['k']->p ??= …
+	j := i + 1
+	for j < len(tokens) {
+		switch tokens[j].Kind {
+		case parser.TokenOpenBracket:
+			j = skipBalanced(tokens, j, parser.TokenOpenBracket, parser.TokenCloseBracket)
+		case parser.TokenArrow, parser.TokenDoubleColon:
+			if j+1 < len(tokens) && (tokens[j+1].Kind == parser.TokenIdentifier || tokens[j+1].Kind == parser.TokenVariable) {
+				j += 2
+			} else {
+				return false
+			}
+		case parser.TokenQuestion:
+			if j+1 < len(tokens) && tokens[j+1].Kind == parser.TokenArrow {
+				j++ // ?-> nullsafe
+				continue
+			}
+			return j+1 < len(tokens) && tokens[j+1].Kind == parser.TokenQuestion
+		case parser.TokenComment, parser.TokenDocComment:
+			j++
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+// enclosingOpenParen returns the index of the unmatched ( at or before i, or -1.
+func enclosingOpenParen(tokens []parser.Token, i int) int {
+	depth := 0
+	for ; i >= 0; i-- {
+		switch tokens[i].Kind {
+		case parser.TokenCloseParen, parser.TokenCloseBracket:
+			depth++
+		case parser.TokenOpenBracket:
+			if depth > 0 {
+				depth--
+			}
+		case parser.TokenOpenParen:
+			if depth == 0 {
+				return i
+			}
+			depth--
+		case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace:
+			return -1
+		}
+	}
+	return -1
+}
+
+// skipBalanced returns the index just after the token that closes the one at
+// tokens[i], or len(tokens) when it is never closed.
+func skipBalanced(tokens []parser.Token, i int, open, close parser.TokenKind) int {
+	depth := 0
+	for ; i < len(tokens); i++ {
+		switch tokens[i].Kind {
+		case open:
+			depth++
+		case close:
+			depth--
+			if depth == 0 {
+				return i + 1
+			}
+		}
+	}
+	return len(tokens)
 }
