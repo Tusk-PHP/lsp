@@ -739,6 +739,13 @@ func heredocOpenLabel(rest string) (string, bool) {
 }
 
 func classLikeExists(name string, line int, file *parser.FileNode, index *symbols.Index) bool {
+	// self, static and parent name the class being edited or its parent. If
+	// that parent is missing, its `extends` is what's reported, not every
+	// parent:: in the class.
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "self", "static", "parent":
+		return true
+	}
 	fqn, ok := resolveClassLikeName(name, line, file)
 	if !ok || fqn == "" {
 		return true

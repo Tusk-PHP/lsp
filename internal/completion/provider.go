@@ -525,8 +525,9 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 	}
 	target := line[i:end]
 
-	// Resolve variables and keywords using standard resolution
-	switch target {
+	// Resolve variables and keywords using standard resolution. self, static
+	// and parent are keywords, which PHP matches regardless of case.
+	switch keywordOrTarget(target) {
 	case "$this", "self", "static":
 		if file != nil {
 			return resolve.ResolvedType{FQN: resolve.FindEnclosingClass(file, pos)}
@@ -582,7 +583,16 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 	// callerFQN is the owner class for late static binding (Category::query() → static=Category).
 	ownerContext := ownerResolved.Params
 
-	result := p.resolver.MemberTypeResolved(member, file, ownerFQN, ownerContext)
+	// self::, parent:: and static:: pass the calling class along, so a method
+	// returning static gives the class being edited: parent::create() in Child
+	// is a Child.
+	callerFQN := ownerFQN
+	if forwardsCallingClass(line[:i]) {
+		if enclosing := p.resolveAccessChain("static->__dummy__", len("static->"), source, pos, file); enclosing != "" {
+			callerFQN = enclosing
+		}
+	}
+	result := p.resolver.MemberTypeResolved(member, file, callerFQN, ownerContext)
 
 	// If the result still has unresolved template params (e.g., TValue from a
 	// method-level @template), try to bind them from the call arguments.
@@ -844,7 +854,7 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 	target := line[i:end]
 
 	// Resolve the target to a class FQN
-	switch target {
+	switch keywordOrTarget(target) {
 	case "$this", "self", "static":
 		if file != nil {
 			return resolve.FindEnclosingClass(file, pos)
@@ -897,7 +907,56 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 	if member == nil {
 		return ""
 	}
+	// A method returning static/$this/self gives back the class it was called
+	// on, not the one that declares it: Child::create() is a Child. Calls through
+	// self::, parent:: and static:: pass the calling class along, which here is
+	// the class being edited.
+	if p.resolver.ReturnsCallingClass(member) {
+		if forwardsCallingClass(line[:i]) {
+			if enclosing := p.resolveAccessChain("static->__dummy__", len("static->"), source, pos, file); enclosing != "" {
+				return enclosing
+			}
+		}
+		return ownerFQN
+	}
 	return p.resolver.MemberType(member, file)
+}
+
+// forwardsCallingClass reports whether the code before a member name ends in
+// `self::`, `parent::` or `static::`, which keep the calling class for static.
+func forwardsCallingClass(before string) bool {
+	before = strings.TrimRight(before, " \t")
+	if !strings.HasSuffix(before, "::") {
+		return false
+	}
+	before = strings.TrimRight(before[:len(before)-2], " \t")
+	start := len(before)
+	for start > 0 && (isWordByte(before[start-1])) {
+		start--
+	}
+	if start > 0 && before[start-1] == '$' {
+		return false // $parent:: is a variable
+	}
+	switch strings.ToLower(before[start:]) {
+	case "self", "parent", "static":
+		return true
+	}
+	return false
+}
+
+// keywordOrTarget lower-cases target when it's one of the class keywords
+// self, static or parent, so SELF:: and Parent:: resolve like their lower-case
+// forms; any other name is returned as it is.
+func keywordOrTarget(target string) string {
+	switch lower := strings.ToLower(target); lower {
+	case "self", "static", "parent":
+		return lower
+	}
+	return target
+}
+
+func isWordByte(b byte) bool {
+	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }
 
 // chainOriginClassName resolves target, which starts at line[start], as a
