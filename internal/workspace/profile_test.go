@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // configWithExplicitPHP returns a *config.Config with PHPVersion explicitly set
@@ -26,6 +27,33 @@ func configWithExplicitPHP(t *testing.T, version string) *config.Config {
 		t.Fatal("configWithExplicitPHP: IsPHPVersionExplicitlySet() is false after loading file with phpVersion key")
 	}
 	return cfg
+}
+
+func TestSuggestedExtensionsReachBuiltinIndex(t *testing.T) {
+	for _, withConfig := range []bool{false, true} {
+		dir := t.TempDir()
+		writeTestFile(t, filepath.Join(dir, "composer.json"), `{"require":{"php":"^7.4"},"suggest":{"ext-imagick":"Images","ext-ssh2":"Remote files"}}`)
+		var profile symbols.BuiltinProfile
+		if withConfig {
+			cfg := config.DefaultConfig()
+			cfg.Extensions = []string{"apcu"}
+			profile, _ = ResolveBuiltinProfileWithConfig(dir, "", time.Second, cfg, nil)
+		} else {
+			profile, _ = ResolveBuiltinProfile(dir, "", time.Second, nil)
+		}
+		ws := New(Options{RootPath: dir, Framework: "none", BuiltinProfile: profile})
+		for _, name := range []string{"Imagick::readImage", "ssh2_connect"} {
+			if ws.Index.Lookup(name) == nil {
+				t.Errorf("withConfig=%v: missing %s", withConfig, name)
+			}
+		}
+		if (ws.Index.Lookup("apcu_fetch") != nil) != withConfig {
+			t.Errorf("withConfig=%v: config extensions not merged correctly", withConfig)
+		}
+		if profile.PHPVersion != "7.4" {
+			t.Errorf("suggest changed PHP target: %s", profile.PHPVersion)
+		}
+	}
 }
 
 func writeTestFile(t *testing.T, path, content string) {

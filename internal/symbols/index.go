@@ -389,13 +389,15 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 		idx.indexEnumMembers(uri, sym, src)
 	}
 
+	idx.indexConstants(uri, nil, ns, file.Constants, src, resolve)
+
 	for _, fn := range file.Functions {
 		fqn := buildFQN(ns, fn.Name)
 		sym := &Symbol{Name: fn.Name, FQN: fqn, Kind: KindFunction, URI: uri, ReturnType: resolve(fn.ReturnType.Name),
 			Attributes: indexAttributes(fn.Attributes, resolve),
 			DocComment: fn.DocComment, Range: symRange(fn.StartLine, fn.StartCol, len(fn.Name))}
 		for _, p := range fn.Params {
-			sym.Params = append(sym.Params, ParamInfo{Name: p.Name, Type: resolve(p.Type.Name), IsVariadic: p.IsVariadic, IsReference: p.IsReference})
+			sym.Params = append(sym.Params, ParamInfo{Name: p.Name, Type: resolve(p.Type.Name), DefaultValue: p.DefaultValue, IsVariadic: p.IsVariadic, IsReference: p.IsReference})
 		}
 		idx.addSymbolWithSource(uri, sym, src)
 	}
@@ -532,17 +534,6 @@ func (idx *Index) indexProperties(uri string, parent *Symbol, parentFQN string, 
 			Range: symRange(prop.StartLine, prop.StartCol, len(prop.Name))}
 		parent.Children = append(parent.Children, ps)
 		idx.addSymbolWithSource(uri, ps, src)
-	}
-}
-
-func (idx *Index) indexConstants(uri string, parent *Symbol, parentFQN string, consts []parser.ConstantNode, src SymbolSource, resolve func(string) string) {
-	for _, co := range consts {
-		cs := &Symbol{Name: co.Name, FQN: parentFQN + "::" + co.Name, Kind: KindConstant, URI: uri, ParentFQN: parentFQN,
-			Value: co.Value, Type: resolve(co.Type.Name), Visibility: co.Visibility,
-			Attributes: indexAttributes(co.Attributes, resolve),
-			Range:      symRange(co.StartLine, co.StartCol, len(co.Name))}
-		parent.Children = append(parent.Children, cs)
-		idx.addSymbolWithSource(uri, cs, src)
 	}
 }
 

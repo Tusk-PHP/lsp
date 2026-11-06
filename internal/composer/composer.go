@@ -23,6 +23,7 @@ type composerJSON struct {
 	AutoloadDev autoloadBlock     `json:"autoload-dev"`
 	Require     map[string]string `json:"require"`
 	RequireDev  map[string]string `json:"require-dev"`
+	Suggest     map[string]string `json:"suggest"`
 	Config      composerConfig    `json:"config"`
 	Extra       composerExtra     `json:"extra"`
 }
@@ -63,7 +64,7 @@ type Platform struct {
 }
 
 // GetPlatform reads composer.json from rootPath and returns the effective PHP
-// platform target together with the required extensions.
+// platform target together with required, suggested and config.platform extensions.
 func GetPlatform(rootPath string) Platform {
 	composerPath := filepath.Join(rootPath, "composer.json")
 	data, err := os.ReadFile(composerPath)
@@ -86,6 +87,9 @@ func GetPlatform(rootPath string) Platform {
 
 	extensions := make(map[string]struct{})
 	for pkg := range cj.Require {
+		addExtension(extensions, pkg)
+	}
+	for pkg := range cj.Suggest {
 		addExtension(extensions, pkg)
 	}
 	for pkg := range cj.Config.Platform {

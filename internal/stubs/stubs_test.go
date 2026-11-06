@@ -89,6 +89,30 @@ func TestBuiltinPHPForProfileSelectsExtensionLayers(t *testing.T) {
 	}
 }
 
+func TestOptionalExtensionsAreSelectedIndependently(t *testing.T) {
+	extensions := []string{"imagick", "ssh2", "redis", "memcached", "apcu", "igbinary"}
+	for _, ext := range extensions {
+		t.Run(ext, func(t *testing.T) {
+			for _, profile := range []Profile{{PHPVersion: "7.4"}, DefaultProfile()} {
+				for _, entry := range mustEntries(t, profile) {
+					if strings.HasPrefix(entry.Path, "php/extensions/"+ext+"/") {
+						t.Fatalf("unselected extension source was loaded: %s", entry.Path)
+					}
+				}
+			}
+			entries := mustEntries(t, Profile{PHPVersion: "7.4", Extensions: []string{" EXT-" + strings.ToUpper(ext) + " "}})
+			if !hasEntry(entries, "php/extensions/"+ext+"/php-7.4.php") {
+				t.Fatal("missing selected extension baseline")
+			}
+			for _, other := range extensions {
+				if other != ext && hasEntry(entries, "php/extensions/"+other+"/php-7.4.php") {
+					t.Errorf("selecting %s also loaded %s", ext, other)
+				}
+			}
+		})
+	}
+}
+
 // TestBuiltinPHPForProfileSelectsCoreDeltasFor81 verifies that the PHP 8.1
 // core delta is included for PHP 8.1+ profiles but excluded for PHP 8.0 and
 // earlier.

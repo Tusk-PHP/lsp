@@ -21,6 +21,30 @@ func TestGetPlatformMissingComposer(t *testing.T) {
 	}
 }
 
+func TestGetPlatformIncludesSuggestedExtensions(t *testing.T) {
+	root := t.TempDir()
+	writeComposerJSON(t, root, `{
+		"require": {"php": "^7.4", "ext-redis": "*"},
+		"require-dev": {"ext-xdebug": "*"},
+		"suggest": {
+			"ext-imagick": "For image processing (not a version constraint)",
+			"ext-redis": "For caching",
+			"ext-apcu": "",
+			"php": "^8.5",
+			"vendor/package": "Optional integration"
+		},
+		"config": {"platform": {"ext-redis": "6.0", "ext-ssh2": "1.4"}}
+	}`)
+	got := GetPlatform(root)
+	if got.PHPVersion != "7.4" {
+		t.Fatalf("suggest changed PHP target: %q", got.PHPVersion)
+	}
+	want := []string{"apcu", "imagick", "redis", "ssh2"}
+	if !reflect.DeepEqual(got.Extensions, want) {
+		t.Fatalf("extensions = %v, want %v", got.Extensions, want)
+	}
+}
+
 func TestGetPlatformUsesConfigPlatformPHPOverRequire(t *testing.T) {
 	root := t.TempDir()
 	writeComposerJSON(t, root, `{
