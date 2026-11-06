@@ -152,7 +152,15 @@ func isPropertyReferenced(name string, declLine int, cls parser.ClassNode, lines
 // endLineOf estimates the end line of a class from the source. It looks for
 // the class EndLine if available, otherwise scans for the matching closing brace.
 func endLineOf(cls parser.ClassNode, lines []string) int {
-	// Scan from class start to find the matching closing brace
+	// The parser knows where the class ends; it reads strings and comments as
+	// such, so a '{' in a string can't close the class early.
+	if cls.EndLine > cls.StartLine {
+		if cls.EndLine < len(lines) {
+			return cls.EndLine
+		}
+		return len(lines) - 1
+	}
+	// Fall back to counting braces from the class start.
 	depth := 0
 	for i := cls.StartLine; i < len(lines); i++ {
 		for _, ch := range lines[i] {
