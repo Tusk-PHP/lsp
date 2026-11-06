@@ -121,6 +121,7 @@ type Index struct {
 	fileSymbols          map[string][]*Symbol
 	namespaceIndex       map[string][]string
 	inheritanceMap       map[string]string
+	childrenMap          map[string][]string // lowercase parent FQN → direct subclass FQNs, the reverse of inheritanceMap
 	implementsMap        map[string][]string // class → interfaces it implements
 	reverseImplementsMap map[string][]string // interface → classes that implement it
 	traitMap             map[string][]string
@@ -140,6 +141,7 @@ func NewIndex() *Index {
 		fileSymbols:          make(map[string][]*Symbol),
 		namespaceIndex:       make(map[string][]string),
 		inheritanceMap:       make(map[string]string),
+		childrenMap:          make(map[string][]string),
 		implementsMap:        make(map[string][]string),
 		reverseImplementsMap: make(map[string][]string),
 		traitMap:             make(map[string][]string),
@@ -247,7 +249,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 			}
 			idx.addSymbolWithSource(uri, sym, SourceProject)
 			if c.Extends != "" {
-				idx.inheritanceMap[fqn] = sym.Extends
+				idx.setParentLocked(fqn, sym.Extends)
 			}
 			for _, impl := range resolvedImpls {
 				idx.implementsMap[fqn] = append(idx.implementsMap[fqn], impl)
@@ -308,7 +310,7 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 		}
 		idx.addSymbolWithSource(uri, sym, src)
 		if c.Extends != "" {
-			idx.inheritanceMap[fqn] = sym.Extends
+			idx.setParentLocked(fqn, sym.Extends)
 		}
 		for _, impl := range resolvedImpls {
 			idx.implementsMap[fqn] = append(idx.implementsMap[fqn], impl)
@@ -475,6 +477,14 @@ func (idx *Index) removeFileSymbols(uri string) {
 			}
 		}
 		delete(idx.implementsMap, sym.FQN)
+		if parent, ok := idx.inheritanceMap[sym.FQN]; ok {
+			key := strings.ToLower(parent)
+			if children := removeFromSlice(idx.childrenMap[key], sym.FQN); len(children) > 0 {
+				idx.childrenMap[key] = children
+			} else {
+				delete(idx.childrenMap, key)
+			}
+		}
 		delete(idx.inheritanceMap, sym.FQN)
 		delete(idx.traitMap, sym.FQN)
 	}
@@ -1338,4 +1348,41 @@ func standaloneRank(s *Symbol) int {
 	default: // KindMethod, KindProperty
 		return 3
 	}
+}
+
+// setParentLocked records that fqn extends parent, in both directions.
+func (idx *Index) setParentLocked(fqn, parent string) {
+	if old, ok := idx.inheritanceMap[fqn]; ok && old != parent {
+		key := strings.ToLower(old)
+		idx.childrenMap[key] = removeFromSlice(idx.childrenMap[key], fqn)
+	}
+	idx.inheritanceMap[fqn] = parent
+	key := strings.ToLower(parent)
+	idx.childrenMap[key] = appendUnique(idx.childrenMap[key], fqn)
+}
+
+// Subclasses returns every class that extends fqn, directly or further down,
+// nearest first. It follows the parent → children map, so it visits only the
+// classes below fqn rather than every inheritance edge. Parent names match
+// regardless of case, as in PHP.
+func (idx *Index) Subclasses(fqn string) []string {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	var out []string
+	seen := map[string]bool{strings.ToLower(fqn): true}
+	queue := []string{fqn}
+	for len(queue) > 0 {
+		next := queue[0]
+		queue = queue[1:]
+		for _, child := range idx.childrenMap[strings.ToLower(next)] {
+			key := strings.ToLower(child)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, child)
+			queue = append(queue, child)
+		}
+	}
+	return out
 }
