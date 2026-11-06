@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -506,6 +507,52 @@ func TestUndefinedVariableBuiltinOutArguments(t *testing.T) {
 		source := "<?php\nfunction f($s) { return " + call + "; }\n"
 		if findings := (&UndefinedVariableRule{}).Check(parser.ParseFile(source), source, index); len(findings) != 1 {
 			t.Errorf("%s: want $o reported, got %+v", call, findings)
+		}
+	}
+}
+
+func TestUndefinedVariableExistenceChecks(t *testing.T) {
+	// isset(), empty(), unset() and ?? accept a variable that may not exist.
+	safe := `<?php
+function walk( $items ) {
+    if ( ! isset( $parent_name ) ) { return; }
+    if ( isset( $num_posts['post'], $other->prop, $deep['a']['b'] ) ) {}
+    if ( empty( $newlevel ) ) {}
+    unset( $v_header_list, $tmp['k'] );
+    $a = $maybe ?? 'default';
+    $b = $cache['key']->value ?? null;
+    $c = $obj?->name ?? '';
+    $d = ISSET( $Upper );
+    $memo ??= [];
+    return $items;
+}
+`
+	if got := (&UndefinedVariableRule{}).Check(parser.ParseFile(safe), safe, nil); len(got) != 0 {
+		t.Errorf("existence checks reported undefined: %+v", got)
+	}
+
+	// Variables evaluated inside them still count: keys, call arguments, the
+	// right side of ??, and keys inside empty().
+	unsafe := `<?php
+function walk() {
+    if ( isset( $known[ $key ] ) ) {}
+    $x = $maybe ?? $fallback;
+    if ( empty( $known[ $str ] ) ) {}
+    $y = $cond ? $yes : 'no';
+}
+`
+	got := map[string]bool{}
+	for _, f := range (&UndefinedVariableRule{}).Check(parser.ParseFile(unsafe), unsafe, nil) {
+		got[strings.TrimPrefix(f.Message, "Undefined variable ")] = true
+	}
+	for _, want := range []string{"$key", "$fallback", "$str", "$cond", "$yes"} {
+		if !got[want] {
+			t.Errorf("%s should still be reported; got %v", want, got)
+		}
+	}
+	for _, not := range []string{"$known", "$maybe"} {
+		if got[not] {
+			t.Errorf("%s is an existence check and should not be reported", not)
 		}
 	}
 }

@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Text outside `<?php … ?>`, such as the HTML and `<script>` blocks in WordPress templates and admin pages, is no longer read as PHP. JavaScript like `jQuery(...)`, `new URL()` or `_.each()` no longer triggers `unknown-function`, `unknown-class`, `deprecated` or `argument-count-mismatch`, and variables set before a `?>` count as defined after the next `<?php`. A file with no `<?php` tag at all is still read as PHP.
 - Functions declared inside another function, such as WordPress's `wxr_cdata()` inside `export_wp()`, are now indexed, so calls to them are no longer reported as unknown.
 - `argument-count-mismatch` no longer checks a method or function declaration against a global function with the same name. For example, `public function init( $data, $site_id = 0 )` in WordPress, or a Magento constructor, was reported as "too many arguments" to a global `init()` or `__construct()`. Class names after `new` are not checked as function calls either.
+- `undefined-variable` no longer reports a variable tested with `isset()`, `empty()` or `unset()`, or on the left of `??` and `??=`, since those accept variables that may not exist (`if ( ! isset( $parent_name ) )`, `$x = $maybe ?? 'default'`). Variables evaluated inside them, such as `$key` in `isset( $items[ $key ] )` or the right side of `??`, are still checked.
 
 ## [0.11.1] - 2026-11-02
 
