@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Completion, hover and extension availability diagnostics for Imagick, SSH2, Redis, Memcached, APCu and igbinary. Extensions listed in Composer's `suggest` now count as available alongside `require` and `config.platform`.
+- Global constants declared with `const` at file level (`const MAX_ITEMS = 10;`, also inside a namespace) are now indexed as symbols, as class constants already were. This is what makes the SSH2 constants above known.
 
 ### Fixed
 
