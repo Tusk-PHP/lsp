@@ -61,7 +61,7 @@ Zed-specific Tusk PHP settings can be passed through `lsp.tusk-php`:
         "pintEnabled": true,
         "pintPath": "",
         "pintConfig": "",
-        "maxIndexFiles": 10000,
+        "maxIndexFiles": 0,
         "excludePaths": ["vendor", "node_modules", ".git", "storage", "var/cache"]
       }
     }

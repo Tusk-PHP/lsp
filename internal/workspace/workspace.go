@@ -123,7 +123,8 @@ func (ws *Bootstrapped) IndexWorkspace() int {
 		if !strings.HasSuffix(path, ".php") {
 			return nil
 		}
-		if count >= ws.Config.MaxIndexFiles {
+		if limit := ws.Config.MaxIndexFiles; limit > 0 && count >= limit {
+			ws.logf("Stopped indexing at maxIndexFiles (%d files); classes in the rest of the workspace will be unknown. Set maxIndexFiles to 0 to index everything.", limit)
 			return filepath.SkipAll
 		}
 		if IsIDEHelperFile(path) {

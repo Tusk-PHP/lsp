@@ -172,6 +172,8 @@ type Config struct {
 	DatabaseEnabled           *bool                        `json:"databaseEnabled,omitempty"`
 	DatabaseSource            string                       `json:"databaseSource,omitempty"`
 	DiagnosticRules           map[string]RuleSeverityValue `json:"diagnosticRules,omitempty"`
+	// MaxIndexFiles caps how many workspace PHP files are indexed; 0 means no
+	// limit (the native default). Composer dependencies aren't counted.
 	MaxIndexFiles             int                          `json:"maxIndexFiles"`
 	StubsPath                 string                       `json:"stubsPath"`
 	LogLevel                  string                       `json:"logLevel"`
@@ -240,7 +242,7 @@ func DefaultConfig() *Config {
 		ExcludePaths:       []string{"vendor", "node_modules", ".git", "storage", "var/cache"},
 		ContainerAware:     true,
 		DiagnosticsEnabled: true,
-		MaxIndexFiles:      10000,
+		MaxIndexFiles:      defaultMaxIndexFiles,
 		LogLevel:           "info",
 		LogFile:            "",
 		InlayHints: InlayHintsConfig{
