@@ -317,6 +317,7 @@ func (idx *Index) addBuiltinFunctionLocked(name string, params []ParamInfo, ret 
 	idx.sortedNamesDirty = true
 	idx.sortedFQNsDirty = true
 	idx.namespaceIndex[namespaceForFQN(sym.FQN)] = appendUnique(idx.namespaceIndex[namespaceForFQN(sym.FQN)], sym.FQN)
+	idx.addFoldLocked(sym.FQN)
 }
 
 func (idx *Index) addBuiltinClassLikeLocked(name string, doc string) {
@@ -327,6 +328,7 @@ func (idx *Index) addBuiltinClassLikeLocked(name string, doc string) {
 	idx.sortedNamesDirty = true
 	idx.sortedFQNsDirty = true
 	idx.namespaceIndex[namespaceForFQN(sym.FQN)] = appendUnique(idx.namespaceIndex[namespaceForFQN(sym.FQN)], sym.FQN)
+	idx.addFoldLocked(sym.FQN)
 }
 
 func appendUniqueSymbol(symbols []*Symbol, sym *Symbol) []*Symbol {

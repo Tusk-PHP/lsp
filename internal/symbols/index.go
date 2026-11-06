@@ -117,6 +117,7 @@ type Index struct {
 	mu                   sync.RWMutex
 	symbols              map[string]*Symbol
 	nameIndex            map[string][]string
+	foldIndex            map[string][]string // lowercase FQN → FQNs of class-likes and functions, whose names PHP matches case-insensitively
 	fileSymbols          map[string][]*Symbol
 	namespaceIndex       map[string][]string
 	inheritanceMap       map[string]string
@@ -135,6 +136,7 @@ func NewIndex() *Index {
 	return &Index{
 		symbols:              make(map[string]*Symbol),
 		nameIndex:            make(map[string][]string),
+		foldIndex:            make(map[string][]string),
 		fileSymbols:          make(map[string][]*Symbol),
 		namespaceIndex:       make(map[string][]string),
 		inheritanceMap:       make(map[string]string),
@@ -411,7 +413,31 @@ func (idx *Index) addSymbol(uri string, sym *Symbol) {
 	// Index top-level symbols by their namespace
 	if isTopLevelSymbol(sym.Kind) {
 		idx.namespaceIndex[namespaceForFQN(sym.FQN)] = appendUnique(idx.namespaceIndex[namespaceForFQN(sym.FQN)], sym.FQN)
+		idx.addFoldLocked(sym.FQN)
 	}
+}
+
+func (idx *Index) addFoldLocked(fqn string) {
+	key := strings.ToLower(fqn)
+	idx.foldIndex[key] = appendUnique(idx.foldIndex[key], fqn)
+}
+
+// LookupFold finds a class-like or function the way PHP does, ignoring case:
+// `new stdclass`, `PclZip` declared as `pclzip`, `floatVal()`. An exact match
+// wins. match, when not nil, must accept the symbol (for example to want a
+// class and not a function of the same name).
+func (idx *Index) LookupFold(fqn string, match func(*Symbol) bool) *Symbol {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	if sym := idx.symbols[fqn]; sym != nil && (match == nil || match(sym)) {
+		return sym
+	}
+	for _, candidate := range idx.foldIndex[strings.ToLower(fqn)] {
+		if sym := idx.symbols[candidate]; sym != nil && (match == nil || match(sym)) {
+			return sym
+		}
+	}
+	return nil
 }
 
 func (idx *Index) addSymbolWithSource(uri string, sym *Symbol, src SymbolSource) {
@@ -432,6 +458,12 @@ func (idx *Index) removeFileSymbols(uri string) {
 			ns := namespaceForFQN(sym.FQN)
 			if fqns, ok := idx.namespaceIndex[ns]; ok {
 				idx.namespaceIndex[ns] = removeFromSlice(fqns, sym.FQN)
+			}
+			key := strings.ToLower(sym.FQN)
+			if fqns := removeFromSlice(idx.foldIndex[key], sym.FQN); len(fqns) > 0 {
+				idx.foldIndex[key] = fqns
+			} else {
+				delete(idx.foldIndex, key)
 			}
 		}
 		// Clean up reverse implements map

@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Functions declared inside another function, such as WordPress's `wxr_cdata()` inside `export_wp()`, are now indexed, so calls to them are no longer reported as unknown.
 - `argument-count-mismatch` no longer checks a method or function declaration against a global function with the same name. For example, `public function init( $data, $site_id = 0 )` in WordPress, or a Magento constructor, was reported as "too many arguments" to a global `init()` or `__construct()`. Class names after `new` are not checked as function calls either.
 - `undefined-variable` no longer reports a variable tested with `isset()`, `empty()` or `unset()`, or on the left of `??` and `??=`, since those accept variables that may not exist (`if ( ! isset( $parent_name ) )`, `$x = $maybe ?? 'default'`). Variables evaluated inside them, such as `$key` in `isset( $items[ $key ] )` or the right side of `??`, are still checked.
+- Class, interface, trait, enum and function names now match regardless of case, as they do in PHP. `new StdClass()`, `$x instanceof pclzip` for a class declared `PclZip`, `ZIPARCHIVE::CHECKCONS` and `floatVal()` are no longer reported as unknown. Constants and members stay case-sensitive.
 
 ## [0.11.1] - 2026-11-02
 

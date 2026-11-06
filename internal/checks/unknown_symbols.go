@@ -450,11 +450,8 @@ func (r *UnknownMemberRule) resolveOwners(ownerExpr string, lineNum int, source 
 	if !strings.HasPrefix(ownerExpr, "$") && !strings.HasSuffix(ownerExpr, ")") && !strings.HasSuffix(ownerExpr, "]") {
 		fqn, ok := resolveClassLikeName(ownerExpr, lineNum, file)
 		if ok && fqn != "" {
-			if localClassLikeExists(fqn, file) {
-				return []string{fqn}
-			}
-			if index != nil && isClassLikeSymbol(index.Lookup(fqn)) {
-				return []string{fqn}
+			if name, found := canonicalClassLike(fqn, file, index); found {
+				return []string{name}
 			}
 		}
 	}
@@ -480,10 +477,14 @@ func instanceofOwners(ownerExpr string, lines []string, lineNum int, file *parse
 		}
 		for _, match := range re.FindAllStringSubmatch(line, -1) {
 			fqn, resolved := resolveClassLikeName(match[1], lineNum, file)
-			if !resolved || fqn == "" || (!localClassLikeExists(fqn, file) && (index == nil || !isClassLikeSymbol(index.Lookup(fqn)))) {
+			if !resolved || fqn == "" {
 				return nil, false
 			}
-			owners = append(owners, fqn)
+			name, found := canonicalClassLike(fqn, file, index)
+			if !found {
+				return nil, false
+			}
+			owners = append(owners, name)
 		}
 	}
 	return owners, true
@@ -531,8 +532,8 @@ func collectClassLikes(expr types.TypeExpr, file *parser.FileNode, index *symbol
 	if symbols.IsPHPBuiltinType(lower) {
 		return true
 	}
-	name = strings.TrimPrefix(name, "\\")
-	if !localClassLikeExists(name, file) && (index == nil || !isClassLikeSymbol(index.Lookup(name))) {
+	name, found := canonicalClassLike(strings.TrimPrefix(name, "\\"), file, index)
+	if !found {
 		return false
 	}
 	for _, owner := range *owners {
@@ -698,13 +699,27 @@ func classLikeExists(name string, line int, file *parser.FileNode, index *symbol
 	if !ok || fqn == "" {
 		return true
 	}
-	if localClassLikeExists(fqn, file) {
-		return true
+	_, ok = canonicalClassLike(fqn, file, index)
+	return ok
+}
+
+// canonicalClassLike finds a class-like the way PHP does, ignoring case, and
+// returns its name as declared, so later member lookups use the right key.
+func canonicalClassLike(fqn string, file *parser.FileNode, index *symbols.Index) (string, bool) {
+	if name, ok := localClassLikeFQN(fqn, file); ok {
+		return name, true
 	}
 	if index == nil {
-		return false
+		return "", false
 	}
-	return isClassLikeSymbol(index.Lookup(fqn))
+	if sym := index.LookupFold(fqn, isClassLikeSymbol); sym != nil {
+		return sym.FQN, true
+	}
+	return "", false
+}
+
+func isFunctionSymbol(sym *symbols.Symbol) bool {
+	return sym != nil && sym.Kind == symbols.KindFunction
 }
 
 func functionExists(name string, file *parser.FileNode, index *symbols.Index) bool {
@@ -719,7 +734,7 @@ func functionExists(name string, file *parser.FileNode, index *symbols.Index) bo
 		if index == nil {
 			continue
 		}
-		if sym := index.Lookup(fqn); sym != nil && sym.Kind == symbols.KindFunction {
+		if index.LookupFold(fqn, isFunctionSymbol) != nil {
 			return true
 		}
 	}
@@ -954,30 +969,37 @@ func resolveImportedName(name, currentNs string, uses []parser.UseNode, useKind 
 }
 
 func localClassLikeExists(fqn string, file *parser.FileNode) bool {
+	_, ok := localClassLikeFQN(fqn, file)
+	return ok
+}
+
+// localClassLikeFQN finds a class-like declared in this file, ignoring case as
+// PHP does, and returns its name as declared.
+func localClassLikeFQN(fqn string, file *parser.FileNode) (string, bool) {
 	if file == nil {
-		return false
+		return "", false
 	}
 	for _, cls := range file.Classes {
-		if classNodeFQN(&cls, file) == fqn {
-			return true
+		if name := classNodeFQN(&cls, file); strings.EqualFold(name, fqn) {
+			return name, true
 		}
 	}
 	for _, iface := range file.Interfaces {
-		if interfaceNodeFQN(&iface, file) == fqn {
-			return true
+		if name := interfaceNodeFQN(&iface, file); strings.EqualFold(name, fqn) {
+			return name, true
 		}
 	}
 	for _, tr := range file.Traits {
-		if traitNodeFQN(&tr, file) == fqn {
-			return true
+		if name := traitNodeFQN(&tr, file); strings.EqualFold(name, fqn) {
+			return name, true
 		}
 	}
 	for _, en := range file.Enums {
-		if enumNodeFQN(&en, file) == fqn {
-			return true
+		if name := enumNodeFQN(&en, file); strings.EqualFold(name, fqn) {
+			return name, true
 		}
 	}
-	return false
+	return "", false
 }
 
 func localClassStandsAlone(fqn string, file *parser.FileNode) bool {
@@ -1015,7 +1037,7 @@ func localFunctionExists(fqn string, file *parser.FileNode) bool {
 		return false
 	}
 	for _, fn := range file.Functions {
-		if functionNodeFQN(&fn, file) == fqn {
+		if strings.EqualFold(functionNodeFQN(&fn, file), fqn) {
 			return true
 		}
 	}
