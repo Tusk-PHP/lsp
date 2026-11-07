@@ -441,7 +441,16 @@ func DetectFramework(rootPath string) string {
 			if _, ok := composer.Require["symfony/framework-bundle"]; ok {
 				return "symfony"
 			}
+			for _, pkg := range []string{"magento/framework", "magento/product-community-edition", "magento/product-enterprise-edition"} {
+				if _, ok := composer.Require[pkg]; ok {
+					return "magento"
+				}
+			}
 		}
+	}
+	// Magento 2 itself, and stores installed from its repository.
+	if fileExists(filepath.Join(rootPath, "bin", "magento")) && fileExists(filepath.Join(rootPath, "app", "etc", "di.xml")) {
+		return "magento"
 	}
 	return "none"
 }

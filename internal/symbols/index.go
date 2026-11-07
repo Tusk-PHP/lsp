@@ -35,6 +35,9 @@ const (
 	SourceProject SymbolSource = iota
 	SourceBuiltin
 	SourceVendor
+	// SourceGenerated marks classes a framework writes at build time, which the
+	// index builds on demand from the class they're generated for.
+	SourceGenerated
 )
 
 type Symbol struct {
@@ -131,6 +134,9 @@ type Index struct {
 	sortedFQNsDirty      bool              // rebuild flag for sortedFQNs
 	fileSource           map[string]string // URI → raw source text stored during IndexFileWithSource
 	ready                atomic.Bool       // true once project + vendor indexing has completed at least once
+	generator            atomic.Pointer[classGeneratorHolder]
+	generatedURIs        map[string]bool     // URIs of generated classes, which are not files on disk
+	generatedFrom        map[string][]string // lowercase source FQN → URIs of the classes generated from it
 }
 
 func NewIndex() *Index {
@@ -146,6 +152,8 @@ func NewIndex() *Index {
 		reverseImplementsMap: make(map[string][]string),
 		traitMap:             make(map[string][]string),
 		fileSource:           make(map[string]string),
+		generatedURIs:        make(map[string]bool),
+		generatedFrom:        make(map[string][]string),
 	}
 }
 
@@ -284,6 +292,12 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 	idx.removeFileSymbols(uri)
 	// Store the raw source text for this URI (replaces any previous version)
 	idx.fileSource[uri] = source
+	idx.indexParsedLocked(uri, file, src)
+}
+
+// indexParsedLocked adds the symbols a parsed file declares. The caller holds
+// the write lock and has removed the file's previous symbols.
+func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src SymbolSource) {
 	// Ensure the file is tracked even if it has no symbol declarations
 	if _, ok := idx.fileSymbols[uri]; !ok {
 		idx.fileSymbols[uri] = nil
@@ -406,6 +420,10 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 }
 
 func (idx *Index) addSymbol(uri string, sym *Symbol) {
+	if sym.Source != SourceGenerated && isTopLevelSymbol(sym.Kind) {
+		// A real declaration replaces a class generated under the same name.
+		idx.dropGeneratedLocked(sym.FQN)
+	}
 	idx.symbols[sym.FQN] = sym
 	if len(sym.Attributes) > 0 {
 		idx.attributedSymbols.Store(true)
@@ -431,6 +449,7 @@ func (idx *Index) addFoldLocked(fqn string) {
 // wins. match, when not nil, must accept the symbol (for example to want a
 // class and not a function of the same name).
 func (idx *Index) LookupFold(fqn string, match func(*Symbol) bool) *Symbol {
+	idx.ensureGenerated(fqn)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	if sym := idx.symbols[fqn]; sym != nil && (match == nil || match(sym)) {
@@ -451,6 +470,10 @@ func (idx *Index) addSymbolWithSource(uri string, sym *Symbol, src SymbolSource)
 
 func (idx *Index) removeFileSymbols(uri string) {
 	for _, sym := range idx.fileSymbols[uri] {
+		if isTopLevelSymbol(sym.Kind) {
+			// Classes generated from this one are rebuilt on their next lookup.
+			idx.dropGeneratedFromLocked(sym.FQN)
+		}
 		delete(idx.symbols, sym.FQN)
 		if fqns, ok := idx.nameIndex[sym.Name]; ok {
 			idx.nameIndex[sym.Name] = removeFromSlice(fqns, sym.FQN)
@@ -490,6 +513,7 @@ func (idx *Index) removeFileSymbols(uri string) {
 	}
 	delete(idx.fileSymbols, uri)
 	delete(idx.fileSource, uri)
+	delete(idx.generatedURIs, uri)
 }
 
 func isTopLevelSymbol(kind SymbolKind) bool {
@@ -723,8 +747,14 @@ func parseDocMethodParams(raw string, resolve func(string) string) []ParamInfo {
 
 func (idx *Index) Lookup(fqn string) *Symbol {
 	idx.mu.RLock()
-	defer idx.mu.RUnlock()
-	return idx.symbols[fqn]
+	sym := idx.symbols[fqn]
+	idx.mu.RUnlock()
+	if sym == nil && idx.ensureGenerated(fqn) {
+		idx.mu.RLock()
+		sym = idx.symbols[fqn]
+		idx.mu.RUnlock()
+	}
+	return sym
 }
 
 // LookupTypeAlias returns the alias declared or imported on the given owner symbol.
@@ -928,6 +958,7 @@ func (idx *Index) GetFileSymbols(uri string) []*Symbol {
 }
 
 func (idx *Index) GetClassMembers(classFQN string) []*Symbol {
+	idx.ensureGenerated(classFQN)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.getClassMembersRecursive(classFQN, make(map[string]bool))
@@ -981,6 +1012,7 @@ func (idx *Index) HasAttributedSymbols() bool {
 // from a parent, interface or trait. known is false when one of those isn't
 // indexed, so the answer can't be trusted.
 func (idx *Index) OverridesInherited(classFQN, method string) (overrides, known bool) {
+	idx.ensureGenerated(classFQN)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	known = true
@@ -1022,6 +1054,7 @@ func (idx *Index) walkAncestors(fqn string, visit func(next string, isTrait bool
 }
 
 func (idx *Index) GetInheritanceChain(classFQN string) []string {
+	idx.ensureGenerated(classFQN)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	var chain []string
@@ -1117,6 +1150,7 @@ func (idx *Index) collectImplementorLocked(classFQN string, seen map[string]bool
 }
 
 func (idx *Index) GetImplementedInterfaces(classFQN string) []string {
+	idx.ensureGenerated(classFQN)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.implementsMap[classFQN]
@@ -1259,6 +1293,9 @@ func (idx *Index) GetAllFileURIs() []string {
 	defer idx.mu.RUnlock()
 	uris := make([]string, 0, len(idx.fileSymbols))
 	for uri := range idx.fileSymbols {
+		if idx.generatedURIs[uri] {
+			continue // not a file on disk
+		}
 		uris = append(uris, uri)
 	}
 	return uris

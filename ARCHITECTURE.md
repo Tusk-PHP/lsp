@@ -34,6 +34,7 @@ tusk-php/
 │   ├── config/                      # .tusk-php.json + client options + framework detection
 │   ├── framework/laravel/           # Routes, views, translations
 │   ├── framework/symfony/           # Routes and other Symfony-specific symbols
+│   ├── framework/magento/           # Classes Magento generates at build time
 │   ├── models/                      # Eloquent, Doctrine, migrations, array shape inference
 │   │
 │   └── conformance/                 # Whole-stack invariants and corpus tests (build-tagged)
@@ -332,7 +333,7 @@ Analyzes DI container bindings. **Laravel**: scans service providers for `bind`/
 
 #### config
 
-Loads `.tusk-php.json` and merges with LSP client `initializationOptions`. Auto-detects framework from `artisan` (Laravel), `bin/console` (Symfony), or `composer.json` requires. Hosts diagnostic severities, per-check enable/disable flags, and `PHPDetectTimeoutMs`. Defaults: 10000 max index files, excludes `vendor`/`node_modules`/`.git`/`storage`.
+Loads `.tusk-php.json` and merges with LSP client `initializationOptions`. Auto-detects framework from `artisan` (Laravel), `bin/console` (Symfony), `bin/magento` (Magento 2), or `composer.json` requires. Hosts diagnostic severities, per-check enable/disable flags, and `PHPDetectTimeoutMs`. Defaults: no limit on indexed files, excludes `vendor`/`node_modules`/`.git`/`storage`.
 
 #### framework/laravel
 
@@ -341,6 +342,10 @@ Routes, views, translations — Laravel-specific symbol resolution that doesn't 
 #### framework/symfony
 
 Routes and other Symfony-specific symbol resolution.
+
+#### framework/magento
+
+Classes Magento generates at build time (`*Factory`, `*\Proxy`, `*\Interceptor`, `*SearchResults`, `*ExtensionInterface`, `*Extension`). The index asks for one through its class generator hook only when a lookup misses, builds it from the class it's generated for, and drops it when that class changes.
 
 #### models
 
