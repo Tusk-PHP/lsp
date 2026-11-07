@@ -11,6 +11,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/container"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
+	frameworkmagento "github.com/Tusk-PHP/lsp/internal/framework/magento"
 	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -47,6 +48,9 @@ func New(opts Options) *Bootstrapped {
 
 	index := symbols.NewIndex()
 	index.RegisterBuiltinsForProfile(opts.BuiltinProfile)
+	if opts.Framework == "magento" {
+		index.SetClassGenerator(frameworkmagento.GeneratedClasses{})
+	}
 
 	var routeIndex *frameworklaravel.RouteIndex
 	if opts.Framework == "laravel" {

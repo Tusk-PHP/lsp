@@ -66,8 +66,8 @@ above it in this list**, never from a later one:
    closures, imports), `resolve` (types, PHPDoc, generics), `source` (what is under
    the cursor).
 4. **Project context:** `config`, `composer`, `coverage`, `framework/laravel`,
-   `framework/symfony`, `container`, `models`, `workspace` (builds the index for a
-   root: files, Composer dependencies, framework analysis).
+   `framework/symfony`, `framework/magento`, `container`, `models`, `workspace`
+   (builds the index for a root: files, Composer dependencies, framework analysis).
 5. **Features:** `completion`, `hover`, `analyzer` (definition, references,
    symbols, rename, signature help), `inlayhint`, `checks` (native rules, testable
    without LSP types), `diagnostics` (runs `checks`, plus PHPStan and Pint),

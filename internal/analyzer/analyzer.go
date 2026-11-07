@@ -1615,8 +1615,9 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 		return nil
 	}
 
-	// Reject vendor symbols (renaming dependencies is not useful)
-	if sym != nil && sym.Source == symbols.SourceVendor {
+	// Reject vendor and generated symbols (renaming dependencies is not
+	// useful, and generated classes have no file to edit)
+	if sym != nil && (sym.Source == symbols.SourceVendor || sym.Source == symbols.SourceGenerated) {
 		return nil
 	}
 
@@ -1716,7 +1717,7 @@ func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName str
 
 	// If it's a known symbol, rename it across the workspace
 	if sym != nil {
-		if symbols.IsBuiltin(sym) || sym.Source == symbols.SourceVendor {
+		if symbols.IsBuiltin(sym) || sym.Source == symbols.SourceVendor || sym.Source == symbols.SourceGenerated {
 			return nil
 		}
 		return a.renameSymbol(sym, newName, readDocument)

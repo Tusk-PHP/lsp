@@ -875,6 +875,12 @@ func (h *memberHierarchy) walk(fqn string, index *symbols.Index) {
 		h.open = true
 		return
 	}
+	// A generated interface gets members from configuration we don't read,
+	// as Magento's extension attributes come from extension_attributes.xml.
+	if sym.Kind == symbols.KindInterface && sym.Source == symbols.SourceGenerated {
+		h.open = true
+		return
+	}
 	h.members = append(h.members, sym.Children...)
 	if sym.Kind == symbols.KindEnum {
 		h.members = append(h.members, enumBuiltinMembers(sym)...)

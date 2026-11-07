@@ -562,6 +562,25 @@ func TestDetectFramework(t *testing.T) {
 		}
 	})
 
+	t.Run("magento repository with bin/magento", func(t *testing.T) {
+		dir := t.TempDir()
+		os.MkdirAll(filepath.Join(dir, "bin"), 0755)
+		os.WriteFile(filepath.Join(dir, "bin", "magento"), []byte("#!/usr/bin/env php"), 0644)
+		os.MkdirAll(filepath.Join(dir, "app", "etc"), 0755)
+		os.WriteFile(filepath.Join(dir, "app", "etc", "di.xml"), []byte("<config/>"), 0644)
+		if f := DetectFramework(dir); f != "magento" {
+			t.Errorf("expected magento, got %q", f)
+		}
+	})
+
+	t.Run("magento module from composer.json", func(t *testing.T) {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, "composer.json"), []byte(`{"require":{"magento/framework":"103.0.*"}}`), 0644)
+		if f := DetectFramework(dir); f != "magento" {
+			t.Errorf("expected magento, got %q", f)
+		}
+	})
+
 	t.Run("laravel from composer.json", func(t *testing.T) {
 		dir := t.TempDir()
 		os.WriteFile(filepath.Join(dir, "composer.json"), []byte(`{"require":{"laravel/framework":"^11.0"}}`), 0644)

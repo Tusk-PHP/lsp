@@ -9,7 +9,7 @@ Back to the [README](../README.md).
 | `tuskPhpLsp.enable` | `true` | Enable/disable the extension |
 | `tuskPhpLsp.executablePath` | `""` | Custom path to the binary |
 | `tuskPhpLsp.phpVersion` | `"8.5"` | Target PHP version (`8.0`-`8.5`) |
-| `tuskPhpLsp.framework` | `"auto"` | Framework: `auto`, `laravel`, `symfony`, `none` |
+| `tuskPhpLsp.framework` | `"auto"` | Framework: `auto`, `laravel`, `symfony`, `magento`, `none` |
 | `tuskPhpLsp.containerAware` | `true` | Enable DI container analysis |
 | `tuskPhpLsp.diagnostics.enable` | `true` | Enable diagnostics |
 | `tuskPhpLsp.diagnostics.phpstan.enable` | `true` | Run PHPStan on save |
@@ -62,7 +62,7 @@ Create `.tusk-php.json` in your project root to override settings per project:
 }
 ```
 
-All diagnostic rules are enabled by default. Set a rule to `false` to disable it. Framework is auto-detected from `artisan` (Laravel), `bin/console` (Symfony), or `composer.json`.
+All diagnostic rules are enabled by default. Set a rule to `false` to disable it. Framework is auto-detected from `artisan` (Laravel), `bin/console` (Symfony), `bin/magento` (Magento 2), or `composer.json`.
 
 ## Test coverage
 
