@@ -33,6 +33,7 @@ tusk-php/
 │   ├── container/                   # Laravel/Symfony DI container analysis
 │   ├── config/                      # .tusk-php.json + client options + framework detection
 │   ├── framework/laravel/           # Routes, views, translations
+│   ├── framework/laravel/blade/     # Blade templates read as a virtual PHP document
 │   ├── framework/symfony/           # Routes and other Symfony-specific symbols
 │   ├── framework/magento/           # Classes Magento generates at build time
 │   ├── models/                      # Eloquent, Doctrine, migrations, array shape inference
@@ -338,6 +339,8 @@ Loads `.tusk-php.json` and merges with LSP client `initializationOptions`. Auto-
 #### framework/laravel
 
 Routes, views, translations — Laravel-specific symbol resolution that doesn't belong in generic completion.
+
+`framework/laravel/blade` reads Blade templates. `Parse` splits a template into echoes, directives, PHP blocks and component tags; `Compile` assembles the PHP in it into a virtual PHP document with a map back to the template. Diagnostics run their native rules on that document and keep only findings in PHP the template contains, moved to their place in the template. Blade files aren't added to the symbol index.
 
 #### framework/symfony
 

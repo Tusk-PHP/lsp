@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Blade templates are read as Blade** (part of [#62](https://github.com/Tusk-PHP/lsp/issues/62)). Diagnostics on `.blade.php` files check only the PHP in them, the code inside `{{ }}`, `{!! !!}`, directive arguments, `@php` blocks and bound component attributes (`:title="$post->title"`), and report it at its place in the view.
+  - Directives, `<x-…>` components, HTML and Alpine attributes such as `@click` are no longer read as PHP. In laravel/framework's own views that removes all 382 false warnings, such as `section` and `props` reported as unknown functions.
+  - The variables a view receives (`$slot`, `$attributes` and the controller's data) aren't reported as undefined.
+  - Unused variables aren't reported in views, since the views they include can read them.
+  - Blade files no longer add symbols to the index.
 - **Variable completion**: typing `$` lists the variables in scope at the cursor: the function's own variables (most recently used first), then its parameters, then `$this`, then PHP's superglobals. Variables only assigned below the cursor aren't offered, and an arrow function also sees its parent's variables.
 - **Magento 2 generated classes** resolve without running `bin/magento setup:di:compile` first. `ProductFactory`, `Product\Proxy`, `Product\Interceptor`, `ProductSearchResults`, `ProductExtensionInterface` and `ProductExtension` are built from the class they're generated for, so they're no longer reported as unknown, and they get hover, completion and go-to-definition (which opens the original class). `$this->productFactory->create()` is typed as `Product`. Extension attributes from `extension_attributes.xml` aren't read yet, so their getters and setters are neither completed nor reported. Magento projects are detected from `bin/magento` or a `magento/framework` requirement in `composer.json`, or by setting `framework` to `magento`.
 - Completion, hover and extension availability diagnostics for Imagick, SSH2, Redis, Memcached, APCu and igbinary. Extensions listed in Composer's `suggest` now count as available alongside `require` and `config.platform`.
