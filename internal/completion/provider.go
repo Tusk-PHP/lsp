@@ -588,7 +588,7 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 	}
 
 	ownerFQN := ownerResolved.BaseFQN()
-	member := p.resolver.FindMember(ownerFQN, target)
+	member := p.resolver.FindAccessedMember(ownerFQN, target, parenEnd > 0)
 	if member == nil {
 		return resolve.ResolvedType{}
 	}
@@ -918,7 +918,7 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 	if ownerFQN == "" {
 		return ""
 	}
-	member := p.resolver.FindMember(ownerFQN, target)
+	member := p.resolver.FindAccessedMember(ownerFQN, target, parenEnd > 0)
 	if member == nil {
 		return ""
 	}

@@ -520,3 +520,21 @@ func TestInferLiteralTypeClassConstant(t *testing.T) {
 		}
 	}
 }
+
+// TestFindAccessedMemberByUse checks that a call finds the method and a plain
+// access the property when a class has both under one name, as Laravel's
+// scheduled Event has a $timezone property and a timezone() method from a trait.
+func TestFindAccessedMemberByUse(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///e.php", `<?php
+trait Frequencies { /** @return $this */ public function timezone($tz) { return $this; } }
+class Event { use Frequencies; /** @var \DateTimeZone|string */ public $timezone; }
+`)
+	r := NewResolver(idx)
+	if m := r.FindAccessedMember("Event", "timezone", true); m == nil || m.Kind != symbols.KindMethod {
+		t.Errorf("call: got %#v, want the method", m)
+	}
+	if m := r.FindAccessedMember("Event", "timezone", false); m == nil || m.Kind != symbols.KindProperty {
+		t.Errorf("access: got %#v, want the property", m)
+	}
+}

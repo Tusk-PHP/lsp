@@ -409,8 +409,8 @@ class Logger {
 		if constant := idx.Lookup("ReflectionMethod::IS_PUBLIC"); constant == nil || constant.Kind != KindConstant {
 			t.Fatalf("expected ReflectionMethod::IS_PUBLIC constant, got %#v", constant)
 		}
-		if method := idx.Lookup("ReflectionObject::getMethod"); method == nil || method.ReturnType != "ReflectionMethod" {
-			t.Fatalf("expected ReflectionObject::getMethod return ReflectionMethod, got %#v", method)
+		if method := idx.Lookup("ReflectionClass::getMethod"); method == nil || method.ReturnType != "ReflectionMethod" {
+			t.Fatalf("expected ReflectionClass::getMethod return ReflectionMethod, got %#v", method)
 		}
 	})
 
@@ -754,4 +754,25 @@ func TestWarmSearchIndexesBuildsSortedCaches(t *testing.T) {
 	if len(idx.sortedNames) == 0 || len(idx.sortedFQNs) == 0 {
 		t.Fatal("expected warmed sorted caches to be populated")
 	}
+}
+
+// TestGetClassMembersTraitBeforeParent checks PHP's precedence: a method from a
+// trait the class uses wins over the parent's, as Carbon's createFromFormat()
+// does over DateTime's.
+func TestGetClassMembersTraitBeforeParent(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///a.php", `<?php
+class Base { public function make(): Base {} }
+trait Creates { public function make(): static {} }
+class Child extends Base { use Creates; }
+`)
+	for _, m := range idx.GetClassMembers("Child") {
+		if m.Name == "make" {
+			if m.ParentFQN != "Creates" {
+				t.Errorf("first make() comes from %q, want the trait", m.ParentFQN)
+			}
+			return
+		}
+	}
+	t.Fatal("make() not found")
 }

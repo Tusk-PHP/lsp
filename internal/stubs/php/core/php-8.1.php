@@ -38,59 +38,6 @@ interface BackedEnum extends UnitEnum
     public static function tryFrom(int|string $value): ?static;
 }
 
-/** @template T of \UnitEnum */
-class ReflectionEnum extends \ReflectionClass
-{
-    /** @param class-string<T>|T $objectOrClass */
-    public function __construct(object|string $objectOrClass) {}
-
-    public function hasCase(string $name): bool {}
-
-    public function getCase(string $name): ReflectionEnumUnitCase {}
-
-    /** @return ReflectionEnumUnitCase[] */
-    public function getCases(): array {}
-
-    public function isBacked(): bool {}
-
-    public function getBackingType(): ?\ReflectionNamedType {}
-}
-
-class ReflectionEnumUnitCase extends \ReflectionClassConstant
-{
-    public function getEnum(): ReflectionEnum {}
-
-    public function getValue(): \UnitEnum {}
-}
-
-class ReflectionEnumBackedCase extends ReflectionEnumUnitCase
-{
-    public function getBackingValue(): int|string {}
-}
-
-class ReflectionFiber
-{
-    public function __construct(\Fiber $fiber) {}
-
-    public function getFiber(): \Fiber {}
-
-    public function getExecutingFile(): ?string {}
-
-    public function getExecutingLine(): ?int {}
-
-    public function getCallable(): callable {}
-
-    public function isStarted(): bool {}
-
-    public function isRunning(): bool {}
-
-    public function isSuspended(): bool {}
-
-    public function isTerminated(): bool {}
-
-    public function getReturn(): mixed {}
-}
-
 class Fiber
 {
     public function __construct(callable $callback) {}

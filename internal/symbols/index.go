@@ -981,13 +981,15 @@ func (idx *Index) getClassMembersRecursive(fqn string, visited map[string]bool) 
 	if sym, ok := idx.symbols[fqn]; ok {
 		members = append(members, sym.Children...)
 	}
-	if parent, ok := idx.inheritanceMap[fqn]; ok {
-		members = append(members, idx.getClassMembersRecursive(parent, visited)...)
-	}
+	// PHP's precedence: the class's own members, then its traits', then the
+	// parent's. Callers take the first match, so the order matters.
 	if traits, ok := idx.traitMap[fqn]; ok {
 		for _, tr := range traits {
 			members = append(members, idx.getClassMembersRecursive(tr, visited)...)
 		}
+	}
+	if parent, ok := idx.inheritanceMap[fqn]; ok {
+		members = append(members, idx.getClassMembersRecursive(parent, visited)...)
 	}
 	// Interfaces are read for their constants only: the methods they declare are
 	// the class's own to implement.
