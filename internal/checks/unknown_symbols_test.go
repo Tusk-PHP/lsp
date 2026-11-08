@@ -268,3 +268,55 @@ func TestUnknownMemberBuiltinWithoutMembersIsNotFlagged(t *testing.T) {
 		t.Errorf("got %v", unknownMemberMessages(got))
 	}
 }
+
+// TestUnknownFunctionRuleNewerSyntax covers syntax that looks like a call to
+// the line-based rule but isn't: by-reference declarations, `new (expr)`,
+// `yield from`, an anonymous class whose `new` is on the previous line, PHP 8.4
+// asymmetric visibility and property hooks, and DNF property types.
+func TestUnknownFunctionRuleNewerSyntax(t *testing.T) {
+	source := `<?php
+class C
+{
+    public private(set) ?string $attribute = null;
+    protected(set) string $name = '';
+    private (\Countable&\Traversable)|null $list = null;
+
+    public array $map {
+        set (array $value) { $this->map = $value; }
+        get => $this->map;
+    }
+    public string $short {
+        set (string $value) => $value . "";
+    }
+
+    public function &get(string $name): array { return $this->map; }
+    public function &__get($name): mixed { return $this->map[$name]; }
+
+    public function make(object $data): iterable
+    {
+        $copy = new ($data::class)();
+        $other = (new ($this->name()))->run();
+        yield from $this->map;
+        yield from (new static())->make($copy);
+        return new
+            class($other) {};
+    }
+}
+function &byRef(array &$a) { return $a; }
+`
+	if findings := (&UnknownFunctionRule{}).Check(parser.ParseFile(source), source, symbols.NewIndex()); len(findings) != 0 {
+		t.Errorf("unexpected findings: %+v", findings)
+	}
+
+	// The names are still checked when they are real calls.
+	source = "<?php\n$a = set(1);\n$b = from(2) + get(3);\n$c = yielded_from(4);\n"
+	findings := (&UnknownFunctionRule{}).Check(parser.ParseFile(source), source, symbols.NewIndex())
+	var names []string
+	for _, f := range findings {
+		names = append(names, f.Message)
+	}
+	want := []string{"Unknown function 'set'", "Unknown function 'from'", "Unknown function 'get'", "Unknown function 'yielded_from'"}
+	if strings.Join(names, "|") != strings.Join(want, "|") {
+		t.Errorf("got %v, want %v", names, want)
+	}
+}

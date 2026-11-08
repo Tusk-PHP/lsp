@@ -1320,6 +1320,10 @@ func (p *structParser) parseEnum(docComment string) {
 func (p *structParser) parseFunction(docComment string) {
 	p.advance()
 	fn := FunctionDef{DocComment: docComment, Attributes: p.takeAttributes()}
+	// By-reference function: function &get()
+	if p.peek().Kind == TokenAmpersand {
+		p.advance()
+	}
 	if t, ok := p.expect(TokenIdentifier); ok {
 		fn.Name = t.Value
 		fn.Line = t.Line
@@ -1370,7 +1374,11 @@ func (p *structParser) collectNestedFunctions(start, end int) {
 			}
 			i = j
 		case TokenFunction:
-			if i+2 >= len(p.tokens) || p.tokens[i+1].Kind != TokenIdentifier || p.tokens[i+2].Kind != TokenOpenParen {
+			k := i + 1
+			if k < len(p.tokens) && p.tokens[k].Kind == TokenAmpersand {
+				k++ // function &name()
+			}
+			if k+1 >= len(p.tokens) || p.tokens[k].Kind != TokenIdentifier || p.tokens[k+1].Kind != TokenOpenParen {
 				continue
 			}
 			doc := ""
@@ -1542,8 +1550,12 @@ func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDe
 				IsAbstract: isAbstract, IsFinal: isFinal,
 				DocComment: docComment, Line: p.peek().Line,
 			}
-			// PHP allows reserved keywords as method names (e.g. class(), match())
-			if p.peek().Kind == TokenIdentifier || isKeywordToken(p.peek().Kind) {
+			// By-reference method: function &get()
+			if p.peek().Kind == TokenAmpersand {
+				p.advance()
+			}
+			// PHP allows reserved keywords as method names (e.g. class(), use(), match())
+			if isNameToken(p.peek()) && p.peek().Kind != TokenOpenParen {
 				m.Name = p.peek().Value
 				p.advance()
 			}

@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Methods that return by reference (`public function &get()`) or are named after a keyword (`public function use()`) are now read as methods. Before, the rest of the class was lost after them, so its other methods were reported as unknown and its properties as unused, as in Symfony's `FormFieldRegistry`.
+- `unknown-function` no longer mistakes newer syntax for calls: `new ($class)()`, `yield from (...)`, an anonymous class with `new` on the line before `class($args)`, PHP 8.4 asymmetric visibility (`public private(set)`) and property hooks with a parameter (`set (array $value) { … }`), and DNF property types (`private (A&B)|null $x`).
 - A method or function named `match()` with no return type, such as Laravel's `Str::match()` and the Eloquent relations' `match()`, is no longer read as a `match` expression, which reported "malformed match arm" syntax errors at the end of the method.
 - The `deprecated` diagnostic no longer flags methods that share a name with a deprecated PHP function, such as Laravel's `$collection->each(...)` or `Arr::each(...)`, nor matches inside `foreach(`, strings or comments. Only real calls to the global `each()`, `create_function()`, `utf8_encode()` and `utf8_decode()` are reported.
 - Hover now works on a method chained after a multi-line argument list, such as `->each` in `Collection::make([...])->each(...)` where the array spans several lines.

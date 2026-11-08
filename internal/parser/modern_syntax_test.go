@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -610,4 +611,50 @@ interface Readable {
 	}
 	// The interface parsed correctly; the abstract hook property should be captured
 	// via parseClassBody which is shared with interfaces.
+}
+
+// TestByReferenceAndKeywordMethodNames verifies that `function &get()` and a
+// method named after a keyword (`use`, `list`, `new`) are read as methods, and
+// that the rest of the class stays intact after them.
+func TestByReferenceAndKeywordMethodNames(t *testing.T) {
+	src := `<?php
+class Registry
+{
+    private array $items = [];
+
+    public function &get(string $name): array
+    {
+        return $this->items;
+    }
+
+    public function &__get($name): mixed { return $this->items[$name]; }
+
+    public function use(): int { return 1; }
+    public function new(): static { return new static(); }
+
+    private function segments(string $name): array
+    {
+        return [$name];
+    }
+}
+
+function &globalRef(array &$a) { return $a; }
+`
+	r := New().Parse(src)
+	if len(r.Classes) != 1 {
+		t.Fatalf("want 1 class, got %d", len(r.Classes))
+	}
+	var names []string
+	for _, m := range r.Classes[0].Methods {
+		names = append(names, m.Name)
+	}
+	if got := strings.Join(names, ","); got != "get,__get,use,new,segments" {
+		t.Errorf("methods = %s", got)
+	}
+	if len(r.Classes[0].Properties) != 1 {
+		t.Errorf("want only $items as a property, got %+v", r.Classes[0].Properties)
+	}
+	if len(r.Functions) != 1 || r.Functions[0].Name != "globalRef" {
+		t.Errorf("want function globalRef, got %+v", r.Functions)
+	}
 }
