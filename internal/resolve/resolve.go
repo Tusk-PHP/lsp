@@ -234,6 +234,25 @@ func (r *Resolver) FindMember(classFQN, memberName string) *symbols.Symbol {
 	return nil
 }
 
+// FindAccessedMember looks up a member the way it is used: a call finds a
+// method before a property of the same name, as with a `$timezone` property
+// and a `timezone()` method, and a plain access finds the property first.
+func (r *Resolver) FindAccessedMember(classFQN, memberName string, call bool) *symbols.Symbol {
+	var fallback *symbols.Symbol
+	for _, m := range r.Index.GetClassMembers(classFQN) {
+		if m.Name != memberName && m.Name != "$"+memberName {
+			continue
+		}
+		if (m.Kind == symbols.KindMethod) == call {
+			return m
+		}
+		if fallback == nil {
+			fallback = m
+		}
+	}
+	return fallback
+}
+
 // MemberTypeResolved returns the fully resolved type including generic params.
 // callerFQN is the class the method was called on (for late static binding:
 // Category::query() where query is on Model — callerFQN is Category).

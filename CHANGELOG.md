@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PHP's Reflection, date and exception classes now have all their members, each from the PHP version that added it. `ReflectionClass::getAttributes()`, `getParentClass()` and `getFileName()`, `ReflectionParameter::getType()`, `ReflectionNamedType::getName()`, `Exception::getFile()` and `DateTime::createFromFormat()` were reported as unknown members, and `DateTime::createFromTimestamp()` is now known on PHP 8.4 and later. The Windows-only `sapi_windows_*` functions are no longer reported as unknown.
+- A method a class gets from a trait now takes precedence over the parent's method of the same name, as in PHP. Carbon's `Carbon::createFromFormat()` and `setTimezone()` return a Carbon, not a `DateTime`.
+- In a chain, a method call finds the method even when the class also has a property of the same name, such as `$event->timezone('UTC')` on Laravel's scheduled events, which have a `$timezone` property.
 - Methods that return by reference (`public function &get()`) or are named after a keyword (`public function use()`) are now read as methods. Before, the rest of the class was lost after them, so its other methods were reported as unknown and its properties as unused, as in Symfony's `FormFieldRegistry`.
 - `unknown-function` no longer mistakes newer syntax for calls: `new ($class)()`, `yield from (...)`, an anonymous class with `new` on the line before `class($args)`, PHP 8.4 asymmetric visibility (`public private(set)`) and property hooks with a parameter (`set (array $value) { … }`), and DNF property types (`private (A&B)|null $x`).
 - A method or function named `match()` with no return type, such as Laravel's `Str::match()` and the Eloquent relations' `match()`, is no longer read as a `match` expression, which reported "malformed match arm" syntax errors at the end of the method.

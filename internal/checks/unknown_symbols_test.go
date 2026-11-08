@@ -320,3 +320,62 @@ function &byRef(array &$a) { return $a; }
 		t.Errorf("got %v, want %v", names, want)
 	}
 }
+
+// TestUnknownMemberBuiltinClassesHaveAllMembers checks that builtin classes
+// with declared members list all of them, so inherited and version-specific
+// members such as ReflectionClass::getAttributes() or
+// DateTime::createFromTimestamp() aren't reported, and that a member newer
+// than the project's PHP version still is.
+func TestUnknownMemberBuiltinClassesHaveAllMembers(t *testing.T) {
+	source := `<?php
+$class->getParentClass();
+$class->getFileName();
+$class->getProperties();
+$class->getAttributes();
+$class->name;
+$object->getProperty('x');
+$param->getType();
+$param->isVariadic();
+$prop->getAttributes();
+$method->getAttributes();
+$named->getName();
+$e->getFile();
+$e->getLine();
+$e->getPrevious();
+$invalid->getTraceAsString();
+$date->modify('+1 day');
+$x = ReflectionProperty::IS_PUBLIC;
+$d = DateTime::createFromFormat('Y', '2024');
+$t = DateTime::createFromTimestamp(1);
+`
+	vars := map[string]string{
+		"$class": "ReflectionClass", "$object": "ReflectionObject", "$param": "ReflectionParameter",
+		"$prop": "ReflectionProperty", "$method": "ReflectionMethod", "$named": "ReflectionNamedType",
+		"$e": "Exception", "$invalid": "InvalidArgumentException", "$date": "DateTime",
+	}
+	check := func(version string) []string {
+		idx := symbols.NewIndex()
+		idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: version})
+		rule := &UnknownMemberRule{TypeResolver: func(expr, _ string, _ int, _ *parser.FileNode) string {
+			return vars[expr]
+		}}
+		return unknownMemberMessages(rule.Check(parser.ParseFile(source), source, idx))
+	}
+	if got := check("8.4"); len(got) != 0 {
+		t.Errorf("PHP 8.4: got %v", got)
+	}
+	got := check("8.3")
+	if len(got) != 1 || !strings.Contains(got[0], "createFromTimestamp") {
+		t.Errorf("PHP 8.3: want only createFromTimestamp reported, got %v", got)
+	}
+}
+
+func TestUnknownFunctionWindowsBuiltins(t *testing.T) {
+	source := "<?php\nsapi_windows_vt100_support(STDOUT, true);\nsapi_windows_set_ctrl_handler(null);\nsapi_windows_cp_get();\n"
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	file := parser.ParseFile(source)
+	if got := (&UnknownFunctionRule{}).Check(file, source, idx); len(got) != 0 {
+		t.Errorf("got %v", unknownMemberMessages(got))
+	}
+}
