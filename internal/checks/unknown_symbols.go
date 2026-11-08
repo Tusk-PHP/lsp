@@ -339,6 +339,11 @@ var skippedFunctionLikeKeywords = map[string]bool{
 	"fn": true, "use": true, "return": true, "list": true, "case": true,
 	"and": true, "or": true, "xor": true, "instanceof": true, "throw": true,
 	"yield": true, "static": true, "declare": true,
+	// `new ($class)()`, `new\nclass($args)`, and the PHP 8.4 asymmetric
+	// visibility and DNF types of `public private(set)` and
+	// `private (A&B)|null $x` are not calls; none of these names can be a
+	// function.
+	"new": true, "class": true, "public": true, "protected": true, "private": true,
 }
 
 func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
@@ -398,8 +403,21 @@ func shouldSkipFunctionCall(line string, start int, name string) bool {
 		return true
 	}
 	prefix := strings.TrimSpace(line[:start])
+	// A property hook with a parameter, `set (array $value) { … }` or
+	// `set (array $value) => …`, declares the hook; it doesn't call set().
+	if (lower == "set" || lower == "get") && isHookDeclaration(line, start+len(name)) {
+		return true
+	}
 	if prefix == "" {
 		return false
+	}
+	// `yield from (expr)` delegates to a generator; it doesn't call from().
+	if lower == "from" && hasKeywordSuffix(prefix, "yield") {
+		return true
+	}
+	// `function &get()` declares a function that returns by reference.
+	if trimmed := strings.TrimSuffix(prefix, "&"); trimmed != prefix {
+		prefix = strings.TrimSpace(trimmed)
 	}
 	switch {
 	case strings.HasSuffix(prefix, "function"),
@@ -414,6 +432,46 @@ func shouldSkipFunctionCall(line string, start int, name string) bool {
 	default:
 		return false
 	}
+}
+
+// isHookDeclaration reports whether the parenthesised list starting at or
+// after pos (just past a `get`/`set` name) is followed on the same line by a
+// hook body, `{` or `=>`, rather than ending a call.
+func isHookDeclaration(line string, pos int) bool {
+	i := pos
+	for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
+		i++
+	}
+	if i >= len(line) || line[i] != '(' {
+		return false
+	}
+	depth := 0
+	for ; i < len(line); i++ {
+		switch line[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				rest := strings.TrimSpace(line[i+1:])
+				return strings.HasPrefix(rest, "{") || strings.HasPrefix(rest, "=>")
+			}
+		}
+	}
+	return false
+}
+
+// hasKeywordSuffix reports whether s ends with the word kw, not with a longer
+// identifier ending in it.
+func hasKeywordSuffix(s, kw string) bool {
+	if !strings.HasSuffix(s, kw) {
+		return false
+	}
+	if len(s) == len(kw) {
+		return true
+	}
+	c := s[len(s)-len(kw)-1]
+	return !(c == '_' || c == '$' || c == '\\' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
 }
 
 // UnknownMemberRule detects unresolved method/property/constant accesses when
