@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Variable completion**: typing `$` lists the variables in scope at the cursor: the function's own variables (most recently used first), then its parameters, then `$this`, then PHP's superglobals. Variables only assigned below the cursor aren't offered, and an arrow function also sees its parent's variables.
 - **Magento 2 generated classes** resolve without running `bin/magento setup:di:compile` first. `ProductFactory`, `Product\Proxy`, `Product\Interceptor`, `ProductSearchResults`, `ProductExtensionInterface` and `ProductExtension` are built from the class they're generated for, so they're no longer reported as unknown, and they get hover, completion and go-to-definition (which opens the original class). `$this->productFactory->create()` is typed as `Product`. Extension attributes from `extension_attributes.xml` aren't read yet, so their getters and setters are neither completed nor reported. Magento projects are detected from `bin/magento` or a `magento/framework` requirement in `composer.json`, or by setting `framework` to `magento`.
 - Completion, hover and extension availability diagnostics for Imagick, SSH2, Redis, Memcached, APCu and igbinary. Extensions listed in Composer's `suggest` now count as available alongside `require` and `config.platform`.
 - Global constants declared with `const` at file level (`const MAX_ITEMS = 10;`, also inside a namespace) are now indexed as symbols, as class constants already were. This is what makes the SSH2 constants above known.
@@ -16,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Completion is ordered by scope**, closest first, before anything is typed and among equally good matches after:
+  - names imported with `use`;
+  - then the current namespace and its sub-namespaces;
+  - then each level up (siblings under `App\Http`, then under `App`);
+  - then the project's other root namespaces (`Database\`, `Tests\`);
+  - then Composer packages;
+  - then PHP's own functions, classes, keywords and types.
+
+  After `->` and `::`, the class's own members come before its traits' and its parent's, and an overridden method is listed once.
 - `maxIndexFiles` now defaults to `0`, meaning no limit, so large projects such as Magento 2 (about 25,000 files) are indexed in full instead of stopping at 10,000 files with the rest reported as unknown. Set a limit if memory is tight: all of Magento 2 takes about 600 MB. When the limit is reached, the server now logs a warning saying how to change it. The WebAssembly build keeps `10000` as its default to stay within browser memory.
 
 ### Fixed

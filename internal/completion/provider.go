@@ -163,7 +163,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		return nil
 	}
 	file := ctx.File
-	currentNS := ctx.Namespace
+	rk := newNameRanker(ctx.Namespace, ctx.Uses)
 
 	if strings.HasSuffix(trimmed, "->") || strings.HasSuffix(trimmed, "?->") {
 		return sanitizeCompletions(p.completeMemberAccess(uri, source, pos, prefix, file, parenAfterCursor))
@@ -185,17 +185,17 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 	}
 	if strings.HasSuffix(trimmed, "|>") {
-		return sanitizeCompletions(p.completePipe(currentNS))
+		return sanitizeCompletions(p.completePipe(rk))
 	}
 	if strings.Contains(trimmed, "#[") && !strings.Contains(trimmed, "]") {
-		return sanitizeCompletions(p.completeAttribute(attributeNamePrefix(trimmed), currentNS, source, file))
+		return sanitizeCompletions(p.completeAttribute(attributeNamePrefix(trimmed), source, rk, file))
 	}
 	words := strings.Fields(trimmed)
 	if len(words) >= 1 && (words[len(words)-1] == "new" || (len(words) >= 2 && words[len(words)-2] == "new")) {
-		return sanitizeCompletions(p.completeNew(prefix, currentNS, source, file))
+		return sanitizeCompletions(p.completeNew(prefix, source, rk, file))
 	}
 	if len(words) >= 1 && words[0] == "use" {
-		return sanitizeCompletions(p.completeUse(prefix, currentNS))
+		return sanitizeCompletions(p.completeUse(prefix, rk))
 	}
 	// Builder column/relation argument completion: ->where('col, ->with('rel
 	if method, partial, quote, ok := extractBuilderArgContext(trimmed); ok {
@@ -236,14 +236,18 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 	}
 	if filter, quoteCtx, ok := extractContainerArgContext(trimmed); ok {
-		return sanitizeCompletions(p.completeContainerResolve(source, filter, currentNS, quoteCtx, file))
+		return sanitizeCompletions(p.completeContainerResolve(source, filter, quoteCtx, file, rk))
+	}
+	// Variables in scope: `$` or `$na`
+	if typed, ok := typedVariablePrefix(prefix); ok {
+		return sanitizeCompletions(p.completeVariables(typed, lines, pos, file))
 	}
 	// Detect namespace path typing (contains \)
 	search := extractLastWord(prefix)
 	if strings.Contains(search, "\\") {
-		return sanitizeCompletions(p.completeNamespacePath(search, currentNS))
+		return sanitizeCompletions(p.completeNamespacePath(search, rk))
 	}
-	items := p.completeGlobal(prefix, currentNS, source, file)
+	items := p.completeGlobal(prefix, source, rk, file)
 	// Add $this if inside a class method
 	lastWord := ""
 	if w := strings.Fields(strings.TrimSpace(prefix)); len(w) > 0 {
@@ -256,7 +260,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 					Label:    "$this",
 					Kind:     protocol.CompletionItemKindVariable,
 					Detail:   "Current object instance",
-					SortText: "0$this",
+					SortText: rankKey(rankMember, 0, "$this"),
 				})
 			}
 		}
@@ -337,12 +341,20 @@ func (p *Provider) completeMemberAccess(uri, source string, pos protocol.Positio
 	}
 	var items []protocol.CompletionItem
 	enclosing := resolve.FindEnclosingClass(file, pos)
-	for _, m := range p.index.GetClassMembers(typeName) {
+	members := p.index.GetClassMembers(typeName)
+	distance := memberDistances(members)
+	seen := make(map[string]bool, len(members))
+	for _, m := range members {
 		// A class can reach its own private members, on any instance of itself.
 		if m.IsStatic || (m.Visibility == "private" && (enclosing == "" || m.ParentFQN != enclosing)) {
 			continue
 		}
-		item := protocol.CompletionItem{Label: m.Name, Detail: formatDetail(m), Documentation: formatDocumentation(m)}
+		// Members come closest first, so an override hides what it overrides.
+		if seen[m.Name] {
+			continue
+		}
+		seen[m.Name] = true
+		item := protocol.CompletionItem{Label: m.Name, Detail: formatDetail(m), Documentation: formatDocumentation(m), SortText: rankKey(rankMember, distance[m.ParentFQN], strings.TrimPrefix(m.Name, "$"))}
 		switch m.Kind {
 		case symbols.KindMethod:
 			item.Kind = protocol.CompletionItemKindMethod
@@ -389,8 +401,10 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 	if facadeConcrete != "" {
 		memberSets = append(memberSets, facadeConcrete)
 	}
-	for _, fqn := range memberSets {
-		for _, m := range p.index.GetClassMembers(fqn) {
+	for set, fqn := range memberSets {
+		members := p.index.GetClassMembers(fqn)
+		distance := memberDistances(members)
+		for _, m := range members {
 			isFacadeForwarded := fqn == facadeConcrete && m.Kind == symbols.KindMethod
 			isInstanceCall := instanceCalls && m.Kind == symbols.KindMethod
 			if !isFacadeForwarded && !isInstanceCall && !m.IsStatic && m.Kind != symbols.KindConstant && m.Kind != symbols.KindEnumCase {
@@ -403,7 +417,8 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 				continue
 			}
 			seen[m.Name] = true
-			item := protocol.CompletionItem{Label: m.Name, Detail: formatDetail(m), Documentation: formatDocumentation(m)}
+			// A facade's forwarded methods come after the facade's own members.
+			item := protocol.CompletionItem{Label: m.Name, Detail: formatDetail(m), Documentation: formatDocumentation(m), SortText: rankKey(rankMember, set*100+distance[m.ParentFQN], strings.TrimPrefix(m.Name, "$"))}
 			switch m.Kind {
 			case symbols.KindMethod:
 				item.Kind = protocol.CompletionItemKindMethod
@@ -1094,7 +1109,7 @@ func parenBalanced(s string) bool {
 	return depth == 0
 }
 
-func (p *Provider) completeNew(prefix, currentNS, source string, file *parser.FileNode) []protocol.CompletionItem {
+func (p *Provider) completeNew(prefix, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {
 	var items []protocol.CompletionItem
 	words := strings.Fields(prefix)
 	search := ""
@@ -1108,14 +1123,14 @@ func (p *Provider) completeNew(prefix, currentNS, source string, file *parser.Fi
 		if sym.Kind != symbols.KindClass {
 			continue
 		}
-		item := protocol.CompletionItem{Label: sym.Name, Kind: protocol.CompletionItemKindClass, Detail: sym.FQN, InsertText: sym.Name + "($0)", InsertTextFormat: 2, SortText: sortPriority(sym, currentNS)}
+		item := protocol.CompletionItem{Label: sym.Name, Kind: protocol.CompletionItemKindClass, Detail: sym.FQN, InsertText: sym.Name + "($0)", InsertTextFormat: 2, SortText: rk.key(sym, sym.Name)}
 		item.AdditionalTextEdits = buildAutoImportEdit(sym.FQN, source, file)
 		items = append(items, item)
 	}
 	return items
 }
 
-func (p *Provider) completeUse(prefix, currentNS string) []protocol.CompletionItem {
+func (p *Provider) completeUse(prefix string, rk nameRanker) []protocol.CompletionItem {
 	parts := strings.Fields(prefix)
 	search := ""
 	if len(parts) > 1 {
@@ -1123,7 +1138,7 @@ func (p *Provider) completeUse(prefix, currentNS string) []protocol.CompletionIt
 	}
 	// If typing a namespace path, use namespace-aware completion
 	if strings.Contains(search, "\\") {
-		return p.completeNamespacePath(search, currentNS)
+		return p.completeNamespacePath(search, rk)
 	}
 	// Otherwise show all top-level namespace segments + global symbols
 	var items []protocol.CompletionItem
@@ -1143,17 +1158,17 @@ func (p *Provider) completeUse(prefix, currentNS string) []protocol.CompletionIt
 			if sym.Kind == symbols.KindMethod || sym.Kind == symbols.KindProperty {
 				continue
 			}
-			items = append(items, protocol.CompletionItem{Label: sym.FQN, Kind: symKind(sym.Kind), Detail: sym.Name, SortText: sortPriority(sym, currentNS)})
+			items = append(items, protocol.CompletionItem{Label: sym.FQN, Kind: symKind(sym.Kind), Detail: sym.Name, SortText: rk.key(sym, sym.FQN)})
 		}
 	}
 	return items
 }
 
-func (p *Provider) completePipe(currentNS string) []protocol.CompletionItem {
+func (p *Provider) completePipe(rk nameRanker) []protocol.CompletionItem {
 	var items []protocol.CompletionItem
 	for _, sym := range p.index.SearchByPrefix("") {
 		if sym.Kind == symbols.KindFunction && len(sym.Params) > 0 {
-			items = append(items, protocol.CompletionItem{Label: sym.Name, Kind: protocol.CompletionItemKindFunction, Detail: formatDetail(sym), SortText: sortPriority(sym, currentNS)})
+			items = append(items, protocol.CompletionItem{Label: sym.Name, Kind: protocol.CompletionItemKindFunction, Detail: formatDetail(sym), SortText: rk.key(sym, sym.Name)})
 		}
 	}
 	return items
@@ -1175,7 +1190,7 @@ func attributeNamePrefix(trimmed string) string {
 	return strings.TrimSpace(tail)
 }
 
-func (p *Provider) completeAttribute(prefix, currentNS, source string, file *parser.FileNode) []protocol.CompletionItem {
+func (p *Provider) completeAttribute(prefix, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {
 	attrs := [][2]string{
 		{"Override", "PHP 8.3"}, {"Deprecated", "PHP 8.4"}, {"SensitiveParameter", "Sensitive in stack traces"}, {"AllowDynamicProperties", "Allow dynamic props"},
 	}
@@ -1200,7 +1215,7 @@ func (p *Provider) completeAttribute(prefix, currentNS, source string, file *par
 				Label:               sym.Name,
 				Kind:                protocol.CompletionItemKindClass,
 				Detail:              sym.FQN,
-				SortText:            sortPriority(sym, currentNS),
+				SortText:            rk.key(sym, sym.Name),
 				AdditionalTextEdits: buildAutoImportEdit(sym.FQN, source, file),
 			})
 		}
@@ -1208,7 +1223,7 @@ func (p *Provider) completeAttribute(prefix, currentNS, source string, file *par
 	return items
 }
 
-func (p *Provider) completeNamespacePath(search, currentNS string) []protocol.CompletionItem {
+func (p *Provider) completeNamespacePath(search string, rk nameRanker) []protocol.CompletionItem {
 	var items []protocol.CompletionItem
 
 	// Strip leading \ for absolute namespace paths
@@ -1242,7 +1257,7 @@ func (p *Provider) completeNamespacePath(search, currentNS string) []protocol.Co
 					Label:    sym.Name,
 					Kind:     symKind(sym.Kind),
 					Detail:   sym.FQN,
-					SortText: sortPriority(sym, currentNS),
+					SortText: rk.key(sym, sym.Name),
 				}
 				if sym.Kind == symbols.KindFunction {
 					item.InsertText = sym.Name + "($0)"
@@ -1272,7 +1287,7 @@ func (p *Provider) completeNamespacePath(search, currentNS string) []protocol.Co
 			Label:    sym.Name,
 			Kind:     symKind(sym.Kind),
 			Detail:   sym.FQN,
-			SortText: sortPriority(sym, currentNS),
+			SortText: rk.key(sym, sym.Name),
 		}
 		if sym.Kind == symbols.KindFunction {
 			item.InsertText = sym.Name + "($0)"
@@ -1306,7 +1321,7 @@ func extractLastWord(prefix string) string {
 	return words[len(words)-1]
 }
 
-func (p *Provider) completeGlobal(prefix, currentNS, source string, file *parser.FileNode) []protocol.CompletionItem {
+func (p *Provider) completeGlobal(prefix, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {
 	var items []protocol.CompletionItem
 	words := strings.Fields(strings.TrimSpace(prefix))
 	search := ""
@@ -1317,12 +1332,12 @@ func (p *Provider) completeGlobal(prefix, currentNS, source string, file *parser
 	// PHP primitive types — highest priority
 	for _, t := range []string{"string", "int", "float", "bool", "array", "object", "callable", "iterable", "void", "never", "null", "mixed", "self", "static", "true", "false"} {
 		if search == "" || strings.HasPrefix(t, lsearch) {
-			items = append(items, protocol.CompletionItem{Label: t, Kind: protocol.CompletionItemKindTypeParameter, SortText: "0" + t})
+			items = append(items, protocol.CompletionItem{Label: t, Kind: protocol.CompletionItemKindTypeParameter, SortText: keywordKey(t)})
 		}
 	}
 	for _, kw := range []string{"abstract", "class", "const", "enum", "extends", "final", "fn", "for", "foreach", "function", "if", "implements", "interface", "match", "namespace", "new", "private", "protected", "public", "readonly", "return", "switch", "throw", "trait", "try", "use", "while", "yield"} {
 		if search == "" || strings.HasPrefix(kw, lsearch) {
-			items = append(items, protocol.CompletionItem{Label: kw, Kind: protocol.CompletionItemKindKeyword, SortText: "5" + kw})
+			items = append(items, protocol.CompletionItem{Label: kw, Kind: protocol.CompletionItemKindKeyword, SortText: keywordKey(kw)})
 		}
 	}
 	for _, sym := range p.index.SearchByPrefix(search) {
@@ -1345,36 +1360,20 @@ func (p *Provider) completeGlobal(prefix, currentNS, source string, file *parser
 			if strings.Contains(sym.FQN, "\\") && sym.Source == symbols.SourceVendor {
 				continue
 			}
-			item := protocol.CompletionItem{Label: sym.Name, Kind: symKind(sym.Kind), Detail: sym.FQN, SortText: sortPriority(sym, currentNS)}
+			item := protocol.CompletionItem{Label: sym.Name, Kind: symKind(sym.Kind), Detail: sym.FQN, SortText: rk.key(sym, sym.Name)}
 			item.InsertText = sym.Name + "($0)"
 			item.InsertTextFormat = 2
 			items = append(items, item)
 		case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
 			// Only show type-level symbols when user is actively typing a name
 			if search != "" {
-				item := protocol.CompletionItem{Label: sym.Name, Kind: symKind(sym.Kind), Detail: sym.FQN, SortText: sortPriority(sym, currentNS)}
+				item := protocol.CompletionItem{Label: sym.Name, Kind: symKind(sym.Kind), Detail: sym.FQN, SortText: rk.key(sym, sym.Name)}
 				item.AdditionalTextEdits = buildAutoImportEdit(sym.FQN, source, file)
 				items = append(items, item)
 			}
 		}
 	}
 	return items
-}
-
-func sortPriority(sym *symbols.Symbol, currentNS string) string {
-	switch sym.Source {
-	case symbols.SourceProject:
-		if currentNS != "" && strings.HasPrefix(sym.FQN, currentNS+"\\") {
-			return "1" + sym.Name
-		}
-		return "2" + sym.Name
-	case symbols.SourceBuiltin:
-		return "3" + sym.Name
-	case symbols.SourceVendor:
-		return "4" + sym.Name
-	default:
-		return "2" + sym.Name
-	}
 }
 
 func extractNamespace(source string) string {

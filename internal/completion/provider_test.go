@@ -7,45 +7,6 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func TestSortPriority(t *testing.T) {
-	tests := []struct {
-		name    string
-		sym     *symbols.Symbol
-		ns      string
-		wantPfx string
-	}{
-		{"same namespace project", &symbols.Symbol{Name: "Foo", FQN: "App\\Models\\Foo", Source: symbols.SourceProject}, "App\\Models", "1"},
-		{"different namespace project", &symbols.Symbol{Name: "Bar", FQN: "App\\Services\\Bar", Source: symbols.SourceProject}, "App\\Models", "2"},
-		{"builtin", &symbols.Symbol{Name: "strlen", FQN: "strlen", Source: symbols.SourceBuiltin}, "App\\Models", "3"},
-		{"vendor", &symbols.Symbol{Name: "collect", FQN: "collect", Source: symbols.SourceVendor}, "App\\Models", "4"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := sortPriority(tt.sym, tt.ns)
-			if got[0:1] != tt.wantPfx {
-				t.Errorf("sortPriority() prefix = %q, want %q", got[0:1], tt.wantPfx)
-			}
-		})
-	}
-}
-
-func TestSortOrdering(t *testing.T) {
-	projectSame := sortPriority(&symbols.Symbol{Name: "Foo", FQN: "App\\Models\\Foo", Source: symbols.SourceProject}, "App\\Models")
-	projectOther := sortPriority(&symbols.Symbol{Name: "Bar", FQN: "App\\Services\\Bar", Source: symbols.SourceProject}, "App\\Models")
-	builtin := sortPriority(&symbols.Symbol{Name: "strlen", FQN: "strlen", Source: symbols.SourceBuiltin}, "App\\Models")
-	vendor := sortPriority(&symbols.Symbol{Name: "collect", FQN: "collect", Source: symbols.SourceVendor}, "App\\Models")
-
-	if projectSame >= projectOther {
-		t.Error("same-namespace project should sort before other-namespace project")
-	}
-	if projectOther >= builtin {
-		t.Error("project should sort before builtins")
-	}
-	if builtin >= vendor {
-		t.Error("builtins should sort before vendor")
-	}
-}
-
 func TestKeywordSortLast(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
@@ -55,10 +16,8 @@ func TestKeywordSortLast(t *testing.T) {
 	items := p.GetCompletions("file:///test.php", source, protocol.Position{Line: 2, Character: 0})
 
 	for _, item := range items {
-		if item.Kind == protocol.CompletionItemKindKeyword {
-			if item.SortText[0:1] != "5" {
-				t.Errorf("keyword %q has SortText %q, expected prefix '5'", item.Label, item.SortText)
-			}
+		if item.Kind == protocol.CompletionItemKindKeyword && item.SortText != keywordKey(item.Label) {
+			t.Errorf("keyword %q has SortText %q, want it ranked with PHP's builtins", item.Label, item.SortText)
 		}
 	}
 }
@@ -104,25 +63,13 @@ function str_vendor(): string { return ""; }
 		sortTexts[item.Label] = item.SortText
 	}
 
-	// Project symbol in same namespace should sort first
-	if st, ok := sortTexts["str_project"]; ok {
-		if st[0:1] != "1" {
-			t.Errorf("str_project SortText = %q, expected prefix '1' (same namespace)", st)
-		}
+	// Same namespace first, then vendor, then PHP's builtins.
+	project, vendor, builtin := sortTexts["str_project"], sortTexts["str_vendor"], sortTexts["str_contains"]
+	if project == "" || vendor == "" || builtin == "" {
+		t.Fatalf("missing items: %v", sortTexts)
 	}
-
-	// Builtin str_contains should sort as builtin
-	if st, ok := sortTexts["str_contains"]; ok {
-		if st[0:1] != "3" {
-			t.Errorf("str_contains SortText = %q, expected prefix '3' (builtin)", st)
-		}
-	}
-
-	// Vendor function should sort last among symbols
-	if st, ok := sortTexts["str_vendor"]; ok {
-		if st[0:1] != "4" {
-			t.Errorf("str_vendor SortText = %q, expected prefix '4' (vendor)", st)
-		}
+	if !(project < vendor && vendor < builtin) {
+		t.Errorf("want project < vendor < builtin, got %q, %q, %q", project, vendor, builtin)
 	}
 }
 
