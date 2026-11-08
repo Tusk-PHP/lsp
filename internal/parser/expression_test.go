@@ -908,3 +908,49 @@ func truncate(s string, n int) string {
 	}
 	return s[:n] + "..."
 }
+
+// TestMatchMethodWithoutReturnType verifies that a method named match whose
+// parameter list is followed directly by its body, as in Laravel's Str::match
+// and Relation::match, is not read as a match expression.
+func TestMatchMethodWithoutReturnType(t *testing.T) {
+	src := `<?php
+class Str {
+    public static function match($pattern, $subject)
+    {
+        preg_match($pattern, $subject, $matches);
+
+        if (! $matches) {
+            return '';
+        }
+
+        return $matches[1] ?? $matches[0];
+    }
+
+    public function &match2() { return $this->x; }
+}
+
+interface Relation {
+    public function match(array $models, $results, $relation);
+}
+
+function match($x) { return $x; }
+
+$a = Str::match('/a/', 'a');
+$b = $relation->match($models, $results, 'rel');
+$c = $relation?->match($models, $results, 'rel');
+$d = match ($a) {
+    'a' => 1,
+    default => 2,
+};
+`
+	r := New().Parse(src)
+	for _, e := range r.Errors {
+		t.Errorf("unexpected parse error line %d: %s", e.Line, e.Message)
+	}
+	if len(r.Matches) != 1 || r.Matches[0].Line != 25 {
+		t.Errorf("expected only the match expression on line 26, got %+v", r.Matches)
+	}
+	if len(r.Classes) == 0 || len(r.Classes[0].Methods) != 2 {
+		t.Errorf("class Str and its methods not parsed correctly: %+v", r.Classes)
+	}
+}

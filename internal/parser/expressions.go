@@ -158,7 +158,7 @@ func (s *exprScanner) scan() {
 
 		// 'match' keyword (it is tokenised as TokenIdentifier since it isn't in
 		// the keyword list — PHP 8 reserved words handled here).
-		case t.Kind == TokenIdentifier && t.Value == "match":
+		case t.Kind == TokenIdentifier && t.Value == "match" && !s.matchIsName():
 			startPos := s.pos
 			m, ok := s.parseMatchExpression()
 			if ok {
@@ -182,6 +182,23 @@ func (s *exprScanner) scan() {
 			s.advance()
 		}
 	}
+}
+
+// matchIsName reports whether the 'match' at the current position names a
+// function or member rather than starting a match expression: a declaration
+// (`function match(`, `function &match(`), a member access (`->match(`,
+// `?->match(`, `::match(`) or a constant (`const match`).
+func (s *exprScanner) matchIsName() bool {
+	prev := s.peekAt(-1)
+	if prev.Kind == TokenAmpersand {
+		prev = s.peekAt(-2)
+		return prev.Kind == TokenFunction
+	}
+	switch prev.Kind {
+	case TokenFunction, TokenArrow, TokenDoubleColon, TokenConst:
+		return true
+	}
+	return false
 }
 
 // isCallHead returns true when the current token can start a call-site
@@ -757,7 +774,7 @@ func (s *exprScanner) skipMatchArmBody() {
 			}
 			s.advance()
 		// Nested match expression — recursively parse and collect it.
-		case t.Kind == TokenIdentifier && t.Value == "match" && depth >= 0:
+		case t.Kind == TokenIdentifier && t.Value == "match" && depth >= 0 && !s.matchIsName():
 			startPos := s.pos
 			nested, ok := s.parseMatchExpression()
 			if ok {

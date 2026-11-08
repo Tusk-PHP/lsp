@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A method or function named `match()` with no return type, such as Laravel's `Str::match()` and the Eloquent relations' `match()`, is no longer read as a `match` expression, which reported "malformed match arm" syntax errors at the end of the method.
 - The `deprecated` diagnostic no longer flags methods that share a name with a deprecated PHP function, such as Laravel's `$collection->each(...)` or `Arr::each(...)`, nor matches inside `foreach(`, strings or comments. Only real calls to the global `each()`, `create_function()`, `utf8_encode()` and `utf8_decode()` are reported.
 - Hover now works on a method chained after a multi-line argument list, such as `->each` in `Collection::make([...])->each(...)` where the array spans several lines.
 - Heredoc and nowdoc strings are now read as strings. Their contents (SQL, braces, words followed by `(`) no longer cause `unknown-function` or `unreachable-code` warnings, nor throw off where a class or method ends. Variables interpolated in a heredoc count as used.
