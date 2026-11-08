@@ -28,6 +28,12 @@ func (r *Resolver) scopeDocument(lines []string) *scope.Document {
 	return r.scopeDoc
 }
 
+// ScopeDocument returns the scopes and variable bindings of the source, cached
+// for as long as the source doesn't change. Treat it as read-only.
+func (r *Resolver) ScopeDocument(lines []string) *scope.Document {
+	return r.scopeDocument(lines)
+}
+
 func (r *Resolver) variableScopeAt(varName string, lines []string, pos protocol.Position) variableScope {
 	s := r.scopeDocument(lines).ScopeAt(pos)
 	if s == nil || s.Kind == scope.ScopeFile {

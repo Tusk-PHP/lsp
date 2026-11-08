@@ -82,7 +82,7 @@ func extractContainerArgContext(trimmed string) (string, string, bool) {
 // quoteCtx is the opening quote character already typed ("'" or "\""), or empty
 // if the user hasn't typed a quote yet. String bindings get wrapped in quotes
 // accordingly.
-func (p *Provider) completeContainerResolve(source, filter, currentNS, quoteCtx string, file *parser.FileNode) []protocol.CompletionItem {
+func (p *Provider) completeContainerResolve(source, filter, quoteCtx string, file *parser.FileNode, rk nameRanker) []protocol.CompletionItem {
 	var items []protocol.CompletionItem
 	lfilter := strings.ToLower(filter)
 
@@ -160,7 +160,7 @@ func (p *Provider) completeContainerResolve(source, filter, currentNS, quoteCtx 
 				Kind:       protocol.CompletionItemKindClass,
 				Detail:     sym.FQN,
 				InsertText: classInsert,
-				SortText:   sortPriority(sym, currentNS),
+				SortText:   rk.key(sym, sym.Name),
 			})
 		}
 	}
