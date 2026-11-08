@@ -124,7 +124,8 @@ func (ws *Bootstrapped) IndexWorkspace() int {
 			}
 			return nil
 		}
-		if !IsPHPSource(path) {
+		// Blade views declare no symbols; their PHP is read when they're opened.
+		if !IsPHPSource(path) || IsBlade(path) {
 			return nil
 		}
 		if limit := ws.Config.MaxIndexFiles; limit > 0 && count >= limit {

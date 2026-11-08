@@ -8,6 +8,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/config"
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -63,6 +64,38 @@ func NewProvider(index *symbols.Index, framework, rootPath string, logger *log.L
 // Called on every file change — only includes lightweight checks.
 func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 	var diags []protocol.Diagnostic
+	if workspace.IsBlade(uri) {
+		// A Blade view is checked through the PHP it contains, and only what
+		// is found in that PHP is reported, at its place in the view.
+		doc := blade.Compile(source)
+		diags = toTemplate(doc, p.analyzeNative(uri, doc.PHP, true))
+	} else {
+		diags = p.analyzeNative(uri, source, false)
+	}
+	p.mu.RLock()
+	if cached, ok := p.toolResults[uri]; ok {
+		diags = append(diags, cached...)
+	}
+	if cached, ok := p.saveResults[uri]; ok {
+		diags = append(diags, cached...)
+	}
+	p.mu.RUnlock()
+
+	// Soft-mode the unknown-* rules until the workspace + composer index has
+	// completed at least once. The rules still ran (for testability), but their
+	// findings depend on cross-file symbol presence and produce false positives
+	// during the warm-up window.
+	if p.index != nil && !p.index.Ready() {
+		diags = filterOutCodes(diags, "unknown-class", "unknown-function", "unknown-member", "invalid-override")
+	}
+
+	return diags
+}
+
+// analyzeNative runs the native rules on PHP source. bladePHP is set for the
+// virtual PHP of a Blade view.
+func (p *Provider) analyzeNative(uri, source string, bladePHP bool) []protocol.Diagnostic {
+	var diags []protocol.Diagnostic
 	file := parser.ParseFile(source)
 	if file != nil {
 		diags = append(diags, parserErrorsToDiagnostics(file.Errors, source)...)
@@ -102,7 +135,9 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 			fs := (&checks.UndefinedVariableRule{IncludedFile: workspace.IsTemplate(uri)}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("undefined-variable", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
-		if p.cfg.IsRuleEnabled("unused-variable") {
+		// A Blade view's variables are also read by the views it includes,
+		// which see all of them, so none can be called unused from here.
+		if p.cfg.IsRuleEnabled("unused-variable") && !bladePHP {
 			fs := (&checks.UnusedVariableRule{}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("unused-variable", checks.SeverityHint, findingsToDiagnostics(fs))...)
 		}
@@ -128,29 +163,34 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 			diags = append(diags, p.applyRuleSeverity("argument-count-mismatch", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 	}
-	p.mu.RLock()
-	if cached, ok := p.toolResults[uri]; ok {
-		diags = append(diags, cached...)
-	}
-	if cached, ok := p.saveResults[uri]; ok {
-		diags = append(diags, cached...)
-	}
-	p.mu.RUnlock()
-
-	// Soft-mode the unknown-* rules until the workspace + composer index has
-	// completed at least once. The rules still ran (for testability), but their
-	// findings depend on cross-file symbol presence and produce false positives
-	// during the warm-up window.
-	if p.index != nil && !p.index.Ready() {
-		diags = filterOutCodes(diags, "unknown-class", "unknown-function", "unknown-member", "invalid-override")
-	}
-
 	return diags
+}
+
+// toTemplate moves diagnostics found in a Blade view's virtual PHP to the
+// view. Those that start in generated PHP have no place in the view and are
+// dropped.
+func toTemplate(doc *blade.Document, diags []protocol.Diagnostic) []protocol.Diagnostic {
+	out := diags[:0]
+	for _, d := range diags {
+		r := d.Range
+		sl, sc, el, ec, ok := doc.TemplateRange(r.Start.Line, r.Start.Character, r.End.Line, r.End.Character)
+		if !ok {
+			continue
+		}
+		d.Range = protocol.Range{Start: protocol.Position{Line: sl, Character: sc}, End: protocol.Position{Line: el, Character: ec}}
+		out = append(out, d)
+	}
+	return out
 }
 
 // AnalyzeOnSave runs heavier checks that need type resolution or model lookups.
 // Called on file save only. Results are cached and merged into Analyze() output.
 func (p *Provider) AnalyzeOnSave(uri, source string) {
+	var doc *blade.Document
+	if workspace.IsBlade(uri) {
+		doc = blade.Compile(source)
+		source = doc.PHP
+	}
 	file := parser.ParseFile(source)
 	if file == nil {
 		return
@@ -174,6 +214,9 @@ func (p *Provider) AnalyzeOnSave(uri, source string) {
 		}
 	}
 
+	if doc != nil {
+		diags = toTemplate(doc, diags)
+	}
 	p.mu.Lock()
 	p.saveResults[uri] = diags
 	p.mu.Unlock()

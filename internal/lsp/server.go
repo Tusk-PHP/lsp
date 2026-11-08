@@ -1085,6 +1085,11 @@ func (s *Server) republishOpenDocuments() {
 
 // indexFileByURI indexes a file, using the IDE helper merge strategy for known IDE helper files.
 func (s *Server) indexFileByURI(uri string, source string) {
+	// Blade views declare no symbols, and reading one as PHP would index the
+	// HTML around its PHP.
+	if workspace.IsBlade(uri) {
+		return
+	}
 	path := symbols.URIToPath(uri)
 	if workspace.IsIDEHelperFile(path) {
 		s.index.IndexIDEHelperFile(uri, source)
