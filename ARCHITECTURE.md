@@ -155,7 +155,7 @@ type BuiltinProfile struct {
 Layer ordering (deterministic, later layers override earlier ones):
 
 1. Generated fallback registry (cheap names-only entries from `phpstorm-stubs` generation)
-2. PHP 7.4 core baseline (full stub file: `internal/stubs/php/core/php-7.4.php`)
+2. PHP 7.4 core baseline (full stub file: `internal/stubs/php/core/php-7.4.php`, plus the per-area core stubs such as `core/spl/` for the iteration classes with their PHPDoc generics)
 3. Core version deltas up to `PHPVersion` (e.g. `php-8.0.php`, `php-8.1.php`, …)
 4. Enabled extension baselines (`internal/stubs/php/extensions/<ext>/php-7.4.php`)
 5. Extension version deltas up to `PHPVersion`
