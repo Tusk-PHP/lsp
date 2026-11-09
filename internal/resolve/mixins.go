@@ -3,7 +3,6 @@ package resolve
 import (
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -24,7 +23,7 @@ func (r *Resolver) MixinTypes(rt ResolvedType) []ResolvedType {
 		if sym == nil || !strings.Contains(sym.DocComment, "mixin") {
 			continue
 		}
-		doc := parser.ParseDocBlock(sym.DocComment)
+		doc := r.parseDoc(sym.DocComment)
 		if doc == nil || len(doc.Mixins) == 0 {
 			continue
 		}
@@ -32,7 +31,7 @@ func (r *Resolver) MixinTypes(rt ResolvedType) []ResolvedType {
 		subst = r.fillUnbound(subst, sym.Templates, cls, nil)
 		env := typeEnv{subst: subst, static: rt, owner: cls}
 		for _, m := range doc.Mixins {
-			if t := r.applyEnv(ParseGenericType(m), env); !t.IsEmpty() && t.FQN != "mixed" && !IsBuiltinTypeName(t.FQN) {
+			if t := r.applyEnv(r.parseType(m), env); !t.IsEmpty() && t.FQN != "mixed" && !IsBuiltinTypeName(t.FQN) {
 				out = append(out, t)
 			}
 		}

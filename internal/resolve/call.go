@@ -95,7 +95,7 @@ func (r *Resolver) paramPatterns(sym *symbols.Symbol, doc *parser.DocBlock) []pa
 		}
 		pp := paramPattern{name: p.Name, variadic: p.IsVariadic, def: p.DefaultValue}
 		if raw != "" {
-			pp.pattern = ParseGenericType(r.expandTypeAliases(raw, ownerScopeFQN(sym, positionZero, nil), nil))
+			pp.pattern = r.parseType(r.expandTypeAliases(raw, ownerScopeFQN(sym, positionZero, nil), nil))
 		}
 		out = append(out, pp)
 	}
@@ -217,7 +217,7 @@ func (r *Resolver) dropOutOfBound(bound map[string]ResolvedType, tmpls []symbols
 		if !ok || t.Bound == "" {
 			continue
 		}
-		b := r.applyEnv(ParseGenericType(t.Bound), typeEnv{owner: owner, file: file})
+		b := r.applyEnv(r.parseType(t.Bound), typeEnv{owner: owner, file: file})
 		if r.typeMatches(v, b) == matchNo {
 			delete(bound, t.Name)
 		}
@@ -261,7 +261,7 @@ func (r *Resolver) MemberTypeForCall(member *symbols.Symbol, file *parser.FileNo
 	if raw == "" || raw == "void" {
 		return r.memberTypeFallback(member, file, callerFQN, typeContext)
 	}
-	pattern := ParseGenericType(raw)
+	pattern := r.parseType(raw)
 	if pattern.IsEmpty() {
 		return r.memberTypeFallback(member, file, callerFQN, typeContext)
 	}
@@ -277,7 +277,7 @@ func (r *Resolver) MemberTypeForCall(member *symbols.Symbol, file *parser.FileNo
 	if member.Kind == symbols.KindMethod {
 		var doc *parser.DocBlock
 		if member.DocComment != "" && (len(member.Templates) > 0 || pattern.hasConditional()) {
-			doc = parser.ParseDocBlock(member.DocComment)
+			doc = r.parseDoc(member.DocComment)
 		}
 		if len(member.Templates) > 0 || pattern.hasConditional() {
 			params = r.paramPatterns(member, doc)
@@ -341,11 +341,11 @@ func (r *Resolver) FunctionTypeForCall(fn *symbols.Symbol, file *parser.FileNode
 	if raw == "" || raw == "void" {
 		return ResolvedType{}
 	}
-	pattern := ParseGenericType(raw)
+	pattern := r.parseType(raw)
 	var params []paramPattern
 	var subst map[string]ResolvedType
 	if len(fn.Templates) > 0 || pattern.hasConditional() {
-		params = r.paramPatterns(fn, parser.ParseDocBlock(fn.DocComment))
+		params = r.paramPatterns(fn, r.parseDoc(fn.DocComment))
 		if len(fn.Templates) > 0 {
 			subst = r.bindCallTemplates(params, call, templateNames(fn.Templates), nil, fn.FQN, file)
 			r.dropOutOfBound(subst, fn.Templates, fn.FQN, file)
@@ -363,7 +363,7 @@ func (r *Resolver) FunctionTypeForCall(fn *symbols.Symbol, file *parser.FileNode
 func (r *Resolver) functionReturnType(fn *symbols.Symbol) string {
 	var docType string
 	if fn.DocComment != "" {
-		if doc := parser.ParseDocBlock(fn.DocComment); doc != nil {
+		if doc := r.parseDoc(fn.DocComment); doc != nil {
 			docType = doc.Return.Type
 		}
 	}
@@ -659,7 +659,7 @@ func (r *Resolver) inheritedDocMethod(member *symbols.Symbol) *symbols.Symbol {
 			}
 			visited[anc] = true
 			if m := r.Index.Lookup(anc + "::" + member.Name); m != nil && m.Kind == symbols.KindMethod && strings.Contains(m.DocComment, "return") {
-				if doc := parser.ParseDocBlock(m.DocComment); doc != nil && doc.Return.Type != "" {
+				if doc := r.parseDoc(m.DocComment); doc != nil && doc.Return.Type != "" {
 					return m
 				}
 			}

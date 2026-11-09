@@ -239,7 +239,7 @@ func (r *Resolver) closureExpectations(closure *scope.Scope, lines []string, fil
 	}
 	var doc *parser.DocBlock
 	if member.DocComment != "" {
-		doc = parser.ParseDocBlock(member.DocComment)
+		doc = r.parseDoc(member.DocComment)
 	}
 	params := r.paramPatterns(member, doc)
 	idx := -1
@@ -285,7 +285,7 @@ func (r *Resolver) closureExpectations(closure *scope.Scope, lines []string, fil
 	if doc != nil {
 		for _, ct := range doc.ClosureThis {
 			if ct.Name == params[idx].name {
-				closureThis = r.applyEnv(ParseGenericType(ct.Type), env)
+				closureThis = r.applyEnv(r.parseType(ct.Type), env)
 			}
 		}
 	}

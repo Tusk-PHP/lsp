@@ -93,7 +93,7 @@ Tusk PHP indexes PHP 7.4 through 8.5. It picks the version from your Composer pl
 
 Every entry is checked through the running server by `internal/lsp/php_versions_test.go`, so it means completion, hover, go-to-definition and diagnostics see the feature, not just that it parses.
 
-PHPDoc is well covered: `@template` generics, `@phpstan-type` / `@psalm-type` aliases, array shapes and `Collection<int, User>` all resolve. Conditional return types fall back to the union of both branches.
+PHPDoc generics are read the way [PHPStan](https://phpstan.org/blog/generics-in-php-using-phpdocs) defines them: `@template` on classes, methods and functions (bound from arguments, `class-string<T>`, constructors and closures, with bounds and defaults), `@extends` / `@implements` / `@use` through every level, `list<T>`, `iterable<K, V>`, generators, array and object shapes, `key-of` / `value-of`, callable signatures, conditional return types decided by the arguments, generic `@mixin`, and narrowing with `@phpstan-assert`, `@param-out` and `@phpstan-self-out`. `@phpstan-` and `@psalm-` tags win over plain ones, and `@phpstan-type` / `@psalm-type` aliases resolve. Hover, completion and diagnostics all see the same types; `internal/lsp/generics_test.go` checks each of these through the running server.
 
 ## Benchmarks
 
