@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-VERSION="${VERSION:-0.9.0}"
+VERSION="${VERSION:-0.13.0}"
 OUTPUT_DIR="./build"
 rm -rf "${OUTPUT_DIR}" && mkdir -p "${OUTPUT_DIR}"
 
