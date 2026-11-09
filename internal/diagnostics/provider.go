@@ -98,6 +98,10 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP bool) []protocol.D
 	var diags []protocol.Diagnostic
 	file := parser.ParseFile(source)
 	if file != nil {
+		// One run of the rules over this version of the file: the rules that
+		// type receivers share what they learn, and find attribute uses once.
+		typeResolver := MemoizeTypeResolver(p.TypeResolver)
+		uses := &checks.MemberUseCache{}
 		diags = append(diags, parserErrorsToDiagnostics(file.Errors, source)...)
 		diags = append(diags, p.checkClassStructure(file)...)
 		if p.cfg.IsRuleEnabled("unknown-class") {
@@ -109,7 +113,7 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP bool) []protocol.D
 			diags = append(diags, p.applyRuleSeverity("unknown-function", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.TypeResolver != nil && p.cfg.IsRuleEnabled("unknown-member") {
-			fs := (&checks.UnknownMemberRule{TypeResolver: p.TypeResolver}).Check(file, source, p.index)
+			fs := (&checks.UnknownMemberRule{TypeResolver: typeResolver}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("unknown-member", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.BuiltinUnavailableRule != nil && p.cfg.IsRuleEnabled("builtin-unavailable") {
@@ -142,7 +146,7 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP bool) []protocol.D
 			diags = append(diags, p.applyRuleSeverity("unused-variable", checks.SeverityHint, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("deprecated") {
-			fs := (&checks.DeprecatedUsageRule{TypeResolver: p.TypeResolver}).Check(file, source, p.index)
+			fs := (&checks.DeprecatedUsageRule{TypeResolver: typeResolver, Uses: uses}).Check(file, source, p.index)
 			deprecatedFns := &checks.DeprecatedFunctionRule{}
 			if p.BuiltinUnavailableRule != nil {
 				deprecatedFns.PHPVersion = p.BuiltinUnavailableRule.PHPVersion
@@ -151,7 +155,7 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP bool) []protocol.D
 			diags = append(diags, p.applyRuleSeverity("deprecated", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("unused-result") {
-			fs := (&checks.UnusedResultRule{TypeResolver: p.TypeResolver}).Check(file, source, p.index)
+			fs := (&checks.UnusedResultRule{TypeResolver: typeResolver, Uses: uses}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("unused-result", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("invalid-override") {
