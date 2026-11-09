@@ -42,17 +42,18 @@ func NativeRules(opts NativeRulesOptions) []checks.Rule {
 	// The rules returned are run together over one file: they share what
 	// they learn about types and attribute uses.
 	opts.TypeResolver = MemoizeTypeResolver(opts.TypeResolver)
-	uses := &checks.MemberUseCache{}
+	shared := &checks.Shared{}
+	uses := &checks.MemberUseCache{Shared: shared}
 	rules := []checks.Rule{
 		&checks.UnknownClassRule{},
 		&checks.UnknownFunctionRule{},
 		&checks.UnusedImportsRule{},
 		&checks.UnusedPrivateRule{},
-		&checks.UnreachableCodeRule{},
+		&checks.UnreachableCodeRule{Shared: shared},
 		&checks.RedundantUnionRule{},
-		&checks.UndefinedVariableRule{},
-		&checks.UnusedVariableRule{},
-		&checks.ArgumentCountRule{},
+		&checks.UndefinedVariableRule{Shared: shared},
+		&checks.UnusedVariableRule{Shared: shared},
+		&checks.ArgumentCountRule{Shared: shared},
 		&checks.InvalidOverrideRule{},
 		&checks.DeprecatedUsageRule{TypeResolver: opts.TypeResolver, Uses: uses},
 		&checks.UnusedResultRule{TypeResolver: opts.TypeResolver, Uses: uses},

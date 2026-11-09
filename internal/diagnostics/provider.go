@@ -101,7 +101,8 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP bool) []protocol.D
 		// One run of the rules over this version of the file: the rules that
 		// type receivers share what they learn, and find attribute uses once.
 		typeResolver := MemoizeTypeResolver(p.TypeResolver)
-		uses := &checks.MemberUseCache{}
+		shared := &checks.Shared{}
+		uses := &checks.MemberUseCache{Shared: shared}
 		diags = append(diags, parserErrorsToDiagnostics(file.Errors, source)...)
 		diags = append(diags, p.checkClassStructure(file)...)
 		if p.cfg.IsRuleEnabled("unknown-class") {
@@ -128,7 +129,7 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP bool) []protocol.D
 			diags = append(diags, p.filterByConfig(p.applyUnusedPrivateSeverity(findingsToDiagnostics((&checks.UnusedPrivateRule{}).Check(file, source, p.index))))...)
 		}
 		if p.cfg.IsRuleEnabled("unreachable-code") {
-			fs := (&checks.UnreachableCodeRule{}).Check(file, source, p.index)
+			fs := (&checks.UnreachableCodeRule{Shared: shared}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("unreachable-code", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("redundant-union-member") {
@@ -136,13 +137,13 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP bool) []protocol.D
 			diags = append(diags, p.applyRuleSeverity("redundant-union-member", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("undefined-variable") {
-			fs := (&checks.UndefinedVariableRule{IncludedFile: workspace.IsTemplate(uri)}).Check(file, source, p.index)
+			fs := (&checks.UndefinedVariableRule{IncludedFile: workspace.IsTemplate(uri), Shared: shared}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("undefined-variable", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		// A Blade view's variables are also read by the views it includes,
 		// which see all of them, so none can be called unused from here.
 		if p.cfg.IsRuleEnabled("unused-variable") && !bladePHP {
-			fs := (&checks.UnusedVariableRule{}).Check(file, source, p.index)
+			fs := (&checks.UnusedVariableRule{Shared: shared}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("unused-variable", checks.SeverityHint, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("deprecated") {
@@ -163,7 +164,7 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP bool) []protocol.D
 			diags = append(diags, p.applyRuleSeverity("invalid-override", checks.SeverityError, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("argument-count-mismatch") {
-			fs := (&checks.ArgumentCountRule{}).Check(file, source, p.index)
+			fs := (&checks.ArgumentCountRule{Shared: shared}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("argument-count-mismatch", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 	}

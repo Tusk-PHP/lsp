@@ -50,6 +50,8 @@ type UndefinedVariableRule struct {
 	// by the includer, so they aren't reported there. Functions and closures
 	// in the file are still checked.
 	IncludedFile bool
+	// Shared, when set, shares the file's parse with the other rules.
+	Shared *Shared
 }
 
 func (r *UndefinedVariableRule) Code() string { return "undefined-variable" }
@@ -58,11 +60,14 @@ func (r *UndefinedVariableRule) Check(file *parser.FileNode, source string, inde
 	if file == nil {
 		return nil
 	}
-	return checkUndefinedVariables(source, outArgChecker(file, index), r.IncludedFile)
+	return checkUndefinedVariables(source, outArgChecker(file, index), r.IncludedFile, r.Shared)
 }
 
 // UnusedVariableRule flags local variable assignments with no subsequent read.
-type UnusedVariableRule struct{}
+type UnusedVariableRule struct {
+	// Shared, when set, shares the file's parse with the other rules.
+	Shared *Shared
+}
 
 func (r *UnusedVariableRule) Code() string { return "unused-variable" }
 
@@ -70,7 +75,7 @@ func (r *UnusedVariableRule) Check(file *parser.FileNode, source string, _ *symb
 	if file == nil {
 		return nil
 	}
-	return checkUnusedVariables(source)
+	return checkUnusedVariables(source, r.Shared)
 }
 
 // outArgChecker reports whether a call's argument may be written to, as $matches
@@ -127,7 +132,7 @@ func argIsReference(params []symbols.ParamInfo, arg int, complete bool) bool {
 }
 
 // checkUndefinedVariables detects reads of undefined variables.
-func checkUndefinedVariables(source string, outArg func(string, int) bool, includedFile bool) []Finding {
+func checkUndefinedVariables(source string, outArg func(string, int) bool, includedFile bool, shared *Shared) []Finding {
 	doc := (&scope.Collector{OutArg: outArg}).Collect(source)
 	if doc == nil {
 		return nil
@@ -151,7 +156,7 @@ func checkUndefinedVariables(source string, outArg func(string, int) bool, inclu
 	}
 
 	// Parse tokens to find all variable occurrences not tracked by the scope collector.
-	result := parser.New().Parse(source)
+	result := shared.parse(source)
 	if result == nil {
 		return nil
 	}
@@ -208,13 +213,13 @@ func checkUndefinedVariables(source string, outArg func(string, int) bool, inclu
 }
 
 // checkUnusedVariables detects local variable assignments with no reads.
-func checkUnusedVariables(source string) []Finding {
+func checkUnusedVariables(source string, shared *Shared) []Finding {
 	doc := scope.Collect(source)
 	if doc == nil {
 		return nil
 	}
 
-	result := parser.New().Parse(source)
+	result := shared.parse(source)
 	if result == nil {
 		return nil
 	}

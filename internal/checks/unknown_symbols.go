@@ -492,6 +492,7 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 	var findings []Finding
 	mask := newMaskState(source)
 	hierarchies := map[string]*memberHierarchy{}
+	instanceofLines := linesWithInstanceof(lines)
 
 	for lineNum, raw := range lines {
 		line := maskPHPLine(raw, &mask)
@@ -515,7 +516,7 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 			if len(owners) == 0 {
 				continue
 			}
-			narrowed, ok := instanceofOwners(ownerExpr, lines[:lineNum+1], lineNum, file, index)
+			narrowed, ok := instanceofOwners(ownerExpr, lines, instanceofLines, lineNum, file, index)
 			if !ok {
 				continue
 			}
@@ -573,31 +574,75 @@ func (r *UnknownMemberRule) resolveOwners(ownerExpr string, lineNum int, source 
 // access, since the code may be relying on that check. The whole file so far is
 // searched, which can only spare a finding. ok is false when a tested class is
 // unknown, as the member could be on it.
-func instanceofOwners(ownerExpr string, lines []string, lineNum int, file *parser.FileNode, index *symbols.Index) (owners []string, ok bool) {
+func instanceofOwners(ownerExpr string, lines []string, instanceofLines []int, lineNum int, file *parser.FileNode, index *symbols.Index) (owners []string, ok bool) {
 	if !strings.HasPrefix(ownerExpr, "$") {
 		return nil, true
 	}
-	var re *regexp.Regexp
-	for _, line := range lines {
-		if !strings.Contains(line, ownerExpr) || !strings.Contains(line, "instanceof") {
+	for _, i := range instanceofLines {
+		if i > lineNum || i >= len(lines) {
+			break
+		}
+		line := lines[i]
+		if !strings.Contains(line, ownerExpr) {
 			continue
 		}
-		if re == nil {
-			re = regexp.MustCompile(regexp.QuoteMeta(ownerExpr) + `\s+instanceof\s+(\\?[A-Za-z_][A-Za-z0-9_\\]*)`)
-		}
-		for _, match := range re.FindAllStringSubmatch(line, -1) {
-			fqn, resolved := resolveClassLikeName(match[1], lineNum, file)
+		for _, name := range instanceofTargets(line, ownerExpr) {
+			fqn, resolved := resolveClassLikeName(name, lineNum, file)
 			if !resolved || fqn == "" {
 				return nil, false
 			}
-			name, found := canonicalClassLike(fqn, file, index)
+			canonical, found := canonicalClassLike(fqn, file, index)
 			if !found {
 				return nil, false
 			}
-			owners = append(owners, name)
+			owners = append(owners, canonical)
 		}
 	}
 	return owners, true
+}
+
+// linesWithInstanceof lists the lines that test something with instanceof,
+// which are few, so each member access only looks at those.
+func linesWithInstanceof(lines []string) []int {
+	var out []int
+	for i, line := range lines {
+		if strings.Contains(line, "instanceof") {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// instanceofTargets returns the class names `expr instanceof Name` tests
+// expr against on a line, where expr is a whole variable, not the start of a
+// longer name ($item, not $items).
+func instanceofTargets(line, expr string) []string {
+	var out []string
+	for from := 0; ; {
+		k := strings.Index(line[from:], expr)
+		if k < 0 {
+			return out
+		}
+		i := from + k + len(expr)
+		from = i
+		if i < len(line) && isIdentChar(line[i]) {
+			continue
+		}
+		rest := strings.TrimLeft(line[i:], " \t")
+		after, found := strings.CutPrefix(rest, "instanceof")
+		if !found || after == "" || (after[0] != ' ' && after[0] != '\t') {
+			continue
+		}
+		after = strings.TrimLeft(after, " \t")
+		end := 0
+		for end < len(after) && (isIdentChar(after[end]) || after[end] == '\\') {
+			end++
+		}
+		if end == 0 || after[0] >= '0' && after[0] <= '9' {
+			continue
+		}
+		out = append(out, after[:end])
+	}
 }
 
 // resolvedClassLikes lists the class-likes in a type from the type resolver,
