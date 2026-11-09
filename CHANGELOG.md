@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-09
+
 ### Added
 
 - **Generics** are read the way PHPStan defines them ([#68](https://github.com/Tusk-PHP/lsp/issues/68)), so hover, completion and diagnostics agree on what Laravel, Symfony, Doctrine and other PHPDoc-typed code returns:
@@ -22,7 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Diagnostics are 3–4× faster** on large files. The rules that check member access share what they learn about types within a run, a variable's type is worked out once per assignment instead of at every line it's used on, class members are looked up by name, and the file is tokenized once for all rules. Over Laravel's test suite a sample of 329 files went from 13.7 s to 3.4 s, and Laravel's largest test file from 2.6 s to under 0.5 s. What's reported is unchanged.
 - **Completion lists over large classes are about 10× cheaper** for editors that support `completionItem/resolve` (VS Code among them): member items are sent without their documentation and detail, which are filled in when an item is selected. Editors that don't declare that support still get everything in the list.
-
 - **PHPDoc types win when they say more** than the native type: a template, a generic, a shape, a narrower union or a subclass, as PHPStan reads them. `@return TStamp|null` on `last(): ?StampInterface` is now used. A vaguer or contradicting PHPDoc type still loses to the native one.
 - `@phpstan-param`, `@phpstan-return`, `@phpstan-var`, `@phpstan-template` and their `@psalm-` forms win over the plain tags for the same parameter.
 - Diagnostics such as `unknown-member` and `redundant-nullsafe` now use the same generic-aware types as hover and completion, so a member called on `Collection<int, User>`'s `first()` is checked against `User`. Unions are kept whole: a member that any class of a union declares is completed and not reported.
@@ -33,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Background work can no longer leave stale results.** A large file (over 5,000 lines) is indexed in the background; when it was edited again quickly, the older version could finish last and leave outdated symbols in the index. Versions of a file are now indexed in order. Diagnostics worked out in the background (after indexing finishes, and after PHPStan and Pint on save) are no longer published once the file has changed or closed, so they can't replace newer ones.
 - Messages to the editor are written one at a time, so two can never interleave on the output stream, whatever the stream is.
-
+- `unknown-member` no longer reports a property that is only checked with `isset()`, `unset()`, `empty()` or `??`, where PHP doesn't require it to exist, or a property of a class with `#[AllowDynamicProperties]` (WordPress's upgrader skins and `WP_Taxonomy`, among others).
 - **Anonymous classes** (`new class { … }`) are understood: inside one, `$this`, `self` and `static` refer to it, not the class around it, so its own members, its promoted constructor properties and what it inherits are completed and checked. This removes the false `unknown-member` warnings in Laravel's `AsCollection`-style casts, Symfony's `TimezoneType` and WordPress's `WP_Block`. Anonymous classes are never offered as class names.
 - A parameter given a new value takes that value's type, as Laravel's `Sleep::duration()` does with `$duration = CarbonInterval::instance($duration)`. This applies to hover, completion and diagnostics. The declared type still applies before the new value, and where the new value may not have been assigned, as after an `if` block that assigns it, the type is treated as unknown so nothing is reported. A parameter reused as a `foreach` variable has the element type inside the loop. `$x ??= …` keeps the declared type.
 - `unknown-member` no longer reports a member that the implementations of an interface, or the subclasses of an abstract class, declare. An object of such a type is always one of those, and code often calls what they add, as in Magento's `$this->getResource()->getAttribute()` on `AbstractDb` and `$item->getQtyToShip()` on `OrderItemInterface`. A member that nothing below the type declares is still reported, and so is a subclass's member called on a concrete class.
