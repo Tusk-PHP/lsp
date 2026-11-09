@@ -92,3 +92,12 @@ func isPseudoTypeName(t string) bool {
 	}
 	return strings.IndexByte(t, '-') > 0 && strings.IndexByte(t, '\\') < 0
 }
+
+// traitUseSupertypes reads `@use Trait<A>` from the docblocks above a class's
+// trait `use` statements.
+func traitUseSupertypes(doc string, uses []parser.UseNode, resolve func(string) string) []Supertype {
+	if doc == "" || !strings.Contains(doc, "use") {
+		return nil
+	}
+	return supertypes(parser.ParseDocBlock(qualifyDocTypes(doc, uses)), resolve)
+}

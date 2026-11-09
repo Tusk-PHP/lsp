@@ -425,8 +425,7 @@ func (r *Resolver) inferArgType(argStr string, lines []string, pos protocol.Posi
 }
 
 func (r *Resolver) resolveDocType(raw string, file *parser.FileNode) ResolvedType {
-	rt := ParseGenericType(raw)
-	return r.resolveResolvedType(rt, file)
+	return r.applyEnv(ParseGenericType(raw), typeEnv{file: file, fileFirst: true})
 }
 
 // resolveDocTypeIn resolves a PHPDoc type written in the file being edited,
@@ -848,8 +847,11 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 		return ResolvedType{}
 	}
 
-	// Special case: $this
+	// Special case: $this, unless a closure is bound to another object.
 	if varName == "$this" {
+		if bound := r.closureThisAt(lines, pos, file); !bound.IsEmpty() {
+			return bound
+		}
 		return ResolvedType{FQN: FindEnclosingClass(file, pos)}
 	}
 
@@ -910,6 +912,12 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 			}
 		}
 		exprCtx := ExprContext{Lines: lines, Pos: pos, File: file}
+		// $received = yield $value: what the generator is sent, its TSend.
+		if _, ok := cutKeyword(strings.TrimSpace(rhs)+" ", "yield"); ok {
+			if gen := r.enclosingReturnType(lines, pos, file); gen.FQN == "Generator" && len(gen.Params) >= 3 {
+				return gen.Params[2]
+			}
+		}
 		// $class = Foo::class is a class-string<Foo>.
 		if trimmed := strings.TrimSuffix(strings.TrimSpace(rhs), ";"); classConstantRe.MatchString(trimmed) {
 			if rt := r.ExpressionType(trimmed, exprCtx); !rt.IsEmpty() {
@@ -938,6 +946,12 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 			}
 			className = strings.TrimSpace(className)
 			if className == "" {
+				break
+			}
+			if strings.HasPrefix(className, "$") {
+				if rt := r.NewExpressionType(className, argStr, exprCtx); !rt.IsEmpty() {
+					return rt
+				}
 				break
 			}
 			classFQN, isKeyword := r.ClassKeywordFQN(className, pos, file)
@@ -979,6 +993,24 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 		// $var = $other[index] — array element access
 		if bracketIdx := strings.Index(rhs, "["); bracketIdx > 0 && strings.HasPrefix(rhs, "$") {
 			arrayVar := strings.TrimSpace(rhs[:bracketIdx])
+			if steps, origin, ok := parseChain(strings.TrimSuffix(rhs, ";")); ok && origin.kind == '$' && len(steps) > 0 {
+				// $data['user'], $map[$key], $rows[0]['id'] and the like.
+				allOffsets := true
+				for _, st := range steps {
+					if st.op != "[" {
+						allOffsets = false
+					}
+				}
+				if allOffsets {
+					cur := r.ResolveVariableTypeTyped(origin.text, lines, pos, file)
+					for _, st := range steps {
+						cur = r.OffsetType(cur, st.offset)
+					}
+					if !cur.IsEmpty() {
+						return cur
+					}
+				}
+			}
 			arrayType := r.ResolveVariableTypeTyped(arrayVar, lines, pos, file)
 			if arrayType.FQN == "array" && len(arrayType.Params) >= 2 {
 				// array<TKey, TValue>[index] → TValue
@@ -1036,68 +1068,111 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	return ResolvedType{FQN: fqn}
 }
 
+// enclosingReturnType is the declared return type of the method or function
+// at pos, preferring its PHPDoc where that says more.
+func (r *Resolver) enclosingReturnType(lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+	if file == nil {
+		return ResolvedType{}
+	}
+	native, doc := "", ""
+	owner := FindEnclosingClass(file, pos)
+	if m := FindEnclosingMethod(file, pos); m != nil && (m.EndLine == 0 || pos.Line <= m.EndLine) {
+		native, doc = m.ReturnType.Name, m.DocComment
+	} else {
+		owner = ""
+		for i := range file.Functions {
+			fn := &file.Functions[i]
+			if pos.Line >= fn.StartLine && (fn.EndLine == 0 || pos.Line <= fn.EndLine) {
+				native, doc = fn.ReturnType.Name, fn.DocComment
+			}
+		}
+	}
+	docType := ""
+	if d := parser.ParseDocBlock(doc); d != nil {
+		docType = d.Return.Type
+	}
+	raw := r.preferDocType(native, docType, nil, owner)
+	if raw == "" {
+		return ResolvedType{}
+	}
+	return r.resolveDocTypeIn(raw, owner, file)
+}
+
 // resolveForeachValueType looks backward for a foreach loop that binds varPrefix
-// as its value variable and returns the element type of the iterable.
-// Handles both "foreach ($x as $v)" and "foreach ($x as $k => $v)".
+// as its value or key variable and returns the value or key type of what it
+// iterates. Handles both "foreach ($x as $v)" and "foreach ($x as $k => $v)".
 func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos protocol.Position, file *parser.FileNode, firstLine int) ResolvedType {
-	source := strings.Join(lines, "\n")
+	var source string
 	for i := pos.Line; i >= firstLine && i >= pos.Line-200; i-- {
 		if i >= len(lines) {
 			continue
 		}
 		line := strings.TrimSpace(lines[i])
-		if !strings.Contains(line, "foreach") || !strings.Contains(line, "as") {
+		if !strings.Contains(line, "foreach") || !strings.Contains(line, " as ") {
 			continue
 		}
-		// Check that varPrefix appears after "as" in the line
-		asIdx := strings.Index(line, " as ")
-		if asIdx < 0 {
-			continue
-		}
-		afterAs := line[asIdx+4:]
-		// For "as $k => $v", check last variable matches; for "as $v", check directly
-		arrowIdx := strings.Index(afterAs, "=>")
-		var valueVarSection string
-		if arrowIdx >= 0 {
-			valueVarSection = strings.TrimSpace(afterAs[arrowIdx+2:])
-		} else {
-			valueVarSection = strings.TrimSpace(afterAs)
-		}
-		// Strip closing paren/brace/semicolon
-		valueVarSection = strings.TrimRight(valueVarSection, ") {;\t ")
-		if valueVarSection != varPrefix {
-			continue
-		}
-		// Extract the iterable expression: between "foreach (" and " as "
 		foreachIdx := strings.Index(line, "foreach")
 		openParen := strings.IndexByte(line[foreachIdx:], '(')
 		if openParen < 0 {
 			continue
 		}
 		openParen += foreachIdx
-		iterableExpr := strings.TrimSpace(line[openParen+1 : foreachIdx+strings.Index(line[foreachIdx:], " as ")])
+		asIdx := strings.Index(line[openParen:], " as ")
+		if asIdx < 0 {
+			continue
+		}
+		asIdx += openParen
+		afterAs := line[asIdx+4:]
+		keyVar, valueVar := "", ""
+		if arrowIdx := strings.Index(afterAs, "=>"); arrowIdx >= 0 {
+			keyVar = strings.TrimSpace(afterAs[:arrowIdx])
+			valueVar = strings.TrimSpace(afterAs[arrowIdx+2:])
+		} else {
+			valueVar = strings.TrimSpace(afterAs)
+		}
+		valueVar = strings.TrimPrefix(strings.TrimRight(valueVar, ") {:;\t "), "&")
+		isKey := keyVar == varPrefix
+		if valueVar != varPrefix && !isKey {
+			continue
+		}
+		iterableExpr := strings.TrimSpace(line[openParen+1 : asIdx])
 		if iterableExpr == "" {
 			continue
 		}
 
 		var iterableType ResolvedType
 		hasChain := strings.Contains(iterableExpr, "->") || strings.Contains(iterableExpr, "::")
-		if r.TypedChainResolver != nil && hasChain {
+		if source == "" && (hasChain || r.TypedChainResolver != nil) {
+			source = strings.Join(lines, "\n")
+		}
+		switch {
+		case r.TypedChainResolver != nil && hasChain:
 			iterableType = r.TypedChainResolver(iterableExpr, source, pos, file)
-		} else if r.ChainResolver != nil && hasChain {
+		case r.ChainResolver != nil && hasChain:
 			if t := r.ChainResolver(iterableExpr, source, pos, file); t != "" {
 				iterableType = ResolvedType{FQN: t}
 			}
-		} else if strings.HasPrefix(iterableExpr, "$") {
+		case strings.HasPrefix(iterableExpr, "$") && extractLeadingVariable(iterableExpr) == iterableExpr:
 			iterableType = r.ResolveVariableTypeTyped(iterableExpr, lines, pos, file)
-		} else if funcName := extractFunctionCallName(iterableExpr); funcName != "" && r.Index != nil {
-			iterableType = r.resolveFunctionCallReturnType(funcName, file)
+		default:
+			iterableType = r.ExpressionType(iterableExpr, ExprContext{Lines: lines, Pos: pos, File: file})
+			if iterableType.IsEmpty() {
+				if funcName := extractFunctionCallName(iterableExpr); funcName != "" && r.Index != nil {
+					iterableType = r.resolveFunctionCallReturnType(funcName, file)
+				}
+			}
 		}
 		if iterableType.IsEmpty() {
 			continue
 		}
-		if _, v, ok := r.IterableTypes(iterableType); ok {
+		if k, v, ok := r.IterableTypes(iterableType); ok {
+			if isKey {
+				return k
+			}
 			return v
+		}
+		if isKey {
+			continue
 		}
 		return arrayElementType(iterableType)
 	}

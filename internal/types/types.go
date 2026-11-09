@@ -14,6 +14,9 @@ const (
 	TypeKindArray
 	TypeKindCallable
 	TypeKindLiteral
+	// TypeKindOffset is an offset access type, T[K]: Element is T and
+	// Params[0] is K.
+	TypeKindOffset
 )
 
 // TypeExpr is a small structured PHPDoc type model shared by hover/completion.
@@ -130,6 +133,10 @@ func (expr TypeExpr) String() string {
 		}
 	case TypeKindLiteral:
 		out = expr.Literal
+	case TypeKindOffset:
+		if expr.Element != nil && len(expr.Params) == 1 {
+			out = expr.Element.String() + "[" + expr.Params[0].String() + "]"
+		}
 	default:
 		out = trimLeadingSlash(expr.Name)
 	}
@@ -326,6 +333,10 @@ func parseTypeExpr(raw string) TypeExpr {
 	}
 	if shape, ok := parseShapeExpr(raw, nullable); ok {
 		return shape
+	}
+	if base, key, ok := splitOffsetAccess(raw); ok {
+		elem := parseTypeExpr(base)
+		return TypeExpr{Kind: TypeKindOffset, Nullable: nullable, Element: &elem, Params: []TypeExpr{parseTypeExpr(key)}}
 	}
 	if strings.HasSuffix(raw, "[]") && len(raw) > 2 {
 		elem := parseTypeExpr(strings.TrimSpace(raw[:len(raw)-2]))
@@ -885,4 +896,42 @@ func trim(s string) string {
 		end--
 	}
 	return s[start:end]
+}
+
+// splitOffsetAccess splits an offset access type such as T[K],
+// MyArray['bar'] or self::TYPES[T] into the type and the key.
+func splitOffsetAccess(raw string) (base, key string, ok bool) {
+	if len(raw) < 4 || raw[len(raw)-1] != ']' || strings.HasSuffix(raw, "[]") {
+		return "", "", false
+	}
+	depth := 0
+	inString := byte(0)
+	for i := len(raw) - 1; i >= 0; i-- {
+		ch := raw[i]
+		if inString != 0 {
+			if ch == inString {
+				inString = 0
+			}
+			continue
+		}
+		switch ch {
+		case '\'', '"':
+			inString = ch
+		case ']', '>', '}', ')':
+			depth++
+		case '[', '<', '{', '(':
+			depth--
+			if depth == 0 {
+				if ch != '[' || i == 0 {
+					return "", "", false
+				}
+				base, key = strings.TrimSpace(raw[:i]), strings.TrimSpace(raw[i+1:len(raw)-1])
+				if base == "" || key == "" {
+					return "", "", false
+				}
+				return base, key, true
+			}
+		}
+	}
+	return "", "", false
 }

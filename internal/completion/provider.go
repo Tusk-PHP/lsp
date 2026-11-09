@@ -337,6 +337,9 @@ func (p *Provider) completeSymfonyRouteNames(partial, quote string) []protocol.C
 func (p *Provider) completeMemberAccess(uri, source string, pos protocol.Position, prefix string, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
 	// Use typed resolver first to get generic context
 	resolved := p.ResolveChainTypeTyped(source, prefix, "->", pos, file)
+	if resolved.FQN == "object" && len(resolved.Fields) > 0 {
+		return objectShapeCompletions(resolved)
+	}
 	typeName := resolved.MemberOwner()
 	if typeName == "" {
 		// Fall back to standard resolver
@@ -353,6 +356,10 @@ func (p *Provider) completeMemberAccess(uri, source string, pos protocol.Positio
 	var items []protocol.CompletionItem
 	enclosing := resolve.FindEnclosingClass(file, pos)
 	members := p.index.GetClassMembers(typeName)
+	// What @mixin tags bring in, after the class's own members.
+	for _, mixin := range p.resolver.MixinTypes(resolved) {
+		members = append(members, p.index.GetClassMembers(mixin.MemberOwner())...)
+	}
 	distance := memberDistances(members)
 	seen := make(map[string]bool, len(members))
 	for _, m := range members {
@@ -384,8 +391,32 @@ func (p *Provider) completeMemberAccess(uri, source string, pos protocol.Positio
 	return items
 }
 
+// objectShapeCompletions offers the properties of an object shape such as
+// object{name: string, age?: int}.
+func objectShapeCompletions(rt resolve.ResolvedType) []protocol.CompletionItem {
+	items := make([]protocol.CompletionItem, 0, len(rt.Fields))
+	for _, f := range rt.Fields {
+		if f.Key == "" {
+			continue
+		}
+		items = append(items, protocol.CompletionItem{
+			Label:    f.Key,
+			Kind:     protocol.CompletionItemKindProperty,
+			Detail:   f.Type.FullString(),
+			SortText: rankKey(rankMember, 0, f.Key),
+		})
+	}
+	return items
+}
+
 func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Position, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
 	typeName := p.resolveChainType(source, prefix, "::", pos, file)
+	// $class:: where $class is a class-string<Foo>.
+	if strings.HasPrefix(strings.TrimSpace(extractClassBefore(prefix, "::")), "$") || typeName == "" || typeName == "string" || strings.HasPrefix(typeName, "class-string") {
+		if t := resolve.ClassStringTarget(p.ResolveChainTypeTyped(source, prefix, "::", pos, file)); t.FQN != "" && !resolve.IsBuiltinTypeName(t.FQN) {
+			typeName = t.FQN
+		}
+	}
 	if typeName == "" {
 		return nil
 	}
@@ -563,6 +594,31 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 		}
 	}
 
+	// An offset: $data['user']->, $rows[0]->
+	if parenEnd == 0 && i > 0 && line[i-1] == ']' {
+		closeAt := i - 1
+		depth := 0
+		j := closeAt
+		for ; j >= 0; j-- {
+			if line[j] == ']' {
+				depth++
+			} else if line[j] == '[' {
+				depth--
+				if depth == 0 {
+					break
+				}
+			}
+		}
+		if j <= 0 {
+			return resolve.ResolvedType{}
+		}
+		base := p.ResolveExpressionTypeTyped(strings.TrimSpace(line[:j]), source, pos, file)
+		if base.IsEmpty() {
+			return resolve.ResolvedType{}
+		}
+		return p.resolver.OffsetType(base, line[j+1:closeAt])
+	}
+
 	end := i
 	for i > 0 && resolve.IsWordChar(line[i-1]) {
 		i--
@@ -578,7 +634,12 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 	// Resolve variables and keywords using standard resolution. self, static
 	// and parent are keywords, which PHP matches regardless of case.
 	switch keywordOrTarget(target) {
-	case "$this", "self", "static":
+	case "$this":
+		if file != nil {
+			return p.resolver.ResolveVariableTypeTyped("$this", resolve.SplitLines(source), pos, file)
+		}
+		return resolve.ResolvedType{}
+	case "self", "static":
 		if file != nil {
 			return resolve.ResolvedType{FQN: resolve.FindEnclosingClass(file, pos)}
 		}
@@ -597,7 +658,12 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 	}
 
 	if strings.HasPrefix(target, "$") {
-		return p.resolver.ResolveVariableTypeTyped(target, resolve.SplitLines(source), pos, file)
+		rt := p.resolver.ResolveVariableTypeTyped(target, resolve.SplitLines(source), pos, file)
+		if parenEnd > 0 && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "->") && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
+			// $fn(…): what calling it gives.
+			return p.resolver.InvokeType(rt)
+		}
+		return rt
 	}
 
 	// Try as class name — this is the chain origin (e.g., Category::). A word
@@ -630,8 +696,23 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 	}
 
 	ownerFQN := ownerResolved.BaseFQN()
-	member := p.resolver.FindAccessedMember(ownerResolved.MemberOwner(), target, parenEnd > 0)
+	if strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
+		ownerResolved = resolve.ClassStringTarget(ownerResolved) // $class::create()
+	}
+	member, foundOn := p.resolver.FindMemberOn(ownerResolved, target, parenEnd > 0)
+	if member != nil && foundOn.FQN != ownerResolved.FQN {
+		ownerResolved = foundOn // a member a @mixin brings in
+	}
+	ownerFQN = ownerResolved.BaseFQN()
 	if member == nil {
+		// A property of an object shape: object{user: User}.
+		if ownerResolved.FQN == "object" && parenEnd == 0 {
+			for _, f := range ownerResolved.Fields {
+				if f.Key == target {
+					return f.Type
+				}
+			}
+		}
 		return resolve.ResolvedType{}
 	}
 	ownerFQN = p.resolver.ReceiverFor(ownerResolved, member)

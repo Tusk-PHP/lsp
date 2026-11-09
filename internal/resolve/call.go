@@ -243,6 +243,16 @@ func (r *Resolver) MemberTypeForCall(member *symbols.Symbol, file *parser.FileNo
 			}
 		}
 	}
+	// A method without a PHPDoc return type inherits the one its parent,
+	// interface or trait documents, read with the arguments passed up to it.
+	if member.Kind == symbols.KindMethod && !strings.Contains(member.DocComment, "return") {
+		if inh := r.inheritedDocMethod(member); inh != nil {
+			if callerFQN == "" {
+				callerFQN = member.ParentFQN
+			}
+			member = inh
+		}
+	}
 	raw := r.rawMemberReturnType(member)
 	staticFQN := callerFQN
 	if staticFQN == "" {
@@ -620,3 +630,41 @@ func literalExprType(expr string) ResolvedType {
 }
 
 var positionZero = protocol.Position{}
+
+// inheritedDocMethod finds the nearest method of the same name above
+// member's class (parent classes, interfaces, traits) whose PHPDoc gives a
+// return type, as PHPStan inherits PHPDoc from what a method overrides.
+func (r *Resolver) inheritedDocMethod(member *symbols.Symbol) *symbols.Symbol {
+	if r.Index == nil || member.ParentFQN == "" {
+		return nil
+	}
+	visited := map[string]bool{member.ParentFQN: true}
+	queue := []string{member.ParentFQN}
+	for steps := 0; len(queue) > 0 && steps < 64; steps++ {
+		cur := queue[0]
+		queue = queue[1:]
+		sym := r.Index.Lookup(cur)
+		if sym == nil {
+			continue
+		}
+		next := make([]string, 0, 2+len(sym.Implements))
+		if sym.Extends != "" {
+			next = append(next, sym.Extends)
+		}
+		next = append(next, sym.Implements...)
+		next = append(next, r.Index.TraitsOf(cur)...)
+		for _, anc := range next {
+			if visited[anc] {
+				continue
+			}
+			visited[anc] = true
+			if m := r.Index.Lookup(anc + "::" + member.Name); m != nil && m.Kind == symbols.KindMethod && strings.Contains(m.DocComment, "return") {
+				if doc := parser.ParseDocBlock(m.DocComment); doc != nil && doc.Return.Type != "" {
+					return m
+				}
+			}
+			queue = append(queue, anc)
+		}
+	}
+	return nil
+}

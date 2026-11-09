@@ -362,6 +362,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		idx.indexMethods(uri, sym, fqn, c.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, c.Constants, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
+		sym.Supertypes = append(sym.Supertypes, traitUseSupertypes(c.TraitUseDoc, file.Uses, resolve)...)
 		if src == SourceBuiltin {
 			mergeEarlierLayer(sym, previous)
 		}
@@ -399,6 +400,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		idx.indexMethods(uri, sym, fqn, tr.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, tr.Constants, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
+		sym.Supertypes = append(sym.Supertypes, traitUseSupertypes(tr.TraitUseDoc, file.Uses, resolve)...)
 	}
 
 	for _, en := range file.Enums {

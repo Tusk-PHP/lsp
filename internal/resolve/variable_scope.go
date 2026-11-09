@@ -85,6 +85,21 @@ func (r *Resolver) variableScopeAt(varName string, lines []string, pos protocol.
 	return vs
 }
 
+// closureThisAt returns what $this is at pos when pos is inside a closure
+// passed for a parameter tagged @param-closure-this.
+func (r *Resolver) closureThisAt(lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+	s := r.scopeDocument(lines).ScopeAt(pos)
+	for ; s != nil; s = s.Parent {
+		if s.Kind != scope.ScopeClosure {
+			return ResolvedType{}
+		}
+		if _, this, ok := r.closureExpectations(s, lines, file); ok && !this.IsEmpty() {
+			return this
+		}
+	}
+	return ResolvedType{}
+}
+
 // IsLocalVariable reports whether the variable is bound in the function, method
 // or closure at pos, whether or not its type can be worked out.
 func (r *Resolver) IsLocalVariable(varName string, lines []string, pos protocol.Position) bool {
@@ -111,6 +126,14 @@ func (r *Resolver) closureParamType(param *scope.Binding, lines []string, file *
 	}
 	declared := declaredParamType(lines[line][:param.Decl.Start.Character])
 	if declared == "" {
+		// Untyped: what the callable(…) it's passed for says.
+		if expected, _, ok := r.closureExpectations(param.Scope, lines, file); ok {
+			if sig := callableSignature(expected); sig != nil {
+				if i := closureParamIndex(param); i >= 0 && i < len(sig.Params) {
+					return sig.Params[i]
+				}
+			}
+		}
 		return ResolvedType{}
 	}
 	// A union is shown as written. Resolving it would pick one of its members.
