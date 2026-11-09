@@ -144,6 +144,8 @@ type memberUse struct {
 // that read them (deprecated, unused-result) find them once. A nil cache
 // finds them every time.
 type MemberUseCache struct {
+	// Shared, when set, shares the file's parse with the other rules.
+	Shared *Shared
 	source string
 	file   *parser.FileNode
 	uses   []memberUse
@@ -152,11 +154,11 @@ type MemberUseCache struct {
 
 func (c *MemberUseCache) get(file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, *parser.FileNode) string) []memberUse {
 	if c == nil {
-		return memberUses(file, source, index, typeResolver)
+		return memberUses(file, source, index, typeResolver, nil)
 	}
 	if !c.done || c.source != source || c.file != file {
 		c.source, c.file, c.done = source, file, true
-		c.uses = memberUses(file, source, index, typeResolver)
+		c.uses = memberUses(file, source, index, typeResolver, c.Shared)
 	}
 	return c.uses
 }
@@ -174,7 +176,7 @@ func (u memberUse) finding(code, message string, tags []Tag) Finding {
 	}
 }
 
-func memberUses(file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, *parser.FileNode) string) []memberUse {
+func memberUses(file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, *parser.FileNode) string, shared *Shared) []memberUse {
 	if file == nil || index == nil {
 		return nil
 	}
@@ -182,7 +184,7 @@ func memberUses(file *parser.FileNode, source string, index *symbols.Index, type
 	if !index.HasAttributedSymbols() {
 		return nil
 	}
-	result := parser.New().Parse(source)
+	result := shared.parse(source)
 	if result == nil {
 		return nil
 	}

@@ -15,7 +15,10 @@ import (
 // Conservative by design: it skips calls that contain named arguments, spread
 // expressions, variadic signatures, magic __call/__callStatic, and any builtin
 // symbols whose signature may be incomplete.
-type ArgumentCountRule struct{}
+type ArgumentCountRule struct {
+	// Shared, when set, shares the file's parse with the other rules.
+	Shared *Shared
+}
 
 func (r *ArgumentCountRule) Code() string { return "argument-count-mismatch" }
 
@@ -23,11 +26,11 @@ func (r *ArgumentCountRule) Check(file *parser.FileNode, source string, index *s
 	if file == nil || index == nil {
 		return nil
 	}
-	return checkArgumentCounts(file, source, index)
+	return checkArgumentCounts(file, source, index, r.Shared)
 }
 
-func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.Index) []Finding {
-	result := parser.New().Parse(source)
+func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.Index, shared *Shared) []Finding {
+	result := shared.parse(source)
 	if result == nil {
 		return nil
 	}

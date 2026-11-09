@@ -388,12 +388,12 @@ function f($p) {
     return $y;
 }
 `
-	if findings := checkUndefinedVariables(source, nil, false); len(findings) != 0 {
+	if findings := checkUndefinedVariables(source, nil, false, nil); len(findings) != 0 {
 		t.Errorf("unexpected findings: %+v", findings)
 	}
 
 	source = "<?php\nfunction f() {\n    return $missing === 1;\n}\n"
-	findings := checkUndefinedVariables(source, nil, false)
+	findings := checkUndefinedVariables(source, nil, false, nil)
 	if len(findings) != 1 || findings[0].Message != "Undefined variable $missing" {
 		t.Errorf("want $missing reported, got %+v", findings)
 	}
@@ -401,7 +401,7 @@ function f($p) {
 
 func TestUnusedVariableCountsComparisonAsRead(t *testing.T) {
 	source := "<?php\nfunction f() {\n    $x = 1;\n    return $x === 1;\n}\n"
-	if findings := checkUnusedVariables(source); len(findings) != 0 {
+	if findings := checkUnusedVariables(source, nil); len(findings) != 0 {
 		t.Errorf("unexpected findings: %+v", findings)
 	}
 }
@@ -468,7 +468,7 @@ func TestUnusedVariableNotFlagged(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			source := "<?php\n" + body + "\n"
-			if findings := checkUnusedVariables(source); len(findings) != 0 {
+			if findings := checkUnusedVariables(source, nil); len(findings) != 0 {
 				t.Errorf("unexpected findings: %+v", findings)
 			}
 		})
@@ -477,7 +477,7 @@ func TestUnusedVariableNotFlagged(t *testing.T) {
 
 func TestUnusedVariableEscapedInStringStillFlagged(t *testing.T) {
 	source := "<?php\nfunction f() { $a = 1; return \"\\$a\"; }\n"
-	if findings := checkUnusedVariables(source); len(findings) != 1 {
+	if findings := checkUnusedVariables(source, nil); len(findings) != 1 {
 		t.Errorf("want $a reported, got %+v", findings)
 	}
 }
@@ -487,7 +487,7 @@ func TestPropertiesOfClassWithSeveralInterfaces(t *testing.T) {
 	if findings := (&UndefinedVariableRule{}).Check(parser.ParseFile(source), source, nil); len(findings) != 0 {
 		t.Errorf("unexpected undefined findings: %+v", findings)
 	}
-	if findings := checkUnusedVariables(source); len(findings) != 0 {
+	if findings := checkUnusedVariables(source, nil); len(findings) != 0 {
 		t.Errorf("unexpected unused findings: %+v", findings)
 	}
 }
@@ -554,5 +554,26 @@ function walk() {
 		if got[not] {
 			t.Errorf("%s is an existence check and should not be reported", not)
 		}
+	}
+}
+
+// Rules given one Shared parse the file once between them and find the same
+// things as rules that parse it themselves.
+func TestSharedParseGivesTheSameFindings(t *testing.T) {
+	source := "<?php\nfunction run() {\n    $unused = 1;\n    echo $missing;\n    return;\n    echo 'never';\n}\n"
+	file := parser.ParseFile(source)
+	shared := &Shared{}
+	for _, pair := range [][2]Rule{
+		{&UnusedVariableRule{}, &UnusedVariableRule{Shared: shared}},
+		{&UndefinedVariableRule{}, &UndefinedVariableRule{Shared: shared}},
+		{&UnreachableCodeRule{}, &UnreachableCodeRule{Shared: shared}},
+	} {
+		alone, together := pair[0].Check(file, source, nil), pair[1].Check(file, source, nil)
+		if len(alone) == 0 || len(alone) != len(together) {
+			t.Errorf("%s: alone %v, with Shared %v", pair[0].Code(), alone, together)
+		}
+	}
+	if first := shared.parse(source); first != shared.parse(source) {
+		t.Error("the same source should be parsed once")
 	}
 }

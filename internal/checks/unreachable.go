@@ -9,7 +9,10 @@ import (
 
 // UnreachableCodeRule detects statements after unconditional return, throw,
 // exit/die, continue, or break within the same block scope.
-type UnreachableCodeRule struct{}
+type UnreachableCodeRule struct {
+	// Shared, when set, shares the file's parse with the other rules.
+	Shared *Shared
+}
 
 func (r *UnreachableCodeRule) Code() string { return "unreachable-code" }
 
@@ -17,7 +20,7 @@ func (r *UnreachableCodeRule) Check(file *parser.FileNode, source string, _ *sym
 	if file == nil {
 		return nil
 	}
-	result := parser.New().Parse(source)
+	result := r.Shared.parse(source)
 	if result == nil {
 		return nil
 	}
