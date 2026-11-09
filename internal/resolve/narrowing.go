@@ -184,7 +184,7 @@ func (r *Resolver) applyStatementCall(varName string, t ResolvedType, stmt strin
 	if !ok || callee.member.DocComment == "" {
 		return t
 	}
-	doc := parser.ParseDocBlock(callee.member.DocComment)
+	doc := r.parseDoc(callee.member.DocComment)
 	if doc == nil || len(doc.Asserts)+len(doc.ParamOuts) == 0 && doc.SelfOut == "" {
 		return t
 	}
@@ -211,16 +211,16 @@ func (r *Resolver) applyStatementCall(varName string, t ResolvedType, stmt strin
 			continue
 		}
 		if a.Target == "$this" && strings.TrimSpace(receiverExpr) == varName || argIs(a.Target) {
-			t = r.applyFact(t, narrowingFact{typ: r.applyEnv(ParseGenericType(a.Type), env), negated: a.Negated, equality: a.Equality})
+			t = r.applyFact(t, narrowingFact{typ: r.applyEnv(r.parseType(a.Type), env), negated: a.Negated, equality: a.Equality})
 		}
 	}
 	for _, out := range doc.ParamOuts {
 		if argIs(out.Name) {
-			t = r.applyEnv(ParseGenericType(out.Type), env)
+			t = r.applyEnv(r.parseType(out.Type), env)
 		}
 	}
 	if doc.SelfOut != "" && strings.TrimSpace(receiverExpr) == varName {
-		t = r.applyEnv(ParseGenericType(doc.SelfOut), env)
+		t = r.applyEnv(r.parseType(doc.SelfOut), env)
 	}
 	return t
 }
@@ -248,7 +248,7 @@ func (r *Resolver) statementCallee(stmt string, lines []string, pos protocol.Pos
 		if fn == nil {
 			return callee, "", nil, false
 		}
-		callee = resolvedCallee{member: fn, params: r.paramPatterns(fn, parser.ParseDocBlock(fn.DocComment))}
+		callee = resolvedCallee{member: fn, params: r.paramPatterns(fn, r.parseDoc(fn.DocComment))}
 		return callee, "", ParseCallArgs(origin.args), true
 	}
 	last := steps[len(steps)-1]
@@ -270,7 +270,7 @@ func (r *Resolver) statementCallee(stmt string, lines []string, pos protocol.Pos
 	if m == nil {
 		return callee, "", nil, false
 	}
-	callee = resolvedCallee{member: m, receiver: owner, params: r.paramPatterns(m, parser.ParseDocBlock(m.DocComment))}
+	callee = resolvedCallee{member: m, receiver: owner, params: r.paramPatterns(m, r.parseDoc(m.DocComment))}
 	return callee, receiverExpr, ParseCallArgs(last.args), true
 }
 
@@ -530,7 +530,7 @@ func (r *Resolver) applyCondition(varName string, t ResolvedType, cond string, n
 		if !ok || !strings.Contains(callee.member.DocComment, "assert") {
 			continue
 		}
-		doc := parser.ParseDocBlock(callee.member.DocComment)
+		doc := r.parseDoc(callee.member.DocComment)
 		if doc == nil {
 			continue
 		}
@@ -555,7 +555,7 @@ func (r *Resolver) applyCondition(varName string, t ResolvedType, cond string, n
 			if !target {
 				continue
 			}
-			fact := narrowingFact{typ: r.applyEnv(ParseGenericType(a.Type), env), negated: a.Negated, equality: a.Equality}
+			fact := narrowingFact{typ: r.applyEnv(r.parseType(a.Type), env), negated: a.Negated, equality: a.Equality}
 			if opposite {
 				// The other outcome: the type is ruled out. =Type says nothing then.
 				if a.Equality {

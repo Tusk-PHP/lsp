@@ -52,6 +52,9 @@ type Resolver struct {
 	scopeMu     sync.Mutex
 	scopeSource string
 	scopeDoc    *scope.Document
+
+	// parsed caches docblocks and PHPDoc types by their text.
+	parsed parseCache
 }
 
 // NewResolver creates a resolver with the given symbol index.
@@ -663,7 +666,7 @@ func (r *Resolver) rawMemberReturnType(member *symbols.Symbol) string {
 	case symbols.KindMethod:
 		var docType string
 		if member.DocComment != "" {
-			if doc := parser.ParseDocBlock(member.DocComment); doc != nil {
+			if doc := r.parseDoc(member.DocComment); doc != nil {
 				docType = doc.Return.Type
 			}
 		}
@@ -673,7 +676,7 @@ func (r *Resolver) rawMemberReturnType(member *symbols.Symbol) string {
 	case symbols.KindProperty:
 		var docType string
 		if member.DocComment != "" && strings.Contains(member.DocComment, "var") {
-			if doc := parser.ParseDocBlock(member.DocComment); doc != nil && len(doc.Vars) > 0 {
+			if doc := r.parseDoc(member.DocComment); doc != nil && len(doc.Vars) > 0 {
 				docType = doc.Vars[0].Type
 			}
 		}
@@ -718,8 +721,8 @@ func (r *Resolver) preferDocType(native, doc string, methodTemplates []symbols.T
 	if r.mentionsTemplate(doc, methodTemplates, ownerFQN) || strings.Contains(doc, " is ") {
 		return doc
 	}
-	docRT := r.applyEnv(ParseGenericType(doc), typeEnv{owner: ownerFQN})
-	nativeRT := ParseGenericType(native)
+	docRT := r.applyEnv(r.parseType(doc), typeEnv{owner: ownerFQN})
+	nativeRT := r.parseType(native)
 	if docRT.IsEmpty() {
 		return native
 	}
@@ -759,7 +762,7 @@ func (r *Resolver) mentionsTemplate(doc string, methodTemplates []symbols.Templa
 		return false
 	}
 	found := false
-	ParseGenericType(doc).transform(func(t ResolvedType) ResolvedType {
+	r.parseType(doc).transform(func(t ResolvedType) ResolvedType {
 		if found || len(t.Params) > 0 {
 			return t
 		}

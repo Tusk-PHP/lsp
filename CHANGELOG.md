@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Generics** are read the way PHPStan defines them ([#68](https://github.com/Tusk-PHP/lsp/issues/68)), so hover, completion and diagnostics agree on what Laravel, Symfony, Doctrine and other PHPDoc-typed code returns:
+  - **Method and function templates** bind from the call: a plain argument (`identity(new User)` is `User`), `Foo::class` for a `class-string<T>` parameter (Symfony's `$envelope->last(BusNameStamp::class)?->getBusName()`), arrays and generic objects in any argument position, named arguments and default values. `new Collection([$user])` is a `Collection<int, User>` wherever it's written. A template nothing binds takes its default (`@template T = string`), then its bound (`@template T of Model`).
+  - **Inheritance**: `@extends`, `@implements` and `@use` (and their `@template-` forms) pass type arguments through every level, including `@use` written above a trait's `use` statement, as Laravel's collections do. A method without its own `@return` takes the one it overrides. `@template` on interfaces and traits is now read; it was ignored before.
+  - **Iterables**: `foreach` types keys and values of `list<T>`, `non-empty-array<K, V>`, `iterable<K, V>`, generators and any object that implements `Traversable` with type arguments, such as `Collection<int, User>`. `ArrayIterator`, `ArrayObject`, `SplObjectStorage`, `WeakMap`, `Iterator`, `IteratorAggregate` and `Generator` carry their generics; `$x = yield …` is the generator's send type and `getReturn()` its return type.
+  - **Shapes and offsets**: `$data['user']` is the type at that key of an array shape, `$pair[1]` the second type of a `list{…}`, and `$map[$key]` the value type of an `ArrayAccess`. Object shapes (`object{name: string}`) complete their properties. `key-of<…>`, `value-of<…>`, offset access `T['key']`, `Collection<covariant Animal>` and `Collection<*>` resolve.
+  - **Callables**: `callable(User): string` and `Closure(int): User` signatures are kept. A closure passed to such a parameter gets its parameters' types, so `$users->map(fn ($u) => $u->…)` completes `User`'s members, and its return binds templates, so that `map()` gives a collection of what the closure returns. Calling a `Closure`-typed variable or an invokable object gives its return type, and `@param-closure-this` sets `$this` inside the closure.
+  - **Conditional return types** pick the branch the arguments choose, including `is not`, nested conditions and conditions on templates; before, both branches were offered. A `class-string<User>` value works in `new $class` and `$class::create()`, `new<T>` resolves, and a generic `@mixin T` brings in `T`'s members.
+  - **Narrowing**: after a call tagged `@phpstan-assert` (with `!Type` and `=Type`), such as PHPUnit's `assertInstanceOf()`, the variable passed has the asserted type; `@phpstan-assert-if-true` and `-if-false` apply inside `if` and `else` blocks and after an early `return`; `@param-out` types a by-reference argument after the call; `@phpstan-self-out` and `@phpstan-this-out` change the object's type.
+
+### Changed
+
+- **PHPDoc types win when they say more** than the native type: a template, a generic, a shape, a narrower union or a subclass, as PHPStan reads them. `@return TStamp|null` on `last(): ?StampInterface` is now used. A vaguer or contradicting PHPDoc type still loses to the native one.
+- `@phpstan-param`, `@phpstan-return`, `@phpstan-var`, `@phpstan-template` and their `@psalm-` forms win over the plain tags for the same parameter.
+- Diagnostics such as `unknown-member` and `redundant-nullsafe` now use the same generic-aware types as hover and completion, so a member called on `Collection<int, User>`'s `first()` is checked against `User`. Unions are kept whole: a member that any class of a union declares is completed and not reported.
+- Generic `@var` on local variables and on properties, and generic `@method` and `@property` types, are read with the declaring file's imports.
+- `Arr::first($items)` and similar `TValue|TDefault` methods are typed as nullable when no default is passed, as PHPStan types them.
+
 ### Fixed
 
 - **Anonymous classes** (`new class { … }`) are understood: inside one, `$this`, `self` and `static` refer to it, not the class around it, so its own members, its promoted constructor properties and what it inherits are completed and checked. This removes the false `unknown-member` warnings in Laravel's `AsCollection`-style casts, Symfony's `TimezoneType` and WordPress's `WP_Block`. Anonymous classes are never offered as class names.

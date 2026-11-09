@@ -387,7 +387,7 @@ func (r *Resolver) ancestorArgs(classFQN string, args []ResolvedType, ancestor s
 			parentArgs = make([]ResolvedType, len(st.Args))
 			env := typeEnv{subst: own, owner: classFQN}
 			for i, raw := range st.Args {
-				parentArgs[i] = r.applyEnv(ParseGenericType(raw), env)
+				parentArgs[i] = r.applyEnv(r.parseType(raw), env)
 			}
 			break
 		}
@@ -451,9 +451,9 @@ func (r *Resolver) fillUnbound(subst map[string]ResolvedType, tmpls []symbols.Te
 		fallback := ResolvedType{FQN: "mixed"}
 		switch {
 		case t.Default != "":
-			fallback = r.applyEnv(ParseGenericType(t.Default), typeEnv{subst: subst, owner: owner, file: file})
+			fallback = r.applyEnv(r.parseType(t.Default), typeEnv{subst: subst, owner: owner, file: file})
 		case t.Bound != "":
-			fallback = r.applyEnv(ParseGenericType(t.Bound), typeEnv{subst: subst, owner: owner, file: file})
+			fallback = r.applyEnv(r.parseType(t.Bound), typeEnv{subst: subst, owner: owner, file: file})
 		}
 		subst[t.Name] = fallback
 	}
