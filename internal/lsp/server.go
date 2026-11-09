@@ -300,6 +300,8 @@ func (s *Server) handleMessage(msg *jsonRPCMessage) {
 		s.handleDidSave(msg)
 	case "textDocument/completion":
 		s.handleCompletion(msg)
+	case "completionItem/resolve":
+		s.handleCompletionResolve(msg)
 	case "textDocument/hover":
 		s.handleHover(msg)
 	case "textDocument/definition":
@@ -398,6 +400,18 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	viewResolver := frameworklaravel.NewViews(s.rootPath)
 	translationResolver := frameworklaravel.NewTranslationResolver(s.rootPath)
 	s.completion = completion.NewProvider(s.index, s.container, s.framework)
+	// Clients that resolve documentation and detail later get member items
+	// without them, which keeps long member lists cheap to send.
+	lazyDoc, lazyDetail := false, false
+	for _, prop := range params.Capabilities.TextDocument.Completion.CompletionItem.ResolveSupport.Properties {
+		switch prop {
+		case "documentation":
+			lazyDoc = true
+		case "detail":
+			lazyDetail = true
+		}
+	}
+	s.completion.SetLazyResolve(lazyDoc, lazyDetail)
 	s.completion.SetArrayResolver(arrayResolver)
 	if s.routeIndex != nil {
 		s.completion.SetLaravelRouteIndex(s.routeIndex)
@@ -461,7 +475,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 				Change:    1, // Full
 				Save:      &protocol.SaveOptions{IncludeText: false},
 			},
-			CompletionProvider:        &protocol.CompletionOptions{TriggerCharacters: []string{".", ">", ":", "$", "\\", "|", "#", "[", "(", "'", "\""}, ResolveProvider: false},
+			CompletionProvider:        &protocol.CompletionOptions{TriggerCharacters: []string{".", ">", ":", "$", "\\", "|", "#", "[", "(", "'", "\""}, ResolveProvider: true},
 			HoverProvider:             true,
 			DefinitionProvider:        true,
 			TypeDefinitionProvider:    true,
@@ -678,6 +692,17 @@ func (s *Server) handleCompletion(msg *jsonRPCMessage) {
 	}
 	source := s.getDocument(params.TextDocument.URI)
 	s.sendResponse(msg.ID, s.completion.GetCompletions(params.TextDocument.URI, source, params.Position))
+}
+
+// handleCompletionResolve fills in the documentation and detail of a member
+// item that were left out of the completion list.
+func (s *Server) handleCompletionResolve(msg *jsonRPCMessage) {
+	var item protocol.CompletionItem
+	if json.Unmarshal(msg.Params, &item) != nil {
+		s.sendError(msg.ID, -32602, "Invalid params")
+		return
+	}
+	s.sendResponse(msg.ID, s.completion.ResolveCompletionItem(item))
 }
 
 func (s *Server) handleHover(msg *jsonRPCMessage) {

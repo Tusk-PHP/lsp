@@ -98,3 +98,18 @@ func TestBenchGenericChainsResolve(t *testing.T) {
 	file := parser.ParseFile(source)
 	t.Logf("$cat: %s", p.ResolveExpressionTypeTyped("$cat", source, protocol.Position{Line: 6, Character: 8}, file).String())
 }
+
+// BenchmarkCompleteGenericChainLazy is BenchmarkCompleteGenericChain for a
+// client that resolves documentation and detail later.
+func BenchmarkCompleteGenericChainLazy(b *testing.B) {
+	p := benchLaravelProvider(b)
+	p.SetLazyResolve(true, true)
+	source := "<?php\nuse App\\Models\\Category;\n\nfunction run(): void {\n    Category::query()->where('a', 1)->get()->map(fn ($c) => $c)->first()->\n}\n"
+	line := 4
+	pos := protocol.Position{Line: line, Character: len(strings.Split(source, "\n")[line])}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		p.GetCompletions("file:///s.php", source, pos)
+	}
+}
