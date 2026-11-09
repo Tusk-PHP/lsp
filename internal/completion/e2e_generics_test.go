@@ -27,6 +27,7 @@ func setupLaravelE2E(t *testing.T) *Provider {
 		"vendor/laravel/framework/src/Illuminate/Database/Eloquent",
 		"vendor/laravel/framework/src/Illuminate/Collections",
 		"vendor/laravel/framework/src/Illuminate/Database/Eloquent/Relations",
+		"vendor/laravel/framework/src/Illuminate/Database/Query",
 	} {
 		absDir := filepath.Join(root, dir)
 		filepath.Walk(absDir, func(path string, info os.FileInfo, err error) error {

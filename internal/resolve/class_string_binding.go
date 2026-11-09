@@ -237,8 +237,8 @@ func (r *Resolver) resolveClassStringArg(arg string, lines []string, pos protoco
 // function. Returns "" if the variable is a parameter, reassigned, or the
 // assignment RHS is not a ::class form.
 func (r *Resolver) traceVariableToClassString(varName string, lines []string, pos protocol.Position, file *parser.FileNode) string {
-	source := strings.Join(lines, "\n")
-	doc := scope.Collect(source)
+	source := r.JoinLines(lines)
+	doc := r.scopeDocument(lines)
 
 	var binding *scope.Binding
 	for _, b := range doc.Bindings {

@@ -663,7 +663,10 @@ func parseGenericExpr(raw string) (string, []TypeExpr, bool) {
 	if openIdx <= 0 || raw[len(raw)-1] != '>' {
 		return "", nil, false
 	}
-	name := trimLeadingSlash(strings.TrimSpace(raw[:openIdx]))
+	// The leading backslash of a fully qualified name is kept, as for plain
+	// names: it tells a global class from one in the current namespace.
+	// String() leaves it out.
+	name := strings.TrimSpace(raw[:openIdx])
 	paramsStr := raw[openIdx+1 : len(raw)-1]
 	params := splitTopLevelByComma(paramsStr)
 	if len(params) == 0 {

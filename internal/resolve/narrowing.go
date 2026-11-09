@@ -41,7 +41,7 @@ func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string
 		return t
 	}
 	from := r.lastWriteLine(varName, lines, pos)
-	if from < 0 || from > pos.Line {
+	if from < 0 || from > pos.Line || !mayNarrow(lines, from, pos, varName) {
 		return t
 	}
 	// Narrowing doesn't nest: the calls it reads type their receivers and
@@ -112,6 +112,31 @@ func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string
 	return t
 }
 
+// mayNarrow reports whether any line after the assignment on line from, up
+// to pos, passes varName to a call or calls a method on it, which is all that
+// can narrow it. It reads the text only, so most lookups stop here.
+func mayNarrow(lines []string, from int, pos protocol.Position, varName string) bool {
+	for i := pos.Line; i >= from; i-- {
+		line := lines[i]
+		if i == pos.Line && pos.Character <= len(line) {
+			line = line[:pos.Character]
+		}
+		k := strings.Index(line, varName)
+		if k < 0 {
+			continue
+		}
+		if i == from && strings.HasPrefix(strings.TrimSpace(line), varName) && !strings.Contains(line[k+len(varName):], varName) {
+			continue // the assignment itself
+		}
+		if strings.IndexByte(line, '(') >= 0 {
+			return true
+		}
+	}
+	// An if around pos may test it: its line is above `from` only when the
+	// variable is a parameter, which lastWriteLine reports as the scope start.
+	return false
+}
+
 // lastWriteLine returns the line of the last assignment to varName before
 // pos, or the start of its scope when it's a parameter never written.
 func (r *Resolver) lastWriteLine(varName string, lines []string, pos protocol.Position) int {
@@ -180,8 +205,16 @@ func braceDelta(line string) int {
 // applyStatementCall applies what a call statement says: asserts on the
 // argument passed for a parameter, @param-out, and self-out on the receiver.
 func (r *Resolver) applyStatementCall(varName string, t ResolvedType, stmt string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
-	callee, receiverExpr, args, ok := r.statementCallee(stmt, lines, pos, file)
-	if !ok || callee.member.DocComment == "" {
+	// Only a call the variable is passed to, or called on, can say anything
+	// about it. Checking that first keeps from resolving every call.
+	if !passesOrCallsOn(stmt, varName) {
+		return t
+	}
+	callee, receiverExpr, args, ok := r.statementCalleeWith(stmt, lines, pos, file, map[string]ResolvedType{varName: t})
+	if !ok {
+		return r.applyUnresolvedAssertion(varName, t, stmt, lines, pos, file)
+	}
+	if callee.member.DocComment == "" {
 		return t
 	}
 	doc := r.parseDoc(callee.member.DocComment)
@@ -235,11 +268,17 @@ type resolvedCallee struct {
 // statementCallee works out what the outermost call of a statement calls:
 // foo($x), $obj->foo($x), Foo::bar($x), $this->assertX($x).
 func (r *Resolver) statementCallee(stmt string, lines []string, pos protocol.Position, file *parser.FileNode) (callee resolvedCallee, receiverExpr string, args []CallArg, ok bool) {
+	return r.statementCalleeWith(stmt, lines, pos, file, nil)
+}
+
+// statementCalleeWith is statementCallee with the types of some variables
+// already known, so they aren't worked out again.
+func (r *Resolver) statementCalleeWith(stmt string, lines []string, pos protocol.Position, file *parser.FileNode, known map[string]ResolvedType) (callee resolvedCallee, receiverExpr string, args []CallArg, ok bool) {
 	steps, origin, parsed := parseChain(stmt)
 	if !parsed {
 		return callee, "", nil, false
 	}
-	ctx := ExprContext{Lines: lines, Pos: pos, File: file}
+	ctx := ExprContext{Lines: lines, Pos: pos, File: file, Locals: known}
 	if len(steps) == 0 {
 		if origin.kind != 'f' {
 			return callee, "", nil, false
@@ -567,4 +606,59 @@ func (r *Resolver) applyCondition(varName string, t ResolvedType, cond string, n
 		}
 	}
 	return t
+}
+
+// applyUnresolvedAssertion handles PHPUnit's assertInstanceOf(Foo::class, $x)
+// when PHPUnit itself isn't installed where it can be read (Symfony runs it
+// through simple-phpunit, outside vendor/): the call is what it says.
+func (r *Resolver) applyUnresolvedAssertion(varName string, t ResolvedType, stmt string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+	steps, origin, ok := parseChain(stmt)
+	if !ok {
+		return t
+	}
+	name, args := origin.text, origin.args
+	if len(steps) > 0 {
+		last := steps[len(steps)-1]
+		name, args = last.name, last.args
+	}
+	if !strings.EqualFold(name, "assertInstanceOf") {
+		return t
+	}
+	list := ParseCallArgs(args)
+	if len(list) < 2 || strings.TrimSpace(list[1].Expr) != varName {
+		return t
+	}
+	cls := ClassStringTarget(r.ExpressionType(list[0].Expr, ExprContext{Lines: lines, Pos: pos, File: file}))
+	if cls.FQN == "" || cls.FQN == "class-string" || IsBuiltinTypeName(cls.FQN) {
+		return t
+	}
+	return cls
+}
+
+// passesOrCallsOn reports whether a call statement passes varName as one of
+// its arguments or calls a method on it: foo($x), $this->assert($x),
+// $x->add(1). It reads the text only.
+func passesOrCallsOn(stmt, varName string) bool {
+	if strings.HasPrefix(stmt, varName+"->") || strings.HasPrefix(stmt, varName+"?->") {
+		return true
+	}
+	for i := strings.Index(stmt, varName); i >= 0; {
+		end := i + len(varName)
+		if end < len(stmt) && (isIdentByte(stmt[end]) || stmt[end] >= '0' && stmt[end] <= '9') {
+			// $xs, not $x
+		} else {
+			before := strings.TrimRight(stmt[:i], " \t&")
+			after := strings.TrimLeft(stmt[end:], " \t")
+			if (strings.HasSuffix(before, "(") || strings.HasSuffix(before, ",") || strings.HasSuffix(before, ":")) &&
+				(strings.HasPrefix(after, ")") || strings.HasPrefix(after, ",")) {
+				return true
+			}
+		}
+		next := strings.Index(stmt[end:], varName)
+		if next < 0 {
+			break
+		}
+		i = end + next
+	}
+	return false
 }

@@ -135,7 +135,7 @@ func sanitizeCompletions(items []protocol.CompletionItem) []protocol.CompletionI
 }
 
 func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []protocol.CompletionItem {
-	lines := resolve.SplitLines(source)
+	lines := p.resolver.Lines(source)
 	line := resolve.LineAt(lines, pos.Line)
 	prefix := ""
 	if pos.Character <= len(line) {
@@ -580,7 +580,7 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 			if newClass := extractNewClass(callExpr); newClass != "" {
 				fqn := p.resolveClassNameFromSource(newClass, source, file)
 				if args := extractNewArgs(callExpr); args != "" {
-					ctx := resolve.ExprContext{Lines: resolve.SplitLines(source), Pos: pos, File: file}
+					ctx := resolve.ExprContext{Lines: p.resolver.Lines(source), Pos: pos, File: file}
 					if rt := p.resolver.NewExpressionType(newClass, args, ctx); rt.FQN == fqn {
 						return rt
 					}
@@ -636,7 +636,7 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 	switch keywordOrTarget(target) {
 	case "$this":
 		if file != nil {
-			return p.resolver.ResolveVariableTypeTyped("$this", resolve.SplitLines(source), pos, file)
+			return p.resolver.ResolveVariableTypeTyped("$this", p.resolver.Lines(source), pos, file)
 		}
 		return resolve.ResolvedType{}
 	case "self", "static":
@@ -658,7 +658,7 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 	}
 
 	if strings.HasPrefix(target, "$") {
-		rt := p.resolver.ResolveVariableTypeTyped(target, resolve.SplitLines(source), pos, file)
+		rt := p.resolver.ResolveVariableTypeTyped(target, p.resolver.Lines(source), pos, file)
 		if parenEnd > 0 && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "->") && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
 			// $fn(…): what calling it gives.
 			return p.resolver.InvokeType(rt)
@@ -685,7 +685,7 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 	}
 	// A function call starts the chain: identity($x)->…
 	if parenEnd > 0 && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "->") && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
-		ctx := resolve.ExprContext{Lines: resolve.SplitLines(source), Pos: pos, File: file}
+		ctx := resolve.ExprContext{Lines: p.resolver.Lines(source), Pos: pos, File: file}
 		if rt := p.resolver.FunctionCallType(target, callArgStr, ctx); !rt.IsEmpty() {
 			return rt
 		}
@@ -701,7 +701,12 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 	}
 	member, foundOn := p.resolver.FindMemberOn(ownerResolved, target, parenEnd > 0)
 	if member != nil && foundOn.FQN != ownerResolved.FQN {
-		ownerResolved = foundOn // a member a @mixin brings in
+		// A member a @mixin brings in. A fluent one gives back the object it
+		// was called on, as forwarding through __call does.
+		if p.resolver.ReturnsCallingClass(member) {
+			return ownerResolved
+		}
+		ownerResolved = foundOn
 	}
 	ownerFQN = ownerResolved.BaseFQN()
 	if member == nil {
@@ -733,7 +738,7 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 	}
 	var call *resolve.CallSite
 	if parenEnd > 0 {
-		call = p.resolver.CallSiteFor(callArgStr, resolve.ExprContext{Lines: resolve.SplitLines(source), Pos: pos, File: file})
+		call = p.resolver.CallSiteFor(callArgStr, resolve.ExprContext{Lines: p.resolver.Lines(source), Pos: pos, File: file})
 	}
 	return p.resolver.MemberTypeForCall(member, file, callerFQN, ownerContext, call)
 }
@@ -874,7 +879,7 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 
 	// $variable-> or $variable::
 	if strings.HasPrefix(target, "$") {
-		return p.resolver.ResolveVariableType(target, resolve.SplitLines(source), pos, file)
+		return p.resolver.ResolveVariableType(target, p.resolver.Lines(source), pos, file)
 	}
 
 	// Try as a class name (for static access or direct use). A word after

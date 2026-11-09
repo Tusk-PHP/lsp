@@ -51,6 +51,7 @@ type Resolver struct {
 	// The last source's scopes, since one request asks about many variables.
 	scopeMu     sync.Mutex
 	scopeSource string
+	cachedLines []string
 	scopeDoc    *scope.Document
 
 	// parsed caches docblocks and PHPDoc types by their text.
@@ -1024,10 +1025,14 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 					}
 				}
 			}
-			arrayType := r.ResolveVariableTypeTyped(arrayVar, lines, pos, file)
-			if arrayType.FQN == "array" && len(arrayType.Params) >= 2 {
-				// array<TKey, TValue>[index] → TValue
-				return arrayType.Params[1]
+			// Only for a plain $other[index]: anything after the brackets, as in
+			// $rows[0]->last(), is a chain the typed resolver follows below.
+			if closeIdx := strings.LastIndexByte(rhs, ']'); closeIdx > bracketIdx && strings.TrimSpace(strings.TrimSuffix(rhs[closeIdx+1:], ";")) == "" {
+				arrayType := r.ResolveVariableTypeTyped(arrayVar, lines, pos, file)
+				if arrayType.FQN == "array" && len(arrayType.Params) >= 2 {
+					// array<TKey, TValue>[index] → TValue
+					return arrayType.Params[1]
+				}
 			}
 		}
 
@@ -1056,11 +1061,14 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 		// Use typed chain resolver if available. If a chain over several lines can't
 		// be followed to its end, what the first line gives is the best guess.
 		if r.TypedChainResolver != nil && (strings.Contains(rhs, "->") || strings.Contains(rhs, "::")) {
-			if rt := r.TypedChainResolver(rhs, strings.Join(lines, "\n"), pos, file); !rt.IsEmpty() {
+			if rt := r.TypedChainResolver(rhs, r.JoinLines(lines), pos, file); !rt.IsEmpty() {
 				return rt
 			}
-			if first := strings.TrimSuffix(firstLine, ";"); first != rhs {
-				if rt := r.TypedChainResolver(first, strings.Join(lines, "\n"), pos, file); !rt.IsEmpty() {
+			// Only when the text itself is cut short, as with unbalanced
+			// parentheses: a complete chain that can't be followed, say through
+			// a magic method, isn't what its first line is.
+			if first := strings.TrimSuffix(firstLine, ";"); first != rhs && strings.Count(rhs, "(") != strings.Count(rhs, ")") {
+				if rt := r.TypedChainResolver(first, r.JoinLines(lines), pos, file); !rt.IsEmpty() {
 					return rt
 				}
 			}
@@ -1068,7 +1076,7 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 
 		// Fall back to standard chain resolver
 		if r.ChainResolver != nil && (strings.Contains(rhs, "->") || strings.Contains(rhs, "::")) {
-			if t := r.ChainResolver(rhs, strings.Join(lines, "\n"), pos, file); t != "" {
+			if t := r.ChainResolver(rhs, r.JoinLines(lines), pos, file); t != "" {
 				return ResolvedType{FQN: t}
 			}
 		}
@@ -1156,7 +1164,7 @@ func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos
 		var iterableType ResolvedType
 		hasChain := strings.Contains(iterableExpr, "->") || strings.Contains(iterableExpr, "::")
 		if source == "" && (hasChain || r.TypedChainResolver != nil) {
-			source = strings.Join(lines, "\n")
+			source = r.JoinLines(lines)
 		}
 		switch {
 		case r.TypedChainResolver != nil && hasChain:
@@ -1357,7 +1365,7 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 		}
 		// $var = ClassName::method() or $var = $foo->bar()->baz()
 		if r.ChainResolver != nil && (strings.Contains(rhs, "->") || strings.Contains(rhs, "::")) {
-			if t := r.ChainResolver(rhs, strings.Join(lines, "\n"), pos, file); t != "" {
+			if t := r.ChainResolver(rhs, r.JoinLines(lines), pos, file); t != "" {
 				return t
 			}
 			break

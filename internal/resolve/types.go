@@ -26,6 +26,9 @@ type ResolvedType struct {
 	Fields       []ShapeEntry   // the fields of an array, list or object shape
 	Literal      string         // the value of a literal type: true, 'foo', 42
 	Conditional  *ConditionalType
+	// Qualified is set when the name was written fully qualified, with a
+	// leading backslash: it isn't relative to any namespace.
+	Qualified bool
 }
 
 // CallableType is the signature of a callable or Closure type.
@@ -385,7 +388,7 @@ func resolvedTypeFromDocType(t types.TypeExpr) ResolvedType {
 		}
 		return makeIntersection(parts, t.Nullable)
 	case types.TypeKindGeneric:
-		rt := ResolvedType{FQN: strings.TrimPrefix(t.Name, "\\"), Nullable: t.Nullable}
+		rt := ResolvedType{FQN: strings.TrimPrefix(t.Name, "\\"), Nullable: t.Nullable, Qualified: strings.HasPrefix(t.Name, "\\")}
 		for _, param := range t.Params {
 			rt.Params = append(rt.Params, resolvedTypeFromDocType(param))
 		}
@@ -488,7 +491,7 @@ func resolvedTypeFromDocType(t types.TypeExpr) ResolvedType {
 		if strings.HasPrefix(name, "'") || strings.HasPrefix(name, "\"") {
 			return ResolvedType{FQN: "string", Nullable: t.Nullable, Literal: name}
 		}
-		return ResolvedType{FQN: strings.TrimPrefix(name, "\\"), Nullable: t.Nullable}
+		return ResolvedType{FQN: strings.TrimPrefix(name, "\\"), Nullable: t.Nullable, Qualified: strings.HasPrefix(name, "\\")}
 	}
 }
 

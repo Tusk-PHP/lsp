@@ -25,11 +25,13 @@ type variableScope struct {
 }
 
 func (r *Resolver) scopeDocument(lines []string) *scope.Document {
-	source := strings.Join(lines, "\n")
 	r.scopeMu.Lock()
 	defer r.scopeMu.Unlock()
-	if r.scopeDoc == nil || r.scopeSource != source {
-		r.scopeSource, r.scopeDoc = source, scope.Collect(source)
+	if r.cachedLines == nil || !sameLines(r.cachedLines, lines) {
+		r.setSourceLocked(strings.Join(lines, "\n"), lines)
+	}
+	if r.scopeDoc == nil {
+		r.scopeDoc = scope.Collect(r.scopeSource)
 	}
 	return r.scopeDoc
 }
@@ -212,16 +214,21 @@ func assignmentValue(lines []string, i int, varPrefix string) (full, firstLine s
 }
 
 // continuedExpression adds the lines an expression carries on to, when it's still
-// inside a call's parentheses or the next line continues a method chain. Bodies
-// of closures aren't followed, since nothing in them changes the expression's type.
+// inside a call's parentheses or the next line continues a method chain. A
+// closure passed as an argument is read through, so the chain after it counts.
 func continuedExpression(lines []string, i int, expr string) string {
 	const maxLines = 30
 	for j := i + 1; j < len(lines) && j <= i+maxLines; j++ {
-		if strings.Contains(expr, "{") || strings.HasSuffix(strings.TrimSpace(expr), ";") {
+		open := strings.Count(expr, "(") - strings.Count(expr, ")")
+		trimmed := strings.TrimSpace(expr)
+		// A complete statement, or a block that isn't a call's argument (such
+		// as a closure assigned to the variable), ends it. A closure passed to
+		// a call is followed to its end, since the chain may go on after it.
+		if open <= 0 && (strings.HasSuffix(trimmed, ";") || strings.HasSuffix(trimmed, "{")) {
 			break
 		}
 		next := strings.TrimSpace(lines[j])
-		if strings.Count(expr, "(") <= strings.Count(expr, ")") && !strings.HasPrefix(next, "->") && !strings.HasPrefix(next, "?->") {
+		if open <= 0 && !strings.HasPrefix(next, "->") && !strings.HasPrefix(next, "?->") {
 			break
 		}
 		expr += next

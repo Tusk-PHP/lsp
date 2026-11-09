@@ -98,7 +98,7 @@ func (r *Resolver) ExpressionTypeExpecting(expr string, expected *ResolvedType, 
 		}
 		_, local := ctx.Locals[origin.text]
 		if !local && r.TypedChainResolver != nil && ctx.File != nil && len(ctx.Lines) > 0 {
-			if rt := r.TypedChainResolver(expr, strings.Join(ctx.Lines, "\n"), ctx.Pos, ctx.File); !rt.IsEmpty() {
+			if rt := r.TypedChainResolver(expr, r.JoinLines(ctx.Lines), ctx.Pos, ctx.File); !rt.IsEmpty() {
 				return rt
 			}
 		}
@@ -112,7 +112,7 @@ func (r *Resolver) ExpressionTypeExpecting(expr string, expected *ResolvedType, 
 		return cur
 	}
 	if r.TypedChainResolver != nil && ctx.File != nil && len(ctx.Lines) > 0 && (strings.Contains(expr, "->") || strings.Contains(expr, "::")) {
-		return r.TypedChainResolver(expr, strings.Join(ctx.Lines, "\n"), ctx.Pos, ctx.File)
+		return r.TypedChainResolver(expr, r.JoinLines(ctx.Lines), ctx.Pos, ctx.File)
 	}
 	return ResolvedType{}
 }
@@ -356,6 +356,11 @@ func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext
 	}
 	member, owner := r.FindMemberOn(cur, name, st.call)
 	if member != nil && owner.FQN != cur.FQN {
+		// Through @mixin: a fluent method of the mixin gives back the object
+		// it was called on, as forwarding through __call does.
+		if r.ReturnsCallingClass(member) {
+			return cur
+		}
 		cur = owner
 	}
 	if member == nil {
