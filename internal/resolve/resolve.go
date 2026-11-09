@@ -189,6 +189,9 @@ func FindEnclosingClass(file *parser.FileNode, pos protocol.Position) string {
 	if file == nil {
 		return ""
 	}
+	if anon := file.AnonymousClassAt(pos.Line, pos.Character); anon != nil {
+		return anon.FullName
+	}
 	for _, c := range classLikes(file) {
 		if pos.Line >= c.startLine {
 			return c.fqn
@@ -201,6 +204,16 @@ func FindEnclosingClass(file *parser.FileNode, pos protocol.Position) string {
 func FindEnclosingMethod(file *parser.FileNode, pos protocol.Position) *parser.MethodNode {
 	if file == nil {
 		return nil
+	}
+	if anon := file.AnonymousClassAt(pos.Line, pos.Character); anon != nil {
+		var best *parser.MethodNode
+		for mi := range anon.Methods {
+			m := &anon.Methods[mi]
+			if pos.Line >= m.StartLine && (best == nil || m.StartLine > best.StartLine) {
+				best = m
+			}
+		}
+		return best
 	}
 	for _, c := range classLikes(file) {
 		if pos.Line < c.startLine {

@@ -1248,6 +1248,10 @@ func enclosingClassAtLine(file *parser.FileNode, line int) *parser.ClassNode {
 	if file == nil {
 		return nil
 	}
+	// Only the line is known here: the line with the `{` counts as outside.
+	if anon := file.AnonymousClassAt(line, 0); anon != nil {
+		return anon
+	}
 	var best *parser.ClassNode
 	for i := range file.Classes {
 		cls := &file.Classes[i]
@@ -1371,6 +1375,9 @@ func isExprChar(b byte) bool {
 }
 
 func unknownSymbolShortName(fqn string) string {
+	if parser.IsAnonymousClass(fqn) {
+		return parser.AnonymousClassName
+	}
 	if idx := strings.LastIndex(fqn, "\\"); idx >= 0 {
 		return fqn[idx+1:]
 	}

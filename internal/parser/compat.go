@@ -82,6 +82,9 @@ type ClassNode struct {
 	EndLine    int
 	StartCol   int
 	DocComment string
+	// BodyLine and BodyCol are where an anonymous class's `{` is, set only
+	// for AnonymousClasses.
+	BodyLine, BodyCol int
 }
 
 type InterfaceNode struct {
@@ -149,15 +152,18 @@ type FunctionNode struct {
 }
 
 type FileNode struct {
-	Namespace  string
-	Uses       []UseNode
-	Classes    []ClassNode
-	Interfaces []InterfaceNode
-	Traits     []TraitNode
-	Enums      []EnumNode
-	Functions  []FunctionNode
-	Constants  []ConstantNode
-	Errors     []ParseError
+	Namespace string
+	Uses      []UseNode
+	Classes   []ClassNode
+	// AnonymousClasses are the `new class { ... }` expressions in the file.
+	// Their Name is AnonymousClassName and their FullName is unique to the file.
+	AnonymousClasses []ClassNode
+	Interfaces       []InterfaceNode
+	Traits           []TraitNode
+	Enums            []EnumNode
+	Functions        []FunctionNode
+	Constants        []ConstantNode
+	Errors           []ParseError
 }
 
 type DocParam struct {
@@ -543,31 +549,10 @@ func toFileNode(result *ParseResult) *FileNode {
 	}
 
 	for _, classDef := range result.Classes {
-		classNode := ClassNode{
-			Attributes: classDef.Attributes,
-			Name:       classDef.Name,
-			FullName:   classDef.FullName,
-			Extends:    classDef.Extends,
-			Implements: append([]string(nil), classDef.Implements...),
-			Traits:     append([]string(nil), classDef.Traits...),
-			IsAbstract: classDef.IsAbstract,
-			IsFinal:    classDef.IsFinal,
-			IsReadonly: classDef.IsReadonly,
-			StartLine:  classDef.Line,
-			EndLine:    classDef.EndLine,
-			StartCol:   startColumnForDeclaration(result, classDef.Name, classDef.Line, TokenClass),
-			DocComment: classDef.DocComment,
-		}
-		for _, propertyDef := range classDef.Properties {
-			classNode.Properties = append(classNode.Properties, toPropertyNode(result, propertyDef))
-		}
-		for _, methodDef := range classDef.Methods {
-			classNode.Methods = append(classNode.Methods, toMethodNode(result, methodDef))
-		}
-		for _, constantDef := range classDef.Constants {
-			classNode.Constants = append(classNode.Constants, toConstantNode(result, constantDef))
-		}
-		file.Classes = append(file.Classes, classNode)
+		file.Classes = append(file.Classes, toClassNode(result, classDef))
+	}
+	for _, classDef := range result.AnonymousClasses {
+		file.AnonymousClasses = append(file.AnonymousClasses, toClassNode(result, classDef))
 	}
 
 	for _, interfaceDef := range result.Interfaces {
@@ -771,4 +756,34 @@ func nameColumnOnLine(result *ParseResult, name string, line int) int {
 		}
 	}
 	return 0
+}
+
+func toClassNode(result *ParseResult, classDef ClassDef) ClassNode {
+	classNode := ClassNode{
+		Attributes: classDef.Attributes,
+		Name:       classDef.Name,
+		FullName:   classDef.FullName,
+		Extends:    classDef.Extends,
+		Implements: append([]string(nil), classDef.Implements...),
+		Traits:     append([]string(nil), classDef.Traits...),
+		IsAbstract: classDef.IsAbstract,
+		IsFinal:    classDef.IsFinal,
+		IsReadonly: classDef.IsReadonly,
+		StartLine:  classDef.Line,
+		EndLine:    classDef.EndLine,
+		StartCol:   startColumnForDeclaration(result, classDef.Name, classDef.Line, TokenClass),
+		DocComment: classDef.DocComment,
+		BodyLine:   classDef.BodyLine,
+		BodyCol:    classDef.BodyCol,
+	}
+	for _, propertyDef := range classDef.Properties {
+		classNode.Properties = append(classNode.Properties, toPropertyNode(result, propertyDef))
+	}
+	for _, methodDef := range classDef.Methods {
+		classNode.Methods = append(classNode.Methods, toMethodNode(result, methodDef))
+	}
+	for _, constantDef := range classDef.Constants {
+		classNode.Constants = append(classNode.Constants, toConstantNode(result, constantDef))
+	}
+	return classNode
 }

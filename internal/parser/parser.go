@@ -14,18 +14,21 @@ func New() *PHPParser {
 
 // ParseResult holds the structured output of parsing a PHP file.
 type ParseResult struct {
-	Namespace  string
-	Uses       []UseStatement
-	Classes    []ClassDef
-	Interfaces []InterfaceDef
-	Traits     []TraitDef
-	Enums      []EnumDef
-	Functions  []FunctionDef
-	Constants  []ConstantDef
-	Variables  []VariableDef
-	Tokens     []Token
-	Errors     []ParseError
-	Lines      []string
+	Namespace string
+	Uses      []UseStatement
+	Classes   []ClassDef
+	// AnonymousClasses are the `new class { ... }` expressions in the file,
+	// kept apart from Classes, whose entries are declarations.
+	AnonymousClasses []ClassDef
+	Interfaces       []InterfaceDef
+	Traits           []TraitDef
+	Enums            []EnumDef
+	Functions        []FunctionDef
+	Constants        []ConstantDef
+	Variables        []VariableDef
+	Tokens           []Token
+	Errors           []ParseError
+	Lines            []string
 	// Matches holds all match expressions found in the file (including those
 	// inside function and method bodies). Populated by the expression scanner
 	// that runs after the declaration-level pass. Nested match expressions are
@@ -61,6 +64,8 @@ type ClassDef struct {
 	Line       int
 	EndLine    int
 	DocComment string
+	// BodyLine and BodyCol are where an anonymous class's `{` is.
+	BodyLine, BodyCol int
 }
 
 type InterfaceDef struct {
@@ -844,6 +849,7 @@ func identifierToKind(word string) TokenKind {
 func parseStructure(tokens []Token, result *ParseResult) {
 	p := &structParser{tokens: tokens, pos: 0, result: result}
 	p.parse()
+	p.parseAnonymousClasses()
 	// Expression scanner is a separate single-pass over the token stream.
 	// It runs after declarations so it shares the same token slice without
 	// re-tokenising. Strings/comments are already collapsed, so keyword
