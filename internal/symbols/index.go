@@ -272,13 +272,13 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 				ps := &Symbol{Name: prop.Name, FQN: fqn + "::" + prop.Name, Kind: KindProperty, URI: uri,
 					Visibility: prop.Visibility, SetVisibility: prop.SetVisibility,
 					IsStatic: prop.IsStatic, Type: resolve(prop.Type.Name),
-					DocComment: prop.DocComment, ParentFQN: fqn,
+					DocComment: qualifyDocTypes(prop.DocComment, file.Uses), ParentFQN: fqn,
 					Hooks: append([]parser.PropertyHook(nil), prop.Hooks...),
 					Range: symRange(prop.StartLine, prop.StartCol, len(prop.Name))}
 				sym.Children = append(sym.Children, ps)
 				idx.addSymbolWithSource(uri, ps, SourceProject)
 			}
-			idx.indexMethods(uri, sym, fqn, c.Methods, SourceProject, resolve)
+			idx.indexMethods(uri, sym, fqn, c.Methods, SourceProject, resolve, file.Uses)
 			idx.indexVirtualMembers(uri, sym, SourceProject, resolve)
 		}
 	}
@@ -335,8 +335,8 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		for _, tr := range c.Traits {
 			idx.traitMap[fqn] = append(idx.traitMap[fqn], resolve(tr))
 		}
-		idx.indexProperties(uri, sym, fqn, c.Properties, src, resolve)
-		idx.indexMethods(uri, sym, fqn, c.Methods, src, resolve)
+		idx.indexProperties(uri, sym, fqn, c.Properties, src, resolve, file.Uses)
+		idx.indexMethods(uri, sym, fqn, c.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, c.Constants, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 		if src == SourceBuiltin {
@@ -358,8 +358,8 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 			idx.implementsMap[fqn] = append(idx.implementsMap[fqn], parent)
 			idx.subInterfaceMap[parent] = appendUnique(idx.subInterfaceMap[parent], fqn)
 		}
-		idx.indexProperties(uri, sym, fqn, iface.Properties, src, resolve)
-		idx.indexMethods(uri, sym, fqn, iface.Methods, src, resolve)
+		idx.indexProperties(uri, sym, fqn, iface.Properties, src, resolve, file.Uses)
+		idx.indexMethods(uri, sym, fqn, iface.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, iface.Constants, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 	}
@@ -372,8 +372,8 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		for _, usedTrait := range tr.Traits {
 			idx.traitMap[fqn] = append(idx.traitMap[fqn], resolve(usedTrait))
 		}
-		idx.indexProperties(uri, sym, fqn, tr.Properties, src, resolve)
-		idx.indexMethods(uri, sym, fqn, tr.Methods, src, resolve)
+		idx.indexProperties(uri, sym, fqn, tr.Properties, src, resolve, file.Uses)
+		idx.indexMethods(uri, sym, fqn, tr.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, tr.Constants, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 	}
@@ -402,8 +402,8 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		for _, tr := range en.Traits {
 			idx.traitMap[fqn] = append(idx.traitMap[fqn], resolve(tr))
 		}
-		idx.indexProperties(uri, sym, fqn, en.Properties, src, resolve)
-		idx.indexMethods(uri, sym, fqn, en.Methods, src, resolve)
+		idx.indexProperties(uri, sym, fqn, en.Properties, src, resolve, file.Uses)
+		idx.indexMethods(uri, sym, fqn, en.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, en.Constants, src, resolve)
 		idx.indexEnumMembers(uri, sym, src)
 	}
@@ -414,7 +414,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		fqn := buildFQN(ns, fn.Name)
 		sym := &Symbol{Name: fn.Name, FQN: fqn, Kind: KindFunction, URI: uri, ReturnType: resolve(fn.ReturnType.Name),
 			Attributes: indexAttributes(fn.Attributes, resolve),
-			DocComment: fn.DocComment, Range: symRange(fn.StartLine, fn.StartCol, len(fn.Name))}
+			DocComment: qualifyDocTypes(fn.DocComment, file.Uses), Range: symRange(fn.StartLine, fn.StartCol, len(fn.Name))}
 		for _, p := range fn.Params {
 			sym.Params = append(sym.Params, ParamInfo{Name: p.Name, Type: resolve(p.Type.Name), DefaultValue: p.DefaultValue, IsVariadic: p.IsVariadic, IsReference: p.IsReference})
 		}
@@ -533,7 +533,7 @@ func namespaceForFQN(fqn string) string {
 	return ""
 }
 
-func (idx *Index) indexMethods(uri string, parent *Symbol, parentFQN string, methods []parser.MethodNode, src SymbolSource, resolve func(string) string) {
+func (idx *Index) indexMethods(uri string, parent *Symbol, parentFQN string, methods []parser.MethodNode, src SymbolSource, resolve func(string) string, uses []parser.UseNode) {
 	for _, m := range methods {
 		ms := &Symbol{
 			Name:       m.Name,
@@ -546,7 +546,7 @@ func (idx *Index) indexMethods(uri string, parent *Symbol, parentFQN string, met
 			IsAbstract: m.IsAbstract,
 			IsFinal:    m.IsFinal,
 			ReturnType: resolve(m.ReturnType.Name),
-			DocComment: m.DocComment,
+			DocComment: qualifyDocTypes(m.DocComment, uses),
 			ParentFQN:  parentFQN,
 			Range:      symRange(m.StartLine, m.StartCol, len(m.Name)),
 		}
@@ -564,12 +564,12 @@ func (idx *Index) indexMethods(uri string, parent *Symbol, parentFQN string, met
 	}
 }
 
-func (idx *Index) indexProperties(uri string, parent *Symbol, parentFQN string, props []parser.PropertyNode, src SymbolSource, resolve func(string) string) {
+func (idx *Index) indexProperties(uri string, parent *Symbol, parentFQN string, props []parser.PropertyNode, src SymbolSource, resolve func(string) string, uses []parser.UseNode) {
 	for _, prop := range props {
 		ps := &Symbol{Name: prop.Name, FQN: parentFQN + "::" + prop.Name, Kind: KindProperty, URI: uri,
 			Visibility: prop.Visibility, SetVisibility: prop.SetVisibility,
 			IsStatic: prop.IsStatic, IsReadonly: prop.IsReadonly, Type: resolve(prop.Type.Name),
-			DocComment: prop.DocComment, ParentFQN: parentFQN, Attributes: indexAttributes(prop.Attributes, resolve),
+			DocComment: qualifyDocTypes(prop.DocComment, uses), ParentFQN: parentFQN, Attributes: indexAttributes(prop.Attributes, resolve),
 			Hooks: append([]parser.PropertyHook(nil), prop.Hooks...),
 			Range: symRange(prop.StartLine, prop.StartCol, len(prop.Name))}
 		parent.Children = append(parent.Children, ps)
