@@ -48,8 +48,10 @@ func (r *Resolver) expandAliasToken(token, ownerFQN string, file *parser.FileNod
 	if token == "" || token == "$this" || token == "self" || token == "static" || symbols.IsPHPBuiltinType(token) {
 		return token
 	}
-	if strings.HasPrefix(token, "\\") || strings.Contains(token, "\\") {
-		return strings.TrimPrefix(token, "\\")
+	// A qualified name is never an alias. A leading backslash is kept: it
+	// says the name is global, not relative to the declaring namespace.
+	if strings.Contains(token, "\\") {
+		return token
 	}
 
 	aliasKey := ownerFQN + "::" + token

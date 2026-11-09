@@ -173,6 +173,10 @@ func (r *Resolver) applyEnv(rt ResolvedType, env typeEnv) ResolvedType {
 			}
 			return out
 		}
+		if t.Qualified {
+			t.Qualified = false
+			return t
+		}
 		if env.fileFirst && env.file != nil && !IsBuiltinTypeName(t.FQN) && !strings.HasPrefix(t.FQN, "\\") {
 			if res := r.ResolveClassName(t.FQN, env.file); res != t.FQN || r.Index != nil && r.Index.Lookup(res) != nil {
 				t.FQN = res

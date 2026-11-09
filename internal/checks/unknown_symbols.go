@@ -521,6 +521,14 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 			}
 			owners = append(owners, narrowed...)
 			access := memberAccess{name: member, isStatic: isStatic, isCall: isCallAfter(line, nameEnd)}
+			if !access.isCall && !isStatic {
+				// isset(), unset(), empty() and ?? are how code asks whether a
+				// property is there; and a class with #[AllowDynamicProperties]
+				// (or stdClass) has whatever properties code gives it.
+				if propertyCheckedForPresence(line, backwardExprStart(line, opStart), nameEnd) || anyOwnerAllowsDynamicProperties(owners, index) {
+					continue
+				}
+			}
 			if anyOwnerMayHaveMember(owners, access, file, index, hierarchies) {
 				continue
 			}
@@ -1039,6 +1047,72 @@ func isAbstractClassLike(sym *symbols.Symbol) bool {
 		return false
 	}
 	return sym.Kind == symbols.KindInterface || (sym.Kind == symbols.KindClass && sym.IsAbstract)
+}
+
+// propertyCheckedForPresence reports whether the property access running
+// from exprStart to nameEnd is the argument of isset(), unset() or empty(), or
+// the left side of ??, where PHP doesn't require the property to exist.
+func propertyCheckedForPresence(line string, exprStart, nameEnd int) bool {
+	if rest := strings.TrimLeft(line[nameEnd:], " \t"); strings.HasPrefix(rest, "??") {
+		return true
+	}
+	depth := 0
+	for i := exprStart - 1; i >= 0; i-- {
+		switch line[i] {
+		case ')', ']':
+			depth++
+		case '(', '[':
+			if depth > 0 {
+				depth--
+				continue
+			}
+			if line[i] == '[' {
+				return false
+			}
+			j := i
+			for j > 0 && (line[j-1] == ' ' || line[j-1] == '\t') {
+				j--
+			}
+			k := j
+			for k > 0 && isIdentChar(line[k-1]) {
+				k--
+			}
+			switch strings.ToLower(line[k:j]) {
+			case "isset", "unset", "empty":
+				return true
+			}
+			return false
+		case ';', '{', '}':
+			return false
+		}
+	}
+	return false
+}
+
+// anyOwnerAllowsDynamicProperties reports whether one of the owners, or a
+// class it extends, is stdClass or has #[AllowDynamicProperties].
+func anyOwnerAllowsDynamicProperties(owners []string, index *symbols.Index) bool {
+	if index == nil {
+		return false
+	}
+	for _, owner := range owners {
+		classes := append([]string{owner}, index.GetInheritanceChain(owner)...)
+		for _, cls := range classes {
+			if strings.EqualFold(cls, "stdClass") {
+				return true
+			}
+			sym := index.Lookup(cls)
+			if sym == nil {
+				continue
+			}
+			for _, attr := range sym.Attributes {
+				if strings.EqualFold(strings.TrimPrefix(attr.FQN, "\\"), "AllowDynamicProperties") {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func isCallAfter(line string, pos int) bool {

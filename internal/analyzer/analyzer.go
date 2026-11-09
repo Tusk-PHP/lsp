@@ -443,7 +443,7 @@ func (a *Analyzer) definitionForVariable(varName string, source string, pos prot
 	if file == nil {
 		return nil
 	}
-	typeName := a.resolver.ResolveVariableType(varName, resolve.SplitLines(source), pos, file)
+	typeName := a.resolver.ResolveVariableType(varName, a.resolver.Lines(source), pos, file)
 	if typeName == "" {
 		return nil
 	}
@@ -627,7 +627,7 @@ func (a *Analyzer) resolveAccessChainTyped(line string, wordStart int, source st
 
 	if strings.HasPrefix(target, "$") {
 		// Use typed resolution to preserve generic params
-		return a.resolver.ResolveVariableTypeTyped(target, resolve.SplitLines(source), pos, file)
+		return a.resolver.ResolveVariableTypeTyped(target, a.resolver.Lines(source), pos, file)
 	}
 
 	// Try as a class name (for static access like Logger::create)
@@ -705,7 +705,7 @@ func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position)
 	}
 
 	if strings.HasPrefix(word, "$") {
-		return a.locationsForTypeName(a.resolver.ResolveVariableType(word, resolve.SplitLines(source), pos, file), file)
+		return a.locationsForTypeName(a.resolver.ResolveVariableType(word, a.resolver.Lines(source), pos, file), file)
 	}
 
 	if ctx.AccessKind != sourcectx.AccessNone {

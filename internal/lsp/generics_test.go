@@ -663,3 +663,81 @@ func TestGenericsNarrowing(t *testing.T) {
 		})
 	}
 }
+
+// fieldRunCases come from running the generics work over Laravel, Symfony,
+// Magento 2 and WordPress: each is a false warning or a wrong type that run
+// turned up.
+var fieldRunCases = []phpVersionCase{
+	{name: "field run/a call after an offset is followed", completion: []string{"getRetryCount"}, src: `
+class RedeliveryStamp { public function getRetryCount(): int { return 0; } }
+final class Envelope {
+	/**
+	 * @template TStamp of object
+	 * @param class-string<TStamp> $class
+	 * @return TStamp|null
+	 */
+	public function last(string $class): ?object { return null; }
+}
+/** @param list<Envelope> $envelopes */
+function run(array $envelopes): void { $stamp = $envelopes[0]->last(RedeliveryStamp::class); $stamp-><|> }`},
+	{name: "field run/a fully qualified PHPDoc type isn't read in the namespace", completion: []string{"getTimestamp"}, src: `
+class DateTime { public function custom(): void {} }
+interface Timezone {
+	/** @return \DateTime */
+	public function date();
+}
+function run(Timezone $tz): void { $tz->date()-><|> }`},
+	{name: "field run/a chain goes on after a closure argument", completion: []string{"name"}, src: `
+class PersonFactory {
+	public static function new(): PersonFactory { return new PersonFactory(); }
+	public function afterMaking(\Closure $fn): static { return $this; }
+	public function createOne(): Person { return new Person(); }
+}
+function run(): void {
+	$person = PersonFactory::new()
+		->afterMaking(function (Person $p) {
+			$p->name();
+		})
+		->createOne();
+	$person-><|>
+}`},
+	{name: "field run/assertInstanceOf narrows without PHPUnit installed", noDiag: []string{"unknown-member"}, src: `
+abstract class Shape {}
+class Circle extends Shape { public function radius(): int { return 1; } }
+class Factory {
+	/**
+	 * @template T of object
+	 * @param class-string<T> $class
+	 * @return T
+	 */
+	public function make(string $class): object { return new Circle(); }
+}
+class ShapeTest extends \PHPUnit\Framework\TestCase {
+	function go(Factory $f): void {
+		$shape = $f->make(Shape::class);
+		$this->assertInstanceOf(Circle::class, $shape);
+		echo $shape->radius();
+	}
+}`},
+	{name: "field run/isset and unset of an undeclared property", clean: true, src: `
+class Customer {
+	public function reset(): void {
+		if (isset($this->subscribed)) {
+			unset($this->subscribed);
+		}
+		echo $this->label ?? '';
+	}
+}`},
+	{name: "field run/AllowDynamicProperties", clean: true, src: `
+#[\AllowDynamicProperties]
+final class PostType {}
+function run(PostType $type): void { $type->capabilities = []; echo count($type->capabilities); }`},
+}
+
+func TestGenericsFieldRun(t *testing.T) {
+	for _, tc := range fieldRunCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runPHPVersionCase(t, tc)
+		})
+	}
+}

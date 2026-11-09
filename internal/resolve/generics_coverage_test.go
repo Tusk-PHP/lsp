@@ -406,9 +406,19 @@ func TestAssignmentValue(t *testing.T) {
 		"});",
 		"$a = $b",
 		"    ?? 1;",
+		"$a = j(function () {",
+		"    return 1;",
+		"})",
+		"    ->k();",
+		"$a = function () {",
+		"    return 1;",
+		"};",
 	}
+	// A closure passed to a call is read through, so the chain after it
+	// counts; one assigned to the variable is not.
 	want := map[int]string{
-		0: "1;", 1: "2;", 6: "$b->c()->d()?->e();", 9: "f($g,)->h();", 12: "i(function () {", 15: "$b",
+		0: "1;", 1: "2;", 6: "$b->c()->d()?->e();", 9: "f($g,)->h();", 12: "i(function () {return 1;});", 15: "$b",
+		17: "j(function () {return 1;})->k();", 21: "function () {",
 	}
 	for i := range lines {
 		got, _, ok := assignmentValue(lines, i, "$a")
