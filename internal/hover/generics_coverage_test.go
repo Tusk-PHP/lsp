@@ -64,6 +64,9 @@ $service->fetch();
 	idx.IndexFile("file:///hover.php", source)
 	p := NewProvider(idx, nil, "none")
 	p.GenericExprResolver = func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
+		if expr == "$service" {
+			return resolve.ResolvedType{FQN: "App\\Service"}
+		}
 		return resolve.ResolvedType{
 			FQN:    "App\\Collection",
 			Params: []resolve.ResolvedType{{FQN: "int"}, {FQN: "App\\User"}},

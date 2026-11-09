@@ -9,7 +9,10 @@ import (
 
 // qualifyDocTypes rewrites the class names a member's PHPDoc types take from
 // the file's `use` imports to fully qualified names, in its @param, @return,
-// @var and @throws tags (and their @phpstan- and @psalm- forms).
+// @var and @throws tags, the generic tags (@template bounds and defaults,
+// @extends, @implements, @use, @mixin, @param-out, @phpstan-assert and the
+// like) and class-level @method and @property tags, in their plain,
+// @phpstan- and @psalm- forms.
 //
 // A PHPDoc type means what the imports of the file that declares it say, but
 // it is read where the member is used, where another class may have the same
@@ -40,35 +43,34 @@ func qualifyDocTypes(doc string, uses []parser.UseNode) string {
 		i = j
 		tag := doc[at+1 : j]
 		tag = strings.TrimPrefix(strings.TrimPrefix(tag, "phpstan-"), "psalm-")
-		switch tag {
-		case "param", "return", "var", "throws":
-		default:
-			continue
-		}
-		ts := j
-		for ts < len(doc) && (doc[ts] == ' ' || doc[ts] == '\t') {
-			ts++
-		}
-		lineEnd := strings.IndexByte(doc[ts:], '\n')
+		lineEnd := strings.IndexByte(doc[j:], '\n')
 		if lineEnd < 0 {
 			lineEnd = len(doc)
 		} else {
-			lineEnd += ts
+			lineEnd += j
 		}
-		typeStr, _ := types.ExtractDocTypeString(doc[ts:lineEnd])
-		if typeStr == "" || !strings.HasPrefix(doc[ts:], typeStr) {
-			continue
-		}
-		forEachImportedName(typeStr, uses, func(start, end int, fqn string) {
-			if b.Len() == 0 {
-				b.Grow(len(doc) + 64)
+		starts, n := docTagTypeStarts(tag, doc, j, lineEnd)
+		for _, ts := range starts[:n] {
+			if ts < last {
+				continue
 			}
-			b.WriteString(doc[last : ts+start])
-			b.WriteByte('\\')
-			b.WriteString(fqn)
-			last = ts + end
-		})
-		i = ts + len(typeStr)
+			typeStr, _ := types.ExtractDocTypeString(doc[ts:lineEnd])
+			if typeStr == "" || !strings.HasPrefix(doc[ts:], typeStr) {
+				continue
+			}
+			forEachImportedName(typeStr, uses, func(start, end int, fqn string) {
+				if b.Len() == 0 {
+					b.Grow(len(doc) + 64)
+				}
+				b.WriteString(doc[last : ts+start])
+				b.WriteByte('\\')
+				b.WriteString(fqn)
+				last = ts + end
+			})
+			if ts+len(typeStr) > i {
+				i = ts + len(typeStr)
+			}
+		}
 	}
 	if last == 0 {
 		return doc
@@ -142,6 +144,66 @@ func importedName(name string, uses []parser.UseNode) (string, bool) {
 		return full, true
 	}
 	return "", false
+}
+
+// docTagTypeStarts returns where the types of a tag's value start in doc. The
+// tag's name ends at j and its line at lineEnd. Most tags start with a type;
+// @template has one after `of` and another after `=`.
+func docTagTypeStarts(tag, doc string, j, lineEnd int) (starts [2]int, n int) {
+	ts := j
+	for ts < lineEnd && (doc[ts] == ' ' || doc[ts] == '\t') {
+		ts++
+	}
+	if ts >= lineEnd {
+		return starts, 0
+	}
+	switch tag {
+	case "param", "return", "var", "throws", "param-out", "param-closure-this",
+		"extends", "implements", "use", "template-extends", "template-implements", "template-use",
+		"mixin", "self-out", "this-out", "property", "property-read", "property-write":
+		return [2]int{ts}, 1
+	case "assert", "assert-if-true", "assert-if-false":
+		for ts < lineEnd && (doc[ts] == '!' || doc[ts] == '=') {
+			ts++
+		}
+		return [2]int{ts}, 1
+	case "method":
+		if strings.HasPrefix(doc[ts:lineEnd], "static ") {
+			ts += len("static ")
+			for ts < lineEnd && doc[ts] == ' ' {
+				ts++
+			}
+		}
+		// Only a return type: `@method name()` has none.
+		rest := doc[ts:lineEnd]
+		if open := strings.IndexByte(rest, '('); open >= 0 && !strings.ContainsAny(strings.TrimSpace(rest[:open]), " \t") {
+			return starts, 0
+		}
+		return [2]int{ts}, 1
+	case "template", "template-covariant", "template-contravariant":
+		line := doc[ts:lineEnd]
+		for _, kw := range []string{" of ", " as "} {
+			if k := strings.Index(line, kw); k >= 0 {
+				p := ts + k + len(kw)
+				for p < lineEnd && doc[p] == ' ' {
+					p++
+				}
+				starts[n] = p
+				n++
+				break
+			}
+		}
+		if k := strings.Index(line, "="); k >= 0 {
+			p := ts + k + 1
+			for p < lineEnd && doc[p] == ' ' {
+				p++
+			}
+			starts[n] = p
+			n++
+		}
+		return starts, n
+	}
+	return starts, 0
 }
 
 func isDocNameByte(c byte) bool {

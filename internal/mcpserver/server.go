@@ -739,7 +739,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 
 	rt.Diagnostics = diagnostics.NewProvider(ws.Index, s.Framework, s.RootPath, newStdLogger(nil), s.Config)
 	rt.Diagnostics.TypeResolver = func(expr, source string, line int, file *parser.FileNode) string {
-		return rt.Completion.ResolveExpressionType(expr, source, protocol.Position{Line: line}, file)
+		return rt.Completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line}, file)
 	}
 	rt.Diagnostics.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(ws.Index)
 	rt.Diagnostics.BuiltinUnavailableRule = &checks.BuiltinUnavailableRule{

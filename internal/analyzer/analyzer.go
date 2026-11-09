@@ -32,6 +32,9 @@ type Analyzer struct {
 	// makes sense client-side (e.g. copying to the clipboard) are offered only
 	// when their command is listed here.
 	clientCommands map[string]bool
+	// sharedExprResolver is the generic-aware expression resolver the server
+	// shares between providers, when it wires one.
+	sharedExprResolver func(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType
 }
 
 // DefinitionResult is the extended return shape from FindDefinitionWithManual.
@@ -74,6 +77,7 @@ func (a *Analyzer) SetChainResolver(fn func(expr string, source string, pos prot
 
 func (a *Analyzer) SetTypedChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType) {
 	a.resolver.TypedChainResolver = fn
+	a.sharedExprResolver = fn
 }
 
 func (a *Analyzer) SetTranslationResolver(resolver *frameworklaravel.TranslationResolver) {
@@ -539,10 +543,24 @@ func (a *Analyzer) resolveAccessChainTyped(line string, wordStart int, source st
 
 	if line[i-2] == '-' && line[i-1] == '>' {
 		i -= 2
+		if i > 0 && line[i-1] == '?' {
+			i-- // ?->
+		}
 	} else if line[i-2] == ':' && line[i-1] == ':' {
 		i -= 2
 	} else {
 		return resolve.ResolvedType{}
+	}
+
+	// Type the owner with the shared generic-aware resolver when the server
+	// wired one, so definitions agree with hover and completion.
+	if a.sharedExprResolver != nil && file != nil {
+		owner := strings.TrimSpace(line[:i])
+		if owner != "" {
+			if rt := a.sharedExprResolver(owner, source, pos, file); !rt.IsEmpty() {
+				return rt
+			}
+		}
 	}
 
 	for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {

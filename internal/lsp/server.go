@@ -436,7 +436,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	}
 	s.diag = diagnostics.NewProvider(s.index, s.framework, s.rootPath, s.logger, s.cfg)
 	s.diag.TypeResolver = func(expr, source string, line int, file *parser.FileNode) string {
-		return s.completion.ResolveExpressionType(expr, source, protocol.Position{Line: line}, file)
+		return s.completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line}, file)
 	}
 	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(s.index)
 	s.diag.BuiltinUnavailableRule = &checks.BuiltinUnavailableRule{

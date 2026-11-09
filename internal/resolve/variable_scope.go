@@ -120,6 +120,25 @@ func (r *Resolver) closureParamType(param *scope.Binding, lines []string, file *
 	return r.resolveDocType(declared, file)
 }
 
+// varDocAbove returns the type a docblock right above line i gives varName
+// with `@var Type $name`, or with a bare `@var Type`.
+func varDocAbove(lines []string, i int, varName string) string {
+	raw := docBlockAbove(lines, i)
+	if raw == "" || !strings.Contains(raw, "var") {
+		return ""
+	}
+	doc := parser.ParseDocBlock(raw)
+	if doc == nil {
+		return ""
+	}
+	for _, v := range doc.Vars {
+		if v.Name == varName || v.Name == "" {
+			return v.Type
+		}
+	}
+	return ""
+}
+
 // docBlockAbove returns the docblock ending on the line above, if there is one.
 func docBlockAbove(lines []string, line int) string {
 	end := line - 1

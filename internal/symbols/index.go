@@ -65,6 +65,7 @@ type Symbol struct {
 	Value         string
 	IsVirtual     bool
 	Templates     []TemplateParam
+	Supertypes    []Supertype
 	TypeAliases   map[string]TypeAlias
 	Hooks         []parser.PropertyHook // PHP 8.4 property hooks (get/set accessors)
 	Attributes    []Attribute
@@ -87,10 +88,22 @@ func (s *Symbol) Attribute(fqn string) *Attribute {
 	return nil
 }
 
-// TemplateParam represents a generic type parameter on a class: @template T of Model
+// TemplateParam represents a generic type parameter on a class, method or
+// function: @template T of Model = User.
 type TemplateParam struct {
-	Name  string
-	Bound string
+	Name    string
+	Bound   string
+	Default string
+}
+
+// Supertype is a parent class, interface or trait together with the type
+// arguments a class gives it in @extends, @implements or @use:
+// `@extends Collection<int, User>` is {FQN: Collection, Args: [int, User]}.
+// Args are PHPDoc types as written, with the declaring file's imports
+// qualified; they may name the class's own templates.
+type Supertype struct {
+	FQN  string
+	Args []string
 }
 
 // TypeAlias represents a structured PHPDoc alias declared on a symbol owner.
@@ -250,7 +263,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 			for _, impl := range c.Implements {
 				resolvedImpls = append(resolvedImpls, resolve(impl))
 			}
-			sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: c.DocComment,
+			sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, file.Uses),
 				IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly,
 				Implements: resolvedImpls,
 				Range:      symRange(c.StartLine, c.StartCol, len(c.Name))}
@@ -326,7 +339,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		for _, impl := range c.Implements {
 			resolvedImpls = append(resolvedImpls, resolve(impl))
 		}
-		sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: c.DocComment,
+		sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, file.Uses),
 			IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly,
 			Implements: resolvedImpls, Attributes: indexAttributes(c.Attributes, resolve),
 			Range: symRange(c.StartLine, c.StartCol, len(c.Name))}
@@ -360,7 +373,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		for _, parent := range iface.Extends {
 			resolvedParents = append(resolvedParents, resolve(parent))
 		}
-		sym := &Symbol{Name: iface.Name, FQN: fqn, Kind: KindInterface, URI: uri, DocComment: iface.DocComment,
+		sym := &Symbol{Name: iface.Name, FQN: fqn, Kind: KindInterface, URI: uri, DocComment: qualifyDocTypes(iface.DocComment, file.Uses),
 			Implements: resolvedParents, Attributes: indexAttributes(iface.Attributes, resolve),
 			Range: symRange(iface.StartLine, iface.StartCol, len(iface.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
@@ -376,7 +389,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 
 	for _, tr := range file.Traits {
 		fqn := buildFQN(ns, tr.Name)
-		sym := &Symbol{Name: tr.Name, FQN: fqn, Kind: KindTrait, URI: uri, DocComment: tr.DocComment,
+		sym := &Symbol{Name: tr.Name, FQN: fqn, Kind: KindTrait, URI: uri, DocComment: qualifyDocTypes(tr.DocComment, file.Uses),
 			Range: symRange(tr.StartLine, tr.StartCol, len(tr.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
 		for _, usedTrait := range tr.Traits {
@@ -394,7 +407,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		for _, impl := range en.Implements {
 			resolvedEnumImpls = append(resolvedEnumImpls, resolve(impl))
 		}
-		sym := &Symbol{Name: en.Name, FQN: fqn, Kind: KindEnum, URI: uri, DocComment: en.DocComment,
+		sym := &Symbol{Name: en.Name, FQN: fqn, Kind: KindEnum, URI: uri, DocComment: qualifyDocTypes(en.DocComment, file.Uses),
 			BackedType: en.BackedType, Implements: resolvedEnumImpls, Attributes: indexAttributes(en.Attributes, resolve),
 			Range: symRange(en.StartLine, en.StartCol, len(en.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
@@ -425,6 +438,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		sym := &Symbol{Name: fn.Name, FQN: fqn, Kind: KindFunction, URI: uri, ReturnType: resolve(fn.ReturnType.Name),
 			Attributes: indexAttributes(fn.Attributes, resolve),
 			DocComment: qualifyDocTypes(fn.DocComment, file.Uses), Range: symRange(fn.StartLine, fn.StartCol, len(fn.Name))}
+		sym.Templates = docTemplates(sym.DocComment, resolve)
 		for _, p := range fn.Params {
 			sym.Params = append(sym.Params, ParamInfo{Name: p.Name, Type: resolve(p.Type.Name), DefaultValue: p.DefaultValue, IsVariadic: p.IsVariadic, IsReference: p.IsReference})
 		}
@@ -564,6 +578,7 @@ func (idx *Index) indexMethods(uri string, parent *Symbol, parentFQN string, met
 			ParentFQN:  parentFQN,
 			Range:      symRange(m.StartLine, m.StartCol, len(m.Name)),
 		}
+		ms.Templates = docTemplates(ms.DocComment, resolve)
 		for _, p := range m.Params {
 			ms.Params = append(ms.Params, ParamInfo{
 				Name:         p.Name,
@@ -636,6 +651,9 @@ func mergeEarlierLayer(sym, previous *Symbol) {
 	if len(sym.Templates) == 0 {
 		sym.Templates = previous.Templates
 	}
+	if len(sym.Supertypes) == 0 {
+		sym.Supertypes = previous.Supertypes
+	}
 	if sym.Extends == "" {
 		sym.Extends = previous.Extends
 	}
@@ -670,14 +688,8 @@ func (idx *Index) indexVirtualMembers(uri string, parent *Symbol, src SymbolSour
 	indexTypeAliases(parent, doc, resolve)
 
 	// Populate template parameters from @template tags
-	for _, tmpl := range doc.Templates {
-		if tmpl.Name != "" {
-			parent.Templates = append(parent.Templates, TemplateParam{
-				Name:  tmpl.Name,
-				Bound: resolve(tmpl.Bound),
-			})
-		}
-	}
+	parent.Templates = templateParams(doc, resolve)
+	parent.Supertypes = supertypes(doc, resolve)
 
 	for _, prop := range doc.Properties {
 		if prop.Name == "" {
@@ -1074,6 +1086,35 @@ func (idx *Index) walkAncestors(fqn string, visit func(next string, isTrait bool
 	for _, tr := range idx.traitMap[fqn] {
 		visit(tr, true)
 	}
+}
+
+// IsSubtypeOf reports whether child is parent or extends, implements or uses
+// it, directly or further up. Only child's ancestors are visited.
+func (idx *Index) IsSubtypeOf(child, parent string) bool {
+	if strings.EqualFold(child, parent) {
+		return true
+	}
+	idx.ensureGenerated(child)
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	visited := map[string]bool{child: true}
+	found := false
+	var walk func(fqn string)
+	walk = func(fqn string) {
+		idx.walkAncestors(fqn, func(next string, _ bool) {
+			if found || visited[next] {
+				return
+			}
+			visited[next] = true
+			if strings.EqualFold(next, parent) {
+				found = true
+				return
+			}
+			walk(next)
+		})
+	}
+	walk(child)
+	return found
 }
 
 func (idx *Index) GetInheritanceChain(classFQN string) []string {

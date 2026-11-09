@@ -9,16 +9,74 @@ import (
 
 // ResolvedType represents a type with optional generic parameters.
 // For example, Collection<int, Category> is {FQN: "Illuminate\...\Collection", Params: [{FQN: "int"}, {FQN: "App\Models\Category"}]}.
+//
+// A union, intersection or conditional type keeps its parts in Union,
+// Intersection or Conditional. Its FQN, Params and Shape then mirror the most
+// useful part (a generic or a class over null, mixed or a scalar), so code that
+// only reads one class name keeps working.
 type ResolvedType struct {
 	FQN      string         // base type FQN, e.g., "Illuminate\Database\Eloquent\Collection"
 	Params   []ResolvedType // generic type parameters
-	Nullable bool           // true if prefixed with ?
-	Shape    string         // for array shapes: "array{id: int, name: string}" — takes priority over Params in String()
+	Nullable bool           // true if prefixed with ? or in a union with null
+	Shape    string         // for array and object shapes: "array{id: int, name: string}" — takes priority over Params in String()
+
+	Union        []ResolvedType // every part of a union but null, when there are two or more
+	Intersection []ResolvedType // every part of an intersection
+	Callable     *CallableType  // the signature of callable(…): T and Closure(…): T
+	Fields       []ShapeEntry   // the fields of an array, list or object shape
+	Literal      string         // the value of a literal type: true, 'foo', 42
+	Conditional  *ConditionalType
+}
+
+// CallableType is the signature of a callable or Closure type.
+type CallableType struct {
+	Params []ResolvedType
+	Return *ResolvedType
+}
+
+// ShapeEntry is one field of an array or object shape.
+type ShapeEntry struct {
+	Key      string
+	Type     ResolvedType
+	Optional bool
+}
+
+// ConditionalType is a PHPDoc conditional type: ($subject is Target ? IfTrue : IfFalse).
+// Subject is a parameter ($as_float) or a template name (T).
+type ConditionalType struct {
+	Subject string
+	Target  ResolvedType
+	Negated bool // `is not`
+	IfTrue  ResolvedType
+	IfFalse ResolvedType
 }
 
 // BaseFQN returns just the FQN without generic parameters.
 func (rt ResolvedType) BaseFQN() string {
 	return rt.FQN
+}
+
+// MemberOwner is what to look members up on: the class, or for a union or
+// intersection of classes every one of them, as "A|B" or "A&B" (which the
+// symbol index reads as the members of each).
+func (rt ResolvedType) MemberOwner() string {
+	sep := ""
+	switch {
+	case len(rt.Intersection) > 0:
+		sep = "&"
+	case len(rt.Union) > 0:
+		sep = "|"
+	default:
+		return rt.FQN
+	}
+	names := rt.ClassNames()
+	switch len(names) {
+	case 0:
+		return rt.FQN
+	case 1:
+		return names[0]
+	}
+	return strings.Join(names, sep)
 }
 
 // IsGeneric returns true if the type has generic parameters.
@@ -33,7 +91,46 @@ func (rt ResolvedType) IsEmpty() bool {
 
 // String serializes the type back to a string like "Collection<int, Category>".
 // For array shapes, outputs "array{key: type, ...}" instead of generic syntax.
+// A union or intersection is shown as its most useful part; FullString shows
+// all of it.
 func (rt ResolvedType) String() string {
+	single := rt
+	single.Union, single.Intersection = nil, nil
+	return single.FullString()
+}
+
+// FullString is like String but shows every part of a union or intersection,
+// as in "Foo|Bar|null".
+func (rt ResolvedType) FullString() string {
+	if len(rt.Union) > 0 {
+		var sb strings.Builder
+		for i, part := range rt.Union {
+			if i > 0 {
+				sb.WriteByte('|')
+			}
+			sb.WriteString(part.FullString())
+		}
+		if rt.Nullable {
+			sb.WriteString("|null")
+		}
+		return sb.String()
+	}
+	if len(rt.Intersection) > 0 {
+		var sb strings.Builder
+		if rt.Nullable {
+			sb.WriteString("?(")
+		}
+		for i, part := range rt.Intersection {
+			if i > 0 {
+				sb.WriteByte('&')
+			}
+			sb.WriteString(part.FullString())
+		}
+		if rt.Nullable {
+			sb.WriteByte(')')
+		}
+		return sb.String()
+	}
 	if rt.FQN == "" {
 		return ""
 	}
@@ -42,11 +139,26 @@ func (rt ResolvedType) String() string {
 		sb.WriteByte('?')
 	}
 	// Array shapes take priority: array{id: int, name: string}
-	if rt.Shape != "" && rt.FQN == "array" {
+	if rt.Shape != "" && (rt.FQN == "array" || rt.FQN == "object") {
 		sb.WriteString(rt.Shape)
 		return sb.String()
 	}
 	sb.WriteString(rt.FQN)
+	if rt.Callable != nil {
+		sb.WriteByte('(')
+		for i, p := range rt.Callable.Params {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(p.FullString())
+		}
+		sb.WriteByte(')')
+		if rt.Callable.Return != nil {
+			sb.WriteString(": ")
+			sb.WriteString(rt.Callable.Return.FullString())
+		}
+		return sb.String()
+	}
 	if len(rt.Params) > 0 {
 		sb.WriteByte('<')
 		for i, p := range rt.Params {
@@ -234,17 +346,19 @@ func resolvedTypeFromDocType(t types.TypeExpr) ResolvedType {
 
 	switch t.Kind {
 	case types.TypeKindUnion:
-		nullable := false
+		parts := make([]ResolvedType, 0, len(t.Types))
 		for _, part := range t.Types {
-			if strings.EqualFold(part.Name, "null") {
-				nullable = true
+			parts = append(parts, resolvedTypeFromDocType(part))
+		}
+		return MakeUnion(parts, t.Nullable)
+	case types.TypeKindIntersection:
+		parts := make([]ResolvedType, 0, len(t.Types))
+		for _, part := range t.Types {
+			if rt := resolvedTypeFromDocType(part); !rt.IsEmpty() {
+				parts = append(parts, rt)
 			}
 		}
-		best := pickBestResolvedBranch(t.Types)
-		best.Nullable = best.Nullable || nullable
-		return best
-	case types.TypeKindIntersection:
-		return pickBestResolvedBranch(t.Types)
+		return makeIntersection(parts, t.Nullable)
 	case types.TypeKindGeneric:
 		rt := ResolvedType{FQN: strings.TrimPrefix(t.Name, "\\"), Nullable: t.Nullable}
 		for _, param := range t.Params {
@@ -252,10 +366,16 @@ func resolvedTypeFromDocType(t types.TypeExpr) ResolvedType {
 		}
 		return rt
 	case types.TypeKindShape:
-		if t.Name == "array" || t.Name == "list" {
-			return ResolvedType{FQN: "array", Shape: t.String(), Nullable: t.Nullable}
+		fields := make([]ShapeEntry, 0, len(t.ShapeFields))
+		for _, f := range t.ShapeFields {
+			fields = append(fields, ShapeEntry{Key: f.Key, Type: resolvedTypeFromDocType(f.Type), Optional: f.Optional})
 		}
-		return ResolvedType{FQN: "object", Nullable: t.Nullable}
+		if t.Name == "array" || t.Name == "list" {
+			return ResolvedType{FQN: "array", Shape: t.String(), Nullable: t.Nullable, Fields: fields}
+		}
+		shape := t
+		shape.Nullable = false
+		return ResolvedType{FQN: "object", Shape: shape.String(), Nullable: t.Nullable, Fields: fields}
 	case types.TypeKindArray:
 		elem := ResolvedType{FQN: "mixed"}
 		if t.Element != nil {
@@ -267,47 +387,164 @@ func resolvedTypeFromDocType(t types.TypeExpr) ResolvedType {
 			Params:   []ResolvedType{{FQN: "int"}, elem},
 		}
 	case types.TypeKindCallable:
-		return ResolvedType{FQN: "callable", Nullable: t.Nullable}
+		name := strings.TrimPrefix(t.Name, "\\")
+		if name == "" {
+			name = "callable"
+		}
+		rt := ResolvedType{FQN: name, Nullable: t.Nullable}
+		if t.ParamTypes != nil || t.ReturnType != nil {
+			sig := &CallableType{}
+			for _, p := range t.ParamTypes {
+				sig.Params = append(sig.Params, resolvedTypeFromDocType(p))
+			}
+			if t.ReturnType != nil {
+				ret := resolvedTypeFromDocType(*t.ReturnType)
+				sig.Return = &ret
+			}
+			rt.Callable = sig
+		}
+		return rt
 	case types.TypeKindLiteral:
 		switch strings.ToLower(t.Literal) {
 		case "true", "false":
-			return ResolvedType{FQN: "bool", Nullable: t.Nullable}
+			return ResolvedType{FQN: "bool", Nullable: t.Nullable, Literal: strings.ToLower(t.Literal)}
 		case "null":
 			return ResolvedType{Nullable: true}
 		}
 		if strings.HasPrefix(t.Literal, "'") || strings.HasPrefix(t.Literal, "\"") {
-			return ResolvedType{FQN: "string", Nullable: t.Nullable}
+			return ResolvedType{FQN: "string", Nullable: t.Nullable, Literal: t.Literal}
 		}
 		if strings.Contains(t.Literal, ".") {
-			return ResolvedType{FQN: "float", Nullable: t.Nullable}
+			return ResolvedType{FQN: "float", Nullable: t.Nullable, Literal: t.Literal}
 		}
-		return ResolvedType{FQN: "int", Nullable: t.Nullable}
+		return ResolvedType{FQN: "int", Nullable: t.Nullable, Literal: t.Literal}
 	case types.TypeKindConditional:
 		if t.Condition == nil {
 			return ResolvedType{}
 		}
-		return resolvedTypeFromDocType(types.TypeExpr{
-			Kind:  types.TypeKindUnion,
-			Types: []types.TypeExpr{t.Condition.IfTrue, t.Condition.IfFalse},
-		})
+		cond := &ConditionalType{Subject: t.Condition.Subject}
+		target := t.Condition.Target
+		if target.Kind == types.TypeKindNamed && strings.HasPrefix(target.Name, "not ") {
+			cond.Negated = true
+			target = types.ParseTypeExpr(strings.TrimSpace(target.Name[4:]))
+		}
+		cond.Target = resolvedTypeFromDocType(target)
+		cond.IfTrue = resolvedTypeFromDocType(t.Condition.IfTrue)
+		cond.IfFalse = resolvedTypeFromDocType(t.Condition.IfFalse)
+		rt := MakeUnion([]ResolvedType{cond.IfTrue, cond.IfFalse}, t.Nullable)
+		rt.Conditional = cond
+		return rt
 	default:
-		switch strings.ToLower(t.Name) {
+		name := t.Name
+		switch strings.ToLower(name) {
 		case "true", "false":
-			return ResolvedType{FQN: "bool", Nullable: t.Nullable}
+			return ResolvedType{FQN: "bool", Nullable: t.Nullable, Literal: strings.ToLower(name)}
 		case "null":
 			return ResolvedType{Nullable: true}
+		case "*":
+			// A wildcard type argument: Collection<*>.
+			return ResolvedType{FQN: "mixed"}
 		}
-		if strings.HasPrefix(t.Name, "'") || strings.HasPrefix(t.Name, "\"") {
-			return ResolvedType{FQN: "string", Nullable: t.Nullable}
+		// Call-site variance: Collection<covariant Animal> reads as Animal.
+		for _, prefix := range []string{"covariant ", "contravariant "} {
+			if strings.HasPrefix(name, prefix) {
+				rt := resolvedTypeFromDocType(types.ParseTypeExpr(strings.TrimSpace(name[len(prefix):])))
+				rt.Nullable = rt.Nullable || t.Nullable
+				return rt
+			}
 		}
-		return ResolvedType{FQN: strings.TrimPrefix(t.Name, "\\"), Nullable: t.Nullable}
+		if strings.HasPrefix(name, "'") || strings.HasPrefix(name, "\"") {
+			return ResolvedType{FQN: "string", Nullable: t.Nullable, Literal: name}
+		}
+		return ResolvedType{FQN: strings.TrimPrefix(name, "\\"), Nullable: t.Nullable}
 	}
 }
 
-func pickBestResolvedBranch(parts []types.TypeExpr) ResolvedType {
-	var fallback ResolvedType
+// MakeUnion builds the union of parts. Nested unions are flattened, null parts
+// make it nullable, and repeated parts are dropped. With one part left, that
+// part is returned; with several, the result mirrors the most useful one.
+func MakeUnion(parts []ResolvedType, nullable bool) ResolvedType {
+	flat := make([]ResolvedType, 0, len(parts))
+	seen := make(map[string]bool, len(parts))
+	var add func(rt ResolvedType)
+	add = func(rt ResolvedType) {
+		if len(rt.Union) > 0 && rt.Conditional == nil {
+			if rt.Nullable {
+				nullable = true
+			}
+			for _, part := range rt.Union {
+				add(part)
+			}
+			return
+		}
+		if rt.IsEmpty() && len(rt.Intersection) == 0 {
+			if rt.Nullable {
+				nullable = true
+			}
+			return
+		}
+		if rt.FQN == "null" {
+			nullable = true
+			return
+		}
+		if rt.Nullable {
+			nullable = true
+			rt.Nullable = false
+		}
+		key := rt.FullString()
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		flat = append(flat, rt)
+	}
 	for _, part := range parts {
-		rt := resolvedTypeFromDocType(part)
+		add(part)
+	}
+	switch len(flat) {
+	case 0:
+		if nullable {
+			return ResolvedType{Nullable: true}
+		}
+		return ResolvedType{}
+	case 1:
+		out := flat[0]
+		out.Nullable = out.Nullable || nullable
+		return out
+	}
+	// mixed absorbs everything else.
+	for _, part := range flat {
+		if part.FQN == "mixed" && len(part.Union) == 0 {
+			return ResolvedType{FQN: "mixed"}
+		}
+	}
+	best := pickBestResolved(flat)
+	best.Union = flat
+	best.Nullable = nullable
+	best.Conditional = nil
+	return best
+}
+
+func makeIntersection(parts []ResolvedType, nullable bool) ResolvedType {
+	switch len(parts) {
+	case 0:
+		return ResolvedType{}
+	case 1:
+		out := parts[0]
+		out.Nullable = out.Nullable || nullable
+		return out
+	}
+	best := pickBestResolved(parts)
+	best.Intersection = parts
+	best.Nullable = nullable
+	return best
+}
+
+// pickBestResolved picks the part a single-class reader should see: the first
+// generic or shape, else the first that isn't mixed or void.
+func pickBestResolved(parts []ResolvedType) ResolvedType {
+	var fallback ResolvedType
+	for _, rt := range parts {
 		if rt.IsEmpty() {
 			continue
 		}
@@ -318,5 +555,44 @@ func pickBestResolvedBranch(parts []types.TypeExpr) ResolvedType {
 			fallback = rt
 		}
 	}
+	if fallback.IsEmpty() && len(parts) > 0 {
+		return parts[0]
+	}
 	return fallback
+}
+
+// Parts returns the members of a union, or the type itself.
+func (rt ResolvedType) Parts() []ResolvedType {
+	if len(rt.Union) > 0 {
+		return rt.Union
+	}
+	if rt.IsEmpty() {
+		return nil
+	}
+	single := rt
+	single.Nullable = false
+	return []ResolvedType{single}
+}
+
+// ClassNames returns the class names a value of this type can be: every part
+// of a union or intersection that isn't a builtin type.
+func (rt ResolvedType) ClassNames() []string {
+	var out []string
+	var walk func(t ResolvedType)
+	walk = func(t ResolvedType) {
+		switch {
+		case len(t.Union) > 0:
+			for _, p := range t.Union {
+				walk(p)
+			}
+		case len(t.Intersection) > 0:
+			for _, p := range t.Intersection {
+				walk(p)
+			}
+		case t.FQN != "" && !IsBuiltinTypeName(t.FQN):
+			out = append(out, t.FQN)
+		}
+	}
+	walk(rt)
+	return out
 }
