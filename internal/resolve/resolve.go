@@ -56,6 +56,11 @@ type Resolver struct {
 	// closureMemos remembers what each closure of scopeDoc is passed to.
 	closureMemos   map[*scope.Scope]closureMemo
 	closureMemoDoc *scope.Document
+	// varMemos remembers variable types per write while scopeDoc and the
+	// index generation stay the same.
+	varMemos   map[varMemoKey]ResolvedType
+	varMemoDoc *scope.Document
+	varMemoGen uint64
 
 	// parsed caches docblocks and PHPDoc types by their text.
 	parsed parseCache
@@ -78,6 +83,17 @@ func currentGID() uint64 {
 		return 0
 	}
 	return gid
+}
+
+// resolutionDepth is how many resolutions the current goroutine is inside.
+func (r *Resolver) resolutionDepth() int {
+	gid := currentGID()
+	r.stateMu.Lock()
+	defer r.stateMu.Unlock()
+	if st := r.states[gid]; st != nil {
+		return st.depth
+	}
+	return 0
 }
 
 func (r *Resolver) enterResolution(key string) (func(), bool) {
@@ -701,13 +717,26 @@ func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) str
 // Used by the typed chain resolver so that $categories = Category::query()->get()
 // results in $categories having type Collection<int, Category>.
 func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
-	rt := r.resolveVariableTypeTypedBase(varName, lines, pos, file)
 	if varName == "$this" || file == nil {
-		return rt
+		return r.resolveVariableTypeTypedBase(varName, lines, pos, file)
 	}
+	key, memo := r.varMemoKeyAt(varName, lines, pos)
+	// Only an answer worked out from the top is kept: further in, a guard
+	// against cycles may have cut it short.
+	memo = memo && r.resolutionDepth() == 0
+	if memo {
+		if rt, ok := r.varMemoGet(key); ok {
+			return rt
+		}
+	}
+	rt := r.resolveVariableTypeTypedBase(varName, lines, pos, file)
 	// What asserting calls, @param-out and self-out since its last
 	// assignment say about it.
-	return r.narrowVariable(varName, rt, lines, pos, file)
+	rt = r.narrowVariable(varName, rt, lines, pos, file)
+	if memo {
+		r.varMemoPut(key, rt)
+	}
+	return rt
 }
 
 func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {

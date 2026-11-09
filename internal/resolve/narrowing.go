@@ -41,7 +41,7 @@ func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string
 		return t
 	}
 	from := r.lastWriteLine(varName, lines, pos)
-	if from < 0 || from > pos.Line || !mayNarrow(lines, from, pos, varName) {
+	if from < 0 || from > pos.Line || !r.mayNarrow(lines, from, pos, varName) {
 		return t
 	}
 	// Narrowing doesn't nest: the calls it reads type their receivers and
@@ -75,7 +75,7 @@ func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string
 		if i == pos.Line && pos.Character <= len(lines[i]) {
 			line = strings.TrimSpace(lines[i][:pos.Character])
 		}
-		if line == "" || !strings.Contains(line, varName) {
+		if line == "" || !strings.Contains(line, varName) || !r.callsNarrowing(line) {
 			continue
 		}
 		rel := i - from
@@ -113,27 +113,49 @@ func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string
 }
 
 // mayNarrow reports whether any line after the assignment on line from, up
-// to pos, passes varName to a call or calls a method on it, which is all that
-// can narrow it. It reads the text only, so most lookups stop here.
-func mayNarrow(lines []string, from int, pos protocol.Position, varName string) bool {
+// to pos, mentions varName and calls something that narrows types (see
+// symbols.Index.MayNarrow), which is all that can narrow it. It reads the
+// text and does lookups only, so most variables stop here.
+func (r *Resolver) mayNarrow(lines []string, from int, pos protocol.Position, varName string) bool {
 	for i := pos.Line; i >= from; i-- {
 		line := lines[i]
 		if i == pos.Line && pos.Character <= len(line) {
 			line = line[:pos.Character]
 		}
-		k := strings.Index(line, varName)
-		if k < 0 {
+		if !strings.Contains(line, varName) || strings.IndexByte(line, '(') < 0 {
 			continue
 		}
-		if i == from && strings.HasPrefix(strings.TrimSpace(line), varName) && !strings.Contains(line[k+len(varName):], varName) {
-			continue // the assignment itself
-		}
-		if strings.IndexByte(line, '(') >= 0 {
+		if r.callsNarrowing(line) {
 			return true
 		}
 	}
-	// An if around pos may test it: its line is above `from` only when the
-	// variable is a parameter, which lastWriteLine reports as the scope start.
+	return false
+}
+
+// callsNarrowing reports whether a line calls a method or function whose
+// PHPDoc narrows types, or PHPUnit's assertInstanceOf(), which is read by
+// name when PHPUnit isn't installed where it can be read.
+func (r *Resolver) callsNarrowing(line string) bool {
+	for i := 0; i < len(line); i++ {
+		if line[i] != '(' {
+			continue
+		}
+		j := i
+		for j > 0 && (line[j-1] == ' ' || line[j-1] == '\t') {
+			j--
+		}
+		k := j
+		for k > 0 && (isIdentByte(line[k-1]) || line[k-1] >= '0' && line[k-1] <= '9') {
+			k--
+		}
+		if k == j {
+			continue
+		}
+		name := line[k:j]
+		if strings.EqualFold(name, "assertInstanceOf") || r.Index != nil && r.Index.MayNarrow(name) {
+			return true
+		}
+	}
 	return false
 }
 

@@ -129,7 +129,13 @@ type ParamInfo struct {
 }
 
 type Index struct {
-	attributedSymbols    atomic.Bool
+	attributedSymbols atomic.Bool
+	// generation counts changes to the index, so caches built from it can
+	// tell when they're out of date.
+	generation atomic.Uint64
+	// narrowingNames counts, by lowercase name, the methods and functions
+	// whose PHPDoc narrows a type (@phpstan-assert, @param-out, self-out).
+	narrowingNames       map[string]int
 	mu                   sync.RWMutex
 	symbols              map[string]*Symbol
 	nameIndex            map[string][]string
@@ -151,6 +157,33 @@ type Index struct {
 	generator            atomic.Pointer[classGeneratorHolder]
 	generatedURIs        map[string]bool     // URIs of generated classes, which are not files on disk
 	generatedFrom        map[string][]string // lowercase source FQN → URIs of the classes generated from it
+}
+
+// Generation changes whenever symbols are added to or removed from the index.
+// A cache of answers derived from the index keeps the generation it was built
+// at and starts over when it differs.
+func (idx *Index) Generation() uint64 {
+	return idx.generation.Load()
+}
+
+// narrowsTypes reports whether a method or function's PHPDoc narrows the
+// type of something passed to it or called on it.
+func narrowsTypes(sym *Symbol) bool {
+	if sym.Kind != KindMethod && sym.Kind != KindFunction || sym.DocComment == "" {
+		return false
+	}
+	d := sym.DocComment
+	return strings.Contains(d, "-assert") || strings.Contains(d, "param-out") ||
+		strings.Contains(d, "self-out") || strings.Contains(d, "this-out")
+}
+
+// MayNarrow reports whether some method or function called name has PHPDoc
+// that narrows types: @phpstan-assert and friends, @param-out, self-out.
+// Code that narrows variables only needs to look at calls to those.
+func (idx *Index) MayNarrow(name string) bool {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.narrowingNames[strings.ToLower(name)] > 0
 }
 
 func NewIndex() *Index {
@@ -449,6 +482,13 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 }
 
 func (idx *Index) addSymbol(uri string, sym *Symbol) {
+	idx.generation.Add(1)
+	if narrowsTypes(sym) {
+		if idx.narrowingNames == nil {
+			idx.narrowingNames = make(map[string]int)
+		}
+		idx.narrowingNames[strings.ToLower(sym.Name)]++
+	}
 	if sym.Source != SourceGenerated && isTopLevelSymbol(sym.Kind) {
 		// A real declaration replaces a class generated under the same name.
 		idx.dropGeneratedLocked(sym.FQN)
@@ -502,7 +542,16 @@ func (idx *Index) addSymbolWithSource(uri string, sym *Symbol, src SymbolSource)
 }
 
 func (idx *Index) removeFileSymbols(uri string) {
+	idx.generation.Add(1)
 	for _, sym := range idx.fileSymbols[uri] {
+		if narrowsTypes(sym) {
+			key := strings.ToLower(sym.Name)
+			if idx.narrowingNames[key] <= 1 {
+				delete(idx.narrowingNames, key)
+			} else {
+				idx.narrowingNames[key]--
+			}
+		}
 		if isTopLevelSymbol(sym.Kind) {
 			// Classes generated from this one are rebuilt on their next lookup.
 			idx.dropGeneratedFromLocked(sym.FQN)

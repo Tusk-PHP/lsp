@@ -579,3 +579,44 @@ use App\Product;
 		}
 	}
 }
+
+// A variable's remembered type ends with the write that gave it, and a call
+// that may narrow it keeps it from being remembered at all.
+func TestVariableTypeMemoFollowsWrites(t *testing.T) {
+	src := `<?php
+namespace App;
+class A { public function a(): void {} }
+class B { public function b(): void {} }
+class Check {
+    /** @phpstan-assert B $x */
+    public static function isB($x): void {}
+}
+function run(): void {
+    $x = new A();
+    echo $x;
+    echo $x;
+    $x = new B();
+    echo $x;
+    $y = new A();
+    Check::isB($y);
+    echo $y;
+}
+`
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///a.php", src)
+	r := NewResolver(idx)
+	file := parser.ParseFile(src)
+	lines := SplitLines(src)
+	at := func(v string, line int) string {
+		return r.ResolveVariableTypeTyped(v, lines, protocol.Position{Line: line, Character: 9}, file).String()
+	}
+	for _, c := range []struct {
+		v    string
+		line int
+		want string
+	}{{"$x", 10, "App\\A"}, {"$x", 11, "App\\A"}, {"$x", 13, "App\\B"}, {"$x", 11, "App\\A"}, {"$y", 16, "App\\B"}} {
+		if got := at(c.v, c.line); got != c.want {
+			t.Errorf("%s at %d = %q, want %q", c.v, c.line, got, c.want)
+		}
+	}
+}
