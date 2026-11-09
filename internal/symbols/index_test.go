@@ -776,3 +776,24 @@ class Child extends Base { use Creates; }
 	}
 	t.Fatal("make() not found")
 }
+
+func TestIndexTracksNarrowingNamesAndGeneration(t *testing.T) {
+	idx := NewIndex()
+	before := idx.Generation()
+	idx.IndexFile("file:///a.php", `<?php
+class Assert {
+    /** @phpstan-assert !null $value */
+    public static function notNull($value): void {}
+    public static function plain($value): void {}
+}`)
+	if idx.Generation() == before {
+		t.Fatal("generation should change when a file is indexed")
+	}
+	if !idx.MayNarrow("notnull") || idx.MayNarrow("plain") {
+		t.Fatalf("MayNarrow: notNull=%v plain=%v", idx.MayNarrow("notNull"), idx.MayNarrow("plain"))
+	}
+	idx.IndexFile("file:///a.php", `<?php class Assert {}`)
+	if idx.MayNarrow("notNull") {
+		t.Fatal("a removed method should no longer narrow")
+	}
+}
