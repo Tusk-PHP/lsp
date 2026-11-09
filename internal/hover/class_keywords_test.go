@@ -56,7 +56,7 @@ func TestHoverClassKeywordsAndStaticProperties(t *testing.T) {
 		{"$g = new self", 1, "Child $g"},
 		{"$h = new STATIC", 1, "Child $h"},
 		{"$i = new parent", 1, "Base $i"},
-		{"$m = self::class", 1, "string $m"},
+		{"$m = self::class", 1, "class-string<Child> $m"},
 		{"instanceof self", len("instanceof s"), "App\\Child"},
 	}
 	for _, c := range cases {

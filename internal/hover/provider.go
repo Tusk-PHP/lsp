@@ -321,10 +321,25 @@ func (p *Provider) resolveAccessChainTyped(line string, wordStart int, lines []s
 
 	if line[i-2] == '-' && line[i-1] == '>' {
 		i -= 2
+		if i > 0 && line[i-1] == '?' {
+			i-- // ?->
+		}
 	} else if line[i-2] == ':' && line[i-1] == ':' {
 		i -= 2
 	} else {
 		return resolve.ResolvedType{}
+	}
+
+	// The shared generic-aware resolver, when the server wires one, types
+	// the owner with call arguments, constructors and closures taken into
+	// account, the same way completion does.
+	if p.GenericExprResolver != nil && file != nil {
+		owner := strings.TrimSpace(line[:i])
+		if owner != "" {
+			if rt := p.GenericExprResolver(owner, strings.Join(lines, "\n"), pos, file); !rt.IsEmpty() {
+				return rt
+			}
+		}
 	}
 
 	// Skip whitespace before operator

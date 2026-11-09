@@ -161,7 +161,8 @@ $employees = [['id' => 1, 'name' => 'Ruben'], ['id' => 2, 'name' => 'Jorge']];
 $first = Arr::first($employees);
 `
 		typ := resolveTyped("$first", source, 4)
-		if typ != "array{id: int, name: string}" {
+		// TValue|TFirstDefault, and $default's null binds TFirstDefault.
+		if typ != "?array{id: int, name: string}" {
 			t.Errorf("got %q", typ)
 		}
 	})
@@ -173,7 +174,7 @@ $nums = [10, 20, 30];
 $first = Arr::first($nums);
 `
 		typ := resolveTyped("$first", source, 4)
-		if typ != "int" {
+		if typ != "?int" {
 			t.Errorf("got %q", typ)
 		}
 	})

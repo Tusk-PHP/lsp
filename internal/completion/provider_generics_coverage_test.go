@@ -71,13 +71,6 @@ func TestProviderGenericCoverageHelpers(t *testing.T) {
 		t.Fatalf("expected empty chain type, got %#v", got)
 	}
 
-	if !hasUnresolvedTemplateParam(resolve.ResolvedType{FQN: "Collection", Params: []resolve.ResolvedType{{FQN: "TValue"}}}) {
-		t.Fatal("expected unresolved template param in nested type")
-	}
-	if hasUnresolvedTemplateParam(resolve.ResolvedType{FQN: "Collection", Params: []resolve.ResolvedType{{FQN: "int"}}}) {
-		t.Fatal("did not expect unresolved template param")
-	}
-
 	member := idx.Lookup("App\\Arr::first")
 	if member == nil {
 		t.Fatal("expected App\\Arr::first symbol")
@@ -85,18 +78,22 @@ func TestProviderGenericCoverageHelpers(t *testing.T) {
 
 	pos := protocol.Position{Line: providerLineContaining(t, source, "$selected =")}
 
-	rt := p.resolveMethodTemplateFromArgs(member, "[1, 2, 3]", source, pos, file, "")
-	if rt.String() != "?int" {
+	ctx := resolve.ExprContext{Lines: resolve.SplitLines(source), Pos: pos, File: file}
+	call := func(args string) resolve.ResolvedType {
+		return p.resolver.MemberTypeForCall(member, file, "", nil, p.resolver.CallSiteFor(args, ctx))
+	}
+
+	if rt := call("[1, 2, 3]"); rt.String() != "?int" {
 		t.Fatalf("literal array inference got %q", rt.String())
 	}
 
-	rt = p.resolveMethodTemplateFromArgs(member, "$rows", source, pos, file, "")
-	if rt.String() != "?array{id: int}" {
+	if rt := call("$rows"); rt.String() != "?array{id: int}" {
 		t.Fatalf("variable array inference got %q", rt.String())
 	}
 
-	if rt := p.resolveMethodTemplateFromArgs(member, "", source, pos, file, ""); !rt.IsEmpty() {
-		t.Fatalf("expected empty result for empty arg string, got %#v", rt)
+	// Nothing passed: the template has nothing to bind it.
+	if rt := call(""); rt.BaseFQN() != "mixed" && !rt.IsEmpty() {
+		t.Fatalf("expected an unbound template for an empty argument list, got %#v", rt)
 	}
 }
 

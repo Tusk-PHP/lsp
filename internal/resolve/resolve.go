@@ -270,82 +270,9 @@ func (r *Resolver) FindAccessedMember(classFQN, memberName string, call bool) *s
 // callerFQN is the class the method was called on (for late static binding:
 // Category::query() where query is on Model — callerFQN is Category).
 // typeContext carries generic params from the caller (e.g., Builder<Category>).
+// It's MemberTypeForCall without the call's arguments.
 func (r *Resolver) MemberTypeResolved(member *symbols.Symbol, file *parser.FileNode, callerFQN string, typeContext []ResolvedType) ResolvedType {
-	// 1. Check if the member's return type has generic syntax or needs
-	//    late static binding resolution.
-	rawType := r.rawMemberReturnType(member)
-	returnsNull := false
-	if rawType != "" && rawType != "void" && rawType != "mixed" {
-		staticFQN := callerFQN
-		if staticFQN == "" {
-			staticFQN = member.ParentFQN
-		}
-
-		// Handle union types: pick the best part (prefer generic over bare).
-		// E.g., "Builder<static>|Category" → use "Builder<static>".
-		// Track if null was in the union for nullable marking.
-		resolvedRaw := strings.TrimPrefix(rawType, "\\")
-		nullable := strings.HasPrefix(resolvedRaw, "?")
-		if nullable {
-			resolvedRaw = resolvedRaw[1:]
-		}
-		if strings.Contains(resolvedRaw, "|") {
-			if HasNullInUnion(resolvedRaw) {
-				nullable = true
-			}
-			resolvedRaw = PickBestUnionPart(resolvedRaw)
-		}
-		returnsNull = nullable
-
-		if resolvedRaw == "self" || resolvedRaw == "static" || resolvedRaw == "$this" {
-			return ResolvedType{FQN: staticFQN, Params: typeContext, Nullable: nullable}
-		}
-
-		resolvedRaw = strings.TrimPrefix(resolvedRaw, "\\")
-
-		// Build template substitution map from the parent class's @template tags
-		// and the typeContext. E.g., Builder has @template TModel and typeContext
-		// is [Category], so TModel → Category.
-		templateSubst := buildTemplateSubst(r.Index, member.ParentFQN, typeContext)
-
-		if strings.Contains(resolvedRaw, "<") || strings.HasSuffix(resolvedRaw, "[]") {
-			rt := ParseGenericType(resolvedRaw)
-			rt.FQN = resolveTypeParam(r, rt.FQN, staticFQN, templateSubst, file)
-			for i := range rt.Params {
-				rt.Params[i].FQN = resolveTypeParam(r, rt.Params[i].FQN, staticFQN, templateSubst, file)
-			}
-			rt.Nullable = rt.Nullable || nullable
-			return rt
-		}
-
-		// Even without <>, the return type might be a bare template param name
-		// (e.g., @return TModel|null → resolvedRaw is "TModel", nullable is true)
-		if sub, ok := templateSubst[resolvedRaw]; ok {
-			result := sub
-			result.Nullable = result.Nullable || nullable
-			return result
-		}
-	}
-
-	// 2. Try template resolution from the registry if we have context
-	if len(typeContext) > 0 && member.Kind == symbols.KindMethod {
-		if rt := ResolveTemplateReturn(member.ParentFQN, member.Name, typeContext); !rt.IsEmpty() {
-			rt.FQN = r.ResolveClassName(rt.FQN, file)
-			for i := range rt.Params {
-				if rt.Params[i].FQN != "" && rt.Params[i].FQN != "int" && rt.Params[i].FQN != "mixed" {
-					rt.Params[i].FQN = r.ResolveClassName(rt.Params[i].FQN, file)
-				}
-			}
-			return rt
-		}
-	}
-
-	// 3. Fall back to standard resolution (strips generics)
-	fqn := r.MemberType(member, file)
-	if fqn == "" {
-		return ResolvedType{}
-	}
-	return ResolvedType{FQN: fqn, Nullable: returnsNull}
+	return r.MemberTypeForCall(member, file, callerFQN, typeContext, nil)
 }
 
 // pickBestUnionPart selects the most informative part from a union type string.
@@ -500,6 +427,17 @@ func (r *Resolver) inferArgType(argStr string, lines []string, pos protocol.Posi
 func (r *Resolver) resolveDocType(raw string, file *parser.FileNode) ResolvedType {
 	rt := ParseGenericType(raw)
 	return r.resolveResolvedType(rt, file)
+}
+
+// resolveDocTypeIn resolves a PHPDoc type written in the file being edited,
+// inside class owner: names go through the file's imports, and self and
+// static stand for owner.
+func (r *Resolver) resolveDocTypeIn(raw, owner string, file *parser.FileNode) ResolvedType {
+	env := typeEnv{owner: owner, file: file}
+	if owner != "" {
+		env.static = ResolvedType{FQN: owner}
+	}
+	return r.applyEnv(ParseGenericType(raw), envWithFileFirst(env))
 }
 
 func (r *Resolver) resolveResolvedType(rt ResolvedType, file *parser.FileNode) ResolvedType {
@@ -724,29 +662,118 @@ func (r *Resolver) rawMemberReturnType(member *symbols.Symbol) string {
 	ownerFQN := ownerScopeFQN(member, protocol.Position{}, nil)
 	switch member.Kind {
 	case symbols.KindMethod:
-		nativeType := member.ReturnType
 		var docType string
 		if member.DocComment != "" {
 			if doc := parser.ParseDocBlock(member.DocComment); doc != nil {
 				docType = doc.Return.Type
 			}
 		}
-		// Prefer @return over non-specific native hints (object/mixed/array) so that
-		// element-typed PHPDoc like @return ReflectionMethod[] is not obscured by
-		// a bare "array" return type hint.
-		if nativeType != "" && nativeType != "object" && nativeType != "mixed" && nativeType != "array" {
-			return r.expandTypeAliases(nativeType, ownerFQN, nil)
-		}
-		if docType != "" {
-			return r.expandTypeAliases(docType, ownerFQN, nil)
-		}
-		if nativeType != "" {
-			return r.expandTypeAliases(nativeType, ownerFQN, nil)
+		if t := r.preferDocType(member.ReturnType, docType, member.Templates, ownerFQN); t != "" {
+			return r.expandTypeAliases(t, ownerFQN, nil)
 		}
 	case symbols.KindProperty:
-		return r.expandTypeAliases(member.Type, ownerFQN, nil)
+		var docType string
+		if member.DocComment != "" && strings.Contains(member.DocComment, "var") {
+			if doc := parser.ParseDocBlock(member.DocComment); doc != nil && len(doc.Vars) > 0 {
+				docType = doc.Vars[0].Type
+			}
+		}
+		if t := r.preferDocType(member.Type, docType, nil, ownerFQN); t != "" {
+			return r.expandTypeAliases(t, ownerFQN, nil)
+		}
 	}
 	return ""
+}
+
+// preferDocType picks between a member's native type and its PHPDoc type the
+// way PHPStan does: the PHPDoc type is used when it says more, as a template, a
+// generic, a shape, a callable signature, a narrower union or a subclass, and
+// the native type is kept when the PHPDoc is vaguer or contradicts it.
+func (r *Resolver) preferDocType(native, doc string, methodTemplates []symbols.TemplateParam, ownerFQN string) string {
+	native, doc = strings.TrimSpace(native), strings.TrimSpace(doc)
+	if doc == "" {
+		return native
+	}
+	if native == "" {
+		return doc
+	}
+	nativeBare := strings.TrimPrefix(strings.TrimPrefix(native, "?"), "\\")
+	switch strings.ToLower(nativeBare) {
+	case "object", "mixed", "array", "iterable", "callable", "closure", "traversable",
+		"iterator", "iteratoraggregate", "generator", "static", "self", "$this", "string", "int", "bool", "float":
+		if strings.EqualFold(nativeBare, "string") || strings.EqualFold(nativeBare, "int") || strings.EqualFold(nativeBare, "bool") || strings.EqualFold(nativeBare, "float") {
+			// A scalar's PHPDoc is only read for what it can tell a reader of
+			// classes: a conditional type or a template.
+			if !strings.Contains(doc, " is ") && !r.mentionsTemplate(doc, methodTemplates, ownerFQN) {
+				return native
+			}
+		}
+		if strings.EqualFold(doc, "mixed") {
+			return native
+		}
+		return doc
+	}
+	if strings.EqualFold(doc, "mixed") || strings.EqualFold(doc, "object") {
+		return native
+	}
+	if r.mentionsTemplate(doc, methodTemplates, ownerFQN) || strings.Contains(doc, " is ") {
+		return doc
+	}
+	docRT := r.applyEnv(ParseGenericType(doc), typeEnv{owner: ownerFQN})
+	nativeRT := ParseGenericType(native)
+	if docRT.IsEmpty() {
+		return native
+	}
+	// Every class in the PHPDoc type must be the native class or below it.
+	nativeClasses := nativeRT.ClassNames()
+	for _, part := range docRT.Parts() {
+		if part.FQN == "" || IsBuiltinTypeName(part.FQN) {
+			if part.FQN == "" || nativeRT.FQN == part.FQN || len(nativeRT.Union) > 0 {
+				continue
+			}
+			return native
+		}
+		ok := false
+		for _, nc := range nativeClasses {
+			if strings.EqualFold(nc, part.FQN) || r.Index != nil && r.Index.IsSubtypeOf(part.FQN, nc) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return native
+		}
+	}
+	return doc
+}
+
+// mentionsTemplate reports whether a PHPDoc type names a template of the
+// method or of the class that declares it.
+func (r *Resolver) mentionsTemplate(doc string, methodTemplates []symbols.TemplateParam, ownerFQN string) bool {
+	var classTemplates []symbols.TemplateParam
+	if ownerFQN != "" && r.Index != nil {
+		if sym := r.Index.Lookup(ownerFQN); sym != nil {
+			classTemplates = sym.Templates
+		}
+	}
+	if len(methodTemplates)+len(classTemplates) == 0 {
+		return false
+	}
+	found := false
+	ParseGenericType(doc).transform(func(t ResolvedType) ResolvedType {
+		if found || len(t.Params) > 0 {
+			return t
+		}
+		for _, list := range [][]symbols.TemplateParam{methodTemplates, classTemplates} {
+			for _, tp := range list {
+				if tp.Name == t.FQN {
+					found = true
+				}
+			}
+		}
+		return t
+	})
+	return found
 }
 
 // MemberType returns the resolved type of a member symbol (property type or method return type).
@@ -875,6 +902,20 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 		if declaredType != "" {
 			return r.resolveDocType(declaredType, file)
 		}
+		// /** @var Collection<int, User> $users */ above the assignment.
+		if declared := varDocAbove(lines, i, varName); declared != "" {
+			owner := FindEnclosingClass(file, pos)
+			if rt := r.resolveDocTypeIn(r.expandTypeAliases(declared, owner, file), owner, file); !rt.IsEmpty() {
+				return rt
+			}
+		}
+		exprCtx := ExprContext{Lines: lines, Pos: pos, File: file}
+		// $class = Foo::class is a class-string<Foo>.
+		if trimmed := strings.TrimSuffix(strings.TrimSpace(rhs), ";"); classConstantRe.MatchString(trimmed) {
+			if rt := r.ExpressionType(trimmed, exprCtx); !rt.IsEmpty() {
+				return rt
+			}
+		}
 
 		// $var = [...$other] — keeps the elements of what it spreads.
 		if spread := spreadOnlyVariable(rhs); spread != "" && spread != varName {
@@ -904,8 +945,11 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 				classFQN = r.ResolveClassName(className, file)
 			}
 
-			// Try to infer generic params from constructor argument
+			// Bind the class's templates from the constructor's arguments.
 			if argStr != "" {
+				if rt := r.NewExpressionType(className, argStr, exprCtx); rt.FQN == classFQN && len(rt.Params) > 0 {
+					return rt
+				}
 				argRT := r.inferArgType(argStr, lines, pos, file, i)
 				if !argRT.IsEmpty() && (argRT.IsGeneric() || argRT.Shape != "") {
 					if rt := r.inferConstructorGenerics(classFQN, argRT); !rt.IsEmpty() {
@@ -949,8 +993,14 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 			}
 		}
 
-		// $var = funcName(...) — look up function return type in symbol index
+		// $var = funcName(...): the function's return type, with its templates
+		// bound from the arguments.
 		if funcName := extractFunctionCallName(rhs); funcName != "" && r.Index != nil {
+			if steps, origin, ok := parseChain(rhs); ok && len(steps) == 0 && origin.kind == 'f' {
+				if rt := r.FunctionCallType(origin.text, origin.args, exprCtx); !rt.IsEmpty() {
+					return rt
+				}
+			}
 			for _, sym := range r.Index.LookupByName(funcName) {
 				if sym.Kind == symbols.KindFunction && sym.ReturnType != "" {
 					return ResolvedType{FQN: sym.ReturnType}
@@ -1045,6 +1095,9 @@ func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos
 		}
 		if iterableType.IsEmpty() {
 			continue
+		}
+		if _, v, ok := r.IterableTypes(iterableType); ok {
+			return v
 		}
 		return arrayElementType(iterableType)
 	}
