@@ -127,6 +127,14 @@ type CompletionItem struct {
 	FilterText          string             `json:"filterText,omitempty"`
 	Deprecated          bool               `json:"deprecated,omitempty"`
 	AdditionalTextEdits []TextEdit         `json:"additionalTextEdits,omitempty"`
+	// Data is kept by the client and sent back with completionItem/resolve.
+	Data *CompletionItemData `json:"data,omitempty"`
+}
+
+// CompletionItemData says what a completion item stands for, so its
+// details can be filled in when the client asks to resolve it.
+type CompletionItemData struct {
+	Symbol string `json:"symbol"`
 }
 
 // Hover represents the result of a hover request.
@@ -254,6 +262,11 @@ type InitializeParams struct {
 			Completion struct {
 				CompletionItem struct {
 					SnippetSupport bool `json:"snippetSupport"`
+					// ResolveSupport lists the item properties the client
+					// fills in later through completionItem/resolve.
+					ResolveSupport struct {
+						Properties []string `json:"properties"`
+					} `json:"resolveSupport"`
 				} `json:"completionItem"`
 			} `json:"completion"`
 		} `json:"textDocument"`

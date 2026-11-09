@@ -27,6 +27,9 @@ type Provider struct {
 	views               *frameworklaravel.Views
 	translations        *frameworklaravel.TranslationResolver
 	symfonyTranslations *frameworksymfony.TranslationResolver
+	// lazyDocumentation and lazyDetail leave those properties of member
+	// items to completionItem/resolve, for clients that ask for them later.
+	lazyDocumentation, lazyDetail bool
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
@@ -372,7 +375,8 @@ func (p *Provider) completeMemberAccess(uri, source string, pos protocol.Positio
 			continue
 		}
 		seen[m.Name] = true
-		item := protocol.CompletionItem{Label: m.Name, Detail: formatDetail(m), Documentation: formatDocumentation(m), SortText: rankKey(rankMember, distance[m.ParentFQN], strings.TrimPrefix(m.Name, "$"))}
+		item := protocol.CompletionItem{Label: m.Name, SortText: rankKey(rankMember, distance[m.ParentFQN], strings.TrimPrefix(m.Name, "$"))}
+		p.describeMember(&item, m)
 		switch m.Kind {
 		case symbols.KindMethod:
 			item.Kind = protocol.CompletionItemKindMethod
@@ -389,6 +393,46 @@ func (p *Provider) completeMemberAccess(uri, source string, pos protocol.Positio
 		items = append(items, item)
 	}
 	return items
+}
+
+// SetLazyResolve leaves the documentation and/or the detail of member items
+// to ResolveCompletionItem. Only for clients that resolve those properties:
+// others would never see them.
+func (p *Provider) SetLazyResolve(documentation, detail bool) {
+	p.lazyDocumentation, p.lazyDetail = documentation, detail
+}
+
+// describeMember fills in a member item's detail and documentation, or marks
+// it to be filled in by completionItem/resolve. Over a class with hundreds of
+// members, formatting them all is most of a completion request's time.
+func (p *Provider) describeMember(item *protocol.CompletionItem, m *symbols.Symbol) {
+	if !p.lazyDetail {
+		item.Detail = formatDetail(m)
+	}
+	if !p.lazyDocumentation {
+		item.Documentation = formatDocumentation(m)
+	}
+	if p.lazyDetail || p.lazyDocumentation {
+		item.Data = &protocol.CompletionItemData{Symbol: m.FQN}
+	}
+}
+
+// ResolveCompletionItem fills in what describeMember left for later.
+func (p *Provider) ResolveCompletionItem(item protocol.CompletionItem) protocol.CompletionItem {
+	if item.Data == nil || item.Data.Symbol == "" {
+		return item
+	}
+	sym := p.index.Lookup(item.Data.Symbol)
+	if sym == nil {
+		return item
+	}
+	if item.Detail == "" {
+		item.Detail = formatDetail(sym)
+	}
+	if item.Documentation == "" {
+		item.Documentation = formatDocumentation(sym)
+	}
+	return item
 }
 
 // objectShapeCompletions offers the properties of an object shape such as
@@ -460,7 +504,8 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 			}
 			seen[m.Name] = true
 			// A facade's forwarded methods come after the facade's own members.
-			item := protocol.CompletionItem{Label: m.Name, Detail: formatDetail(m), Documentation: formatDocumentation(m), SortText: rankKey(rankMember, set*100+distance[m.ParentFQN], strings.TrimPrefix(m.Name, "$"))}
+			item := protocol.CompletionItem{Label: m.Name, SortText: rankKey(rankMember, set*100+distance[m.ParentFQN], strings.TrimPrefix(m.Name, "$"))}
+			p.describeMember(&item, m)
 			switch m.Kind {
 			case symbols.KindMethod:
 				item.Kind = protocol.CompletionItemKindMethod
