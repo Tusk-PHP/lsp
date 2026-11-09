@@ -538,3 +538,44 @@ class Event { use Frequencies; /** @var \DateTimeZone|string */ public $timezone
 		t.Errorf("access: got %#v, want the property", m)
 	}
 }
+
+// A PHPDoc type means what the declaring file's imports say, even where the
+// caller imports another class with the same short name.
+func TestMemberTypeUsesDeclaringFileImports(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///vendor/Model/Product.php", `<?php
+namespace Magento\Catalog\Model;
+class Product { public function getSku() {} }
+`)
+	idx.IndexFile("file:///vendor/Helper.php", `<?php
+namespace Magento\Catalog\Helper;
+use Magento\Catalog\Model\Product;
+class Helper {
+    /** @return Product */
+    public function initialize($id) {}
+    /** @var Product */
+    public $current;
+}
+`)
+	idx.IndexFile("file:///app/Product.php", `<?php
+namespace App;
+class Product {}
+`)
+	r := NewResolver(idx)
+	caller := parser.ParseFile(`<?php
+namespace App\Http;
+use App\Product;
+`)
+	for _, name := range []string{"initialize", "$current"} {
+		m := r.FindMember("Magento\\Catalog\\Helper\\Helper", name)
+		if m == nil {
+			t.Fatalf("%s not found", name)
+		}
+		if got := r.MemberType(m, caller); got != "Magento\\Catalog\\Model\\Product" {
+			t.Errorf("MemberType(%s) = %q, want Magento\\Catalog\\Model\\Product", name, got)
+		}
+		if got := r.MemberTypeResolved(m, caller, "", nil).FQN; got != "Magento\\Catalog\\Model\\Product" {
+			t.Errorf("MemberTypeResolved(%s) = %q, want Magento\\Catalog\\Model\\Product", name, got)
+		}
+	}
+}

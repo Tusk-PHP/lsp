@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `unknown-member` no longer reports a member that the implementations of an interface, or the subclasses of an abstract class, declare. An object of such a type is always one of those, and code often calls what they add, as in Magento's `$this->getResource()->getAttribute()` on `AbstractDb` and `$item->getQtyToShip()` on `OrderItemInterface`. A member that nothing below the type declares is still reported, and so is a subclass's member called on a concrete class.
+- A PHPDoc type now means what the imports of the file that declares it say, even where the caller imports another class with the same short name. Magento's `Helper::initialize()`, documented `@return Product` for `Magento\Catalog\Model\Product`, no longer takes the caller's own `Product`, so hover, completion, go-to-definition and diagnostics on the result are right. This covers `@param`, `@return`, `@var` and `@throws` (and their `@phpstan-` and `@psalm-` forms); hover now shows those types by their full name.
 
 ## [0.12.0] - 2026-11-09
 
