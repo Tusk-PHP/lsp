@@ -102,7 +102,7 @@ func (p *structParser) parseAnonymousClasses() {
 			continue
 		}
 		cls.BodyLine, cls.BodyCol = open.Line, open.Column
-		cls.Methods, cls.Properties, cls.Constants, cls.Traits = p.parseClassBody()
+		cls.Methods, cls.Properties, cls.Constants, cls.Traits, cls.TraitUseDoc = p.parseClassBodyWithTraitDocs()
 		if cls.IsReadonly {
 			for k := range cls.Properties {
 				cls.Properties[k].IsReadonly = true

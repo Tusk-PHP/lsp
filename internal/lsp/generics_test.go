@@ -227,3 +227,347 @@ func TestGenerics(t *testing.T) {
 		})
 	}
 }
+
+var inheritanceCases = []phpVersionCase{
+	{name: "inheritance/@implements gives an interface its type arguments", completion: []string{"bark"}, src: `
+class Dog { public function bark(): void {} }
+/** @template T */
+interface Collection {
+	/** @return T */
+	public function get();
+}
+/** @implements Collection<Dog> */
+class DogCollection implements Collection {
+	public function get() { return new Dog(); }
+}
+function run(DogCollection $dogs): void { $dogs->get()-><|> }`},
+	{name: "inheritance/@extends through several levels", completion: []string{"bark"}, src: `
+class Dog { public function bark(): void {} }
+/** @template T */
+abstract class Repository {
+	/** @return T */
+	public function find(int $id) { return null; }
+}
+/** @extends Repository<Dog> */
+class DogRepository extends Repository {}
+class ShelterRepository extends DogRepository {}
+function run(ShelterRepository $r): void { $r->find(1)-><|> }`},
+	{name: "inheritance/a generic child passes its template through", completion: []string{"bark"}, src: `
+class Dog { public function bark(): void {} }
+/** @template T */
+abstract class Repository {
+	/** @return T */
+	public function find(int $id) { return null; }
+}
+/**
+ * @template TEntity
+ * @template-extends Repository<TEntity>
+ */
+class CachedRepository extends Repository {}
+/** @param CachedRepository<Dog> $r */
+function run($r): void { $r->find(1)-><|> }`},
+	{name: "inheritance/@use above a trait use statement", completion: []string{"bark"}, src: `
+class Dog { public function bark(): void {} }
+/** @template T */
+trait HoldsItems {
+	/** @return T */
+	public function first() { return null; }
+}
+class Kennel {
+	/** @use HoldsItems<Dog> */
+	use HoldsItems;
+}
+function run(Kennel $k): void { $k->first()-><|> }`},
+	{name: "inheritance/unknown-member sees an inherited generic type", diag: []string{"unknown-member"}, src: `
+class Dog { public function bark(): void {} }
+/** @template T */
+abstract class Repository {
+	/** @return T */
+	public function find(int $id) { return null; }
+}
+/** @extends Repository<Dog> */
+class DogRepository extends Repository {}
+function run(DogRepository $r): void { $r->find(1)->meow(); }`},
+	{name: "inheritance/foreach over IteratorAggregate type arguments", completion: []string{"bark"}, src: `
+class Dog { public function bark(): void {} }
+/** @implements \IteratorAggregate<int, Dog> */
+class Pack implements \IteratorAggregate {
+	public function getIterator(): \Iterator { return new \ArrayIterator([]); }
+}
+function run(Pack $pack): void { foreach ($pack as $dog) { $dog-><|> } }`},
+	{name: "builtins/ArrayIterator values", completion: []string{"bark"}, src: `
+class Dog { public function bark(): void {} }
+/** @param \ArrayIterator<int, Dog> $it */
+function run(\ArrayIterator $it): void { $it->current()-><|> }`},
+	{name: "builtins/ArrayObject in foreach", completion: []string{"bark"}, src: `
+class Dog { public function bark(): void {} }
+/** @param \ArrayObject<int, Dog> $dogs */
+function run(\ArrayObject $dogs): void { foreach ($dogs as $dog) { $dog-><|> } }`},
+	{name: "builtins/SplObjectStorage data", completion: []string{"bark"}, src: `
+class Dog { public function bark(): void {} }
+/** @param \SplObjectStorage<Person, Dog> $s */
+function run(\SplObjectStorage $s, Person $p): void { $s->offsetGet($p)-><|> }`},
+	{name: "builtins/WeakMap values by offset", completion: []string{"bark"}, src: `
+class Dog { public function bark(): void {} }
+/** @param \WeakMap<Person, Dog> $map */
+function run(\WeakMap $map, Person $p): void { $dog = $map[$p]; $dog-><|> }`},
+}
+
+func TestGenericsInheritance(t *testing.T) {
+	for _, tc := range inheritanceCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runPHPVersionCase(t, tc)
+		})
+	}
+}
+
+var iterableCases = []phpVersionCase{
+	{name: "iterables/list<T> in foreach", completion: []string{"name"}, src: `
+/** @return list<Person> */
+function people(): array { return []; }
+function run(): void { foreach (people() as $p) { $p-><|> } }`},
+	{name: "iterables/non-empty-array<K, V> values", completion: []string{"name"}, src: `
+/** @param non-empty-array<string, Person> $people */
+function run(array $people): void { foreach ($people as $p) { $p-><|> } }`},
+	{name: "iterables/iterable<K, V> keys", completion: []string{"name"}, src: `
+/** @param iterable<Person, Logger> $map */
+function run(iterable $map): void { foreach ($map as $person => $logger) { $person-><|> } }`},
+	{name: "iterables/a Laravel-style collection in foreach", completion: []string{"name"}, src: `
+/**
+ * @template TKey of array-key
+ * @template TValue
+ * @extends \IteratorAggregate<TKey, TValue>
+ */
+interface Enumerable extends \IteratorAggregate {}
+/**
+ * @template TKey of array-key
+ * @template TValue
+ * @implements Enumerable<TKey, TValue>
+ */
+class Collection implements Enumerable {
+	public function getIterator(): \Traversable { return new \ArrayIterator([]); }
+}
+/** @param Collection<int, Person> $people */
+function run(Collection $people): void { foreach ($people as $p) { $p-><|> } }`},
+	{name: "iterables/generator values in foreach", completion: []string{"name"}, src: `
+/** @return \Generator<int, Person, string, Logger> */
+function people(): \Generator { yield new Person(); return new Logger(); }
+function run(): void { foreach (people() as $p) { $p-><|> } }`},
+	{name: "iterables/generator getReturn()", completion: []string{"info"}, src: `
+/** @return \Generator<int, Person, string, Logger> */
+function people(): \Generator { yield new Person(); return new Logger(); }
+function run(): void { $gen = people(); $gen->getReturn()-><|> }`},
+	{name: "iterables/the value of yield is what the generator is sent", completion: []string{"info"}, src: `
+/** @return \Generator<int, Person, Logger, void> */
+function people(): \Generator {
+	$logger = yield new Person();
+	$logger-><|>
+}`},
+	{name: "iterables/the value at an array shape's key", completion: []string{"name"}, src: `
+/** @param array{person: Person, count: int} $data */
+function run(array $data): void { $data['person']-><|> }`},
+	{name: "iterables/a shape's value assigned to a variable", completion: []string{"name"}, src: `
+/** @param array{person: Person, count: int} $data */
+function run(array $data): void { $p = $data['person']; $p-><|> }`},
+	{name: "iterables/list{…} shapes by position", completion: []string{"info"}, src: `
+/** @param list{Person, Logger} $pair */
+function run(array $pair): void { $pair[1]-><|> }`},
+	{name: "iterables/object shape properties complete", completion: []string{"person", "count"}, src: `
+/** @param object{person: Person, count?: int} $data */
+function run(object $data): void { $data-><|> }`},
+	{name: "iterables/object shape property types", completion: []string{"name"}, src: `
+/** @param object{person: Person, count?: int} $data */
+function run(object $data): void { $data->person-><|> }`},
+	{name: "iterables/value-of an array shape", completion: []string{"name"}, src: `
+class Svc {
+	/**
+	 * @param array{a: Person, b: Person} $map
+	 * @return value-of<array{a: Person, b: Person}>
+	 */
+	public function pick(array $map) { return $map['a']; }
+}
+function run(Svc $s): void { $s->pick([])-><|> }`},
+	{name: "iterables/offset access T[K]", completion: []string{"name"}, src: `
+class Svc {
+	/**
+	 * @template T of array{person: Person}
+	 * @param T $data
+	 * @return T['person']
+	 */
+	public function person(array $data) { return $data['person']; }
+}
+/** @param array{person: Person} $d */
+function run(Svc $s, array $d): void { $s->person($d)-><|> }`},
+	{name: "iterables/call-site variance reads as the type", completion: []string{"name"}, src: `
+/** @template T */
+class Box {
+	/** @return T */
+	public function get() { return null; }
+}
+/** @param Box<covariant Person> $box */
+function run(Box $box): void { $box->get()-><|> }`},
+	{name: "iterables/a wildcard type argument is mixed", clean: true, src: `
+/** @template T */
+class Box {
+	/** @return T */
+	public function get() { return null; }
+}
+/** @param Box<*> $box */
+function run(Box $box): void { $box->get()->anything(); }`},
+}
+
+func TestGenericsIterables(t *testing.T) {
+	for _, tc := range iterableCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runPHPVersionCase(t, tc)
+		})
+	}
+}
+
+var callableCases = []phpVersionCase{
+	{name: "callables/a closure's untyped parameter takes the callable's type", completion: []string{"name"}, src: `
+class People {
+	/** @param callable(Person, int): void $fn */
+	public function each(callable $fn): void {}
+}
+function run(People $people): void { $people->each(function ($p, $i) { $p-><|> }); }`},
+	{name: "callables/an arrow function's parameter takes a template bound by the receiver", completion: []string{"name"}, src: `
+/** @template TValue */
+class Collection {
+	/**
+	 * @template TMapValue
+	 * @param callable(TValue): TMapValue $callback
+	 * @return Collection<TMapValue>
+	 */
+	public function map(callable $callback) { return new Collection(); }
+}
+/** @param Collection<Person> $people */
+function run(Collection $people): void { $people->map(fn ($p) => $p-><|>); }`},
+	{name: "callables/templates bind through a callable's return", completion: []string{"info"}, src: `
+/** @template TValue */
+class Collection {
+	/**
+	 * @template TMapValue
+	 * @param callable(TValue): TMapValue $callback
+	 * @return Collection<TMapValue>
+	 */
+	public function map(callable $callback) { return new Collection(); }
+	/** @return TValue|null */
+	public function first() { return null; }
+}
+class Person2 { public Logger $logger; }
+/** @param Collection<Person2> $people */
+function run(Collection $people): void { $people->map(fn (Person2 $p) => $p->logger)->first()-><|> }`},
+	{name: "callables/a closure's return type binds a template", completion: []string{"info"}, src: `
+/**
+ * @template T
+ * @param \Closure(): T $factory
+ * @return T
+ */
+function make(\Closure $factory) { return $factory(); }
+function run(): void { make(function (): Logger { return new Logger(); })-><|> }`},
+	{name: "callables/calling a Closure-typed variable", completion: []string{"info"}, src: `
+/** @param \Closure(int): Logger $factory */
+function run(\Closure $factory): void { $factory(1)-><|> }`},
+	{name: "callables/calling an invokable object", completion: []string{"name"}, src: `
+class Finder { public function __invoke(): Person { return new Person(); } }
+function run(Finder $find): void { $find()-><|> }`},
+	{name: "callables/@param-closure-this binds $this", completion: []string{"info"}, src: `
+class Router {
+	/** @param-closure-this Logger $routes */
+	public function group(\Closure $routes): void {}
+}
+function run(Router $r): void { $r->group(function () { $this-><|> }); }`},
+}
+
+func TestGenericsCallables(t *testing.T) {
+	for _, tc := range callableCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runPHPVersionCase(t, tc)
+		})
+	}
+}
+
+var conditionalCases = []phpVersionCase{
+	{name: "conditional/the branch the argument picks", completion: []string{"info"}, src: `
+class Svc {
+	/** @return ($asLogger is true ? Logger : Person) */
+	public function get(bool $asLogger = false) { return new Person(); }
+}
+function run(Svc $s): void { $s->get(true)-><|> }`},
+	{name: "conditional/the default value picks the other branch", completion: []string{"name"}, src: `
+class Svc {
+	/** @return ($asLogger is true ? Logger : Person) */
+	public function get(bool $asLogger = false) { return new Person(); }
+}
+function run(Svc $s): void { $s->get()-><|> }`},
+	{name: "conditional/the picked branch is checked", diag: []string{"unknown-member"}, src: `
+class Svc {
+	/** @return ($asLogger is true ? Logger : Person) */
+	public function get(bool $asLogger = false) { return new Person(); }
+}
+function run(Svc $s): void { $s->get(false)->info('x'); }`},
+	{name: "conditional/is not", completion: []string{"info"}, src: `
+class Svc {
+	/** @return ($value is not null ? Logger : Person) */
+	public function get(?string $value) { return new Person(); }
+}
+function run(Svc $s): void { $s->get('a')-><|> }`},
+	{name: "conditional/nested", completion: []string{"name"}, src: `
+class Svc {
+	/** @return ($a is int ? ($b is int ? Person : Logger) : Logger) */
+	public function get($a, $b) { return new Person(); }
+}
+function run(Svc $s): void { $s->get(1, 2)-><|> }`},
+	{name: "conditional/on a template", completion: []string{"info"}, src: `
+class Container {
+	/**
+	 * @template T
+	 * @param class-string<T>|string $id
+	 * @return ($id is class-string<T> ? T : object)
+	 */
+	public function get(string $id) { return new \stdClass(); }
+}
+function run(Container $c): void { $c->get(Logger::class)-><|> }`},
+	{name: "class-string/new $class", completion: []string{"info"}, src: `
+function run(): void { $class = Logger::class; $obj = new $class(); $obj-><|> }`},
+	{name: "class-string/$class::method()", completion: []string{"make"}, src: `
+class Factory { public static function make(): Factory { return new Factory(); } }
+/** @param class-string<Factory> $class */
+function run(string $class): void { $class::<|> }`},
+	{name: "class-string/new<T>", completion: []string{"info"}, src: `
+class Container {
+	/**
+	 * @template T of object
+	 * @param class-string<T> $class
+	 * @return new<T>
+	 */
+	public function build(string $class) { return new $class(); }
+}
+function run(Container $c): void { $c->build(Logger::class)-><|> }`},
+	{name: "mixin/a generic @mixin brings in members", completion: []string{"info"}, src: `
+/**
+ * @template T
+ * @mixin T
+ */
+class Delegatee {}
+/** @param Delegatee<Logger> $d */
+function run(Delegatee $d): void { $d-><|> }`},
+	{name: "mixin/a member from a generic @mixin has its type", completion: []string{"name"}, src: `
+class Finder { public function person(): Person { return new Person(); } }
+/**
+ * @template T
+ * @mixin T
+ */
+class Delegatee {}
+/** @param Delegatee<Finder> $d */
+function run(Delegatee $d): void { $d->person()-><|> }`},
+}
+
+func TestGenericsConditionalAndClassStrings(t *testing.T) {
+	for _, tc := range conditionalCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runPHPVersionCase(t, tc)
+		})
+	}
+}

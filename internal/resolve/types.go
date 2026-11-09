@@ -143,6 +143,13 @@ func (rt ResolvedType) FullString() string {
 		sb.WriteString(rt.Shape)
 		return sb.String()
 	}
+	if rt.FQN == "offset-access" && len(rt.Params) == 2 {
+		sb.WriteString(rt.Params[0].FullString())
+		sb.WriteByte('[')
+		sb.WriteString(rt.Params[1].FullString())
+		sb.WriteByte(']')
+		return sb.String()
+	}
 	sb.WriteString(rt.FQN)
 	if rt.Callable != nil {
 		sb.WriteByte('(')
@@ -187,6 +194,24 @@ func ParseGenericType(raw string) ResolvedType {
 //	"[['id' => 1], ['id' => 2]]" → array<int, array{id: int}>
 //	"[]" → array (bare)
 func InferArrayLiteralType(literal string) ResolvedType {
+	return attachShapeFields(inferArrayLiteralType(literal))
+}
+
+// attachShapeFields fills in the structured fields of shapes that were built
+// as strings, here and in the type's arguments.
+func attachShapeFields(rt ResolvedType) ResolvedType {
+	if rt.Shape != "" && len(rt.Fields) == 0 {
+		if parsed := ParseGenericType(rt.Shape); len(parsed.Fields) > 0 {
+			rt.Fields = parsed.Fields
+		}
+	}
+	for i := range rt.Params {
+		rt.Params[i] = attachShapeFields(rt.Params[i])
+	}
+	return rt
+}
+
+func inferArrayLiteralType(literal string) ResolvedType {
 	literal = strings.TrimSpace(literal)
 	if !strings.HasPrefix(literal, "[") || literal == "[]" {
 		return ResolvedType{FQN: "array"}
@@ -418,6 +443,13 @@ func resolvedTypeFromDocType(t types.TypeExpr) ResolvedType {
 			return ResolvedType{FQN: "float", Nullable: t.Nullable, Literal: t.Literal}
 		}
 		return ResolvedType{FQN: "int", Nullable: t.Nullable, Literal: t.Literal}
+	case types.TypeKindOffset:
+		if t.Element == nil || len(t.Params) != 1 {
+			return ResolvedType{}
+		}
+		return ResolvedType{FQN: "offset-access", Nullable: t.Nullable, Params: []ResolvedType{
+			resolvedTypeFromDocType(*t.Element), resolvedTypeFromDocType(t.Params[0]),
+		}}
 	case types.TypeKindConditional:
 		if t.Condition == nil {
 			return ResolvedType{}

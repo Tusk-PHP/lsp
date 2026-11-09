@@ -427,11 +427,11 @@ func TestParseVariadicParams(t *testing.T) {
 	// so IsVariadic must be detected via the triple-dot sequence, not a single
 	// "..." token value comparison.
 	tests := []struct {
-		name        string
-		source      string
-		paramIndex  int
-		wantName    string
-		wantType    string
+		name         string
+		source       string
+		paramIndex   int
+		wantName     string
+		wantType     string
 		wantVariadic bool
 	}{
 		{
@@ -439,9 +439,9 @@ func TestParseVariadicParams(t *testing.T) {
 			source: `<?php
 function f(...$args) {}
 `,
-			paramIndex:  0,
-			wantName:    "$args",
-			wantType:    "",
+			paramIndex:   0,
+			wantName:     "$args",
+			wantType:     "",
 			wantVariadic: true,
 		},
 		{
@@ -449,9 +449,9 @@ function f(...$args) {}
 			source: `<?php
 function f(int ...$nums) {}
 `,
-			paramIndex:  0,
-			wantName:    "$nums",
-			wantType:    "int",
+			paramIndex:   0,
+			wantName:     "$nums",
+			wantType:     "int",
 			wantVariadic: true,
 		},
 		{
@@ -459,9 +459,9 @@ function f(int ...$nums) {}
 			source: `<?php
 function f(string $name) {}
 `,
-			paramIndex:  0,
-			wantName:    "$name",
-			wantType:    "string",
+			paramIndex:   0,
+			wantName:     "$name",
+			wantType:     "string",
 			wantVariadic: false,
 		},
 		{
@@ -469,9 +469,9 @@ function f(string $name) {}
 			source: `<?php
 function f(string $prefix, int ...$nums) {}
 `,
-			paramIndex:  1,
-			wantName:    "$nums",
-			wantType:    "int",
+			paramIndex:   1,
+			wantName:     "$nums",
+			wantType:     "int",
 			wantVariadic: true,
 		},
 		{
@@ -479,9 +479,9 @@ function f(string $prefix, int ...$nums) {}
 			source: `<?php
 function f(string $prefix, int ...$nums) {}
 `,
-			paramIndex:  0,
-			wantName:    "$prefix",
-			wantType:    "string",
+			paramIndex:   0,
+			wantName:     "$prefix",
+			wantType:     "string",
 			wantVariadic: false,
 		},
 	}

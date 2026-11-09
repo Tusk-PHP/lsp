@@ -82,6 +82,9 @@ type ClassNode struct {
 	EndLine    int
 	StartCol   int
 	DocComment string
+	// TraitUseDoc holds the docblocks above the class's trait `use`
+	// statements, where @use gives a trait its type arguments.
+	TraitUseDoc string
 	// BodyLine and BodyCol are where an anonymous class's `{` is, set only
 	// for AnonymousClasses.
 	BodyLine, BodyCol int
@@ -111,6 +114,9 @@ type TraitNode struct {
 	StartLine  int
 	StartCol   int
 	DocComment string
+	// TraitUseDoc holds the docblocks above the trait's own trait `use`
+	// statements.
+	TraitUseDoc string
 }
 
 type EnumCaseNode struct {
@@ -550,6 +556,7 @@ func toFileNode(result *ParseResult) *FileNode {
 			Name:       interfaceDef.Name,
 			FullName:   interfaceDef.FullName,
 			Extends:    append([]string(nil), interfaceDef.Extends...),
+			DocComment: interfaceDef.DocComment,
 			StartLine:  interfaceDef.Line,
 			StartCol:   startColumnForDeclaration(result, interfaceDef.Name, interfaceDef.Line, TokenInterface),
 		}
@@ -567,12 +574,14 @@ func toFileNode(result *ParseResult) *FileNode {
 
 	for _, traitDef := range result.Traits {
 		traitNode := TraitNode{
-			Attributes: traitDef.Attributes,
-			Name:       traitDef.Name,
-			FullName:   traitDef.FullName,
-			Traits:     append([]string(nil), traitDef.Traits...),
-			StartLine:  traitDef.Line,
-			StartCol:   startColumnForDeclaration(result, traitDef.Name, traitDef.Line, TokenTrait),
+			Attributes:  traitDef.Attributes,
+			Name:        traitDef.Name,
+			FullName:    traitDef.FullName,
+			Traits:      append([]string(nil), traitDef.Traits...),
+			TraitUseDoc: traitDef.TraitUseDoc,
+			DocComment:  traitDef.DocComment,
+			StartLine:   traitDef.Line,
+			StartCol:    startColumnForDeclaration(result, traitDef.Name, traitDef.Line, TokenTrait),
 		}
 		for _, propertyDef := range traitDef.Properties {
 			traitNode.Properties = append(traitNode.Properties, toPropertyNode(result, propertyDef))
@@ -749,21 +758,22 @@ func nameColumnOnLine(result *ParseResult, name string, line int) int {
 
 func toClassNode(result *ParseResult, classDef ClassDef) ClassNode {
 	classNode := ClassNode{
-		Attributes: classDef.Attributes,
-		Name:       classDef.Name,
-		FullName:   classDef.FullName,
-		Extends:    classDef.Extends,
-		Implements: append([]string(nil), classDef.Implements...),
-		Traits:     append([]string(nil), classDef.Traits...),
-		IsAbstract: classDef.IsAbstract,
-		IsFinal:    classDef.IsFinal,
-		IsReadonly: classDef.IsReadonly,
-		StartLine:  classDef.Line,
-		EndLine:    classDef.EndLine,
-		StartCol:   startColumnForDeclaration(result, classDef.Name, classDef.Line, TokenClass),
-		DocComment: classDef.DocComment,
-		BodyLine:   classDef.BodyLine,
-		BodyCol:    classDef.BodyCol,
+		Attributes:  classDef.Attributes,
+		Name:        classDef.Name,
+		FullName:    classDef.FullName,
+		Extends:     classDef.Extends,
+		Implements:  append([]string(nil), classDef.Implements...),
+		Traits:      append([]string(nil), classDef.Traits...),
+		IsAbstract:  classDef.IsAbstract,
+		IsFinal:     classDef.IsFinal,
+		IsReadonly:  classDef.IsReadonly,
+		StartLine:   classDef.Line,
+		EndLine:     classDef.EndLine,
+		StartCol:    startColumnForDeclaration(result, classDef.Name, classDef.Line, TokenClass),
+		DocComment:  classDef.DocComment,
+		TraitUseDoc: classDef.TraitUseDoc,
+		BodyLine:    classDef.BodyLine,
+		BodyCol:     classDef.BodyCol,
 	}
 	for _, propertyDef := range classDef.Properties {
 		classNode.Properties = append(classNode.Properties, toPropertyNode(result, propertyDef))

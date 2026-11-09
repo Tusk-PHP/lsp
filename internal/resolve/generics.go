@@ -179,9 +179,118 @@ func (r *Resolver) applyEnv(rt ResolvedType, env typeEnv) ResolvedType {
 				return t
 			}
 		}
+		switch t.FQN {
+		case "new":
+			// new<T>: an object of the class T or class-string<T> names.
+			if len(t.Params) == 1 {
+				if target := ClassStringTarget(t.Params[0]); !IsBuiltinTypeName(target.FQN) && !target.IsEmpty() {
+					return target
+				}
+			}
+			return t
+		case "key-of", "value-of", "offset-access":
+			if out, ok := r.evalTypeOperator(t); ok {
+				return out
+			}
+			return t
+		}
+		if i := strings.Index(t.FQN, "::"); i > 0 && len(t.Params) == 0 {
+			// A class constant used as a type: Foo::TYPES.
+			class := r.qualifyDocName(t.FQN[:i], env.owner, env.file)
+			if out, ok := r.classConstantType(class, t.FQN[i+2:], env.static); ok {
+				return out
+			}
+			return t
+		}
 		t.FQN = r.qualifyDocName(t.FQN, env.owner, env.file)
 		return t
 	})
+}
+
+// evalTypeOperator works out key-of<T>, value-of<T> and T[K] once T and K
+// are known. ok is false while they aren't.
+func (r *Resolver) evalTypeOperator(t ResolvedType) (ResolvedType, bool) {
+	switch t.FQN {
+	case "offset-access":
+		if len(t.Params) != 2 {
+			return ResolvedType{}, false
+		}
+		key := t.Params[1].Literal
+		if key == "" {
+			key = t.Params[1].FQN
+		}
+		out := r.OffsetType(t.Params[0], key)
+		return out, !out.IsEmpty()
+	case "key-of", "value-of":
+		if len(t.Params) != 1 {
+			return ResolvedType{}, false
+		}
+		target := t.Params[0]
+		// value-of<BackedEnum> is the enum's backing type.
+		if t.FQN == "value-of" && target.FQN != "" && !IsBuiltinTypeName(target.FQN) && r.Index != nil {
+			if sym := r.Index.Lookup(target.FQN); sym != nil && sym.Kind == symbols.KindEnum && sym.BackedType != "" {
+				return ResolvedType{FQN: sym.BackedType}, true
+			}
+		}
+		if len(target.Fields) > 0 {
+			parts := make([]ResolvedType, 0, len(target.Fields))
+			for i, f := range target.Fields {
+				if t.FQN == "value-of" {
+					parts = append(parts, f.Type)
+					continue
+				}
+				switch {
+				case f.Key == "":
+					parts = append(parts, ResolvedType{FQN: "int", Literal: itoa(i)})
+				case isIntKey(f.Key):
+					parts = append(parts, ResolvedType{FQN: "int", Literal: f.Key})
+				default:
+					parts = append(parts, ResolvedType{FQN: "string", Literal: "'" + f.Key + "'"})
+				}
+			}
+			return MakeUnion(parts, false), true
+		}
+		if k, v, ok := r.IterableTypes(target); ok {
+			if t.FQN == "key-of" {
+				return k, true
+			}
+			return v, true
+		}
+	}
+	return ResolvedType{}, false
+}
+
+// classConstantType is the type of a class constant's value, for types such
+// as key-of<Foo::TYPES>.
+func (r *Resolver) classConstantType(class, name string, static ResolvedType) (ResolvedType, bool) {
+	switch strings.ToLower(class) {
+	case "self", "static", "$this":
+		class = static.FQN
+	}
+	if class == "" || r.Index == nil || strings.ContainsAny(name, "*") {
+		return ResolvedType{}, false
+	}
+	sym := r.Index.Lookup(class + "::" + name)
+	if sym == nil {
+		for _, m := range r.Index.GetClassMembers(class) {
+			if m.Name == name && m.Kind == symbols.KindConstant {
+				sym = m
+				break
+			}
+		}
+	}
+	if sym == nil || sym.Value == "" {
+		return ResolvedType{}, false
+	}
+	v := strings.TrimSpace(sym.Value)
+	if strings.HasPrefix(v, "[") || strings.HasPrefix(strings.ToLower(v), "array(") {
+		rt := InferArrayLiteralType(v)
+		return rt, !rt.IsEmpty()
+	}
+	if lit := literalExprType(v); !lit.IsEmpty() {
+		return lit, true
+	}
+	return ResolvedType{}, false
 }
 
 // qualifyDocName resolves a class name written in the PHPDoc of owner. The
@@ -610,6 +719,33 @@ func (r *Resolver) IterableTypes(rt ResolvedType) (key, value ResolvedType, ok b
 			k = ResolvedType{FQN: "mixed"}
 		}
 		return k, v, true
+	}
+	// Without type arguments on the interface, what getIterator() or
+	// current() and key() return.
+	if r.Index != nil && r.Index.IsSubtypeOf(rt.FQN, "Traversable") {
+		exit, ok := r.enterResolution("iterable|" + rt.FQN)
+		if !ok {
+			return ResolvedType{}, ResolvedType{}, false
+		}
+		defer exit()
+		if m := r.FindAccessedMember(rt.FQN, "getIterator", true); m != nil && m.ParentFQN != "IteratorAggregate" {
+			if it := r.MemberTypeForCall(m, nil, rt.FQN, rt.Params, nil); !it.IsEmpty() && it.FQN != rt.FQN {
+				if k, v, ok := r.IterableTypes(it); ok {
+					return k, v, true
+				}
+			}
+		}
+		if m := r.FindAccessedMember(rt.FQN, "current", true); m != nil && m.ParentFQN != "Iterator" {
+			if v := r.MemberTypeForCall(m, nil, rt.FQN, rt.Params, nil); !v.IsEmpty() && v.FQN != "mixed" {
+				k := ResolvedType{FQN: "mixed"}
+				if km := r.FindAccessedMember(rt.FQN, "key", true); km != nil && km.ParentFQN != "Iterator" {
+					if kt := r.MemberTypeForCall(km, nil, rt.FQN, rt.Params, nil); !kt.IsEmpty() {
+						k = kt
+					}
+				}
+				return k, v, true
+			}
+		}
 	}
 	return ResolvedType{}, ResolvedType{}, false
 }

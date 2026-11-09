@@ -192,6 +192,15 @@ func parseChain(expr string) (steps []chainStep, origin chainOrigin, ok bool) {
 		if origin.text == "$" {
 			return nil, origin, false
 		}
+		skipSpace()
+		// $fn(…): calling the variable.
+		if i < n && expr[i] == '(' {
+			args, closed := readBalanced('(', ')')
+			if !closed {
+				return nil, origin, false
+			}
+			steps = append(steps, chainStep{op: "()", call: true, args: args})
+		}
 	case strings.HasPrefix(expr, "new ") || strings.HasPrefix(expr, "(new "):
 		wrapped := expr[0] == '('
 		if wrapped {
@@ -327,6 +336,9 @@ func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext
 	if st.op == "[" {
 		return r.OffsetType(cur, st.offset)
 	}
+	if st.op == "()" {
+		return r.InvokeType(cur)
+	}
 	if r.Index == nil {
 		return ResolvedType{}
 	}
@@ -339,7 +351,13 @@ func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext
 	if st.op == "::" && !st.call && strings.HasPrefix(name, "$") {
 		name = name[1:]
 	}
-	member := r.FindAccessedMember(cur.MemberOwner(), name, st.call)
+	if st.op == "::" {
+		cur = ClassStringTarget(cur)
+	}
+	member, owner := r.FindMemberOn(cur, name, st.call)
+	if member != nil && owner.FQN != cur.FQN {
+		cur = owner
+	}
 	if member == nil {
 		// A member of an object shape.
 		for _, f := range cur.Fields {
@@ -459,7 +477,22 @@ func (r *Resolver) lookupFunction(name string, file *parser.FileNode) *symbols.S
 // Collection<int, User>.
 func (r *Resolver) NewExpressionType(className, args string, ctx ExprContext) ResolvedType {
 	className = strings.TrimSpace(className)
-	if className == "" || strings.HasPrefix(className, "class") || strings.HasPrefix(className, "$") {
+	if strings.HasPrefix(className, "$") {
+		// new $class: the class a class-string<T> names.
+		if name := extractLeadingVariable(className); name == className {
+			var vt ResolvedType
+			if t, ok := ctx.Locals[name]; ok {
+				vt = t
+			} else if ctx.File != nil {
+				vt = r.ResolveVariableTypeTyped(name, ctx.Lines, ctx.Pos, ctx.File)
+			}
+			if t := ClassStringTarget(vt); t.FQN != "class-string" && t.FQN != "string" && !t.IsEmpty() {
+				return t
+			}
+		}
+		return ResolvedType{}
+	}
+	if className == "" || strings.HasPrefix(className, "class") {
 		return ResolvedType{}
 	}
 	fqn, isKeyword := r.ClassKeywordFQN(className, ctx.Pos, ctx.File)

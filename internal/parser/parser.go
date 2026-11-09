@@ -49,21 +49,22 @@ type UseStatement struct {
 }
 
 type ClassDef struct {
-	Name       string
-	FullName   string
-	Extends    string
-	Implements []string
-	Traits     []string
-	Properties []PropertyDef
-	Methods    []MethodDef
-	Constants  []ConstantDef
-	Attributes []AttributeDef
-	IsAbstract bool
-	IsFinal    bool
-	IsReadonly bool
-	Line       int
-	EndLine    int
-	DocComment string
+	Name        string
+	FullName    string
+	Extends     string
+	Implements  []string
+	Traits      []string
+	Properties  []PropertyDef
+	Methods     []MethodDef
+	Constants   []ConstantDef
+	Attributes  []AttributeDef
+	IsAbstract  bool
+	IsFinal     bool
+	IsReadonly  bool
+	TraitUseDoc string // docblocks above the trait `use` statements in the body
+	Line        int
+	EndLine     int
+	DocComment  string
 	// BodyLine and BodyCol are where an anonymous class's `{` is.
 	BodyLine, BodyCol int
 }
@@ -76,36 +77,40 @@ type InterfaceDef struct {
 	Properties []PropertyDef
 	Constants  []ConstantDef
 	Attributes []AttributeDef
+	DocComment string
 	Line       int
 	EndLine    int
 }
 
 type TraitDef struct {
-	Name       string
-	FullName   string
-	Properties []PropertyDef
-	Methods    []MethodDef
-	Traits     []string
-	Constants  []ConstantDef
-	Attributes []AttributeDef
-	Line       int
-	EndLine    int
+	Name        string
+	FullName    string
+	Properties  []PropertyDef
+	Methods     []MethodDef
+	Traits      []string
+	Constants   []ConstantDef
+	Attributes  []AttributeDef
+	TraitUseDoc string // docblocks above the trait `use` statements in the body
+	DocComment  string
+	Line        int
+	EndLine     int
 }
 
 type EnumDef struct {
-	Name       string
-	FullName   string
-	BackedType string
-	Cases      []EnumCase
-	Methods    []MethodDef
-	Properties []PropertyDef
-	Constants  []ConstantDef
-	Traits     []string
-	Implements []string
-	Attributes []AttributeDef
-	DocComment string
-	Line       int
-	EndLine    int
+	Name        string
+	FullName    string
+	BackedType  string
+	Cases       []EnumCase
+	Methods     []MethodDef
+	Properties  []PropertyDef
+	Constants   []ConstantDef
+	Traits      []string
+	Implements  []string
+	Attributes  []AttributeDef
+	DocComment  string
+	TraitUseDoc string // docblocks above the trait `use` statements in the body
+	Line        int
+	EndLine     int
 }
 
 type EnumCase struct {
@@ -863,6 +868,20 @@ type structParser struct {
 	result     *ParseResult
 	attributes []AttributeDef // read, waiting for the declaration they belong to
 	enumCases  *[]EnumCase    // where the enum body being parsed collects its cases
+	// traitUseDocs collects the docblocks above trait `use` statements in the
+	// class body being parsed, where @use gives the trait's type arguments.
+	traitUseDocs []string
+}
+
+// parseClassBodyWithTraitDocs parses a class-like body and also returns the
+// docblocks written above its trait `use` statements, joined.
+func (p *structParser) parseClassBodyWithTraitDocs() (methods []MethodDef, props []PropertyDef, consts []ConstantDef, traits []string, traitDoc string) {
+	saved := p.traitUseDocs
+	p.traitUseDocs = nil
+	methods, props, consts, traits = p.parseClassBody()
+	traitDoc = strings.Join(p.traitUseDocs, "\n")
+	p.traitUseDocs = saved
+	return
 }
 
 func (p *structParser) peek() Token {
@@ -983,9 +1002,9 @@ func (p *structParser) parse() {
 			// Look ahead for class
 			p.parseClass(lastDocComment)
 		case TokenInterface:
-			p.parseInterface()
+			p.parseInterface(lastDocComment)
 		case TokenTrait:
-			p.parseTrait()
+			p.parseTrait(lastDocComment)
 		case TokenEnum:
 			p.parseEnum(lastDocComment)
 		case TokenFunction:
@@ -1217,7 +1236,7 @@ afterMod:
 	if _, ok := p.expect(TokenOpenBrace); !ok {
 		return
 	}
-	cls.Methods, cls.Properties, cls.Constants, cls.Traits = p.parseClassBody()
+	cls.Methods, cls.Properties, cls.Constants, cls.Traits, cls.TraitUseDoc = p.parseClassBodyWithTraitDocs()
 	if cls.IsReadonly {
 		for i := range cls.Properties {
 			cls.Properties[i].IsReadonly = true
@@ -1227,9 +1246,9 @@ afterMod:
 	p.result.Classes = append(p.result.Classes, cls)
 }
 
-func (p *structParser) parseInterface() {
+func (p *structParser) parseInterface(docComment string) {
 	p.advance()
-	iface := InterfaceDef{Attributes: p.takeAttributes()}
+	iface := InterfaceDef{Attributes: p.takeAttributes(), DocComment: docComment}
 	if t, ok := p.expect(TokenIdentifier); ok {
 		iface.Name = t.Value
 		iface.Line = t.Line
@@ -1262,9 +1281,9 @@ func (p *structParser) parseInterface() {
 	p.result.Interfaces = append(p.result.Interfaces, iface)
 }
 
-func (p *structParser) parseTrait() {
+func (p *structParser) parseTrait(docComment string) {
 	p.advance()
-	trait := TraitDef{Attributes: p.takeAttributes()}
+	trait := TraitDef{Attributes: p.takeAttributes(), DocComment: docComment}
 	if t, ok := p.expect(TokenIdentifier); ok {
 		trait.Name = t.Value
 		trait.Line = t.Line
@@ -1277,7 +1296,7 @@ func (p *structParser) parseTrait() {
 	if _, ok := p.expect(TokenOpenBrace); !ok {
 		return
 	}
-	trait.Methods, trait.Properties, trait.Constants, trait.Traits = p.parseClassBody()
+	trait.Methods, trait.Properties, trait.Constants, trait.Traits, trait.TraitUseDoc = p.parseClassBodyWithTraitDocs()
 	trait.EndLine = p.peek().Line
 	p.result.Traits = append(p.result.Traits, trait)
 }
@@ -1317,7 +1336,7 @@ func (p *structParser) parseEnum(docComment string) {
 		return
 	}
 	p.enumCases = &e.Cases
-	e.Methods, e.Properties, e.Constants, e.Traits = p.parseClassBody()
+	e.Methods, e.Properties, e.Constants, e.Traits, e.TraitUseDoc = p.parseClassBodyWithTraitDocs()
 	p.enumCases = nil
 	e.EndLine = p.peek().Line
 	p.result.Enums = append(p.result.Enums, e)
@@ -1519,6 +1538,9 @@ func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDe
 		switch p.peek().Kind {
 		case TokenUse:
 			// Trait use statement inside class body: use Foo, Bar { ... };
+			if docComment != "" {
+				p.traitUseDocs = append(p.traitUseDocs, docComment)
+			}
 			p.advance()
 			var traitNames []string
 			for {
