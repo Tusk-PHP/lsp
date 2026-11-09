@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=open-southeners.tusk-php"><img alt="VS Code Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/open-southeners.tusk-php?label=VS%20Code%20Marketplace&logo=visualstudiocode&logoColor=white&color=007ACC"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=open-southeners.tusk-php"><img alt="VS Code Marketplace" src="https://img.shields.io/badge/marketplace-0277D4?label=vscode"></a>
   <a href="https://open-vsx.org/extension/open-southeners/tusk-php"><img alt="Open VSX" src="https://img.shields.io/open-vsx/v/open-southeners/tusk-php?label=Open%20VSX&logo=vscodium&logoColor=white&color=2F80ED"></a>
   <a href="https://github.com/Tusk-PHP/zed"><img alt="Zed: coming soon" src="https://img.shields.io/badge/Zed-coming%20soon-lightgrey?logo=zedindustries&logoColor=white"></a>
 </p>
