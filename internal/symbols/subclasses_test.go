@@ -40,3 +40,29 @@ func equalStrings(a, b []string) bool {
 	}
 	return true
 }
+
+func TestImplementations(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///contracts.php", `<?php
+namespace Lib;
+interface Item {}
+`)
+	idx.IndexFile("file:///order.php", `<?php
+namespace Lib;
+interface OrderItem extends Item {}
+class OrderLine implements OrderItem {}
+class BundleLine extends OrderLine {}
+class Unrelated {}
+`)
+	got := idx.Implementations("Lib\\Item")
+	sort.Strings(got)
+	if want := []string{"Lib\\BundleLine", "Lib\\OrderItem", "Lib\\OrderLine"}; !equalStrings(got, want) {
+		t.Errorf("Implementations(Item) = %v, want %v", got, want)
+	}
+
+	// Re-indexing a file without the sub-interface drops it and what's below it.
+	idx.IndexFile("file:///order.php", "<?php\n")
+	if got := idx.Implementations("Lib\\Item"); len(got) != 0 {
+		t.Errorf("after removing order.php: %v, want none", got)
+	}
+}

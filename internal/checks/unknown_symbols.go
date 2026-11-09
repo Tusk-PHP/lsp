@@ -524,7 +524,7 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 			if anyOwnerMayHaveMember(owners, access, file, index, hierarchies) {
 				continue
 			}
-			if isLateBoundOwner(ownerExpr) && anySubclassHasMember(owners, access, file, index, hierarchies) {
+			if anyImplementationHasMember(owners, isLateBoundOwner(ownerExpr), access, file, index, hierarchies) {
 				continue
 			}
 			names := make([]string, len(owners))
@@ -1005,22 +1005,40 @@ func isLateBoundOwner(ownerExpr string) bool {
 	return ownerExpr == "$this" || strings.EqualFold(ownerExpr, "static")
 }
 
-// anySubclassHasMember reports whether a subclass of one of the owners
-// declares the member. A base class may call methods only its subclasses
-// define, as WordPress's ftp_base does with _exec() from ftp_sockets and
-// ftp_pure: through $this, the call works whichever subclass is in use.
-func anySubclassHasMember(owners []string, access memberAccess, file *parser.FileNode, index *symbols.Index, hierarchies map[string]*memberHierarchy) bool {
+// anyImplementationHasMember reports whether a class-like below one of the
+// owners declares the member, when the object may be one of them.
+//
+// Through `$this` and `static::` (lateBound), the object is whichever subclass
+// is in use: WordPress's ftp_base calls _exec(), which only its subclasses
+// ftp_sockets and ftp_pure declare. An interface or an abstract class can't be
+// instantiated either, so an object typed as one is always an implementation
+// or a subclass, and code often calls what those add: Magento's
+// `AbstractModel::getResource()` returns `AbstractDb`, whose EAV subclasses
+// declare `getAttribute()`.
+func anyImplementationHasMember(owners []string, lateBound bool, access memberAccess, file *parser.FileNode, index *symbols.Index, hierarchies map[string]*memberHierarchy) bool {
 	if index == nil {
 		return false
 	}
 	for _, owner := range owners {
-		for _, sub := range index.Subclasses(owner) {
+		if !lateBound && !isAbstractClassLike(index.Lookup(owner)) {
+			continue
+		}
+		for _, sub := range index.Implementations(owner) {
 			if ownerMayHaveMember(sub, access, file, index, hierarchies) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// isAbstractClassLike reports whether sym is an interface or an abstract class,
+// which no object is an instance of without being something below it.
+func isAbstractClassLike(sym *symbols.Symbol) bool {
+	if sym == nil {
+		return false
+	}
+	return sym.Kind == symbols.KindInterface || (sym.Kind == symbols.KindClass && sym.IsAbstract)
 }
 
 func isCallAfter(line string, pos int) bool {
