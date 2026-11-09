@@ -135,7 +135,9 @@ type Index struct {
 	generation atomic.Uint64
 	// narrowingNames counts, by lowercase name, the methods and functions
 	// whose PHPDoc narrows a type (@phpstan-assert, @param-out, self-out).
-	narrowingNames       map[string]int
+	narrowingNames map[string]int
+	// members caches member tables by class (see ClassMembersNamed).
+	members              memberTables
 	mu                   sync.RWMutex
 	symbols              map[string]*Symbol
 	nameIndex            map[string][]string

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/phparray"
@@ -47,6 +48,9 @@ type Resolver struct {
 	// without unrelated concurrent requests sharing the same depth budget.
 	stateMu sync.Mutex
 	states  map[uint64]*resolutionState
+	// guardCuts counts the times a guard stopped a resolution, so a cached
+	// answer is never one that was cut short.
+	guardCuts atomic.Uint64
 
 	// The last source's scopes, since one request asks about many variables.
 	scopeMu     sync.Mutex
@@ -85,17 +89,6 @@ func currentGID() uint64 {
 	return gid
 }
 
-// resolutionDepth is how many resolutions the current goroutine is inside.
-func (r *Resolver) resolutionDepth() int {
-	gid := currentGID()
-	r.stateMu.Lock()
-	defer r.stateMu.Unlock()
-	if st := r.states[gid]; st != nil {
-		return st.depth
-	}
-	return 0
-}
-
 func (r *Resolver) enterResolution(key string) (func(), bool) {
 	gid := currentGID()
 
@@ -107,6 +100,7 @@ func (r *Resolver) enterResolution(key string) (func(), bool) {
 	}
 	if st.depth >= maxResolveDepth || st.active[key] > 0 {
 		r.stateMu.Unlock()
+		r.guardCuts.Add(1)
 		return nil, false
 	}
 	st.depth++
@@ -261,11 +255,8 @@ func FindEnclosingMethod(file *parser.FileNode, pos protocol.Position) *parser.M
 // FindMember looks up a member (method, property, constant) on a class,
 // traversing the inheritance chain and traits via GetClassMembers.
 func (r *Resolver) FindMember(classFQN, memberName string) *symbols.Symbol {
-	members := r.Index.GetClassMembers(classFQN)
-	for _, m := range members {
-		if m.Name == memberName || m.Name == "$"+memberName {
-			return m
-		}
+	if named := r.Index.ClassMembersNamed(classFQN, memberName); len(named) > 0 {
+		return named[0]
 	}
 	return nil
 }
@@ -275,10 +266,7 @@ func (r *Resolver) FindMember(classFQN, memberName string) *symbols.Symbol {
 // and a `timezone()` method, and a plain access finds the property first.
 func (r *Resolver) FindAccessedMember(classFQN, memberName string, call bool) *symbols.Symbol {
 	var fallback *symbols.Symbol
-	for _, m := range r.Index.GetClassMembers(classFQN) {
-		if m.Name != memberName && m.Name != "$"+memberName {
-			continue
-		}
+	for _, m := range r.Index.ClassMembersNamed(classFQN, memberName) {
 		if (m.Kind == symbols.KindMethod) == call {
 			return m
 		}
@@ -721,9 +709,9 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 		return r.resolveVariableTypeTypedBase(varName, lines, pos, file)
 	}
 	key, memo := r.varMemoKeyAt(varName, lines, pos)
-	// Only an answer worked out from the top is kept: further in, a guard
-	// against cycles may have cut it short.
-	memo = memo && r.resolutionDepth() == 0
+	// An answer a guard against cycles cut short isn't kept. Guards tripped
+	// by other requests at the same time only cost a missed cache entry.
+	cutsBefore := r.guardCuts.Load()
 	if memo {
 		if rt, ok := r.varMemoGet(key); ok {
 			return rt
@@ -733,7 +721,7 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	// What asserting calls, @param-out and self-out since its last
 	// assignment say about it.
 	rt = r.narrowVariable(varName, rt, lines, pos, file)
-	if memo {
+	if memo && r.guardCuts.Load() == cutsBefore {
 		r.varMemoPut(key, rt)
 	}
 	return rt
