@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Diagnostics are 3–4× faster** on large files. The rules that check member access share what they learn about types within a run, a variable's type is worked out once per assignment instead of at every line it's used on, class members are looked up by name, and the file is tokenized once for all rules. Over Laravel's test suite a sample of 329 files went from 13.7 s to 3.4 s, and Laravel's largest test file from 2.6 s to under 0.5 s. What's reported is unchanged.
+- **Completion lists over large classes are about 10× cheaper** for editors that support `completionItem/resolve` (VS Code among them): member items are sent without their documentation and detail, which are filled in when an item is selected. Editors that don't declare that support still get everything in the list.
+
 - **PHPDoc types win when they say more** than the native type: a template, a generic, a shape, a narrower union or a subclass, as PHPStan reads them. `@return TStamp|null` on `last(): ?StampInterface` is now used. A vaguer or contradicting PHPDoc type still loses to the native one.
 - `@phpstan-param`, `@phpstan-return`, `@phpstan-var`, `@phpstan-template` and their `@psalm-` forms win over the plain tags for the same parameter.
 - Diagnostics such as `unknown-member` and `redundant-nullsafe` now use the same generic-aware types as hover and completion, so a member called on `Collection<int, User>`'s `first()` is checked against `User`. Unions are kept whole: a member that any class of a union declares is completed and not reported.
