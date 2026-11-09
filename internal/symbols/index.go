@@ -127,6 +127,7 @@ type Index struct {
 	childrenMap          map[string][]string // lowercase parent FQN → direct subclass FQNs, the reverse of inheritanceMap
 	implementsMap        map[string][]string // class → interfaces it implements
 	reverseImplementsMap map[string][]string // interface → classes that implement it
+	subInterfaceMap      map[string][]string // interface → interfaces that extend it
 	traitMap             map[string][]string
 	sortedNames          []string          // sorted lowercase name keys for binary search
 	sortedNamesDirty     bool              // rebuild flag
@@ -150,6 +151,7 @@ func NewIndex() *Index {
 		childrenMap:          make(map[string][]string),
 		implementsMap:        make(map[string][]string),
 		reverseImplementsMap: make(map[string][]string),
+		subInterfaceMap:      make(map[string][]string),
 		traitMap:             make(map[string][]string),
 		fileSource:           make(map[string]string),
 		generatedURIs:        make(map[string]bool),
@@ -354,6 +356,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		idx.addSymbolWithSource(uri, sym, src)
 		for _, parent := range resolvedParents {
 			idx.implementsMap[fqn] = append(idx.implementsMap[fqn], parent)
+			idx.subInterfaceMap[parent] = appendUnique(idx.subInterfaceMap[parent], fqn)
 		}
 		idx.indexProperties(uri, sym, fqn, iface.Properties, src, resolve)
 		idx.indexMethods(uri, sym, fqn, iface.Methods, src, resolve)
@@ -497,6 +500,9 @@ func (idx *Index) removeFileSymbols(uri string) {
 		if ifaces, ok := idx.implementsMap[sym.FQN]; ok {
 			for _, iface := range ifaces {
 				idx.reverseImplementsMap[iface] = removeFromSlice(idx.reverseImplementsMap[iface], sym.FQN)
+				if sym.Kind == KindInterface {
+					idx.subInterfaceMap[iface] = removeFromSlice(idx.subInterfaceMap[iface], sym.FQN)
+				}
 			}
 		}
 		delete(idx.implementsMap, sym.FQN)
@@ -1398,6 +1404,37 @@ func (idx *Index) setParentLocked(fqn, parent string) {
 	idx.inheritanceMap[fqn] = parent
 	key := strings.ToLower(parent)
 	idx.childrenMap[key] = appendUnique(idx.childrenMap[key], fqn)
+}
+
+// Implementations returns every class-like below fqn: the classes that extend
+// it, the interfaces that extend it, the classes that implement any of those,
+// and so on down, nearest first. Like Subclasses, it follows reverse maps and
+// visits only what is below fqn.
+func (idx *Index) Implementations(fqn string) []string {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	var out []string
+	seen := map[string]bool{strings.ToLower(fqn): true}
+	queue := []string{fqn}
+	visit := func(names []string) {
+		for _, name := range names {
+			key := strings.ToLower(name)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, name)
+			queue = append(queue, name)
+		}
+	}
+	for len(queue) > 0 {
+		next := queue[0]
+		queue = queue[1:]
+		visit(idx.childrenMap[strings.ToLower(next)])
+		visit(idx.reverseImplementsMap[next])
+		visit(idx.subInterfaceMap[next])
+	}
+	return out
 }
 
 // Subclasses returns every class that extends fqn, directly or further down,

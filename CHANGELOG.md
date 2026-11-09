@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `unknown-member` no longer reports a member that the implementations of an interface, or the subclasses of an abstract class, declare. An object of such a type is always one of those, and code often calls what they add, as in Magento's `$this->getResource()->getAttribute()` on `AbstractDb` and `$item->getQtyToShip()` on `OrderItemInterface`. A member that nothing below the type declares is still reported, and so is a subclass's member called on a concrete class.
+
 ## [0.12.0] - 2026-11-09
 
 ### Added
