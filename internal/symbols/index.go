@@ -310,8 +310,18 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		return resolveTypeName(name, ns, file.Uses)
 	}
 
-	for _, c := range file.Classes {
+	// Anonymous classes are indexed like declared ones, under their file-unique
+	// FullName, so their members and parents resolve; addSymbol keeps them out
+	// of name search.
+	classes := file.Classes
+	if len(file.AnonymousClasses) > 0 {
+		classes = append(append(make([]parser.ClassNode, 0, len(file.Classes)+len(file.AnonymousClasses)), file.Classes...), file.AnonymousClasses...)
+	}
+	for _, c := range classes {
 		fqn := buildFQN(ns, c.Name)
+		if c.Name == parser.AnonymousClassName {
+			fqn = c.FullName
+		}
 		var resolvedImpls []string
 		for _, impl := range c.Implements {
 			resolvedImpls = append(resolvedImpls, resolve(impl))
@@ -431,8 +441,12 @@ func (idx *Index) addSymbol(uri string, sym *Symbol) {
 	if len(sym.Attributes) > 0 {
 		idx.attributedSymbols.Store(true)
 	}
-	idx.nameIndex[sym.Name] = appendUnique(idx.nameIndex[sym.Name], sym.FQN)
 	idx.fileSymbols[uri] = append(idx.fileSymbols[uri], sym)
+	if sym.Kind == KindClass && sym.Name == parser.AnonymousClassName {
+		// Found by its FQN only: no one can write its name.
+		return
+	}
+	idx.nameIndex[sym.Name] = appendUnique(idx.nameIndex[sym.Name], sym.FQN)
 	idx.sortedNamesDirty = true
 	idx.sortedFQNsDirty = true
 	// Index top-level symbols by their namespace
@@ -860,8 +874,9 @@ func (idx *Index) rebuildSortedFQNs() {
 		if sym.Kind == KindMethod || sym.Kind == KindProperty || sym.Kind == KindConstant || sym.Kind == KindEnumCase {
 			continue
 		}
-		// Never store a symbol with an empty short name (M1 guard)
-		if sym.Name == "" {
+		// Never store a symbol with an empty short name (M1 guard), nor an
+		// anonymous class, which no one can write.
+		if sym.Name == "" || sym.Name == parser.AnonymousClassName {
 			continue
 		}
 		idx.sortedFQNs = append(idx.sortedFQNs, fqn)
