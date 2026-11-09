@@ -837,6 +837,16 @@ func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) str
 // Used by the typed chain resolver so that $categories = Category::query()->get()
 // results in $categories having type Collection<int, Category>.
 func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+	rt := r.resolveVariableTypeTypedBase(varName, lines, pos, file)
+	if varName == "$this" || file == nil {
+		return rt
+	}
+	// What asserting calls, @param-out and self-out since its last
+	// assignment say about it.
+	return r.narrowVariable(varName, rt, lines, pos, file)
+}
+
+func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
 	exit, ok := r.enterResolution("typed|" + varName + "|" + strconv.Itoa(pos.Line) + ":" + strconv.Itoa(pos.Character))
 	if !ok {
 		return ResolvedType{}

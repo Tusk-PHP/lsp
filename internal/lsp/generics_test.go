@@ -571,3 +571,95 @@ func TestGenericsConditionalAndClassStrings(t *testing.T) {
 		})
 	}
 }
+
+const assertPrelude = `
+class Assert {
+	/**
+	 * @template ExpectedType of object
+	 * @param class-string<ExpectedType> $expected
+	 * @phpstan-assert =ExpectedType $actual
+	 */
+	public static function assertInstanceOf(string $expected, $actual): void {}
+	/** @phpstan-assert !null $value */
+	public static function assertNotNull($value): void {}
+	/** @phpstan-assert-if-true Person $value */
+	public static function isPerson($value): bool { return true; }
+	/** @phpstan-assert-if-false Logger $value */
+	public static function isNotLogger($value): bool { return true; }
+}
+`
+
+var narrowingCases = []phpVersionCase{
+	{name: "narrowing/@phpstan-assert after a call", completion: []string{"info"}, src: assertPrelude + `
+function run(object $x): void { Assert::assertInstanceOf(Logger::class, $x); $x-><|> }`},
+	{name: "narrowing/assertions through $this, as in PHPUnit", completion: []string{"name"}, src: assertPrelude + `
+class Test extends Assert {
+	function go(object $x): void { $this->assertInstanceOf(Person::class, $x); $x-><|> }
+}`},
+	{name: "narrowing/!null drops null", hover: []string{"Logger $l"}, src: assertPrelude + `
+function run(?Logger $l): void { Assert::assertNotNull($l); echo $<|>l; }`},
+	{name: "narrowing/an assertion is checked by unknown-member", clean: true, src: assertPrelude + `
+function run(object $x): void { Assert::assertInstanceOf(Logger::class, $x); $x->info('a'); }`},
+	{name: "narrowing/-if-true inside the if", completion: []string{"name"}, src: assertPrelude + `
+function run(object $x): void { if (Assert::isPerson($x)) { $x-><|> } }`},
+	{name: "narrowing/-if-true after an early return", completion: []string{"name"}, src: assertPrelude + `
+function run(Person|Logger $x): void {
+	if (!Assert::isPerson($x)) {
+		return;
+	}
+	$x-><|>
+}`},
+	{name: "narrowing/-if-false in the else branch", completion: []string{"info"}, src: assertPrelude + `
+function run(object $x): void {
+	if (Assert::isNotLogger($x)) {
+		echo 1;
+	} else {
+		$x-><|>
+	}
+}`},
+	{name: "narrowing/an assertion ends with its block", hover: []string{"object $x"}, src: assertPrelude + `
+function run(object $x): void {
+	if (Assert::isPerson($x)) {
+		echo 1;
+	}
+	echo $<|>x;
+}`},
+	{name: "narrowing/@param-out", completion: []string{"info"}, src: `
+/** @param-out Logger $out */
+function fill(&$out): void { $out = new Logger(); }
+function run(): void { $out = null; fill($out); $out-><|> }`},
+	{name: "narrowing/@phpstan-self-out", completion: []string{"name"}, src: `
+/** @template T */
+class Bag {
+	/**
+	 * @template TItem
+	 * @param TItem $item
+	 * @phpstan-self-out self<TItem>
+	 */
+	public function add($item): void {}
+	/** @return T */
+	public function first() { return null; }
+}
+function run(Bag $bag): void { $bag->add(new Person()); $bag->first()-><|> }`},
+	{name: "narrowing/@phpstan-this-out", completion: []string{"info"}, src: `
+/** @template T */
+class Bag {
+	/**
+	 * @template TItem
+	 * @param TItem $item
+	 * @phpstan-this-out self<TItem>
+	 */
+	public function add($item): void {}
+	/** @return T */
+	public function first() { return null; }
+}
+function run(): void { $bag = new Bag(); $bag->add(new Logger()); $bag->first()-><|> }`},
+}
+
+func TestGenericsNarrowing(t *testing.T) {
+	for _, tc := range narrowingCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runPHPVersionCase(t, tc)
+		})
+	}
+}
