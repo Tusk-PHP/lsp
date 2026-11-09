@@ -308,3 +308,58 @@ function run($name, $flag) {
 		t.Fatalf("expected nested assignment depth 1, got %d", got)
 	}
 }
+
+func TestRebindsHoldUntilTheEndOfTheirBlock(t *testing.T) {
+	src := `<?php
+function f(A $x, bool $c, array $list) {
+    $x = new B();
+    if ($c) {
+        $x = new C();
+    }
+    if ($c) $x = new D();
+    foreach ($list as $x) {
+        echo 1;
+    }
+    $x ??= new E();
+}
+`
+	doc := Collect(src)
+	var x *Binding
+	for _, b := range doc.Bindings {
+		if b.Name == "$x" && b.Kind == BindingParameter {
+			x = b
+		}
+	}
+	if x == nil {
+		t.Fatal("parameter $x not found")
+	}
+	if len(x.Rebinds) != 4 {
+		t.Fatalf("got %d rebinds, want 4 (??= keeps the value)", len(x.Rebinds))
+	}
+	at := func(line, char int) protocol.Position { return protocol.Position{Line: line, Character: char} }
+	tests := []struct {
+		name  string
+		pos   protocol.Position
+		holds bool
+	}{
+		{"after the plain assignment", at(3, 0), true},
+		{"inside the if block", at(4, 20), true},
+		{"after the if block", at(6, 4), false},
+		{"after the braceless if", at(7, 4), false},
+		{"inside the foreach", at(8, 8), true},
+		{"after the foreach", at(10, 4), false},
+	}
+	for _, tt := range tests {
+		r := x.LatestRebindBefore(tt.pos)
+		if r == nil {
+			t.Errorf("%s: no rebind", tt.name)
+			continue
+		}
+		if got := r.HoldsAt(tt.pos); got != tt.holds {
+			t.Errorf("%s: HoldsAt = %v, want %v", tt.name, got, tt.holds)
+		}
+	}
+	if r := x.LatestRebindBefore(at(2, 0)); r != nil {
+		t.Errorf("before any write: got a rebind at %v", r.At)
+	}
+}

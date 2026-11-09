@@ -16,6 +16,12 @@ type variableScope struct {
 	isLocal    bool // it's bound in the enclosing function, method or closure
 	param      *scope.Binding
 	capturedAt *protocol.Position // resolve it here instead: it comes from the parent scope
+	// reassigned: a parameter given a new value that holds here, so its type
+	// comes from that value, not its declaration.
+	reassigned bool
+	// unknownValue: a parameter given a new value that may or may not hold
+	// here, as after `if ($c) { $x = new Other; }`. Its type isn't known.
+	unknownValue bool
 }
 
 func (r *Resolver) scopeDocument(lines []string) *scope.Document {
@@ -50,6 +56,12 @@ func (r *Resolver) variableScopeAt(varName string, lines []string, pos protocol.
 	}
 	if binding != nil {
 		vs.isLocal = true
+		if binding.Kind == scope.BindingParameter {
+			if r := binding.LatestRebindBefore(pos); r != nil {
+				vs.reassigned = r.HoldsAt(pos)
+				vs.unknownValue = !vs.reassigned
+			}
+		}
 	}
 	if !vs.inClosure {
 		return vs
@@ -57,7 +69,9 @@ func (r *Resolver) variableScopeAt(varName string, lines []string, pos protocol.
 
 	switch {
 	case binding != nil && binding.Kind == scope.BindingParameter:
-		vs.param = binding
+		if !vs.reassigned {
+			vs.param = binding
+		}
 	case binding != nil && binding.Kind == scope.BindingClosureUse, binding == nil && s.ExprBody:
 		// `use ($x)`, or an arrow function reading its parent's variable.
 		parent := protocol.Position{Line: s.Range.Start.Line, Character: s.Range.Start.Character - 1}

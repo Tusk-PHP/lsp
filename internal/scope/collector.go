@@ -50,6 +50,42 @@ type Binding struct {
 	Assignments []*Assignment
 	References  []protocol.Range
 	Writes      []protocol.Range // later assignments; Decl is the first
+	Rebinds     []Rebind         // the writes that give it a new value, in order
+}
+
+// Rebind is a write that gives a binding a new value: `$x = …`, `foreach (… as
+// $x)`, `[$x] = …`. A parameter given a new value no longer has its declared
+// type. `$x ??= …` isn't one: it keeps the value when there is one.
+type Rebind struct {
+	At protocol.Position // where the new value is written
+	// Until is the end of the block the write is in, a loop's body for a
+	// foreach variable. Past it, the binding may have an earlier value.
+	Until protocol.Position
+	// Conditional is set when the write may not run at all, as the braceless
+	// body of `if (…) $x = …;`.
+	Conditional bool
+}
+
+// HoldsAt reports whether the value written here is the binding's value at
+// pos, whichever way the code went to get there.
+func (r *Rebind) HoldsAt(pos protocol.Position) bool {
+	return !r.Conditional && positionBefore(r.At, pos) && !positionBefore(r.Until, pos)
+}
+
+// LatestRebindBefore returns the last write before pos that gives the binding a
+// new value, or nil.
+func (b *Binding) LatestRebindBefore(pos protocol.Position) *Rebind {
+	var latest *Rebind
+	for i := range b.Rebinds {
+		if positionBefore(b.Rebinds[i].At, pos) {
+			latest = &b.Rebinds[i]
+		}
+	}
+	return latest
+}
+
+func positionBefore(a, b protocol.Position) bool {
+	return a.Line < b.Line || (a.Line == b.Line && a.Character < b.Character)
 }
 
 type Assignment struct {
@@ -125,6 +161,12 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 	braceDepth := 0
 	var classBodies []classBody
 	pendingClassBody := -1
+	// Rebinds wait for the end of the block they're in: blocks has one entry
+	// per open brace, rootRebinds those outside any.
+	var blocks [][]rebindRef
+	var rootRebinds []rebindRef
+	foreachVars := map[int]int{}           // foreach variable token → its loop body's `{`, or -1
+	foreachBodies := map[int][]rebindRef{} // loop body `{` → the rebinds of its foreach variables
 
 	popFinishedExpressions := func(i int) {
 		for len(active) > 1 && active[len(active)-1].exprEnd == i {
@@ -167,8 +209,10 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 		}
 
 		if tok.Kind == parser.TokenIdentifier && tok.Value == "foreach" {
+			body := foreachBodyOpen(result.Tokens, i)
 			for idx, binding := range parseForeachBindings(result.Tokens, i, active[len(active)-1].scope, doc) {
 				declByToken[idx] = binding
+				foreachVars[idx] = body
 			}
 		}
 
@@ -221,6 +265,8 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 
 		if tok.Kind == parser.TokenOpenBrace {
 			braceDepth++
+			blocks = append(blocks, foreachBodies[i])
+			delete(foreachBodies, i)
 			for len(pending) > 0 && pending[0].bodyOpenIndex == i && !pending[0].expressionBody {
 				active = append(active, scopeFrame{scope: pending[0].scope, braceDepth: braceDepth, exprEnd: -1})
 				pending = pending[1:]
@@ -239,6 +285,17 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 			if binding, ok := declByToken[i]; ok {
 				if binding.Decl != tokenRange(tok) {
 					binding.Writes = append(binding.Writes, tokenRange(tok))
+					if r, ok := newRebind(result.Tokens, i, foreachVars); ok {
+						binding.Rebinds = append(binding.Rebinds, r)
+						r := rebindRef{binding, len(binding.Rebinds) - 1}
+						if body, ok := foreachVars[i]; ok && body >= 0 {
+							foreachBodies[body] = append(foreachBodies[body], r)
+						} else if len(blocks) > 0 {
+							blocks[len(blocks)-1] = append(blocks[len(blocks)-1], r)
+						} else {
+							rootRebinds = append(rootRebinds, r)
+						}
+					}
 				}
 			} else if binding := resolveVariable(active, tok.Value); binding != nil {
 				binding.References = append(binding.References, tokenRange(tok))
@@ -250,6 +307,12 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 		}
 
 		if tok.Kind == parser.TokenCloseBrace {
+			if len(blocks) > 0 {
+				for _, r := range blocks[len(blocks)-1] {
+					r.get().Until = tokenRange(tok).Start
+				}
+				blocks = blocks[:len(blocks)-1]
+			}
 			for len(active) > 1 && active[len(active)-1].braceDepth == braceDepth {
 				active[len(active)-1].scope.Range.End = tokenRange(tok).End
 				active = active[:len(active)-1]
@@ -263,6 +326,18 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 		}
 
 		popFinishedExpressions(i)
+	}
+
+	// Blocks left open run to the end of the file.
+	for _, block := range append(blocks, rootRebinds) {
+		for _, r := range block {
+			r.get().Until = root.Range.End
+		}
+	}
+	for _, rs := range foreachBodies {
+		for _, r := range rs {
+			r.get().Until = root.Range.End
+		}
 	}
 
 	for _, ps := range pending {
@@ -696,6 +771,67 @@ func isVariableChar(ch byte, first bool) bool {
 // assignmentOperator returns the index of the `=` when the variable at i is
 // assigned to, by `=` or by `??=`, which reads as `?`, `?`, `=`. It returns -1
 // otherwise.
+// rebindRef points at a rebind whose Until is filled in when its block ends.
+// Rebinds are kept by value, so it holds an index rather than a pointer.
+type rebindRef struct {
+	binding *Binding
+	index   int
+}
+
+func (r rebindRef) get() *Rebind { return &r.binding.Rebinds[r.index] }
+
+// newRebind returns the rebind of the write at token i. ok is false when the
+// write keeps the binding's value (`$x ??= …`).
+func newRebind(tokens []parser.Token, i int, foreachVars map[int]int) (r Rebind, ok bool) {
+	r.At = tokenRange(tokens[i]).Start
+	if body, isForeach := foreachVars[i]; isForeach {
+		// A braceless or `foreach (): … endforeach;` body: where it ends isn't
+		// tracked, so the value is never taken as certain.
+		r.Conditional = body < 0
+		return r, true
+	}
+	if op := assignmentOperator(tokens, i); op > 0 && tokens[op-1].Kind == parser.TokenQuestion {
+		return r, false
+	}
+	r.Conditional = isBracelessBody(tokens, i)
+	return r, true
+}
+
+// isBracelessBody reports whether the write at token i is the body of a
+// control structure without braces, `if ($a) $x = 1;` or `else $x = 2;`, or
+// follows a `case`, alternative-syntax or ternary colon, so it may not run.
+func isBracelessBody(tokens []parser.Token, i int) bool {
+	prev := prevSignificant(tokens, i-1)
+	if prev < 0 {
+		return false
+	}
+	switch tokens[prev].Kind {
+	case parser.TokenCloseParen, parser.TokenColon:
+		return true
+	case parser.TokenIdentifier:
+		return tokens[prev].Value == "else" || tokens[prev].Value == "do"
+	}
+	return false
+}
+
+// foreachBodyOpen returns the `{` that opens the body of the foreach at token
+// start, or -1 when the body has no braces.
+func foreachBodyOpen(tokens []parser.Token, start int) int {
+	open := nextSignificant(tokens, start+1)
+	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
+		return -1
+	}
+	close := findMatching(tokens, open, parser.TokenOpenParen, parser.TokenCloseParen)
+	if close < 0 {
+		return -1
+	}
+	body := nextSignificant(tokens, close+1)
+	if body < 0 || tokens[body].Kind != parser.TokenOpenBrace {
+		return -1
+	}
+	return body
+}
+
 func assignmentOperator(tokens []parser.Token, i int) int {
 	next := nextSignificant(tokens, i+1)
 	if next < 0 {

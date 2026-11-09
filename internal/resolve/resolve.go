@@ -814,6 +814,9 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	}
 
 	vs := r.variableScopeAt(varName, lines, pos)
+	if vs.unknownValue {
+		return ResolvedType{}
+	}
 	if vs.param != nil {
 		return r.closureParamType(vs.param, lines, file)
 	}
@@ -822,7 +825,7 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	}
 
 	// Check parameter types
-	if !vs.inClosure {
+	if !vs.inClosure && !vs.reassigned {
 		enclosingMethod := FindEnclosingMethod(file, pos)
 		if enclosingMethod != nil {
 			if rt := r.resolveMethodParamTypeTyped(enclosingMethod, varName, file); !rt.IsEmpty() {
@@ -1109,6 +1112,9 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 	}
 
 	vs := r.variableScopeAt(varName, lines, pos)
+	if vs.unknownValue {
+		return ""
+	}
 	if vs.param != nil {
 		return r.closureParamType(vs.param, lines, file).String()
 	}
@@ -1117,7 +1123,7 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 	}
 
 	// 1. Check enclosing method/function parameter type hints
-	if !vs.inClosure {
+	if !vs.inClosure && !vs.reassigned {
 		enclosingMethod := FindEnclosingMethod(file, pos)
 		if enclosingMethod != nil {
 			if typ := r.resolveMethodParamType(enclosingMethod, varName, file); typ != "" {
