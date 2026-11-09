@@ -53,6 +53,9 @@ type Resolver struct {
 	scopeSource string
 	cachedLines []string
 	scopeDoc    *scope.Document
+	// closureMemos remembers what each closure of scopeDoc is passed to.
+	closureMemos   map[*scope.Scope]closureMemo
+	closureMemoDoc *scope.Document
 
 	// parsed caches docblocks and PHPDoc types by their text.
 	parsed parseCache
