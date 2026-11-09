@@ -222,6 +222,44 @@ func (r *Resolver) closureExpectations(closure *scope.Scope, lines []string, fil
 	if closure == nil || closure.Kind != scope.ScopeClosure {
 		return ResolvedType{}, ResolvedType{}, false
 	}
+	// Every $this and parameter in a closure asks the same question: answer
+	// it once per closure while the file doesn't change.
+	if m, found := r.closureMemoGet(closure); found {
+		return m.expected, m.this, m.ok
+	}
+	expected, closureThis, ok = r.computeClosureExpectations(closure, lines, file)
+	r.closureMemoPut(closure, closureMemo{expected: expected, this: closureThis, ok: ok})
+	return expected, closureThis, ok
+}
+
+// closureMemo is what closureExpectations found for one closure.
+type closureMemo struct {
+	expected, this ResolvedType
+	ok             bool
+}
+
+func (r *Resolver) closureMemoGet(closure *scope.Scope) (closureMemo, bool) {
+	r.scopeMu.Lock()
+	defer r.scopeMu.Unlock()
+	m, ok := r.closureMemos[closure]
+	return m, ok
+}
+
+// closureMemoPut keeps a result for as long as the scopes it was found in
+// are current; switching files drops them all.
+func (r *Resolver) closureMemoPut(closure *scope.Scope, m closureMemo) {
+	r.scopeMu.Lock()
+	defer r.scopeMu.Unlock()
+	if r.scopeDoc == nil || r.closureMemoDoc != r.scopeDoc {
+		r.closureMemos = make(map[*scope.Scope]closureMemo)
+		r.closureMemoDoc = r.scopeDoc
+	}
+	if r.closureMemoDoc != nil && len(r.closureMemos) < 4096 {
+		r.closureMemos[closure] = m
+	}
+}
+
+func (r *Resolver) computeClosureExpectations(closure *scope.Scope, lines []string, file *parser.FileNode) (expected ResolvedType, closureThis ResolvedType, ok bool) {
 	key := "closure|" + itoa(closure.Range.Start.Line) + ":" + itoa(closure.Range.Start.Character)
 	exit, entered := r.enterResolution(key)
 	if !entered {
