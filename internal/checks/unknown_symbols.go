@@ -598,12 +598,14 @@ func (r *UnknownMemberRule) resolveOwners(ownerExpr string, lineNum, col int, so
 	return resolvedClassLikes(r.TypeResolver(ownerExpr, source, lineNum, col, file), file, index)
 }
 
-// instanceofOwners adds the classes an expression is tested against before the
-// access, since the code may be relying on that check. The whole file so far is
-// searched, which can only spare a finding. ok is false when a tested class is
-// unknown, as the member could be on it.
+// instanceofOwners adds the classes an expression other than a plain
+// variable ($this, a property, a call) is tested against before the access,
+// since the code may be relying on that check: the resolver narrows plain
+// variables only. The whole file so far is searched, which can only spare a
+// finding. ok is false when a tested class is unknown, as the member could be
+// on it.
 func instanceofOwners(ownerExpr string, lines []string, instanceofLines []int, lineNum int, file *parser.FileNode, index *symbols.Index) (owners []string, ok bool) {
-	if !strings.HasPrefix(ownerExpr, "$") {
+	if !strings.HasPrefix(ownerExpr, "$") || isPlainVariable(ownerExpr) {
 		return nil, true
 	}
 	for _, i := range instanceofLines {
@@ -686,6 +688,20 @@ func instanceofTargets(line, expr string) []string {
 		}
 		out = append(out, after[:end])
 	}
+}
+
+// isPlainVariable reports whether expr is a local variable, which the type
+// resolver narrows by instanceof itself.
+func isPlainVariable(expr string) bool {
+	if len(expr) < 2 || expr[0] != '$' || expr == "$this" {
+		return false
+	}
+	for i := 1; i < len(expr); i++ {
+		if !isIdentChar(expr[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // resolvedClassLikes lists the class-likes in a type from the type resolver,

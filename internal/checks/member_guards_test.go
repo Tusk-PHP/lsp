@@ -95,25 +95,27 @@ function other($v) {
 	}
 }
 
-func TestUnknownMemberOwnersListedOnce(t *testing.T) {
+// A property, $this or a call tested with instanceof isn't narrowed by the
+// type resolver, so the rule spares members of the tested class itself.
+func TestUnknownMemberInstanceofOnProperty(t *testing.T) {
 	decl := `<?php
 namespace App;
-class Foo { public function fooOnly() {} }
-class Bar {}
+class Post { public function publish() {} }
+class Thread { public function lock() {} }
 `
 	source := `<?php
 namespace App;
 class C {
-    public function f(Foo|Bar $x, object $o): void {
-        if ($x instanceof Foo) { $x->fooOnly(); }
-        if ($o instanceof Foo) { $o->fooOnly(); }
-        if ($x instanceof Foo && $x instanceof Bar) {}
-        $x->nope();
+    public function f(): void {
+        if ($this->item instanceof Thread) {
+            $this->item->lock();
+        }
+        $this->item->nope();
     }
 }
 `
-	got := unknownMemberMessages(checkUnknownMembers(t, map[string]string{"$x": `App\Foo|App\Bar`, "$o": `App\Bar`}, decl, source))
-	want := []string{"Unknown member 'nope' on 'Foo|Bar'"}
+	got := unknownMemberMessages(checkUnknownMembers(t, map[string]string{"$this->item": `App\Post`}, decl, source))
+	want := []string{"Unknown member 'nope' on 'Post|Thread'"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("got %v, want %v", got, want)
 	}
