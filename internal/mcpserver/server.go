@@ -738,8 +738,8 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.Analyzer.SetTranslationResolver(translationResolver)
 
 	rt.Diagnostics = diagnostics.NewProvider(ws.Index, s.Framework, s.RootPath, newStdLogger(nil), s.Config)
-	rt.Diagnostics.TypeResolver = func(expr, source string, line int, file *parser.FileNode) string {
-		return rt.Completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line}, file)
+	rt.Diagnostics.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
+		return rt.Completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
 	}
 	rt.Diagnostics.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(ws.Index)
 	rt.Diagnostics.BuiltinUnavailableRule = &checks.BuiltinUnavailableRule{

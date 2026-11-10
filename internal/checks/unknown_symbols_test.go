@@ -180,7 +180,7 @@ func checkUnknownMembers(t *testing.T, vars map[string]string, sources ...string
 		idx.IndexFileWithSource("file:///f"+strconv.Itoa(i)+".php", source, src)
 	}
 	source := sources[len(sources)-1]
-	rule := &UnknownMemberRule{TypeResolver: func(expr, _ string, _ int, _ *parser.FileNode) string {
+	rule := &UnknownMemberRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string {
 		return vars[expr]
 	}}
 	return rule.Check(parser.ParseFile(source), source, idx)
@@ -301,7 +301,7 @@ func TestUnknownMemberBuiltinWithoutMembersIsNotFlagged(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
 	source := "<?php\nnamespace App;\n$v->open();\n"
-	rule := &UnknownMemberRule{TypeResolver: func(string, string, int, *parser.FileNode) string { return "ZipArchive" }}
+	rule := &UnknownMemberRule{TypeResolver: func(string, string, int, int, *parser.FileNode) string { return "ZipArchive" }}
 	if sym := idx.Lookup("ZipArchive"); sym == nil || len(sym.Children) != 0 {
 		t.Skip("ZipArchive now has its members listed")
 	}
@@ -397,7 +397,7 @@ $t = DateTime::createFromTimestamp(1);
 	check := func(version string) []string {
 		idx := symbols.NewIndex()
 		idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: version})
-		rule := &UnknownMemberRule{TypeResolver: func(expr, _ string, _ int, _ *parser.FileNode) string {
+		rule := &UnknownMemberRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string {
 			return vars[expr]
 		}}
 		return unknownMemberMessages(rule.Check(parser.ParseFile(source), source, idx))

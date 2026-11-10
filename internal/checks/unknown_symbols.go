@@ -497,7 +497,7 @@ func hasKeywordSuffix(s, kw string) bool {
 // UnknownMemberRule detects unresolved method/property/constant accesses when
 // the receiver type can be resolved reliably.
 type UnknownMemberRule struct {
-	TypeResolver func(expr string, source string, line int, file *parser.FileNode) string
+	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
 }
 
 func (r *UnknownMemberRule) Code() string { return "unknown-member" }
@@ -540,7 +540,7 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 				continue
 			}
 
-			owners := r.resolveOwners(ownerExpr, lineNum, source, file, index)
+			owners := r.resolveOwners(ownerExpr, lineNum, backwardExprStart(line, opStart), source, file, index)
 			if len(owners) == 0 {
 				continue
 			}
@@ -585,7 +585,7 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 
 // resolveOwners returns every class-like a member may be accessed on. It returns
 // nothing when any part of the type isn't known, since the member could be there.
-func (r *UnknownMemberRule) resolveOwners(ownerExpr string, lineNum int, source string, file *parser.FileNode, index *symbols.Index) []string {
+func (r *UnknownMemberRule) resolveOwners(ownerExpr string, lineNum, col int, source string, file *parser.FileNode, index *symbols.Index) []string {
 	if !strings.HasPrefix(ownerExpr, "$") && !strings.HasSuffix(ownerExpr, ")") && !strings.HasSuffix(ownerExpr, "]") {
 		fqn, ok := resolveClassLikeName(ownerExpr, lineNum, file)
 		if ok && fqn != "" {
@@ -595,7 +595,7 @@ func (r *UnknownMemberRule) resolveOwners(ownerExpr string, lineNum int, source 
 		}
 	}
 
-	return resolvedClassLikes(r.TypeResolver(ownerExpr, source, lineNum, file), file, index)
+	return resolvedClassLikes(r.TypeResolver(ownerExpr, source, lineNum, col, file), file, index)
 }
 
 // instanceofOwners adds the classes an expression is tested against before the

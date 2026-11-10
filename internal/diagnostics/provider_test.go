@@ -93,7 +93,7 @@ class Foo {
 func TestSprint3BaselineUnknownDiagnostics(t *testing.T) {
 	p := newTestProvider()
 	p.index.MarkReady()
-	p.TypeResolver = func(expr, source string, line int, file *parser.FileNode) string {
+	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
 		return ""
 	}
 

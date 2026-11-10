@@ -31,7 +31,7 @@ function use_them( $p_archive ) {
 	var got []string
 	for _, rule := range []interface {
 		Check(*parser.FileNode, string, *symbols.Index) []Finding
-	}{&UnknownClassRule{}, &UnknownFunctionRule{}, &UnknownMemberRule{TypeResolver: func(string, string, int, *parser.FileNode) string { return "" }}} {
+	}{&UnknownClassRule{}, &UnknownFunctionRule{}, &UnknownMemberRule{TypeResolver: func(string, string, int, int, *parser.FileNode) string { return "" }}} {
 		for _, f := range rule.Check(file, src, idx) {
 			got = append(got, f.Message)
 		}

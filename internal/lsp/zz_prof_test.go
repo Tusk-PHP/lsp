@@ -33,8 +33,8 @@ func TestZZProfileDiagnostics(t *testing.T) {
 	}
 	comp := completion.NewProvider(ws.Index, ws.Container, "")
 	d := diagnostics.NewProvider(ws.Index, "", root, log.New(io.Discard, "", 0), config.DefaultConfig())
-	d.TypeResolver = func(expr, source string, line int, file *parser.FileNode) string {
-		return comp.ResolveDiagnosticType(expr, source, protocol.Position{Line: line}, file)
+	d.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
+		return comp.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
 	}
 	var files []string
 	for _, g := range strings.Split(os.Getenv("ZZ_GLOB"), ",") {

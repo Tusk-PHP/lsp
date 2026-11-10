@@ -18,7 +18,7 @@ class Foo {
 `
 		file := parser.ParseFile(source)
 		rule := &RedundantNullsafeRule{
-			TypeResolver: func(expr, source string, line int, file *parser.FileNode) string {
+			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				if expr == "$user" {
 					return "User"
 				}
@@ -39,7 +39,7 @@ class Foo {
 `
 		file := parser.ParseFile(source)
 		rule := &RedundantNullsafeRule{
-			TypeResolver: func(expr, source string, line int, file *parser.FileNode) string {
+			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				if expr == "$user" {
 					return "?User"
 				}
@@ -60,7 +60,7 @@ class Foo {
 `
 		file := parser.ParseFile(source)
 		rule := &RedundantNullsafeRule{
-			TypeResolver: func(expr, source string, line int, file *parser.FileNode) string {
+			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				return "mixed"
 			},
 		}
@@ -78,7 +78,7 @@ class Foo {
 `
 		file := parser.ParseFile(source)
 		rule := &RedundantNullsafeRule{
-			TypeResolver: func(expr, source string, line int, file *parser.FileNode) string {
+			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				return "User|null"
 			},
 		}
@@ -97,7 +97,7 @@ class Foo {
 `
 		file := parser.ParseFile(source)
 		rule := &RedundantNullsafeRule{
-			TypeResolver: func(expr, source string, line int, file *parser.FileNode) string {
+			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				return "null"
 			},
 		}

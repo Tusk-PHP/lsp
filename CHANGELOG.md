@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The unknown-member warning no longer fires on a method or property your code checks for first, as in `if (method_exists($notification, 'toArray')) { return $notification->toArray($notifiable); }`. This also covers `property_exists()`, `is_callable([$x, 'name'])`, early returns and ternaries, on the same receiver within the same function.
 - Calling a static method or reading `::class` through a property, as in `$this->type::tryFrom($value)` or `$this->related::class`, no longer reports the property name as an unknown class.
 - `undefined-variable` no longer reports a static property used as the class name after `new`, as in `new static::$builder($query)`.
+- A closure or arrow function parameter that has the same name as a variable outside it, as in `catch (Outer $e) { array_map(fn (Inner $e) => $e->path(), $list); }`, has its own type in unknown-member checks; members were checked against the outer variable's type before.
 - Unknown-member warnings name each possible class once: `Unknown member 'nope' on 'Foo|Bar'` instead of `'Foo|Bar|Foo'`.
 
 ### Changed

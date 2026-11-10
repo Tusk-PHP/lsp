@@ -65,7 +65,7 @@ class Save {
 	idx.MarkReady()
 	p := NewProvider(idx, "magento", "/tmp", nil, config.DefaultConfig())
 	comp := completion.NewProvider(idx, nil, "magento")
-	p.TypeResolver = func(expr, source string, line int, file *parser.FileNode) string {
+	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
 		return comp.ResolveExpressionType(expr, source, protocol.Position{Line: line}, file)
 	}
 	var got []string

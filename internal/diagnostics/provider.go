@@ -26,7 +26,7 @@ type Provider struct {
 
 	// TypeResolver resolves the type of a PHP expression for redundant nullsafe checks.
 	// Set by the LSP server after initialization.
-	TypeResolver func(expr string, source string, line int, file *parser.FileNode) string
+	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
 
 	// BuilderModelResolver resolves the Eloquent model FQN from a builder chain.
 	// Set by the LSP server after initialization.
