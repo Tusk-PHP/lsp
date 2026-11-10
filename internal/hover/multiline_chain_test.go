@@ -41,7 +41,15 @@ class Collection {
 }
 `)
 	p := NewProvider(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"), "none")
+	// A seeder's data: hundreds of lines, with JSON strings holding brackets.
+	var long strings.Builder
+	long.WriteString("<?php\nuse Illuminate\\Support\\Collection;\nclass S { public function run(): void {\n    Collection::make([\n")
+	for i := 0; i < 150; i++ {
+		long.WriteString("        [\n            'form' => '[{\"fields\":[{\"type\":\"checkbox\"}]}]',\n        ],\n")
+	}
+	long.WriteString("    ])->each(function (array $data) {});\n} }\n")
 	for name, src := range map[string]string{
+		"long": long.String(),
 		"oneline": `<?php
 use Illuminate\Support\Collection;
 class S { public function run(): void {

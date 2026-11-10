@@ -1,6 +1,7 @@
 package resolve
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -388,6 +389,19 @@ func TestJoinChainLines(t *testing.T) {
 		joined, _ := JoinChainLines(lines, 2, 6)
 		if joined != "Category::query()    ->with('rel')    ->get()" {
 			t.Errorf("got %q", joined)
+		}
+	})
+
+	t.Run("argument list of hundreds of lines with brackets in strings", func(t *testing.T) {
+		lines := []string{"$x = 1;", "Collection::make(["}
+		for i := 0; i < 400; i++ {
+			lines = append(lines, `    ['form' => '[{"a":[1]}]'],`)
+		}
+		lines = append(lines, "])->each(fn ($i) => $i);")
+		last := len(lines) - 1
+		joined, offset := JoinChainLines(lines, last, 4)
+		if !strings.HasPrefix(joined, "Collection::make([") || !strings.HasPrefix(joined[offset:], "each(") {
+			t.Errorf("joined starts %q, at offset %q", joined[:min(30, len(joined))], joined[offset:min(offset+10, len(joined))])
 		}
 	})
 
