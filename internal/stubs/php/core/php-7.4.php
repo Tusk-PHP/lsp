@@ -8,6 +8,20 @@ function implode(string $separator, array $array): string {}
 
 function get_class(object $object): string {}
 
+/** Class used to represent anonymous functions. */
+final class Closure
+{
+    public static function bind(Closure $closure, ?object $newThis, object|string|null $newScope = 'static'): ?Closure {}
+
+    public function bindTo(?object $newThis, object|string|null $newScope = 'static'): ?Closure {}
+
+    public function call(object $newThis, mixed ...$args): mixed {}
+
+    public static function fromCallable(callable $callback): Closure {}
+
+    public function __invoke(mixed ...$args): mixed {}
+}
+
 // Windows-only functions, missing from a builtin list generated on another OS.
 
 /** @param resource $stream */
