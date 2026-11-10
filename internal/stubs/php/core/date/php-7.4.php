@@ -178,6 +178,25 @@ class DateTimeZone
 
 class DateInterval
 {
+    public int $y;
+
+    public int $m;
+
+    public int $d;
+
+    public int $h;
+
+    public int $i;
+
+    public int $s;
+
+    public float $f;
+
+    public int $invert;
+
+    /** @var int|false */
+    public $days;
+
     public function __construct(string $duration) {}
 
     public static function __set_state(array $array): \DateInterval {}
