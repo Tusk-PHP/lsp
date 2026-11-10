@@ -16,12 +16,45 @@ type variableScope struct {
 	isLocal    bool // it's bound in the enclosing function, method or closure
 	param      *scope.Binding
 	capturedAt *protocol.Position // resolve it here instead: it comes from the parent scope
-	// reassigned: a parameter given a new value that holds here, so its type
-	// comes from that value, not its declaration.
+	// reassigned: a parameter given a new value before the read, so its type
+	// comes from the values that reach it, not only its declaration.
 	reassigned bool
-	// unknownValue: a parameter given a new value that may or may not hold
-	// here, as after `if ($c) { $x = new Other; }`. Its type isn't known.
-	unknownValue bool
+	binding    *scope.Binding // the variable's binding here, when it's local
+	// reach is which of the binding's writes can give it its value here.
+	reach scope.Reach
+	// write is set when the type asked for is one write's value, which is
+	// read from that write's line alone.
+	write *scope.WriteSite
+	// readPos is where the binding is read, and inRHS is set when that's in
+	// the right-hand side of an assignment to it, before it takes effect.
+	readPos protocol.Position
+	inRHS   bool
+}
+
+// readPosition returns where a read at pos reads the binding. A position in
+// the indentation of a line that's inside an assignment's right-hand side, as
+// diagnostics ask about a whole line, or as the line after a multi-line
+// assignment is asked about, reads after that assignment; anywhere else in a
+// right-hand side reads before it.
+func readPosition(b *scope.Binding, lines []string, pos protocol.Position) (protocol.Position, bool) {
+	site, ok := b.AssignmentAround(pos)
+	if !ok {
+		return pos, false
+	}
+	if pos.Line > site.At.Line && pos.Line < len(lines) {
+		line := lines[pos.Line]
+		if indent := len(line) - len(strings.TrimLeft(line, " \t")); pos.Character <= indent {
+			return site.End, false
+		}
+	}
+	return pos, true
+}
+
+// severalValues reports whether more than the last write before the read can
+// give the variable its value, as after `if ($c) { $x = new Other; }`, so its
+// type is the union of theirs.
+func (vs variableScope) severalValues() bool {
+	return vs.binding != nil && !vs.reach.Single()
 }
 
 func (r *Resolver) scopeDocument(lines []string) *scope.Document {
@@ -43,7 +76,8 @@ func (r *Resolver) ScopeDocument(lines []string) *scope.Document {
 }
 
 func (r *Resolver) variableScopeAt(varName string, lines []string, pos protocol.Position) variableScope {
-	s := r.scopeDocument(lines).ScopeAt(pos)
+	doc := r.scopeDocument(lines)
+	s := doc.ScopeAt(pos)
 	if s == nil || s.Kind == scope.ScopeFile {
 		return variableScope{}
 	}
@@ -58,17 +92,76 @@ func (r *Resolver) variableScopeAt(varName string, lines []string, pos protocol.
 	}
 	if binding != nil {
 		vs.isLocal = true
-		if binding.Kind == scope.BindingParameter {
-			if r := binding.LatestRebindBefore(pos); r != nil {
-				vs.reassigned = r.HoldsAt(pos)
-				vs.unknownValue = !vs.reassigned
-			}
-		}
+		vs.binding = binding
+		vs.readPos, vs.inRHS = readPosition(binding, lines, pos)
+		vs.reach = doc.ReachingWrites(binding, vs.readPos)
+		// A parameter's declared type is gone once a write's value is the
+		// one it has.
+		vs.reassigned = binding.Kind == scope.BindingParameter && vs.reach.Latest >= 0
 	}
-	if !vs.inClosure {
+	vs.closureParts(s, binding)
+	return vs
+}
+
+// writeScope is the scope for the value one write of b gives: only the
+// write's line is read for it, and a parameter has its declared type only at
+// its declaration.
+func writeScope(b *scope.Binding, write int, site *scope.WriteSite) variableScope {
+	s := b.Scope
+	vs := variableScope{
+		firstLine: site.At.Line,
+		inClosure: s.Kind == scope.ScopeClosure,
+		isLocal:   true,
+		binding:   b,
+		reach:     scope.Reach{Writes: []int{write}, OnWrite: true, Latest: write},
+		write:     site,
+	}
+	if write != scope.DeclWrite {
+		vs.reassigned = b.Kind == scope.BindingParameter
 		return vs
 	}
+	if b.Kind == scope.BindingParameter {
+		vs.firstLine = s.Range.Start.Line
+	}
+	vs.closureParts(s, b)
+	return vs
+}
 
+// assignmentValue is assignmentValue for line i, except that one write's
+// value is read from the write itself: from its own column to the end of the
+// statement when that's on the same line (`if ($c) { $x = new Foo(); }`,
+// `case 1: $x = new Foo(); break;`, `$x = foo(); // note`), and from the start
+// of the line when it goes on to later lines. When it can't be read that way,
+// it isn't read at all.
+func (vs variableScope) assignmentValue(lines []string, i int, varPrefix string) (full, firstLine string, ok bool) {
+	w := vs.write
+	if w == nil || i != w.At.Line || i >= len(lines) {
+		return assignmentValue(lines, i, varPrefix)
+	}
+	line := lines[i]
+	col := w.At.Character
+	if col > len(line) {
+		return "", "", false
+	}
+	// A statement that ends on its line is read up to its end, so a comment
+	// after it isn't taken for part of the value.
+	if w.Statement && w.End.Line == i && w.End.Character <= len(line) && w.End.Character >= col {
+		return assignmentValue([]string{line[col:w.End.Character] + ";"}, 0, varPrefix)
+	}
+	// One that goes on to later lines is read as before, from the start of
+	// its line.
+	if before := strings.TrimSpace(line[:col]); before == "" || strings.EqualFold(before, "static") {
+		return assignmentValue(lines, i, varPrefix)
+	}
+	return "", "", false
+}
+
+// closureParts fills in what a closure's variable comes from: its own
+// parameter, or the parent scope's variable.
+func (vs *variableScope) closureParts(s *scope.Scope, binding *scope.Binding) {
+	if !vs.inClosure {
+		return
+	}
 	switch {
 	case binding != nil && binding.Kind == scope.BindingParameter:
 		if !vs.reassigned {
@@ -84,7 +177,6 @@ func (r *Resolver) variableScopeAt(varName string, lines []string, pos protocol.
 			vs.capturedAt = &parent
 		}
 	}
-	return vs
 }
 
 // closureThisAt returns what $this is at pos when pos is inside a closure

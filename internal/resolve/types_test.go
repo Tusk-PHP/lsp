@@ -239,3 +239,25 @@ func TestResolveTemplateReturn(t *testing.T) {
 		}
 	})
 }
+
+// A callable with a return type is parenthesised in a union, so its return
+// type isn't read as running on to the union's other parts.
+func TestFullStringParenthesisesCallablesInUnions(t *testing.T) {
+	ret := ResolvedType{FQN: "float"}
+	callable := ResolvedType{FQN: "callable", Callable: &CallableType{Params: []ResolvedType{{FQN: "TValue"}}, Return: &ret}}
+	union := MakeUnion([]ResolvedType{callable, {FQN: "int"}, {FQN: "string"}, {FQN: "null"}}, false)
+	if got, want := union.FullString(), "(callable(TValue): float)|int|string|null"; got != want {
+		t.Errorf("FullString = %q, want %q", got, want)
+	}
+	if got, want := callable.FullString(), "callable(TValue): float"; got != want {
+		t.Errorf("alone: FullString = %q, want %q", got, want)
+	}
+	closure := ResolvedType{FQN: "Closure", Callable: &CallableType{Return: &ResolvedType{FQN: "int"}}}
+	if got, want := MakeUnion([]ResolvedType{{FQN: "string"}, closure}, false).FullString(), "string|(Closure(): int)"; got != want {
+		t.Errorf("Closure: FullString = %q, want %q", got, want)
+	}
+	bare := MakeUnion([]ResolvedType{{FQN: "callable", Callable: &CallableType{}}, {FQN: "int"}}, false)
+	if got, want := bare.FullString(), "callable()|int"; got != want {
+		t.Errorf("without a return type: FullString = %q, want %q", got, want)
+	}
+}

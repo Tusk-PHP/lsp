@@ -51,11 +51,13 @@ type Binding struct {
 	References  []protocol.Range
 	Writes      []protocol.Range // later assignments; Decl is the first
 	Rebinds     []Rebind         // the writes that give it a new value, in order
+	declEffect  effect           // where the declaration's value is, when it's a write
 }
 
 // Rebind is a write that gives a binding a new value: `$x = …`, `foreach (… as
 // $x)`, `[$x] = …`. A parameter given a new value no longer has its declared
-// type. `$x ??= …` isn't one: it keeps the value when there is one.
+// type. `$x ??= …` is one that may not run: it keeps the value when there is
+// one.
 type Rebind struct {
 	At protocol.Position // where the new value is written
 	// Until is the end of the block the write is in, a loop's body for a
@@ -64,12 +66,14 @@ type Rebind struct {
 	// Conditional is set when the write may not run at all, as the braceless
 	// body of `if (…) $x = …;`.
 	Conditional bool
+	block       int // the block Until ends, or -1 outside any
+	effect      effect
 }
 
 // HoldsAt reports whether the value written here is the binding's value at
 // pos, whichever way the code went to get there.
 func (r *Rebind) HoldsAt(pos protocol.Position) bool {
-	return !r.Conditional && positionBefore(r.At, pos) && !positionBefore(r.Until, pos)
+	return !r.Conditional && r.takesEffectBy(pos) && !positionBefore(r.Until, pos)
 }
 
 // LatestRebindBefore returns the last write before pos that gives the binding a
@@ -77,7 +81,7 @@ func (r *Rebind) HoldsAt(pos protocol.Position) bool {
 func (b *Binding) LatestRebindBefore(pos protocol.Position) *Rebind {
 	var latest *Rebind
 	for i := range b.Rebinds {
-		if positionBefore(b.Rebinds[i].At, pos) {
+		if b.Rebinds[i].takesEffectBy(pos) {
 			latest = &b.Rebinds[i]
 		}
 	}
@@ -103,6 +107,10 @@ type Document struct {
 	// variables: declarations, and static accesses such as `self::$name`.
 	Properties []protocol.Range
 	root       *Scope
+	// The control flow ReachingWrites reads, in the order it appears.
+	blocks []block
+	jumps  []flowMark
+	labels map[int][]protocol.Position // block → the case labels directly in it, in order
 }
 
 type Collector struct {
@@ -167,6 +175,7 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 	var rootRebinds []rebindRef
 	foreachVars := map[int]int{}           // foreach variable token → its loop body's `{`, or -1
 	foreachBodies := map[int][]rebindRef{} // loop body `{` → the rebinds of its foreach variables
+	flow := newFlowState(doc, result.Tokens)
 
 	popFinishedExpressions := func(i int) {
 		for len(active) > 1 && active[len(active)-1].exprEnd == i {
@@ -244,7 +253,7 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 
 		if tok.Kind == parser.TokenVariable {
 			_, isDecl := declByToken[i]
-			if next := assignmentOperator(result.Tokens, i); !isDecl && next >= 0 {
+			if next := assignmentOperator(result.Tokens, i); !isDecl && next >= 0 && !isDynamicMemberName(result.Tokens, i) {
 				current := active[len(active)-1]
 				binding := ensureBinding(doc, current.scope, tok.Value, BindingVariable, tokenRange(tok))
 				declByToken[i] = binding
@@ -263,8 +272,16 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 			}
 		}
 
+		if tok.Kind == parser.TokenIdentifier {
+			flow.keyword(result.Tokens, i)
+		}
+
 		if tok.Kind == parser.TokenOpenBrace {
 			braceDepth++
+			idx := flow.openBlock(result.Tokens, i)
+			for _, r := range foreachBodies[i] {
+				r.get().block = idx
+			}
 			blocks = append(blocks, foreachBodies[i])
 			delete(foreachBodies, i)
 			for len(pending) > 0 && pending[0].bodyOpenIndex == i && !pending[0].expressionBody {
@@ -283,9 +300,14 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 
 		if tok.Kind == parser.TokenVariable {
 			if binding, ok := declByToken[i]; ok {
-				if binding.Decl != tokenRange(tok) {
+				_, isForeach := foreachVars[i]
+				if binding.Decl == tokenRange(tok) {
+					binding.declEffect = writeEffect(result.Tokens, i, isForeach)
+				} else {
 					binding.Writes = append(binding.Writes, tokenRange(tok))
 					if r, ok := newRebind(result.Tokens, i, foreachVars); ok {
+						r.block = flow.current()
+						r.effect = writeEffect(result.Tokens, i, isForeach)
 						binding.Rebinds = append(binding.Rebinds, r)
 						r := rebindRef{binding, len(binding.Rebinds) - 1}
 						if body, ok := foreachVars[i]; ok && body >= 0 {
@@ -313,6 +335,7 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 				}
 				blocks = blocks[:len(blocks)-1]
 			}
+			flow.closeBlock(result.Tokens, i)
 			for len(active) > 1 && active[len(active)-1].braceDepth == braceDepth {
 				active[len(active)-1].scope.Range.End = tokenRange(tok).End
 				active = active[:len(active)-1]
@@ -329,6 +352,7 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 	}
 
 	// Blocks left open run to the end of the file.
+	flow.closeAll(root.Range.End)
 	for _, block := range append(blocks, rootRebinds) {
 		for _, r := range block {
 			r.get().Until = root.Range.End
@@ -841,8 +865,8 @@ type rebindRef struct {
 
 func (r rebindRef) get() *Rebind { return &r.binding.Rebinds[r.index] }
 
-// newRebind returns the rebind of the write at token i. ok is false when the
-// write keeps the binding's value (`$x ??= …`).
+// newRebind returns the rebind of the write at token i. `$x ??= …` may keep
+// the binding's value, so it's conditional.
 func newRebind(tokens []parser.Token, i int, foreachVars map[int]int) (r Rebind, ok bool) {
 	r.At = tokenRange(tokens[i]).Start
 	if body, isForeach := foreachVars[i]; isForeach {
@@ -852,9 +876,10 @@ func newRebind(tokens []parser.Token, i int, foreachVars map[int]int) (r Rebind,
 		return r, true
 	}
 	if op := assignmentOperator(tokens, i); op > 0 && tokens[op-1].Kind == parser.TokenQuestion {
-		return r, false
+		r.Conditional = true
+		return r, true
 	}
-	r.Conditional = isBracelessBody(tokens, i)
+	r.Conditional = isBracelessBody(tokens, i) || isShortCircuitOperand(tokens, i)
 	return r, true
 }
 

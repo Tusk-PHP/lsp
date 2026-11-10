@@ -90,6 +90,12 @@ func currentGID() uint64 {
 }
 
 func (r *Resolver) enterResolution(key string) (func(), bool) {
+	return r.enterGuard(key, true)
+}
+
+// enterGuard is enterResolution; a cut counts as one (guardCuts) only when
+// counted is set, for a caller that expects the cycle and handles it.
+func (r *Resolver) enterGuard(key string, counted bool) (func(), bool) {
 	gid := currentGID()
 
 	r.stateMu.Lock()
@@ -99,8 +105,12 @@ func (r *Resolver) enterResolution(key string) (func(), bool) {
 		r.states[gid] = st
 	}
 	if st.depth >= maxResolveDepth || st.active[key] > 0 {
+		// Running out of depth always counts: the answer was cut short.
+		depthCut := st.active[key] == 0
 		r.stateMu.Unlock()
-		r.guardCuts.Add(1)
+		if counted || depthCut {
+			r.guardCuts.Add(1)
+		}
 		return nil, false
 	}
 	st.depth++
@@ -706,9 +716,13 @@ func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) str
 // results in $categories having type Collection<int, Category>.
 func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
 	if varName == "$this" || file == nil {
-		return r.resolveVariableTypeTypedBase(varName, lines, pos, file)
+		return r.resolveVariableTypeTypedBase(varName, lines, pos, file, variableScope{})
 	}
-	key, memo := r.varMemoKeyAt(varName, lines, pos)
+	vs := r.variableScopeAt(varName, lines, pos)
+	if rt, ok := r.reachingType(varName, lines, pos, file, vs); ok {
+		return rt
+	}
+	key, memo := r.varMemoKeyAt(vs, varName, lines, pos)
 	// An answer a guard against cycles cut short isn't kept. Guards tripped
 	// by other requests at the same time only cost a missed cache entry.
 	cutsBefore := r.guardCuts.Load()
@@ -717,7 +731,7 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 			return rt
 		}
 	}
-	rt := r.resolveVariableTypeTypedBase(varName, lines, pos, file)
+	rt := r.resolveVariableTypeTypedBase(varName, lines, pos, file, vs)
 	// What asserting calls, @param-out and self-out since its last
 	// assignment say about it.
 	rt = r.narrowVariable(varName, rt, lines, pos, file)
@@ -727,7 +741,7 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	return rt
 }
 
-func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, pos protocol.Position, file *parser.FileNode, vs variableScope) ResolvedType {
 	exit, ok := r.enterResolution("typed|" + varName + "|" + strconv.Itoa(pos.Line) + ":" + strconv.Itoa(pos.Character))
 	if !ok {
 		return ResolvedType{}
@@ -746,9 +760,8 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 		return ResolvedType{FQN: FindEnclosingClass(file, pos)}
 	}
 
-	vs := r.variableScopeAt(varName, lines, pos)
-	if vs.unknownValue {
-		return ResolvedType{}
+	if vs.severalValues() {
+		return r.reachingValuesType(varName, lines, pos, file, vs)
 	}
 	if vs.param != nil {
 		return r.closureParamType(vs.param, lines, file)
@@ -787,7 +800,7 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 		if i >= len(lines) {
 			continue
 		}
-		rhs, firstLine, isAssignment := assignmentValue(lines, i, varPrefix)
+		rhs, firstLine, isAssignment := vs.assignmentValue(lines, i, varPrefix)
 		if !isAssignment {
 			continue
 		}
@@ -808,6 +821,10 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 			if gen := r.enclosingReturnType(lines, pos, file); gen.FQN == "Generator" && len(gen.Params) >= 3 {
 				return gen.Params[2]
 			}
+		}
+		// $path = $dir . '/' . $name is a string.
+		if isConcatenation(strings.TrimSuffix(strings.TrimSpace(rhs), ";")) {
+			return ResolvedType{FQN: "string"}
 		}
 		// $class = Foo::class is a class-string<Foo>.
 		if trimmed := strings.TrimSuffix(strings.TrimSpace(rhs), ";"); classConstantRe.MatchString(trimmed) {
@@ -967,7 +984,7 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 	}
 
 	// Fall back to standard resolution
-	fqn := r.ResolveVariableType(varName, lines, pos, file)
+	fqn := r.resolveVariableTypePlain(varName, lines, pos, file, vs)
 	return ResolvedType{FQN: fqn}
 }
 
@@ -1029,6 +1046,17 @@ func arrayElementType(rt ResolvedType) ResolvedType {
 // method/function parameters, class properties, $var = new ClassName(...),
 // @var annotations, and literal type inference.
 func (r *Resolver) ResolveVariableType(varName string, lines []string, pos protocol.Position, file *parser.FileNode) string {
+	if varName == "$this" || file == nil {
+		return r.resolveVariableTypePlain(varName, lines, pos, file, variableScope{})
+	}
+	vs := r.variableScopeAt(varName, lines, pos)
+	if rt, ok := r.reachingType(varName, lines, pos, file, vs); ok {
+		return plainTypeName(rt)
+	}
+	return r.resolveVariableTypePlain(varName, lines, pos, file, vs)
+}
+
+func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos protocol.Position, file *parser.FileNode, vs variableScope) string {
 	exit, ok := r.enterResolution("plain|" + varName + "|" + strconv.Itoa(pos.Line) + ":" + strconv.Itoa(pos.Character))
 	if !ok {
 		return ""
@@ -1044,9 +1072,8 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 		return FindEnclosingClass(file, pos)
 	}
 
-	vs := r.variableScopeAt(varName, lines, pos)
-	if vs.unknownValue {
-		return ""
+	if vs.severalValues() {
+		return plainTypeName(r.ResolveVariableTypeTyped(varName, lines, pos, file))
 	}
 	if vs.param != nil {
 		return r.closureParamType(vs.param, lines, file).String()
@@ -1092,7 +1119,7 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 		if i >= len(lines) {
 			continue
 		}
-		rhs, _, isAssignment := assignmentValue(lines, i, varPrefix)
+		rhs, _, isAssignment := vs.assignmentValue(lines, i, varPrefix)
 		if !isAssignment {
 			continue
 		}

@@ -782,6 +782,80 @@ class Customer {
 		echo $this->label ?? '';
 	}
 }`},
+	{name: "field run/a variable assigned in several branches has each one's members", completion: []string{"info", "name"}, src: `
+function run(bool $c): void {
+	if ($c) {
+		$x = new Logger();
+	} else {
+		$x = new Person();
+	}
+	$x-><|>
+}`},
+	{name: "field run/a variable assigned in several branches shows each one's type", hover: []string{"Logger|Person $x"}, src: `
+function run(bool $c): void {
+	$x = new Logger();
+	if ($c) {
+		$x = new Person();
+	}
+	echo $<|>x->level;
+}`},
+	{name: "field run/a member of any branch's value is no unknown member", clean: true, src: `
+function run(bool $c, int $n): void {
+	if ($c) { $a = new Person(); } else { $a = new Logger(); }
+	$a->name();
+	switch ($n) {
+		case 1:
+			$b = new Person();
+			break;
+		default:
+			$b = new Logger();
+	}
+	$b->name();
+	$d = new Person();
+	if ($c) { $d = new Logger(); }
+	$d->name();
+	$e = new Person();
+	while ($c) { $e = new Logger(); }
+	$e->name();
+}`},
+	{name: "field run/a member no branch's value has is still reported", diag: []string{"unknown-member"}, src: `
+function run(bool $c): void {
+	$d = new Person();
+	if ($c) { $d = new Logger(); }
+	$d->nope();
+}`},
+	{name: "field run/a read before a write that reads the variable in a loop", completion: []string{"where", "get"}, src: `
+class Query { public function where(string $c): static { return $this; } public function get(): array { return []; } }
+function run(Query $p, array $xs): void {
+	foreach ($xs as $x) {
+		$p-><|>get();
+		$p = $p->where('x');
+	}
+}`},
+	{name: "field run/a write that keeps its class in a loop stays typed", diag: []string{"unknown-member"}, src: `
+class Query { public function where(string $c): static { return $this; } }
+function run(array $xs, bool $c): void {
+	$q = new Query();
+	foreach ($xs as $x) { $q = $q->where('a'); }
+	if ($c) {
+		$q = $q->where('b');
+	}
+	$q->nope();
+}`},
+	{name: "field run/??= may keep the value it had", clean: true, src: `
+function run(): void {
+	$q = new Person();
+	$q ??= new Logger();
+	$q->name();
+}`},
+	{name: "field run/a write that changes its class in a loop is unknown", clean: true, src: `
+class Leaf {}
+class Node { public function next(): Leaf { return new Leaf(); } }
+function run(array $xs): void {
+	$n = new Node();
+	foreach ($xs as $x) { $n = $n->next(); }
+	$n->nope();
+}`},
 	{name: "field run/AllowDynamicProperties", clean: true, src: `
 #[\AllowDynamicProperties]
 final class PostType {}

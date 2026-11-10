@@ -102,6 +102,19 @@ func (rt ResolvedType) String() string {
 	return single.FullString()
 }
 
+// writeUnionPart writes one part of a union or intersection. A callable with
+// a return type is put in parentheses, as `(callable(T): float)|int`, since
+// `callable(T): float|int` would read as returning float|int.
+func writeUnionPart(sb *strings.Builder, part ResolvedType) {
+	if part.Callable != nil && part.Callable.Return != nil && len(part.Union) == 0 && len(part.Intersection) == 0 {
+		sb.WriteByte('(')
+		sb.WriteString(part.FullString())
+		sb.WriteByte(')')
+		return
+	}
+	sb.WriteString(part.FullString())
+}
+
 // FullString is like String but shows every part of a union or intersection,
 // as in "Foo|Bar|null".
 func (rt ResolvedType) FullString() string {
@@ -111,7 +124,7 @@ func (rt ResolvedType) FullString() string {
 			if i > 0 {
 				sb.WriteByte('|')
 			}
-			sb.WriteString(part.FullString())
+			writeUnionPart(&sb, part)
 		}
 		if rt.Nullable {
 			sb.WriteString("|null")
@@ -127,7 +140,7 @@ func (rt ResolvedType) FullString() string {
 			if i > 0 {
 				sb.WriteByte('&')
 			}
-			sb.WriteString(part.FullString())
+			writeUnionPart(&sb, part)
 		}
 		if rt.Nullable {
 			sb.WriteByte(')')

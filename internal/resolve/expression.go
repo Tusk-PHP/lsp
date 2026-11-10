@@ -60,6 +60,9 @@ func (r *Resolver) ExpressionTypeExpecting(expr string, expected *ResolvedType, 
 	if isClosureExpr(expr) {
 		return r.closureType(expr, expected, ctx)
 	}
+	if isConcatenation(expr) {
+		return ResolvedType{FQN: "string"}
+	}
 	if rest, ok := cutKeyword(expr, "clone"); ok {
 		return r.ExpressionType(rest, ctx)
 	}
