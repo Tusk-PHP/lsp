@@ -25,6 +25,11 @@ _None open._
 
 ## Low / performance
 
+### L62 — A call made only for another version of a library is reported as having too few arguments
+- **Where:** `argument-count-mismatch` in `internal/checks/argument_count.go`.
+- **What:** Laravel's `Foundation/Bootstrap/HandleExceptions.php` (line 359) calls `$instance->enable()` in the `else` of `if (version_compare(Version::id(), '12.3.4', '>='))`, for PHPUnit versions before the one installed, whose `enable()` takes a `TestCase`. Symfony's `Bridge/Twig/Form/TwigRendererEngine.php` (line 242) calls `->unwrap()`, which the installed Twig 4 gives a required `Environment` parameter. Both are correct for the installed versions, but the code supports others.
+- **Fix:** Stay quiet inside a branch guarded by `version_compare()`, and weigh the project's `composer.json` constraints when the installed version is newer than what it allows.
+
 ### L61 — Placeholder classes shadow the real ones when a variable is narrowed to them
 - **Where:** the symbol index (`internal/symbols`), seen through `instanceof` narrowing in `internal/resolve/instanceof.go`.
 - **What:** Symfony's `Bridge/PhpUnit/SymfonyTestsListener.php` declares an empty `SymfonyTestsListener` inside `if (false)` next to a `class_alias()` to the real class, and its tests ship `stubs/mongodb.php` with bare `MongoDB\Collection`, `Database` and `Client` classes. The index takes those as the classes, so `if ($l instanceof SymfonyTestsListener) { $l->globalListenerDisabled(); }` (`Legacy/CommandForV8.php`, `CommandForV9.php`) and `$mongo->withOptions()` and `->getCollection()` on `MongoDB\Collection`, `Database` and `Client` in `Cache/Traits/MongoDbTrait.php` are reported as unknown members. Before `instanceof` narrowing these variables had no known type, so nothing was reported. A parameter declared with those classes is reported the same way.

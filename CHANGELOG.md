@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Too few arguments** is reported by `argument-count-mismatch`: `$mailer->send('to@example.test')` on a `send(string $to, string $subject)` says `Too few arguments to send(): 1 passed, at least 2 required`, which PHP would throw on. It covers functions, static calls and `->` calls whose receiver is one known class. Calls with named arguments or `...$spread`, variadic methods, classes with `__call`, methods only declared by `@method`, and `$this` inside closures aren't checked.
 - **`instanceof` narrows variables** for hover, completion and diagnostics alike: inside `if ($o instanceof Foo) { … }`, after a guard such as `if (!$o instanceof Foo) { return; }`, after `assert($o instanceof Foo)`, in a `while`, an `elseif`, a `switch (true)` case or a `match (true)` arm, and after `&&`, `||` or `?` in the same expression, `$o` is a `Foo`: `$o->` completes its members and unknown members are checked against it. A `Foo|Bar` tested against `Foo` is `Bar` in the `else` branch, and a class tested against an interface it doesn't implement is both.
 - **Catch variables are typed:** in `catch (NotFound $e)` hover shows `NotFound`, `$e->` completes its methods, and unknown members on it are reported. `catch (A|B $e)` gives `A|B`. When the variable already had a value before the `try`, after the `catch` it may hold either.
 
@@ -31,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `argument-count-mismatch` no longer reports too many arguments to a method. PHP allows it, and libraries read the extra arguments with `func_get_args()` to stay compatible, as `Ulid::isValid($id, $format)` does. Too many arguments to a plain function is still reported.
 - **Typing no longer waits for diagnostics:** after an edit, diagnostics are worked out in the background once you pause for about 200 ms, so completion, hover and signature help answer straight away. On a 6,700-line file, completion right after a keystroke went from about 440 ms to under 40 ms. Diagnostics still arrive for the latest text; results for text you've since changed are dropped. Diagnostics on open and on save (PHPStan, Pint) are unchanged.
 - Hover on a variable shows its whole union type, `array|bool|null` instead of `?array`. A callable inside a union is shown in parentheses, as in `(callable(TValue): float)|int|null`.
 - A string concatenation such as `$dir . '/' . $name` is typed as `string`.
