@@ -941,6 +941,15 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 
 	// $variable-> or $variable::
 	if strings.HasPrefix(target, "$") {
+		if parenEnd > 0 && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "->") && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
+			// $fn(…)->: what calling it gives, not the closure itself. A
+			// Closure or callable without a signature gives nothing known.
+			if file == nil {
+				return ""
+			}
+			rt := p.resolver.ResolveVariableTypeTyped(target, p.resolver.Lines(source), pos, file)
+			return resolve.PlainTypeName(p.resolver.InvokeType(rt))
+		}
 		return p.resolver.ResolveVariableType(target, p.resolver.Lines(source), pos, file)
 	}
 

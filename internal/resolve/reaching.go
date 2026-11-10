@@ -89,12 +89,12 @@ func readableWrite(lines []string, b *scope.Binding, w int) bool {
 	return ok
 }
 
-// plainTypeName is a type as ResolveVariableType gives it: a class name
+// PlainTypeName is a type as ResolveVariableType gives it: a class name
 // without type arguments or a callable signature, so it can be looked up as
 // it is; for a union, every part so, as "App\Foo|App\Bar|null". Every part is
 // kept, since a reader that checked members against one of them would report
 // what the others have.
-func plainTypeName(rt ResolvedType) string {
+func PlainTypeName(rt ResolvedType) string {
 	if len(rt.Union) == 0 {
 		return rt.FQN
 	}

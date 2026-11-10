@@ -1051,7 +1051,7 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 	}
 	vs := r.variableScopeAt(varName, lines, pos)
 	if rt, ok := r.reachingType(varName, lines, pos, file, vs); ok {
-		return plainTypeName(rt)
+		return PlainTypeName(rt)
 	}
 	return r.resolveVariableTypePlain(varName, lines, pos, file, vs)
 }
@@ -1073,7 +1073,7 @@ func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos 
 	}
 
 	if vs.severalValues() {
-		return plainTypeName(r.ResolveVariableTypeTyped(varName, lines, pos, file))
+		return PlainTypeName(r.ResolveVariableTypeTyped(varName, lines, pos, file))
 	}
 	if vs.param != nil {
 		return r.closureParamType(vs.param, lines, file).String()
