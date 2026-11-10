@@ -678,14 +678,75 @@ func classBodyOpen(tokens []parser.Token, start int) int {
 }
 
 // isStaticPropertyAccess matches `self::$name`, but not `self::$name()`, which
-// calls the method named by the variable.
+// calls the method named by the variable, unless it names the class to
+// instantiate: in `new static::$builder($q)` the parentheses hold the
+// constructor's arguments.
 func isStaticPropertyAccess(tokens []parser.Token, i int) bool {
 	prev := prevSignificant(tokens, i-1)
 	if prev < 0 || tokens[prev].Kind != parser.TokenDoubleColon {
 		return false
 	}
 	next := nextSignificant(tokens, i+1)
-	return next < 0 || tokens[next].Kind != parser.TokenOpenParen
+	return next < 0 || tokens[next].Kind != parser.TokenOpenParen || isNewClassReference(tokens, prev)
+}
+
+// isNewClassReference reports whether the `::` at i belongs to the class
+// reference of a `new`, as in `new static::$a::$b()`, `new \Foo::$cls()`,
+// `new $this->map[$k]::$cls()` or `new ($factory)::$cls()`. A call earlier in the
+// chain ends the class reference, so `new Foo()::$m()` isn't one.
+func isNewClassReference(tokens []parser.Token, i int) bool {
+	j := prevSignificant(tokens, i-1)
+	for j >= 0 {
+		switch tokens[j].Kind {
+		case parser.TokenCloseBracket:
+			open := findMatchingBefore(tokens, j, parser.TokenOpenBracket, parser.TokenCloseBracket)
+			if open < 0 {
+				return false
+			}
+			j = prevSignificant(tokens, open-1)
+			continue
+		case parser.TokenCloseParen:
+			open := findMatchingBefore(tokens, j, parser.TokenOpenParen, parser.TokenCloseParen)
+			before := prevSignificant(tokens, open-1)
+			return open >= 0 && before >= 0 && tokens[before].Kind == parser.TokenNew
+		case parser.TokenVariable, parser.TokenIdentifier, parser.TokenStatic, parser.TokenBackslash:
+		default:
+			return false
+		}
+		prev := prevSignificant(tokens, j-1)
+		if prev < 0 {
+			return false
+		}
+		switch tokens[prev].Kind {
+		case parser.TokenNew:
+			return true
+		case parser.TokenDoubleColon, parser.TokenArrow:
+			j = prevSignificant(tokens, prev-1)
+		case parser.TokenIdentifier, parser.TokenBackslash: // a qualified name
+			j = prev
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+// findMatchingBefore returns the index of the token opening the group closed at
+// end, or -1.
+func findMatchingBefore(tokens []parser.Token, end int, openKind, closeKind parser.TokenKind) int {
+	depth := 0
+	for i := end; i >= 0; i-- {
+		switch tokens[i].Kind {
+		case closeKind:
+			depth++
+		case openKind:
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 func isGlobalOrStaticKeyword(tok parser.Token) bool {
