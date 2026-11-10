@@ -58,11 +58,28 @@ Create `.tusk-php.json` in your project root to override settings per project:
     "closureReturnTypes": true,
     "returnTypes": true,
     "parameterNames": true
+  },
+  "autoImport": {
+    "aliasStyle": "suffix"
   }
 }
 ```
 
 All diagnostic rules are enabled by default. Set a rule to `false` to disable it. Framework is auto-detected from `artisan` (Laravel), `bin/console` (Symfony), `bin/magento` (Magento 2), or `composer.json`.
+
+## Auto-import
+
+Completing a class from another namespace adds its `use` statement. When the class's short name is already in use in the file (by another import, a class declared in the file, or a class in the file's own namespace, ignoring case), the new import gets an alias instead, so the file never ends up with two `use … User;` lines. Imports already in the file are never renamed.
+
+`autoImport.aliasStyle` sets how that alias is made. It is read from `.tusk-php.json` and from the client's `initializationOptions`:
+
+| Value | Adds | Inserts, for `App\Models\User` |
+|---|---|---|
+| `suffix` (default) | `use App\Models\User as UserModel;` | `UserModel` |
+| `prefix` | `use App\Models\User as ModelUser;` | `ModelUser` |
+| `fullyQualified` | nothing | `\App\Models\User` |
+
+The alias is the class name plus the namespace segment above it in the singular (`Models` → `Model`, `Categories` → `Category`, `Statuses` → `Status`; `Auth` stays `Auth`). If that alias is taken too, the next segment up is added (`Illuminate\Foundation\Auth\User` becomes `UserAuth`, then `UserFoundationAuth`). When every segment is used up, the class is written fully qualified. A class that is already imported, under an alias or not, is inserted by the name it has in the file.
 
 ## Test coverage
 

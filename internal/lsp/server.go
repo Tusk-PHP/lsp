@@ -412,6 +412,9 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		}
 	}
 	s.completion.SetLazyResolve(lazyDoc, lazyDetail)
+	if s.cfg != nil {
+		s.completion.SetAutoImportAliasStyle(s.cfg.AutoImport.AliasStyle)
+	}
 	s.completion.SetArrayResolver(arrayResolver)
 	if s.routeIndex != nil {
 		s.completion.SetLaravelRouteIndex(s.routeIndex)
