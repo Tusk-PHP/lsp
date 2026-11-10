@@ -30,11 +30,13 @@ func (r *UnknownClassRule) Check(file *parser.FileNode, source string, index *sy
 	var findings []Finding
 	mask := newMaskState(source)
 
+	prevLine := ""
 	for lineNum, raw := range lines {
 		line := maskPHPLine(raw, &mask)
 		findings = append(findings, checkUnknownClassMatches(line, lineNum, file, index, unknownClassNewRe)...)
 		findings = append(findings, checkUnknownClassMatches(line, lineNum, file, index, unknownClassSingleRefRe)...)
-		findings = append(findings, checkUnknownStaticClassMatches(line, lineNum, file, index)...)
+		findings = append(findings, checkUnknownStaticClassMatches(line, prevLine, lineNum, file, index)...)
+		prevLine = line
 		findings = append(findings, checkUnknownCatchClasses(line, lineNum, file, index)...)
 		findings = append(findings, checkUnknownImplementsClasses(line, lineNum, file, index)...)
 		findings = append(findings, checkUnknownAttributeClasses(line, lineNum, file, index)...)
@@ -85,11 +87,18 @@ func isKeywordAt(line string, i int) bool {
 	return true
 }
 
-func checkUnknownStaticClassMatches(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
+// checkUnknownStaticClassMatches reports the class in `Foo::bar()`. prevLine is
+// the masked line before, for a `->` that ends it.
+func checkUnknownStaticClassMatches(line, prevLine string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
 	var findings []Finding
 	for _, match := range unknownClassStaticRe.FindAllStringSubmatchIndex(line, -1) {
 		start, end := match[4], match[5]
 		name := line[start:end]
+		// In `$this->type::tryFrom($v)` the name before `::` is a property
+		// holding the class, not a class.
+		if followsObjectOperator(line, prevLine, start) {
+			continue
+		}
 		if classLikeExists(name, lineNum, file, index) {
 			continue
 		}
@@ -104,6 +113,17 @@ func checkUnknownStaticClassMatches(line string, lineNum int, file *parser.FileN
 		})
 	}
 	return findings
+}
+
+// followsObjectOperator reports whether line[i] is preceded by `->` or `?->`,
+// with optional whitespace, which can also close prevLine when line[i] starts
+// its line.
+func followsObjectOperator(line, prevLine string, i int) bool {
+	before := strings.TrimRight(line[:i], " \t\r")
+	if before == "" {
+		before = strings.TrimRight(prevLine, " \t\r")
+	}
+	return strings.HasSuffix(before, "->")
 }
 
 func checkUnknownCatchClasses(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
