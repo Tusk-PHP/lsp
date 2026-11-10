@@ -30,6 +30,9 @@ type Provider struct {
 	// lazyDocumentation and lazyDetail leave those properties of member
 	// items to completionItem/resolve, for clients that ask for them later.
 	lazyDocumentation, lazyDetail bool
+	// aliasStyle is how a class is imported when its short name is already
+	// in use in the file (`autoImport.aliasStyle`).
+	aliasStyle string
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
@@ -393,6 +396,13 @@ func (p *Provider) completeMemberAccess(uri, source string, pos protocol.Positio
 		items = append(items, item)
 	}
 	return items
+}
+
+// SetAutoImportAliasStyle sets how a class is imported when its short name
+// is already in use in the file: "suffix" (the default), "prefix" or
+// "fullyQualified".
+func (p *Provider) SetAutoImportAliasStyle(style string) {
+	p.aliasStyle = normalizeAliasStyle(style)
 }
 
 // SetLazyResolve leaves the documentation and/or the detail of member items
@@ -1164,12 +1174,14 @@ func (p *Provider) completeNew(prefix, source string, rk nameRanker, file *parse
 			search = ""
 		}
 	}
+	imports := p.newImportPlanner(source, file)
 	for _, sym := range p.index.SearchByPrefix(search) {
 		if sym.Kind != symbols.KindClass {
 			continue
 		}
-		item := protocol.CompletionItem{Label: sym.Name, Kind: protocol.CompletionItemKindClass, Detail: sym.FQN, InsertText: sym.Name + "($0)", InsertTextFormat: 2, SortText: rk.key(sym, sym.Name)}
-		item.AdditionalTextEdits = buildAutoImportEdit(sym.FQN, source, file)
+		name, edits := imports.class(sym.FQN)
+		item := protocol.CompletionItem{Label: sym.Name, Kind: protocol.CompletionItemKindClass, Detail: sym.FQN, InsertText: name + "($0)", InsertTextFormat: 2, SortText: rk.key(sym, sym.Name)}
+		item.AdditionalTextEdits = edits
 		items = append(items, item)
 	}
 	return items
@@ -1251,18 +1263,24 @@ func (p *Provider) completeAttribute(prefix, source string, rk nameRanker, file 
 	// Once the user starts typing a name, surface matching attribute classes
 	// from the index (user-defined and vendor attributes like `Char`, `Unique`).
 	if prefix != "" && p.index != nil {
+		imports := p.newImportPlanner(source, file)
 		for _, sym := range p.index.SearchByPrefix(prefix) {
 			if sym == nil || sym.Kind != symbols.KindClass || seen[sym.Name] {
 				continue
 			}
 			seen[sym.Name] = true
-			items = append(items, protocol.CompletionItem{
-				Label:               sym.Name,
-				Kind:                protocol.CompletionItemKindClass,
-				Detail:              sym.FQN,
-				SortText:            rk.key(sym, sym.Name),
-				AdditionalTextEdits: buildAutoImportEdit(sym.FQN, source, file),
-			})
+			item := protocol.CompletionItem{
+				Label:    sym.Name,
+				Kind:     protocol.CompletionItemKindClass,
+				Detail:   sym.FQN,
+				SortText: rk.key(sym, sym.Name),
+			}
+			name, edits := imports.class(sym.FQN)
+			if name != sym.Name {
+				item.InsertText = name
+			}
+			item.AdditionalTextEdits = edits
+			items = append(items, item)
 		}
 	}
 	return items
@@ -1385,6 +1403,7 @@ func (p *Provider) completeGlobal(prefix, source string, rk nameRanker, file *pa
 			items = append(items, protocol.CompletionItem{Label: kw, Kind: protocol.CompletionItemKindKeyword, SortText: keywordKey(kw)})
 		}
 	}
+	var imports *importPlanner
 	for _, sym := range p.index.SearchByPrefix(search) {
 		// In standalone context only show callable/referenceable symbols:
 		// functions, classes, interfaces, enums, traits
@@ -1412,8 +1431,15 @@ func (p *Provider) completeGlobal(prefix, source string, rk nameRanker, file *pa
 		case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
 			// Only show type-level symbols when user is actively typing a name
 			if search != "" {
+				if imports == nil {
+					imports = p.newImportPlanner(source, file)
+				}
 				item := protocol.CompletionItem{Label: sym.Name, Kind: symKind(sym.Kind), Detail: sym.FQN, SortText: rk.key(sym, sym.Name)}
-				item.AdditionalTextEdits = buildAutoImportEdit(sym.FQN, source, file)
+				name, edits := imports.class(sym.FQN)
+				if name != sym.Name {
+					item.InsertText = name
+				}
+				item.AdditionalTextEdits = edits
 				items = append(items, item)
 			}
 		}

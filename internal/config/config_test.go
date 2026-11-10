@@ -118,8 +118,12 @@ func TestMergeClientOptions(t *testing.T) {
 	})
 }
 
-func makeRuleSeverityEnabled() RuleSeverityValue  { return RuleSeverityValue{enabled: true, hasValue: true} }
-func makeRuleSeverityDisabled() RuleSeverityValue { return RuleSeverityValue{enabled: false, hasValue: true} }
+func makeRuleSeverityEnabled() RuleSeverityValue {
+	return RuleSeverityValue{enabled: true, hasValue: true}
+}
+func makeRuleSeverityDisabled() RuleSeverityValue {
+	return RuleSeverityValue{enabled: false, hasValue: true}
+}
 
 func TestIsRuleEnabled(t *testing.T) {
 	t.Run("nil map returns true", func(t *testing.T) {
@@ -602,5 +606,34 @@ func TestMaxIndexFilesUnlimitedByDefaultOnNative(t *testing.T) {
 	// the WebAssembly build keeps a cap for its memory budget (limits_wasip1.go).
 	if defaultMaxIndexFiles != 0 {
 		t.Errorf("native default maxIndexFiles = %d, want 0 (no limit)", defaultMaxIndexFiles)
+	}
+}
+
+func TestAutoImportAliasStyle(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.AutoImport.AliasStyle != "suffix" {
+		t.Errorf("default aliasStyle = %q, want suffix", cfg.AutoImport.AliasStyle)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".tusk-php.json")
+	if err := os.WriteFile(path, []byte(`{"autoImport": {"aliasStyle": "prefix"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AutoImport.AliasStyle != "prefix" {
+		t.Errorf("file aliasStyle = %q, want prefix", cfg.AutoImport.AliasStyle)
+	}
+
+	cfg.MergeClientOptions(&protocol.InitializationOptions{AutoImport: &protocol.AutoImportClientOptions{AliasStyle: "fullyQualified"}})
+	if cfg.AutoImport.AliasStyle != "fullyQualified" {
+		t.Errorf("client aliasStyle = %q, want fullyQualified", cfg.AutoImport.AliasStyle)
+	}
+	cfg.MergeClientOptions(&protocol.InitializationOptions{AutoImport: &protocol.AutoImportClientOptions{}})
+	if cfg.AutoImport.AliasStyle != "fullyQualified" {
+		t.Errorf("empty client option overrode aliasStyle: %q", cfg.AutoImport.AliasStyle)
 	}
 }

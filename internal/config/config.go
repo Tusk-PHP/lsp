@@ -104,6 +104,14 @@ type InlayHintsConfig struct {
 	SuppressNameMatch   bool `json:"suppressNameMatch"`
 }
 
+// AutoImportConfig controls the `use` statements completion adds.
+type AutoImportConfig struct {
+	// AliasStyle is how a class is imported when its short name is already
+	// in use in the file: "suffix" (use App\Models\User as UserModel),
+	// "prefix" (as ModelUser) or "fullyQualified" (no import, \App\Models\User).
+	AliasStyle string `json:"aliasStyle"`
+}
+
 // ComposerHoverConfig controls hover behavior on composer.json files.
 //
 // FetchRemote / FetchVCS / CacheTTLHours / RequestTimeoutMs are stubbed for
@@ -152,39 +160,40 @@ type Config struct {
 	// phpVersionExplicitlySet is true when PHPVersion was loaded from a file
 	// or set via initializationOptions, distinguishing it from the default
 	// "8.5" so the resolution chain can skip the default correctly.
-	phpVersionExplicitlySet   bool
-	Framework                 string                       `json:"framework"`
-	ComposerPath              string                       `json:"composerPath"`
-	IncludePaths              []string                     `json:"includePaths"`
-	ExcludePaths              []string                     `json:"excludePaths"`
-	ContainerAware            bool                         `json:"containerAware"`
-	DiagnosticsEnabled        bool                         `json:"diagnosticsEnabled"`
-	PHPBinary                 string                       `json:"phpBinary,omitempty"`
-	PHPDetectTimeoutMs        int                          `json:"phpDetectTimeoutMs,omitempty"`
-	PHPStanEnabled            *bool                        `json:"phpstanEnabled,omitempty"`
-	PHPStanPath               string                       `json:"phpstanPath,omitempty"`
-	PHPStanLevel              string                       `json:"phpstanLevel,omitempty"`
-	PHPStanConfig             string                       `json:"phpstanConfig,omitempty"`
-	CoverageReportPath        string                       `json:"coverageReportPath,omitempty"`
-	PintEnabled               *bool                        `json:"pintEnabled,omitempty"`
-	PintPath                  string                       `json:"pintPath,omitempty"`
-	PintConfig                string                       `json:"pintConfig,omitempty"`
-	DatabaseEnabled           *bool                        `json:"databaseEnabled,omitempty"`
-	DatabaseSource            string                       `json:"databaseSource,omitempty"`
-	DiagnosticRules           map[string]RuleSeverityValue `json:"diagnosticRules,omitempty"`
+	phpVersionExplicitlySet bool
+	Framework               string                       `json:"framework"`
+	ComposerPath            string                       `json:"composerPath"`
+	IncludePaths            []string                     `json:"includePaths"`
+	ExcludePaths            []string                     `json:"excludePaths"`
+	ContainerAware          bool                         `json:"containerAware"`
+	DiagnosticsEnabled      bool                         `json:"diagnosticsEnabled"`
+	PHPBinary               string                       `json:"phpBinary,omitempty"`
+	PHPDetectTimeoutMs      int                          `json:"phpDetectTimeoutMs,omitempty"`
+	PHPStanEnabled          *bool                        `json:"phpstanEnabled,omitempty"`
+	PHPStanPath             string                       `json:"phpstanPath,omitempty"`
+	PHPStanLevel            string                       `json:"phpstanLevel,omitempty"`
+	PHPStanConfig           string                       `json:"phpstanConfig,omitempty"`
+	CoverageReportPath      string                       `json:"coverageReportPath,omitempty"`
+	PintEnabled             *bool                        `json:"pintEnabled,omitempty"`
+	PintPath                string                       `json:"pintPath,omitempty"`
+	PintConfig              string                       `json:"pintConfig,omitempty"`
+	DatabaseEnabled         *bool                        `json:"databaseEnabled,omitempty"`
+	DatabaseSource          string                       `json:"databaseSource,omitempty"`
+	DiagnosticRules         map[string]RuleSeverityValue `json:"diagnosticRules,omitempty"`
 	// MaxIndexFiles caps how many workspace PHP files are indexed; 0 means no
 	// limit (the native default). Composer dependencies aren't counted.
-	MaxIndexFiles             int                          `json:"maxIndexFiles"`
-	StubsPath                 string                       `json:"stubsPath"`
-	LogLevel                  string                       `json:"logLevel"`
-	LogFile                   string                       `json:"logFile"`
-	InlayHints                InlayHintsConfig             `json:"inlayHints"`
-	PHPManualLocale           string                       `json:"php_manual_locale,omitempty"`
-	PHPManualOpenOnDefinition bool                         `json:"php_manual_open_on_definition,omitempty"`
-	Composer                  ComposerConfig               `json:"composer,omitempty"`
-	DB                        DBConfig                     `json:"db,omitempty"`
-	AI                        AIConfig                     `json:"ai,omitempty"`
-	Introspection             IntrospectionConfig          `json:"introspection,omitempty"`
+	MaxIndexFiles             int                 `json:"maxIndexFiles"`
+	StubsPath                 string              `json:"stubsPath"`
+	LogLevel                  string              `json:"logLevel"`
+	LogFile                   string              `json:"logFile"`
+	InlayHints                InlayHintsConfig    `json:"inlayHints"`
+	AutoImport                AutoImportConfig    `json:"autoImport"`
+	PHPManualLocale           string              `json:"php_manual_locale,omitempty"`
+	PHPManualOpenOnDefinition bool                `json:"php_manual_open_on_definition,omitempty"`
+	Composer                  ComposerConfig      `json:"composer,omitempty"`
+	DB                        DBConfig            `json:"db,omitempty"`
+	AI                        AIConfig            `json:"ai,omitempty"`
+	Introspection             IntrospectionConfig `json:"introspection,omitempty"`
 }
 
 // SetDiagnosticRulesJSON parses a JSON object of rule code → severity value
@@ -255,6 +264,7 @@ func DefaultConfig() *Config {
 			SuppressSingleParam: true,
 			SuppressNameMatch:   true,
 		},
+		AutoImport: AutoImportConfig{AliasStyle: "suffix"},
 		Composer: ComposerConfig{
 			Hover: ComposerHoverConfig{Enable: true, CacheTTLHours: 6, RequestTimeoutMs: 3000},
 		},
@@ -372,6 +382,9 @@ func (c *Config) MergeClientOptions(opts *protocol.InitializationOptions) {
 		if ih.SuppressNameMatch != nil {
 			c.InlayHints.SuppressNameMatch = *ih.SuppressNameMatch
 		}
+	}
+	if opts.AutoImport != nil && opts.AutoImport.AliasStyle != "" {
+		c.AutoImport.AliasStyle = opts.AutoImport.AliasStyle
 	}
 	if opts.PHPManualLocale != "" {
 		c.PHPManualLocale = opts.PHPManualLocale

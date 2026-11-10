@@ -707,6 +707,9 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 
 	rt.Completion = completion.NewProvider(ws.Index, ws.Container, s.Framework)
 	rt.Completion.SetArrayResolver(arrayResolver)
+	if s.Config != nil {
+		rt.Completion.SetAutoImportAliasStyle(s.Config.AutoImport.AliasStyle)
+	}
 	if ws.RouteIndex != nil {
 		rt.Completion.SetLaravelRouteIndex(ws.RouteIndex)
 	}

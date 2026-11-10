@@ -297,6 +297,7 @@ type InitializationOptions struct {
 	MaxIndexFiles             *int                        `json:"maxIndexFiles,omitempty"`
 	ExcludePaths              []string                    `json:"excludePaths,omitempty"`
 	InlayHints                *InlayHintsClientOptions    `json:"inlayHints,omitempty"`
+	AutoImport                *AutoImportClientOptions    `json:"autoImport,omitempty"`
 	PHPManualLocale           string                      `json:"phpManualLocale,omitempty"`
 	PHPManualOpenOnDefinition *bool                       `json:"phpManualOpenOnDefinition,omitempty"`
 	Composer                  *ComposerClientOptions      `json:"composer,omitempty"`
@@ -392,6 +393,12 @@ type InlayHintParams struct {
 // FoldingRangeParams is the params type for textDocument/foldingRange requests.
 type FoldingRangeParams struct {
 	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+// AutoImportClientOptions carries the client's auto-import settings.
+type AutoImportClientOptions struct {
+	// AliasStyle is "suffix", "prefix" or "fullyQualified".
+	AliasStyle string `json:"aliasStyle,omitempty"`
 }
 
 // InlayHintsClientOptions carries per-flag inlay hint toggles from the client.
