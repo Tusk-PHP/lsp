@@ -722,3 +722,23 @@ function f(&$a, array &$b, ?array &$c, A&B &$d, A&B $e, int &...$f, $g) {}
 		}
 	}
 }
+
+// A comment in a parameter list, as libraries write for a parameter read with
+// func_get_args(), isn't a parameter.
+func TestCommentInParameterListIsNotAParameter(t *testing.T) {
+	file := ParseFile(`<?php
+class A {
+    public function getValues(/* bool $raw = false */): array { return []; }
+    public static function isValid(string $ulid/* , int $format = 1 */): bool { return true; }
+}
+`)
+	if len(file.Classes) != 1 || len(file.Classes[0].Methods) != 2 {
+		t.Fatalf("parse: %+v", file.Classes)
+	}
+	if n := len(file.Classes[0].Methods[0].Params); n != 0 {
+		t.Errorf("getValues: %d params, want 0", n)
+	}
+	if n := len(file.Classes[0].Methods[1].Params); n != 1 {
+		t.Errorf("isValid: %d params, want 1", n)
+	}
+}
