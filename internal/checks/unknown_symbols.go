@@ -513,9 +513,11 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 	mask := newMaskState(source)
 	hierarchies := map[string]*memberHierarchy{}
 	instanceofLines := linesWithInstanceof(lines)
+	guards := memberGuards{file: file}
 
 	for lineNum, raw := range lines {
 		line := maskPHPLine(raw, &mask)
+		guards.add(line, raw, lineNum)
 		for _, match := range unknownMemberAccessRe.FindAllStringSubmatchIndex(line, -1) {
 			opStart, opEnd := match[2], match[3]
 			nameStart, nameEnd := match[4], match[5]
@@ -531,6 +533,12 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 			if ownerExpr == "" || strings.Count(ownerExpr, ")") > strings.Count(ownerExpr, "(") {
 				continue
 			}
+			isCall := isCallAfter(line, nameEnd)
+			// method_exists(), property_exists() and is_callable() are how code
+			// asks whether an object has a member before using it.
+			if guards.covers(ownerExpr, member, isCall, isStatic, lineNum, opStart) {
+				continue
+			}
 
 			owners := r.resolveOwners(ownerExpr, lineNum, source, file, index)
 			if len(owners) == 0 {
@@ -540,8 +548,8 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 			if !ok {
 				continue
 			}
-			owners = append(owners, narrowed...)
-			access := memberAccess{name: member, isStatic: isStatic, isCall: isCallAfter(line, nameEnd)}
+			owners = appendNewOwners(owners, narrowed)
+			access := memberAccess{name: member, isStatic: isStatic, isCall: isCall}
 			if !access.isCall && !isStatic {
 				// isset(), unset(), empty() and ?? are how code asks whether a
 				// property is there; and a class with #[AllowDynamicProperties]
@@ -619,6 +627,21 @@ func instanceofOwners(ownerExpr string, lines []string, instanceofLines []int, l
 		}
 	}
 	return owners, true
+}
+
+// appendNewOwners adds the owners not already listed, keeping first-seen order,
+// so a class tested more than once is named once.
+func appendNewOwners(owners, more []string) []string {
+next:
+	for _, owner := range more {
+		for _, seen := range owners {
+			if seen == owner {
+				continue next
+			}
+		}
+		owners = append(owners, owner)
+	}
+	return owners
 }
 
 // linesWithInstanceof lists the lines that test something with instanceof,
