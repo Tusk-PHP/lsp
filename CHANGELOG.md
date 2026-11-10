@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Catch variables are typed:** in `catch (NotFound $e)` hover shows `NotFound`, `$e->` completes its methods, and unknown members on it are reported. `catch (A|B $e)` gives `A|B`. When the variable already had a value before the `try`, after the `catch` it may hold either.
+
 ### Fixed
 
 - **A variable assigned in different branches** now has the types of all of them: after `if ($c) { $x = new Foo(); } else { $x = new Bar(); }`, a `switch`, a `try`/`catch`, an `if` without `else`, a loop or `$x ??= new Bar()`, hover and completion show `Foo|Bar`, and `$x->fooOnly()` is no longer reported as an unknown member on `Bar`. When one of the values can't be typed, the variable is left unknown instead of taking the last assignment's type. Go to definition on such a variable goes to the first of its classes.

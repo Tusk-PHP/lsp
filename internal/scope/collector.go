@@ -52,6 +52,7 @@ type Binding struct {
 	Writes      []protocol.Range // later assignments; Decl is the first
 	Rebinds     []Rebind         // the writes that give it a new value, in order
 	declEffect  effect           // where the declaration's value is, when it's a write
+	declCaught  []string         // the classes a catch declaration catches, as written
 }
 
 // Rebind is a write that gives a binding a new value: `$x = …`, `foreach (… as
@@ -66,8 +67,10 @@ type Rebind struct {
 	// Conditional is set when the write may not run at all, as the braceless
 	// body of `if (…) $x = …;`.
 	Conditional bool
-	block       int // the block Until ends, or -1 outside any
-	effect      effect
+	// Caught lists the classes a `catch (A|B $e)` write catches, as written.
+	Caught []string
+	block  int // the block Until ends, or -1 outside any
+	effect effect
 }
 
 // HoldsAt reports whether the value written here is the binding's value at
@@ -173,8 +176,12 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 	// per open brace, rootRebinds those outside any.
 	var blocks [][]rebindRef
 	var rootRebinds []rebindRef
-	foreachVars := map[int]int{}           // foreach variable token → its loop body's `{`, or -1
-	foreachBodies := map[int][]rebindRef{} // loop body `{` → the rebinds of its foreach variables
+	foreachVars := map[int]int{} // foreach variable token → its loop body's `{`, or -1
+	caught := map[int][]string{} // catch variable token → the classes it catches, as written
+	catchBodies := map[int]int{} // catch variable token → its catch body's `{`
+	// loop or catch body `{` → the rebinds of its foreach or catch variables,
+	// which hold only to the end of that body.
+	foreachBodies := map[int][]rebindRef{}
 	flow := newFlowState(doc, result.Tokens)
 
 	popFinishedExpressions := func(i int) {
@@ -228,6 +235,10 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 		if tok.Kind == parser.TokenIdentifier && tok.Value == "catch" {
 			for idx, binding := range parseCatchBindings(result.Tokens, i, active[len(active)-1].scope, doc) {
 				declByToken[idx] = binding
+				caught[idx] = catchTypes(result.Tokens, i, idx)
+				if body := catchBodyOpen(result.Tokens, i); body >= 0 {
+					catchBodies[idx] = body
+				}
 			}
 		}
 
@@ -303,14 +314,18 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 				_, isForeach := foreachVars[i]
 				if binding.Decl == tokenRange(tok) {
 					binding.declEffect = writeEffect(result.Tokens, i, isForeach)
+					binding.declCaught = caught[i]
 				} else {
 					binding.Writes = append(binding.Writes, tokenRange(tok))
 					if r, ok := newRebind(result.Tokens, i, foreachVars); ok {
 						r.block = flow.current()
 						r.effect = writeEffect(result.Tokens, i, isForeach)
+						r.Caught = caught[i]
 						binding.Rebinds = append(binding.Rebinds, r)
 						r := rebindRef{binding, len(binding.Rebinds) - 1}
 						if body, ok := foreachVars[i]; ok && body >= 0 {
+							foreachBodies[body] = append(foreachBodies[body], r)
+						} else if body, ok := catchBodies[i]; ok {
 							foreachBodies[body] = append(foreachBodies[body], r)
 						} else if len(blocks) > 0 {
 							blocks[len(blocks)-1] = append(blocks[len(blocks)-1], r)
@@ -609,6 +624,50 @@ func parseCatchBindings(tokens []parser.Token, start int, scope *Scope, doc *Doc
 		}
 	}
 	return decls
+}
+
+// catchTypes returns the class names in `catch (A|\B\C $e)`, as written,
+// for the catch at token start whose variable is token v.
+func catchTypes(tokens []parser.Token, start, v int) []string {
+	open := nextSignificant(tokens, start+1)
+	var names []string
+	var b strings.Builder
+	flush := func() {
+		if b.Len() > 0 {
+			names = append(names, b.String())
+			b.Reset()
+		}
+	}
+	for i := open + 1; i < v; i++ {
+		switch tokens[i].Kind {
+		case parser.TokenIdentifier, parser.TokenBackslash:
+			b.WriteString(tokens[i].Value)
+		case parser.TokenPipe:
+			flush()
+		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
+		default:
+			return nil
+		}
+	}
+	flush()
+	return names
+}
+
+// catchBodyOpen returns the `{` that opens the body of the catch at token
+// start, or -1.
+func catchBodyOpen(tokens []parser.Token, start int) int {
+	open := nextSignificant(tokens, start+1)
+	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
+		return -1
+	}
+	close := findMatching(tokens, open, parser.TokenOpenParen, parser.TokenCloseParen)
+	if close < 0 {
+		return -1
+	}
+	if body := nextSignificant(tokens, close+1); body >= 0 && tokens[body].Kind == parser.TokenOpenBrace {
+		return body
+	}
+	return -1
 }
 
 func parseDestructureBindings(tokens []parser.Token, start int, scope *Scope, doc *Document) map[int]*Binding {
