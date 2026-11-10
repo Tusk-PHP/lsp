@@ -88,6 +88,47 @@ class Foo {
 	}
 }
 
+// TestUnknownClassIgnoresPropertyBeforeStaticAccess checks that in
+// `$this->type::tryFrom($v)` the property holding a class name isn't read as
+// a class.
+func TestUnknownClassIgnoresPropertyBeforeStaticAccess(t *testing.T) {
+	source := `<?php
+namespace App;
+
+class Holder {
+    public function go($value, $useFactory, $a, $k) {
+        $value = $this->type::tryFrom($value);
+        $related = $this->related::class;
+        $macro = $this->grammar::hasMacro($value);
+        $factory = $useFactory->factoryClass::new();
+        $soft = $this->throughParent::isSoftDeletable();
+        $deep = $a->b->c::d();
+        $safe = $this?->type::X;
+        $spaced = $this -> type :: X;
+        $made = self::$map[$k]::make();
+        $name = $value::class;
+        $split = $this->
+            type::tryFrom($value);
+        return Missing::bar();
+    }
+}
+`
+	file := parser.ParseFile(source)
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.3"})
+
+	var got []string
+	for _, f := range (&UnknownClassRule{}).Check(file, source, idx) {
+		got = append(got, f.Message)
+	}
+	if strings.Join(got, ",") != "Unknown class 'Missing'" {
+		t.Errorf("only Missing should be reported, got %v", got)
+	}
+	for _, f := range (&UnknownFunctionRule{}).Check(file, source, idx) {
+		t.Errorf("unexpected unknown-function finding: %q at line %d", f.Message, f.StartLine)
+	}
+}
+
 func TestUnknownFunctionRuleSkipsKeywords(t *testing.T) {
 	source := `<?php
 class B {
