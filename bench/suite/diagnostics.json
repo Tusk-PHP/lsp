@@ -51,7 +51,7 @@
       "file": "src/Bad/UnknownMethod.php",
       "anchor": "$mailer->sendMessage(",
       "expect": {
-        "messageAny": ["undefined method", "unknown method", "not found", "does not exist", "undefined symbol"]
+        "messageAny": ["undefined method", "unknown method", "unknown member", "not found", "does not exist", "undefined symbol"]
       }
     },
     {
