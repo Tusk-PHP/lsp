@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A variable assigned in different branches** now has the types of all of them: after `if ($c) { $x = new Foo(); } else { $x = new Bar(); }`, a `switch`, a `try`/`catch`, an `if` without `else`, a loop or `$x ??= new Bar()`, hover and completion show `Foo|Bar`, and `$x->fooOnly()` is no longer reported as an unknown member on `Bar`. When one of the values can't be typed, the variable is left unknown instead of taking the last assignment's type. Go to definition on such a variable goes to the first of its classes.
+- A `foreach` variable given a new value, as in `foreach ($foos as $item) { … } $item = new Bar();`, has that value's type instead of the loop's, so its members are no longer reported as unknown.
+- In `$query = $query->where('a');`, the `$query` on the right has the type it had before the assignment, so it completes and is typed in hover, also inside `if` blocks and loops.
+- A comment after an assignment, as in `$n = $y->count(); // see $y`, is no longer read as part of the assigned value.
+- `DateInterval` properties (`$interval->days`, `->y`, `->invert` and the others) are no longer reported as unknown members.
+- `$this->$name = $value;` no longer counts as an assignment to `$name`, so `unused-variable` doesn't report `$name` as assigned but never read.
+- Parameters of functions, methods and closures that return by reference, as in `public function &__get($name)`, are no longer reported as undefined variables or as assigned but never read.
+- **First-class callable syntax** such as `$f = $box->get(...);` or `strlen(...)` now gives a `Closure` with the callee's signature instead of what the callee returns, so `$f->bindTo(null)` is no longer reported as an unknown member, `$f->` completes `Closure`'s methods and `$f()` has the callee's return type. A spread call, `f(...$args)`, is still a call.
+- The unknown-member warning no longer fires on a method or property your code checks for first, as in `if (method_exists($notification, 'toArray')) { return $notification->toArray($notifiable); }`. This also covers `property_exists()`, `is_callable([$x, 'name'])`, early returns and ternaries, on the same receiver within the same function.
+- Calling a static method or reading `::class` through a property, as in `$this->type::tryFrom($value)` or `$this->related::class`, no longer reports the property name as an unknown class.
+- `undefined-variable` no longer reports a static property used as the class name after `new`, as in `new static::$builder($query)`.
+- Unknown-member warnings name each possible class once: `Unknown member 'nope' on 'Foo|Bar'` instead of `'Foo|Bar|Foo'`.
+
+### Changed
+
+- Hover on a variable shows its whole union type, `array|bool|null` instead of `?array`. A callable inside a union is shown in parentheses, as in `(callable(TValue): float)|int|null`.
+- A string concatenation such as `$dir . '/' . $name` is typed as `string`.
+
 ## [0.13.0] - 2026-11-09
 
 ### Added

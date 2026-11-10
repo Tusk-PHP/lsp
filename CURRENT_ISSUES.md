@@ -25,6 +25,101 @@ _None open._
 
 ## Low / performance
 
+### L60 — Hover and go-to-definition find nothing on a member of a called closure's result
+- **Where:** member hover in `internal/hover/provider.go`, member definition in `internal/analyzer/analyzer.go` (their fallback chain walkers, see L49).
+- **What:** With `$g = fn (int $i): Foo => new Foo();`, `$x = $g(1);` types `$x` as `Foo`, but hover and go-to-definition on `fooOnly` in `$g(1)->fooOnly()` find nothing, and `$g(1)->nope()` isn't reported as an unknown member on `Foo`. The same on 0.13.0.
+- **Fix:** Route both through `resolve`'s chain resolution, which knows what calling a variable gives.
+
+### L59 — A variable destructured into keeps the type it had before
+- **Where:** `reachingType` in `internal/resolve/reaching.go` (the fallback to the line scan); `instanceofOwners` in `internal/checks/unknown_symbols.go`.
+- **What:** In Symfony's `Routing/Matcher/Dumper/CompiledUrlMatcherDumper.php` (line 405), `foreach ($routes as $route) { if ($route instanceof StaticPrefixCollection) { …; continue; } [$name, $regex, $vars, $route] = $route; $route->compile(); }` reports `Unknown member 'compile' on 'StaticPrefixCollection'`. The only write that reaches the call is the destructuring, which can't be typed on its own, so the old line scan answers, finds the `foreach` line and gives the loop's element type; the `instanceof` owner from the block that ended in `continue` is added on top. The same on 0.13.0.
+- **Fix:** Mark destructuring writes in the collector and return unknown for them instead of falling back to the line scan. Separately, drop an `instanceof` owner once the variable is written again or the tested block leaves with `continue`, `break`, `return` or `throw`.
+
+### L58 — Hover and go-to-definition on a member of a union receiver look at one class
+- **Where:** member hover in `internal/hover/provider.go`, member definition in `internal/analyzer/analyzer.go`.
+- **What:** After `if ($c) { $x = new Foo(); } else { $x = new Bar(); }`, `$x->barOnly()` is accepted and completed, but hover and go-to-definition on `barOnly` find nothing: they look the member up on one class of `Foo|Bar`. The same on 0.13.0 for any union receiver; branch-assigned variables now make it more common.
+- **Fix:** Look the member up on each class of the receiver's `MemberOwner()`, as completion and `unknown-member` do.
+
+### L57 — Branch shapes that still give a wider union than they should
+- **Where:** `internal/scope/reach.go` (`ReachingWrites`), `internal/scope/flow.go`.
+- **What:** A branch that ends in `return` or `throw` still reaches the code after it (`if ($c) { $h = new Bar(); return; }` leaves `Bar` in the union), and a value written before a `switch` whose every `case` and `default` assigns stays in the union (`Box<int>|Foo|Bar`). Wider, never wrong, so nothing false is reported; a member only the dropped class has is accepted.
+- **Fix:** Record blocks that end in `return`/`throw`/`continue`/`break` and leave their writes out; treat a `switch` with a `default` where every arm assigns like a covered `if`/`else` chain.
+
+### L56 — A read that more than 32 writes may reach is left unknown
+- **Where:** `scope.MaxReachingWrites` in `internal/scope/reach.go`.
+- **What:** The cap keeps a read's cost bounded (a file with 1,500 conditional writes opens in 70 ms instead of 2.5 s). Past it the variable has no type: no hover type, no completion, no member checks. How often real code reaches the cap hasn't been measured; a long generated `switch` would.
+- **Fix:** If it shows up in real code, stop at the cap with the union of the distinct types seen when every write examined so far typed to the same few classes, instead of giving up.
+
+### L55 — Values that still can't be typed make a branch-assigned variable unknown
+- **Where:** `internal/resolve/expression.go` (`ExpressionType`), `internal/resolve/resolve.go` (`resolveVariableTypeTypedBase`), `internal/symbols/builtin_registry_generated.go`.
+- **What:** A variable is now unknown when any value that can reach it is. That exposes values nothing types: ternaries, `$a ?? $b`, arithmetic and array `+`, an offset into an untyped array, `catch (Foo $e)` variables (hover `mixed`), `static $x;` without a value (so `static $memo; $memo ??= new Foo();` went from `Foo` to unknown), `$x .= …` (not tracked as a string write), and builtins the generated registry lists by name only (`addslashes`). `str_replace` returns `string|array` without its conditional return type. In a 12-file WordPress sample 405 of 17,545 variable hovers lost a type this way (1,042 gained one); in Laravel 35 of 3,894 (79 gained).
+- **Fix:** Type them in `ExpressionType`, in this order of payoff: ternary and `??` (union of both sides), `catch` variables (the caught class or union), arithmetic, then return types for the registry's bare builtins.
+
+### L54 — An assignment inside an expression is still answered by the line scan
+- **Where:** `variableScope.assignmentValue` in `internal/resolve/variable_scope.go`; `reachingType` in `internal/resolve/reaching.go`.
+- **What:** `foo($x = new Bar())` and `for ($i = 0; …)` aren't whole statements, so their value isn't read at the write. The old backward line scan answers and can give the value of an earlier line, as on 0.13.0. Multi-line values also still go through `continuedExpression`, which reads raw lines.
+- **Fix:** Read a write's value from its token range (`WriteSite.RHS` to `End`) for every write, which also retires `continuedExpression`.
+
+### L53 — The resolution guard is keyed by goroutine id
+- **Where:** `currentGID`, `enterGuard` in `internal/resolve/resolve.go`.
+- **What:** Root `AGENTS.md` rules out goroutine-identity tricks, and the cycle guard for type resolution finds its per-request state that way. It predates the false-warning fixes; the branch-values work adds one more caller of the same guard because the cycle runs through completion's chain-resolver callbacks, which carry no request state.
+- **Fix:** Give resolution a request struct (or `context.Context`) that carries the guard, and pass it through the chain-resolver callbacks.
+
+### L52 — `ResolveVariableType` returns a string that each caller parses again
+- **Where:** `Resolver.ResolveVariableType` and `plainTypeName` in `internal/resolve`; callers in `internal/analyzer/analyzer.go` (`definitionForVariable`, `locationsForTypeName`), `internal/completion/provider.go`, `internal/hover/provider.go`.
+- **What:** The plain resolver gives a class name, or `A|B|null` for several values, and callers split or trim it themselves. Returning a fuller string there broke go-to-definition on a variable during the branch-values work until a test caught it.
+- **Fix:** Move the callers to `ResolveVariableTypeTyped` and `MemberOwner()`/`ClassNames()`, then drop the plain form (root `AGENTS.md`: structured types).
+
+### L51 — A comment between `->` and the member name makes the call an unknown function
+- **Where:** the `unknown-function` rule in `internal/checks/unknown_symbols.go`.
+- **What:** `$f->/* note */bindTo(null);` reports `Unknown function 'bindTo'`: the rule looks at the text before the name and finds the comment, not the `->`. Valid PHP, rare in real code; the same on 0.13.0.
+- **Fix:** Decide "is this a member call" from the previous significant token, as the shared tokens give it.
+
+### L50 — `completion/provider.go` and `resolve/resolve.go` are well past the 800-line guideline
+- **Where:** `internal/completion/provider.go` (1,564 lines), `internal/resolve/resolve.go` (1,459 lines), `internal/scope/collector.go` (1,539 lines).
+- **What:** All three were already over the guideline in root `AGENTS.md` before the false-warning fixes, which added only call-site lines to them (new logic went to `scope/flow.go`, `scope/reach.go`, `resolve/reaching.go`, `resolve/concat.go`). Every new typing rule lands in the same two functions (`resolveChainWithContext`, `resolveVariableTypeTypedBase`).
+- **Fix:** Split within the package before the next feature there: the chain walkers out of `provider.go`, the assignment branches of `resolveVariableTypeTypedBase` into one file per right-hand-side form.
+
+### L49 — Hover's and the analyzer's fallback chain walkers read `f(...)` as a call
+- **Where:** `internal/hover/provider.go` (`resolveAccessChainTyped`, line 311); `internal/analyzer/analyzer.go` (`resolveAccessChainTyped`, about line 532).
+- **What:** First-class callable syntax is a `Closure` in the shared resolver and in completion's walkers, but these two copies still type `$obj->m(...)` as what `m()` returns. They run only when the shared resolver returns nothing, so it isn't visible today.
+- **Fix:** Route both through `resolve.IsFirstClassCallableArgs`, or remove the copies once `session` wires one resolver for every feature.
+
+### L48 — `unknown-member` stays quiet on a receiver typed `Closure(…): T`
+- **Where:** `internal/checks/unknown_symbols.go` (`collectClassLikes`, line 706).
+- **What:** There is no branch for the callable type kind, so a closure with a signature (written, or from `f(...)`) reads as an unknown owner and `$closure->fooOnly()` is not reported. Safe, but a real error is missed. A plain `Closure` is checked, now that the stubs declare its members.
+- **Fix:** Treat a callable kind named `Closure` as the class `Closure`; leave `callable(…)` alone.
+
+### L47 — Laravel notification methods called by convention are still reported
+- **Where:** `Illuminate/Notifications/Channels/MailChannel.php:55` (`toMail`), `Illuminate/Notifications/NotificationSender.php:233` (`via`) in the Laravel field run.
+- **What:** `Notification` declares neither method; channels call them by convention with no `method_exists()` guard, so `unknown-member` fires. The guard rule correctly doesn't cover them.
+- **Fix:** Teach `framework/laravel` the notification channel methods (`via`, `toMail`, `toArray`, `toDatabase`, `toBroadcast`, …) as known on `Notification` subclasses; not in the generic check.
+
+### L46 — Existence guards written over several lines, or in upper case, aren't recognised
+- **Where:** `internal/checks/member_guards.go` (`memberGuardCallRe`, `memberGuards.add`).
+- **What:** `method_exists(` with its arguments on following lines, and `METHOD_EXISTS(…)`, don't register as guards, so the guarded member is still reported. It fails towards warning, not towards silence.
+- **Fix:** Read the guard call from the shared tokens instead of one masked line; compare the function name case-insensitively.
+
+### L45 — A nullsafe link cuts the receiver of a longer chain
+- **Where:** `internal/checks/unknown_symbols.go` (`isExprChar`, line 1535).
+- **What:** `?` isn't an expression character, so the receiver of `$a?->b->c()` is read as `->b` onwards and the member check (and the guard match) sees the wrong owner expression.
+- **Fix:** Accept `?` when it is followed by `->`, with a test for `$a?->b->c()` and for a ternary that ends just before a variable.
+
+### L44 — 17 files under `internal/` aren't gofmt-clean
+- **Where:** `gofmt -l internal/`, for example `internal/config/config.go`, `internal/mcpserver/server.go`, `internal/workspace/workspace.go`.
+- **What:** Pre-existing on 0.13.0; unrelated diffs pick up formatting noise when an editor formats on save.
+- **Fix:** One `chore: gofmt` commit, and `gofmt -l` as a CI step.
+
+### L43 — Tests that need `testdata/laravel/vendor` fail instead of skipping
+- **Where:** `internal/analyzer/container_test.go` (`TestDefinitionAppStringBinding`, `TestDefinitionAppChainedMethod`, `TestDefinitionResolveHelper`); 15 end-to-end tests in `internal/completion`; `TestE2ESymfonyCompletions` in `internal/lsp` with an incomplete `testdata/symfony/vendor`.
+- **What:** `testdata/laravel/vendor` is git-ignored, so in a fresh clone or worktree these fail with or without any change. They pass in a checkout where `composer install` has been run there.
+- **Fix:** Skip with a message naming the setup step when the vendor directory is missing, and add that step to `make test` or the contributing notes.
+
+### L42 — `unknown-class` before `::` is still matched with a regular expression per line
+- **Where:** `internal/checks/unknown_symbols.go` (`unknownClassStaticRe`, line 21; `checkUnknownStaticClassMatches`).
+- **What:** The fix for `$this->prop::method()` looks back for `->` on the line (and the previous line). A name that follows `::` or `)` and comes before another `::` still depends on the pattern alone (not probed for false warnings yet), against the "tokens, not raw lines" rule.
+- **Fix:** Move the rule to the shared tokens; that needs the rule's `Check` to receive them.
+
 ### L41 — `laravel_model_schema` re-derives all project relations per single-model call
 - **Where:** `internal/mcpserver/server.go` (`laravelModelSchema` handler); `internal/models/relations.go` (`ModelRelations`).
 - **What:** The handler calls `models.ModelRelations` over the whole project and then filters to the requested model FQN — O(all project relations) per single-model query. Accepted per the graph-cli-removal plan ("revisit only if it shows up in profiling"); not a correctness issue.
