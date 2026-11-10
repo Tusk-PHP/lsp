@@ -69,15 +69,17 @@ type Server struct {
 	// publishMu orders diagnostics publishes (see publishDiagnostics).
 	publishMu sync.Mutex
 	// docIndex orders background indexing of open documents.
-	docIndex  docIndexQueue
-	rootPath  string
-	framework string
-	reader    *bufio.Reader
-	writer    io.Writer
-	logger    *log.Logger
-	shutdown  bool
-	strict    bool      // when true, recovered panics are re-raised after logging
-	exitFunc  func(int) // called by the "exit" notification handler; defaults to os.Exit
+	docIndex docIndexQueue
+	// diagDebounce delays diagnostics after edits (see scheduleDiagnostics).
+	diagDebounce diagDebouncer
+	rootPath     string
+	framework    string
+	reader       *bufio.Reader
+	writer       io.Writer
+	logger       *log.Logger
+	shutdown     bool
+	strict       bool      // when true, recovered panics are re-raised after logging
+	exitFunc     func(int) // called by the "exit" notification handler; defaults to os.Exit
 
 	builtinPHPVersion string
 	builtinPHPSource  string // "composer" | "local" | "fallback"
@@ -281,6 +283,7 @@ func (s *Server) handleMessage(msg *jsonRPCMessage) {
 		s.handleInitialized(msg)
 	case "shutdown":
 		s.shutdown = true
+		s.cancelAllDiagnostics()
 		if s.coverage != nil {
 			s.coverage.Stop()
 		}
@@ -610,7 +613,7 @@ func (s *Server) handleDidChange(msg *jsonRPCMessage) {
 		}
 		s.indexDocumentMaybeAsync(uri, source)
 		if s.cfg.DiagnosticsEnabled {
-			s.publishDiagnostics(uri, source)
+			s.scheduleDiagnostics(uri)
 		}
 	}
 }
@@ -631,6 +634,7 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 	s.docMu.Lock()
 	delete(s.documents, params.TextDocument.URI)
 	s.docMu.Unlock()
+	s.cancelDiagnostics(params.TextDocument.URI)
 	s.diag.ClearCache(params.TextDocument.URI)
 }
 

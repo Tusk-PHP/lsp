@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Typing no longer waits for diagnostics:** after an edit, diagnostics are worked out in the background once you pause for about 200 ms, so completion, hover and signature help answer straight away. On a 6,700-line file, completion right after a keystroke went from about 440 ms to under 40 ms. Diagnostics still arrive for the latest text; results for text you've since changed are dropped. Diagnostics on open and on save (PHPStan, Pint) are unchanged.
 - Hover on a variable shows its whole union type, `array|bool|null` instead of `?array`. A callable inside a union is shown in parentheses, as in `(callable(TValue): float)|int|null`.
 - A string concatenation such as `$dir . '/' . $name` is typed as `string`.
 
