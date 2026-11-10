@@ -53,7 +53,7 @@ func NativeRules(opts NativeRulesOptions) []checks.Rule {
 		&checks.RedundantUnionRule{},
 		&checks.UndefinedVariableRule{Shared: shared},
 		&checks.UnusedVariableRule{Shared: shared},
-		&checks.ArgumentCountRule{Shared: shared},
+		&checks.ArgumentCountRule{Shared: shared, TypeResolver: opts.TypeResolver},
 		&checks.InvalidOverrideRule{},
 		&checks.DeprecatedUsageRule{TypeResolver: opts.TypeResolver, Uses: uses},
 		&checks.UnusedResultRule{TypeResolver: opts.TypeResolver, Uses: uses},

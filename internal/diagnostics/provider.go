@@ -164,7 +164,7 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP bool) []protocol.D
 			diags = append(diags, p.applyRuleSeverity("invalid-override", checks.SeverityError, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("argument-count-mismatch") {
-			fs := (&checks.ArgumentCountRule{Shared: shared}).Check(file, source, p.index)
+			fs := (&checks.ArgumentCountRule{Shared: shared, TypeResolver: typeResolver}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("argument-count-mismatch", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 	}
