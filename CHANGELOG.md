@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A comment inside a parameter list, as in `function getValues(/* bool $raw = false */)`, is no longer read as a parameter, so hover and signature help show the method's real parameters.
+- Hover, completion and go to definition work on a method called after a long multi-line argument list, as in a seeder's `Collection::make([ … hundreds of lines … ])->each(…)`. They stopped working once the list ran past 200 lines; it can now run to 2,000, and brackets inside its strings no longer throw it off.
 - **A variable assigned in different branches** now has the types of all of them: after `if ($c) { $x = new Foo(); } else { $x = new Bar(); }`, a `switch`, a `try`/`catch`, an `if` without `else`, a loop or `$x ??= new Bar()`, hover and completion show `Foo|Bar`, and `$x->fooOnly()` is no longer reported as an unknown member on `Bar`. When one of the values can't be typed, the variable is left unknown instead of taking the last assignment's type. Go to definition on such a variable goes to the first of its classes.
 - A `foreach` variable given a new value, as in `foreach ($foos as $item) { … } $item = new Bar();`, has that value's type instead of the loop's, so its members are no longer reported as unknown.
 - In `$query = $query->where('a');`, the `$query` on the right has the type it had before the assignment, so it completes and is typed in hover, also inside `if` blocks and loops.

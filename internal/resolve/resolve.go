@@ -7,6 +7,7 @@ package resolve
 import (
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1298,34 +1299,45 @@ func JoinChainLines(lines []string, lineNum, character int) (string, int) {
 	if lineNum < 0 || lineNum >= len(lines) {
 		return "", character
 	}
-	joined := lines[lineNum]
+	cur := lines[lineNum]
+	// How many brackets closed before the cursor were opened on earlier
+	// lines, kept up to date as lines are prepended, so the walk is linear
+	// however long the argument list is.
+	open, _ := bracketBalance(cur[:min(character, len(cur))])
+	need := -open
+	first := cur
+	var parts []string
 	offset := character
-
-	// Walk backward, prepending lines as long as the current joined line
-	// starts with a chain continuation operator (-> or ::), or the code before
-	// the cursor closes brackets opened on earlier lines — e.g. `])->each(`
-	// ending a multi-line `Collection::make([...])` argument list.
 	for i := lineNum - 1; i >= 0 && lineNum-i <= maxChainJoinLines; i-- {
-		trimmed := strings.TrimSpace(joined)
+		trimmed := strings.TrimSpace(first)
 		continuation := strings.HasPrefix(trimmed, "->") || strings.HasPrefix(trimmed, "::") || strings.HasPrefix(trimmed, "?->")
-		if !continuation && !hasUnmatchedClosingBracket(joined[:min(offset, len(joined))]) {
+		if !continuation && need <= 0 {
 			break
 		}
 		prev := strings.TrimRight(lines[i], " \t")
+		_, net := bracketBalance(prev)
+		need -= net
 		offset += len(prev)
-		joined = prev + joined
+		parts = append(parts, prev)
+		first = prev
 	}
-	return joined, offset
+	if len(parts) == 0 {
+		return cur, offset
+	}
+	slices.Reverse(parts)
+	parts = append(parts, cur)
+	return strings.Join(parts, ""), offset
 }
 
 // maxChainJoinLines bounds how far JoinChainLines walks back, so a stray
-// closing bracket cannot pull in a whole file.
-const maxChainJoinLines = 200
+// closing bracket cannot pull in a whole file. Seeders and config arrays
+// passed to Collection::make([...]) run to hundreds of lines.
+const maxChainJoinLines = 2000
 
-// hasUnmatchedClosingBracket reports whether s contains a `)` or `]` whose
-// opening bracket is not in s. Quoted strings are skipped.
-func hasUnmatchedClosingBracket(s string) bool {
-	depth := 0
+// bracketBalance reads the `(` and `[` brackets in s, skipping quoted
+// strings. lowest is the lowest the depth gets from 0, so -lowest brackets
+// close ones opened before s; net is opened minus closed.
+func bracketBalance(s string) (lowest, net int) {
 	var quote byte
 	for i := 0; i < len(s); i++ {
 		c := s[i]
@@ -1341,15 +1353,13 @@ func hasUnmatchedClosingBracket(s string) bool {
 		case '\'', '"':
 			quote = c
 		case '(', '[':
-			depth++
+			net++
 		case ')', ']':
-			depth--
-			if depth < 0 {
-				return true
-			}
+			net--
+			lowest = min(lowest, net)
 		}
 	}
-	return false
+	return lowest, net
 }
 
 // SplitLines splits source into lines. Use this once per request,
