@@ -136,6 +136,11 @@ func (r *Resolver) writeValue(varName string, lines []string, file *parser.FileN
 	defer exit()
 	cutsBefore := r.guardCuts.Load()
 
+	if caught := b.Caught(w); len(caught) > 0 {
+		rt := r.caughtType(caught, file)
+		r.varMemoPut(key, rt)
+		return rt, false
+	}
 	site := b.Site(w)
 	pos := site.RHS
 	if w == scope.DeclWrite && b.Kind == scope.BindingParameter {
@@ -150,6 +155,20 @@ func (r *Resolver) writeValue(varName string, lines []string, file *parser.FileN
 		r.varMemoPut(key, rt)
 	}
 	return rt, false
+}
+
+// caughtType is the value of a catch variable: the class it catches, or the
+// union of them for `catch (A|B $e)`, named as the file's imports and
+// namespace say.
+func (r *Resolver) caughtType(names []string, file *parser.FileNode) ResolvedType {
+	parts := make([]ResolvedType, 0, len(names))
+	for _, name := range names {
+		parts = append(parts, ResolvedType{FQN: r.ResolveClassName(name, file)})
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return MakeUnion(parts, false)
 }
 
 // feedsItself checks the value t of a write that reads the variable it

@@ -61,6 +61,15 @@ func (b *Binding) Site(write int) WriteSite {
 	return WriteSite{At: at, RHS: e.rhs, End: e.end, Statement: e.statement}
 }
 
+// Caught returns the classes a write catches, as written, when it is the
+// variable of `catch (A|B $e)`; nil for any other write.
+func (b *Binding) Caught(write int) []string {
+	if write == DeclWrite {
+		return b.declCaught
+	}
+	return b.Rebinds[write].Caught
+}
+
 // ReadsItself reports whether the value a write assigns reads the binding, as
 // `$x = $x->next()` does.
 func (b *Binding) ReadsItself(write int) bool {
