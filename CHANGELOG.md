@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`instanceof` narrows variables** for hover, completion and diagnostics alike: inside `if ($o instanceof Foo) { … }`, after a guard such as `if (!$o instanceof Foo) { return; }`, after `assert($o instanceof Foo)`, in a `while`, an `elseif`, a `switch (true)` case or a `match (true)` arm, and after `&&`, `||` or `?` in the same expression, `$o` is a `Foo`: `$o->` completes its members and unknown members are checked against it. A `Foo|Bar` tested against `Foo` is `Bar` in the `else` branch, and a class tested against an interface it doesn't implement is both.
 - **Catch variables are typed:** in `catch (NotFound $e)` hover shows `NotFound`, `$e->` completes its methods, and unknown members on it are reported. `catch (A|B $e)` gives `A|B`. When the variable already had a value before the `try`, after the `catch` it may hold either.
 
 ### Fixed

@@ -75,7 +75,7 @@ func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string
 		if i == pos.Line && pos.Character <= len(lines[i]) {
 			line = strings.TrimSpace(lines[i][:pos.Character])
 		}
-		if line == "" || !strings.Contains(line, varName) || !r.callsNarrowing(line) {
+		if line == "" || !strings.Contains(line, varName) || !r.callsNarrowing(line) && !strings.Contains(line, "instanceof") {
 			continue
 		}
 		rel := i - from
@@ -102,6 +102,10 @@ func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string
 			continue
 		}
 		statements++
+		if cond, ok := assertedCondition(stmt); ok {
+			t = r.applyCondition(varName, t, cond, false, lines, protocol.Position{Line: i, Character: 0}, file)
+			continue
+		}
 		t = r.applyStatementCall(varName, t, stmt, lines, protocol.Position{Line: i, Character: 0}, file)
 	}
 
@@ -109,6 +113,10 @@ func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string
 	for _, h := range enclosingIfConditions(lines, from, pos) {
 		t = r.applyCondition(varName, t, h.cond, h.inElse, lines, protocol.Position{Line: h.line}, file)
 	}
+	// A switch (true) case the read is under.
+	t = r.switchCaseInstanceof(varName, t, lines, from, pos, file)
+	// An instanceof test before && or || in the read's own statement.
+	t = r.statementInstanceof(varName, t, statementPrefix(lines, pos), file)
 	return t
 }
 
@@ -122,7 +130,13 @@ func (r *Resolver) mayNarrow(lines []string, from int, pos protocol.Position, va
 		if i == pos.Line && pos.Character <= len(line) {
 			line = line[:pos.Character]
 		}
-		if !strings.Contains(line, varName) || strings.IndexByte(line, '(') < 0 {
+		if !strings.Contains(line, varName) {
+			continue
+		}
+		if strings.Contains(line, "instanceof") {
+			return true
+		}
+		if strings.IndexByte(line, '(') < 0 {
 			continue
 		}
 		if r.callsNarrowing(line) {
@@ -176,7 +190,9 @@ func (r *Resolver) lastWriteLine(varName string, lines []string, pos protocol.Po
 				last = s.Range.Start.Line
 			}
 			for _, w := range b.Writes {
-				if w.Start.Line <= pos.Line && w.Start.Line > last {
+				// A write on the read's own line is the one whose right-hand
+				// side it's in, as `$x = $x->inner()` inside an instanceof test.
+				if w.Start.Line < pos.Line && w.Start.Line > last {
 					last = w.Start.Line
 				}
 			}
@@ -467,11 +483,11 @@ func enclosingIfConditions(lines []string, from int, pos protocol.Position) []if
 				// This brace opens a block pos is in.
 				header := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line[:k]), "}"))
 				switch {
-				case strings.HasPrefix(header, "if") || strings.HasPrefix(header, "elseif") || strings.HasPrefix(header, "else if"):
-					if strings.HasPrefix(header, "if") {
-						if c, ok := conditionOf(header); ok {
-							out = append(out, ifCondition{cond: c, line: i})
-						}
+				case strings.HasPrefix(header, "if") || strings.HasPrefix(header, "elseif") || strings.HasPrefix(header, "else if") || strings.HasPrefix(header, "while"):
+					// An elseif's own condition holds in its block; the ones
+					// before it were false, which isn't read here.
+					if c, ok := conditionOf(header); ok {
+						out = append(out, ifCondition{cond: c, line: i})
 					}
 				case header == "else":
 					if c, l, ok := matchingIfCondition(lines, i, from); ok {
@@ -551,20 +567,42 @@ func guardCondition(lines []string, i int) (string, bool) {
 		return "", false
 	}
 	body := strings.TrimSpace(line[open+1:])
-	for j := i + 1; !strings.Contains(body, "}") && j < len(lines) && j <= i+3; j++ {
+	for j := i + 1; !strings.Contains(body, "}") && j < len(lines) && j <= i+maxGuardLines; j++ {
 		body += " " + strings.TrimSpace(lines[j])
 	}
-	if close := strings.IndexByte(body, '}'); close >= 0 {
-		body = strings.TrimSpace(body[:close])
-	} else {
-		return "", false
+	close := strings.IndexByte(body, '}')
+	if close < 0 || strings.IndexByte(body[:close], '{') >= 0 {
+		return "", false // nested blocks may leave only sometimes
+	}
+	// The block's last statement leaves; what comes before it doesn't matter.
+	stmts := splitTopLevel(strings.TrimSpace(body[:close]), ";")
+	last := ""
+	for k := len(stmts) - 1; k >= 0; k-- {
+		if s := strings.TrimSpace(stmts[k]); s != "" {
+			last = s
+			break
+		}
 	}
 	for _, kw := range []string{"return", "throw", "continue", "break", "exit", "die"} {
-		if strings.HasPrefix(body, kw) && strings.Count(body, ";") <= 1 {
+		if hasLeaveKeyword(last, kw) {
 			return cond, true
 		}
 	}
 	return "", false
+}
+
+// maxGuardLines bounds how far a guard's block is read.
+const maxGuardLines = 12
+
+func hasLeaveKeyword(stmt, kw string) bool {
+	if !strings.HasPrefix(stmt, kw) {
+		return false
+	}
+	if len(stmt) == len(kw) {
+		return true
+	}
+	c := stmt[len(kw)]
+	return c == ' ' || c == '\t' || c == '(' || c == ';'
 }
 
 // applyCondition applies what holds of varName when cond is true, or false
@@ -573,6 +611,14 @@ func (r *Resolver) applyCondition(varName string, t ResolvedType, cond string, n
 	conjuncts := splitTopLevel(cond, "&&")
 	if negate && len(conjuncts) > 1 {
 		return t // !(a && b) says nothing about either alone
+	}
+	if negate {
+		// !(a || b) is !a && !b: each of them was false.
+		if disjuncts := splitTopLevel(cond, "||"); len(disjuncts) > 1 {
+			conjuncts = disjuncts
+		}
+	} else if len(splitTopLevel(cond, "||")) > 1 {
+		return t // a || b says nothing about either alone
 	}
 	for _, c := range conjuncts {
 		c = strings.TrimSpace(c)
@@ -583,6 +629,14 @@ func (r *Resolver) applyCondition(varName string, t ResolvedType, cond string, n
 		}
 		if inner, ok := unwrapParens(c); ok {
 			c = inner
+			for strings.HasPrefix(c, "!") {
+				value = !value
+				c = strings.TrimSpace(c[1:])
+			}
+		}
+		if name, ok := instanceofTest(c, varName); ok {
+			t = r.narrowInstanceof(t, name, value, file)
+			continue
 		}
 		if !strings.Contains(c, varName) || !strings.HasSuffix(c, ")") {
 			continue
