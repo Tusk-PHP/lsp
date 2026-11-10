@@ -279,6 +279,54 @@ function run() {
 	}
 }
 
+func TestStaticPropertyAfterNewIsNotAVariable(t *testing.T) {
+	source := `<?php
+class C {
+    function make($q, $k) {
+        $builder = $q;
+        $a = new static::$builder($builder);
+        $b = new self::$map[$k]();
+        $c = new \Foo\Bar::$builder;
+        $d = new ($this->factory)::$builder();
+        $e = new static::$builder::$builder();
+        $f = new static
+            :: $builder($q);
+        return [$a, $b, $c, $d, $e, $f];
+    }
+}
+`
+	doc := Collect(source)
+
+	builder := doc.BindingAt(protocol.Position{Line: 3, Character: 9})
+	if builder == nil {
+		t.Fatal("expected a binding for the local $builder")
+	}
+	// Its declaration and the constructor argument on line 4, nothing after `::`.
+	if got := doc.Occurrences(builder); len(got) != 2 || got[1].Start != (protocol.Position{Line: 4, Character: 34}) {
+		t.Fatalf("local $builder occurrences = %+v", got)
+	}
+	if got := len(doc.Properties); got != 7 {
+		t.Fatalf("want 7 static properties, got %d: %+v", got, doc.Properties)
+	}
+}
+
+func TestDynamicStaticCallOutsideNewReadsTheVariable(t *testing.T) {
+	source := `<?php
+function run($m) {
+    Foo::$m();
+    return new Foo()::$m();
+}
+`
+	doc := Collect(source)
+	m := doc.BindingAt(protocol.Position{Line: 1, Character: 14})
+	if m == nil {
+		t.Fatal("expected a binding for $m")
+	}
+	if got := len(doc.Occurrences(m)); got != 3 {
+		t.Fatalf("want 3 occurrences of $m, got %d", got)
+	}
+}
+
 func TestCollectVariableAssignments(t *testing.T) {
 	source := `<?php
 function run($name, $flag) {

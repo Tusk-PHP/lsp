@@ -416,6 +416,7 @@ func TestUndefinedVariableNotFlagged(t *testing.T) {
 		"property declarations":     "class C { public $a; protected ?string $b = null, $c; public static $d; function f() { return 1; } }",
 		"anonymous class property":  "function f() { return new class(1) { public $a; private int $b; }; }",
 		"static property":           "class C { function f() { self::$a = 1; return static::$b; } }",
+		"static property after new": "class C { function f($q, $k) { return [new static::$builder($q), new self::$map[$k](), new Foo::$cls, new ($this->factory)::$cls(), new static::$a::$b(), new static\n  ::\n  $c($q)]; } }",
 		"out argument":              "function g(&$o) {} function f() { g($o); return $o; }",
 		"out argument of a method":  "function f($q) { $q->fetch($o); Foo::fetch($p); new Foo($r); return [$o, $p, $r]; }",
 		"out variadic argument":     "function g($a, &...$o) {} function f() { g(1, $o, $p); return [$o, $p]; }",
@@ -440,6 +441,9 @@ func TestUndefinedVariableStillFlagged(t *testing.T) {
 		"array element":                   "function g(&$a) {} function f() { g([$missing]); }",
 		"nested expression":               "function g(&$a) {} function f() { g($missing + 1); }",
 		"dynamic static method":           "class C { function f() { return self::$missing(); } }",
+		"dynamic static method on new":    "class C { function f() { return new Foo()::$missing(); } }",
+		"class name of new":               "function f() { return new $missing(1); }",
+		"class name property of new":      "function f() { return new $missing->cls(); }",
 		"subscript read":                  "function f() { return $missing[0]; }",
 	}
 	for name, body := range cases {
@@ -472,6 +476,13 @@ func TestUnusedVariableNotFlagged(t *testing.T) {
 				t.Errorf("unexpected findings: %+v", findings)
 			}
 		})
+	}
+}
+
+func TestUnusedVariableNotReadByStaticPropertyAfterNew(t *testing.T) {
+	source := "<?php\nclass C { function f() { $builder = 1; return new static::$builder(); } }\n"
+	if findings := checkUnusedVariables(source, nil); len(findings) != 1 {
+		t.Errorf("want $builder reported, got %+v", findings)
 	}
 }
 
