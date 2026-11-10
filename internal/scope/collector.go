@@ -466,6 +466,10 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 	name := ""
 	kind := ScopeClosure
 	nameIdx := nextSignificant(tokens, start+1)
+	// `function &name(…)`, `function &(…)` and `fn &(…)` return by reference.
+	if nameIdx >= 0 && tokens[nameIdx].Kind == parser.TokenAmpersand {
+		nameIdx = nextSignificant(tokens, nameIdx+1)
+	}
 	if nameIdx >= 0 && tokens[nameIdx].Kind == parser.TokenIdentifier {
 		name = tokens[nameIdx].Value
 		kind = ScopeFunction

@@ -411,3 +411,31 @@ function f(A $x, bool $c, array $list) {
 		t.Errorf("before any write: got a rebind at %v", r.At)
 	}
 }
+
+// Functions, methods and closures that return by reference bind their
+// parameters like any other.
+func TestReturnByReferenceBindsParameters(t *testing.T) {
+	src := `<?php
+class C {
+    public function &get($name) { return $name; }
+}
+function &f($a) { return $a; }
+$g = function &($b) use ($c) { return $b; };
+$h = fn &($d) => $d;
+`
+	doc := Collect(src)
+	for _, tc := range []struct {
+		name string
+		kind BindingKind
+	}{{"$name", BindingParameter}, {"$a", BindingParameter}, {"$b", BindingParameter}, {"$c", BindingClosureUse}, {"$d", BindingParameter}} {
+		found := false
+		for _, b := range doc.Bindings {
+			if b.Name == tc.name && b.Kind == tc.kind && b.Scope.Kind != ScopeFile {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s: no %s binding", tc.name, tc.kind)
+		}
+	}
+}
