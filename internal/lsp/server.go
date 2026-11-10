@@ -446,8 +446,8 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		})
 	}
 	s.diag = diagnostics.NewProvider(s.index, s.framework, s.rootPath, s.logger, s.cfg)
-	s.diag.TypeResolver = func(expr, source string, line int, file *parser.FileNode) string {
-		return s.completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line}, file)
+	s.diag.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
+		return s.completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
 	}
 	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(s.index)
 	s.diag.BuiltinUnavailableRule = &checks.BuiltinUnavailableRule{
@@ -984,7 +984,7 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 
 				// Run native checks synchronously for a self-consistent dump.
 				file := parser.ParseFile(source)
-				var typeRes func(string, string, int, *parser.FileNode) string
+				var typeRes diagnostics.TypeResolverFunc
 				var builtinRule *checks.BuiltinUnavailableRule
 				if s.diag != nil {
 					typeRes = s.diag.TypeResolver

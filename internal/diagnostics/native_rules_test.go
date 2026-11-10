@@ -40,7 +40,7 @@ func TestNativeRulesParityWithProvider(t *testing.T) {
 		"invalid-builder-arg": true,
 	}
 
-	tr := func(expr, source string, line int, file *parser.FileNode) string { return "" }
+	tr := func(expr, source string, line, col int, file *parser.FileNode) string { return "" }
 	builtinRule := &checks.BuiltinUnavailableRule{}
 	opts := NativeRulesOptions{
 		TypeResolver:           tr,

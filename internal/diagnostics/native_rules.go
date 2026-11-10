@@ -12,7 +12,7 @@ import (
 type NativeRulesOptions struct {
 	// TypeResolver resolves the type of a PHP expression at a given source line.
 	// Required by UnknownMemberRule and RedundantNullsafeRule; omit both when nil.
-	TypeResolver func(expr string, source string, line int, file *parser.FileNode) string
+	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
 
 	// BuiltinUnavailableRule is the pre-built rule that reports usages of PHP
 	// built-ins not available in the resolved PHP profile. Omitted when nil.

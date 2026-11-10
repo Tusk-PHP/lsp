@@ -6,8 +6,10 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
-// TypeResolverFunc types a PHP expression read at a line of a file.
-type TypeResolverFunc = func(expr string, source string, line int, file *parser.FileNode) string
+// TypeResolverFunc types a PHP expression read at a line of a file. col is
+// the byte column where the expression starts on that line, or 0 when only
+// the line is known.
+type TypeResolverFunc = func(expr string, source string, line, col int, file *parser.FileNode) string
 
 // MemoizeTypeResolver returns a type resolver that remembers its answers for
 // one run of the rules over one version of a file. Several rules ask about
@@ -20,17 +22,17 @@ func MemoizeTypeResolver(resolve TypeResolverFunc) TypeResolverFunc {
 	}
 	memo := make(map[string]string)
 	var memoSource string
-	return func(expr string, source string, line int, file *parser.FileNode) string {
+	return func(expr string, source string, line, col int, file *parser.FileNode) string {
 		if source != memoSource {
 			// Another file (or version): what was learnt doesn't apply.
 			clear(memo)
 			memoSource = source
 		}
-		key := strconv.Itoa(line) + "\x00" + expr
+		key := strconv.Itoa(line) + ":" + strconv.Itoa(col) + "\x00" + expr
 		if t, ok := memo[key]; ok {
 			return t
 		}
-		t := resolve(expr, source, line, file)
+		t := resolve(expr, source, line, col, file)
 		memo[key] = t
 		return t
 	}

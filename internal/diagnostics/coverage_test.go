@@ -27,7 +27,7 @@ func TestAnalyzeOnSaveWithTypeResolver(t *testing.T) {
 	idx := symbols.NewIndex()
 	cfg := config.DefaultConfig()
 	p := NewProvider(idx, "none", "/tmp", nil, cfg)
-	p.TypeResolver = func(expr, source string, line int, file *parser.FileNode) string {
+	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
 		return "SomeClass" // non-nullable
 	}
 

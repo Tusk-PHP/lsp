@@ -91,7 +91,7 @@ class Cases
 	idx.MarkReady()
 	p := NewProvider(idx, "none", "/tmp", nil, config.DefaultConfig())
 	comp := completion.NewProvider(idx, nil, "none")
-	p.TypeResolver = func(expr, source string, line int, file *parser.FileNode) string {
+	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
 		return comp.ResolveExpressionType(expr, source, protocol.Position{Line: line}, file)
 	}
 	var got []string

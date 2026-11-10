@@ -35,7 +35,7 @@ class ftp_base {
 }
 `
 	idx.IndexFile("file:///base.php", src)
-	resolver := func(expr, source string, line int, file *parser.FileNode) string {
+	resolver := func(expr, source string, line, col int, file *parser.FileNode) string {
 		if expr == "$other" || expr == "$this" {
 			return "ftp_base"
 		}
@@ -90,7 +90,7 @@ function f(AbstractDb $db, ItemInterface $item, Concrete $c) {
 }
 `
 	idx.IndexFile("file:///app.php", src)
-	resolver := func(expr, source string, line int, file *parser.FileNode) string {
+	resolver := func(expr, source string, line, col int, file *parser.FileNode) string {
 		switch expr {
 		case "$db":
 			return "Lib\\AbstractDb"

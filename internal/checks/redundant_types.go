@@ -14,7 +14,7 @@ type RedundantNullsafeRule struct {
 	// TypeResolver resolves the type of an expression at a given line.
 	// Returns the type string (e.g., "string", "?Foo", "Foo|null", "mixed").
 	// If nil, the rule is a no-op.
-	TypeResolver func(expr string, source string, line int, file *parser.FileNode) string
+	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
 }
 
 func (r *RedundantNullsafeRule) Code() string { return "redundant-nullsafe" }
@@ -50,7 +50,7 @@ func (r *RedundantNullsafeRule) Check(file *parser.FileNode, source string, _ *s
 			expr = strings.TrimSpace(expr[exprStart:])
 
 			if expr != "" {
-				resolved := r.TypeResolver(expr, source, i, file)
+				resolved := r.TypeResolver(expr, source, i, 0, file)
 				if resolved == "null" {
 					findings = append(findings, Finding{
 						StartLine: i,

@@ -10,7 +10,7 @@ import (
 
 // DeprecatedUsageRule flags uses of what's marked with PHP 8.4's #[\Deprecated].
 type DeprecatedUsageRule struct {
-	TypeResolver func(expr string, source string, line int, file *parser.FileNode) string
+	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
 	// Uses, when set, shares the attribute uses found in a file with the
 	// other rules run over it.
 	Uses *MemberUseCache
@@ -37,7 +37,7 @@ func (r *DeprecatedUsageRule) Check(file *parser.FileNode, source string, index 
 // UnusedResultRule flags calls to what's marked with PHP 8.5's #[\NoDiscard]
 // whose result is thrown away. A `(void)` cast is the way to do that on purpose.
 type UnusedResultRule struct {
-	TypeResolver func(expr string, source string, line int, file *parser.FileNode) string
+	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
 	// Uses, when set, shares the attribute uses found in a file with the
 	// other rules run over it.
 	Uses *MemberUseCache
@@ -152,7 +152,7 @@ type MemberUseCache struct {
 	done   bool
 }
 
-func (c *MemberUseCache) get(file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, *parser.FileNode) string) []memberUse {
+func (c *MemberUseCache) get(file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string) []memberUse {
 	if c == nil {
 		return memberUses(file, source, index, typeResolver, nil)
 	}
@@ -176,7 +176,7 @@ func (u memberUse) finding(code, message string, tags []Tag) Finding {
 	}
 }
 
-func memberUses(file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, *parser.FileNode) string, shared *Shared) []memberUse {
+func memberUses(file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string, shared *Shared) []memberUse {
 	if file == nil || index == nil {
 		return nil
 	}
@@ -227,7 +227,7 @@ func memberUses(file *parser.FileNode, source string, index *symbols.Index, type
 			if ownerExpr == "" {
 				continue
 			}
-			ownerFQN := resolveMemberOwner(ownerExpr, tok.Line, source, file, index, typeResolver)
+			ownerFQN := resolveMemberOwner(ownerExpr, tok.Line, backwardExprStart(line, opStart), source, file, index, typeResolver)
 			if ownerFQN == "" {
 				continue
 			}
@@ -251,13 +251,13 @@ func memberUses(file *parser.FileNode, source string, index *symbols.Index, type
 }
 
 // resolveMemberOwner returns the class-like a member is accessed on.
-func resolveMemberOwner(ownerExpr string, line int, source string, file *parser.FileNode, index *symbols.Index, typeResolver func(string, string, int, *parser.FileNode) string) string {
+func resolveMemberOwner(ownerExpr string, line, col int, source string, file *parser.FileNode, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string) string {
 	if !strings.HasPrefix(ownerExpr, "$") && !strings.HasSuffix(ownerExpr, ")") && !strings.HasSuffix(ownerExpr, "]") {
 		if fqn, ok := resolveClassLikeName(ownerExpr, line, file); ok && isClassLikeSymbol(index.Lookup(fqn)) {
 			return fqn
 		}
 	}
-	if owners := resolvedClassLikes(typeResolver(ownerExpr, source, line, file), file, index); len(owners) > 0 {
+	if owners := resolvedClassLikes(typeResolver(ownerExpr, source, line, col, file), file, index); len(owners) > 0 {
 		return owners[0]
 	}
 	return ""
