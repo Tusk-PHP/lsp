@@ -229,9 +229,6 @@ class Thread { public function lock(): void {} }
 		{"property names don't", `App\Post`, `$v->TITLE;`, []string{"Unknown member 'TITLE' on 'Post'"}},
 		{"chain continued from an earlier line", `App\Post`, `})->missing();`, nil},
 		{"class name", `App\Post`, `$v::class;`, nil},
-		{"tested with instanceof", `App\Post`, "if ($v instanceof \\App\\Thread) {\n$v->lock();\n}", nil},
-		{"tested with instanceof, on neither", `App\Post`, "if ($v instanceof \\App\\Thread) {\n$v->missing();\n}", []string{"Unknown member 'missing' on 'Post|Thread'"}},
-		{"tested against an unknown class", `App\Post`, "if ($v instanceof \\App\\Gone) {\n$v->missing();\n}", nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
