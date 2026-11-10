@@ -60,7 +60,7 @@ Communication uses stdio with `Content-Length` headers. The server reads message
 | `initialized` | Async start: workspace indexing, composer deps, container analysis |
 | `shutdown` / `exit` | Graceful termination (`exit` uses an injectable function for testability) |
 | `textDocument/didOpen` | Store document, index, run diagnostics |
-| `textDocument/didChange` | Update content, re-index, re-run diagnostics |
+| `textDocument/didChange` | Update content, re-index, schedule diagnostics (background, debounced) |
 | `textDocument/didClose` | Drop in-memory document state |
 | `textDocument/didSave` | Re-index, trigger PHPStan/Pint |
 | `textDocument/completion` | Context-aware completions at cursor |
@@ -317,7 +317,7 @@ Standalone PHP static analysis rules with **no LSP dependency** — results are 
 
 Two layers:
 
-1. **Fast checks** (on every change, debounced): runs the `checks/` rule set plus parser recovery errors as `syntax-error`. Results published via `publishDiagnostics`.
+1. **Fast checks** (on every change, debounced by about 200 ms and run in the background, so requests never wait for them; a result for text that has changed since is dropped): runs the `checks/` rule set plus parser recovery errors as `syntax-error`. Results published via `publishDiagnostics`.
 2. **External tools** (on save): PHPStan (JSON output → diagnostics with token-level ranges) and Laravel Pint (diff output → style warnings). Results cached per-file.
 
 PHPStan diagnostic ranges highlight the specific identifier mentioned in the error message, falling back to the trimmed line content.
