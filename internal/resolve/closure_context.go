@@ -364,7 +364,8 @@ func (r *Resolver) InvokeType(rt ResolvedType) ResolvedType {
 		}
 		return ResolvedType{}
 	}
-	if rt.FQN != "" && !IsBuiltinTypeName(rt.FQN) && r.Index != nil {
+	// A Closure without a signature: its stubbed __invoke says only mixed.
+	if rt.FQN != "" && rt.FQN != "Closure" && !IsBuiltinTypeName(rt.FQN) && r.Index != nil {
 		if m := r.FindAccessedMember(rt.FQN, "__invoke", true); m != nil {
 			return r.MemberTypeForCall(m, nil, rt.FQN, rt.Params, nil)
 		}

@@ -336,15 +336,19 @@ func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext
 	if st.op == "[" {
 		return r.OffsetType(cur, st.offset)
 	}
+	fcc := st.call && IsFirstClassCallableArgs(st.args)
 	if st.op == "()" {
+		if fcc {
+			return r.CallableOf(cur)
+		}
 		return r.InvokeType(cur)
 	}
 	if r.Index == nil {
 		return ResolvedType{}
 	}
-	if cur.Callable != nil && st.op == "->" && st.name == "call" {
-		if cur.Callable.Return != nil {
-			return *cur.Callable.Return
+	if st.op == "->" {
+		if rt, ok := ClosureCallType(cur, st.name); ok {
+			return rt
 		}
 	}
 	name := st.name
@@ -358,7 +362,7 @@ func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext
 	if member != nil && owner.FQN != cur.FQN {
 		// Through @mixin: a fluent method of the mixin gives back the object
 		// it was called on, as forwarding through __call does.
-		if r.ReturnsCallingClass(member) {
+		if !fcc && r.ReturnsCallingClass(member) {
 			return cur
 		}
 		cur = owner
@@ -371,6 +375,9 @@ func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext
 			}
 		}
 		return ResolvedType{}
+	}
+	if fcc {
+		return r.MemberCallableType(member, ctx.File, r.ReceiverFor(cur, member), cur.Params)
 	}
 	var call *CallSite
 	if st.call {
@@ -441,6 +448,10 @@ func (r *Resolver) FunctionCallType(name, args string, ctx ExprContext) Resolved
 		return ResolvedType{}
 	}
 	fn := r.lookupFunction(name, ctx.File)
+	if IsFirstClassCallableArgs(args) {
+		// strlen(...) is a Closure of strlen, known or not.
+		return r.FunctionCallableType(fn, ctx.File)
+	}
 	if fn == nil {
 		return ResolvedType{}
 	}

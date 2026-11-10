@@ -478,6 +478,60 @@ class Router {
 	public function group(\Closure $routes): void {}
 }
 function run(Router $r): void { $r->group(function () { $this-><|> }); }`},
+	{name: "callables/first-class callable syntax makes a Closure", completion: []string{"bindTo", "call"}, src: `
+/** @template T */
+class Box {
+	/** @param T $value */
+	public function __construct($value) {}
+	/** @return T */
+	public function get() { return null; }
+}
+function run(): void {
+	$b = new Box(new Person());
+	$f = $b->get(...);
+	$f-><|>
+}`},
+	{name: "callables/first-class callable syntax keeps the signature", hover: []string{"Closure(): Person $f"}, src: `
+/** @template T */
+class Box {
+	/** @param T $value */
+	public function __construct($value) {}
+	/** @return T */
+	public function get() { return null; }
+}
+function run(): void { $b = new Box(new Person()); $f = $b->get(...); echo $<|>f; }`},
+	{name: "callables/calling a first-class callable gives what the callee returns", completion: []string{"name"}, src: `
+/** @template T */
+class Box {
+	/** @param T $value */
+	public function __construct($value) {}
+	/** @return T */
+	public function get() { return null; }
+}
+function run(): void { $b = new Box(new Person()); $f = $b->get(...); $r = $f(); $r-><|> }`},
+	{name: "callables/Closure::call on a first-class callable", completion: []string{"name"}, src: `
+class Maker { public function make(int $n): Person { return new Person(); } }
+function run(Maker $m, Logger $l): void { $m->make(...)->call($l)-><|> }`},
+	{name: "callables/a function's first-class callable", hover: []string{"Closure(string): int $len"}, src: `
+function run(): void { $len = strlen(...); echo $<|>len; }`},
+	{name: "callables/Closure members on a first-class callable aren't unknown", noDiag: []string{"unknown-member"}, src: `
+class Maker {
+	public function make(int $n): Person { return new Person(); }
+	public static function build(): Person { return new Person(); }
+	public function run(): void {
+		$a = $this->make(...);
+		$a->bindTo(null);
+		$b = static::build(...);
+		$b->bindTo(null);
+		$c = Maker::build(...);
+		$c->bindTo(null);
+		$d = strlen(...);
+		$d->bindTo(null);
+	}
+}`},
+	{name: "callables/a spread argument is still a call", completion: []string{"name"}, src: `
+class Maker { public function make(int ...$n): Person { return new Person(); } }
+function run(Maker $m, array $args): void { $m->make(...$args)-><|> }`},
 }
 
 func TestGenericsCallables(t *testing.T) {

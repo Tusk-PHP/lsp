@@ -920,6 +920,11 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 			}
 		}
 
+		// $var = $fn(…): what calling it gives; $fn(...) is a Closure of it.
+		if rt, ok := r.invokedVariableType(rhs, varName, exprCtx); ok {
+			return rt
+		}
+
 		// $var = funcName(...): the function's return type, with its templates
 		// bound from the arguments.
 		if funcName := extractFunctionCallName(rhs); funcName != "" && r.Index != nil {
@@ -1123,6 +1128,9 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 		}
 		// $var = funcName(...) — look up function return type in symbol index
 		if funcName := extractFunctionCallName(rhs); funcName != "" && r.Index != nil {
+			if IsFirstClassCallable(rhs) {
+				return "Closure" // strlen(...) makes a Closure, it doesn't call
+			}
 			for _, sym := range r.Index.LookupByName(funcName) {
 				if sym.Kind == symbols.KindFunction && sym.ReturnType != "" {
 					return sym.ReturnType

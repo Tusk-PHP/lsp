@@ -705,7 +705,10 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 	if strings.HasPrefix(target, "$") {
 		rt := p.resolver.ResolveVariableTypeTyped(target, p.resolver.Lines(source), pos, file)
 		if parenEnd > 0 && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "->") && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
-			// $fn(…): what calling it gives.
+			// $fn(…): what calling it gives; $fn(...) is a Closure of it.
+			if resolve.IsFirstClassCallableArgs(callArgStr) {
+				return p.resolver.CallableOf(rt)
+			}
 			return p.resolver.InvokeType(rt)
 		}
 		return rt
@@ -740,15 +743,22 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 		return resolve.ResolvedType{}
 	}
 
+	if parenEnd > 0 && strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "->") {
+		// $closure->call($newThis): what the closure returns.
+		if rt, ok := resolve.ClosureCallType(ownerResolved, target); ok {
+			return rt
+		}
+	}
 	ownerFQN := ownerResolved.BaseFQN()
 	if strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
 		ownerResolved = resolve.ClassStringTarget(ownerResolved) // $class::create()
 	}
 	member, foundOn := p.resolver.FindMemberOn(ownerResolved, target, parenEnd > 0)
+	firstClass := parenEnd > 0 && resolve.IsFirstClassCallableArgs(callArgStr)
 	if member != nil && foundOn.FQN != ownerResolved.FQN {
 		// A member a @mixin brings in. A fluent one gives back the object it
 		// was called on, as forwarding through __call does.
-		if p.resolver.ReturnsCallingClass(member) {
+		if !firstClass && p.resolver.ReturnsCallingClass(member) {
 			return ownerResolved
 		}
 		ownerResolved = foundOn
@@ -780,6 +790,10 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 		if enclosing := p.resolveAccessChain("static->__dummy__", len("static->"), source, pos, file); enclosing != "" {
 			callerFQN = enclosing
 		}
+	}
+	if firstClass {
+		// $obj->m(...) makes a Closure of m instead of calling it.
+		return p.resolver.MemberCallableType(member, file, callerFQN, ownerContext)
 	}
 	var call *resolve.CallSite
 	if parenEnd > 0 {
@@ -880,6 +894,9 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 			if newClass := extractNewClass(callExpr); newClass != "" {
 				return p.resolveClassNameFromSource(newClass, source, file)
 			}
+		}
+		if line[i] == '(' && resolve.IsFirstClassCallableArgs(line[i+1:parenEnd-1]) {
+			return "Closure" // f(...), $obj->m(...): a Closure, not a call
 		}
 
 		// Skip whitespace before paren
