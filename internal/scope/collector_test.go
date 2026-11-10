@@ -381,8 +381,8 @@ function f(A $x, bool $c, array $list) {
 	if x == nil {
 		t.Fatal("parameter $x not found")
 	}
-	if len(x.Rebinds) != 4 {
-		t.Fatalf("got %d rebinds, want 4 (??= keeps the value)", len(x.Rebinds))
+	if len(x.Rebinds) != 5 || !x.Rebinds[4].Conditional {
+		t.Fatalf("got %d rebinds, want 5, the ??= one conditional (it may keep the value)", len(x.Rebinds))
 	}
 	at := func(line, char int) protocol.Position { return protocol.Position{Line: line, Character: char} }
 	tests := []struct {

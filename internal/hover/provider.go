@@ -438,7 +438,7 @@ func (p *Provider) hoverVariable(lines []string, pos protocol.Position, file *pa
 	// Try typed resolution first (preserves generics: array<int, Category>)
 	resolvedType := p.resolver.ResolveVariableTypeTyped(varName, lines, pos, file)
 	typeName := resolvedType.BaseFQN()
-	typeDisplay := resolvedType.String()
+	typeDisplay := resolvedType.FullString()
 	if typeDisplay == "" {
 		// Fall back to non-typed resolution
 		typeName = p.resolver.ResolveVariableType(varName, lines, pos, file)

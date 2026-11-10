@@ -79,7 +79,7 @@ class Cases
         }
     }
 
-    // ??= keeps the value it has, so the declared type still applies.
+    // ??= may keep the value it has, so the declared type still applies.
     public function coalesce(?\DateInterval $d)
     {
         $d ??= Interval::instance(new \DateInterval('P1D'));
@@ -101,9 +101,10 @@ class Cases
 		}
 	}
 	sort.Strings(got)
-	// Before the new value, the declared type still applies.
+	// Before the new value, the declared type still applies; after ??=, it
+	// is one of the types.
 	want := []string{
-		"Unknown member 'missing' on 'DateInterval'",
+		"Unknown member 'missing' on 'DateInterval|Interval'",
 		"Unknown member 'totalMicroseconds' on 'DateInterval'",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {

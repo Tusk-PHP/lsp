@@ -12,11 +12,13 @@ import (
 // file and the index stay as they are.
 
 // varMemoKey identifies a variable's value: its binding, the write that gave
-// the value, and whether that write certainly holds where it's read.
+// the value, whether that write certainly holds where it's read, and whether
+// the read is on the write itself, whose value is read from its line alone.
 type varMemoKey struct {
 	binding *scope.Binding
 	rebind  int // index into binding.Rebinds, or -1 for its declaration
 	holds   bool
+	onWrite bool
 }
 
 // maxMemoDistance keeps the cache from changing answers: variable lookups
@@ -26,35 +28,21 @@ const maxMemoDistance = 190
 
 // varMemoKeyAt returns the key for varName read at pos, or false when its
 // type might depend on more than its last write: no binding (a global or a
-// captured variable), a read far from the write, or a call in between that
-// may narrow it.
-func (r *Resolver) varMemoKeyAt(varName string, lines []string, pos protocol.Position) (varMemoKey, bool) {
-	doc := r.scopeDocument(lines)
-	s := doc.ScopeAt(pos)
-	if s == nil || s.Kind == scope.ScopeFile {
+// captured variable), several writes that may give its value, a read far from
+// the write, or a call in between that may narrow it.
+func (r *Resolver) varMemoKeyAt(vs variableScope, varName string, lines []string, pos protocol.Position) (varMemoKey, bool) {
+	b := vs.binding
+	if b == nil || b.Kind == scope.BindingImport || !vs.reach.Single() {
 		return varMemoKey{}, false
 	}
-	var b *scope.Binding
-	for _, cand := range s.Bindings {
-		if cand.Name == varName {
-			b = cand
-			break
-		}
-	}
-	if b == nil || b.Kind == scope.BindingImport {
-		return varMemoKey{}, false
-	}
-	key := varMemoKey{binding: b, rebind: -1, holds: true}
+	key := varMemoKey{binding: b, rebind: -1, holds: true, onWrite: vs.reach.OnWrite}
 	writeLine := b.Decl.Start.Line
 	if b.Kind == scope.BindingParameter {
-		writeLine = s.Range.Start.Line
+		writeLine = b.Scope.Range.Start.Line
 	}
-	if rb := b.LatestRebindBefore(pos); rb != nil {
-		for i := range b.Rebinds {
-			if &b.Rebinds[i] == rb {
-				key.rebind = i
-			}
-		}
+	if i := vs.reach.Latest; i >= 0 {
+		rb := &b.Rebinds[i]
+		key.rebind = i
 		key.holds = rb.HoldsAt(pos)
 		writeLine = rb.At.Line
 	}

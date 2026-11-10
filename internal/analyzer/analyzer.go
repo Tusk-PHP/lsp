@@ -447,8 +447,11 @@ func (a *Analyzer) definitionForVariable(varName string, source string, pos prot
 	if typeName == "" {
 		return nil
 	}
-	if sym := a.index.Lookup(typeName); sym != nil {
-		return symbolLocation(sym)
+	// A variable that may hold several values goes to the first class of them.
+	for _, name := range strings.Split(typeName, "|") {
+		if sym := a.index.Lookup(name); sym != nil {
+			return symbolLocation(sym)
+		}
 	}
 	return nil
 }
