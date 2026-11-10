@@ -25,6 +25,8 @@ class DateTimeZone
 
 class DateInterval
 {
+    public bool $from_string;
+
     public function __serialize(): array {}
 
     public function __unserialize(array $data): void {}
