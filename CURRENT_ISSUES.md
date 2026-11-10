@@ -25,6 +25,11 @@ _None open._
 
 ## Low / performance
 
+### L61 — Placeholder classes shadow the real ones when a variable is narrowed to them
+- **Where:** the symbol index (`internal/symbols`), seen through `instanceof` narrowing in `internal/resolve/instanceof.go`.
+- **What:** Symfony's `Bridge/PhpUnit/SymfonyTestsListener.php` declares an empty `SymfonyTestsListener` inside `if (false)` next to a `class_alias()` to the real class, and its tests ship `stubs/mongodb.php` with bare `MongoDB\Collection`, `Database` and `Client` classes. The index takes those as the classes, so `if ($l instanceof SymfonyTestsListener) { $l->globalListenerDisabled(); }` (`Legacy/CommandForV8.php`, `CommandForV9.php`) and `$mongo->withOptions()` and `->getCollection()` on `MongoDB\Collection`, `Database` and `Client` in `Cache/Traits/MongoDbTrait.php` are reported as unknown members. Before `instanceof` narrowing these variables had no known type, so nothing was reported. A parameter declared with those classes is reported the same way.
+- **Fix:** Index a class declared under `if (false)` as a placeholder that loses to the `class_alias()` target, and leave test stub folders (`Tests/**/stubs`) out of the index or below vendor code.
+
 ### L60 — Hover and go-to-definition find nothing on a member of a called closure's result
 - **Where:** member hover in `internal/hover/provider.go`, member definition in `internal/analyzer/analyzer.go` (their fallback chain walkers, see L49).
 - **What:** With `$g = fn (int $i): Foo => new Foo();`, `$x = $g(1);` types `$x` as `Foo`, but hover and go-to-definition on `fooOnly` in `$g(1)->fooOnly()` find nothing, and `$g(1)->nope()` isn't reported as an unknown member on `Foo`. The same on 0.13.0.
