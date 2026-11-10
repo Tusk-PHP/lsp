@@ -1871,7 +1871,11 @@ func (p *structParser) parseParams() []ParamDef {
 		if p.peek().Kind == TokenOpenBrace && param.IsPromoted {
 			param.Hooks = p.parsePropertyHooks()
 		}
-		params = append(params, param)
+		// A comment in the list, as in `f(/* bool $raw = false */)`, isn't a
+		// parameter: only what has a name is.
+		if param.Name != "" {
+			params = append(params, param)
+		}
 		if p.peek().Kind == TokenComma {
 			p.advance()
 		}
