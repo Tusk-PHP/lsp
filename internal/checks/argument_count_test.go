@@ -324,3 +324,48 @@ $mailer->send(to: 'a', subject: 'b');
 		t.Errorf("first finding at %d:%d, want 2:9", got[0].StartLine, got[0].StartCol)
 	}
 }
+
+// Code that checks a version first is written for several versions of PHP or a
+// library, whose signatures differ. Laravel calls PHPUnit's ErrorHandler
+// enable() with or without an argument depending on PHPUnit's version.
+func TestArgumentCountSkipsVersionGatedBranches(t *testing.T) {
+	idx := indexWithFunctions(`<?php
+namespace App;
+class Handler { public function enable(string $test): void {} }
+class Kernel { const VERSION_ID = 70000; }
+function pair($a, $b) {}
+`)
+	types := map[string]string{"$instance": `App\Handler`}
+	rule := &ArgumentCountRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string { return types[expr] }}
+	source := `<?php
+namespace App;
+if (version_compare(Version::id(), '12.3.4', '>=')) {
+    $instance->enable($test);
+} else {
+    $instance->enable();
+}
+if ($legacy) {
+    pair(1);
+} elseif (\PHP_VERSION_ID < 80100) {
+    pair(1);
+} else if ($other) {
+    pair(1);
+}
+if (Kernel::VERSION_ID >= 70000) pair(1);
+if (PHP_VERSION >= '8.0'):
+    pair(1);
+endif;
+$instance->enable();
+if ($unrelated) {
+    pair(1);
+}
+`
+	got := rule.Check(parser.ParseFile(source), source, idx)
+	var lines []int
+	for _, f := range got {
+		lines = append(lines, f.StartLine)
+	}
+	if len(lines) != 2 || lines[0] != 18 || lines[1] != 20 {
+		t.Errorf("findings on lines %v, want [18 20] (only outside the version checks)", lines)
+	}
+}
