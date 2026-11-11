@@ -45,6 +45,16 @@ func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.In
 	var lines []string
 	var scopes *scope.Document
 	tokens := result.Tokens
+	// Calls behind a version check are left alone; the spans are worked out
+	// only once a call would be reported.
+	var gatedSpans []tokenSpan
+	gatedDone := false
+	versionGated := func(i int) bool {
+		if !gatedDone {
+			gatedSpans, gatedDone = versionGatedSpans(tokens), true
+		}
+		return inTokenSpans(gatedSpans, i)
+	}
 	for i := 0; i < len(tokens); i++ {
 		tok := tokens[i]
 		// We're looking for plain function call: IDENTIFIER (  or  IDENTIFIER::IDENTIFIER (
@@ -98,7 +108,7 @@ func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.In
 				continue
 			}
 			// As for -> calls, too many arguments to a method is left alone.
-			if f := buildArgCountFinding(sym, argCount, tok.Line, tok.Column, methodTok.Value); f != nil && argCount < len(sym.Params) {
+			if f := buildArgCountFinding(sym, argCount, tok.Line, tok.Column, methodTok.Value); f != nil && argCount < len(sym.Params) && !versionGated(i) {
 				findings = append(findings, *f)
 			}
 			i = closeIdx
@@ -145,7 +155,7 @@ func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.In
 			}
 			// Too many arguments to a method is left alone: PHP allows it, and
 			// libraries read extra ones with func_get_args() to stay compatible.
-			if f := buildArgCountFinding(sym, argCount, tok.Line, tok.Column, name); f != nil && argCount < len(sym.Params) {
+			if f := buildArgCountFinding(sym, argCount, tok.Line, tok.Column, name); f != nil && argCount < len(sym.Params) && !versionGated(i) {
 				findings = append(findings, *f)
 			}
 			continue
@@ -183,7 +193,7 @@ func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.In
 		if !safe {
 			continue
 		}
-		if f := buildArgCountFinding(sym, argCount, tok.Line, tok.Column, name); f != nil {
+		if f := buildArgCountFinding(sym, argCount, tok.Line, tok.Column, name); f != nil && !versionGated(i) {
 			findings = append(findings, *f)
 		}
 		i = closeIdx
