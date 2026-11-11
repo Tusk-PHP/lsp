@@ -1,4 +1,4 @@
-.PHONY: build install test clean dev cross-build wasm conformance conformance-pr bench bench-install bench-self
+.PHONY: build install test clean dev cross-build wasm conformance conformance-pr bench bench-install bench-self field-run
 
 VERSION ?= 0.13.0
 BINARY  := tusk-php
@@ -41,3 +41,8 @@ bench: build
 
 bench-self: build
 	go run ./bench/lspbench -servers tusk-php
+
+# Diagnostics over a real project, as the server reports them:
+#   make field-run ROOT=../framework PATHS='src/Illuminate' BASELINE=laravel.baseline
+field-run: build
+	./build/$(BINARY) check --root $(ROOT) $(if $(BASELINE),--baseline $(BASELINE)) $(PATHS)

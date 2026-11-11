@@ -38,6 +38,7 @@ make conformance      # full corpus
 make bench-install    # once: install the other servers for comparison
 make bench-self       # benchmark this server only
 make bench            # benchmark against the other servers
+make field-run ROOT=../framework PATHS=src   # diagnostics over a real project, as the server reports them
 
 go test -v -race -run TestHoverMethodChain ./internal/hover/   # one test
 php scripts/generate-builtins.php registry --output=internal/symbols/builtin_registry_generated.go
@@ -213,7 +214,9 @@ cross-file answer on a 9,700-file Laravel app. Every change must keep it.
   every rule that depends on them.
 - Real codebases beat fixtures: before shipping a diagnostic change, run it over a
   real project (a Laravel or Symfony app, WordPress, Magento 2) and look at what it
-  reports, not only at the tests.
+  reports, not only at the tests. `tusk-php check` (or `make field-run`) reports
+  what the server would: run it before and after, or keep a `--write-baseline`
+  from `main` and check against it with `--baseline`.
 - The parser must stay fault-tolerant: bail-out conditions, progress guards,
   partial results on panic. Message handlers and goroutines recover panics
   (`recoverPanic`, `goSafe`); `-strict` / `TUSK_STRICT` re-panics in development.
