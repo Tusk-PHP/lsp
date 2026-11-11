@@ -50,6 +50,13 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "check" {
+		code, err := runCheck(os.Args[2:], os.Stdout, os.Stderr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
+		os.Exit(code)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
 		runMCP(os.Args[2:])
 		return

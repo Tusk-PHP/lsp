@@ -42,6 +42,7 @@
 | **Zed** | *Coming soon to Zed's extension registry.* Until then, install [Tusk-PHP/zed](https://github.com/Tusk-PHP/zed) as a dev extension. |
 | **Neovim and others** | Download a binary from [Releases](https://github.com/Tusk-PHP/lsp/releases/latest) (Linux, macOS, Windows · amd64/arm64) and run `tusk-php --transport stdio`. |
 | **AI agents** | `claude mcp add tusk-php -- tusk-php mcp --root "$(pwd)"`. [More agents](docs/ai-agents.md). |
+| **CI and the terminal** | `tusk-php check` reports the same diagnostics as your editor, with a baseline so CI fails only on new ones. [Command line](docs/command-line.md). |
 
 Setup for each editor is in [docs/editors.md](docs/editors.md), and every setting is in [docs/configuration.md](docs/configuration.md).
 
