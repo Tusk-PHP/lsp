@@ -1,4 +1,4 @@
-.PHONY: build install test clean dev cross-build wasm conformance conformance-pr bench bench-install bench-self field-run
+.PHONY: build install test clean dev cross-build wasm conformance conformance-pr bench bench-install bench-self field-run field-baseline field-baseline-update
 
 VERSION ?= 0.13.0
 BINARY  := tusk-php
@@ -46,3 +46,11 @@ bench-self: build
 #   make field-run ROOT=../framework PATHS='src/Illuminate' BASELINE=laravel.baseline
 field-run: build
 	./build/$(BINARY) check --root $(ROOT) $(if $(BASELINE),--baseline $(BASELINE)) $(PATHS)
+
+# Diagnostics over Laravel, Symfony, WordPress and Magento 2 at pinned commits,
+# compared with testdata/field/*.baseline. NAME=laravel checks one.
+field-baseline: build
+	bash scripts/field-baseline.sh $(NAME)
+
+field-baseline-update: build
+	bash scripts/field-baseline.sh --update $(NAME)

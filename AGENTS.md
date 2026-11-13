@@ -39,6 +39,8 @@ make bench-install    # once: install the other servers for comparison
 make bench-self       # benchmark this server only
 make bench            # benchmark against the other servers
 make field-run ROOT=../framework PATHS=src   # diagnostics over a real project, as the server reports them
+make field-baseline   # Laravel, Symfony, WordPress, Magento 2 against testdata/field/*.baseline (NAME=laravel for one)
+make field-baseline-update   # rewrite those baselines after an intended change
 
 go test -v -race -run TestHoverMethodChain ./internal/hover/   # one test
 php scripts/generate-builtins.php registry --output=internal/symbols/builtin_registry_generated.go
@@ -216,7 +218,10 @@ cross-file answer on a 9,700-file Laravel app. Every change must keep it.
   real project (a Laravel or Symfony app, WordPress, Magento 2) and look at what it
   reports, not only at the tests. `tusk-php check` (or `make field-run`) reports
   what the server would: run it before and after, or keep a `--write-baseline`
-  from `main` and check against it with `--baseline`.
+  from `main` and check against it with `--baseline`. CI holds Laravel,
+  Symfony, WordPress and Magento 2 at pinned commits to the baselines in
+  `testdata/field/`: when a change adds or removes findings there, look at
+  each one, then run `make field-baseline-update` and commit the result.
 - The parser must stay fault-tolerant: bail-out conditions, progress guards,
   partial results on panic. Message handlers and goroutines recover panics
   (`recoverPanic`, `goSafe`); `-strict` / `TUSK_STRICT` re-panics in development.
@@ -224,7 +229,8 @@ cross-file answer on a 9,700-file Laravel app. Every change must keep it.
 ## Before opening a pull request
 
 1. `make test` passes (with `-race`).
-2. `make conformance-pr` passes for changes to the parser, index or providers.
+2. `make conformance-pr` passes for changes to the parser, index or providers,
+   and `make field-baseline` for changes to diagnostics or typing.
 3. `make wasm` still builds.
 4. New behaviour has a test that fails without it. Tests use the mock project in
    `testdata/project/`; corpus tests fetch real projects with
