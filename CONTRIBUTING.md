@@ -179,7 +179,7 @@ Open an issue with the **feature request** label. Describe the use case and expe
 
 ## Release Process
 
-Releases are automated via GitHub Actions. Pushing a semver tag (e.g., `v0.13.0`) triggers:
+Releases are automated via GitHub Actions. Pushing a semver tag (e.g., `v0.14.0`) triggers:
 
 1. Full test suite
 2. Cross-platform binary builds

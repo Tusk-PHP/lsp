@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-13
+
 ### Added
 
 - **`tusk-php check`** reports the diagnostics your editor shows from the command line, for a whole project or the files, directories and globs you name, as text or JSON, and exits with `1` on errors or warnings. `--exclude` leaves out paths such as test directories, and `--write-baseline` and `--baseline` let CI fail only on new findings. See [docs/command-line.md](docs/command-line.md).
