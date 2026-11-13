@@ -1,0 +1,298 @@
+src/wp-admin/includes/ajax-actions.php	unused-variable	Variable $errors is assigned but never read
+src/wp-admin/includes/class-ftp-pure.php	unused-variable	Variable $out is assigned but never read
+src/wp-admin/includes/class-ftp-sockets.php	unknown-member	Unknown member 'stream' on 'ftp_sockets'
+src/wp-admin/includes/class-ftp-sockets.php	unused-variable	Variable $NewLine is assigned but never read
+src/wp-admin/includes/class-ftp-sockets.php	unused-variable	Variable $NewLine is assigned but never read
+src/wp-admin/includes/class-ftp-sockets.php	unused-variable	Variable $out is assigned but never read
+src/wp-admin/includes/class-ftp-sockets.php	unused-variable	Variable $res is assigned but never read
+src/wp-admin/includes/class-ftp.php	unknown-member	Unknown member 'my_regexp' on 'ftp_base'
+src/wp-admin/includes/class-ftp.php	unknown-member	Unknown member 'verbose' on 'ftp_base'
+src/wp-admin/includes/class-pclzip.php	unknown-function	Unknown function 'PclError'
+src/wp-admin/includes/class-pclzip.php	unknown-function	Unknown function 'PclErrorCode'
+src/wp-admin/includes/class-pclzip.php	unknown-function	Unknown function 'PclErrorReset'
+src/wp-admin/includes/class-pclzip.php	unknown-function	Unknown function 'PclErrorString'
+src/wp-admin/includes/class-pclzip.php	unused-variable	Variable $g_pclzip_version is assigned but never read
+src/wp-admin/includes/class-pclzip.php	unused-variable	Variable $p_remove_path_size is assigned but never read
+src/wp-admin/includes/class-pclzip.php	unused-variable	Variable $v_add_path is assigned but never read
+src/wp-admin/includes/class-pclzip.php	unused-variable	Variable $v_list_detail is assigned but never read
+src/wp-admin/includes/class-pclzip.php	unused-variable	Variable $v_list_detail is assigned but never read
+src/wp-admin/includes/class-pclzip.php	unused-variable	Variable $v_list_detail is assigned but never read
+src/wp-admin/includes/class-pclzip.php	unused-variable	Variable $v_result is assigned but never read
+src/wp-admin/includes/class-pclzip.php	unused-variable	Variable $v_result is assigned but never read
+src/wp-admin/includes/class-theme-upgrader.php	unknown-member	Unknown member 'display' on 'WP_Upgrader'
+src/wp-admin/includes/class-theme-upgrader.php	unknown-member	Unknown member 'display' on 'WP_Upgrader'
+src/wp-admin/includes/class-theme-upgrader.php	unknown-member	Unknown member 'errors' on 'WP_Upgrader'
+src/wp-admin/includes/class-wp-internal-pointers.php	unused-private-method	Private method 'WP_Internal_Pointers::print_js' is never used
+src/wp-admin/includes/class-wp-list-table.php	unused-variable	Variable $abbr is assigned but never read
+src/wp-admin/includes/class-wp-list-table.php	unused-variable	Variable $desc_first is assigned but never read
+src/wp-admin/includes/class-wp-site-health.php	unused-variable	Variable $errors is assigned but never read
+src/wp-admin/includes/edit-tag-messages.php	undefined-variable	Undefined variable $taxonomy
+src/wp-admin/includes/edit-tag-messages.php	undefined-variable	Undefined variable $taxonomy
+src/wp-admin/includes/edit-tag-messages.php	undefined-variable	Undefined variable $taxonomy
+src/wp-admin/includes/edit-tag-messages.php	unused-variable	Variable $message is assigned but never read
+src/wp-admin/includes/file.php	unused-variable	Variable $wp_file_descriptions is assigned but never read
+src/wp-admin/includes/media.php	undefined-variable	Undefined variable $num_posts
+src/wp-admin/includes/template.php	unused-variable	Variable $widget_title is assigned but never read
+src/wp-admin/includes/theme-install.php	unused-variable	Variable $theme_field_defaults is assigned but never read
+src/wp-admin/includes/theme-install.php	unused-variable	Variable $themes_allowedtags is assigned but never read
+src/wp-admin/options-head.php	unused-variable	Variable $action is assigned but never read
+src/wp-admin/press-this.php	unknown-class	Unknown class 'WP_Press_This_Plugin'
+src/wp-content/themes/twentyeleven/functions.php	unused-variable	Variable $content_width is assigned but never read
+src/wp-content/themes/twentyeleven/header.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyeleven/header.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyeleven/header.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyeleven/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyeleven/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyeleven/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyeleven/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyeleven/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyeleven/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyeleven/showcase.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyfifteen/inc/back-compat.php	argument-count-mismatch	Too many arguments to switch_theme(): 2 passed, at most 1 expected
+src/wp-content/themes/twentyfourteen/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyfourteen/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyfourteen/inc/back-compat.php	argument-count-mismatch	Too many arguments to switch_theme(): 2 passed, at most 1 expected
+src/wp-content/themes/twentyseventeen/template-parts/page/content-front-page-panels.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyseventeen/template-parts/page/content-front-page.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentysixteen/inc/back-compat.php	argument-count-mismatch	Too many arguments to switch_theme(): 2 passed, at most 1 expected
+src/wp-content/themes/twentyten/functions.php	unused-variable	Variable $content_width is assigned but never read
+src/wp-content/themes/twentyten/header.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyten/header.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyten/header.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyten/loop-attachment.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyten/loop-attachment.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyten/loop-attachment.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyten/loop-attachment.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyten/loop-attachment.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyten/loop-attachment.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyten/loop.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyten/loop.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentyten/loop.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentythirteen/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentythirteen/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentythirteen/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentythirteen/inc/back-compat.php	argument-count-mismatch	Too many arguments to switch_theme(): 2 passed, at most 1 expected
+src/wp-content/themes/twentytwelve/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentytwelve/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentytwelve/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentytwelve/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentytwelve/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentytwelve/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentytwenty/comments.php	undefined-variable	Undefined variable $comments
+src/wp-content/themes/twentytwenty/comments.php	undefined-variable	Undefined variable $comments
+src/wp-content/themes/twentytwenty/comments.php	undefined-variable	Undefined variable $comments
+src/wp-content/themes/twentytwenty/searchform.php	undefined-variable	Undefined variable $args
+src/wp-content/themes/twentytwenty/searchform.php	undefined-variable	Undefined variable $args
+src/wp-content/themes/twentytwentyone/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentytwentyone/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentytwentyone/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentytwentyone/image.php	undefined-variable	Undefined variable $post
+src/wp-content/themes/twentytwentyone/searchform.php	undefined-variable	Undefined variable $args
+src/wp-includes/ID3/getid3.lib.php	unused-variable	Variable $keylength is assigned but never read
+src/wp-includes/ID3/getid3.php	unused-variable	Variable $PlaytimeSeconds is assigned but never read
+src/wp-includes/ID3/module.audio-video.flv.php	unused-variable	Variable $AVCProfileIndication is assigned but never read
+src/wp-includes/ID3/module.audio-video.flv.php	unused-variable	Variable $FLVdataLength is assigned but never read
+src/wp-includes/ID3/module.audio-video.flv.php	unused-variable	Variable $PreviousTagLength is assigned but never read
+src/wp-includes/ID3/module.audio-video.flv.php	unused-variable	Variable $className is assigned but never read
+src/wp-includes/ID3/module.audio-video.flv.php	unused-variable	Variable $configurationVersion is assigned but never read
+src/wp-includes/ID3/module.audio-video.flv.php	unused-variable	Variable $highestIndex is assigned but never read
+src/wp-includes/ID3/module.audio-video.flv.php	unused-variable	Variable $lengthSizeMinusOne is assigned but never read
+src/wp-includes/ID3/module.audio-video.flv.php	unused-variable	Variable $level_idc is assigned but never read
+src/wp-includes/ID3/module.audio-video.flv.php	unused-variable	Variable $profile_compatibility is assigned but never read
+src/wp-includes/ID3/module.audio-video.flv.php	unused-variable	Variable $timezone is assigned but never read
+src/wp-includes/ID3/module.audio-video.quicktime.php	unknown-class	Unknown class 'getid3_tag_nikon_nctg'
+src/wp-includes/ID3/module.audio-video.quicktime.php	unused-variable	Variable $GOPRO_offset is assigned but never read
+src/wp-includes/ID3/module.audio-video.quicktime.php	unused-variable	Variable $chpl_flags is assigned but never read
+src/wp-includes/ID3/module.audio-video.quicktime.php	unused-variable	Variable $chpl_version is assigned but never read
+src/wp-includes/ID3/module.audio-video.riff.php	unknown-class	Unknown class 'getid3_mpeg'
+src/wp-includes/ID3/module.audio-video.riff.php	unused-variable	Variable $AudioChunkStreamNum is assigned but never read
+src/wp-includes/ID3/module.audio-video.riff.php	unused-variable	Variable $SNDM_thisTagDataFlags is assigned but never read
+src/wp-includes/ID3/module.audio.ac3.php	unused-variable	Variable $padding is assigned but never read
+src/wp-includes/ID3/module.audio.mp3.php	unused-variable	Variable $MPEGaudioChannelModeLookup is assigned but never read
+src/wp-includes/ID3/module.audio.mp3.php	unused-variable	Variable $MPEGaudioEmphasisLookup is assigned but never read
+src/wp-includes/ID3/module.audio.mp3.php	unused-variable	Variable $MPEGaudioModeExtensionLookup is assigned but never read
+src/wp-includes/ID3/module.audio.mp3.php	unused-variable	Variable $SideInfoData is assigned but never read
+src/wp-includes/ID3/module.audio.mp3.php	unused-variable	Variable $previousvalidframe is assigned but never read
+src/wp-includes/ID3/module.audio.mp3.php	unused-variable	Variable $this_scan_segment is assigned but never read
+src/wp-includes/ID3/module.audio.ogg.php	unused-variable	Variable $basicfields is assigned but never read
+src/wp-includes/ID3/module.tag.lyrics3.php	unused-variable	Variable $id3v1tag is assigned but never read
+src/wp-includes/IXR/class-IXR-introspectionserver.php	unused-variable	Variable $method is assigned but never read
+src/wp-includes/IXR/class-IXR-introspectionserver.php	unused-variable	Variable $returnType is assigned but never read
+src/wp-includes/IXR/class-IXR-server.php	unused-variable	Variable $length is assigned but never read
+src/wp-includes/IXR/class-IXR-value.php	unreachable-code	Unreachable code detected
+src/wp-includes/IXR/class-IXR-value.php	unreachable-code	Unreachable code detected
+src/wp-includes/IXR/class-IXR-value.php	unreachable-code	Unreachable code detected
+src/wp-includes/IXR/class-IXR-value.php	unreachable-code	Unreachable code detected
+src/wp-includes/IXR/class-IXR-value.php	unreachable-code	Unreachable code detected
+src/wp-includes/IXR/class-IXR-value.php	unreachable-code	Unreachable code detected
+src/wp-includes/IXR/class-IXR-value.php	unreachable-code	Unreachable code detected
+src/wp-includes/PHPMailer/OAuth.php	unknown-class	Unknown class 'RefreshToken'
+src/wp-includes/PHPMailer/PHPMailer.php	unknown-class	Unknown class 'Psr\Log\LoggerInterface'
+src/wp-includes/PHPMailer/PHPMailer.php	unknown-function	Unknown function 'imap_errors'
+src/wp-includes/PHPMailer/SMTP.php	unknown-class	Unknown class 'Psr\Log\LoggerInterface'
+src/wp-includes/Requests/src/Iri.php	unknown-class	Unknown class 'UnexpectedValueException'
+src/wp-includes/Requests/src/Iri.php	unknown-class	Unknown class 'UnexpectedValueException'
+src/wp-includes/SimplePie/src/Cache/Memcache.php	unknown-class	Unknown class 'NativeMemcache'
+src/wp-includes/SimplePie/src/HTTP/Psr18Client.php	unknown-class	Unknown class 'ClientExceptionInterface'
+src/wp-includes/SimplePie/src/Item.php	unused-variable	Variable $javascript is assigned but never read
+src/wp-includes/Text/Diff/Engine/string.php	unknown-class	Unknown class 'PEAR'
+src/wp-includes/Text/Diff/Engine/string.php	unknown-class	Unknown class 'PEAR'
+src/wp-includes/Text/Diff/Engine/xdiff.php	unknown-function	Unknown function 'xdiff_string_diff'
+src/wp-includes/blocks/navigation-link.php	unknown-function	Unknown function 'gutenberg_block_core_shared_navigation_item_should_render'
+src/wp-includes/blocks/navigation-link.php	unknown-function	Unknown function 'gutenberg_block_core_shared_navigation_render_submenu_icon'
+src/wp-includes/blocks/navigation-submenu.php	unknown-function	Unknown function 'gutenberg_block_core_shared_navigation_item_should_render'
+src/wp-includes/blocks/navigation-submenu.php	unknown-function	Unknown function 'gutenberg_block_core_shared_navigation_render_submenu_icon'
+src/wp-includes/blocks/navigation-submenu.php	unknown-function	Unknown function 'gutenberg_block_core_shared_navigation_render_submenu_icon'
+src/wp-includes/blocks/navigation.php	unknown-class	Unknown class 'WP_Theme_JSON_Gutenberg'
+src/wp-includes/class-pop3.php	unused-variable	Variable $fp is assigned but never read
+src/wp-includes/class-snoopy.php	unreachable-code	Unreachable code detected
+src/wp-includes/class-snoopy.php	unreachable-code	Unreachable code detected
+src/wp-includes/class-snoopy.php	unreachable-code	Unreachable code detected
+src/wp-includes/class-snoopy.php	unreachable-code	Unreachable code detected
+src/wp-includes/class-snoopy.php	unreachable-code	Unreachable code detected
+src/wp-includes/class-snoopy.php	unreachable-code	Unreachable code detected
+src/wp-includes/class-walker-nav-menu.php	unused-variable	Variable $n is assigned but never read
+src/wp-includes/class-walker-nav-menu.php	unused-variable	Variable $t is assigned but never read
+src/wp-includes/class-walker-page.php	unused-variable	Variable $n is assigned but never read
+src/wp-includes/class-walker-page.php	unused-variable	Variable $t is assigned but never read
+src/wp-includes/class-wp-http-requests-hooks.php	argument-count-mismatch	Too many arguments to do_action_ref_array(): 4 passed, at most 2 expected
+src/wp-includes/class-wp-http.php	unused-private-method	Private method 'WP_Http::_dispatch_request' is never used
+src/wp-includes/class-wp-script-modules.php	unused-private-method	Private method 'WP_Script_Modules::get_marked_for_enqueue' is never used
+src/wp-includes/class-wpdb.php	unused-private-property	Private property 'wpdb::$use_mysqli' is never used
+src/wp-includes/deprecated.php	undefined-variable	Undefined variable $excerpt
+src/wp-includes/deprecated.php	undefined-variable	Undefined variable $excerpt
+src/wp-includes/deprecated.php	undefined-variable	Undefined variable $excerpt
+src/wp-includes/deprecated.php	unknown-class	Unknown class 'WP_Press_This_Plugin'
+src/wp-includes/deprecated.php	unknown-class	Unknown class 'WP_Press_This_Plugin'
+src/wp-includes/feed-atom-comments.php	undefined-variable	Undefined variable $comment
+src/wp-includes/feed-atom-comments.php	undefined-variable	Undefined variable $comment
+src/wp-includes/feed-atom-comments.php	undefined-variable	Undefined variable $comment
+src/wp-includes/feed-atom-comments.php	undefined-variable	Undefined variable $comment
+src/wp-includes/feed-atom.php	unused-variable	Variable $more is assigned but never read
+src/wp-includes/feed-rdf.php	undefined-variable	Undefined variable $post
+src/wp-includes/feed-rdf.php	unused-variable	Variable $more is assigned but never read
+src/wp-includes/feed-rss.php	unused-variable	Variable $more is assigned but never read
+src/wp-includes/feed-rss2-comments.php	undefined-variable	Undefined variable $comment
+src/wp-includes/feed-rss2-comments.php	undefined-variable	Undefined variable $comment
+src/wp-includes/feed-rss2.php	unused-variable	Variable $more is assigned but never read
+src/wp-includes/ms-load.php	unused-variable	Variable $blog_id is assigned but never read
+src/wp-includes/php-ai-client/src/Providers/ProviderRegistry.php	unknown-member	Unknown member 'setHttpTransporterOriginal' on 'ProviderRegistry'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/ClassDiscovery.php	unknown-class	Unknown class 'Strategy\GeneratedDiscoveryStrategy'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/ClassDiscovery.php	unknown-class	Unknown class 'Strategy\GeneratedDiscoveryStrategy'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/ClassDiscovery.php	unknown-class	Unknown class 'Strategy\GeneratedDiscoveryStrategy'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Artax'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Artax'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Buzz'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Buzz'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Cake'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Cake'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Curl'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Curl'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Curl'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Curl'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'DiactorosMessageFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'DiactorosMessageFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'DiactorosRequest'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'DiactorosRequest'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'DiactorosRequest'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'DiactorosStreamFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'DiactorosStreamFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'DiactorosUriFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'DiactorosUriFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Guzzle5'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Guzzle5'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Guzzle6'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Guzzle6'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Guzzle6'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Guzzle6'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Guzzle7'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Guzzle7'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Guzzle7'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Guzzle7'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'GuzzleHttp'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'GuzzleMessageFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'GuzzleMessageFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'GuzzleRequest'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'GuzzleRequest'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'GuzzleRequest'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'GuzzleStreamFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'GuzzleStreamFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'GuzzleUriFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'GuzzleUriFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'HttpAsyncClient'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'HttpClient'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'HttpClient'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'HttpClient'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'MessageFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Promise'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'React'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'React'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'React'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'React'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SlimMessageFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SlimMessageFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SlimRequest'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SlimRequest'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SlimRequest'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SlimStreamFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SlimStreamFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SlimUriFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SlimUriFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Socket'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'Socket'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'StreamFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SymfonyHttplug'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SymfonyHttplug'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SymfonyHttplug'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SymfonyHttplug'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SymfonyHttplug'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SymfonyPsr18'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'SymfonyPsr18'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'UriFactory'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'WordPress\AiClientDependencies\Buzz\Client\FileGetContents'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'WordPress\AiClientDependencies\Buzz\Client\FileGetContents'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'WordPress\AiClientDependencies\Buzz\Client\FileGetContents'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'WordPress\AiClientDependencies\Buzz\Message\ResponseBuilder'
+src/wp-includes/php-ai-client/third-party/Http/Discovery/Strategy/CommonClassesStrategy.php	unknown-class	Unknown class 'WordPress\AiClientDependencies\Buzz\Message\ResponseBuilder'
+src/wp-includes/php-ai-client/third-party/Nyholm/Psr7/Factory/HttplugFactory.php	unknown-class	Unknown class 'MessageFactory'
+src/wp-includes/php-ai-client/third-party/Nyholm/Psr7/Factory/HttplugFactory.php	unknown-class	Unknown class 'MessageFactory'
+src/wp-includes/php-ai-client/third-party/Nyholm/Psr7/Factory/HttplugFactory.php	unknown-class	Unknown class 'StreamFactory'
+src/wp-includes/php-ai-client/third-party/Nyholm/Psr7/Factory/HttplugFactory.php	unknown-class	Unknown class 'UriFactory'
+src/wp-includes/php-ai-client/third-party/Nyholm/Psr7/StreamTrait.php	unknown-class	Unknown class 'SymfonyErrorHandler'
+src/wp-includes/php-ai-client/third-party/Nyholm/Psr7/StreamTrait.php	unknown-class	Unknown class 'SymfonyLegacyErrorHandler'
+src/wp-includes/php-compat/readonly.php	undefined-variable	Undefined variable $readonly_value
+src/wp-includes/php-compat/readonly.php	undefined-variable	Undefined variable $readonly_value
+src/wp-includes/post-template.php	unused-variable	Variable $t is assigned but never read
+src/wp-includes/rss.php	unknown-function	Unknown function 'debug'
+src/wp-includes/rss.php	unknown-function	Unknown function 'debug'
+src/wp-includes/rss.php	unknown-function	Unknown function 'debug'
+src/wp-includes/rss.php	unknown-function	Unknown function 'debug'
+src/wp-includes/rss.php	unknown-function	Unknown function 'debug'
+src/wp-includes/rss.php	unknown-member	Unknown member 'etag' on 'MagpieRSS'
+src/wp-includes/rss.php	unknown-member	Unknown member 'last_modified' on 'MagpieRSS'
+src/wp-includes/shortcodes.php	unused-variable	Variable $shortcode_tags is assigned but never read
+src/wp-includes/sodium_compat/src/Core32/Poly1305/State.php	unknown-member	Unknown member 'mulInt64' on 'ParagonIE_Sodium_Core32_Int32'
+src/wp-includes/sodium_compat/src/Core32/Poly1305/State.php	unknown-member	Unknown member 'mulInt64' on 'ParagonIE_Sodium_Core32_Int32'
+src/wp-includes/sodium_compat/src/Core32/Poly1305/State.php	unknown-member	Unknown member 'mulInt64' on 'ParagonIE_Sodium_Core32_Int32'
+src/wp-includes/sodium_compat/src/Core32/Poly1305/State.php	unknown-member	Unknown member 'mulInt64' on 'ParagonIE_Sodium_Core32_Int32'
+src/wp-includes/sodium_compat/src/Core32/Poly1305/State.php	unknown-member	Unknown member 'mulInt64' on 'ParagonIE_Sodium_Core32_Int32'
+src/wp-includes/sodium_compat/src/Core32/Poly1305/State.php	unused-variable	Variable $b is assigned but never read
+src/wp-includes/vars.php	unused-variable	Variable $is_IE is assigned but never read
+src/wp-includes/vars.php	unused-variable	Variable $is_NS4 is assigned but never read
+src/wp-includes/vars.php	unused-variable	Variable $is_caddy is assigned but never read
+src/wp-includes/vars.php	unused-variable	Variable $is_edge is assigned but never read
+src/wp-includes/vars.php	unused-variable	Variable $is_gecko is assigned but never read
+src/wp-includes/vars.php	unused-variable	Variable $is_iis7 is assigned but never read
+src/wp-includes/vars.php	unused-variable	Variable $is_iphone is assigned but never read
+src/wp-includes/vars.php	unused-variable	Variable $is_lynx is assigned but never read
+src/wp-includes/vars.php	unused-variable	Variable $is_nginx is assigned but never read
+src/wp-includes/vars.php	unused-variable	Variable $is_opera is assigned but never read
+src/wp-includes/version.php	unused-variable	Variable $required_mysql_version is assigned but never read
+src/wp-includes/version.php	unused-variable	Variable $required_php_extensions is assigned but never read
+src/wp-includes/version.php	unused-variable	Variable $required_php_version is assigned but never read
+src/wp-includes/version.php	unused-variable	Variable $tinymce_version is assigned but never read
+src/wp-includes/version.php	unused-variable	Variable $wp_db_version is assigned but never read
+src/wp-includes/version.php	unused-variable	Variable $wp_version is assigned but never read
+src/wp-login.php	unknown-member	Unknown member 'has_cap' on 'WP_Error'
+src/wp-login.php	unknown-member	Unknown member 'has_cap' on 'WP_Error'
+src/wp-login.php	unknown-member	Unknown member 'has_cap' on 'WP_Error'

@@ -12,6 +12,7 @@ plans/
 /tusk-php
 *.wasm
 testdata/corpus/_repos/
+testdata/field/_repos/
 
 # benchmark harness artifacts
 bench/.tools/

@@ -1,0 +1,95 @@
+src/Illuminate/Broadcasting/BroadcastManager.php	unknown-class	Unknown class 'AblyRest'
+src/Illuminate/Broadcasting/BroadcastManager.php	unknown-class	Unknown class 'AblyRest'
+src/Illuminate/Broadcasting/BroadcastManager.php	unknown-class	Unknown class 'Pusher'
+src/Illuminate/Broadcasting/Broadcasters/AblyBroadcaster.php	unknown-class	Unknown class 'AblyException'
+src/Illuminate/Broadcasting/Broadcasters/AblyBroadcaster.php	unknown-class	Unknown class 'AblyMessage'
+src/Illuminate/Broadcasting/Broadcasters/PusherBroadcaster.php	unknown-class	Unknown class 'ApiErrorException'
+src/Illuminate/Cache/RedisStore.php	unknown-member	Unknown member 'manyAlias' on 'RedisStore'
+src/Illuminate/Cache/RedisStore.php	unknown-member	Unknown member 'putManyAlias' on 'RedisStore'
+src/Illuminate/Cache/RedisTaggedCache.php	unknown-member	Unknown member 'addEntry' on 'TagSet'
+src/Illuminate/Cache/RedisTaggedCache.php	unknown-member	Unknown member 'addEntry' on 'TagSet'
+src/Illuminate/Cache/RedisTaggedCache.php	unknown-member	Unknown member 'addEntry' on 'TagSet'
+src/Illuminate/Cache/RedisTaggedCache.php	unknown-member	Unknown member 'addEntry' on 'TagSet'
+src/Illuminate/Cache/RedisTaggedCache.php	unknown-member	Unknown member 'addEntry' on 'TagSet'
+src/Illuminate/Cache/RedisTaggedCache.php	unknown-member	Unknown member 'addEntry' on 'TagSet'
+src/Illuminate/Cache/RedisTaggedCache.php	unknown-member	Unknown member 'entries' on 'TagSet'
+src/Illuminate/Cache/RedisTaggedCache.php	unknown-member	Unknown member 'flushStaleEntries' on 'TagSet'
+src/Illuminate/Concurrency/ConcurrencyManager.php	unknown-class	Unknown class 'Fork'
+src/Illuminate/Concurrency/ForkDriver.php	unknown-class	Unknown class 'Fork'
+src/Illuminate/Console/Signals.php	unknown-member	Unknown member 'signalHandlers' on 'Signals'
+src/Illuminate/Console/Signals.php	unknown-member	Unknown member 'signalHandlers' on 'Signals'
+src/Illuminate/Console/resources/views/components/bullet-list.php	undefined-variable	Undefined variable $elements
+src/Illuminate/Console/resources/views/components/line.php	undefined-variable	Undefined variable $bgColor
+src/Illuminate/Console/resources/views/components/line.php	undefined-variable	Undefined variable $fgColor
+src/Illuminate/Console/resources/views/components/line.php	undefined-variable	Undefined variable $marginTop
+src/Illuminate/Console/resources/views/components/line.php	undefined-variable	Undefined variable $title
+src/Illuminate/Console/resources/views/components/line.php	undefined-variable	Undefined variable $title
+src/Illuminate/Console/resources/views/components/two-column-detail.php	undefined-variable	Undefined variable $second
+src/Illuminate/Database/Console/DumpCommand.php	unused-variable	Variable $database is assigned but never read
+src/Illuminate/Database/Console/Migrations/TableGuesser.php	unused-variable	Variable $create is assigned but never read
+src/Illuminate/Database/Eloquent/Relations/Concerns/CanBeOneOfMany.php	undefined-variable	Undefined variable $previous
+src/Illuminate/Database/Eloquent/Relations/Concerns/CanBeOneOfMany.php	undefined-variable	Undefined variable $previous
+src/Illuminate/Foundation/Application.php	unknown-class	Unknown class 'ClassLoader'
+src/Illuminate/Foundation/Cloud/ExceptionReporter.php	unknown-class	Unknown class 'IgnitionViewException'
+src/Illuminate/Foundation/ComposerScripts.php	unknown-class	Unknown class 'IOInterface'
+src/Illuminate/Foundation/Configuration/ApplicationBuilder.php	unknown-class	Unknown class 'Folio'
+src/Illuminate/Foundation/Configuration/ApplicationBuilder.php	unknown-class	Unknown class 'Folio'
+src/Illuminate/Foundation/Configuration/Middleware.php	undefined-variable	Undefined variable $middleware
+src/Illuminate/Foundation/Configuration/Middleware.php	unknown-class	Unknown class 'Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful'
+src/Illuminate/Foundation/Configuration/Middleware.php	unknown-class	Unknown class 'Spark\Http\Middleware\VerifyBillableIsSubscribed'
+src/Illuminate/Foundation/Configuration/Middleware.php	unknown-class	Unknown class 'Spark\Http\Middleware\VerifyBillableIsSubscribed'
+src/Illuminate/Foundation/Console/BroadcastingInstallCommand.php	unknown-class	Unknown class 'InstalledVersions'
+src/Illuminate/Foundation/Console/BroadcastingInstallCommand.php	unknown-class	Unknown class 'InstalledVersions'
+src/Illuminate/Foundation/Console/DownCommand.php	unknown-class	Unknown class 'AppPreventRequestsDuringMaintenance'
+src/Illuminate/Foundation/DevCommands.php	unknown-class	Unknown class 'PailServiceProvider'
+src/Illuminate/Foundation/DevCommands.php	unused-variable	Variable $existing is assigned but never read
+src/Illuminate/Foundation/Exceptions/Renderer/Exception.php	unknown-class	Unknown class 'ClassLoader'
+src/Illuminate/Foundation/Exceptions/Renderer/Listener.php	unknown-class	Unknown class 'RequestReceived'
+src/Illuminate/Foundation/Exceptions/Renderer/Listener.php	unknown-class	Unknown class 'RequestTerminated'
+src/Illuminate/Foundation/Exceptions/Renderer/Listener.php	unknown-class	Unknown class 'TaskReceived'
+src/Illuminate/Foundation/Exceptions/Renderer/Listener.php	unknown-class	Unknown class 'TickReceived'
+src/Illuminate/Foundation/Exceptions/Renderer/Mappers/BladeMapper.php	unknown-member	Unknown member 'trace' on 'BladeMapper'
+src/Illuminate/Foundation/Exceptions/Whoops/WhoopsExceptionRenderer.php	unknown-class	Unknown class 'Whoops'
+src/Illuminate/Foundation/Exceptions/Whoops/WhoopsHandler.php	unknown-class	Unknown class 'PrettyPageHandler'
+src/Illuminate/Foundation/Providers/FoundationServiceProvider.php	unused-variable	Variable $absolute is assigned but never read
+src/Illuminate/Foundation/Providers/FoundationServiceProvider.php	unused-variable	Variable $absolute is assigned but never read
+src/Illuminate/Foundation/Testing/Concerns/InteractsWithTestCaseLifecycle.php	unknown-class	Unknown class 'PHPUnitRegistry'
+src/Illuminate/Foundation/Testing/Concerns/InteractsWithTestCaseLifecycle.php	unknown-class	Unknown class 'PHPUnitRegistry'
+src/Illuminate/Http/Client/PendingRequest.php	unknown-member	Unknown member 'getResponse' on 'RequestException'
+src/Illuminate/JsonSchema/Deserializer.php	unknown-member	Unknown member 'default' on 'Deserializer'
+src/Illuminate/JsonSchema/Types/Type.php	undefined-variable	Undefined variable $values
+src/Illuminate/JsonSchema/Types/Type.php	undefined-variable	Undefined variable $values
+src/Illuminate/Mail/MailManager.php	unknown-class	Unknown class 'MailgunTransportFactory'
+src/Illuminate/Mail/MailManager.php	unknown-class	Unknown class 'PostmarkTransportFactory'
+src/Illuminate/Mail/SentMessage.php	unknown-member	Unknown member 'getAttachments' on 'RawMessage'
+src/Illuminate/Notifications/Channels/MailChannel.php	unknown-member	Unknown member 'toMail' on 'Notification'
+src/Illuminate/Notifications/NotificationSender.php	unknown-member	Unknown member 'via' on 'Notification'
+src/Illuminate/Queue/DeferredQueue.php	unknown-function	Unknown function 'Illuminate\Support\defer'
+src/Illuminate/Redis/Connections/PredisClusterConnection.php	unknown-class	Unknown class 'ServerFlushDatabase'
+src/Illuminate/Redis/Connections/PredisClusterConnection.php	unknown-class	Unknown class 'ServerFlushDatabase'
+src/Illuminate/Redis/Connectors/PhpRedisConnector.php	unknown-member	Unknown member 'OPT_PACK_IGNORE_NUMBERS' on 'Redis'
+src/Illuminate/Routing/RouteUrlGenerator.php	unused-variable	Variable $root is assigned but never read
+src/Illuminate/Routing/SortedMiddleware.php	undefined-variable	Undefined variable $lastPriorityIndex
+src/Illuminate/Routing/SortedMiddleware.php	unused-variable	Variable $lastPriorityIndex is assigned but never read
+src/Illuminate/Session/SessionManager.php	unused-variable	Variable $id is assigned but never read
+src/Illuminate/Session/SessionManager.php	unused-variable	Variable $id is assigned but never read
+src/Illuminate/Support/DateFactory.php	undefined-variable	Undefined variable $handler
+src/Illuminate/Support/DateFactory.php	undefined-variable	Undefined variable $handler
+src/Illuminate/Support/Facades/Auth.php	unknown-class	Unknown class 'UiServiceProvider'
+src/Illuminate/Support/ServiceProvider.php	unknown-class	Unknown class 'ModelFactory'
+src/Illuminate/Support/Traits/InteractsWithData.php	undefined-variable	Undefined variable $default
+src/Illuminate/Support/Traits/InteractsWithData.php	undefined-variable	Undefined variable $default
+src/Illuminate/Support/Traits/Localizable.php	unknown-member	Unknown member 'getLocale' on 'Container'
+src/Illuminate/Support/Traits/Localizable.php	unknown-member	Unknown member 'setLocale' on 'Container'
+src/Illuminate/Support/Traits/Localizable.php	unknown-member	Unknown member 'setLocale' on 'Container'
+src/Illuminate/Testing/Concerns/RunsInParallel.php	unknown-class	Unknown class 'ParaTest\Options'
+src/Illuminate/Testing/Concerns/RunsInParallel.php	unknown-class	Unknown class 'ParaTest\Options'
+src/Illuminate/Testing/Concerns/RunsInParallel.php	unknown-class	Unknown class 'ParaTest\Runners\PHPUnit\WrapperRunner'
+src/Illuminate/Testing/Concerns/RunsInParallel.php	unknown-class	Unknown class 'ParaTest\WrapperRunner\WrapperRunner'
+src/Illuminate/Testing/Concerns/RunsInParallel.php	unknown-class	Unknown class 'ParaTest\WrapperRunner\WrapperRunner'
+src/Illuminate/Testing/Concerns/RunsInParallel.php	unknown-class	Unknown class 'Tests\CreatesApplication'
+src/Illuminate/Testing/ParallelRunner.php	unknown-class	Unknown class 'ParaTest\RunnerInterface'
+src/Illuminate/Testing/ParallelRunner.php	unknown-class	Unknown class 'ParaTest\RunnerInterface'
+src/Illuminate/Testing/ParallelRunner.php	unknown-class	Unknown class 'ParaTest\Runners\PHPUnit\RunnerInterface'
+src/Illuminate/View/Compilers/ComponentTagCompiler.php	unused-variable	Variable $escapeAttributes is assigned but never read
+src/Illuminate/View/ViewServiceProvider.php	unknown-member	Unknown member 'terminating' on 'Container'

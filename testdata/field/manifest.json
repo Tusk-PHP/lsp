@@ -1,0 +1,51 @@
+[
+  {
+    "name": "laravel",
+    "repo": "https://github.com/laravel/framework.git",
+    "sha": "3ee9f38b4b840acabe79dbe3212b42e00b9ee4ee",
+    "lock": "locks/laravel.lock",
+    "rootVersion": null,
+    "paths": [
+      "src"
+    ],
+    "exclude": []
+  },
+  {
+    "name": "symfony",
+    "repo": "https://github.com/symfony/symfony.git",
+    "sha": "6c71047b42d6ec7ebf49e006ffd71c83d73e3f89",
+    "lock": "locks/symfony.lock",
+    "rootVersion": "8.2.x-dev",
+    "paths": [
+      "src/Symfony"
+    ],
+    "exclude": [
+      "Tests"
+    ]
+  },
+  {
+    "name": "wordpress",
+    "repo": "https://github.com/WordPress/wordpress-develop.git",
+    "sha": "54312c753fd44a38101fe0c2a8badce811857557",
+    "lock": null,
+    "rootVersion": null,
+    "paths": [
+      "src"
+    ],
+    "exclude": []
+  },
+  {
+    "name": "magento",
+    "repo": "https://github.com/magento/magento2.git",
+    "sha": "dfbf53de79808128191f7435cae70f0fc5c43080",
+    "lock": "composer.lock",
+    "rootVersion": null,
+    "paths": [
+      "app/code",
+      "lib/internal/Magento"
+    ],
+    "exclude": [
+      "Test"
+    ]
+  }
+]

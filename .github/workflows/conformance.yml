@@ -49,6 +49,48 @@ jobs:
         run: go test -tags=conformance -race -timeout 120s ./internal/conformance/...
 
   # ---------------------------------------------------------------------------
+  # Field baselines: diagnostics over Laravel, Symfony, WordPress and Magento 2
+  # at pinned commits must match testdata/field/<name>.baseline, so false
+  # warnings can't come back unnoticed and fixes are recorded.
+  # ---------------------------------------------------------------------------
+  field-baseline:
+    name: Field baseline (${{ matrix.name }})
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [laravel, symfony, wordpress, magento]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          coverage: none
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Cache checkout and dependencies
+        uses: actions/cache@v4
+        with:
+          path: testdata/field/_repos/${{ matrix.name }}
+          key: field-${{ matrix.name }}-${{ hashFiles('testdata/field/manifest.json', 'testdata/field/locks/**') }}
+
+      - name: Build
+        run: make build
+
+      - name: Check against the baseline
+        run: bash scripts/field-baseline.sh ${{ matrix.name }}
+
+  # ---------------------------------------------------------------------------
   # Nightly / manual job: full corpus + fuzz targets
   # ---------------------------------------------------------------------------
   conformance-nightly:

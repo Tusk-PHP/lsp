@@ -1,0 +1,895 @@
+src/Symfony/Bridge/Doctrine/ManagerRegistry.php	unknown-member	Unknown member 'aliases' on 'ManagerRegistry'
+src/Symfony/Bridge/Doctrine/ManagerRegistry.php	unknown-member	Unknown member 'fileMap' on 'ManagerRegistry'
+src/Symfony/Bridge/Doctrine/ManagerRegistry.php	unknown-member	Unknown member 'load' on 'ManagerRegistry'
+src/Symfony/Bridge/Doctrine/ManagerRegistry.php	unknown-member	Unknown member 'methodMap' on 'ManagerRegistry'
+src/Symfony/Bridge/Doctrine/ManagerRegistry.php	unknown-member	Unknown member 'privates' on 'ManagerRegistry'
+src/Symfony/Bridge/Doctrine/ManagerRegistry.php	unknown-member	Unknown member 'privates' on 'ManagerRegistry'
+src/Symfony/Bridge/Doctrine/ManagerRegistry.php	unknown-member	Unknown member 'services' on 'ManagerRegistry'
+src/Symfony/Bridge/Doctrine/ManagerRegistry.php	unknown-member	Unknown member 'services' on 'ManagerRegistry'
+src/Symfony/Bridge/Doctrine/Security/RememberMe/DoctrineTokenProvider.php	unknown-member	Unknown member 'getClass' on 'PersistentToken'
+src/Symfony/Bridge/PhpUnit/ConstraintTrait.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Bridge/PhpUnit/CoverageListener.php	unknown-class	Unknown class 'Registry'
+src/Symfony/Bridge/PhpUnit/CoverageListener.php	unknown-class	Unknown class 'Registry'
+src/Symfony/Bridge/PhpUnit/CoverageListener.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Bridge/PhpUnit/CoverageListener.php	unknown-class	Unknown class 'TestListener'
+src/Symfony/Bridge/PhpUnit/CoverageListener.php	unknown-class	Unknown class 'TestUtil'
+src/Symfony/Bridge/PhpUnit/CoverageListener.php	unknown-class	Unknown class 'TestUtil'
+src/Symfony/Bridge/PhpUnit/CoverageListener.php	unknown-class	Unknown class 'TestUtil'
+src/Symfony/Bridge/PhpUnit/CoverageListener.php	unknown-class	Unknown class 'Warning'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'ErrorHandler'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'ErrorHandler'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'ErrorHandler'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'ErrorHandler'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'ErrorHandler'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'ErrorHandler'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'Handler'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'Handler'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'TestResult'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'UtilErrorHandler'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'UtilErrorHandler'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'UtilErrorHandler'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'UtilErrorHandler'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'UtilErrorHandler'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler/Deprecation.php	unknown-class	Unknown class 'Groups'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler/Deprecation.php	unknown-class	Unknown class 'Groups'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler/Deprecation.php	unknown-class	Unknown class 'Groups'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler/Deprecation.php	unknown-class	Unknown class 'SymfonyTestsListenerFor'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler/Deprecation.php	unknown-class	Unknown class 'Test'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler/Deprecation.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler/Deprecation.php	unknown-class	Unknown class 'TestSuite'
+src/Symfony/Bridge/PhpUnit/ExpectDeprecationTrait.php	unknown-class	Unknown class 'PHPUnit\Runner\Version'
+src/Symfony/Bridge/PhpUnit/ExpectUserDeprecationMessageTrait.php	unknown-class	Unknown class 'Version'
+src/Symfony/Bridge/PhpUnit/Extension/EnableClockMockSubscriber.php	unknown-class	Unknown class 'Group'
+src/Symfony/Bridge/PhpUnit/Extension/EnableClockMockSubscriber.php	unknown-class	Unknown class 'PreparationStartedSubscriber'
+src/Symfony/Bridge/PhpUnit/Extension/EnableClockMockSubscriber.php	unknown-class	Unknown class 'TestMethod'
+src/Symfony/Bridge/PhpUnit/Extension/RecorderSubscriber.php	unknown-class	Unknown class 'EventFacade'
+src/Symfony/Bridge/PhpUnit/Extension/RecorderSubscriber.php	unknown-class	Unknown class 'PreparationStartedSubscriber'
+src/Symfony/Bridge/PhpUnit/Extension/RecorderSubscriber.php	unknown-class	Unknown class 'TestMethod'
+src/Symfony/Bridge/PhpUnit/Extension/RegisterClockMockSubscriber.php	unknown-class	Unknown class 'Group'
+src/Symfony/Bridge/PhpUnit/Extension/RegisterClockMockSubscriber.php	unknown-class	Unknown class 'LoadedSubscriber'
+src/Symfony/Bridge/PhpUnit/Extension/RegisterClockMockSubscriber.php	unknown-class	Unknown class 'TestMethod'
+src/Symfony/Bridge/PhpUnit/Extension/RegisterDnsMockSubscriber.php	unknown-class	Unknown class 'Group'
+src/Symfony/Bridge/PhpUnit/Extension/RegisterDnsMockSubscriber.php	unknown-class	Unknown class 'LoadedSubscriber'
+src/Symfony/Bridge/PhpUnit/Extension/RegisterDnsMockSubscriber.php	unknown-class	Unknown class 'TestMethod'
+src/Symfony/Bridge/PhpUnit/Legacy/CommandForV8.php	unknown-class	Unknown class 'BaseCommand'
+src/Symfony/Bridge/PhpUnit/Legacy/CommandForV8.php	unknown-class	Unknown class 'Configuration'
+src/Symfony/Bridge/PhpUnit/Legacy/CommandForV8.php	unknown-class	Unknown class 'Configuration'
+src/Symfony/Bridge/PhpUnit/Legacy/CommandForV8.php	unknown-member	Unknown member 'globalListenerDisabled' on 'SymfonyTestsListener'
+src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'BaseCommand'
+src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'Configuration'
+src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'Configuration'
+src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'Configuration'
+src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'LegacyConfiguration'
+src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'Loader'
+src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'Registry'
+src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-member	Unknown member 'globalListenerDisabled' on 'SymfonyTestsListener'
+src/Symfony/Bridge/PhpUnit/Legacy/PolyfillAssertTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bridge/PhpUnit/Legacy/PolyfillAssertTrait.php	unknown-class	Unknown class 'TraversableContains'
+src/Symfony/Bridge/PhpUnit/Legacy/PolyfillAssertTrait.php	unknown-class	Unknown class 'TraversableContains'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerForV7.php	unknown-class	Unknown class 'TestListener'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'AssertionFailedError'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'AssertionFailedError'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'AssertionFailedError'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'BaseTestRunner'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'BaseTestRunner'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'BaseTestRunner'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'BaseTestRunner'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'BaseTestRunner'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'BaseTestRunner'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'Blacklist'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'Blacklist'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'Blacklist'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'Blacklist'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'DataProviderTestSuite'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'ExcludeList'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'ExcludeList'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'ExcludeList'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'PhptTestCase'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'RiskyTestError'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'RiskyTestError'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'Test'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'Test'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'Test'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'Test'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'Test'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestSuite'
+src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestSuite'
+src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'BeforeTestMethodErroredSubscriber'
+src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'BeforeTestMethodErroredSubscriber'
+src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'ErroredSubscriber'
+src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'ExecutionFinishedSubscriber'
+src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'Extension'
+src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'FinishedSubscriber'
+src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'Group'
+src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'SkippedSubscriber'
+src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'TestMethod'
+src/Symfony/Bridge/PhpUnit/TextUI/Command.php	unknown-class	Unknown class 'PHPUnit\Runner\Version'
+src/Symfony/Bridge/PhpUnit/bootstrap.php	undefined-variable	Undefined variable $fileIdentifier
+src/Symfony/Bridge/PhpUnit/bootstrap.php	unknown-class	Unknown class 'PHPUnit\Metadata\Metadata'
+src/Symfony/Bridge/PhpUnit/bootstrap.php	unknown-class	Unknown class 'PHPUnit\TextUI\Command'
+src/Symfony/Bridge/Twig/Form/TwigRendererEngine.php	argument-count-mismatch	Too few arguments to unwrap(): 0 passed, at least 1 required
+src/Symfony/Bridge/Twig/Form/TwigRendererEngine.php	unknown-member	Unknown member 'vars' on 'AbstractRendererEngine'
+src/Symfony/Bridge/Twig/Form/TwigRendererEngine.php	unknown-member	Unknown member 'vars' on 'AbstractRendererEngine'
+src/Symfony/Bridge/Twig/UndefinedCallableHandler.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Bridge/Twig/UndefinedCallableHandler.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Bundle/FrameworkBundle/Command/AboutCommand.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Bundle/FrameworkBundle/Command/AboutCommand.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Bundle/FrameworkBundle/Command/AboutCommand.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Bundle/FrameworkBundle/Command/AboutCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/AbstractConfigCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/AbstractConfigCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/AbstractConfigCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/AbstractConfigCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/AssetsInstallCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/CacheClearCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/CacheClearCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/CacheClearCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/CachePoolClearCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/CacheWarmupCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/ConfigDebugCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/ConfigDebugCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/ConfigDebugCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/ConfigDumpReferenceCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/ConfigDumpReferenceCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/ConfigDumpReferenceCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/ConfigDumpReferenceCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/ContainerDebugCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/ContainerDebugCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/ContainerLintCommand.php	unknown-member	Unknown member 'buildContainer' on 'ContainerLintCommand'
+src/Symfony/Bundle/FrameworkBundle/Command/ContainerLintCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/ContainerLintCommand.php	unknown-member	Unknown member 'initializeBundles' on 'ContainerLintCommand'
+src/Symfony/Bundle/FrameworkBundle/Command/DebugAutoconfigurationCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/DebugAutowiringCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/DebugAutowiringCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/DebugAutowiringCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/RouterDebugCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/TranslationDebugCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/TranslationExtractCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/XliffLintCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Command/YamlLintCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Bundle/FrameworkBundle/Console/Application.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Bundle/FrameworkBundle/Console/Application.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Bundle/FrameworkBundle/Console/Application.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Bundle/FrameworkBundle/Console/Descriptor/JsonDescriptor.php	unused-variable	Variable $reverseAliases is assigned but never read
+src/Symfony/Bundle/FrameworkBundle/Console/Descriptor/JsonDescriptor.php	unused-variable	Variable $showAliases is assigned but never read
+src/Symfony/Bundle/FrameworkBundle/Console/Descriptor/MarkdownDescriptor.php	unused-variable	Variable $reverseAliases is assigned but never read
+src/Symfony/Bundle/FrameworkBundle/Console/Descriptor/MarkdownDescriptor.php	unused-variable	Variable $showAliases is assigned but never read
+src/Symfony/Bundle/FrameworkBundle/Console/Descriptor/XmlDescriptor.php	unused-variable	Variable $reverseAliases is assigned but never read
+src/Symfony/Bundle/FrameworkBundle/Console/Descriptor/XmlDescriptor.php	unused-variable	Variable $showAliases is assigned but never read
+src/Symfony/Bundle/FrameworkBundle/DependencyInjection/FrameworkExtension.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Bundle/FrameworkBundle/DependencyInjection/FrameworkExtension.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Bundle/FrameworkBundle/DependencyInjection/FrameworkExtension.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Bundle/FrameworkBundle/Test/BrowserKitAssertionsTrait.php	unknown-class	Unknown class 'ExpectationFailedException'
+src/Symfony/Bundle/FrameworkBundle/Test/BrowserKitAssertionsTrait.php	unknown-class	Unknown class 'LogicalAnd'
+src/Symfony/Bundle/FrameworkBundle/Test/BrowserKitAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/BrowserKitAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/BrowserKitAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/BrowserKitAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/BrowserKitAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/BrowserKitAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/DomCrawlerAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/DomCrawlerAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/DomCrawlerAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/DomCrawlerAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/DomCrawlerAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/KernelTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Bundle/FrameworkBundle/Test/MailerAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/MailerAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/MailerAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/MailerAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/MailerAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/MailerAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/MailerAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/NotificationAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/NotificationAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/FrameworkBundle/Test/NotificationAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
+src/Symfony/Bundle/SecurityBundle/Debug/TraceableFirewallListener.php	unknown-member	Unknown member 'listeners' on 'TraceableFirewallListener'
+src/Symfony/Bundle/SecurityBundle/Debug/TraceableFirewallListener.php	unknown-member	Unknown member 'listeners' on 'TraceableFirewallListener'
+src/Symfony/Bundle/SecurityBundle/DependencyInjection/SecurityExtension.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Bundle/SecurityBundle/DependencyInjection/SecurityExtension.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Bundle/SecurityBundle/DependencyInjection/SecurityExtension.php	unused-variable	Variable $authenticationProviders is assigned but never read
+src/Symfony/Bundle/SecurityBundle/DependencyInjection/SecurityExtension.php	unused-variable	Variable $usedEnvs is assigned but never read
+src/Symfony/Bundle/TwigBundle/Command/LintCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
+src/Symfony/Component/AssetMapper/Compressor/BrotliCompressor.php	unused-private-method	Private method 'BrotliCompressor::compressWithBinary' is never used
+src/Symfony/Component/AssetMapper/Compressor/BrotliCompressor.php	unused-private-method	Private method 'BrotliCompressor::createStreamContext' is never used
+src/Symfony/Component/AssetMapper/Compressor/GzipCompressor.php	unknown-member	Unknown member 'baseCompress' on 'GzipCompressor'
+src/Symfony/Component/AssetMapper/Compressor/GzipCompressor.php	unknown-member	Unknown member 'baseGetUnsupportedReason' on 'GzipCompressor'
+src/Symfony/Component/AssetMapper/Compressor/GzipCompressor.php	unused-private-method	Private method 'GzipCompressor::compressWithBinary' is never used
+src/Symfony/Component/AssetMapper/Compressor/GzipCompressor.php	unused-private-method	Private method 'GzipCompressor::createStreamContext' is never used
+src/Symfony/Component/AssetMapper/Compressor/ZopfliCompressor.php	unused-private-method	Private method 'ZopfliCompressor::compressWithBinary' is never used
+src/Symfony/Component/AssetMapper/Compressor/ZopfliCompressor.php	unused-private-method	Private method 'ZopfliCompressor::createStreamContext' is never used
+src/Symfony/Component/AssetMapper/Compressor/ZstandardCompressor.php	unused-private-method	Private method 'ZstandardCompressor::compressWithBinary' is never used
+src/Symfony/Component/AssetMapper/Compressor/ZstandardCompressor.php	unused-private-method	Private method 'ZstandardCompressor::createStreamContext' is never used
+src/Symfony/Component/BrowserKit/Test/Constraint/BrowserCookieValueSame.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/BrowserKit/Test/Constraint/BrowserHasCookie.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/BrowserKit/Test/Constraint/BrowserHistoryIsOnFirstPage.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/BrowserKit/Test/Constraint/BrowserHistoryIsOnLastPage.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Couchbase\Collection'
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Memcached'
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'RedisArray'
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Relay\Cluster'
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Relay\Relay'
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Class 'APCUIterator' requires ext-apcu (PHP >= )
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Class 'APCUIterator' requires ext-apcu (PHP >= )
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Constant 'APC_ITER_KEY' requires ext-apcu (PHP >= )
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_add' requires ext-apcu (PHP >= )
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_clear_cache' requires ext-apcu (PHP >= )
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_delete' requires ext-apcu (PHP >= )
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_delete' requires ext-apcu (PHP >= )
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_exists' requires ext-apcu (PHP >= )
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_exists' requires ext-apcu (PHP >= )
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_store' requires ext-apcu (PHP >= )
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-class	Unknown class 'APCUIterator'
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-class	Unknown class 'APCUIterator'
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_add'
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_clear_cache'
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_delete'
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_delete'
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_exists'
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_exists'
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_store'
+src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'Cluster'
+src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'ClusterOptions'
+src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'UpsertOptions'
+src/Symfony/Component/Cache/Adapter/FilesystemTagAwareAdapter.php	unknown-member	Unknown member 'doClearCache' on 'FilesystemTagAwareAdapter'
+src/Symfony/Component/Cache/Adapter/FilesystemTagAwareAdapter.php	unknown-member	Unknown member 'doPrune' on 'FilesystemTagAwareAdapter'
+src/Symfony/Component/Cache/Adapter/FilesystemTagAwareAdapter.php	unknown-member	Unknown member 'doSaveCache' on 'FilesystemTagAwareAdapter'
+src/Symfony/Component/Cache/Adapter/MongoDbAdapter.php	unknown-member	Unknown member 'bulkWrite' on 'Collection'
+src/Symfony/Component/Cache/Adapter/MongoDbAdapter.php	unused-private-method	Private method 'MongoDbAdapter::createMarshaller' is never used
+src/Symfony/Component/Cache/Adapter/MongoDbTagAwareAdapter.php	unknown-member	Unknown member 'bulkWrite' on 'Collection'
+src/Symfony/Component/Cache/Adapter/MongoDbTagAwareAdapter.php	unknown-member	Unknown member 'createIndex' on 'Collection'
+src/Symfony/Component/Cache/Adapter/MongoDbTagAwareAdapter.php	unknown-member	Unknown member 'deleteMany' on 'Collection'
+src/Symfony/Component/Cache/Adapter/MongoDbTagAwareAdapter.php	unknown-member	Unknown member 'setupExpiresAtIndex' on 'MongoDbTagAwareAdapter'
+src/Symfony/Component/Cache/Adapter/MongoDbTagAwareAdapter.php	unused-private-method	Private method 'MongoDbTagAwareAdapter::createMarshaller' is never used
+src/Symfony/Component/Cache/Adapter/PdoTagAwareAdapter.php	unknown-member	Unknown member 'doSaveItem' on 'PdoTagAwareAdapter'
+src/Symfony/Component/Cache/Adapter/PdoTagAwareAdapter.php	unknown-member	Unknown member 'pruneItems' on 'PdoTagAwareAdapter'
+src/Symfony/Component/Cache/Adapter/PdoTagAwareAdapter.php	unused-private-method	Private method 'PdoTagAwareAdapter::createTables' is never used
+src/Symfony/Component/Cache/Adapter/PhpFilesAdapter.php	unknown-member	Unknown member 'doCommonClear' on 'PhpFilesAdapter'
+src/Symfony/Component/Cache/Adapter/PhpFilesAdapter.php	unknown-member	Unknown member 'doCommonDelete' on 'PhpFilesAdapter'
+src/Symfony/Component/Cache/Adapter/PhpFilesAdapter.php	unused-private-method	Private method 'PhpFilesAdapter::getFileKey' is never used
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'ClusterInterface'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'PredisCluster'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'PredisCluster'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'RedisArray'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'RedisException'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'RedisException'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'RedisException'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay\Cluster'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay\Cluster'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay\Cluster'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'ReplicationInterface'
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'ReplicationInterface'
+src/Symfony/Component/Cache/CacheItem.php	unused-private-method	Private method 'CacheItem::pack' is never used
+src/Symfony/Component/Cache/CacheItem.php	unused-private-method	Private method 'CacheItem::unpack' is never used
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'countDocuments' on 'Collection'
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'createIndex' on 'Collection'
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'deleteMany' on 'Collection'
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'deleteMany' on 'Collection'
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'deleteMany' on 'Collection'
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'deleteMany' on 'Collection'
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'find' on 'Collection'
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'getCollection' on 'Client'
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'getCollection' on 'Client'
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'getCollection' on 'Client'
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'getCollection' on 'Database'
+src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'withOptions' on 'Collection'
+src/Symfony/Component/Cache/Traits/RedisClusterProxy.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Traits/RedisClusterProxy.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Traits/RedisClusterProxy.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Cache/Traits/RedisClusterProxy.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/Cache/Traits/RedisProxy.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Traits/RedisProxy.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Traits/RedisProxy.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Cache/Traits/RedisProxy.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'ClusterInterface'
+src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'ClusterInterface'
+src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'ClusterInterface'
+src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'ReplicationInterface'
+src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'Sentinel'
+src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'Sentinel'
+src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'Sentinel'
+src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'UNLINK'
+src/Symfony/Component/Cache/Traits/Relay/Relay502Trait.php	unknown-class	Unknown class 'Relay\Relay'
+src/Symfony/Component/Cache/Traits/RelayClusterProxy.php	unknown-class	Unknown class 'Relay\Cluster'
+src/Symfony/Component/Cache/Traits/RelayClusterProxy.php	unknown-class	Unknown class 'Relay\Relay'
+src/Symfony/Component/Cache/Traits/RelayProxy.php	unknown-class	Unknown class 'Relay\Relay'
+src/Symfony/Component/Clock/Resources/now.php	unknown-class	Unknown class 'now'
+src/Symfony/Component/Clock/Test/ClockSensitiveTrait.php	unknown-class	Unknown attribute 'After'
+src/Symfony/Component/Clock/Test/ClockSensitiveTrait.php	unknown-class	Unknown attribute 'Before'
+src/Symfony/Component/Clock/Test/ClockSensitiveTrait.php	unknown-class	Unknown attribute 'BeforeClass'
+src/Symfony/Component/Config/Definition/Builder/NodeDefinition.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/Console/Command/TraceableCommand.php	unknown-member	Unknown member 'invokable' on 'TraceableCommand'
+src/Symfony/Component/Console/Tester/Constraint/CommandFailed.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Console/Tester/Constraint/CommandIsInvalid.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Console/Tester/Constraint/CommandIsSuccessful.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Console/Tester/TesterTrait.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Console/Tester/TesterTrait.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Console/Tester/TesterTrait.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Console/Tester/TesterTrait.php	unknown-member	Unknown member 'getErrorOutput' on 'StreamOutput'
+src/Symfony/Component/Console/Tester/TesterTrait.php	unknown-member	Unknown member 'getErrorOutput' on 'StreamOutput'
+src/Symfony/Component/DependencyInjection/Compiler/ResolveBindingsPass.php	undefined-variable	Undefined variable $parsedName
+src/Symfony/Component/DependencyInjection/Compiler/ResolveBindingsPass.php	undefined-variable	Undefined variable $parsedName
+src/Symfony/Component/DependencyInjection/Compiler/ResolveBindingsPass.php	undefined-variable	Undefined variable $parsedName
+src/Symfony/Component/DependencyInjection/Compiler/ResolveBindingsPass.php	undefined-variable	Undefined variable $parsedName
+src/Symfony/Component/DependencyInjection/Compiler/ResolveInstanceofConditionalsPass.php	unused-variable	Variable $reflectionClass is assigned but never read
+src/Symfony/Component/DependencyInjection/Container.php	unknown-class	Unknown class 'LazyLoadingInterface'
+src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'ClassLoader'
+src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/DependencyInjection/Dumper/PhpDumper.php	unknown-class	Unknown class 'ClassLoader'
+src/Symfony/Component/DependencyInjection/Kernel/ServicesBundle.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Component/DependencyInjection/Loader/Configurator/ContainerConfigurator.php	unused-import	Unused import 'Symfony\Component\DependencyInjection\Reference'
+src/Symfony/Component/DependencyInjection/Loader/Configurator/DefaultsConfigurator.php	unused-private-property	Private property 'DefaultsConfigurator::$path' is never used
+src/Symfony/Component/DependencyInjection/Loader/Configurator/InlineServiceConfigurator.php	unused-private-property	Private property 'InlineServiceConfigurator::$allowParent' is never used
+src/Symfony/Component/DependencyInjection/Loader/Configurator/InlineServiceConfigurator.php	unused-private-property	Private property 'InlineServiceConfigurator::$id' is never used
+src/Symfony/Component/DependencyInjection/Loader/Configurator/InlineServiceConfigurator.php	unused-private-property	Private property 'InlineServiceConfigurator::$path' is never used
+src/Symfony/Component/DependencyInjection/Loader/Configurator/InstanceofConfigurator.php	unused-private-property	Private property 'InstanceofConfigurator::$path' is never used
+src/Symfony/Component/DependencyInjection/Loader/Configurator/PrototypeConfigurator.php	unused-private-property	Private property 'PrototypeConfigurator::$allowParent' is never used
+src/Symfony/Component/DependencyInjection/Loader/Configurator/ServiceConfigurator.php	unused-private-property	Private property 'ServiceConfigurator::$allowParent' is never used
+src/Symfony/Component/DependencyInjection/Loader/Configurator/ServiceConfigurator.php	unused-private-property	Private property 'ServiceConfigurator::$path' is never used
+src/Symfony/Component/DependencyInjection/Loader/PhpFileLoader.php	unknown-class	Unknown class 'App'
+src/Symfony/Component/DependencyInjection/Loader/PhpFileLoader.php	unknown-class	Unknown class 'App'
+src/Symfony/Component/DependencyInjection/ReverseContainer.php	unknown-member	Unknown member 'privates' on 'ReverseContainer'
+src/Symfony/Component/DependencyInjection/ReverseContainer.php	unknown-member	Unknown member 'services' on 'ReverseContainer'
+src/Symfony/Component/DependencyInjection/ServiceLocator.php	unused-private-method	Private method 'ServiceLocator::createCircularReferenceException' is never used
+src/Symfony/Component/DependencyInjection/ServiceLocator.php	unused-private-method	Private method 'ServiceLocator::createNotFoundException' is never used
+src/Symfony/Component/DependencyInjection/ServicesResetter.php	unknown-class	Unknown class 'LazyLoadingInterface'
+src/Symfony/Component/DomCrawler/Test/Constraint/CrawlerAnySelectorTextContains.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/DomCrawler/Test/Constraint/CrawlerAnySelectorTextSame.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/DomCrawler/Test/Constraint/CrawlerSelectorAttributeValueSame.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/DomCrawler/Test/Constraint/CrawlerSelectorCount.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/DomCrawler/Test/Constraint/CrawlerSelectorExists.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/DomCrawler/Test/Constraint/CrawlerSelectorTextContains.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/DomCrawler/Test/Constraint/CrawlerSelectorTextSame.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'IMock'
+src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'LegacyProxy'
+src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'MockInterface'
+src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'MockObject'
+src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'ProphecySubjectInterface'
+src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'ProxyInterface'
+src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'StatelessInvocation'
+src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'Stub'
+src/Symfony/Component/ErrorHandler/ErrorEnhancer/ClassNotFoundErrorEnhancer.php	unknown-class	Unknown class 'ClassLoader'
+src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::addElementToGhost' is never used
+src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::dumpExceptionProperties' is never used
+src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::fileExcerpt' is never used
+src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatArgsAsText' is never used
+src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatFileFromText' is never used
+src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatLogContext' is never used
+src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatLogMessage' is never used
+src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::isVendorExceptionClass' is never used
+src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::showExceptionProperties' is never used
+src/Symfony/Component/ErrorHandler/Resources/views/exception_full.html.php	unknown-class	Unknown class 'Composer\InstalledVersions'
+src/Symfony/Component/ErrorHandler/Resources/views/exception_full.html.php	unknown-class	Unknown class 'Composer\InstalledVersions'
+src/Symfony/Component/ErrorHandler/Resources/views/exception_full.html.php	unknown-class	Unknown class 'Composer\InstalledVersions'
+src/Symfony/Component/ErrorHandler/Resources/views/exception_full.html.php	unknown-class	Unknown class 'Composer\InstalledVersions'
+src/Symfony/Component/ErrorHandler/Resources/views/traces_text.html.php	undefined-variable	Undefined variable $exception
+src/Symfony/Component/ErrorHandler/Resources/views/traces_text.html.php	undefined-variable	Undefined variable $exception
+src/Symfony/Component/ErrorHandler/Resources/views/traces_text.html.php	undefined-variable	Undefined variable $exception
+src/Symfony/Component/ErrorHandler/Resources/views/traces_text.html.php	undefined-variable	Undefined variable $exception
+src/Symfony/Component/ErrorHandler/Resources/views/traces_text.html.php	undefined-variable	Undefined variable $exception
+src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
+src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
+src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
+src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
+src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
+src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
+src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
+src/Symfony/Component/Form/Extension/Core/Type/FormType.php	unknown-member	Unknown member 'vars' on 'BaseType'
+src/Symfony/Component/Form/Extension/Core/Type/FormType.php	unknown-member	Unknown member 'vars' on 'BaseType'
+src/Symfony/Component/Form/Test/FormIntegrationTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-member	Unknown member 'method' on 'ValidatorInterface'
+src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-member	Unknown member 'method' on 'ValidatorInterface'
+src/Symfony/Component/HttpClient/AmpHttpClient.php	unused-private-property	Private property 'AmpHttpClient::$emptyDefaults' is never used
+src/Symfony/Component/HttpClient/CachingHttpClient.php	unknown-member	Unknown member 'asyncStream' on 'CachingHttpClient'
+src/Symfony/Component/HttpClient/CachingHttpClient.php	unknown-member	Unknown member 'asyncStream' on 'CachingHttpClient'
+src/Symfony/Component/HttpClient/CurlHttpClient.php	unused-private-property	Private property 'CurlHttpClient::$emptyDefaults' is never used
+src/Symfony/Component/HttpClient/Har/HarFile.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/HttpClient/Har/HarFile.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/HttpClient/Har/HarFile.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/HttpClient/Har/HarFile.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/HttpClient/Har/HarFile.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
+src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown class 'Rize\UriTemplate'
+src/Symfony/Component/HttpClient/Internal/AmpResolver.php	unknown-function	Unknown function 'Dns\resolve'
+src/Symfony/Component/HttpClient/Internal/AmpResolver.php	unknown-function	Unknown function 'Dns\resolve'
+src/Symfony/Component/HttpClient/NativeHttpClient.php	unused-private-property	Private property 'NativeHttpClient::$emptyDefaults' is never used
+src/Symfony/Component/HttpClient/Recorder/Redactor/DefaultRedactor.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
+src/Symfony/Component/HttpClient/Recorder/Redactor/DefaultRedactor.php	unknown-function	Unknown function 'json_validate'
+src/Symfony/Component/HttpClient/Resources/config/http_client.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
+src/Symfony/Component/HttpClient/Resources/config/http_client.php	unknown-class	Unknown class 'Rize\UriTemplate'
+src/Symfony/Component/HttpClient/Response/AmpResponse.php	unused-private-method	Private method 'AmpResponse::perform' is never used
+src/Symfony/Component/HttpClient/Response/AmpResponse.php	unused-private-method	Private method 'AmpResponse::schedule' is never used
+src/Symfony/Component/HttpClient/Response/AmpResponse.php	unused-private-method	Private method 'AmpResponse::select' is never used
+src/Symfony/Component/HttpClient/Response/CurlResponse.php	unknown-member	Unknown member 'doGetContent' on 'CurlResponse'
+src/Symfony/Component/HttpClient/Response/CurlResponse.php	unused-private-method	Private method 'CurlResponse::schedule' is never used
+src/Symfony/Component/HttpClient/Response/CurlResponse.php	unused-private-method	Private method 'CurlResponse::select' is never used
+src/Symfony/Component/HttpClient/Response/JsonMockResponse.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
+src/Symfony/Component/HttpClient/Response/JsonMockResponse.php	unknown-function	Unknown function 'json_validate'
+src/Symfony/Component/HttpClient/Response/NativeResponse.php	unused-private-method	Private method 'NativeResponse::schedule' is never used
+src/Symfony/Component/HttpClient/Response/NativeResponse.php	unused-private-method	Private method 'NativeResponse::select' is never used
+src/Symfony/Component/HttpClient/ThrottlingHttpClient.php	unknown-member	Unknown member 'traitReset' on 'ThrottlingHttpClient'
+src/Symfony/Component/HttpClient/UriTemplateHttpClient.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
+src/Symfony/Component/HttpClient/UriTemplateHttpClient.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
+src/Symfony/Component/HttpClient/UriTemplateHttpClient.php	unknown-class	Unknown class 'Rize\UriTemplate'
+src/Symfony/Component/HttpClient/UriTemplateHttpClient.php	unknown-class	Unknown class 'Rize\UriTemplate'
+src/Symfony/Component/HttpFoundation/AcceptHeader.php	syntax-error	malformed match arm
+src/Symfony/Component/HttpFoundation/RequestMatcher/IsJsonRequestMatcher.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
+src/Symfony/Component/HttpFoundation/RequestMatcher/IsJsonRequestMatcher.php	unknown-function	Unknown function 'json_validate'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	unknown-class	Unknown class 'Memcached'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	unknown-class	Unknown class 'Memcached'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'Query'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/RedisSessionHandler.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/RedisSessionHandler.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/RedisSessionHandler.php	unknown-class	Unknown class 'RedisArray'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/RedisSessionHandler.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	unknown-class	Unknown class 'Memcached'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	unknown-class	Unknown class 'RedisArray'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/HttpFoundation/Test/Constraint/RequestAttributeValueSame.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseCookieValueSame.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseFormatSame.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseHasCookie.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseHasHeader.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseHeaderLocationSame.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseHeaderSame.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseIsRedirected.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseIsSuccessful.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseIsUnprocessable.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseStatusCodeSame.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/HttpFoundation/Test/Constraint/SessionHasFlashMessage.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/HttpKernel/DataCollector/ConfigDataCollector.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/HttpKernel/DataCollector/ConfigDataCollector.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/HttpKernel/DataCollector/ConfigDataCollector.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/HttpKernel/DataCollector/DumpDataCollector.php	unknown-member	Unknown member 'line' on 'DumpDataCollector'
+src/Symfony/Component/HttpKernel/DataCollector/DumpDataCollector.php	unknown-member	Unknown member 'style' on 'DumpDataCollector'
+src/Symfony/Component/HttpKernel/Event/ViewEvent.php	unknown-member	Unknown member 'controllerEvent' on 'ViewEvent'
+src/Symfony/Component/HttpKernel/Event/ViewEvent.php	unknown-member	Unknown member 'controllerEvent' on 'ViewEvent'
+src/Symfony/Component/HttpKernel/EventListener/ControllerAttributesListener.php	unknown-member	Unknown member 'controllerMetadata' on 'KernelEvent'
+src/Symfony/Component/HttpKernel/HttpKernel.php	unknown-member	Unknown member 'getController' on 'RequestEvent'
+src/Symfony/Component/HttpKernel/HttpKernel.php	unknown-member	Unknown member 'getControllerReflector' on 'RequestEvent'
+src/Symfony/Component/HttpKernel/Kernel.php	unknown-member	Unknown member 'doInitializeBundles' on 'Kernel'
+src/Symfony/Component/HttpKernel/Kernel.php	unknown-member	Unknown member 'doInitializeContainer' on 'Kernel'
+src/Symfony/Component/HttpKernel/Resources/welcome.html.php	undefined-variable	Undefined variable $docVersion
+src/Symfony/Component/HttpKernel/Resources/welcome.html.php	undefined-variable	Undefined variable $docVersion
+src/Symfony/Component/HttpKernel/Resources/welcome.html.php	undefined-variable	Undefined variable $docVersion
+src/Symfony/Component/HttpKernel/Resources/welcome.html.php	undefined-variable	Undefined variable $projectDir
+src/Symfony/Component/HttpKernel/Resources/welcome.html.php	undefined-variable	Undefined variable $version
+src/Symfony/Component/HttpKernel/Resources/welcome.html.php	undefined-variable	Undefined variable $version
+src/Symfony/Component/JsonPath/Test/JsonPathAssertionsTrait.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/JsonPath/Test/JsonPathAssertionsTrait.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/JsonPath/Test/JsonPathAssertionsTrait.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/JsonPath/Test/JsonPathAssertionsTrait.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/JsonPath/Test/JsonPathAssertionsTrait.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/JsonPath/Test/JsonPathAssertionsTrait.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/JsonPath/Test/JsonPathAssertionsTrait.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/JsonPath/Test/JsonPathContains.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/JsonPath/Test/JsonPathCount.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/JsonPath/Test/JsonPathEquals.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/JsonPath/Test/JsonPathNotContains.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/JsonPath/Test/JsonPathNotEquals.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/JsonPath/Test/JsonPathNotSame.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/JsonPath/Test/JsonPathSame.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/JsonSchema/Dialect.php	undefined-variable	Undefined variable $value
+src/Symfony/Component/JsonSchema/Dialect.php	undefined-variable	Undefined variable $value
+src/Symfony/Component/JsonSchema/DialectKeywords.php	undefined-variable	Undefined variable $values
+src/Symfony/Component/JsonStreamer/Read/Decoder.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
+src/Symfony/Component/JsonStreamer/Read/Decoder.php	unknown-function	Unknown function 'json_validate'
+src/Symfony/Component/JsonStreamer/Write/PhpGenerator.php	unused-private-property	Private property 'PhpGenerator::$transformers' is never used
+src/Symfony/Component/JsonStreamer/Write/StreamWriterGenerator.php	unused-variable	Variable $classReflection is assigned but never read
+src/Symfony/Component/KeyManagement/Bridge/DoctrineOrm/EventListener/EncryptedColumnListener.php	unknown-function	Unknown function 'readonly'
+src/Symfony/Component/KeyManagement/Bridge/Kmip/Kmip/StreamTransport.php	undefined-variable	Undefined variable $written
+src/Symfony/Component/KeyManagement/DataKey.php	undefined-variable	Undefined variable $consumer
+src/Symfony/Component/KeyManagement/DataKeyHandle.php	undefined-variable	Undefined variable $consumer
+src/Symfony/Component/Lock/Store/DoctrineDbalStore.php	unused-private-method	Private method 'DoctrineDbalStore::prune' is never used
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWrite'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWrite'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWriteException'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWriteException'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'Command'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'Manager'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'Manager'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'Query'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'ReadPreference'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'ReadPreference'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'WriteConcern'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'WriteConcern'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'WriteConcern'
+src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'WriteConcern'
+src/Symfony/Component/Lock/Store/PdoStore.php	unused-private-method	Private method 'PdoStore::prune' is never used
+src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $result is assigned but never read
+src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $result is assigned but never read
+src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $result is assigned but never read
+src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $result is assigned but never read
+src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
+src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'RedisArray'
+src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'RelayCluster'
+src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'RelayCluster'
+src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
+src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
+src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'Memcached'
+src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'RedisArray'
+src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'Zookeeper'
+src/Symfony/Component/Lock/Store/ZookeeperStore.php	unknown-class	Unknown class 'Zookeeper'
+src/Symfony/Component/Lock/Store/ZookeeperStore.php	unknown-class	Unknown class 'Zookeeper'
+src/Symfony/Component/Lock/Store/ZookeeperStore.php	unknown-class	Unknown class 'Zookeeper'
+src/Symfony/Component/Lock/Store/ZookeeperStore.php	unknown-class	Unknown class 'Zookeeper'
+src/Symfony/Component/Lock/Store/ZookeeperStore.php	unknown-class	Unknown class 'ZookeeperException'
+src/Symfony/Component/Lock/Store/ZookeeperStore.php	unknown-class	Unknown class 'ZookeeperException'
+src/Symfony/Component/Lock/Test/AbstractStoreTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Component/Mailer/Bridge/Postal/Transport/PostalApiTransport.php	unused-private-property	Private property 'PostalApiTransport::$hostName' is never used
+src/Symfony/Component/Mailer/Bridge/Sendgrid/Transport/SendgridSmtpTransport.php	unused-private-property	Private property 'SendgridSmtpTransport::$region' is never used
+src/Symfony/Component/Mailer/Test/AbstractTransportFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Mailer/Test/AbstractTransportFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Mailer/Test/AbstractTransportFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Mailer/Test/AbstractTransportFactoryTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Component/Mailer/Test/Constraint/EmailCount.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Mailer/Test/Constraint/EmailIsQueued.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Mailer/Test/IncompleteDsnTestTrait.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Mailer/Transport/Transports.php	unknown-member	Unknown member 'getHeaders' on 'RawMessage'
+src/Symfony/Component/Mailer/Transport/Transports.php	unknown-member	Unknown member 'getHeaders' on 'RawMessage'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpFactory.php	unknown-class	Unknown class 'AMQPChannel'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpFactory.php	unknown-class	Unknown class 'AMQPConnection'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpFactory.php	unknown-class	Unknown class 'AMQPExchange'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpFactory.php	unknown-class	Unknown class 'AMQPQueue'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpSender.php	unknown-class	Unknown class 'AMQPException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpSender.php	unknown-class	Unknown class 'AMQPException'
+src/Symfony/Component/Messenger/Bridge/Doctrine/Transport/Connection.php	unknown-class	Unknown class 'FirebirdPlatform'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'BSONDocument'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'BSONDocument'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'BSONDocument'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'BSONDocument'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'BSONDocument'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'BulkWriteException'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'InstalledVersions'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'ObjectId'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'ObjectId'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'ObjectId'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'ObjectId'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'ObjectId'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'WriteConcern'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'WriteConcern'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'WriteConcern'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'WriteConcern'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-member	Unknown member 'countDocuments' on 'Collection'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-member	Unknown member 'createIndex' on 'Collection'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-member	Unknown member 'deleteMany' on 'Collection'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-member	Unknown member 'deleteOne' on 'Collection'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-member	Unknown member 'deleteOne' on 'Collection'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-member	Unknown member 'find' on 'Collection'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-member	Unknown member 'findOne' on 'Collection'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-member	Unknown member 'findOneAndUpdate' on 'Collection'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-member	Unknown member 'getCollection' on 'Client'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-member	Unknown member 'insertMany' on 'Collection'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-member	Unknown member 'insertOne' on 'Collection'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-member	Unknown member 'updateOne' on 'Collection'
+src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/MongoDbReceiver.php	unknown-class	Unknown class 'BSONDocument'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	undefined-variable	Undefined variable $auth
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Sentinel'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Sentinel'
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unused-variable	Variable $error is assigned but never read
+src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unused-variable	Variable $error is assigned but never read
+src/Symfony/Component/Messenger/Exception/DelayedMessageHandlingException.php	unused-private-property	Private property 'DelayedMessageHandlingException::$exceptions' is never used
+src/Symfony/Component/Messenger/Test/Middleware/MiddlewareTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Component/Messenger/Transport/Serialization/Normalizer/MessageStampNormalizer.php	unknown-member	Unknown member 'getMessage' on 'ChainStamp'
+src/Symfony/Component/Mime/Test/Constraint/EmailAddressContains.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Mime/Test/Constraint/EmailAddressContains.php	unknown-member	Unknown member 'getHeaders' on 'RawMessage'
+src/Symfony/Component/Mime/Test/Constraint/EmailAddressContains.php	unknown-member	Unknown member 'getHeaders' on 'RawMessage'
+src/Symfony/Component/Mime/Test/Constraint/EmailAttachmentCount.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Mime/Test/Constraint/EmailAttachmentCount.php	unknown-member	Unknown member 'getAttachments' on 'RawMessage'
+src/Symfony/Component/Mime/Test/Constraint/EmailHasHeader.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Mime/Test/Constraint/EmailHasHeader.php	unknown-member	Unknown member 'getHeaders' on 'RawMessage'
+src/Symfony/Component/Mime/Test/Constraint/EmailHeaderSame.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Mime/Test/Constraint/EmailHtmlBodyContains.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Mime/Test/Constraint/EmailHtmlBodyContains.php	unknown-member	Unknown member 'getHtmlBody' on 'RawMessage'
+src/Symfony/Component/Mime/Test/Constraint/EmailSubjectContains.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Mime/Test/Constraint/EmailTextBodyContains.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Mime/Test/Constraint/EmailTextBodyContains.php	unknown-member	Unknown member 'getTextBody' on 'RawMessage'
+src/Symfony/Component/Notifier/Bridge/Firebase/FirebaseOptions.php	unused-private-property	Private property 'FirebaseOptions::$target' is never used
+src/Symfony/Component/Notifier/Bridge/GatewayApi/GatewayApiOptions.php	undefined-variable	Undefined variable $class
+src/Symfony/Component/Notifier/Bridge/MicrosoftTeams/Test/Action/Input/AbstractInputTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Component/Notifier/Bridge/Sipgate/SipgateTransport.php	unused-private-property	Private property 'SipgateTransport::$token' is never used
+src/Symfony/Component/Notifier/Test/AbstractTransportFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Notifier/Test/AbstractTransportFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Notifier/Test/AbstractTransportFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Notifier/Test/AbstractTransportFactoryTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Component/Notifier/Test/Constraint/NotificationCount.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Notifier/Test/Constraint/NotificationIsQueued.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Notifier/Test/Constraint/NotificationSubjectContains.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Notifier/Test/Constraint/NotificationTransportIsEqual.php	unknown-class	Unknown class 'Constraint'
+src/Symfony/Component/Notifier/Test/IncompleteDsnTestTrait.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Notifier/Test/MissingRequiredOptionTestTrait.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Notifier/Test/TransportTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Notifier/Test/TransportTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Notifier/Test/TransportTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Notifier/Test/TransportTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Notifier/Test/TransportTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Component/OptionsResolver/Debug/OptionsResolverIntrospector.php	unknown-member	Unknown member 'isDefined' on 'OptionsResolverIntrospector'
+src/Symfony/Component/PasswordHasher/Hasher/NativePasswordHasher.php	unknown-function	Unknown function 'Sodium\crypto_pwhash_str_verify'
+src/Symfony/Component/PasswordHasher/Hasher/SodiumPasswordHasher.php	unknown-function	Unknown function 'Sodium\crypto_pwhash_str'
+src/Symfony/Component/PasswordHasher/Hasher/SodiumPasswordHasher.php	unknown-function	Unknown function 'Sodium\crypto_pwhash_str_needs_rehash'
+src/Symfony/Component/PasswordHasher/Hasher/SodiumPasswordHasher.php	unknown-function	Unknown function 'Sodium\crypto_pwhash_str_verify'
+src/Symfony/Component/PropertyInfo/Util/PhpDocTypeHelper.php	syntax-error	malformed match arm
+src/Symfony/Component/PropertyInfo/Util/PhpDocTypeHelper.php	unknown-class	Unknown class 'Collection'
+src/Symfony/Component/PropertyInfo/Util/PhpDocTypeHelper.php	unknown-class	Unknown class 'LegacyScalar'
+src/Symfony/Component/Routing/Loader/Configurator/CollectionConfigurator.php	unused-private-method	Private method 'CollectionConfigurator::createRoute' is never used
+src/Symfony/Component/Routing/Loader/Configurator/CollectionConfigurator.php	unused-private-property	Private property 'CollectionConfigurator::$parentConfigurator' is never used
+src/Symfony/Component/Routing/Loader/YamlFileLoader.php	unknown-member	Unknown member 'doParseImport' on 'YamlFileLoader'
+src/Symfony/Component/Routing/Loader/YamlFileLoader.php	unknown-member	Unknown member 'doParseRoute' on 'YamlFileLoader'
+src/Symfony/Component/Routing/Loader/YamlFileLoader.php	unknown-member	Unknown member 'doValidate' on 'YamlFileLoader'
+src/Symfony/Component/Routing/Matcher/Dumper/CompiledUrlMatcherDumper.php	unknown-member	Unknown member 'compile' on 'StaticPrefixCollection'
+src/Symfony/Component/Routing/Matcher/Dumper/CompiledUrlMatcherTrait.php	unused-variable	Variable $request is assigned but never read
+src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'EventSubscriberInterface'
+src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'Factory'
+src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'PluginInterface'
+src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'ScriptEvents'
+src/Symfony/Component/Runtime/Runner/FrankenPhpWorkerRunner.php	unused-variable	Variable $sfRequest is assigned but never read
+src/Symfony/Component/Runtime/Runner/FrankenPhpWorkerRunner.php	unused-variable	Variable $sfResponse is assigned but never read
+src/Symfony/Component/Security/Core/Role/SwitchUserRole.php	unused-private-property	Private property 'SwitchUserRole::$deprecationTriggered' is never used
+src/Symfony/Component/Security/Core/Role/SwitchUserRole.php	unused-private-property	Private property 'SwitchUserRole::$source' is never used
+src/Symfony/Component/Security/Core/Test/AccessDecisionStrategyTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Security/Core/Test/AccessDecisionStrategyTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Component/Security/Http/AccessToken/OAuth2/Oauth2TokenHandler.php	unknown-class	Unknown class 'Symfony\Component\String\u'
+src/Symfony/Component/Security/Http/Firewall/ContextListener.php	unknown-class	Unknown class 'LazyLoadingInterface'
+src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
+src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'RedisArray'
+src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'RelayCluster'
+src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'RelayCluster'
+src/Symfony/Component/Semaphore/Store/StoreFactory.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/Semaphore/Store/StoreFactory.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
+src/Symfony/Component/Semaphore/Store/StoreFactory.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/Semaphore/Store/StoreFactory.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Semaphore/Store/StoreFactory.php	unknown-class	Unknown class 'RedisArray'
+src/Symfony/Component/Semaphore/Store/StoreFactory.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/Semaphore/Store/StoreFactory.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/Semaphore/Store/StoreFactory.php	unknown-class	Unknown class 'RelayCluster'
+src/Symfony/Component/Serializer/Normalizer/ArrayDenormalizer.php	unknown-class	Unknown class 'LegacyType'
+src/Symfony/Component/Serializer/Normalizer/GetSetMethodNormalizer.php	unknown-class	Unknown class 'LegacyIgnore'
+src/Symfony/Component/String/AbstractString.php	unused-variable	Variable $fromEncoding is assigned but never read
+src/Symfony/Component/String/AbstractUnicodeString.php	unknown-member	Unknown member 'NFKC_CF' on 'Normalizer'
+src/Symfony/Component/String/Resources/functions.php	unknown-class	Unknown class 'b'
+src/Symfony/Component/String/Resources/functions.php	unknown-class	Unknown class 's'
+src/Symfony/Component/String/Resources/functions.php	unknown-class	Unknown class 'u'
+src/Symfony/Component/Translation/Command/TranslationPullCommand.php	unused-private-property	Private property 'TranslationPullCommand::$reader' is never used
+src/Symfony/Component/Translation/Command/TranslationPushCommand.php	unused-private-property	Private property 'TranslationPushCommand::$reader' is never used
+src/Symfony/Component/Translation/Command/XliffUpdateSourcesCommand.php	unused-private-property	Private property 'XliffUpdateSourcesCommand::$reader' is never used
+src/Symfony/Component/Translation/Resources/functions.php	unknown-class	Unknown class 't'
+src/Symfony/Component/Translation/Test/AbstractProviderFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Translation/Test/AbstractProviderFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Translation/Test/AbstractProviderFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Translation/Test/AbstractProviderFactoryTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Component/Translation/Test/IncompleteDsnTestTrait.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Translation/Test/ProviderTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Translation/Test/ProviderTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Component/Tui/Input/KeyParser.php	unused-variable	Variable $isDigit is assigned but never read
+src/Symfony/Component/Tui/Input/StdinBuffer.php	syntax-error	malformed match arm
+src/Symfony/Component/Tui/Widget/MarkdownWidget.php	syntax-error	malformed match arm
+src/Symfony/Component/TypeInfo/TypeContext/TypeContextFactory.php	unused-variable	Variable $typeContext is assigned but never read
+src/Symfony/Component/TypeInfo/TypeFactoryTrait.php	undefined-variable	Undefined variable $backingType
+src/Symfony/Component/TypeInfo/TypeFactoryTrait.php	undefined-variable	Undefined variable $className
+src/Symfony/Component/Uid/HashableInterface.php	unknown-class	Unknown class 'Ds\Hashable'
+src/Symfony/Component/Uid/HashableInterface.php	unknown-class	Unknown class 'Ds\Hashable'
+src/Symfony/Component/Uid/HashableInterface.php	unknown-class	Unknown class 'Ds\Key'
+src/Symfony/Component/Uid/HashableInterface.php	unknown-class	Unknown class 'Ds\Key'
+src/Symfony/Component/Validator/Constraints/JsonValidator.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
+src/Symfony/Component/Validator/Constraints/JsonValidator.php	unknown-function	Unknown function 'json_validate'
+src/Symfony/Component/Validator/Test/CompoundConstraintTestCase.php	unknown-class	Unknown class 'ExpectationFailedException'
+src/Symfony/Component/Validator/Test/CompoundConstraintTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'Assert'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'ExpectationFailedException'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'ExpectationFailedException'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'ExpectationFailedException'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'IsIdentical'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'IsInstanceOf'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'IsNull'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'LogicalOr'
+src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Component/VarDumper/Caster/DsCaster.php	unknown-class	Unknown class 'Map'
+src/Symfony/Component/VarDumper/Caster/DsCaster.php	unknown-class	Unknown class 'Pair'
+src/Symfony/Component/VarDumper/Caster/MemcachedCaster.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
+src/Symfony/Component/VarDumper/Caster/MemcachedCaster.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
+src/Symfony/Component/VarDumper/Caster/MemcachedCaster.php	unknown-class	Unknown class 'Memcached'
+src/Symfony/Component/VarDumper/Caster/MemcachedCaster.php	unknown-class	Unknown class 'Memcached'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Relay'
+src/Symfony/Component/VarDumper/Caster/SymfonyCaster.php	unknown-member	Unknown member 'STATUS_INITIALIZED_FULL' on 'LazyObjectState'
+src/Symfony/Component/VarDumper/Caster/SymfonyCaster.php	unknown-member	Unknown member 'STATUS_INITIALIZED_PARTIAL' on 'LazyObjectState'
+src/Symfony/Component/VarDumper/Caster/SymfonyCaster.php	unknown-member	Unknown member 'STATUS_UNINITIALIZED_FULL' on 'LazyObjectState'
+src/Symfony/Component/VarDumper/Caster/SymfonyCaster.php	unknown-member	Unknown member 'STATUS_UNINITIALIZED_PARTIAL' on 'LazyObjectState'
+src/Symfony/Component/VarDumper/Test/VarDumperTestTrait.php	unknown-class	Unknown attribute 'After'
+src/Symfony/Component/Webhook/Test/AbstractRequestParserTestCase.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Component/Webhook/Test/AbstractRequestParserTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	undefined-variable	Undefined variable $steps
+src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'Group'
+src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'Group'
+src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'Group'
+src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'RequiresPhpExtension'
+src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'RequiresPhpExtension'
+src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'RequiresPhpExtension'
+src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'TestWith'
+src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'TestWith'
+src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unused-variable	Variable $data is assigned but never read
+src/Symfony/Contracts/Service/Test/ServiceLocatorTestCase.php	unknown-class	Unknown class 'TestCase'
+src/Symfony/Contracts/Translation/Test/TranslatorTest.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Contracts/Translation/Test/TranslatorTest.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Contracts/Translation/Test/TranslatorTest.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Contracts/Translation/Test/TranslatorTest.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Contracts/Translation/Test/TranslatorTest.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Contracts/Translation/Test/TranslatorTest.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Contracts/Translation/Test/TranslatorTest.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Contracts/Translation/Test/TranslatorTest.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Contracts/Translation/Test/TranslatorTest.php	unknown-class	Unknown attribute 'DataProvider'
+src/Symfony/Contracts/Translation/Test/TranslatorTest.php	unknown-class	Unknown attribute 'RequiresPhpExtension'
+src/Symfony/Contracts/Translation/Test/TranslatorTest.php	unknown-class	Unknown attribute 'RequiresPhpExtension'
+src/Symfony/Contracts/Translation/Test/TranslatorTest.php	unknown-class	Unknown class 'TestCase'
