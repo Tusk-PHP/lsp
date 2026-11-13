@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -51,8 +52,16 @@ func runCheck(args []string, stdout, stderr io.Writer) (int, error) {
 	format := fs.String("format", "text", "Output format: text|json")
 	baseline := fs.String("baseline", "", "Report only findings this baseline file doesn't list")
 	writeBaseline := fs.String("write-baseline", "", "Write all findings to this baseline file")
+	var excludes []string
+	fs.Func("exclude", "Leave out files under a directory or with a name matching this glob (repeatable)", func(v string) error {
+		if _, err := path.Match(v, ""); err != nil {
+			return fmt.Errorf("bad pattern %q: %w", v, err)
+		}
+		excludes = append(excludes, strings.Trim(filepath.ToSlash(v), "/"))
+		return nil
+	})
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "usage: tusk-php check [--root=.] [--format=text|json] [--baseline=file] [--write-baseline=file] [path|dir|glob ...]")
+		fmt.Fprintln(stderr, "usage: tusk-php check [--root=.] [--format=text|json] [--exclude=glob ...] [--baseline=file] [--write-baseline=file] [path|dir|glob ...]")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -80,6 +89,7 @@ func runCheck(args []string, stdout, stderr io.Writer) (int, error) {
 	if err != nil {
 		return 2, err
 	}
+	files = excludeFiles(root, files, excludes)
 	indexed := time.Since(start)
 
 	var all []finding
@@ -217,6 +227,44 @@ func checkTargets(root string, args []string, index *symbols.Index) ([]string, e
 	}
 	sort.Strings(files)
 	return files, nil
+}
+
+// excludeFiles drops the files an --exclude pattern matches. A pattern
+// without a slash matches any one directory or file name in the path, as in
+// "Tests" or "*Test.php"; a pattern with one matches the path relative to root
+// or a directory leading to it, as in "src/wp-content" or "app/code/*/Test".
+func excludeFiles(root string, files, patterns []string) []string {
+	if len(patterns) == 0 {
+		return files
+	}
+	kept := files[:0:0]
+	for _, file := range files {
+		if !excluded(relativePath(root, file), patterns) {
+			kept = append(kept, file)
+		}
+	}
+	return kept
+}
+
+func excluded(rel string, patterns []string) bool {
+	segments := strings.Split(rel, "/")
+	for _, pattern := range patterns {
+		if !strings.Contains(pattern, "/") {
+			for _, segment := range segments {
+				if ok, _ := path.Match(pattern, segment); ok {
+					return true
+				}
+			}
+			continue
+		}
+		depth := strings.Count(pattern, "/") + 1
+		if depth <= len(segments) {
+			if ok, _ := path.Match(pattern, strings.Join(segments[:depth], "/")); ok {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func relativePath(root, path string) string {

@@ -13,6 +13,7 @@ the PHP version and extensions from `composer.json`, the framework, and
 tusk-php check                       # every project file, vendor/ left out
 tusk-php check src/Http app/Models/User.php 'src/*/Console/*.php'
 tusk-php check --root ../my-app --format json
+tusk-php check --exclude Tests --exclude '*Test.php' src
 ```
 
 Each finding is printed as `path:line:column: severity code: message`, with paths
@@ -23,6 +24,7 @@ indexed PHP files under them, so paths in `excludePaths` stay out.
 |---|---|---|
 | `--root` | current directory | The project to index. |
 | `--format` | `text` | `text`, or `json` for an array of `{path, line, column, severity, code, message}`. |
+| `--exclude` | | Leave out files matching a glob; repeat it for more. Without a `/` it matches any directory or file name in the path (`Tests`, `*Test.php`); with one, a path from the root (`src/Legacy`, `app/code/*/Test`). |
 | `--write-baseline` | | Write every finding to this file. |
 | `--baseline` | | Report only findings this file doesn't list. |
 
