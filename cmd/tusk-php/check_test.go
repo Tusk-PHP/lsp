@@ -89,3 +89,35 @@ func TestCheckCommand(t *testing.T) {
 		t.Errorf("summary: %q", summary)
 	}
 }
+
+// --exclude leaves out files by a directory or file name anywhere in the path,
+// or by a path from the root.
+func TestCheckExclude(t *testing.T) {
+	root := writeProject(t, map[string]string{
+		"composer.json":              `{"autoload": {"psr-4": {"App\\": "src/"}}}`,
+		"src/Bad.php":                "<?php\nfunction a() { return $one; }\n",
+		"src/Tests/BadTest.php":      "<?php\nfunction b() { return $two; }\n",
+		"src/Mail/Tests/Fixture.php": "<?php\nfunction c() { return $three; }\n",
+		"src/Legacy/Old.php":         "<?php\nfunction d() { return $four; }\n",
+	})
+	files := func(args ...string) string {
+		t.Helper()
+		_, out, _ := check(t, append([]string{"--root", root}, args...)...)
+		var names []string
+		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+			if line != "" {
+				names = append(names, line[:strings.Index(line, ":")])
+			}
+		}
+		return strings.Join(names, " ")
+	}
+	if got := files("--exclude", "Tests"); got != "src/Bad.php src/Legacy/Old.php" {
+		t.Errorf("by directory name: %q", got)
+	}
+	if got := files("--exclude", "*Test.php", "--exclude", "src/Legacy"); got != "src/Bad.php src/Mail/Tests/Fixture.php" {
+		t.Errorf("by file name and path: %q", got)
+	}
+	if got := files("--exclude", "src/*/Tests"); got != "src/Bad.php src/Legacy/Old.php src/Tests/BadTest.php" {
+		t.Errorf("by a glob path: %q", got)
+	}
+}
