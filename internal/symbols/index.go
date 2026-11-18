@@ -159,6 +159,10 @@ type Index struct {
 	generator            atomic.Pointer[classGeneratorHolder]
 	generatedURIs        map[string]bool     // URIs of generated classes, which are not files on disk
 	generatedFrom        map[string][]string // lowercase source FQN → URIs of the classes generated from it
+	// templateFiles holds the URIs of templates (Blade views) in the
+	// workspace. They declare no symbols, but references and rename read the
+	// PHP in them.
+	templateFiles map[string]struct{}
 }
 
 // Generation changes whenever symbols are added to or removed from the index.
@@ -1413,6 +1417,29 @@ func (idx *Index) GetAllFileURIs() []string {
 		if idx.generatedURIs[uri] {
 			continue // not a file on disk
 		}
+		uris = append(uris, uri)
+	}
+	return uris
+}
+
+// AddTemplateFile records a template (a Blade view) in the workspace. Only its
+// URI is kept.
+func (idx *Index) AddTemplateFile(uri string) {
+	idx.mu.Lock()
+	if idx.templateFiles == nil {
+		idx.templateFiles = make(map[string]struct{})
+	}
+	idx.templateFiles[uri] = struct{}{}
+	idx.mu.Unlock()
+}
+
+// TemplateFileURIs returns the URIs recorded with AddTemplateFile, as a new
+// slice.
+func (idx *Index) TemplateFileURIs() []string {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	uris := make([]string, 0, len(idx.templateFiles))
+	for uri := range idx.templateFiles {
 		uris = append(uris, uri)
 	}
 	return uris

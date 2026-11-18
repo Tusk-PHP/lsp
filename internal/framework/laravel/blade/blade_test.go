@@ -168,3 +168,30 @@ func BenchmarkCompile(b *testing.B) {
 		Compile(tpl)
 	}
 }
+
+func TestPHPPositionRoundTrip(t *testing.T) {
+	tpl := "<p>\n  {{ $user->name }}\n</p>\n@if($a)\n"
+	doc := Compile(tpl)
+	// On `name`, in the echo.
+	line, col, ok := doc.PHPPosition(1, 13)
+	if !ok {
+		t.Fatal("expected the echo to map into the PHP")
+	}
+	if l, c, ok := doc.TemplatePosition(line, col); !ok || l != 1 || c != 13 {
+		t.Fatalf("round trip gave %d:%d (%v)", l, c, ok)
+	}
+	// Just after the expression, where a cursor sits while typing.
+	if _, _, ok := doc.PHPPosition(1, 17); !ok {
+		t.Fatal("expected the end of the expression to map")
+	}
+	// HTML and the directive's name are not PHP.
+	if _, _, ok := doc.PHPPosition(0, 1); ok {
+		t.Fatal("HTML mapped into the PHP")
+	}
+	if _, _, ok := doc.PHPPosition(3, 1); ok {
+		t.Fatal("a directive's name mapped into the PHP")
+	}
+	if _, _, ok := doc.PHPPosition(3, 4); !ok {
+		t.Fatal("expected the directive's argument to map")
+	}
+}

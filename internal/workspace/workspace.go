@@ -124,8 +124,13 @@ func (ws *Bootstrapped) IndexWorkspace() int {
 			}
 			return nil
 		}
-		// Blade views declare no symbols; their PHP is read when they're opened.
-		if !IsPHPSource(path) || IsBlade(path) {
+		if !IsPHPSource(path) {
+			return nil
+		}
+		// Blade views declare no symbols; only their place is kept, for
+		// references and rename, and their PHP is read when it's needed.
+		if IsBlade(path) {
+			ws.Index.AddTemplateFile("file://" + path)
 			return nil
 		}
 		if limit := ws.Config.MaxIndexFiles; limit > 0 && count >= limit {

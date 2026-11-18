@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **PHP features inside Blade views** (part of [#62](https://github.com/Tusk-PHP/lsp/issues/62)). Hover, completion, go to definition, type definition, implementation, signature help, inlay hints, document highlights and rename now work on the PHP in a `.blade.php` file: inside `{{ }}` and `{!! !!}`, directive arguments such as `@foreach(...)` and `@if(...)`, `@php` blocks and bound component attributes (`:title="$post->title"`). Variables assigned or given a `/** @var */` in the view are typed. A view has no place for a `use` import, so completing a class there inserts its fully qualified name, such as `\App\Models\User`. The variables a controller passes to a view aren't typed yet.
+- **Find references and rename include Blade views.** References to a class, method, property, function or constant now list its uses in the project's views, and renaming it updates them too. Only PHP written in the view counts, never HTML text that happens to match.
+
 ## [0.14.0] - 2026-11-13
 
 ### Added

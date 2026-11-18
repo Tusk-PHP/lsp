@@ -404,10 +404,32 @@ func (d *Document) templateLineCol(off int) (int, int, bool) {
 // PHPOffset maps a byte offset in the template to the PHP, when it is in PHP
 // the template contains.
 func (d *Document) PHPOffset(template int) (int, bool) {
-	for _, s := range d.segments {
-		if template >= s.template && template <= s.template+s.length {
-			return s.php + template - s.template, true
-		}
+	// Segments are copied in template order, so they're sorted by template too.
+	i := sort.Search(len(d.segments), func(i int) bool { return d.segments[i].template > template }) - 1
+	if i < 0 {
+		return 0, false
 	}
-	return 0, false
+	s := d.segments[i]
+	if template > s.template+s.length {
+		return 0, false
+	}
+	return s.php + template - s.template, true
+}
+
+// PHPPosition maps a 0-based line and byte column in the template to the PHP,
+// when it is in PHP the template contains. A position just after copied text,
+// where a cursor sits while typing, maps too.
+func (d *Document) PHPPosition(line, col int) (int, int, bool) {
+	if line < 0 || line >= len(d.tplLines) {
+		return 0, 0, false
+	}
+	off, ok := d.PHPOffset(d.tplLines[line] + col)
+	if !ok {
+		return 0, 0, false
+	}
+	l := sort.Search(len(d.phpLines), func(i int) bool { return d.phpLines[i] > off }) - 1
+	if l < 0 {
+		return 0, 0, false
+	}
+	return l, off - d.phpLines[l], true
 }

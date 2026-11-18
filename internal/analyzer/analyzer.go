@@ -879,7 +879,7 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 		return locs
 	}
 
-	return a.findSymbolOccurrences(sym, readDocument)
+	return a.findSymbolOccurrences(sym, readDocument, uri, source)
 }
 
 // resolveSymbolAtCursor resolves the word at cursor to a Symbol, handling
@@ -951,77 +951,6 @@ func (a *Analyzer) resolveSymbolAtCursor(uri, source string, pos protocol.Positi
 	return symbols.PickBestStandalone(syms, word)
 }
 
-// findSymbolOccurrences scans all indexed files for references to the given symbol.
-// Returns locations for both definition sites and usage sites.
-func (a *Analyzer) findSymbolOccurrences(sym *symbols.Symbol, readDocument func(string) string) []protocol.Location {
-	// Built-in symbols are opaque to navigation.
-	if symbols.IsBuiltin(sym) {
-		return nil
-	}
-
-	var locs []protocol.Location
-	name := sym.Name
-
-	// Include the definition itself
-	if sym.URI != "" {
-		locs = append(locs, protocol.Location{URI: sym.URI, Range: sym.Range})
-	}
-
-	bareName := strings.TrimPrefix(name, "$")
-
-	allURIs := a.index.GetAllFileURIs()
-	for _, fileURI := range allURIs {
-		// Defense in depth: skip any stub URIs that may have been indexed.
-		if strings.HasPrefix(fileURI, "builtin://") {
-			continue
-		}
-		var source string
-		if readDocument != nil {
-			source = readDocument(fileURI)
-		}
-		// Prefer the in-memory source stored by the index to avoid redundant disk I/O.
-		// Fall back to disk only when neither the caller-supplied reader nor the index
-		// has a stored copy (e.g. files indexed without source via IndexFile on older paths).
-		if source == "" {
-			source = a.index.GetFileSource(fileURI)
-		}
-		if source == "" {
-			source = a.readFileFromDisk(fileURI)
-		}
-		if source == "" {
-			continue
-		}
-		lines := strings.Split(source, "\n")
-
-		for i, line := range lines {
-			switch sym.Kind {
-			case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
-				locs = append(locs, findWordLocations(fileURI, line, i, name)...)
-				// Also find as last segment of FQN (e.g. \Cacheable in use App\Contracts\Cacheable)
-				locs = append(locs, findAccessLocations(fileURI, line, i, "\\"+name, 1, name)...)
-
-			case symbols.KindMethod:
-				locs = append(locs, findWordLocations(fileURI, line, i, name)...)
-
-			case symbols.KindProperty:
-				// Declaration form: $name
-				locs = append(locs, findWordLocations(fileURI, line, i, "$"+bareName)...)
-				// Access form: ->name
-				locs = append(locs, findAccessLocations(fileURI, line, i, "->"+bareName, 2, bareName)...)
-
-			case symbols.KindFunction:
-				locs = append(locs, findWordLocations(fileURI, line, i, name)...)
-
-			case symbols.KindConstant, symbols.KindEnumCase:
-				locs = append(locs, findWordLocations(fileURI, line, i, name)...)
-			}
-		}
-	}
-
-	// Deduplicate (definition may appear twice: once from sym.Range, once from file scan)
-	return deduplicateLocations(locs)
-}
-
 // findVariableReferences finds all occurrences of a variable within its enclosing function scope.
 func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Position, varName string, file *parser.FileNode) []protocol.Location {
 	_ = file
@@ -1033,67 +962,6 @@ func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Posit
 	var locs []protocol.Location
 	for _, rng := range doc.Occurrences(binding) {
 		locs = append(locs, protocol.Location{URI: uri, Range: rng})
-	}
-	return locs
-}
-
-// findWordLocations finds all word-boundary occurrences of `word` on a line.
-func findWordLocations(uri, line string, lineNum int, word string) []protocol.Location {
-	var locs []protocol.Location
-	offset := 0
-	for {
-		idx := strings.Index(line[offset:], word)
-		if idx < 0 {
-			break
-		}
-		col := offset + idx
-		end := col + len(word)
-		// Word boundary before
-		if col > 0 && (resolve.IsWordChar(line[col-1]) || line[col-1] == '$') {
-			offset = end
-			continue
-		}
-		// Word boundary after
-		if end < len(line) && resolve.IsWordChar(line[end]) {
-			offset = end
-			continue
-		}
-		locs = append(locs, protocol.Location{
-			URI: uri,
-			Range: protocol.Range{
-				Start: protocol.Position{Line: lineNum, Character: col},
-				End:   protocol.Position{Line: lineNum, Character: end},
-			},
-		})
-		offset = end
-	}
-	return locs
-}
-
-// findAccessLocations finds occurrences of a needle (e.g. "->name") on a line
-// and returns locations pointing to the identifier part (after skipChars).
-func findAccessLocations(uri, line string, lineNum int, needle string, skipChars int, identName string) []protocol.Location {
-	var locs []protocol.Location
-	offset := 0
-	for {
-		idx := strings.Index(line[offset:], needle)
-		if idx < 0 {
-			break
-		}
-		col := offset + idx + skipChars
-		end := col + len(identName)
-		if end < len(line) && resolve.IsWordChar(line[end]) {
-			offset = end
-			continue
-		}
-		locs = append(locs, protocol.Location{
-			URI: uri,
-			Range: protocol.Range{
-				Start: protocol.Position{Line: lineNum, Character: col},
-				End:   protocol.Position{Line: lineNum, Character: end},
-			},
-		})
-		offset = end
 	}
 	return locs
 }
@@ -1741,7 +1609,7 @@ func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName str
 		if symbols.IsBuiltin(sym) || sym.Source == symbols.SourceVendor || sym.Source == symbols.SourceGenerated {
 			return nil
 		}
-		return a.renameSymbol(sym, newName, readDocument)
+		return a.renameSymbol(sym, newName, readDocument, uri, source)
 	}
 
 	// Fall back to variable rename (local scope)
@@ -1779,8 +1647,8 @@ func (a *Analyzer) renameVariable(uri, source string, pos protocol.Position, old
 
 // renameSymbol renames a class, method, property, function, interface, enum, or trait
 // across the entire workspace by finding all occurrences and generating TextEdits.
-func (a *Analyzer) renameSymbol(sym *symbols.Symbol, newName string, readDocument func(string) string) *protocol.WorkspaceEdit {
-	locs := a.findSymbolOccurrences(sym, readDocument)
+func (a *Analyzer) renameSymbol(sym *symbols.Symbol, newName string, readDocument func(string) string, uri, source string) *protocol.WorkspaceEdit {
+	locs := a.findSymbolOccurrences(sym, readDocument, uri, source)
 	if len(locs) == 0 {
 		return nil
 	}
