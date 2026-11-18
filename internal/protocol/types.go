@@ -37,6 +37,9 @@ const (
 	CompletionItemKindEvent         CompletionItemKind = 19
 	CompletionItemKindOperator      CompletionItemKind = 20
 	CompletionItemKindTypeParameter CompletionItemKind = 21
+	// File and Reference take their values from the LSP specification.
+	CompletionItemKindFile      CompletionItemKind = 17
+	CompletionItemKindReference CompletionItemKind = 18
 )
 
 // DiagnosticSeverity as defined by LSP spec.
@@ -125,6 +128,7 @@ type CompletionItem struct {
 	InsertTextFormat    int                `json:"insertTextFormat,omitempty"`
 	SortText            string             `json:"sortText,omitempty"`
 	FilterText          string             `json:"filterText,omitempty"`
+	TextEdit            *TextEdit          `json:"textEdit,omitempty"`
 	Deprecated          bool               `json:"deprecated,omitempty"`
 	AdditionalTextEdits []TextEdit         `json:"additionalTextEdits,omitempty"`
 	// Data is kept by the client and sent back with completionItem/resolve.

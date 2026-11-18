@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **PHP features inside Blade views** (part of [#62](https://github.com/Tusk-PHP/lsp/issues/62)). Hover, completion, go to definition, type definition, implementation, signature help, inlay hints, document highlights and rename now work on the PHP in a `.blade.php` file: inside `{{ }}` and `{!! !!}`, directive arguments such as `@foreach(...)` and `@if(...)`, `@php` blocks and bound component attributes (`:title="$post->title"`). Variables assigned or given a `/** @var */` in the view are typed. A view has no place for a `use` import, so completing a class there inserts its fully qualified name, such as `\App\Models\User`. The variables a controller passes to a view aren't typed yet.
 - **Find references and rename include Blade views.** References to a class, method, property, function or constant now list its uses in the project's views, and renaming it updates them too. Only PHP written in the view counts, never HTML text that happens to match.
+- **Blade directives**: typing `@` in a view completes Laravel's and Livewire's directives, and a block directive such as `@foreach` comes with its `@endforeach`. Hover on a directive says what it does.
+- **View names in Blade**: the view in `@include`, `@includeIf`, `@includeWhen`, `@includeUnless`, `@each`, `@extends` and `@component` is completed from `resources/views` and goes to its file. A view that doesn't exist is reported as `unknown-view`. Views from packages (`mail::message`), names built at runtime and `@includeIf` are never reported, and neither is any view in a project that adds view paths in `config/view.php`.
+- **Sections and stacks**: `@section`, `@hasSection`, `@push`, `@prepend` and their variants complete the names the layout `@yield`s or `@stack`s, following `@extends` up the chain and into the views a layout includes. Go to definition on the name opens the `@yield` or `@stack`.
+- **Unclosed Blade directives** are reported as `unclosed-directive`: an `@if` without `@endif`, an `@endforeach` with no `@foreach`, or an `@else` outside a conditional. Ending one conditional with another's closer (`@auth … @endif`) works in Blade and isn't reported, and neither is `@else` in a view that uses its own `Blade::if` directives.
+
+### Changed
+
+- `tusk-php check` now checks Blade views too when given a directory or the whole project, as the editor does.
 
 ## [0.14.0] - 2026-11-13
 

@@ -25,6 +25,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/coverage"
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/introspect"
@@ -66,6 +67,9 @@ type Server struct {
 	documents     map[string]string
 	// blade keeps the compiled PHP of open Blade views (see blade.go).
 	blade bladeViews
+	// bladeFeatures answers requests about Blade itself: directives and the
+	// views, sections and stacks they name.
+	bladeFeatures *blade.Features
 	// writeMu keeps frames whole on the output stream (see writeMessage).
 	writeMu sync.Mutex
 	// publishMu orders diagnostics publishes (see publishDiagnostics).
@@ -462,6 +466,8 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		PHPVersion: profile.PHPVersion,
 		Extensions: profile.Extensions,
 	}
+	s.bladeFeatures = &blade.Features{Views: viewResolver, Read: s.getDocumentReader()}
+	s.diag.Blade = s.bladeFeatures
 	s.analyzer = analyzer.NewAnalyzer(s.index, s.container)
 	if opts := params.InitializationOptions; opts != nil {
 		s.analyzer.SetClientCommands(opts.ClientCommands)
@@ -480,7 +486,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 				Change:    1, // Full
 				Save:      &protocol.SaveOptions{IncludeText: false},
 			},
-			CompletionProvider:        &protocol.CompletionOptions{TriggerCharacters: []string{".", ">", ":", "$", "\\", "|", "#", "[", "(", "'", "\""}, ResolveProvider: true},
+			CompletionProvider:        &protocol.CompletionOptions{TriggerCharacters: []string{".", ">", ":", "$", "\\", "|", "#", "[", "(", "'", "\"", "@"}, ResolveProvider: true},
 			HoverProvider:             true,
 			DefinitionProvider:        true,
 			TypeDefinitionProvider:    true,
@@ -678,12 +684,28 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 }
 
 func (s *Server) handleCompletion(msg *jsonRPCMessage) {
-	var params protocol.TextDocumentPositionParams
+	var params struct {
+		protocol.TextDocumentPositionParams
+		Context *struct {
+			TriggerCharacter string `json:"triggerCharacter"`
+		} `json:"context"`
+	}
 	if json.Unmarshal(msg.Params, &params) != nil {
 		s.sendError(msg.ID, -32602, "Invalid params")
 		return
 	}
-	req, ok := s.phpRequest(params.TextDocument.URI, params.Position)
+	uri := params.TextDocument.URI
+	if workspace.IsBlade(uri) {
+		if items, ok := s.bladeCompletion(uri, params.Position); ok {
+			s.sendResponse(msg.ID, items)
+			return
+		}
+	} else if params.Context != nil && params.Context.TriggerCharacter == "@" {
+		// `@` starts a Blade directive; in PHP it has nothing to complete.
+		s.sendResponse(msg.ID, []protocol.CompletionItem{})
+		return
+	}
+	req, ok := s.phpRequest(uri, params.Position)
 	if !ok {
 		s.sendResponse(msg.ID, []protocol.CompletionItem{})
 		return
@@ -711,6 +733,10 @@ func (s *Server) handleHover(msg *jsonRPCMessage) {
 	uri := params.TextDocument.URI
 	if cardhover.IsComposerJSON(uri) {
 		s.sendResponse(msg.ID, s.composerHover.Hover(uri, s.getDocument(uri), params.Position))
+		return
+	}
+	if h, ok := s.bladeHover(uri, params.Position); ok {
+		s.sendResponse(msg.ID, h)
 		return
 	}
 	req, ok := s.phpRequest(uri, params.Position)
@@ -743,6 +769,10 @@ func (s *Server) handleDefinition(msg *jsonRPCMessage) {
 		return
 	}
 
+	if locs, ok := s.bladeDefinition(uri, params.Position); ok {
+		s.sendResponse(msg.ID, locs)
+		return
+	}
 	req, ok := s.phpRequest(uri, params.Position)
 	if !ok {
 		s.sendResponse(msg.ID, nil)

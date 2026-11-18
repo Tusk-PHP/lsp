@@ -20,6 +20,9 @@ type Views struct {
 	loaded bool
 	views  []View
 	byName map[string]View
+
+	knownOnce sync.Once
+	known     bool
 }
 
 func NewViews(rootPath string) *Views {
@@ -263,4 +266,88 @@ func findViewCall(prefix string) (viewCall, bool) {
 
 func isWordChar(ch byte) bool {
 	return ch == '_' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')
+}
+
+// ViewURI returns the file of a view by name. A view created since the views
+// were listed is found on disk and added.
+func (v *Views) ViewURI(name string) (string, bool) {
+	if v == nil {
+		return "", false
+	}
+	if view := v.Find(name); view != nil {
+		return view.URI, true
+	}
+	if strings.Contains(name, "::") || strings.Contains(name, "..") {
+		return "", false
+	}
+	base := filepath.Join(v.rootPath, "resources", "views", filepath.FromSlash(strings.ReplaceAll(name, ".", "/")))
+	for _, ext := range []string{".blade.php", ".php"} {
+		if info, err := os.Stat(base + ext); err == nil && !info.IsDir() {
+			view := View{Name: name, URI: "file://" + filepath.ToSlash(base+ext)}
+			v.mu.Lock()
+			if _, ok := v.byName[name]; ok {
+				v.mu.Unlock()
+				return view.URI, true
+			}
+			v.byName[name] = view
+			v.views = append(v.views, view)
+			sort.Slice(v.views, func(i, j int) bool { return v.views[i].Name < v.views[j].Name })
+			v.mu.Unlock()
+			return view.URI, true
+		}
+	}
+	return "", false
+}
+
+// ViewNames returns the names of the views starting with prefix.
+func (v *Views) ViewNames(prefix string) []string {
+	views := v.Search(prefix)
+	names := make([]string, 0, len(views))
+	for _, view := range views {
+		names = append(names, view.Name)
+	}
+	return names
+}
+
+// ViewsKnown reports whether all of the project's views are in
+// resources/views, so a view not found there doesn't exist. A project with no
+// such directory, or that adds view paths in config/view.php, isn't.
+func (v *Views) ViewsKnown() bool {
+	if v == nil {
+		return false
+	}
+	v.knownOnce.Do(func() {
+		info, err := os.Stat(filepath.Join(v.rootPath, "resources", "views"))
+		if err != nil || !info.IsDir() {
+			return
+		}
+		cfg, err := os.ReadFile(filepath.Join(v.rootPath, "config", "view.php"))
+		if err != nil {
+			v.known = true
+			return
+		}
+		v.known = onlyDefaultViewPath(string(cfg))
+	})
+	return v.known
+}
+
+// onlyDefaultViewPath reports whether a config/view.php lists no view path
+// but resource_path('views').
+func onlyDefaultViewPath(cfg string) bool {
+	k := strings.Index(cfg, "'paths'")
+	if k < 0 {
+		return true
+	}
+	rest := cfg[k:]
+	open := strings.IndexByte(rest, '[')
+	if open < 0 {
+		return false
+	}
+	end := strings.IndexByte(rest[open:], ']')
+	if end < 0 {
+		return false
+	}
+	paths := rest[open+1 : open+end]
+	paths = strings.NewReplacer(" ", "", "\n", "", "\r", "", "\t", "", ",", "", "\"", "'").Replace(paths)
+	return paths == "resource_path('views')"
 }

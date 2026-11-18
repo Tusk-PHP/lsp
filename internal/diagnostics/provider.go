@@ -40,6 +40,10 @@ type Provider struct {
 	// resolved PHP profile. Set by the LSP server after initialization.
 	BuiltinUnavailableRule *checks.BuiltinUnavailableRule
 
+	// Blade checks a Blade view's own structure and the views it names. Set
+	// by the server after initialization.
+	Blade *blade.Features
+
 	mu          sync.RWMutex
 	toolResults map[string][]protocol.Diagnostic
 	saveResults map[string][]protocol.Diagnostic
@@ -69,6 +73,7 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 		// is found in that PHP is reported, at its place in the view.
 		doc := blade.Compile(source)
 		diags = toTemplate(doc, p.analyzeNative(uri, doc.PHP, true))
+		diags = append(diags, p.analyzeBlade(source)...)
 	} else {
 		diags = p.analyzeNative(uri, source, false)
 	}
@@ -166,6 +171,44 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP bool) []protocol.D
 		if p.cfg.IsRuleEnabled("argument-count-mismatch") {
 			fs := (&checks.ArgumentCountRule{Shared: shared, TypeResolver: typeResolver}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("argument-count-mismatch", checks.SeverityWarning, findingsToDiagnostics(fs))...)
+		}
+	}
+	return diags
+}
+
+// bladeSeverity is the default severity of the Blade rules.
+var bladeSeverity = map[string]checks.Severity{
+	// A block that doesn't close doesn't compile.
+	blade.CodeUnclosedDirective: checks.SeverityError,
+	blade.CodeUnknownView:       checks.SeverityWarning,
+}
+
+// analyzeBlade checks a Blade view's directives and the views they name.
+func (p *Provider) analyzeBlade(source string) []protocol.Diagnostic {
+	if p.Blade == nil {
+		return nil
+	}
+	found := p.Blade.Diagnose(source)
+	if len(found) == 0 {
+		return nil
+	}
+	lines := blade.NewLines(source)
+	byCode := map[string][]checks.Finding{}
+	for _, d := range found {
+		if !p.cfg.IsRuleEnabled(d.Code) {
+			continue
+		}
+		sl, sc := lines.Position(d.Span.Start)
+		el, ec := lines.Position(d.Span.End)
+		byCode[d.Code] = append(byCode[d.Code], checks.Finding{
+			StartLine: sl, StartCol: sc, EndLine: el, EndCol: ec,
+			Severity: bladeSeverity[d.Code], Code: d.Code, Message: d.Message,
+		})
+	}
+	var diags []protocol.Diagnostic
+	for _, code := range []string{blade.CodeUnclosedDirective, blade.CodeUnknownView} {
+		if fs := byCode[code]; len(fs) > 0 {
+			diags = append(diags, p.applyRuleSeverity(code, bladeSeverity[code], findingsToDiagnostics(fs))...)
 		}
 	}
 	return diags

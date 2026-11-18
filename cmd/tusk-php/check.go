@@ -163,13 +163,19 @@ func runCheck(args []string, stdout, stderr io.Writer) (int, error) {
 	return 0, nil
 }
 
-// checkTargets lists the files to check: the project's own indexed files
-// (not vendor/) when no paths are given; otherwise each file, each directory's
+// checkTargets lists the files to check: the project's own indexed files and
+// Blade views (not vendor/) when no paths are given; otherwise each file, each directory's
 // indexed files, and each glob's matches, relative to root.
 func checkTargets(root string, args []string, index *symbols.Index) ([]string, error) {
 	var indexed []string
 	for _, uri := range index.GetAllFileURIs() {
 		if path := symbols.URIToPath(uri); path != "" && workspace.IsPHPSource(path) {
+			indexed = append(indexed, path)
+		}
+	}
+	// Blade views declare no symbols, but they are checked like the rest.
+	for _, uri := range index.TemplateFileURIs() {
+		if path := symbols.URIToPath(uri); path != "" && workspace.IsBlade(path) {
 			indexed = append(indexed, path)
 		}
 	}
@@ -220,7 +226,7 @@ func checkTargets(root string, args []string, index *symbols.Index) ([]string, e
 				return nil, fmt.Errorf("%s: %w", arg, err)
 			case info.IsDir():
 				add(under(m)...)
-			case workspace.IsPHPSource(m):
+			case workspace.IsPHPSource(m), workspace.IsBlade(m):
 				add(m)
 			}
 		}
