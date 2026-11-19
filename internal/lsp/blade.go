@@ -4,6 +4,7 @@ import (
 	"strings"
 	"sync"
 
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -69,7 +70,7 @@ type bladeRequest struct {
 	// the variables passed to it.
 	template string
 	offset   int
-	vars     []viewVar
+	vars     []frameworklaravel.TypedVar
 }
 
 // phpRequest prepares a positional request. ok is false when the position is
@@ -80,8 +81,9 @@ func (s *Server) phpRequest(uri string, pos protocol.Position) (bladeRequest, bo
 	if !workspace.IsBlade(uri) {
 		return bladeRequest{uri: uri, source: source, pos: pos}, true
 	}
-	vars := s.viewVars(uri)
-	doc := s.blade.get(uri, source, bladeVarsFor(vars))
+	in := s.viewVars(uri)
+	vars := in.Vars
+	doc := s.blade.get(uri, source, in.BladeVars())
 	line, col, ok := doc.PHPPosition(pos.Line, pos.Character)
 	if !ok {
 		return bladeRequest{}, false
@@ -98,8 +100,9 @@ func (s *Server) phpDocument(uri string) bladeRequest {
 	if !workspace.IsBlade(uri) {
 		return bladeRequest{uri: uri, source: source}
 	}
-	vars := s.viewVars(uri)
-	doc := s.blade.get(uri, source, bladeVarsFor(vars))
+	in := s.viewVars(uri)
+	vars := in.Vars
+	doc := s.blade.get(uri, source, in.BladeVars())
 	return bladeRequest{uri: uri, source: doc.PHP, doc: doc, template: source, vars: vars}
 }
 

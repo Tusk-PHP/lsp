@@ -1,15 +1,10 @@
 package lsp
 
 import (
-	"os"
-	"regexp"
-	"sort"
 	"strings"
-	"sync"
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -20,193 +15,12 @@ import (
 // frameworklaravel.ViewData). Each is typed from the expression passed, at the
 // place it is passed, when a request first needs it.
 
-// viewVar is a variable a view receives, typed as the union of what each
-// place passes.
-type viewVar struct {
-	Name  string
-	Type  string
-	Sites []frameworklaravel.ViewVar
-}
-
-// viewVarCache keeps each view's typed variables until the index or the
-// view data changes.
-type viewVarCache struct {
-	mu      sync.Mutex
-	entries map[string]viewVarEntry
-}
-
-type viewVarEntry struct {
-	indexGen, dataGen uint64
-	vars              []viewVar
-}
-
-// maxViewVarCache bounds the cache; it is emptied when full.
-const maxViewVarCache = 512
-
-// viewVars returns the variables passed to the Blade view at uri.
-func (s *Server) viewVars(uri string) []viewVar {
-	if s.workspace == nil || s.workspace.ViewData == nil || !workspace.IsBlade(uri) {
-		return nil
+// viewVars returns what the Blade view at uri receives, typed.
+func (s *Server) viewVars(uri string) frameworklaravel.TypedInputs {
+	if s.viewTypes == nil || !workspace.IsBlade(uri) {
+		return frameworklaravel.TypedInputs{}
 	}
-	return s.viewVarsOf(s.workspace.ViewData.ViewName(uri), &typingState{visiting: map[string]bool{}, files: map[string]siteFile{}})
-}
-
-// typingState is shared while typing one view's variables: the views being
-// typed, so a cycle of includes ends, and each file read once.
-type typingState struct {
-	visiting map[string]bool
-	files    map[string]siteFile
-}
-
-type siteFile struct {
-	source string
-	file   *parser.FileNode
-}
-
-func (s *Server) viewVarsOf(view string, st *typingState) []viewVar {
-	visiting := st.visiting
-	data := s.workspace.ViewData
-	if view == "" || visiting[view] {
-		return nil
-	}
-	indexGen, dataGen := s.index.Generation(), data.Generation()
-	s.viewVarCache.mu.Lock()
-	if e, ok := s.viewVarCache.entries[view]; ok && e.indexGen == indexGen && e.dataGen == dataGen {
-		s.viewVarCache.mu.Unlock()
-		return e.vars
-	}
-	s.viewVarCache.mu.Unlock()
-
-	visiting[view] = true
-	sites, _ := data.Vars(view)
-	byName := map[string]*viewVar{}
-	var order []string
-	types := map[string]map[string]bool{}
-	for _, site := range sites {
-		v, ok := byName[site.Name]
-		if !ok {
-			v = &viewVar{Name: site.Name}
-			byName[site.Name] = v
-			order = append(order, site.Name)
-			types[site.Name] = map[string]bool{}
-		}
-		v.Sites = append(v.Sites, site)
-		if t := s.siteType(site, st); t != "" {
-			for _, part := range strings.Split(t, "|") {
-				types[site.Name][strings.TrimSpace(part)] = true
-			}
-		}
-	}
-	vars := make([]viewVar, 0, len(order))
-	for _, name := range order {
-		v := byName[name]
-		parts := make([]string, 0, len(types[name]))
-		for t := range types[name] {
-			if t != "" && t != "mixed" {
-				parts = append(parts, t)
-			}
-		}
-		sort.Strings(parts)
-		v.Type = strings.Join(parts, "|")
-		vars = append(vars, *v)
-	}
-	delete(visiting, view)
-
-	s.viewVarCache.mu.Lock()
-	if s.viewVarCache.entries == nil || len(s.viewVarCache.entries) >= maxViewVarCache {
-		s.viewVarCache.entries = map[string]viewVarEntry{}
-	}
-	s.viewVarCache.entries[view] = viewVarEntry{indexGen: indexGen, dataGen: dataGen, vars: vars}
-	s.viewVarCache.mu.Unlock()
-	return vars
-}
-
-var (
-	intLiteral   = regexp.MustCompile(`^-?\d+$`)
-	floatLiteral = regexp.MustCompile(`^-?\d*\.\d+$`)
-)
-
-// siteType types the expression passed at one place.
-func (s *Server) siteType(site frameworklaravel.ViewVar, st *typingState) string {
-	expr := strings.TrimSpace(site.Expr)
-	switch {
-	case expr == "":
-		return ""
-	case strings.HasPrefix(expr, "'") || strings.HasPrefix(expr, `"`):
-		return "string"
-	case intLiteral.MatchString(expr):
-		return "int"
-	case floatLiteral.MatchString(expr):
-		return "float"
-	case strings.EqualFold(expr, "true") || strings.EqualFold(expr, "false"):
-		return "bool"
-	case strings.EqualFold(expr, "null"):
-		return "null"
-	case strings.HasPrefix(expr, "["):
-		return "array"
-	}
-	if site.FromTemplate {
-		// Passed by a Blade view: a variable it received itself has the type
-		// it was passed with.
-		if strings.HasPrefix(expr, "$") && isPlainVar(expr[1:]) {
-			from := s.workspace.ViewData.ViewName(site.URI)
-			for _, v := range s.viewVarsOf(from, st) {
-				if v.Name == expr[1:] {
-					return v.Type
-				}
-			}
-		}
-		return ""
-	}
-	f, ok := st.files[site.URI]
-	if !ok {
-		f.source = s.siteSource(site.URI)
-		if f.source != "" {
-			f.file = parser.ParseFile(f.source)
-		}
-		st.files[site.URI] = f
-	}
-	if f.source == "" {
-		return ""
-	}
-	return s.completion.ResolveExpressionType(expr, f.source, protocol.Position{Line: site.ExprLine, Character: site.ExprCol}, f.file)
-}
-
-// siteSource reads the file a variable is passed from.
-func (s *Server) siteSource(uri string) string {
-	if src := s.getDocument(uri); src != "" {
-		return src
-	}
-	if src := s.index.GetFileSource(uri); src != "" {
-		return src
-	}
-	data, err := os.ReadFile(symbols.URIToPath(uri))
-	if err != nil {
-		return ""
-	}
-	return string(data)
-}
-
-func isPlainVar(name string) bool {
-	if name == "" {
-		return false
-	}
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		if !(c == '_' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9') || c >= 0x80) {
-			return false
-		}
-	}
-	return true
-}
-
-// bladeVarsFor returns the declarations the virtual PHP of a view gets.
-func bladeVarsFor(vars []viewVar) []blade.Var {
-	out := make([]blade.Var, 0, len(vars))
-	for _, v := range vars {
-		out = append(out, blade.Var{Name: v.Name, Type: v.Type})
-	}
-	return out
+	return s.viewTypes.For(uri)
 }
 
 // variableAt returns the `$name` at offset in a template, without `$`.
@@ -272,7 +86,7 @@ func assignedIn(src, name string) bool {
 
 // withViewVarCompletions lists the variables passed to the view first when
 // a variable is being typed.
-func withViewVarCompletions(items []protocol.CompletionItem, vars []viewVar, src string, offset int) []protocol.CompletionItem {
+func withViewVarCompletions(items []protocol.CompletionItem, vars []frameworklaravel.TypedVar, src string, offset int) []protocol.CompletionItem {
 	if len(vars) == 0 {
 		return items
 	}
@@ -284,7 +98,7 @@ func withViewVarCompletions(items []protocol.CompletionItem, vars []viewVar, src
 		return items
 	}
 	typed := strings.ToLower(src[start:offset])
-	passed := map[string]viewVar{}
+	passed := map[string]frameworklaravel.TypedVar{}
 	for _, v := range vars {
 		passed["$"+v.Name] = v
 	}
@@ -315,7 +129,7 @@ func withViewVarCompletions(items []protocol.CompletionItem, vars []viewVar, src
 
 // viewVarHover adds where a variable passed to the view comes from to the
 // hover on it.
-func (s *Server) viewVarHover(h *protocol.Hover, vars []viewVar, src string, offset int) *protocol.Hover {
+func (s *Server) viewVarHover(h *protocol.Hover, vars []frameworklaravel.TypedVar, src string, offset int) *protocol.Hover {
 	name, rng, ok := variableAt(src, offset)
 	if !ok {
 		return h
@@ -352,7 +166,7 @@ func (s *Server) viewVarHover(h *protocol.Hover, vars []viewVar, src string, off
 // viewVarDefinition goes to where a variable passed to the view is passed:
 // the `'name' =>` key at each place. ok is false for a variable the view
 // assigns itself or isn't passed.
-func viewVarDefinition(vars []viewVar, src string, offset int) ([]protocol.Location, bool) {
+func viewVarDefinition(vars []frameworklaravel.TypedVar, src string, offset int) ([]protocol.Location, bool) {
 	name, _, ok := variableAt(src, offset)
 	if !ok || assignedIn(src, name) {
 		return nil, false

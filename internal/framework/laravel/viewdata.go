@@ -1,15 +1,12 @@
 package laravel
 
 import (
+	"hash/fnv"
 	"path/filepath"
 	"reflect"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
-
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 // ViewVar is a variable passed to a view at one place.
@@ -20,14 +17,18 @@ type ViewVar struct {
 	URI               string
 	Line, Col, EndCol int
 	// Expr is the PHP expression passed, and ExprLine, ExprCol where it
-	// starts. Expr is empty when the value can't be read, as for a variable
-	// a view receives from the view that includes it.
+	// starts. Expr is empty when the value can't be read, as for the item
+	// `@each` passes.
 	Expr              string
 	ExprLine, ExprCol int
 	// FromTemplate is set when the variable is passed by a Blade view, whose
 	// PHP the expression is written in.
 	FromTemplate bool
 }
+
+// sharedView is the name renders are recorded under for data every view
+// gets: View::share() and composers registered for '*'.
+const sharedView = "*"
 
 // viewRender is one place a view is rendered with its data.
 type viewRender struct {
@@ -36,6 +37,18 @@ type viewRender struct {
 	vars []ViewVar
 	// opaque is set when some of the data can't be read, such as
 	// view('x', $request->all()).
+	opaque bool
+	// class is the class the render is written in, whose public properties
+	// a component's or a Mailable's view gets too.
+	class string
+}
+
+// viewComposer is a composer registered for views: a class whose compose()
+// adds data, or a closure whose data was read where it's registered.
+type viewComposer struct {
+	views  []string
+	class  string
+	vars   []ViewVar
 	opaque bool
 }
 
@@ -49,23 +62,68 @@ type viewEdge struct {
 	isolated bool
 }
 
+// phpViewFile is what one PHP file says about views.
+type phpViewFile struct {
+	renders   []viewRender
+	composers []viewComposer
+	// composes are the data each composer class in the file adds, by class.
+	composes map[string]viewRender
+	// dynamic counts the views rendered by a name the server can't read,
+	// such as view($name).
+	dynamic int
+	// mentions counts the string literals that could name a view, and
+	// consumed those of them read as view names by a render or composer.
+	mentions, consumed map[uint64]int
+}
+
+type templateViewFile struct {
+	edges   []viewEdge
+	dynamic int
+}
+
 // ViewData indexes the data passed to each view: by PHP that renders it
-// (`view()`, `View::make()`, `response()->view()`, `Route::view()` and their
-// `->with()` calls) and by the Blade views that include or extend it. It is
+// (`view()`, `View::make()`, `response()->view()`, `Route::view()`, a
+// Mailable's `Content`, and their `->with()` calls), by `View::share()` and
+// view composers, and by the Blade views that include or extend it. It is
 // updated per file as files are indexed, so a request looks a view up and
 // never scans.
 type ViewData struct {
 	rootPath string
 
-	mu       sync.RWMutex
-	byURI    map[string][]viewRender // PHP file → its renders
-	byView   map[string][]viewRender // view name → its renders
-	edgesOf  map[string][]viewEdge   // Blade file → the views it renders
-	edgesTo  map[string][]viewEdge   // view name → the Blade views rendering it
+	mu        sync.RWMutex
+	php       map[string]phpViewFile      // PHP file → what it says
+	templates map[string]templateViewFile // Blade file → the views it renders
+
+	// Totals over every file, kept as files change.
+	byView      map[string][]viewRender   // view name → its renders
+	composersOf map[string][]viewComposer // view name → its composers
+	composes    map[string][]viewRender   // composer class → the data it adds
+	edgesTo     map[string][]viewEdge     // view name → the views rendering it
+	dynamic     int
+	mentions    map[uint64]int // by viewHash
+	consumed    map[uint64]int
+
 	viewDirs []string
 	// generation counts changes, so answers built from the index can tell
 	// when they're stale.
 	generation atomic.Uint64
+}
+
+// NewViewData returns an empty index for the Laravel app at rootPath.
+func NewViewData(rootPath string) *ViewData {
+	extra, _ := livewireLocations(rootPath)
+	return &ViewData{
+		rootPath:    rootPath,
+		php:         map[string]phpViewFile{},
+		templates:   map[string]templateViewFile{},
+		byView:      map[string][]viewRender{},
+		composersOf: map[string][]viewComposer{},
+		composes:    map[string][]viewRender{},
+		edgesTo:     map[string][]viewEdge{},
+		mentions:    map[uint64]int{},
+		consumed:    map[uint64]int{},
+		viewDirs:    append([]string{filepath.Join(rootPath, "resources", "views")}, extra...),
+	}
 }
 
 // Generation counts the changes to the index.
@@ -76,22 +134,9 @@ func (d *ViewData) Generation() uint64 {
 	return d.generation.Load()
 }
 
-// NewViewData returns an empty index for the Laravel app at rootPath.
-func NewViewData(rootPath string) *ViewData {
-	extra, _ := livewireLocations(rootPath)
-	return &ViewData{
-		rootPath: rootPath,
-		byURI:    map[string][]viewRender{},
-		byView:   map[string][]viewRender{},
-		edgesOf:  map[string][]viewEdge{},
-		edgesTo:  map[string][]viewEdge{},
-		viewDirs: append([]string{filepath.Join(rootPath, "resources", "views")}, extra...),
-	}
-}
-
-// IndexFile reads the views a PHP file renders and the data it passes them,
-// replacing what was read from the file before. A Blade view is read for the
-// views it includes and extends.
+// IndexFile reads what a file says about views, replacing what was read
+// from it before: the views a PHP file renders and the data it passes them,
+// or the views a Blade view includes and extends.
 func (d *ViewData) IndexFile(uri, source string) {
 	if d == nil {
 		return
@@ -100,30 +145,87 @@ func (d *ViewData) IndexFile(uri, source string) {
 		d.indexTemplate(uri, source)
 		return
 	}
-	var renders []viewRender
-	if strings.Contains(source, "view(") || strings.Contains(source, "View::make(") {
-		renders = parseViewRenders(uri, source)
+	var f phpViewFile
+	if mayTouchViews(source) {
+		f = parseViewFile(uri, source)
 	}
+	f.mentions = literalMentions(source)
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if reflect.DeepEqual(renders, d.byURI[uri]) || len(renders) == 0 && len(d.byURI[uri]) == 0 {
+	old, had := d.php[uri]
+	if !had && f.empty() || had && reflect.DeepEqual(old, f) {
 		return
 	}
 	d.generation.Add(1)
-	for _, r := range d.byURI[uri] {
-		d.byView[r.view] = withoutURI(d.byView[r.view], uri)
+	if had {
+		d.applyPHP(uri, old, -1)
 	}
-	if len(renders) == 0 {
-		delete(d.byURI, uri)
+	if f.empty() {
+		delete(d.php, uri)
 		return
 	}
-	d.byURI[uri] = renders
-	for _, r := range renders {
-		d.byView[r.view] = append(d.byView[r.view], r)
+	d.php[uri] = f
+	d.applyPHP(uri, f, 1)
+}
+
+// mayTouchViews is a cheap test of whether a file can render a view or
+// register view data, so most files are never tokenized.
+func mayTouchViews(source string) bool {
+	return strings.Contains(source, "view") || strings.Contains(source, "View")
+}
+
+func (f phpViewFile) empty() bool {
+	return len(f.renders) == 0 && len(f.composers) == 0 && len(f.composes) == 0 && f.dynamic == 0 && len(f.mentions) == 0
+}
+
+// applyPHP adds (sign 1) or removes (sign -1) a PHP file's part of the
+// totals.
+func (d *ViewData) applyPHP(uri string, f phpViewFile, sign int) {
+	for _, r := range f.renders {
+		if sign > 0 {
+			d.byView[r.view] = append(d.byView[r.view], r)
+		} else {
+			d.byView[r.view] = withoutRendersOf(d.byView[r.view], uri)
+		}
+	}
+	for _, c := range f.composers {
+		for _, v := range c.views {
+			if sign > 0 {
+				d.composersOf[v] = append(d.composersOf[v], c)
+			} else {
+				kept := d.composersOf[v][:0]
+				for _, o := range d.composersOf[v] {
+					if !reflect.DeepEqual(o, c) {
+						kept = append(kept, o)
+					}
+				}
+				d.composersOf[v] = kept
+			}
+		}
+	}
+	for class, r := range f.composes {
+		if sign > 0 {
+			d.composes[class] = append(d.composes[class], r)
+		} else {
+			d.composes[class] = withoutRendersOf(d.composes[class], uri)
+		}
+	}
+	d.dynamic += sign * f.dynamic
+	for s, n := range f.mentions {
+		d.mentions[s] += sign * n
+		if d.mentions[s] <= 0 {
+			delete(d.mentions, s)
+		}
+	}
+	for s, n := range f.consumed {
+		d.consumed[s] += sign * n
+		if d.consumed[s] <= 0 {
+			delete(d.consumed, s)
+		}
 	}
 }
 
-func withoutURI(renders []viewRender, uri string) []viewRender {
+func withoutRendersOf(renders []viewRender, uri string) []viewRender {
 	out := renders[:0]
 	for _, r := range renders {
 		if r.uri != uri {
@@ -135,17 +237,19 @@ func withoutURI(renders []viewRender, uri string) []viewRender {
 
 func (d *ViewData) indexTemplate(uri, source string) {
 	from := d.ViewName(uri)
-	var edges []viewEdge
+	var f templateViewFile
 	if from != "" {
-		edges = parseViewEdges(uri, from, source)
+		f.edges, f.dynamic = parseViewEdges(uri, from, source)
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if reflect.DeepEqual(edges, d.edgesOf[uri]) || len(edges) == 0 && len(d.edgesOf[uri]) == 0 {
+	old, had := d.templates[uri]
+	empty := len(f.edges) == 0 && f.dynamic == 0
+	if !had && empty || had && reflect.DeepEqual(old, f) {
 		return
 	}
 	d.generation.Add(1)
-	for _, e := range d.edgesOf[uri] {
+	for _, e := range old.edges {
 		kept := d.edgesTo[e.to][:0]
 		for _, o := range d.edgesTo[e.to] {
 			if o.from != from {
@@ -154,12 +258,13 @@ func (d *ViewData) indexTemplate(uri, source string) {
 		}
 		d.edgesTo[e.to] = kept
 	}
-	if len(edges) == 0 {
-		delete(d.edgesOf, uri)
+	d.dynamic += f.dynamic - old.dynamic
+	if empty {
+		delete(d.templates, uri)
 		return
 	}
-	d.edgesOf[uri] = edges
-	for _, e := range edges {
+	d.templates[uri] = f
+	for _, e := range f.edges {
 		d.edgesTo[e.to] = append(d.edgesTo[e.to], e)
 	}
 }
@@ -185,39 +290,103 @@ func (d *ViewData) ViewName(uri string) string {
 // include or extend each other.
 const maxViewDepth = 8
 
-// Vars returns the variables passed to a view, at every place they are
-// passed: by PHP that renders it, by the views that include it with data,
-// and, through those views, what is passed to them. complete is false when
-// some data passed to the view, or to a view it inherits from, can't be read.
-func (d *ViewData) Vars(view string) (vars []ViewVar, complete bool) {
+// ViewInputs is what a view receives.
+type ViewInputs struct {
+	// Vars are the variables passed, at every place they're passed.
+	Vars []ViewVar
+	// Classes are the classes rendering the view, or a view that includes
+	// it, whose public properties it gets when they are components or
+	// Mailables.
+	Classes []string
+	// Complete is set when every place that renders the view, or a view it
+	// inherits variables from, is known, and all the data they pass can be
+	// read: a variable none of them passes isn't defined.
+	Complete bool
+}
+
+// Inputs returns what a view receives: from the PHP that renders it, from
+// View::share() and composers, from the views that include it with data,
+// and, through those views, what is passed to them.
+func (d *ViewData) Inputs(view string) ViewInputs {
+	var in ViewInputs
 	if d == nil || view == "" {
-		return nil, false
+		return in
 	}
 	d.mu.RLock()
 	defer d.mu.RUnlock()
-	complete = true
+	in.Complete = d.dynamic == 0 && ownViewName(view)
 	seen := map[string]bool{}
+	classes := map[string]bool{}
 	var walk func(view string, depth int)
 	walk = func(view string, depth int) {
-		if seen[view] || depth > maxViewDepth {
+		if seen[view] {
+			return
+		}
+		if depth > maxViewDepth {
+			in.Complete = false
 			return
 		}
 		seen[view] = true
-		for _, r := range d.byView[view] {
-			vars = append(vars, r.vars...)
-			if r.opaque {
-				complete = false
+		renders, edges := d.byView[view], d.edgesTo[view]
+		if len(renders)+len(edges) == 0 || d.mentions[viewHash(view)] > d.consumed[viewHash(view)] {
+			// Nothing known renders it, or its name is used somewhere a
+			// render isn't recognized.
+			in.Complete = false
+		}
+		for _, r := range renders {
+			in.Vars = append(in.Vars, r.vars...)
+			in.Complete = in.Complete && !r.opaque
+			if r.class != "" && !classes[r.class] {
+				classes[r.class] = true
+				in.Classes = append(in.Classes, r.class)
 			}
 		}
-		for _, e := range d.edgesTo[view] {
-			vars = append(vars, e.vars...)
+		d.addComposed(&in, view)
+		for _, e := range edges {
+			in.Vars = append(in.Vars, e.vars...)
 			if !e.isolated {
 				walk(e.from, depth+1)
 			}
 		}
 	}
 	walk(view, 0)
-	return vars, complete
+	for _, r := range d.byView[sharedView] {
+		in.Vars = append(in.Vars, r.vars...)
+		in.Complete = in.Complete && !r.opaque
+	}
+	d.addComposed(&in, sharedView)
+	return in
+}
+
+// addComposed adds the data the composers of a view add.
+func (d *ViewData) addComposed(in *ViewInputs, view string) {
+	for _, c := range d.composersOf[view] {
+		in.Vars = append(in.Vars, c.vars...)
+		in.Complete = in.Complete && !c.opaque
+		if c.class == "" {
+			continue
+		}
+		composes := d.composes[c.class]
+		if len(composes) == 0 {
+			in.Complete = false // a composer whose compose() wasn't read
+		}
+		for _, r := range composes {
+			in.Vars = append(in.Vars, r.vars...)
+			in.Complete = in.Complete && !r.opaque
+		}
+	}
+}
+
+// ownViewName reports whether a view is one the app renders itself with the
+// data it passes: not a component's or Livewire's, an error page, or a
+// package's published view, which get data the app doesn't pass.
+func ownViewName(view string) bool {
+	for _, prefix := range []string{"components.", "livewire.", "errors.", "vendor.", "flux."} {
+		if strings.HasPrefix(view, prefix) {
+			return false
+		}
+	}
+	return !strings.Contains(view, "::")
 }
 
 // RenderedFrom reports whether anything is known to render the view.
@@ -230,390 +399,39 @@ func (d *ViewData) RenderedFrom(view string) bool {
 	return len(d.byView[view]) > 0 || len(d.edgesTo[view]) > 0
 }
 
-// renderCall says where a render call takes its view name and data.
-type renderCall struct {
-	nameArg, dataArg int
-	chain            bool // whether `->with()` calls after it add data
+// viewHash is how a string that could name a view is counted, so a file's
+// mentions take little room.
+func viewHash(s string) uint64 {
+	h := fnv.New64a()
+	h.Write([]byte(s))
+	return h.Sum64()
 }
 
-// parseViewRenders reads the views a PHP file renders.
-func parseViewRenders(uri, source string) []viewRender {
-	all := parser.Tokenize(source)
-	toks := make([]parser.Token, 0, len(all))
-	for _, t := range all {
-		if t.Kind != parser.TokenComment && t.Kind != parser.TokenDocComment {
-			toks = append(toks, t)
-		}
-	}
-	var out []viewRender
-	for i := 0; i+1 < len(toks); i++ {
-		call, ok := renderCallAt(toks, i)
-		if !ok {
+// literalMentions counts the quoted strings in a file that could name a
+// view, without tokenizing it: a view named somewhere other than a render
+// the server reads may be rendered with data it doesn't see.
+func literalMentions(source string) map[uint64]int {
+	var out map[uint64]int
+	for i := 0; i < len(source); i++ {
+		q := source[i]
+		if q != '\'' && q != '"' {
 			continue
 		}
-		open := i + 1
-		if toks[i].Value == "View" || toks[i].Value == "Route" {
-			open = i + 3
+		j := i + 1
+		for j < len(source) && j-i <= 128 && isViewNameByte(source[j]) {
+			j++
 		}
-		args, close := splitTokenArgs(toks, open)
-		if close < 0 || call.nameArg >= len(args) {
-			continue
-		}
-		name, ok := literalString(toks, args[call.nameArg])
-		if !ok || name == "" {
-			continue
-		}
-		r := viewRender{uri: uri, view: name}
-		if call.dataArg < len(args) {
-			r.vars, r.opaque = readData(uri, source, toks, args[call.dataArg], i)
-		}
-		if call.chain {
-			for k := close + 1; k+2 < len(toks) && toks[k].Kind == parser.TokenArrow && toks[k+2].Kind == parser.TokenOpenParen; {
-				method := toks[k+1].Value
-				if !strings.HasPrefix(method, "with") {
-					break
-				}
-				wargs, wclose := splitTokenArgs(toks, k+2)
-				if wclose < 0 {
-					break
-				}
-				vars, opaque := readWith(uri, source, toks, method, wargs, i)
-				r.vars = append(r.vars, vars...)
-				r.opaque = r.opaque || opaque
-				k = wclose + 1
+		if j < len(source) && source[j] == q && j > i+1 {
+			if out == nil {
+				out = map[uint64]int{}
 			}
+			out[viewHash(source[i+1:j])]++
+			i = j
 		}
-		for k := range r.vars {
-			r.vars[k].URI = uri
-		}
-		out = append(out, r)
-		i = close
 	}
 	return out
 }
 
-// renderCallAt reports whether a render call starts at toks[i].
-func renderCallAt(toks []parser.Token, i int) (renderCall, bool) {
-	t := toks[i]
-	if t.Kind != parser.TokenIdentifier {
-		return renderCall{}, false
-	}
-	prev := parser.TokenEOF
-	if i > 0 {
-		prev = toks[i-1].Kind
-	}
-	switch {
-	case t.Value == "view" && toks[i+1].Kind == parser.TokenOpenParen:
-		if prev == parser.TokenArrow {
-			// response()->view('name', $data), a Mailable's ->view().
-			return renderCall{nameArg: 0, dataArg: 1}, true
-		}
-		if prev == parser.TokenDoubleColon || prev == parser.TokenFunction || prev == parser.TokenNew {
-			return renderCall{}, false
-		}
-		return renderCall{nameArg: 0, dataArg: 1, chain: true}, true
-	case (t.Value == "View" || t.Value == "Route") && i+3 < len(toks) && toks[i+1].Kind == parser.TokenDoubleColon && toks[i+3].Kind == parser.TokenOpenParen:
-		if prev == parser.TokenArrow || prev == parser.TokenDoubleColon {
-			return renderCall{}, false
-		}
-		method := toks[i+2].Value
-		if t.Value == "View" && method == "make" {
-			return renderCall{nameArg: 0, dataArg: 1, chain: true}, true
-		}
-		if t.Value == "Route" && method == "view" {
-			return renderCall{nameArg: 1, dataArg: 2}, true
-		}
-	}
-	return renderCall{}, false
-}
-
-// tokenSpan is a range of tokens [start, end).
-type tokenSpan struct{ start, end int }
-
-// splitTokenArgs splits the arguments of the call whose `(` is toks[open],
-// returning them and the index of its `)`, or -1 when it isn't closed.
-func splitTokenArgs(toks []parser.Token, open int) ([]tokenSpan, int) {
-	if open >= len(toks) || toks[open].Kind != parser.TokenOpenParen {
-		return nil, -1
-	}
-	var args []tokenSpan
-	depth, start := 0, open+1
-	for k := open; k < len(toks); k++ {
-		switch toks[k].Kind {
-		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
-			depth++
-		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
-			depth--
-			if depth == 0 {
-				if k > start {
-					args = append(args, tokenSpan{start, k})
-				}
-				return args, k
-			}
-		case parser.TokenComma:
-			if depth == 1 {
-				args = append(args, tokenSpan{start, k})
-				start = k + 1
-			}
-		case parser.TokenSemicolon, parser.TokenEOF:
-			return nil, -1
-		}
-	}
-	return nil, -1
-}
-
-// literalString returns the value of a span that is one string literal with
-// nothing interpolated.
-func literalString(toks []parser.Token, s tokenSpan) (string, bool) {
-	if s.end-s.start != 1 || toks[s.start].Kind != parser.TokenStringLiteral {
-		return "", false
-	}
-	v := toks[s.start].Value
-	if len(v) < 2 || (v[0] == '"' && strings.ContainsAny(v, "${")) {
-		return "", false
-	}
-	return v[1 : len(v)-1], true
-}
-
-// readData reads a render's data argument: an array literal, compact(), or
-// a variable assigned an array literal earlier in the same function.
-func readData(uri, source string, toks []parser.Token, s tokenSpan, call int) ([]ViewVar, bool) {
-	if s.end <= s.start {
-		return nil, false
-	}
-	first := toks[s.start]
-	switch {
-	case first.Kind == parser.TokenOpenBracket && matchingClose(toks, s.start) == s.end-1:
-		return readArray(source, toks, tokenSpan{s.start + 1, s.end - 1})
-	case first.Kind == parser.TokenIdentifier && strings.EqualFold(first.Value, "compact") && s.end-s.start >= 3:
-		return readCompact(toks, s)
-	case first.Kind == parser.TokenVariable && s.end-s.start == 1:
-		return readAssignedArray(source, toks, first.Value, call)
-	}
-	return nil, true
-}
-
-// readWith reads a `->with()` call: with('key', $value), with([...]) or
-// withKey($value).
-func readWith(uri, source string, toks []parser.Token, method string, args []tokenSpan, call int) ([]ViewVar, bool) {
-	if method != "with" {
-		if len(args) != 1 || len(method) <= 4 {
-			return nil, true
-		}
-		key := toks[args[0].start-2] // the method name token
-		name := strings.ToLower(method[4:5]) + method[5:]
-		v := exprVar(source, toks, name, args[0])
-		v.Line, v.Col, v.EndCol = key.Line, key.Column+4, key.Column+len(method)
-		return []ViewVar{v}, false
-	}
-	switch len(args) {
-	case 1:
-		return readData(uri, source, toks, args[0], call)
-	case 2:
-		name, ok := literalString(toks, args[0])
-		if !ok {
-			return nil, true
-		}
-		v := exprVar(source, toks, name, args[1])
-		key := toks[args[0].start]
-		v.Line, v.Col, v.EndCol = key.Line, key.Column+1, key.Column+1+len(name)
-		return []ViewVar{v}, false
-	}
-	return nil, true
-}
-
-// readArray reads `'key' => expr` items; any other item makes the data
-// opaque.
-func readArray(source string, toks []parser.Token, inner tokenSpan) ([]ViewVar, bool) {
-	var vars []ViewVar
-	opaque := false
-	for _, item := range splitItems(toks, inner) {
-		arrow := -1
-		for k := item.start; k < item.end; k++ {
-			if toks[k].Kind == parser.TokenDoubleArrow {
-				arrow = k
-				break
-			}
-		}
-		if arrow < 0 {
-			opaque = true
-			continue
-		}
-		name, ok := literalString(toks, tokenSpan{item.start, arrow})
-		if !ok || !isVarName(name) {
-			opaque = true
-			continue
-		}
-		v := exprVar(source, toks, name, tokenSpan{arrow + 1, item.end})
-		key := toks[item.start]
-		v.Line, v.Col, v.EndCol = key.Line, key.Column+1, key.Column+1+len(name)
-		vars = append(vars, v)
-	}
-	return vars, opaque
-}
-
-func readCompact(toks []parser.Token, s tokenSpan) ([]ViewVar, bool) {
-	args, close := splitTokenArgs(toks, s.start+1)
-	if close != s.end-1 {
-		return nil, true
-	}
-	var vars []ViewVar
-	opaque := false
-	for _, a := range args {
-		name, ok := literalString(toks, a)
-		if !ok || !isVarName(name) {
-			opaque = true
-			continue
-		}
-		t := toks[a.start]
-		vars = append(vars, ViewVar{
-			Name: name, Line: t.Line, Col: t.Column + 1, EndCol: t.Column + 1 + len(name),
-			Expr: "$" + name, ExprLine: t.Line, ExprCol: t.Column,
-		})
-	}
-	return vars, opaque
-}
-
-// readAssignedArray reads `$data = [...]` assigned before the call in the
-// same function, and the `$data['key'] = expr;` that follow it.
-func readAssignedArray(source string, toks []parser.Token, name string, call int) ([]ViewVar, bool) {
-	start := -1
-	for k := call - 1; k >= 0; k-- {
-		if toks[k].Kind == parser.TokenFunction {
-			break
-		}
-		if toks[k].Kind == parser.TokenVariable && toks[k].Value == name && k+2 < len(toks) &&
-			toks[k+1].Kind == parser.TokenEquals && toks[k+2].Kind == parser.TokenOpenBracket {
-			start = k
-			break
-		}
-	}
-	if start < 0 {
-		return nil, true
-	}
-	close := matchingClose(toks, start+2)
-	if close < 0 || close > call {
-		return nil, true
-	}
-	vars, opaque := readArray(source, toks, tokenSpan{start + 3, close})
-	// $data['key'] = expr; between the assignment and the call.
-	for k := close; k < call; k++ {
-		if toks[k].Kind != parser.TokenVariable || toks[k].Value != name {
-			continue
-		}
-		if k+4 < call && toks[k+1].Kind == parser.TokenOpenBracket && toks[k+3].Kind == parser.TokenCloseBracket && toks[k+4].Kind == parser.TokenEquals {
-			key, ok := literalString(toks, tokenSpan{k + 2, k + 3})
-			if !ok || !isVarName(key) {
-				opaque = true
-				continue
-			}
-			end := k + 5
-			for end < call && toks[end].Kind != parser.TokenSemicolon {
-				end++
-			}
-			v := exprVar(source, toks, key, tokenSpan{k + 5, end})
-			kt := toks[k+2]
-			v.Line, v.Col, v.EndCol = kt.Line, kt.Column+1, kt.Column+1+len(key)
-			vars = append(vars, v)
-			continue
-		}
-		if k+1 < call && toks[k+1].Kind != parser.TokenOpenBracket && toks[k+1].Kind != parser.TokenComma && toks[k+1].Kind != parser.TokenCloseParen {
-			// Something else is done with the array: it may change.
-			opaque = true
-		}
-	}
-	return vars, opaque
-}
-
-// splitItems splits array items at top-level commas.
-func splitItems(toks []parser.Token, s tokenSpan) []tokenSpan {
-	var items []tokenSpan
-	depth, start := 0, s.start
-	for k := s.start; k < s.end; k++ {
-		switch toks[k].Kind {
-		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
-			depth++
-		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
-			depth--
-		case parser.TokenComma:
-			if depth == 0 {
-				if k > start {
-					items = append(items, tokenSpan{start, k})
-				}
-				start = k + 1
-			}
-		}
-	}
-	if s.end > start {
-		items = append(items, tokenSpan{start, s.end})
-	}
-	return items
-}
-
-func matchingClose(toks []parser.Token, open int) int {
-	depth := 0
-	for k := open; k < len(toks); k++ {
-		switch toks[k].Kind {
-		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
-			depth++
-		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
-			depth--
-			if depth == 0 {
-				return k
-			}
-		}
-	}
-	return -1
-}
-
-// exprVar is a variable whose value is the expression in s.
-func exprVar(source string, toks []parser.Token, name string, s tokenSpan) ViewVar {
-	v := ViewVar{Name: name}
-	if s.end <= s.start {
-		return v
-	}
-	first, last := toks[s.start], toks[s.end-1]
-	end := last.Offset + len(last.Value)
-	if first.Offset < end && end <= len(source) {
-		v.Expr = strings.TrimSpace(source[first.Offset:end])
-		v.ExprLine, v.ExprCol = first.Line, first.Column
-	}
-	return v
-}
-
-func isVarName(s string) bool {
-	if s == "" || ('0' <= s[0] && s[0] <= '9') {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if !(c == '_' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9') || c >= 0x80) {
-			return false
-		}
-	}
-	return true
-}
-
-// parseViewEdges reads the views a Blade view renders inside it, and the
-// data it passes them.
-func parseViewEdges(uri, from, source string) []viewEdge {
-	nodes := blade.Parse(source)
-	lines := blade.NewLines(source)
-	var edges []viewEdge
-	for _, inc := range blade.Includes(source, nodes) {
-		e := viewEdge{from: from, to: inc.View, isolated: inc.Isolated}
-		for _, v := range inc.Vars {
-			line, col := lines.Position(v.Key.Start)
-			el, ec := lines.Position(v.Value.Start)
-			vv := ViewVar{Name: v.Name, URI: uri, Line: line, Col: col, EndCol: col + len(v.Name), FromTemplate: true}
-			if v.Value.End > v.Value.Start {
-				vv.Expr = source[v.Value.Start:v.Value.End]
-				vv.ExprLine, vv.ExprCol = el, ec
-			}
-			e.vars = append(e.vars, vv)
-		}
-		edges = append(edges, e)
-	}
-	sort.SliceStable(edges, func(i, j int) bool { return edges[i].to < edges[j].to })
-	return edges
+func isViewNameByte(c byte) bool {
+	return c == '.' || c == '-' || c == '_' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9')
 }

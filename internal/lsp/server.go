@@ -67,8 +67,8 @@ type Server struct {
 	documents     map[string]string
 	// blade keeps the compiled PHP of open Blade views (see blade.go).
 	blade bladeViews
-	// viewVarCache keeps the typed variables of Blade views (see blade_vars.go).
-	viewVarCache viewVarCache
+	// viewTypes types the variables Blade views receive (see blade_vars.go).
+	viewTypes *frameworklaravel.ViewTypes
 	// bladeFeatures answers requests about Blade itself: directives and the
 	// views, sections and stacks they name.
 	bladeFeatures *blade.Features
@@ -474,6 +474,17 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.components = frameworklaravel.NewComponents(s.rootPath, s.index, s.getDocumentReader())
 	s.bladeFeatures = &blade.Features{Views: viewResolver, Components: s.components, Read: s.getDocumentReader()}
 	s.diag.Blade = s.bladeFeatures
+	if s.workspace.ViewData != nil {
+		s.viewTypes = &frameworklaravel.ViewTypes{
+			Data:  s.workspace.ViewData,
+			Index: s.index,
+			Read:  s.getDocumentReader(),
+			Resolve: func(expr, source string, file *parser.FileNode, line, col int) string {
+				return s.completion.ResolveExpressionType(expr, source, protocol.Position{Line: line, Character: col}, file)
+			},
+		}
+		s.diag.ViewTypes = s.viewTypes
+	}
 	s.analyzer = analyzer.NewAnalyzer(s.index, s.container)
 	if opts := params.InitializationOptions; opts != nil {
 		s.analyzer.SetClientCommands(opts.ClientCommands)

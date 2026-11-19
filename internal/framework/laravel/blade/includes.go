@@ -94,3 +94,39 @@ func arrayVars(src string, arg Span) []IncludeVar {
 	}
 	return vars
 }
+
+// DynamicIncludes counts the views a template renders by a name it builds
+// at runtime, such as `@include($partial)`, or from a list it can't read.
+func DynamicIncludes(src string, nodes []Node) int {
+	n := 0
+	for _, node := range nodes {
+		if node.Kind != KindDirective || !node.HasArgs {
+			continue
+		}
+		name := strings.ToLower(node.Name)
+		args := splitArgs(src, node.Args)
+		viewArg := -1
+		switch name {
+		case "each":
+			viewArg = 0
+		case "includefirst", "componentfirst":
+			n++ // a list: which view renders isn't known
+			continue
+		default:
+			if at, ok := includeArgs[name]; ok {
+				viewArg = at[0]
+			}
+		}
+		if viewArg < 0 {
+			continue
+		}
+		if viewArg >= len(args) {
+			n++
+			continue
+		}
+		if _, ok := stringLiteral(src, args[viewArg]); !ok {
+			n++
+		}
+	}
+	return n
+}

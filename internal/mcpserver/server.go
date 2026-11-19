@@ -750,6 +750,16 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 		PHPVersion: s.BuiltinProfile.PHPVersion,
 		Extensions: s.BuiltinProfile.Extensions,
 	}
+	if ws.ViewData != nil {
+		rt.Diagnostics.ViewTypes = &frameworklaravel.ViewTypes{
+			Data:  ws.ViewData,
+			Index: ws.Index,
+			Read:  readFile,
+			Resolve: func(expr, source string, file *parser.FileNode, line, col int) string {
+				return rt.Completion.ResolveExpressionType(expr, source, protocol.Position{Line: line, Character: col}, file)
+			},
+		}
+	}
 	rt.Diagnostics.Blade = &blade.Features{
 		Views:      viewResolver,
 		Components: frameworklaravel.NewComponents(s.RootPath, ws.Index, readFile),

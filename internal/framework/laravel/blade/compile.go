@@ -42,6 +42,28 @@ type Var struct {
 // receives vars: each is declared with `/** @var Type $name */` on the first
 // line, which has no place in the template, so the PHP in it is typed.
 func CompileWithVars(template string, vars []Var) *Document {
+	return CompileWith(template, CompileOptions{Vars: vars})
+}
+
+// CompileOptions says what a template receives.
+type CompileOptions struct {
+	Vars []Var
+	// Defined is set when Vars are all the variables the template receives:
+	// they, and those Blade gives every view, are then declared as defined,
+	// so a variable none of them names is undefined.
+	Defined bool
+}
+
+// bladeVariables are the variables Blade gives a view, or a block of it,
+// itself: `$loop` in loops, `$message` in `@error`, `$value` in `@session`
+// and `@context`, and those every view shares.
+var bladeVariables = []string{"loop", "message", "value", "errors", "app", "__env", "__data", "slot", "attributes", "component"}
+
+// CompileWith builds the virtual PHP document of a template with the
+// variables it receives declared on its first line, which has no place in
+// the template.
+func CompileWith(template string, opts CompileOptions) *Document {
+	vars := opts.Vars
 	var header strings.Builder
 	for _, v := range vars {
 		if !validVarName(v.Name) {
@@ -56,6 +78,26 @@ func CompileWithVars(template string, vars []Var) *Document {
 		header.WriteString(" /** @var " + t + " $" + v.Name + " */")
 	}
 	nodes := Parse(template)
+	if opts.Defined {
+		names := make([]string, 0, len(vars)+len(bladeVariables))
+		seen := map[string]bool{}
+		addName := func(n string) {
+			if validVarName(n) && !seen[n] {
+				seen[n] = true
+				names = append(names, "$"+n)
+			}
+		}
+		for _, v := range vars {
+			addName(v.Name)
+		}
+		for _, n := range bladeVariables {
+			addName(n)
+		}
+		for _, n := range injected(template, nodes) {
+			addName(n)
+		}
+		header.WriteString(" global " + strings.Join(names, ", ") + ";")
+	}
 	doc := compile(template, nodes, true, header.String())
 	if !doc.Structured {
 		doc = compile(template, nodes, false, header.String())
@@ -358,6 +400,22 @@ func (c *compiler) use(n Node) {
 		c.emit(" as " + parts[1])
 	}
 	c.emit(";")
+}
+
+// injected returns the variables `@inject('name', Service::class)` defines.
+func injected(template string, nodes []Node) []string {
+	var out []string
+	for _, n := range nodes {
+		if n.Kind != KindDirective || !n.HasArgs || !strings.EqualFold(n.Name, "inject") {
+			continue
+		}
+		if args := splitArgs(template, n.Args); len(args) > 0 {
+			if name, ok := stringLiteral(template, args[0]); ok {
+				out = append(out, template[name.Start:name.End])
+			}
+		}
+	}
+	return out
 }
 
 func validVarName(s string) bool {

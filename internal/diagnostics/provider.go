@@ -8,6 +8,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/config"
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -43,6 +44,9 @@ type Provider struct {
 	// Blade checks a Blade view's own structure and the views it names. Set
 	// by the server after initialization.
 	Blade *blade.Features
+	// ViewTypes types the variables Blade views receive, and says when all
+	// of them are known. Set by the server for a Laravel app.
+	ViewTypes *frameworklaravel.ViewTypes
 
 	mu          sync.RWMutex
 	toolResults map[string][]protocol.Diagnostic
@@ -71,11 +75,12 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 	if workspace.IsBlade(uri) {
 		// A Blade view is checked through the PHP it contains, and only what
 		// is found in that PHP is reported, at its place in the view.
-		doc := blade.Compile(source)
-		diags = toTemplate(doc, p.analyzeNative(uri, doc.PHP, true))
+		in := p.ViewTypes.For(uri)
+		doc := blade.CompileWith(source, blade.CompileOptions{Vars: in.BladeVars(), Defined: in.Complete})
+		diags = toTemplate(doc, p.analyzeNative(uri, doc.PHP, true, !in.Complete))
 		diags = append(diags, p.analyzeBlade(source)...)
 	} else {
-		diags = p.analyzeNative(uri, source, false)
+		diags = p.analyzeNative(uri, source, false, workspace.IsTemplate(uri))
 	}
 	p.mu.RLock()
 	if cached, ok := p.toolResults[uri]; ok {
@@ -99,7 +104,9 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 
 // analyzeNative runs the native rules on PHP source. bladePHP is set for the
 // virtual PHP of a Blade view.
-func (p *Provider) analyzeNative(uri, source string, bladePHP bool) []protocol.Diagnostic {
+// includedFile is set when the source's top-level variables are set by
+// code the server can't see, and aren't reported as undefined.
+func (p *Provider) analyzeNative(uri, source string, bladePHP, includedFile bool) []protocol.Diagnostic {
 	var diags []protocol.Diagnostic
 	file := parser.ParseFile(source)
 	if file != nil {
@@ -142,7 +149,7 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP bool) []protocol.D
 			diags = append(diags, p.applyRuleSeverity("redundant-union-member", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("undefined-variable") {
-			fs := (&checks.UndefinedVariableRule{IncludedFile: workspace.IsTemplate(uri), Shared: shared}).Check(file, source, p.index)
+			fs := (&checks.UndefinedVariableRule{IncludedFile: includedFile, Shared: shared}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("undefined-variable", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		// A Blade view's variables are also read by the views it includes,
@@ -237,7 +244,7 @@ func toTemplate(doc *blade.Document, diags []protocol.Diagnostic) []protocol.Dia
 func (p *Provider) AnalyzeOnSave(uri, source string) {
 	var doc *blade.Document
 	if workspace.IsBlade(uri) {
-		doc = blade.Compile(source)
+		doc = blade.CompileWithVars(source, p.ViewTypes.For(uri).BladeVars())
 		source = doc.PHP
 	}
 	file := parser.ParseFile(source)
