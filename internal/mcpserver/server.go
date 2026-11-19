@@ -760,10 +760,13 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 			},
 		}
 	}
+	providers := frameworklaravel.NewProviders(s.RootPath, ws.Index)
+	viewResolver.SetProviders(providers)
 	rt.Diagnostics.Blade = &blade.Features{
 		Views:      viewResolver,
-		Components: frameworklaravel.NewComponents(s.RootPath, ws.Index, readFile),
+		Components: frameworklaravel.NewComponents(s.RootPath, ws.Index, providers, readFile),
 		Read:       readFile,
+		Custom:     providers.Custom,
 	}
 	return rt
 }

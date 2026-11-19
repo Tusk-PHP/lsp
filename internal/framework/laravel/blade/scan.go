@@ -44,14 +44,21 @@ type Node struct {
 
 // Parse splits a template into its nodes, in order.
 func Parse(src string) []Node {
-	s := scanner{src: src}
+	return ParseCustom(src, nil)
+}
+
+// ParseCustom splits a template into its nodes, knowing the directives and
+// conditionals the project registers.
+func ParseCustom(src string, custom *Custom) []Node {
+	s := scanner{src: src, custom: custom}
 	s.scan(0, len(src))
 	return s.nodes
 }
 
 type scanner struct {
-	src   string
-	nodes []Node
+	src    string
+	nodes  []Node
+	custom *Custom
 }
 
 func (s *scanner) add(n Node) { s.nodes = append(s.nodes, n) }
@@ -136,7 +143,7 @@ func (s *scanner) at(i, end int) int {
 		j++
 	}
 	name := src[i+1 : j]
-	if name == "" || !isDirective(name) {
+	if name == "" || !isDirective(name) && !s.custom.known(name) {
 		return j
 	}
 	n := Node{Kind: KindDirective, Span: Span{i, j}, Name: name}

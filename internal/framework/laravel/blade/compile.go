@@ -52,6 +52,8 @@ type CompileOptions struct {
 	// they, and those Blade gives every view, are then declared as defined,
 	// so a variable none of them names is undefined.
 	Defined bool
+	// Custom is what the project registers with Blade.
+	Custom *Custom
 }
 
 // bladeVariables are the variables Blade gives a view, or a block of it,
@@ -77,7 +79,7 @@ func CompileWith(template string, opts CompileOptions) *Document {
 		}
 		header.WriteString(" /** @var " + t + " $" + v.Name + " */")
 	}
-	nodes := Parse(template)
+	nodes := ParseCustom(template, opts.Custom)
 	if opts.Defined {
 		names := make([]string, 0, len(vars)+len(bladeVariables))
 		seen := map[string]bool{}
@@ -98,9 +100,9 @@ func CompileWith(template string, opts CompileOptions) *Document {
 		}
 		header.WriteString(" global " + strings.Join(names, ", ") + ";")
 	}
-	doc := compile(template, nodes, true, header.String())
+	doc := compile(template, nodes, true, header.String(), opts.Custom)
 	if !doc.Structured {
-		doc = compile(template, nodes, false, header.String())
+		doc = compile(template, nodes, false, header.String(), opts.Custom)
 	}
 	doc.phpLines = lineStarts(doc.PHP)
 	doc.tplLines = lineStarts(template)
@@ -126,10 +128,20 @@ type compiler struct {
 	last     int // template offset up to which newlines have been carried over
 	stack    []block
 	ok       bool
+	custom   *Custom
 }
 
-func compile(template string, nodes []Node, structured bool, header string) *Document {
-	c := &compiler{tpl: template, ok: true}
+// lookup returns how a directive becomes PHP: Blade's own, or one the
+// project registers.
+func (c *compiler) lookup(name string) directive {
+	if d, ok := c.custom.directive(name); ok && !isDirective(name) {
+		return d
+	}
+	return lookupDirective(name)
+}
+
+func compile(template string, nodes []Node, structured bool, header string, custom *Custom) *Document {
+	c := &compiler{tpl: template, ok: true, custom: custom}
 	c.out.Grow(len(template)/2 + len(header))
 	c.out.WriteString("<?php" + header + "\n")
 	for _, n := range nodes {
@@ -258,7 +270,7 @@ func (c *compiler) top() (block, bool) {
 }
 
 func (c *compiler) directive(n Node) {
-	d := lookupDirective(n.Name)
+	d := c.lookup(n.Name)
 	switch d.kind {
 	case dirIf:
 		// `@empty` with no argument inside `@forelse` is its else branch.
@@ -357,7 +369,7 @@ func (c *compiler) directive(n Node) {
 // flatDirective writes a directive as a statement of its own, for templates
 // whose blocks don't balance.
 func (c *compiler) flatDirective(n Node) {
-	d := lookupDirective(n.Name)
+	d := c.lookup(n.Name)
 	switch d.kind {
 	case dirForeach, dirForelse:
 		c.emit("foreach (")

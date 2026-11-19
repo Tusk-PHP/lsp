@@ -76,7 +76,7 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 		// A Blade view is checked through the PHP it contains, and only what
 		// is found in that PHP is reported, at its place in the view.
 		in := p.ViewTypes.For(uri)
-		doc := blade.CompileWith(source, blade.CompileOptions{Vars: in.BladeVars(), Defined: in.Complete})
+		doc := blade.CompileWith(source, blade.CompileOptions{Vars: in.BladeVars(), Defined: in.Complete, Custom: p.bladeCustom()})
 		diags = toTemplate(doc, p.analyzeNative(uri, doc.PHP, true, !in.Complete))
 		diags = append(diags, p.analyzeBlade(source)...)
 	} else {
@@ -183,6 +183,15 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP, includedFile bool
 	return diags
 }
 
+// bladeCustom returns the directives and conditionals the project
+// registers with Blade.
+func (p *Provider) bladeCustom() *blade.Custom {
+	if p.Blade == nil || p.Blade.Custom == nil {
+		return nil
+	}
+	return p.Blade.Custom()
+}
+
 // bladeSeverity is the default severity of the Blade rules.
 var bladeSeverity = map[string]checks.Severity{
 	// A block that doesn't close doesn't compile.
@@ -244,7 +253,7 @@ func toTemplate(doc *blade.Document, diags []protocol.Diagnostic) []protocol.Dia
 func (p *Provider) AnalyzeOnSave(uri, source string) {
 	var doc *blade.Document
 	if workspace.IsBlade(uri) {
-		doc = blade.CompileWithVars(source, p.ViewTypes.For(uri).BladeVars())
+		doc = blade.CompileWith(source, blade.CompileOptions{Vars: p.ViewTypes.For(uri).BladeVars(), Custom: p.bladeCustom()})
 		source = doc.PHP
 	}
 	file := parser.ParseFile(source)

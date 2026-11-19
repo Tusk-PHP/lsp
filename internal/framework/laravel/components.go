@@ -3,12 +3,10 @@ package laravel
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
 
-	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -18,30 +16,26 @@ import (
 const classComponentNamespace = `App\View\Components\`
 
 // Components finds the Blade components of a Laravel app: classes under
-// App\View\Components and anonymous views under resources/views/components.
-// It implements blade.Components.
+// App\View\Components, anonymous views under resources/views/components, and
+// what its providers and packages register: aliases, class namespaces
+// (`<x-pkg::name>`), anonymous component paths (`<flux:button>`) and view
+// namespaces (`<x-filament::button>`). It implements blade.Components.
 type Components struct {
-	rootPath string
-	index    *symbols.Index
+	rootPath  string
+	index     *symbols.Index
+	providers *Providers
 	// read returns a file's source, open in the editor or on disk.
 	read func(uri string) string
 
 	mu     sync.Mutex
 	names  map[string]bool // every component name found, once listed
 	listed bool
-	// aliases are the components providers register under a literal name
-	// with Blade::component, name to class.
-	aliases map[string]string
-	// known is set once the providers have been read and register no
-	// component the server can't name.
-	known, checked bool
-	// dirs are the directories anonymous components are looked for in.
-	dirs []string
+	regs   *Registrations // what names was listed from
 }
 
 // NewComponents returns the components of the Laravel app at rootPath.
-func NewComponents(rootPath string, index *symbols.Index, read func(uri string) string) *Components {
-	return &Components{rootPath: rootPath, index: index, read: read}
+func NewComponents(rootPath string, index *symbols.Index, providers *Providers, read func(uri string) string) *Components {
+	return &Components{rootPath: rootPath, index: index, providers: providers, read: read}
 }
 
 // Invalidate forgets what was listed and read from providers, after a
@@ -50,9 +44,23 @@ func (c *Components) Invalidate() {
 	if c == nil {
 		return
 	}
+	c.providers.Invalidate()
 	c.mu.Lock()
-	c.names, c.listed, c.aliases, c.known, c.checked, c.dirs = nil, false, nil, false, false, nil
+	c.names, c.listed, c.regs = nil, false, nil
 	c.mu.Unlock()
+}
+
+func (c *Components) registrations() *Registrations {
+	if regs := c.providers.Get(); regs != nil {
+		return regs
+	}
+	// Until the providers are read: Livewire's locations, from its config.
+	regs := &Registrations{}
+	dirs, _ := livewireLocations(c.rootPath)
+	for _, d := range dirs {
+		regs.AnonymousPaths = append(regs.AnonymousPaths, AnonymousPath{Dir: d})
+	}
+	return regs
 }
 
 // ComponentNames implements blade.Components.
@@ -79,17 +87,49 @@ func (c *Components) Component(name string) (blade.Component, bool) {
 	if c == nil || name == "" || strings.Contains(name, "..") {
 		return blade.Component{}, false
 	}
-	c.readProviders()
-	c.mu.Lock()
-	fqn := c.aliases[name]
-	c.mu.Unlock()
+	regs := c.registrations()
+	if prefix, rest, ok := strings.Cut(name, "::"); ok {
+		return c.namespaced(regs, name, prefix, rest)
+	}
+	fqn := regs.ComponentAliases[name]
 	if fqn == "" {
 		fqn = classComponentNamespace + studlyPath(name)
 	}
-	view := c.anonymousView(name)
+	view := c.anonymousView(name, c.anonymousDirs(regs, ""))
 	if comp, ok := c.classComponent(name, fqn, view); ok {
 		return comp, true
 	}
+	return c.anonymous(name, view)
+}
+
+// namespaced finds `<x-prefix::name>`: an alias registered with that name,
+// a class in a componentNamespace(), a view in an anonymous component path
+// with that prefix, or a view namespace's components/ directory, which
+// resources/views/vendor/{prefix} overrides.
+func (c *Components) namespaced(regs *Registrations, name, prefix, rest string) (blade.Component, bool) {
+	if fqn := regs.ComponentAliases[name]; fqn != "" {
+		return c.classComponent(name, fqn, "")
+	}
+	if ns, ok := regs.ComponentNamespaces[prefix]; ok {
+		if comp, ok := c.classComponent(name, ns+`\`+studlyPath(rest), ""); ok {
+			return comp, true
+		}
+	}
+	if view := c.anonymousView(rest, c.anonymousDirs(regs, prefix)); view != "" {
+		return c.anonymous(name, view)
+	}
+	var dirs []string
+	dirs = append(dirs, filepath.Join(c.rootPath, "resources", "views", "vendor", prefix, "components"))
+	for _, d := range regs.ViewNamespaces[prefix] {
+		dirs = append(dirs, filepath.Join(d, "components"))
+	}
+	if view := c.anonymousView(rest, dirs); view != "" {
+		return c.anonymous(name, view)
+	}
+	return blade.Component{}, false
+}
+
+func (c *Components) anonymous(name, view string) (blade.Component, bool) {
 	if view == "" {
 		return blade.Component{}, false
 	}
@@ -146,12 +186,12 @@ func (c *Components) constructorAttributes(fqn string) []blade.Attribute {
 	return nil
 }
 
-// anonymousView returns the view of an anonymous component:
-// components/name.blade.php, components/name/index.blade.php or
-// components/name/name.blade.php, in the order Laravel tries them.
-func (c *Components) anonymousView(name string) string {
+// anonymousView returns the view of an anonymous component in dirs:
+// name.blade.php, name/index.blade.php or name/name.blade.php, in the order
+// Laravel tries them.
+func (c *Components) anonymousView(name string, dirs []string) string {
 	rel := filepath.FromSlash(strings.ReplaceAll(name, ".", "/"))
-	for _, dir := range c.anonymousDirs() {
+	for _, dir := range dirs {
 		base := filepath.Join(dir, rel)
 		for _, path := range []string{base + ".blade.php", filepath.Join(base, "index.blade.php"), filepath.Join(base, filepath.Base(base)+".blade.php")} {
 			if isFile(path) {
@@ -162,25 +202,18 @@ func (c *Components) anonymousView(name string) string {
 	return ""
 }
 
-// anonymousDirs are the directories anonymous components are looked for in:
-// resources/views/components, then the locations Livewire 4 adds.
-func (c *Components) anonymousDirs() []string {
-	c.mu.Lock()
-	dirs := c.dirs
-	c.mu.Unlock()
-	if dirs != nil {
-		return dirs
+// anonymousDirs are the directories anonymous components with a prefix are
+// looked for in; for no prefix, resources/views/components first.
+func (c *Components) anonymousDirs(regs *Registrations, prefix string) []string {
+	var dirs []string
+	if prefix == "" {
+		dirs = append(dirs, filepath.Join(c.rootPath, "resources", "views", "components"))
 	}
-	dirs = []string{filepath.Join(c.rootPath, "resources", "views", "components")}
-	extra, _ := livewireLocations(c.rootPath)
-	for _, d := range extra {
-		if d != dirs[0] {
-			dirs = append(dirs, d)
+	for _, p := range regs.AnonymousPaths {
+		if p.Prefix == prefix && (len(dirs) == 0 || p.Dir != dirs[0]) {
+			dirs = append(dirs, p.Dir)
 		}
 	}
-	c.mu.Lock()
-	c.dirs = dirs
-	c.mu.Unlock()
 	return dirs
 }
 
@@ -196,16 +229,15 @@ func (c *Components) ComponentsKnown() bool {
 	if !isDir(filepath.Join(c.rootPath, "resources", "views")) || !appInAppDir(c.rootPath) {
 		return false
 	}
-	c.readProviders()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.known
+	regs := c.providers.Get()
+	return regs != nil && !regs.UnknownComponents
 }
 
 // list walks the component directories once, for completion.
 func (c *Components) list() {
+	regs := c.registrations()
 	c.mu.Lock()
-	if c.listed {
+	if c.listed && c.regs == regs {
 		c.mu.Unlock()
 		return
 	}
@@ -225,140 +257,42 @@ func (c *Components) list() {
 		names[strings.Join(parts, ".")] = true
 		return nil
 	})
-	for _, views := range c.anonymousDirs() {
-		_ = filepath.Walk(views, func(path string, info os.FileInfo, err error) error {
+	walkViews := func(dir, prefix string) {
+		_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() || !strings.HasSuffix(path, ".blade.php") {
 				return nil
 			}
-			rel, _ := filepath.Rel(views, strings.TrimSuffix(path, ".blade.php"))
+			rel, _ := filepath.Rel(dir, strings.TrimSuffix(path, ".blade.php"))
 			rel = filepath.ToSlash(rel)
-			dir, file := filepath.Split(rel)
-			dir = strings.TrimSuffix(dir, "/")
-			if dir != "" && (file == "index" || file == filepath.Base(dir)) {
-				rel = dir
+			d, file := filepath.Split(rel)
+			d = strings.TrimSuffix(d, "/")
+			if d != "" && (file == "index" || file == filepath.Base(d)) {
+				rel = d
 			}
-			names[strings.ReplaceAll(rel, "/", ".")] = true
+			names[prefix+strings.ReplaceAll(rel, "/", ".")] = true
 			return nil
 		})
 	}
-
-	c.mu.Lock()
-	for alias := range c.aliases {
+	for _, dir := range c.anonymousDirs(regs, "") {
+		walkViews(dir, "")
+	}
+	for _, p := range regs.AnonymousPaths {
+		if p.Prefix != "" {
+			walkViews(p.Dir, p.Prefix+"::")
+		}
+	}
+	for ns, dirs := range regs.ViewNamespaces {
+		for _, d := range dirs {
+			walkViews(filepath.Join(d, "components"), ns+"::")
+		}
+	}
+	for alias := range regs.ComponentAliases {
 		names[alias] = true
 	}
-	c.names, c.listed = names, true
-	c.mu.Unlock()
-}
-
-var (
-	// componentRegistration finds the calls that register Blade components.
-	componentRegistration = regexp.MustCompile(`(?:Blade::|->)(component|components|anonymousComponentPath|loadViewComponentsAs|componentNamespace|anonymousComponentNamespace)\s*\(`)
-	// literalComponent is Blade::component('alias', X::class) or
-	// Blade::component(X::class, 'alias'), with no prefix.
-	literalComponentAliasFirst = regexp.MustCompile(`^\s*['"]([\w.-]+)['"]\s*,\s*\\?([\w\\]+)::class\s*\)`)
-	literalComponentClassFirst = regexp.MustCompile(`^\s*\\?([\w\\]+)::class\s*,\s*['"]([\w.-]+)['"]\s*\)`)
-)
-
-// readProviders reads the app's service providers and those its packages
-// register, once, for the components they register.
-func (c *Components) readProviders() {
-	c.mu.Lock()
-	if c.checked || c.index == nil || !c.index.Ready() {
-		c.mu.Unlock()
-		return
-	}
-	c.mu.Unlock()
-
-	var files []string
-	if entries, err := os.ReadDir(filepath.Join(c.rootPath, "app", "Providers")); err == nil {
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".php") {
-				files = append(files, filepath.Join(c.rootPath, "app", "Providers", e.Name()))
-			}
-		}
-	}
-	_, known := livewireLocations(c.rootPath)
-	for _, fqn := range composer.LaravelPackageProviders(c.rootPath) {
-		sym := c.lookup(fqn)
-		if sym == nil {
-			// A provider that can't be read may register anything.
-			known = false
-			continue
-		}
-		files = append(files, symbols.URIToPath(sym.URI))
-	}
-	aliases := map[string]string{}
-	for _, path := range files {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			known = false
-			continue
-		}
-		src := string(data)
-		if !strings.Contains(src, "Blade") && !strings.Contains(src, "blade.compiler") {
-			continue
-		}
-		livewire := strings.Contains(filepath.ToSlash(path), "/livewire/livewire/src/")
-		for _, m := range componentRegistration.FindAllStringSubmatchIndex(src, -1) {
-			name := src[m[2]:m[3]]
-			if livewire && name == "anonymousComponentPath" {
-				// Livewire's component locations, read from its config above.
-				continue
-			}
-			if name == "anonymousComponentPath" && prefixedPath(src[m[1]:]) {
-				// anonymousComponentPath($path, 'flux') is `<x-flux::name>`.
-				continue
-			}
-			switch name {
-			case "componentNamespace", "anonymousComponentNamespace":
-				// Only names written `<x-pkg::name>`, which are never reported.
-				continue
-			case "component":
-				rest := src[m[1]:]
-				if g := literalComponentAliasFirst.FindStringSubmatch(rest); g != nil && !strings.Contains(g[1], `\`) {
-					aliases[g[1]] = strings.TrimPrefix(g[2], `\`)
-					continue
-				}
-				if g := literalComponentClassFirst.FindStringSubmatch(rest); g != nil {
-					aliases[g[2]] = strings.TrimPrefix(g[1], `\`)
-					continue
-				}
-			}
-			known = false
-		}
-	}
 
 	c.mu.Lock()
-	c.aliases, c.known, c.checked = aliases, known, true
-	for alias := range aliases {
-		if c.names != nil {
-			c.names[alias] = true
-		}
-	}
+	c.names, c.listed, c.regs = names, true, regs
 	c.mu.Unlock()
-}
-
-// prefixedPath reports whether the arguments of an anonymousComponentPath
-// call give a literal prefix as second argument.
-func prefixedPath(args string) bool {
-	depth := 0
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case '(', '[':
-			depth++
-		case ')', ']':
-			if depth == 0 {
-				return false
-			}
-			depth--
-		case ',':
-			if depth == 0 {
-				rest := strings.TrimSpace(args[i+1:])
-				return len(rest) > 1 && (rest[0] == '\'' || rest[0] == '"')
-			}
-		}
-	}
-	return false
 }
 
 // appInAppDir reports whether composer.json maps App\ to app/, where class

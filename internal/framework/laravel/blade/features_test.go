@@ -145,6 +145,8 @@ func (v fakeViews) ViewNames(prefix string) []string {
 
 func (v fakeViews) ViewsKnown() bool { return true }
 
+func (v fakeViews) NamespaceKnown(ns string) bool { return ns == "pkg" }
+
 func (v fakeViews) features() *Features {
 	return &Features{Views: v, Read: func(uri string) string { return v[strings.TrimPrefix(uri, "file:///views/")] }}
 }

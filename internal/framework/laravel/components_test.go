@@ -34,7 +34,7 @@ func TestAnonymousComponents(t *testing.T) {
 		data, _ := os.ReadFile(strings.TrimPrefix(uri, "file://"))
 		return string(data)
 	}
-	c := NewComponents(root, nil, read)
+	c := NewComponents(root, nil, nil, read)
 	if got := strings.Join(c.ComponentNames(""), " "); got != "accordion alert card counter forms.input" {
 		t.Fatalf("names: %q", got)
 	}
@@ -67,10 +67,7 @@ func TestLivewireLocationsUnreadable(t *testing.T) {
 	}
 }
 
-func TestPrefixedPathAndStudly(t *testing.T) {
-	if !prefixedPath(`resource_path('views/flux'), 'flux');`) || prefixedPath(`$location);`) || prefixedPath(`dirname(__DIR__, 2));`) {
-		t.Fatal("prefixedPath")
-	}
+func TestStudlyPath(t *testing.T) {
 	if got := studlyPath("forms.input-group"); got != `Forms\InputGroup` {
 		t.Fatalf("studlyPath: %s", got)
 	}

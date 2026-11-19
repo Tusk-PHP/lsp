@@ -15,6 +15,11 @@ type View struct {
 
 type Views struct {
 	rootPath string
+	// providers registers view namespaces (`courier::mail`).
+	providers *Providers
+	nsMu      sync.Mutex
+	nsNames   map[string][]string // namespace → its view names, once listed
+	nsRegs    *Registrations      // what nsNames was listed from
 
 	mu     sync.RWMutex
 	loaded bool
@@ -280,6 +285,14 @@ func (v *Views) ViewURI(name string) (string, bool) {
 	if view := v.Find(name); view != nil {
 		return view.URI, true
 	}
+	if ns, rest, ok := strings.Cut(name, "::"); ok && !strings.Contains(rest, "..") {
+		for _, dir := range v.namespaceDirs(ns) {
+			if uri, ok := v.addFromDisk(name, filepath.Join(dir, filepath.FromSlash(strings.ReplaceAll(rest, ".", "/")))); ok {
+				return uri, true
+			}
+		}
+		return "", false
+	}
 	if strings.Contains(name, "::") || strings.Contains(name, "..") {
 		return "", false
 	}
@@ -317,8 +330,73 @@ func (v *Views) addFromDisk(name, base string) (string, bool) {
 	return "", false
 }
 
+// SetProviders lets the views find the namespaces providers register.
+func (v *Views) SetProviders(p *Providers) {
+	if v != nil {
+		v.providers = p
+	}
+}
+
+// namespaceDirs are where a namespace's views are looked for: the app's
+// published copies in resources/views/vendor/{ns} first, as Laravel does,
+// then the directories registered for it.
+func (v *Views) namespaceDirs(ns string) []string {
+	dirs := []string{filepath.Join(v.rootPath, "resources", "views", "vendor", ns)}
+	if regs := v.providers.Get(); regs != nil {
+		dirs = append(dirs, regs.ViewNamespaces[ns]...)
+	}
+	return dirs
+}
+
+// NamespaceKnown reports whether every directory of a view namespace is
+// known, so a view not found in them doesn't exist.
+func (v *Views) NamespaceKnown(ns string) bool {
+	if v == nil {
+		return false
+	}
+	regs := v.providers.Get()
+	return regs != nil && len(regs.ViewNamespaces[ns]) > 0 && !regs.UnknownNamespaces[ns]
+}
+
+// namespaceNames lists a namespace's views once, for completion.
+func (v *Views) namespaceNames(ns string) []string {
+	regs := v.providers.Get()
+	v.nsMu.Lock()
+	defer v.nsMu.Unlock()
+	if v.nsRegs != regs || v.nsNames == nil {
+		v.nsNames, v.nsRegs = map[string][]string{}, regs
+	}
+	if names, ok := v.nsNames[ns]; ok {
+		return names
+	}
+	seen := map[string]bool{}
+	var names []string
+	for _, dir := range v.namespaceDirs(ns) {
+		for _, view := range collectViews(dir) {
+			if !strings.Contains(view.Name, "::") && !seen[view.Name] {
+				seen[view.Name] = true
+				names = append(names, ns+"::"+view.Name)
+			}
+		}
+	}
+	sort.Strings(names)
+	v.nsNames[ns] = names
+	return names
+}
+
 // ViewNames returns the names of the views starting with prefix.
 func (v *Views) ViewNames(prefix string) []string {
+	if ns, _, ok := strings.Cut(prefix, "::"); ok && v != nil {
+		var out []string
+		for _, name := range v.namespaceNames(ns) {
+			if strings.HasPrefix(name, prefix) {
+				out = append(out, name)
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
 	views := v.Search(prefix)
 	names := make([]string, 0, len(views))
 	for _, view := range views {

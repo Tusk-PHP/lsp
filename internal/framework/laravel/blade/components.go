@@ -131,17 +131,35 @@ func kebab(s string) string {
 // attributes and names.
 func Kebab(s string) string { return kebab(s) }
 
-// isXComponent reports whether a component node is an `<x-name>` tag naming
-// one of the project's components: not `<x-slot>`, `<x-dynamic-component>`,
-// a package's `<x-pkg::name>`, or `<livewire:…>` and `<flux:…>`.
+// isXComponent reports whether a component node names a Blade component:
+// `<x-name>`, a package's `<x-pkg::name>`, or Flux's `<flux:name>`. Not
+// `<x-slot>`, `<x-dynamic-component>` or Livewire's `<livewire:…>`.
 func isXComponent(src string, n Node) bool {
-	if n.Kind != KindComponent || !strings.HasPrefix(src[n.Span.Start:], "<x-") {
-		return false
+	_, ok := componentName(src, n)
+	return ok
+}
+
+// componentName returns the name a component tag is looked up by:
+// `<flux:button>` is `flux::button`.
+func componentName(src string, n Node) (string, bool) {
+	if n.Kind != KindComponent || n.Name == "" {
+		return "", false
+	}
+	tag := src[n.Span.Start:]
+	switch {
+	case strings.HasPrefix(tag, "<flux:"):
+		return "flux::" + strings.TrimPrefix(n.Name, "flux:"), true
+	case !strings.HasPrefix(tag, "<x-"):
+		return "", false
 	}
 	if n.Name == "slot" || n.Name == "dynamic-component" || strings.HasPrefix(n.Name, "slot:") {
-		return false
+		return "", false
 	}
-	return n.Name != "" && !strings.Contains(n.Name, ":")
+	// `pkg::name` is a namespace; a single `:` is something else.
+	if strings.Contains(strings.ReplaceAll(n.Name, "::", ""), ":") {
+		return "", false
+	}
+	return n.Name, true
 }
 
 // componentAt returns the `<x-name>` component whose name contains offset.
@@ -157,20 +175,28 @@ func componentAt(src string, nodes []Node, offset int) (Node, bool) {
 	return n, true
 }
 
-// componentNamePrefixAt reports whether offset ends a partial component name
-// after `<x-`, and returns where the name starts.
-func componentNamePrefixAt(src string, offset int) (start int, ok bool) {
-	k := strings.LastIndex(src[:offset], "<x-")
+// componentPrefixAt reports whether offset ends a partial component name
+// after `<x-` or `<flux:`, returning where the name starts and the namespace
+// the tag implies ("flux::" for `<flux:`).
+func componentPrefixAt(src string, offset int) (start int, namespace string, ok bool) {
+	k := strings.LastIndexByte(src[:offset], '<')
 	if k < 0 {
-		return 0, false
+		return 0, "", false
 	}
-	start = k + 3
+	switch rest := src[k:offset]; {
+	case strings.HasPrefix(rest, "<x-"):
+		start = k + 3
+	case strings.HasPrefix(rest, "<flux:"):
+		start, namespace = k+6, "flux::"
+	default:
+		return 0, "", false
+	}
 	for i := start; i < offset; i++ {
-		if !isTagNameByte(src[i]) || src[i] == ':' {
-			return 0, false
+		if !isTagNameByte(src[i]) {
+			return 0, "", false
 		}
 	}
-	return start, true
+	return start, namespace, true
 }
 
 // attributeContext is an attribute name being typed in a component tag.
@@ -249,14 +275,15 @@ func (f *Features) completeComponents(src string, nodes []Node, offset int) ([]C
 	if f.Components == nil {
 		return nil, false
 	}
-	if start, ok := componentNamePrefixAt(src, offset); ok {
+	if start, ns, ok := componentPrefixAt(src, offset); ok {
 		end := offset
-		for end < len(src) && isTagNameByte(src[end]) && src[end] != ':' {
+		for end < len(src) && isTagNameByte(src[end]) {
 			end++
 		}
 		var items []Completion
-		for _, name := range f.Components.ComponentNames(src[start:offset]) {
-			items = append(items, Completion{Kind: CompleteComponent, Label: name, Detail: "component", Insert: name, Start: start, End: end})
+		for _, name := range f.Components.ComponentNames(ns + src[start:offset]) {
+			label := strings.TrimPrefix(name, ns)
+			items = append(items, Completion{Kind: CompleteComponent, Label: label, Detail: "component", Insert: label, Start: start, End: end})
 		}
 		return items, true
 	}
@@ -264,7 +291,8 @@ func (f *Features) completeComponents(src string, nodes []Node, offset int) ([]C
 	if !ok {
 		return nil, false
 	}
-	c, ok := f.Components.Component(ctx.component.Name)
+	name, _ := componentName(src, ctx.component)
+	c, ok := f.Components.Component(name)
 	if !ok {
 		return nil, true
 	}
@@ -293,12 +321,17 @@ func (f *Features) componentHover(src string, nodes []Node, offset int) (HoverRe
 	if !ok || f.Components == nil {
 		return HoverResult{}, false
 	}
-	c, ok := f.Components.Component(n.Name)
+	name, _ := componentName(src, n)
+	c, ok := f.Components.Component(name)
 	if !ok {
 		return HoverResult{}, false
 	}
 	var b strings.Builder
-	b.WriteString("Component `x-" + c.Name + "`")
+	tag := "x-" + c.Name
+	if rest, ok := strings.CutPrefix(c.Name, "flux::"); ok {
+		tag = "flux:" + rest
+	}
+	b.WriteString("Component `" + tag + "`")
 	if c.ClassFQN != "" {
 		b.WriteString("\n\n`" + c.ClassFQN + "`")
 	}
@@ -328,7 +361,8 @@ func (f *Features) componentDefinition(src string, nodes []Node, offset int) ([]
 	if f.Components == nil {
 		return nil, true
 	}
-	c, ok := f.Components.Component(n.Name)
+	name, _ := componentName(src, n)
+	c, ok := f.Components.Component(name)
 	if !ok {
 		return nil, true
 	}
@@ -345,10 +379,13 @@ func (f *Features) unknownComponents(src string, nodes []Node) []Diagnostic {
 	}
 	var out []Diagnostic
 	for _, n := range nodes {
-		if !isXComponent(src, n) {
+		name, ok := componentName(src, n)
+		if !ok || strings.Contains(name, "::") {
+			// A package's components aren't reported: its namespace may
+			// be registered in ways the server doesn't read.
 			continue
 		}
-		if _, ok := f.Components.Component(n.Name); ok {
+		if _, ok := f.Components.Component(name); ok {
 			continue
 		}
 		out = append(out, Diagnostic{Code: CodeUnknownComponent, Problem: Problem{Span: n.Expr, Message: "Component `x-" + n.Name + "` not found"}})

@@ -111,17 +111,53 @@ var customEnd = regexp.MustCompile(`@end[A-Za-z_]\w*`)
 type openBlock struct {
 	group blockGroup
 	node  Node
+	// closer names the closer in messages when it isn't the group's own,
+	// as `@endadmin` for a conditional registered with Blade::if.
+	closer string
 }
 
 // CheckStructure reports blocks that are never closed and closing directives
 // that close nothing, such as `@if` without `@endif`. A conditional closed by
 // another conditional's closer (`@auth … @endif`) runs, and isn't reported.
 func CheckStructure(src string, nodes []Node) []Problem {
+	return CheckStructureCustom(src, nodes, nil)
+}
+
+// customRole returns how a directive the project registers takes part in
+// blocks: its conditionals as `@if`, and a directive registered with its
+// `@end…` as a block of its own.
+func customRole(c *Custom, name string) (opener *blockRule, branch, closer blockGroup) {
+	if c == nil || isDirective(name) {
+		return nil, "", ""
+	}
+	n := strings.ToLower(name)
+	if cond := c.conditionalOf(n); cond != "" {
+		switch {
+		case n == cond || n == "unless"+cond:
+			return &blockRule{group: "if"}, "", ""
+		case n == "else"+cond:
+			return nil, "if", ""
+		default:
+			return nil, "", "if"
+		}
+	}
+	if c.Directives[n] && c.Directives["end"+n] {
+		return &blockRule{group: blockGroup("custom:" + n)}, "", ""
+	}
+	if strings.HasPrefix(n, "end") && c.Directives[n] && c.Directives[n[3:]] {
+		return nil, "", blockGroup("custom:" + n[3:])
+	}
+	return nil, "", ""
+}
+
+// CheckStructureCustom is CheckStructure knowing the directives and
+// conditionals the project registers.
+func CheckStructureCustom(src string, nodes []Node, custom *Custom) []Problem {
 	// A project's own block directives aren't known, and their branches look
 	// like `@else` outside a block: stay quiet about branches then.
 	checkBranches := true
 	for _, m := range customEnd.FindAllString(src, -1) {
-		if !isDirective(m[1:]) {
+		if !isDirective(m[1:]) && !custom.known(m[1:]) {
 			checkBranches = false
 			break
 		}
@@ -133,6 +169,22 @@ func CheckStructure(src string, nodes []Node) []Problem {
 			continue
 		}
 		name := strings.ToLower(n.Name)
+		if rule, branch, closer := customRole(custom, name); rule != nil || branch != "" || closer != "" {
+			switch {
+			case rule != nil:
+				ob := openBlock{group: rule.group, node: n}
+				if cond := custom.conditionalOf(name); cond != "" {
+					ob.closer = "end" + custom.name(cond)
+				}
+				stack = append(stack, ob)
+				continue
+			case branch != "":
+				if checkBranches && (len(stack) == 0 || stack[len(stack)-1].group != branch) {
+					problems = append(problems, Problem{Span: nameSpan(n), Message: "`@" + n.Name + "` is outside an `@if` block"})
+				}
+				continue
+			}
+		}
 		if rule, ok := openers[name]; ok {
 			if name == "empty" && !n.HasArgs {
 				// The `@empty` branch of a `@forelse`.
@@ -154,6 +206,9 @@ func CheckStructure(src string, nodes []Node) []Problem {
 			continue
 		}
 		group, ok := closers[name]
+		if _, _, closer := customRole(custom, name); closer != "" {
+			group, ok = closer, true
+		}
 		if !ok {
 			continue
 		}
@@ -181,7 +236,7 @@ func CheckStructure(src string, nodes []Node) []Problem {
 	for _, o := range stack {
 		problems = append(problems, Problem{
 			Span:    nameSpan(o.node),
-			Message: "`@" + o.node.Name + "` is never closed with `@" + displayCloser[o.group] + "`",
+			Message: "`@" + o.node.Name + "` is never closed with `@" + o.closerName() + "`",
 		})
 	}
 	return problems
@@ -190,4 +245,20 @@ func CheckStructure(src string, nodes []Node) []Problem {
 // nameSpan is the `@name` of a directive.
 func nameSpan(n Node) Span {
 	return Span{n.Span.Start, n.Span.Start + 1 + len(n.Name)}
+}
+
+func (o openBlock) closerName() string {
+	if o.closer != "" {
+		return o.closer
+	}
+	return closerName(o.group)
+}
+
+// closerName is the closer named in messages for a group: a custom block's
+// is its opener's `@end…`.
+func closerName(g blockGroup) string {
+	if name, ok := strings.CutPrefix(string(g), "custom:"); ok {
+		return "end" + name
+	}
+	return displayCloser[g]
 }

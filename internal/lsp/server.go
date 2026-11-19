@@ -75,6 +75,9 @@ type Server struct {
 	// components finds the app's Blade components; forgotten when a
 	// component or provider is saved.
 	components *frameworklaravel.Components
+	// providers reads what service providers register with Blade and the
+	// view factory.
+	providers *frameworklaravel.Providers
 	// writeMu keeps frames whole on the output stream (see writeMessage).
 	writeMu sync.Mutex
 	// publishMu orders diagnostics publishes (see publishDiagnostics).
@@ -471,8 +474,10 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		PHPVersion: profile.PHPVersion,
 		Extensions: profile.Extensions,
 	}
-	s.components = frameworklaravel.NewComponents(s.rootPath, s.index, s.getDocumentReader())
-	s.bladeFeatures = &blade.Features{Views: viewResolver, Components: s.components, Read: s.getDocumentReader()}
+	s.providers = frameworklaravel.NewProviders(s.rootPath, s.index)
+	viewResolver.SetProviders(s.providers)
+	s.components = frameworklaravel.NewComponents(s.rootPath, s.index, s.providers, s.getDocumentReader())
+	s.bladeFeatures = &blade.Features{Views: viewResolver, Components: s.components, Read: s.getDocumentReader(), Custom: s.providers.Custom}
 	s.diag.Blade = s.bladeFeatures
 	if s.workspace.ViewData != nil {
 		s.viewTypes = &frameworklaravel.ViewTypes{
