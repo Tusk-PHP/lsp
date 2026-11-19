@@ -23,6 +23,9 @@ type Views struct {
 
 	knownOnce sync.Once
 	known     bool
+
+	dirsOnce sync.Once
+	dirs     []string // where views are found: resources/views, then Livewire's
 }
 
 func NewViews(rootPath string) *Views {
@@ -280,7 +283,22 @@ func (v *Views) ViewURI(name string) (string, bool) {
 	if strings.Contains(name, "::") || strings.Contains(name, "..") {
 		return "", false
 	}
-	base := filepath.Join(v.rootPath, "resources", "views", filepath.FromSlash(strings.ReplaceAll(name, ".", "/")))
+	rel := filepath.FromSlash(strings.ReplaceAll(name, ".", "/"))
+	v.dirsOnce.Do(func() {
+		// Livewire 4 adds view locations after resources/views.
+		extra, _ := livewireLocations(v.rootPath)
+		v.dirs = append([]string{filepath.Join(v.rootPath, "resources", "views")}, extra...)
+	})
+	for _, dir := range v.dirs {
+		if uri, ok := v.addFromDisk(name, filepath.Join(dir, rel)); ok {
+			return uri, true
+		}
+	}
+	return "", false
+}
+
+// addFromDisk finds a view's file at base plus its extension, and adds it.
+func (v *Views) addFromDisk(name, base string) (string, bool) {
 	for _, ext := range []string{".blade.php", ".php"} {
 		if info, err := os.Stat(base + ext); err == nil && !info.IsDir() {
 			view := View{Name: name, URI: "file://" + filepath.ToSlash(base+ext)}
@@ -311,7 +329,8 @@ func (v *Views) ViewNames(prefix string) []string {
 
 // ViewsKnown reports whether all of the project's views are in
 // resources/views, so a view not found there doesn't exist. A project with no
-// such directory, or that adds view paths in config/view.php, isn't.
+// such directory, or that adds view paths in config/view.php, isn't. Livewire
+// 4's view locations are searched too.
 func (v *Views) ViewsKnown() bool {
 	if v == nil {
 		return false
@@ -319,6 +338,9 @@ func (v *Views) ViewsKnown() bool {
 	v.knownOnce.Do(func() {
 		info, err := os.Stat(filepath.Join(v.rootPath, "resources", "views"))
 		if err != nil || !info.IsDir() {
+			return
+		}
+		if _, ok := livewireLocations(v.rootPath); !ok {
 			return
 		}
 		cfg, err := os.ReadFile(filepath.Join(v.rootPath, "config", "view.php"))

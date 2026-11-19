@@ -70,6 +70,9 @@ type Server struct {
 	// bladeFeatures answers requests about Blade itself: directives and the
 	// views, sections and stacks they name.
 	bladeFeatures *blade.Features
+	// components finds the app's Blade components; forgotten when a
+	// component or provider is saved.
+	components *frameworklaravel.Components
 	// writeMu keeps frames whole on the output stream (see writeMessage).
 	writeMu sync.Mutex
 	// publishMu orders diagnostics publishes (see publishDiagnostics).
@@ -466,7 +469,8 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		PHPVersion: profile.PHPVersion,
 		Extensions: profile.Extensions,
 	}
-	s.bladeFeatures = &blade.Features{Views: viewResolver, Read: s.getDocumentReader()}
+	s.components = frameworklaravel.NewComponents(s.rootPath, s.index, s.getDocumentReader())
+	s.bladeFeatures = &blade.Features{Views: viewResolver, Components: s.components, Read: s.getDocumentReader()}
 	s.diag.Blade = s.bladeFeatures
 	s.analyzer = analyzer.NewAnalyzer(s.index, s.container)
 	if opts := params.InitializationOptions; opts != nil {
@@ -666,6 +670,9 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 	}
 	if !isPHPDocument(uri) {
 		return
+	}
+	if affectsComponents(s.rootPath, uri) {
+		s.components.Invalidate()
 	}
 	s.goSafe("container.Analyze", s.container.Analyze)
 	if s.cfg.DiagnosticsEnabled {

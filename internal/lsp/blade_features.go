@@ -1,8 +1,12 @@
 package lsp
 
 import (
+	"path/filepath"
+	"strings"
+
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
@@ -40,6 +44,10 @@ func (s *Server) bladeCompletion(uri string, pos protocol.Position) ([]protocol.
 			item.Kind = protocol.CompletionItemKindKeyword
 		case blade.CompleteView:
 			item.Kind = protocol.CompletionItemKindFile
+		case blade.CompleteComponent:
+			item.Kind = protocol.CompletionItemKindClass
+		case blade.CompleteAttribute:
+			item.Kind = protocol.CompletionItemKindProperty
 		default:
 			item.Kind = protocol.CompletionItemKindReference
 		}
@@ -103,4 +111,17 @@ func offsetRange(lines blade.Lines, start, end int) protocol.Range {
 func sortKey(i int) string {
 	const digits = "0123456789"
 	return string([]byte{digits[i/1000%10], digits[i/100%10], digits[i/10%10], digits[i%10]})
+}
+
+// affectsComponents reports whether a saved file can change which Blade
+// components exist: a provider, a component class or an anonymous component.
+func affectsComponents(root, uri string) bool {
+	path := filepath.ToSlash(symbols.URIToPath(uri))
+	root = strings.TrimSuffix(filepath.ToSlash(root), "/") + "/"
+	if !strings.HasPrefix(path, root) {
+		return false
+	}
+	rel := path[len(root):]
+	return strings.HasPrefix(rel, "app/Providers/") || strings.HasPrefix(rel, "app/View/Components/") ||
+		strings.HasPrefix(rel, "resources/views/components/")
 }

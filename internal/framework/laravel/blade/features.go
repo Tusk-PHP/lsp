@@ -19,7 +19,8 @@ type Views interface {
 // directives and the views, sections and stacks they name. PHP in the
 // template is answered elsewhere, through its virtual PHP.
 type Features struct {
-	Views Views
+	Views      Views
+	Components Components
 	// Read returns the source of a file, open in the editor or on disk.
 	Read func(uri string) string
 }
@@ -32,6 +33,8 @@ const (
 	CompleteView
 	CompleteSection
 	CompleteStack
+	CompleteComponent
+	CompleteAttribute
 )
 
 // Completion is a completion item. It replaces template[Start:End].
@@ -56,6 +59,9 @@ type Location struct {
 // offset isn't in a place Blade completes, and PHP completion should answer.
 func (f *Features) Complete(uri, src string, offset int) (items []Completion, ok bool) {
 	nodes := Parse(src)
+	if items, ok := f.completeComponents(src, nodes, offset); ok {
+		return items, true
+	}
 	if InPHP(nodes, offset) {
 		if ref, ok := PartialRefAt(src, offset); ok {
 			return f.completeRef(uri, src, ref), true
@@ -125,6 +131,9 @@ type HoverResult struct {
 // Hover describes the directive or view name at offset.
 func (f *Features) Hover(src string, offset int) (HoverResult, bool) {
 	nodes := Parse(src)
+	if h, ok := f.componentHover(src, nodes, offset); ok {
+		return h, true
+	}
 	if n, ok := DirectiveAt(nodes, offset); ok {
 		info, ok := LookupDirectiveInfo(n.Name)
 		if !ok {
@@ -147,7 +156,11 @@ func (f *Features) Hover(src string, offset int) (HoverResult, bool) {
 // view's file, or the `@yield` or `@stack` of a layout. ok is false when
 // offset names none of them.
 func (f *Features) Definition(uri, src string, offset int) ([]Location, bool) {
-	ref, ok := RefAt(Refs(src, Parse(src)), offset)
+	nodes := Parse(src)
+	if locs, ok := f.componentDefinition(src, nodes, offset); ok {
+		return locs, true
+	}
+	ref, ok := RefAt(Refs(src, nodes), offset)
 	if !ok {
 		return nil, false
 	}
@@ -182,16 +195,20 @@ const (
 	CodeUnknownView = "unknown-view"
 	// CodeUnclosedDirective is the rule code for blocks that don't close.
 	CodeUnclosedDirective = "unclosed-directive"
+	// CodeUnknownComponent is the rule code for an `<x-name>` component that
+	// doesn't exist.
+	CodeUnknownComponent = "unknown-component"
 )
 
-// Diagnose reports the template's unbalanced blocks and the views it names
-// that don't exist.
+// Diagnose reports the template's unbalanced blocks, and the views and
+// components it names that don't exist.
 func (f *Features) Diagnose(src string) []Diagnostic {
 	nodes := Parse(src)
 	var out []Diagnostic
 	for _, p := range CheckStructure(src, nodes) {
 		out = append(out, Diagnostic{Problem: p, Code: CodeUnclosedDirective})
 	}
+	out = append(out, f.unknownComponents(src, nodes)...)
 	if f.Views == nil || !f.Views.ViewsKnown() {
 		return out
 	}

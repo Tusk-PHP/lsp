@@ -750,7 +750,11 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 		PHPVersion: s.BuiltinProfile.PHPVersion,
 		Extensions: s.BuiltinProfile.Extensions,
 	}
-	rt.Diagnostics.Blade = &blade.Features{Views: viewResolver, Read: readFile}
+	rt.Diagnostics.Blade = &blade.Features{
+		Views:      viewResolver,
+		Components: frameworklaravel.NewComponents(s.RootPath, ws.Index, readFile),
+		Read:       readFile,
+	}
 	return rt
 }
 

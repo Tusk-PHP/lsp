@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // LaravelAutoDiscoveredPackages reads composer.json at rootPath and returns the
@@ -74,6 +75,45 @@ func LaravelAutoDiscoveredPackages(rootPath string) []string {
 // extra.laravel.dont-discover are left out, and "*" leaves out all of them.
 // A missing or unreadable vendor/composer/installed.json gives nil.
 func LaravelPackageAliases(rootPath string) map[string]string {
+	var aliases map[string]string
+	for _, p := range discoveredLaravelPackages(rootPath) {
+		for alias, fqn := range p.Aliases {
+			if alias == "" || fqn == "" {
+				continue
+			}
+			if aliases == nil {
+				aliases = make(map[string]string)
+			}
+			aliases[alias] = fqn
+		}
+	}
+	return aliases
+}
+
+// LaravelPackageProviders returns the service providers installed packages
+// register through Laravel's package discovery (extra.laravel.providers), as
+// class FQNs, leaving out the packages extra.laravel.dont-discover names.
+func LaravelPackageProviders(rootPath string) []string {
+	var providers []string
+	for _, p := range discoveredLaravelPackages(rootPath) {
+		for _, fqn := range p.Providers {
+			if fqn != "" {
+				providers = append(providers, strings.TrimPrefix(fqn, `\`))
+			}
+		}
+	}
+	return providers
+}
+
+// laravelExtra is a package's extra.laravel block.
+type laravelExtra struct {
+	Providers []string          `json:"providers"`
+	Aliases   map[string]string `json:"aliases"`
+}
+
+// discoveredLaravelPackages reads the extra.laravel block of each installed
+// package that Laravel's package discovery reads.
+func discoveredLaravelPackages(rootPath string) []laravelExtra {
 	var dontDiscover []string
 	if data, err := os.ReadFile(filepath.Join(rootPath, "composer.json")); err == nil {
 		var root struct {
@@ -115,28 +155,18 @@ func LaravelPackageAliases(rootPath string) map[string]string {
 		return nil
 	}
 
-	var aliases map[string]string
+	var out []laravelExtra
 	for _, p := range packages {
 		if skip[p.Name] || len(p.Extra) == 0 {
 			continue
 		}
 		var extra struct {
-			Laravel struct {
-				Aliases map[string]string `json:"aliases"`
-			} `json:"laravel"`
+			Laravel laravelExtra `json:"laravel"`
 		}
 		if json.Unmarshal(p.Extra, &extra) != nil {
 			continue
 		}
-		for alias, fqn := range extra.Laravel.Aliases {
-			if alias == "" || fqn == "" {
-				continue
-			}
-			if aliases == nil {
-				aliases = make(map[string]string)
-			}
-			aliases[alias] = fqn
-		}
+		out = append(out, extra.Laravel)
 	}
-	return aliases
+	return out
 }

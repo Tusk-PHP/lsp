@@ -181,6 +181,7 @@ var bladeSeverity = map[string]checks.Severity{
 	// A block that doesn't close doesn't compile.
 	blade.CodeUnclosedDirective: checks.SeverityError,
 	blade.CodeUnknownView:       checks.SeverityWarning,
+	blade.CodeUnknownComponent:  checks.SeverityWarning,
 }
 
 // analyzeBlade checks a Blade view's directives and the views they name.
@@ -206,7 +207,7 @@ func (p *Provider) analyzeBlade(source string) []protocol.Diagnostic {
 		})
 	}
 	var diags []protocol.Diagnostic
-	for _, code := range []string{blade.CodeUnclosedDirective, blade.CodeUnknownView} {
+	for _, code := range []string{blade.CodeUnclosedDirective, blade.CodeUnknownView, blade.CodeUnknownComponent} {
 		if fs := byCode[code]; len(fs) > 0 {
 			diags = append(diags, p.applyRuleSeverity(code, bladeSeverity[code], findingsToDiagnostics(fs))...)
 		}
