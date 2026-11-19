@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Laravel facade aliases are known classes.** `Route::has('login')` in a Blade view, or `Cache::get()` in a file without a namespace, is no longer reported as `unknown-class`, and hover and go to definition lead to the class the alias stands for. This covers Laravel's default aliases, the `aliases` in `config/app.php` and the ones packages register in `extra.laravel.aliases` (such as Flux's `Flux`), except packages listed under `dont-discover`. An alias whose class isn't installed is still reported.
 - A method called straight on a function's result, such as `map($input)->to(CreateProjectData::class)`, now gives the method's return type, with its `@template` bound from the arguments, instead of the function's. This removes false `unknown-member` warnings on the result.
+- A private method or property that only a trait the class uses calls, reads or declares as `abstract private` is no longer reported as `unused-private-method` or `unused-private-property`. A class using a trait the server can't find isn't checked.
+- `#[\Override]` is accepted on a method that overrides one a parent class gets from a trait, as in tests extending Orchestra Testbench's `TestCase`. On a method that only replaces one from the class's own trait, it's still reported, as PHP does.
 
 ## [0.14.0] - 2026-11-13
 

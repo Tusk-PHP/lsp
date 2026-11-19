@@ -1127,7 +1127,10 @@ func (idx *Index) OverridesInherited(classFQN, method string) (overrides, known 
 				overrides = true
 			}
 		}
-		idx.walkAncestors(fqn, func(next string, isTrait bool) { walk(next, viaTrait || isTrait) })
+		// A parent class's traits are part of that class, so their concrete
+		// methods are overridden too; only the class's own traits (and the
+		// traits they use) merely provide the same method.
+		idx.walkAncestors(fqn, func(next string, isTrait bool) { walk(next, viaTrait && isTrait) })
 	}
 	idx.walkAncestors(classFQN, func(next string, isTrait bool) { walk(next, isTrait) })
 	return overrides, known

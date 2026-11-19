@@ -200,16 +200,8 @@ src/Symfony/Bundle/SecurityBundle/DependencyInjection/SecurityExtension.php	unkn
 src/Symfony/Bundle/SecurityBundle/DependencyInjection/SecurityExtension.php	unused-variable	Variable $authenticationProviders is assigned but never read
 src/Symfony/Bundle/SecurityBundle/DependencyInjection/SecurityExtension.php	unused-variable	Variable $usedEnvs is assigned but never read
 src/Symfony/Bundle/TwigBundle/Command/LintCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
-src/Symfony/Component/AssetMapper/Compressor/BrotliCompressor.php	unused-private-method	Private method 'BrotliCompressor::compressWithBinary' is never used
-src/Symfony/Component/AssetMapper/Compressor/BrotliCompressor.php	unused-private-method	Private method 'BrotliCompressor::createStreamContext' is never used
 src/Symfony/Component/AssetMapper/Compressor/GzipCompressor.php	unknown-member	Unknown member 'baseCompress' on 'GzipCompressor'
 src/Symfony/Component/AssetMapper/Compressor/GzipCompressor.php	unknown-member	Unknown member 'baseGetUnsupportedReason' on 'GzipCompressor'
-src/Symfony/Component/AssetMapper/Compressor/GzipCompressor.php	unused-private-method	Private method 'GzipCompressor::compressWithBinary' is never used
-src/Symfony/Component/AssetMapper/Compressor/GzipCompressor.php	unused-private-method	Private method 'GzipCompressor::createStreamContext' is never used
-src/Symfony/Component/AssetMapper/Compressor/ZopfliCompressor.php	unused-private-method	Private method 'ZopfliCompressor::compressWithBinary' is never used
-src/Symfony/Component/AssetMapper/Compressor/ZopfliCompressor.php	unused-private-method	Private method 'ZopfliCompressor::createStreamContext' is never used
-src/Symfony/Component/AssetMapper/Compressor/ZstandardCompressor.php	unused-private-method	Private method 'ZstandardCompressor::compressWithBinary' is never used
-src/Symfony/Component/AssetMapper/Compressor/ZstandardCompressor.php	unused-private-method	Private method 'ZstandardCompressor::createStreamContext' is never used
 src/Symfony/Component/BrowserKit/Test/Constraint/BrowserCookieValueSame.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/BrowserKit/Test/Constraint/BrowserHasCookie.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/BrowserKit/Test/Constraint/BrowserHistoryIsOnFirstPage.php	unknown-class	Unknown class 'Constraint'
@@ -251,18 +243,15 @@ src/Symfony/Component/Cache/Adapter/FilesystemTagAwareAdapter.php	unknown-member
 src/Symfony/Component/Cache/Adapter/FilesystemTagAwareAdapter.php	unknown-member	Unknown member 'doPrune' on 'FilesystemTagAwareAdapter'
 src/Symfony/Component/Cache/Adapter/FilesystemTagAwareAdapter.php	unknown-member	Unknown member 'doSaveCache' on 'FilesystemTagAwareAdapter'
 src/Symfony/Component/Cache/Adapter/MongoDbAdapter.php	unknown-member	Unknown member 'bulkWrite' on 'Collection'
-src/Symfony/Component/Cache/Adapter/MongoDbAdapter.php	unused-private-method	Private method 'MongoDbAdapter::createMarshaller' is never used
 src/Symfony/Component/Cache/Adapter/MongoDbTagAwareAdapter.php	unknown-member	Unknown member 'bulkWrite' on 'Collection'
 src/Symfony/Component/Cache/Adapter/MongoDbTagAwareAdapter.php	unknown-member	Unknown member 'createIndex' on 'Collection'
 src/Symfony/Component/Cache/Adapter/MongoDbTagAwareAdapter.php	unknown-member	Unknown member 'deleteMany' on 'Collection'
 src/Symfony/Component/Cache/Adapter/MongoDbTagAwareAdapter.php	unknown-member	Unknown member 'setupExpiresAtIndex' on 'MongoDbTagAwareAdapter'
-src/Symfony/Component/Cache/Adapter/MongoDbTagAwareAdapter.php	unused-private-method	Private method 'MongoDbTagAwareAdapter::createMarshaller' is never used
 src/Symfony/Component/Cache/Adapter/PdoTagAwareAdapter.php	unknown-member	Unknown member 'doSaveItem' on 'PdoTagAwareAdapter'
 src/Symfony/Component/Cache/Adapter/PdoTagAwareAdapter.php	unknown-member	Unknown member 'pruneItems' on 'PdoTagAwareAdapter'
 src/Symfony/Component/Cache/Adapter/PdoTagAwareAdapter.php	unused-private-method	Private method 'PdoTagAwareAdapter::createTables' is never used
 src/Symfony/Component/Cache/Adapter/PhpFilesAdapter.php	unknown-member	Unknown member 'doCommonClear' on 'PhpFilesAdapter'
 src/Symfony/Component/Cache/Adapter/PhpFilesAdapter.php	unknown-member	Unknown member 'doCommonDelete' on 'PhpFilesAdapter'
-src/Symfony/Component/Cache/Adapter/PhpFilesAdapter.php	unused-private-method	Private method 'PhpFilesAdapter::getFileKey' is never used
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
@@ -384,20 +373,10 @@ src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unk
 src/Symfony/Component/DependencyInjection/Dumper/PhpDumper.php	unknown-class	Unknown class 'ClassLoader'
 src/Symfony/Component/DependencyInjection/Kernel/ServicesBundle.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/DependencyInjection/Loader/Configurator/ContainerConfigurator.php	unused-import	Unused import 'Symfony\Component\DependencyInjection\Reference'
-src/Symfony/Component/DependencyInjection/Loader/Configurator/DefaultsConfigurator.php	unused-private-property	Private property 'DefaultsConfigurator::$path' is never used
-src/Symfony/Component/DependencyInjection/Loader/Configurator/InlineServiceConfigurator.php	unused-private-property	Private property 'InlineServiceConfigurator::$allowParent' is never used
-src/Symfony/Component/DependencyInjection/Loader/Configurator/InlineServiceConfigurator.php	unused-private-property	Private property 'InlineServiceConfigurator::$id' is never used
-src/Symfony/Component/DependencyInjection/Loader/Configurator/InlineServiceConfigurator.php	unused-private-property	Private property 'InlineServiceConfigurator::$path' is never used
-src/Symfony/Component/DependencyInjection/Loader/Configurator/InstanceofConfigurator.php	unused-private-property	Private property 'InstanceofConfigurator::$path' is never used
-src/Symfony/Component/DependencyInjection/Loader/Configurator/PrototypeConfigurator.php	unused-private-property	Private property 'PrototypeConfigurator::$allowParent' is never used
-src/Symfony/Component/DependencyInjection/Loader/Configurator/ServiceConfigurator.php	unused-private-property	Private property 'ServiceConfigurator::$allowParent' is never used
-src/Symfony/Component/DependencyInjection/Loader/Configurator/ServiceConfigurator.php	unused-private-property	Private property 'ServiceConfigurator::$path' is never used
 src/Symfony/Component/DependencyInjection/Loader/PhpFileLoader.php	unknown-class	Unknown class 'App'
 src/Symfony/Component/DependencyInjection/Loader/PhpFileLoader.php	unknown-class	Unknown class 'App'
 src/Symfony/Component/DependencyInjection/ReverseContainer.php	unknown-member	Unknown member 'privates' on 'ReverseContainer'
 src/Symfony/Component/DependencyInjection/ReverseContainer.php	unknown-member	Unknown member 'services' on 'ReverseContainer'
-src/Symfony/Component/DependencyInjection/ServiceLocator.php	unused-private-method	Private method 'ServiceLocator::createCircularReferenceException' is never used
-src/Symfony/Component/DependencyInjection/ServiceLocator.php	unused-private-method	Private method 'ServiceLocator::createNotFoundException' is never used
 src/Symfony/Component/DependencyInjection/ServicesResetter.php	unknown-class	Unknown class 'LazyLoadingInterface'
 src/Symfony/Component/DomCrawler/Test/Constraint/CrawlerAnySelectorTextContains.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/DomCrawler/Test/Constraint/CrawlerAnySelectorTextSame.php	unknown-class	Unknown class 'Constraint'
@@ -447,10 +426,8 @@ src/Symfony/Component/Form/Extension/Core/Type/FormType.php	unknown-member	Unkno
 src/Symfony/Component/Form/Test/FormIntegrationTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-member	Unknown member 'method' on 'ValidatorInterface'
 src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-member	Unknown member 'method' on 'ValidatorInterface'
-src/Symfony/Component/HttpClient/AmpHttpClient.php	unused-private-property	Private property 'AmpHttpClient::$emptyDefaults' is never used
 src/Symfony/Component/HttpClient/CachingHttpClient.php	unknown-member	Unknown member 'asyncStream' on 'CachingHttpClient'
 src/Symfony/Component/HttpClient/CachingHttpClient.php	unknown-member	Unknown member 'asyncStream' on 'CachingHttpClient'
-src/Symfony/Component/HttpClient/CurlHttpClient.php	unused-private-property	Private property 'CurlHttpClient::$emptyDefaults' is never used
 src/Symfony/Component/HttpClient/Har/HarFile.php	unknown-class	Unknown class 'InstalledVersions'
 src/Symfony/Component/HttpClient/Har/HarFile.php	unknown-class	Unknown class 'InstalledVersions'
 src/Symfony/Component/HttpClient/Har/HarFile.php	unknown-class	Unknown class 'InstalledVersions'
@@ -460,21 +437,13 @@ src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown clas
 src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown class 'Rize\UriTemplate'
 src/Symfony/Component/HttpClient/Internal/AmpResolver.php	unknown-function	Unknown function 'Dns\resolve'
 src/Symfony/Component/HttpClient/Internal/AmpResolver.php	unknown-function	Unknown function 'Dns\resolve'
-src/Symfony/Component/HttpClient/NativeHttpClient.php	unused-private-property	Private property 'NativeHttpClient::$emptyDefaults' is never used
 src/Symfony/Component/HttpClient/Recorder/Redactor/DefaultRedactor.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/HttpClient/Recorder/Redactor/DefaultRedactor.php	unknown-function	Unknown function 'json_validate'
 src/Symfony/Component/HttpClient/Resources/config/http_client.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
 src/Symfony/Component/HttpClient/Resources/config/http_client.php	unknown-class	Unknown class 'Rize\UriTemplate'
-src/Symfony/Component/HttpClient/Response/AmpResponse.php	unused-private-method	Private method 'AmpResponse::perform' is never used
-src/Symfony/Component/HttpClient/Response/AmpResponse.php	unused-private-method	Private method 'AmpResponse::schedule' is never used
-src/Symfony/Component/HttpClient/Response/AmpResponse.php	unused-private-method	Private method 'AmpResponse::select' is never used
 src/Symfony/Component/HttpClient/Response/CurlResponse.php	unknown-member	Unknown member 'doGetContent' on 'CurlResponse'
-src/Symfony/Component/HttpClient/Response/CurlResponse.php	unused-private-method	Private method 'CurlResponse::schedule' is never used
-src/Symfony/Component/HttpClient/Response/CurlResponse.php	unused-private-method	Private method 'CurlResponse::select' is never used
 src/Symfony/Component/HttpClient/Response/JsonMockResponse.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/HttpClient/Response/JsonMockResponse.php	unknown-function	Unknown function 'json_validate'
-src/Symfony/Component/HttpClient/Response/NativeResponse.php	unused-private-method	Private method 'NativeResponse::schedule' is never used
-src/Symfony/Component/HttpClient/Response/NativeResponse.php	unused-private-method	Private method 'NativeResponse::select' is never used
 src/Symfony/Component/HttpClient/ThrottlingHttpClient.php	unknown-member	Unknown member 'traitReset' on 'ThrottlingHttpClient'
 src/Symfony/Component/HttpClient/UriTemplateHttpClient.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
 src/Symfony/Component/HttpClient/UriTemplateHttpClient.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
@@ -555,13 +524,11 @@ src/Symfony/Component/JsonSchema/Dialect.php	undefined-variable	Undefined variab
 src/Symfony/Component/JsonSchema/DialectKeywords.php	undefined-variable	Undefined variable $values
 src/Symfony/Component/JsonStreamer/Read/Decoder.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/JsonStreamer/Read/Decoder.php	unknown-function	Unknown function 'json_validate'
-src/Symfony/Component/JsonStreamer/Write/PhpGenerator.php	unused-private-property	Private property 'PhpGenerator::$transformers' is never used
 src/Symfony/Component/JsonStreamer/Write/StreamWriterGenerator.php	unused-variable	Variable $classReflection is assigned but never read
 src/Symfony/Component/KeyManagement/Bridge/DoctrineOrm/EventListener/EncryptedColumnListener.php	unknown-function	Unknown function 'readonly'
 src/Symfony/Component/KeyManagement/Bridge/Kmip/Kmip/StreamTransport.php	undefined-variable	Undefined variable $written
 src/Symfony/Component/KeyManagement/DataKey.php	undefined-variable	Undefined variable $consumer
 src/Symfony/Component/KeyManagement/DataKeyHandle.php	undefined-variable	Undefined variable $consumer
-src/Symfony/Component/Lock/Store/DoctrineDbalStore.php	unused-private-method	Private method 'DoctrineDbalStore::prune' is never used
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWrite'
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWrite'
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWriteException'
@@ -578,7 +545,6 @@ src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'W
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'WriteConcern'
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'WriteConcern'
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'WriteConcern'
-src/Symfony/Component/Lock/Store/PdoStore.php	unused-private-method	Private method 'PdoStore::prune' is never used
 src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $result is assigned but never read
 src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $result is assigned but never read
 src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $result is assigned but never read
@@ -699,7 +665,6 @@ src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-cl
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Sentinel'
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unused-variable	Variable $error is assigned but never read
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unused-variable	Variable $error is assigned but never read
-src/Symfony/Component/Messenger/Exception/DelayedMessageHandlingException.php	unused-private-property	Private property 'DelayedMessageHandlingException::$exceptions' is never used
 src/Symfony/Component/Messenger/Test/Middleware/MiddlewareTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Messenger/Transport/Serialization/Normalizer/MessageStampNormalizer.php	unknown-member	Unknown member 'getMessage' on 'ChainStamp'
 src/Symfony/Component/Mime/Test/Constraint/EmailAddressContains.php	unknown-class	Unknown class 'Constraint'
@@ -742,8 +707,6 @@ src/Symfony/Component/PasswordHasher/Hasher/SodiumPasswordHasher.php	unknown-fun
 src/Symfony/Component/PropertyInfo/Util/PhpDocTypeHelper.php	syntax-error	malformed match arm
 src/Symfony/Component/PropertyInfo/Util/PhpDocTypeHelper.php	unknown-class	Unknown class 'Collection'
 src/Symfony/Component/PropertyInfo/Util/PhpDocTypeHelper.php	unknown-class	Unknown class 'LegacyScalar'
-src/Symfony/Component/Routing/Loader/Configurator/CollectionConfigurator.php	unused-private-method	Private method 'CollectionConfigurator::createRoute' is never used
-src/Symfony/Component/Routing/Loader/Configurator/CollectionConfigurator.php	unused-private-property	Private property 'CollectionConfigurator::$parentConfigurator' is never used
 src/Symfony/Component/Routing/Loader/YamlFileLoader.php	unknown-member	Unknown member 'doParseImport' on 'YamlFileLoader'
 src/Symfony/Component/Routing/Loader/YamlFileLoader.php	unknown-member	Unknown member 'doParseRoute' on 'YamlFileLoader'
 src/Symfony/Component/Routing/Loader/YamlFileLoader.php	unknown-member	Unknown member 'doValidate' on 'YamlFileLoader'
@@ -787,9 +750,6 @@ src/Symfony/Component/String/AbstractUnicodeString.php	unknown-member	Unknown me
 src/Symfony/Component/String/Resources/functions.php	unknown-class	Unknown class 'b'
 src/Symfony/Component/String/Resources/functions.php	unknown-class	Unknown class 's'
 src/Symfony/Component/String/Resources/functions.php	unknown-class	Unknown class 'u'
-src/Symfony/Component/Translation/Command/TranslationPullCommand.php	unused-private-property	Private property 'TranslationPullCommand::$reader' is never used
-src/Symfony/Component/Translation/Command/TranslationPushCommand.php	unused-private-property	Private property 'TranslationPushCommand::$reader' is never used
-src/Symfony/Component/Translation/Command/XliffUpdateSourcesCommand.php	unused-private-property	Private property 'XliffUpdateSourcesCommand::$reader' is never used
 src/Symfony/Component/Translation/Resources/functions.php	unknown-class	Unknown class 't'
 src/Symfony/Component/Translation/Test/AbstractProviderFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Translation/Test/AbstractProviderFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
