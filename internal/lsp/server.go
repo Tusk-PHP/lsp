@@ -67,6 +67,8 @@ type Server struct {
 	documents     map[string]string
 	// blade keeps the compiled PHP of open Blade views (see blade.go).
 	blade bladeViews
+	// viewVarCache keeps the typed variables of Blade views (see blade_vars.go).
+	viewVarCache viewVarCache
 	// bladeFeatures answers requests about Blade itself: directives and the
 	// views, sections and stacks they name.
 	bladeFeatures *blade.Features
@@ -717,7 +719,11 @@ func (s *Server) handleCompletion(msg *jsonRPCMessage) {
 		s.sendResponse(msg.ID, []protocol.CompletionItem{})
 		return
 	}
-	s.sendResponse(msg.ID, req.completions(s.completion.GetCompletions(req.uri, req.source, req.pos)))
+	items := req.completions(s.completion.GetCompletions(req.uri, req.source, req.pos))
+	if req.doc != nil {
+		items = withViewVarCompletions(items, req.vars, req.template, req.offset)
+	}
+	s.sendResponse(msg.ID, items)
 }
 
 // handleCompletionResolve fills in the documentation and detail of a member
@@ -751,7 +757,11 @@ func (s *Server) handleHover(msg *jsonRPCMessage) {
 		s.sendResponse(msg.ID, nil)
 		return
 	}
-	s.sendResponse(msg.ID, req.hover(s.hover.GetHover(req.uri, req.source, req.pos)))
+	h := req.hover(s.hover.GetHover(req.uri, req.source, req.pos))
+	if req.doc != nil {
+		h = s.viewVarHover(h, req.vars, req.template, req.offset)
+	}
+	s.sendResponse(msg.ID, h)
 }
 
 func (s *Server) handleDefinition(msg *jsonRPCMessage) {
@@ -784,6 +794,12 @@ func (s *Server) handleDefinition(msg *jsonRPCMessage) {
 	if !ok {
 		s.sendResponse(msg.ID, nil)
 		return
+	}
+	if req.doc != nil {
+		if locs, ok := viewVarDefinition(req.vars, req.template, req.offset); ok {
+			s.sendResponse(msg.ID, locs)
+			return
+		}
 	}
 	openManual := s.cfg.PHPManualOpenOnDefinition && s.clientSupportsShowDocument
 	result := s.analyzer.FindDefinitionWithManual(req.uri, req.source, req.pos, openManual, s.cfg.PHPManualLocale)
@@ -1192,6 +1208,10 @@ func (s *Server) republishOpenDocuments() {
 
 // indexFileByURI indexes a file, using the IDE helper merge strategy for known IDE helper files.
 func (s *Server) indexFileByURI(uri string, source string) {
+	// What the file passes to views, or the views a Blade view includes.
+	if s.workspace != nil {
+		s.workspace.ViewData.IndexFile(uri, source)
+	}
 	// Blade views declare no symbols, and reading one as PHP would index the
 	// HTML around its PHP.
 	if workspace.IsBlade(uri) {

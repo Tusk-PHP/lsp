@@ -275,6 +275,13 @@ type ParseError struct {
 	Column  int
 }
 
+// Tokenize returns the tokens of PHP source, without the structural parse,
+// for callers that only read token patterns.
+func Tokenize(source string) []Token {
+	tokens, _ := tokenize(source)
+	return tokens
+}
+
 // Parse tokenizes and performs a structural parse of PHP source code.
 func (p *PHPParser) Parse(source string) *ParseResult {
 	result := &ParseResult{

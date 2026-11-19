@@ -29,10 +29,36 @@ type segment struct {
 
 // Compile builds the virtual PHP document of a template.
 func Compile(template string) *Document {
+	return CompileWithVars(template, nil)
+}
+
+// Var is a variable a view receives, with its type when it's known.
+type Var struct {
+	Name string // without `$`
+	Type string
+}
+
+// CompileWithVars builds the virtual PHP document of a template that
+// receives vars: each is declared with `/** @var Type $name */` on the first
+// line, which has no place in the template, so the PHP in it is typed.
+func CompileWithVars(template string, vars []Var) *Document {
+	var header strings.Builder
+	for _, v := range vars {
+		if !validVarName(v.Name) {
+			continue
+		}
+		t := v.Type
+		// A type that would end the comment or name a variable can't be
+		// written in it.
+		if t == "" || strings.Contains(t, "*/") || strings.ContainsAny(t, "\n$") {
+			t = "mixed"
+		}
+		header.WriteString(" /** @var " + t + " $" + v.Name + " */")
+	}
 	nodes := Parse(template)
-	doc := compile(template, nodes, true)
+	doc := compile(template, nodes, true, header.String())
 	if !doc.Structured {
-		doc = compile(template, nodes, false)
+		doc = compile(template, nodes, false, header.String())
 	}
 	doc.phpLines = lineStarts(doc.PHP)
 	doc.tplLines = lineStarts(template)
@@ -60,10 +86,10 @@ type compiler struct {
 	ok       bool
 }
 
-func compile(template string, nodes []Node, structured bool) *Document {
+func compile(template string, nodes []Node, structured bool, header string) *Document {
 	c := &compiler{tpl: template, ok: true}
-	c.out.Grow(len(template) / 2)
-	c.out.WriteString("<?php\n")
+	c.out.Grow(len(template)/2 + len(header))
+	c.out.WriteString("<?php" + header + "\n")
 	for _, n := range nodes {
 		c.lines(n.Span.Start)
 		switch n.Kind {
@@ -332,6 +358,18 @@ func (c *compiler) use(n Node) {
 		c.emit(" as " + parts[1])
 	}
 	c.emit(";")
+}
+
+func validVarName(s string) bool {
+	if s == "" || ('0' <= s[0] && s[0] <= '9') {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if !isNameByte(s[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func lineStarts(s string) []int {
