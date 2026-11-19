@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A method called straight on a function's result, such as `map($input)->to(CreateProjectData::class)`, now gives the method's return type, with its `@template` bound from the arguments, instead of the function's. This removes false `unknown-member` warnings on the result.
 - A private method or property that only a trait the class uses calls, reads or declares as `abstract private` is no longer reported as `unused-private-method` or `unused-private-property`. A class using a trait the server can't find isn't checked.
 - `#[\Override]` is accepted on a method that overrides one a parent class gets from a trait, as in tests extending Orchestra Testbench's `TestCase`. On a method that only replaces one from the class's own trait, it's still reported, as PHP does.
+- **Classes from PSR-0 packages and Composer itself are known.** Dependencies that autoload with `psr-0`, such as Magento's `Zend_Db_Expr` from `magento/zend-db`, are indexed, and so are `Composer\InstalledVersions` and `Composer\Autoload\ClassLoader`, which Composer installs into every project. They're no longer reported as `unknown-class`, and hover, completion and go to definition work on them.
 
 ## [0.14.0] - 2026-11-13
 

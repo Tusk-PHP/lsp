@@ -41,6 +41,7 @@ type composerConfig struct {
 
 type autoloadBlock struct {
 	PSR4     map[string]interface{} `json:"psr-4"`
+	PSR0     map[string]interface{} `json:"psr-0"`
 	Files    []string               `json:"files"`
 	Classmap []string               `json:"classmap"`
 }
@@ -150,6 +151,9 @@ func GetAutoloadPaths(rootPath string) []AutoloadEntry {
 		if len(pkg.Autoload.PSR4) > 0 {
 			entries = append(entries, parsePSR4(pkg.Autoload.PSR4, pkgDir, true)...)
 		}
+		if len(pkg.Autoload.PSR0) > 0 {
+			entries = append(entries, parsePSR0(pkg.Autoload.PSR0, pkgDir)...)
+		}
 		if len(pkg.Autoload.Files) > 0 {
 			entries = append(entries, parseFiles(pkg.Autoload.Files, pkgDir, true)...)
 		}
@@ -158,7 +162,60 @@ func GetAutoloadPaths(rootPath string) []AutoloadEntry {
 		}
 	}
 
+	entries = appendComposerRuntime(entries, composerDir)
 	return appendComposerAutoloadFiles(entries, rootPath)
+}
+
+// composerRuntimeClasses are the classes Composer installs into
+// vendor/composer itself, which no package's autoload lists.
+var composerRuntimeClasses = []string{"InstalledVersions.php", "ClassLoader.php"}
+
+func appendComposerRuntime(entries []AutoloadEntry, composerDir string) []AutoloadEntry {
+	for _, name := range composerRuntimeClasses {
+		path := filepath.Join(composerDir, name)
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			entries = append(entries, AutoloadEntry{Path: path, IsVendor: true, IsFile: true})
+		}
+	}
+	return entries
+}
+
+// parsePSR0 turns a vendor package's PSR-0 prefixes into the directory and
+// file each one covers: `"Zend_Db": "library/"` is library/Zend/Db/ and
+// library/Zend/Db.php, since PSR-0 maps both namespace separators and
+// underscores in class names to directories.
+func parsePSR0(psr0 map[string]interface{}, basePath string) []AutoloadEntry {
+	var entries []AutoloadEntry
+	seen := map[string]bool{}
+	add := func(e AutoloadEntry) {
+		if !seen[e.Path] {
+			seen[e.Path] = true
+			entries = append(entries, e)
+		}
+	}
+	for prefix, paths := range psr0 {
+		var dirs []string
+		switch v := paths.(type) {
+		case string:
+			dirs = []string{v}
+		case []interface{}:
+			for _, p := range v {
+				if s, ok := p.(string); ok {
+					dirs = append(dirs, s)
+				}
+			}
+		}
+		rel := strings.TrimRight(prefix, "\\_")
+		rel = strings.NewReplacer("\\", "/", "_", "/").Replace(rel)
+		for _, dir := range dirs {
+			base := filepath.Join(basePath, dir, filepath.FromSlash(rel))
+			add(AutoloadEntry{Path: base, IsVendor: true})
+			if rel != "" {
+				add(AutoloadEntry{Path: base + ".php", IsVendor: true, IsFile: true})
+			}
+		}
+	}
+	return entries
 }
 
 var composerAutoloadFileRe = regexp.MustCompile(`\$(vendorDir|baseDir)\s*\.\s*'([^']+\.php)'`)

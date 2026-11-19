@@ -120,11 +120,6 @@ src/Symfony/Bridge/PhpUnit/bootstrap.php	unknown-class	Unknown class 'PHPUnit\Te
 src/Symfony/Bridge/Twig/Form/TwigRendererEngine.php	argument-count-mismatch	Too few arguments to unwrap(): 0 passed, at least 1 required
 src/Symfony/Bridge/Twig/Form/TwigRendererEngine.php	unknown-member	Unknown member 'vars' on 'AbstractRendererEngine'
 src/Symfony/Bridge/Twig/Form/TwigRendererEngine.php	unknown-member	Unknown member 'vars' on 'AbstractRendererEngine'
-src/Symfony/Bridge/Twig/UndefinedCallableHandler.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Bridge/Twig/UndefinedCallableHandler.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Bundle/FrameworkBundle/Command/AboutCommand.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Bundle/FrameworkBundle/Command/AboutCommand.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Bundle/FrameworkBundle/Command/AboutCommand.php	unknown-class	Unknown class 'InstalledVersions'
 src/Symfony/Bundle/FrameworkBundle/Command/AboutCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
 src/Symfony/Bundle/FrameworkBundle/Command/AbstractConfigCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
 src/Symfony/Bundle/FrameworkBundle/Command/AbstractConfigCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
@@ -157,18 +152,12 @@ src/Symfony/Bundle/FrameworkBundle/Command/TranslationDebugCommand.php	unknown-m
 src/Symfony/Bundle/FrameworkBundle/Command/TranslationExtractCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
 src/Symfony/Bundle/FrameworkBundle/Command/XliffLintCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
 src/Symfony/Bundle/FrameworkBundle/Command/YamlLintCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
-src/Symfony/Bundle/FrameworkBundle/Console/Application.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Bundle/FrameworkBundle/Console/Application.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Bundle/FrameworkBundle/Console/Application.php	unknown-class	Unknown class 'InstalledVersions'
 src/Symfony/Bundle/FrameworkBundle/Console/Descriptor/JsonDescriptor.php	unused-variable	Variable $reverseAliases is assigned but never read
 src/Symfony/Bundle/FrameworkBundle/Console/Descriptor/JsonDescriptor.php	unused-variable	Variable $showAliases is assigned but never read
 src/Symfony/Bundle/FrameworkBundle/Console/Descriptor/MarkdownDescriptor.php	unused-variable	Variable $reverseAliases is assigned but never read
 src/Symfony/Bundle/FrameworkBundle/Console/Descriptor/MarkdownDescriptor.php	unused-variable	Variable $showAliases is assigned but never read
 src/Symfony/Bundle/FrameworkBundle/Console/Descriptor/XmlDescriptor.php	unused-variable	Variable $reverseAliases is assigned but never read
 src/Symfony/Bundle/FrameworkBundle/Console/Descriptor/XmlDescriptor.php	unused-variable	Variable $showAliases is assigned but never read
-src/Symfony/Bundle/FrameworkBundle/DependencyInjection/FrameworkExtension.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Bundle/FrameworkBundle/DependencyInjection/FrameworkExtension.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Bundle/FrameworkBundle/DependencyInjection/FrameworkExtension.php	unknown-class	Unknown class 'InstalledVersions'
 src/Symfony/Bundle/FrameworkBundle/Test/BrowserKitAssertionsTrait.php	unknown-class	Unknown class 'ExpectationFailedException'
 src/Symfony/Bundle/FrameworkBundle/Test/BrowserKitAssertionsTrait.php	unknown-class	Unknown class 'LogicalAnd'
 src/Symfony/Bundle/FrameworkBundle/Test/BrowserKitAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
@@ -195,8 +184,6 @@ src/Symfony/Bundle/FrameworkBundle/Test/NotificationAssertionsTrait.php	unknown-
 src/Symfony/Bundle/FrameworkBundle/Test/NotificationAssertionsTrait.php	unknown-class	Unknown class 'LogicalNot'
 src/Symfony/Bundle/SecurityBundle/Debug/TraceableFirewallListener.php	unknown-member	Unknown member 'listeners' on 'TraceableFirewallListener'
 src/Symfony/Bundle/SecurityBundle/Debug/TraceableFirewallListener.php	unknown-member	Unknown member 'listeners' on 'TraceableFirewallListener'
-src/Symfony/Bundle/SecurityBundle/DependencyInjection/SecurityExtension.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Bundle/SecurityBundle/DependencyInjection/SecurityExtension.php	unknown-class	Unknown class 'InstalledVersions'
 src/Symfony/Bundle/SecurityBundle/DependencyInjection/SecurityExtension.php	unused-variable	Variable $authenticationProviders is assigned but never read
 src/Symfony/Bundle/SecurityBundle/DependencyInjection/SecurityExtension.php	unused-variable	Variable $usedEnvs is assigned but never read
 src/Symfony/Bundle/TwigBundle/Command/LintCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
@@ -305,8 +292,6 @@ src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unkno
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'ReplicationInterface'
 src/Symfony/Component/Cache/CacheItem.php	unused-private-method	Private method 'CacheItem::pack' is never used
 src/Symfony/Component/Cache/CacheItem.php	unused-private-method	Private method 'CacheItem::unpack' is never used
-src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-class	Unknown class 'InstalledVersions'
 src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'countDocuments' on 'Collection'
 src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'createIndex' on 'Collection'
 src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'deleteMany' on 'Collection'
@@ -347,7 +332,6 @@ src/Symfony/Component/Clock/Resources/now.php	unknown-class	Unknown class 'now'
 src/Symfony/Component/Clock/Test/ClockSensitiveTrait.php	unknown-class	Unknown attribute 'After'
 src/Symfony/Component/Clock/Test/ClockSensitiveTrait.php	unknown-class	Unknown attribute 'Before'
 src/Symfony/Component/Clock/Test/ClockSensitiveTrait.php	unknown-class	Unknown attribute 'BeforeClass'
-src/Symfony/Component/Config/Definition/Builder/NodeDefinition.php	unknown-class	Unknown class 'InstalledVersions'
 src/Symfony/Component/Console/Command/TraceableCommand.php	unknown-member	Unknown member 'invokable' on 'TraceableCommand'
 src/Symfony/Component/Console/Tester/Constraint/CommandFailed.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/Console/Tester/Constraint/CommandIsInvalid.php	unknown-class	Unknown class 'Constraint'
@@ -363,14 +347,6 @@ src/Symfony/Component/DependencyInjection/Compiler/ResolveBindingsPass.php	undef
 src/Symfony/Component/DependencyInjection/Compiler/ResolveBindingsPass.php	undefined-variable	Undefined variable $parsedName
 src/Symfony/Component/DependencyInjection/Compiler/ResolveInstanceofConditionalsPass.php	unused-variable	Variable $reflectionClass is assigned but never read
 src/Symfony/Component/DependencyInjection/Container.php	unknown-class	Unknown class 'LazyLoadingInterface'
-src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'ClassLoader'
-src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/DependencyInjection/ContainerBuilder.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/DependencyInjection/Dumper/PhpDumper.php	unknown-class	Unknown class 'ClassLoader'
 src/Symfony/Component/DependencyInjection/Kernel/ServicesBundle.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/DependencyInjection/Loader/Configurator/ContainerConfigurator.php	unused-import	Unused import 'Symfony\Component\DependencyInjection\Reference'
 src/Symfony/Component/DependencyInjection/Loader/PhpFileLoader.php	unknown-class	Unknown class 'App'
@@ -386,8 +362,6 @@ src/Symfony/Component/DomCrawler/Test/Constraint/CrawlerSelectorExists.php	unkno
 src/Symfony/Component/DomCrawler/Test/Constraint/CrawlerSelectorTextContains.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/DomCrawler/Test/Constraint/CrawlerSelectorTextSame.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'IMock'
-src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'InstalledVersions'
 src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'LegacyProxy'
 src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'MockInterface'
 src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'MockObject'
@@ -395,7 +369,6 @@ src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown cl
 src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'ProxyInterface'
 src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'StatelessInvocation'
 src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'Stub'
-src/Symfony/Component/ErrorHandler/ErrorEnhancer/ClassNotFoundErrorEnhancer.php	unknown-class	Unknown class 'ClassLoader'
 src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::addElementToGhost' is never used
 src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::dumpExceptionProperties' is never used
 src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::fileExcerpt' is never used
@@ -405,10 +378,6 @@ src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-pr
 src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatLogMessage' is never used
 src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::isVendorExceptionClass' is never used
 src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::showExceptionProperties' is never used
-src/Symfony/Component/ErrorHandler/Resources/views/exception_full.html.php	unknown-class	Unknown class 'Composer\InstalledVersions'
-src/Symfony/Component/ErrorHandler/Resources/views/exception_full.html.php	unknown-class	Unknown class 'Composer\InstalledVersions'
-src/Symfony/Component/ErrorHandler/Resources/views/exception_full.html.php	unknown-class	Unknown class 'Composer\InstalledVersions'
-src/Symfony/Component/ErrorHandler/Resources/views/exception_full.html.php	unknown-class	Unknown class 'Composer\InstalledVersions'
 src/Symfony/Component/ErrorHandler/Resources/views/traces_text.html.php	undefined-variable	Undefined variable $exception
 src/Symfony/Component/ErrorHandler/Resources/views/traces_text.html.php	undefined-variable	Undefined variable $exception
 src/Symfony/Component/ErrorHandler/Resources/views/traces_text.html.php	undefined-variable	Undefined variable $exception
@@ -428,11 +397,6 @@ src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-membe
 src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-member	Unknown member 'method' on 'ValidatorInterface'
 src/Symfony/Component/HttpClient/CachingHttpClient.php	unknown-member	Unknown member 'asyncStream' on 'CachingHttpClient'
 src/Symfony/Component/HttpClient/CachingHttpClient.php	unknown-member	Unknown member 'asyncStream' on 'CachingHttpClient'
-src/Symfony/Component/HttpClient/Har/HarFile.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/HttpClient/Har/HarFile.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/HttpClient/Har/HarFile.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/HttpClient/Har/HarFile.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/HttpClient/Har/HarFile.php	unknown-class	Unknown class 'InstalledVersions'
 src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
 src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown class 'Rize\UriTemplate'
 src/Symfony/Component/HttpClient/Internal/AmpResolver.php	unknown-function	Unknown function 'Dns\resolve'
@@ -487,9 +451,6 @@ src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseIsSuccessful.php	un
 src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseIsUnprocessable.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseStatusCodeSame.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/HttpFoundation/Test/Constraint/SessionHasFlashMessage.php	unknown-class	Unknown class 'Constraint'
-src/Symfony/Component/HttpKernel/DataCollector/ConfigDataCollector.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/HttpKernel/DataCollector/ConfigDataCollector.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/HttpKernel/DataCollector/ConfigDataCollector.php	unknown-class	Unknown class 'InstalledVersions'
 src/Symfony/Component/HttpKernel/DataCollector/DumpDataCollector.php	unknown-member	Unknown member 'line' on 'DumpDataCollector'
 src/Symfony/Component/HttpKernel/DataCollector/DumpDataCollector.php	unknown-member	Unknown member 'style' on 'DumpDataCollector'
 src/Symfony/Component/HttpKernel/Event/ViewEvent.php	unknown-member	Unknown member 'controllerEvent' on 'ViewEvent'
@@ -534,8 +495,6 @@ src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'B
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWriteException'
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWriteException'
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'Command'
-src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'InstalledVersions'
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'Manager'
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'Manager'
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'Query'
@@ -611,8 +570,6 @@ src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-
 src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'BSONDocument'
 src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'BSONDocument'
 src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'BulkWriteException'
-src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'InstalledVersions'
-src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'InstalledVersions'
 src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
 src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
 src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'MongoDriverException'
