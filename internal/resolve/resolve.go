@@ -945,15 +945,21 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 
 		// $var = funcName(...): the function's return type, with its templates
 		// bound from the arguments.
+		// A call followed by ->member, ::member or [offset] is a chain: what the
+		// function returns is only its start, so the chain resolvers below
+		// decide it.
 		if funcName := extractFunctionCallName(rhs); funcName != "" && r.Index != nil {
-			if steps, origin, ok := parseChain(rhs); ok && len(steps) == 0 && origin.kind == 'f' {
-				if rt := r.FunctionCallType(origin.text, origin.args, exprCtx); !rt.IsEmpty() {
-					return rt
+			steps, origin, ok := parseChain(strings.TrimSuffix(rhs, ";"))
+			if !ok || len(steps) == 0 {
+				if ok && origin.kind == 'f' {
+					if rt := r.FunctionCallType(origin.text, origin.args, exprCtx); !rt.IsEmpty() {
+						return rt
+					}
 				}
-			}
-			for _, sym := range r.Index.LookupByName(funcName) {
-				if sym.Kind == symbols.KindFunction && sym.ReturnType != "" {
-					return ResolvedType{FQN: sym.ReturnType}
+				for _, sym := range r.Index.LookupByName(funcName) {
+					if sym.Kind == symbols.KindFunction && sym.ReturnType != "" {
+						return ResolvedType{FQN: sym.ReturnType}
+					}
 				}
 			}
 		}
