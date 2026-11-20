@@ -60,7 +60,7 @@ func (r *UndefinedVariableRule) Check(file *parser.FileNode, source string, inde
 	if file == nil {
 		return nil
 	}
-	return checkUndefinedVariables(source, outArgChecker(file, index), r.IncludedFile, r.Shared)
+	return checkUndefinedVariables(file, source, outArgChecker(file, index), r.IncludedFile, r.Shared)
 }
 
 // UnusedVariableRule flags local variable assignments with no subsequent read.
@@ -132,7 +132,7 @@ func argIsReference(params []symbols.ParamInfo, arg int, complete bool) bool {
 }
 
 // checkUndefinedVariables detects reads of undefined variables.
-func checkUndefinedVariables(source string, outArg func(string, int) bool, includedFile bool, shared *Shared) []Finding {
+func checkUndefinedVariables(file *parser.FileNode, source string, outArg func(string, int) bool, includedFile bool, shared *Shared) []Finding {
 	doc := (&scope.Collector{OutArg: outArg}).Collect(source)
 	if doc == nil {
 		return nil
@@ -160,6 +160,10 @@ func checkUndefinedVariables(source string, outArg func(string, int) bool, inclu
 	if result == nil {
 		return nil
 	}
+
+	// A plain PHP view gets its top-level variables from whatever includes
+	// it, just like a .phtml template.
+	includedFile = includedFile || isPlainView(file, source, result.Tokens)
 
 	// Determine which scopes are "tainted" (contain skip functions).
 	taintedScopes := findTaintedScopes(doc, result.Tokens)

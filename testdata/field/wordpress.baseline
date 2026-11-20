@@ -38,56 +38,11 @@ src/wp-admin/includes/theme-install.php	unused-variable	Variable $themes_allowed
 src/wp-admin/options-head.php	unused-variable	Variable $action is assigned but never read
 src/wp-admin/press-this.php	unknown-class	Unknown class 'WP_Press_This_Plugin'
 src/wp-content/themes/twentyeleven/functions.php	unused-variable	Variable $content_width is assigned but never read
-src/wp-content/themes/twentyeleven/header.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyeleven/header.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyeleven/header.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyeleven/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyeleven/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyeleven/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyeleven/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyeleven/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyeleven/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyeleven/showcase.php	undefined-variable	Undefined variable $post
 src/wp-content/themes/twentyfifteen/inc/back-compat.php	argument-count-mismatch	Too many arguments to switch_theme(): 2 passed, at most 1 expected
-src/wp-content/themes/twentyfourteen/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyfourteen/image.php	undefined-variable	Undefined variable $post
 src/wp-content/themes/twentyfourteen/inc/back-compat.php	argument-count-mismatch	Too many arguments to switch_theme(): 2 passed, at most 1 expected
-src/wp-content/themes/twentyseventeen/template-parts/page/content-front-page-panels.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyseventeen/template-parts/page/content-front-page.php	undefined-variable	Undefined variable $post
 src/wp-content/themes/twentysixteen/inc/back-compat.php	argument-count-mismatch	Too many arguments to switch_theme(): 2 passed, at most 1 expected
 src/wp-content/themes/twentyten/functions.php	unused-variable	Variable $content_width is assigned but never read
-src/wp-content/themes/twentyten/header.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyten/header.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyten/header.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyten/loop-attachment.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyten/loop-attachment.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyten/loop-attachment.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyten/loop-attachment.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyten/loop-attachment.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyten/loop-attachment.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyten/loop.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyten/loop.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentyten/loop.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentythirteen/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentythirteen/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentythirteen/image.php	undefined-variable	Undefined variable $post
 src/wp-content/themes/twentythirteen/inc/back-compat.php	argument-count-mismatch	Too many arguments to switch_theme(): 2 passed, at most 1 expected
-src/wp-content/themes/twentytwelve/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentytwelve/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentytwelve/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentytwelve/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentytwelve/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentytwelve/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentytwenty/comments.php	undefined-variable	Undefined variable $comments
-src/wp-content/themes/twentytwenty/comments.php	undefined-variable	Undefined variable $comments
-src/wp-content/themes/twentytwenty/comments.php	undefined-variable	Undefined variable $comments
-src/wp-content/themes/twentytwenty/searchform.php	undefined-variable	Undefined variable $args
-src/wp-content/themes/twentytwenty/searchform.php	undefined-variable	Undefined variable $args
-src/wp-content/themes/twentytwentyone/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentytwentyone/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentytwentyone/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentytwentyone/image.php	undefined-variable	Undefined variable $post
-src/wp-content/themes/twentytwentyone/searchform.php	undefined-variable	Undefined variable $args
 src/wp-includes/ID3/getid3.lib.php	unused-variable	Variable $keylength is assigned but never read
 src/wp-includes/ID3/getid3.php	unused-variable	Variable $PlaytimeSeconds is assigned but never read
 src/wp-includes/ID3/module.audio-video.flv.php	unused-variable	Variable $AVCProfileIndication is assigned but never read
@@ -164,16 +119,9 @@ src/wp-includes/deprecated.php	undefined-variable	Undefined variable $excerpt
 src/wp-includes/deprecated.php	undefined-variable	Undefined variable $excerpt
 src/wp-includes/deprecated.php	unknown-class	Unknown class 'WP_Press_This_Plugin'
 src/wp-includes/deprecated.php	unknown-class	Unknown class 'WP_Press_This_Plugin'
-src/wp-includes/feed-atom-comments.php	undefined-variable	Undefined variable $comment
-src/wp-includes/feed-atom-comments.php	undefined-variable	Undefined variable $comment
-src/wp-includes/feed-atom-comments.php	undefined-variable	Undefined variable $comment
-src/wp-includes/feed-atom-comments.php	undefined-variable	Undefined variable $comment
 src/wp-includes/feed-atom.php	unused-variable	Variable $more is assigned but never read
-src/wp-includes/feed-rdf.php	undefined-variable	Undefined variable $post
 src/wp-includes/feed-rdf.php	unused-variable	Variable $more is assigned but never read
 src/wp-includes/feed-rss.php	unused-variable	Variable $more is assigned but never read
-src/wp-includes/feed-rss2-comments.php	undefined-variable	Undefined variable $comment
-src/wp-includes/feed-rss2-comments.php	undefined-variable	Undefined variable $comment
 src/wp-includes/feed-rss2.php	unused-variable	Variable $more is assigned but never read
 src/wp-includes/ms-load.php	unused-variable	Variable $blog_id is assigned but never read
 src/wp-includes/php-ai-client/src/Providers/ProviderRegistry.php	unknown-member	Unknown member 'setHttpTransporterOriginal' on 'ProviderRegistry'

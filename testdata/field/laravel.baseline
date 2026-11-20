@@ -10,13 +10,6 @@ src/Illuminate/Cache/RedisTaggedCache.php	unknown-member	Unknown member 'entries
 src/Illuminate/Cache/RedisTaggedCache.php	unknown-member	Unknown member 'flushStaleEntries' on 'TagSet'
 src/Illuminate/Console/Signals.php	unknown-member	Unknown member 'signalHandlers' on 'Signals'
 src/Illuminate/Console/Signals.php	unknown-member	Unknown member 'signalHandlers' on 'Signals'
-src/Illuminate/Console/resources/views/components/bullet-list.php	undefined-variable	Undefined variable $elements
-src/Illuminate/Console/resources/views/components/line.php	undefined-variable	Undefined variable $bgColor
-src/Illuminate/Console/resources/views/components/line.php	undefined-variable	Undefined variable $fgColor
-src/Illuminate/Console/resources/views/components/line.php	undefined-variable	Undefined variable $marginTop
-src/Illuminate/Console/resources/views/components/line.php	undefined-variable	Undefined variable $title
-src/Illuminate/Console/resources/views/components/line.php	undefined-variable	Undefined variable $title
-src/Illuminate/Console/resources/views/components/two-column-detail.php	undefined-variable	Undefined variable $second
 src/Illuminate/Database/Console/DumpCommand.php	unused-variable	Variable $database is assigned but never read
 src/Illuminate/Database/Console/Migrations/TableGuesser.php	unused-variable	Variable $create is assigned but never read
 src/Illuminate/Database/Eloquent/Relations/Concerns/CanBeOneOfMany.php	undefined-variable	Undefined variable $previous

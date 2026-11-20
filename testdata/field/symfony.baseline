@@ -351,11 +351,6 @@ src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-pr
 src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatLogMessage' is never used
 src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::isVendorExceptionClass' is never used
 src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::showExceptionProperties' is never used
-src/Symfony/Component/ErrorHandler/Resources/views/traces_text.html.php	undefined-variable	Undefined variable $exception
-src/Symfony/Component/ErrorHandler/Resources/views/traces_text.html.php	undefined-variable	Undefined variable $exception
-src/Symfony/Component/ErrorHandler/Resources/views/traces_text.html.php	undefined-variable	Undefined variable $exception
-src/Symfony/Component/ErrorHandler/Resources/views/traces_text.html.php	undefined-variable	Undefined variable $exception
-src/Symfony/Component/ErrorHandler/Resources/views/traces_text.html.php	undefined-variable	Undefined variable $exception
 src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
 src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
 src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
@@ -429,12 +424,6 @@ src/Symfony/Component/HttpKernel/HttpKernel.php	unknown-member	Unknown member 'g
 src/Symfony/Component/HttpKernel/HttpKernel.php	unknown-member	Unknown member 'getControllerReflector' on 'RequestEvent'
 src/Symfony/Component/HttpKernel/Kernel.php	unknown-member	Unknown member 'doInitializeBundles' on 'Kernel'
 src/Symfony/Component/HttpKernel/Kernel.php	unknown-member	Unknown member 'doInitializeContainer' on 'Kernel'
-src/Symfony/Component/HttpKernel/Resources/welcome.html.php	undefined-variable	Undefined variable $docVersion
-src/Symfony/Component/HttpKernel/Resources/welcome.html.php	undefined-variable	Undefined variable $docVersion
-src/Symfony/Component/HttpKernel/Resources/welcome.html.php	undefined-variable	Undefined variable $docVersion
-src/Symfony/Component/HttpKernel/Resources/welcome.html.php	undefined-variable	Undefined variable $projectDir
-src/Symfony/Component/HttpKernel/Resources/welcome.html.php	undefined-variable	Undefined variable $version
-src/Symfony/Component/HttpKernel/Resources/welcome.html.php	undefined-variable	Undefined variable $version
 src/Symfony/Component/JsonPath/Test/JsonPathAssertionsTrait.php	unknown-class	Unknown class 'Assert'
 src/Symfony/Component/JsonPath/Test/JsonPathAssertionsTrait.php	unknown-class	Unknown class 'Assert'
 src/Symfony/Component/JsonPath/Test/JsonPathAssertionsTrait.php	unknown-class	Unknown class 'Assert'
