@@ -8,8 +8,6 @@ src/Symfony/Bridge/Doctrine/ManagerRegistry.php	unknown-member	Unknown member 's
 src/Symfony/Bridge/Doctrine/ManagerRegistry.php	unknown-member	Unknown member 'services' on 'ManagerRegistry'
 src/Symfony/Bridge/Doctrine/Security/RememberMe/DoctrineTokenProvider.php	unknown-member	Unknown member 'getClass' on 'PersistentToken'
 src/Symfony/Bridge/PhpUnit/ConstraintTrait.php	unknown-class	Unknown class 'Constraint'
-src/Symfony/Bridge/PhpUnit/CoverageListener.php	unknown-class	Unknown class 'Registry'
-src/Symfony/Bridge/PhpUnit/CoverageListener.php	unknown-class	Unknown class 'Registry'
 src/Symfony/Bridge/PhpUnit/CoverageListener.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Bridge/PhpUnit/CoverageListener.php	unknown-class	Unknown class 'TestListener'
 src/Symfony/Bridge/PhpUnit/CoverageListener.php	unknown-class	Unknown class 'TestUtil'
@@ -22,8 +20,6 @@ src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown cla
 src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'ErrorHandler'
 src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'ErrorHandler'
 src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'ErrorHandler'
-src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'Handler'
-src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'Handler'
 src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'TestResult'
 src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'UtilErrorHandler'
@@ -31,9 +27,6 @@ src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown cla
 src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'UtilErrorHandler'
 src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'UtilErrorHandler'
 src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler.php	unknown-class	Unknown class 'UtilErrorHandler'
-src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler/Deprecation.php	unknown-class	Unknown class 'Groups'
-src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler/Deprecation.php	unknown-class	Unknown class 'Groups'
-src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler/Deprecation.php	unknown-class	Unknown class 'Groups'
 src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler/Deprecation.php	unknown-class	Unknown class 'SymfonyTestsListenerFor'
 src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler/Deprecation.php	unknown-class	Unknown class 'Test'
 src/Symfony/Bridge/PhpUnit/DeprecationErrorHandler/Deprecation.php	unknown-class	Unknown class 'TestCase'
@@ -57,9 +50,6 @@ src/Symfony/Bridge/PhpUnit/Legacy/CommandForV8.php	unknown-class	Unknown class '
 src/Symfony/Bridge/PhpUnit/Legacy/CommandForV8.php	unknown-class	Unknown class 'Configuration'
 src/Symfony/Bridge/PhpUnit/Legacy/CommandForV8.php	unknown-member	Unknown member 'globalListenerDisabled' on 'SymfonyTestsListener'
 src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'BaseCommand'
-src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'Configuration'
-src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'Configuration'
-src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'Configuration'
 src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'LegacyConfiguration'
 src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'Loader'
 src/Symfony/Bridge/PhpUnit/Legacy/CommandForV9.php	unknown-class	Unknown class 'Registry'
@@ -82,9 +72,6 @@ src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Un
 src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'Blacklist'
 src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'Blacklist'
 src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'DataProviderTestSuite'
-src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'ExcludeList'
-src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'ExcludeList'
-src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'ExcludeList'
 src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'PhptTestCase'
 src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'RiskyTestError'
 src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'RiskyTestError'
@@ -104,8 +91,6 @@ src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Un
 src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestSuite'
 src/Symfony/Bridge/PhpUnit/Legacy/SymfonyTestsListenerTrait.php	unknown-class	Unknown class 'TestSuite'
-src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'BeforeTestMethodErroredSubscriber'
-src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'BeforeTestMethodErroredSubscriber'
 src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'ErroredSubscriber'
 src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'ExecutionFinishedSubscriber'
 src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'Extension'
@@ -115,8 +100,6 @@ src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'Ski
 src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'TestMethod'
 src/Symfony/Bridge/PhpUnit/TextUI/Command.php	unknown-class	Unknown class 'PHPUnit\Runner\Version'
 src/Symfony/Bridge/PhpUnit/bootstrap.php	undefined-variable	Undefined variable $fileIdentifier
-src/Symfony/Bridge/PhpUnit/bootstrap.php	unknown-class	Unknown class 'PHPUnit\Metadata\Metadata'
-src/Symfony/Bridge/PhpUnit/bootstrap.php	unknown-class	Unknown class 'PHPUnit\TextUI\Command'
 src/Symfony/Bridge/Twig/Form/TwigRendererEngine.php	argument-count-mismatch	Too few arguments to unwrap(): 0 passed, at least 1 required
 src/Symfony/Bridge/Twig/Form/TwigRendererEngine.php	unknown-member	Unknown member 'vars' on 'AbstractRendererEngine'
 src/Symfony/Bridge/Twig/Form/TwigRendererEngine.php	unknown-member	Unknown member 'vars' on 'AbstractRendererEngine'
@@ -204,8 +187,6 @@ src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown cl
 src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'RedisCluster'
 src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Relay\Cluster'
 src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Relay\Relay'
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Class 'APCUIterator' requires ext-apcu (PHP >= )
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Class 'APCUIterator' requires ext-apcu (PHP >= )
 src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Constant 'APC_ITER_KEY' requires ext-apcu (PHP >= )
 src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_add' requires ext-apcu (PHP >= )
 src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_clear_cache' requires ext-apcu (PHP >= )
@@ -214,8 +195,6 @@ src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function
 src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_exists' requires ext-apcu (PHP >= )
 src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_exists' requires ext-apcu (PHP >= )
 src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_store' requires ext-apcu (PHP >= )
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-class	Unknown class 'APCUIterator'
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-class	Unknown class 'APCUIterator'
 src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_add'
 src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_clear_cache'
 src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_delete'
@@ -320,10 +299,6 @@ src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'R
 src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'Relay\Exception'
 src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'Relay\Exception'
 src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'ReplicationInterface'
-src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'Sentinel'
-src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'Sentinel'
-src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'Sentinel'
-src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'UNLINK'
 src/Symfony/Component/Cache/Traits/Relay/Relay502Trait.php	unknown-class	Unknown class 'Relay\Relay'
 src/Symfony/Component/Cache/Traits/RelayClusterProxy.php	unknown-class	Unknown class 'Relay\Cluster'
 src/Symfony/Component/Cache/Traits/RelayClusterProxy.php	unknown-class	Unknown class 'Relay\Relay'
@@ -349,8 +324,6 @@ src/Symfony/Component/DependencyInjection/Compiler/ResolveInstanceofConditionals
 src/Symfony/Component/DependencyInjection/Container.php	unknown-class	Unknown class 'LazyLoadingInterface'
 src/Symfony/Component/DependencyInjection/Kernel/ServicesBundle.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/DependencyInjection/Loader/Configurator/ContainerConfigurator.php	unused-import	Unused import 'Symfony\Component\DependencyInjection\Reference'
-src/Symfony/Component/DependencyInjection/Loader/PhpFileLoader.php	unknown-class	Unknown class 'App'
-src/Symfony/Component/DependencyInjection/Loader/PhpFileLoader.php	unknown-class	Unknown class 'App'
 src/Symfony/Component/DependencyInjection/ReverseContainer.php	unknown-member	Unknown member 'privates' on 'ReverseContainer'
 src/Symfony/Component/DependencyInjection/ReverseContainer.php	unknown-member	Unknown member 'services' on 'ReverseContainer'
 src/Symfony/Component/DependencyInjection/ServicesResetter.php	unknown-class	Unknown class 'LazyLoadingInterface'
@@ -409,10 +382,6 @@ src/Symfony/Component/HttpClient/Response/CurlResponse.php	unknown-member	Unknow
 src/Symfony/Component/HttpClient/Response/JsonMockResponse.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/HttpClient/Response/JsonMockResponse.php	unknown-function	Unknown function 'json_validate'
 src/Symfony/Component/HttpClient/ThrottlingHttpClient.php	unknown-member	Unknown member 'traitReset' on 'ThrottlingHttpClient'
-src/Symfony/Component/HttpClient/UriTemplateHttpClient.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
-src/Symfony/Component/HttpClient/UriTemplateHttpClient.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
-src/Symfony/Component/HttpClient/UriTemplateHttpClient.php	unknown-class	Unknown class 'Rize\UriTemplate'
-src/Symfony/Component/HttpClient/UriTemplateHttpClient.php	unknown-class	Unknown class 'Rize\UriTemplate'
 src/Symfony/Component/HttpFoundation/AcceptHeader.php	syntax-error	malformed match arm
 src/Symfony/Component/HttpFoundation/RequestMatcher/IsJsonRequestMatcher.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/HttpFoundation/RequestMatcher/IsJsonRequestMatcher.php	unknown-function	Unknown function 'json_validate'
@@ -618,8 +587,6 @@ src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-cl
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
-src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Sentinel'
-src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Sentinel'
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unused-variable	Variable $error is assigned but never read
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unused-variable	Variable $error is assigned but never read
 src/Symfony/Component/Messenger/Test/Middleware/MiddlewareTestCase.php	unknown-class	Unknown class 'TestCase'
@@ -721,10 +688,6 @@ src/Symfony/Component/Tui/Widget/MarkdownWidget.php	syntax-error	malformed match
 src/Symfony/Component/TypeInfo/TypeContext/TypeContextFactory.php	unused-variable	Variable $typeContext is assigned but never read
 src/Symfony/Component/TypeInfo/TypeFactoryTrait.php	undefined-variable	Undefined variable $backingType
 src/Symfony/Component/TypeInfo/TypeFactoryTrait.php	undefined-variable	Undefined variable $className
-src/Symfony/Component/Uid/HashableInterface.php	unknown-class	Unknown class 'Ds\Hashable'
-src/Symfony/Component/Uid/HashableInterface.php	unknown-class	Unknown class 'Ds\Hashable'
-src/Symfony/Component/Uid/HashableInterface.php	unknown-class	Unknown class 'Ds\Key'
-src/Symfony/Component/Uid/HashableInterface.php	unknown-class	Unknown class 'Ds\Key'
 src/Symfony/Component/Validator/Constraints/JsonValidator.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/Validator/Constraints/JsonValidator.php	unknown-function	Unknown function 'json_validate'
 src/Symfony/Component/Validator/Test/CompoundConstraintTestCase.php	unknown-class	Unknown class 'ExpectationFailedException'

@@ -920,8 +920,12 @@ func classLikeExists(name string, line int, file *parser.FileNode, index *symbol
 	if !ok || fqn == "" {
 		return true
 	}
-	_, ok = canonicalClassLike(fqn, file, index)
-	return ok
+	if _, ok = canonicalClassLike(fqn, file, index); ok {
+		return true
+	}
+	// A class from an optional package the project suggests but doesn't
+	// have installed is missing by design.
+	return index != nil && index.IsOptionalClass(fqn)
 }
 
 // canonicalClassLike finds a class-like the way PHP does, ignoring case, and

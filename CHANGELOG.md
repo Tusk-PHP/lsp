@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A private method or property that only a trait the class uses calls, reads or declares as `abstract private` is no longer reported as `unused-private-method` or `unused-private-property`. A class using a trait the server can't find isn't checked.
 - `#[\Override]` is accepted on a method that overrides one a parent class gets from a trait, as in tests extending Orchestra Testbench's `TestCase`. On a method that only replaces one from the class's own trait, it's still reported, as PHP does.
 - **Classes from PSR-0 packages and Composer itself are known.** Dependencies that autoload with `psr-0`, such as Magento's `Zend_Db_Expr` from `magento/zend-db`, are indexed, and so are `Composer\InstalledVersions` and `Composer\Autoload\ClassLoader`, which Composer installs into every project. They're no longer reported as `unknown-class`, and hover, completion and go to definition work on them.
+- **Optional packages aren't reported as unknown.** In a library that lists packages under Composer `suggest`, classes from the ones that aren't installed are no longer reported as `unknown-class`, such as Laravel's `Ably\AblyRest` and `Pusher\Pusher`. Once a suggested package is installed, its classes are checked as usual. A class checked with `class_exists(Foo::class)` (or `interface_exists`, `trait_exists`, `enum_exists`) isn't reported in that file either, just like the quoted `class_exists('Foo')`.
 
 ## [0.14.0] - 2026-11-13
 

@@ -10,6 +10,11 @@ import (
 // function_exists('ssh2_connect') and their interface/trait/enum variants.
 var extensionGuardRe = regexp.MustCompile(`(?i)\b(extension_loaded|class_exists|interface_exists|trait_exists|enum_exists|function_exists)\s*\(\s*['"]\\?([A-Za-z_][A-Za-z0-9_\\]*)['"]`)
 
+// classConstGuardRe finds the same checks written with a class constant,
+// class_exists(Foo::class), and keeps the name as written: the file's imports
+// resolve it the same way at the guard and where the class is used.
+var classConstGuardRe = regexp.MustCompile(`(?i)\b(?:class_exists|interface_exists|trait_exists|enum_exists)\s*\(\s*\\?([A-Za-z_][A-Za-z0-9_\\]*)\s*::\s*class\b`)
+
 // extensionGuards holds what a file checks for before using it. Code guarded
 // that way runs only where the extension or symbol exists, so a name it
 // covers isn't reported as unknown even when this project's profile lacks it.
@@ -36,6 +41,12 @@ func findExtensionGuards(source string) extensionGuards {
 			g.names = map[string]bool{}
 		}
 		g.names[name] = true
+	}
+	for _, m := range classConstGuardRe.FindAllStringSubmatch(source, -1) {
+		if g.names == nil {
+			g.names = map[string]bool{}
+		}
+		g.names[strings.ToLower(m[1])] = true
 	}
 	return g
 }

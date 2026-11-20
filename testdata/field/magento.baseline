@@ -717,10 +717,6 @@ lib/internal/Magento/Framework/Cache/Backend/Decorator/AbstractDecorator.php	unk
 lib/internal/Magento/Framework/Cache/Backend/Decorator/Compression.php	unknown-member	Unknown member 'load' on 'Zend_Cache_Backend'
 lib/internal/Magento/Framework/Cache/Backend/Decorator/Compression.php	unknown-member	Unknown member 'save' on 'Zend_Cache_Backend'
 lib/internal/Magento/Framework/Cache/Backend/Eaccelerator.php	unused-variable	Variable $data is assigned but never read
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/RedisBase.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/RedisBase.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/RedisBase.php	unknown-class	Unknown class 'Redis'
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/RedisBase.php	unknown-class	Unknown class 'Redis'
 lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
 lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	unknown-class	Unknown class 'Redis'
 lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	unknown-member	Unknown member 'get' on 'RedisBase'

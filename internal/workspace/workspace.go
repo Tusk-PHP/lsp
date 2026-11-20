@@ -53,6 +53,7 @@ func New(opts Options) *Bootstrapped {
 
 	index := symbols.NewIndex()
 	index.RegisterBuiltinsForProfile(opts.BuiltinProfile)
+	index.SetOptionalNamespaces(composer.SuggestedNamespaces(opts.RootPath))
 	if opts.Framework == "magento" {
 		index.SetClassGenerator(frameworkmagento.GeneratedClasses{})
 	}
