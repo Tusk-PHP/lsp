@@ -716,7 +716,7 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 		rt := p.resolver.ResolveVariableTypeTyped(target, p.resolver.Lines(source), pos, file)
 		if parenEnd > 0 && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "->") && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
 			// $fn(…): what calling it gives; $fn(...) is a Closure of it.
-			if resolve.IsFirstClassCallableArgs(callArgStr) {
+			if resolve.IsCallableArgs(callArgStr) {
 				return p.resolver.CallableOf(rt)
 			}
 			return p.resolver.InvokeType(rt)
@@ -764,7 +764,7 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 		ownerResolved = resolve.ClassStringTarget(ownerResolved) // $class::create()
 	}
 	member, foundOn := p.resolver.FindMemberOn(ownerResolved, target, parenEnd > 0)
-	firstClass := parenEnd > 0 && resolve.IsFirstClassCallableArgs(callArgStr)
+	firstClass := parenEnd > 0 && resolve.IsCallableArgs(callArgStr)
 	if member != nil && foundOn.FQN != ownerResolved.FQN {
 		// A member a @mixin brings in. A fluent one gives back the object it
 		// was called on, as forwarding through __call does.
@@ -802,8 +802,8 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 		}
 	}
 	if firstClass {
-		// $obj->m(...) makes a Closure of m instead of calling it.
-		return p.resolver.MemberCallableType(member, file, callerFQN, ownerContext)
+		// $obj->m(...) and $obj->m(?, 1) make a Closure of m instead of calling it.
+		return resolve.PartialClosure(p.resolver.MemberCallableType(member, file, callerFQN, ownerContext), member, callArgStr)
 	}
 	var call *resolve.CallSite
 	if parenEnd > 0 {
@@ -905,8 +905,8 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 				return p.resolveClassNameFromSource(newClass, source, file)
 			}
 		}
-		if line[i] == '(' && resolve.IsFirstClassCallableArgs(line[i+1:parenEnd-1]) {
-			return "Closure" // f(...), $obj->m(...): a Closure, not a call
+		if line[i] == '(' && resolve.IsCallableArgs(line[i+1:parenEnd-1]) {
+			return "Closure" // f(...), $obj->m(...), f(?, 1): a Closure, not a call
 		}
 
 		// Skip whitespace before paren

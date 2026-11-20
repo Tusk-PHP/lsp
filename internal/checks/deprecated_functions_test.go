@@ -117,3 +117,26 @@ func TestDeprecatedFunctionRuleFollowsPHPVersion(t *testing.T) {
 		t.Errorf("unknown version: want every deprecation, got %v", got)
 	}
 }
+
+// PHP 8.6 deprecated aliases and the mb_ereg family; a project that still
+// supports 8.5 isn't told to move off them yet.
+func TestDeprecatedFunctionRulePHP86(t *testing.T) {
+	src := "<?php\nif (is_integer($a) || is_double($b)) { mb_split(',', $s); }\n$h = spl_object_hash($o);\n$c->is_long();\n"
+	file := parser.ParseFile(src)
+	var got []string
+	for _, f := range (&DeprecatedFunctionRule{PHPVersion: "8.6"}).Check(file, src, nil) {
+		got = append(got, f.Message)
+	}
+	want := []string{
+		"is_integer() is deprecated since PHP 8.6, use is_int()",
+		"is_double() is deprecated since PHP 8.6, use is_float()",
+		"mb_split() is deprecated since PHP 8.6, its regex library is no longer maintained, use the preg_* functions with the u modifier",
+		"spl_object_hash() is deprecated since PHP 8.6, use spl_object_id()",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got %q", got)
+	}
+	if fs := (&DeprecatedFunctionRule{PHPVersion: "8.5"}).Check(file, src, nil); len(fs) != 0 {
+		t.Errorf("PHP 8.5 should report none, got %d", len(fs))
+	}
+}

@@ -447,7 +447,9 @@ func (p *Provider) hoverVariable(lines []string, pos protocol.Position, file *pa
 	if typeName != "" {
 		var sb strings.Builder
 		sb.WriteString(fmt.Sprintf("**%s**\n", varName))
-		if sym := p.index.Lookup(typeName); sym != nil {
+		if summary := resolve.ParamDocSummary(file, pos, varName); summary != "" {
+			sb.WriteString("\n" + summary + "\n")
+		} else if sym := p.index.Lookup(typeName); sym != nil {
 			if sym.DocComment != "" {
 				if doc := parser.ParseDocBlock(sym.DocComment); doc != nil && doc.Summary != "" {
 					sb.WriteString("\n" + doc.Summary + "\n")

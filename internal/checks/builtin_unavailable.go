@@ -31,6 +31,11 @@ type BuiltinUnavailableRule struct {
 	// Extensions is the set of project-enabled PHP extensions, lower-cased,
 	// without the "ext-" prefix (e.g. {"json", "mbstring"}).
 	Extensions []string
+
+	// versionChecked is set, on the copy Check works with, when the file
+	// checks PHP's version: such code is written for several versions, so a
+	// builtin from a newer one is assumed to be behind that check.
+	versionChecked bool
 }
 
 // Code returns the machine-readable rule identifier.
@@ -41,6 +46,9 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 	if file == nil || r == nil || r.PHPVersion == "" {
 		return nil
 	}
+	rule := *r
+	rule.versionChecked = checksPHPVersion(source)
+	r = &rule
 	lines := strings.Split(source, "\n")
 	var findings []Finding
 	mask := newMaskState(source)
@@ -62,17 +70,12 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 
 func (r *BuiltinUnavailableRule) checkFunctions(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
 	var findings []Finding
+	attrGroups := scanAttributeGroups(line)
 	for _, match := range unknownFunctionCallRe.FindAllStringSubmatchIndex(line, -1) {
 		start, end := match[2], match[3]
 		name := line[start:end]
-		if shouldSkipFunctionCall(line, start, name) {
-			continue
-		}
-		// Strip leading backslash for the lookup; partial namespaces aren't
-		// builtins. If the call is namespaced (contains "\" after trim) it's
-		// not a global builtin — bail.
-		bare := strings.TrimPrefix(name, "\\")
-		if strings.Contains(bare, "\\") {
+		// `#[\NoDiscard('…')]` is an attribute, not a call.
+		if posInAttributeGroup(start, attrGroups) || shouldSkipFunctionCall(line, start, name) {
 			continue
 		}
 
@@ -80,11 +83,12 @@ func (r *BuiltinUnavailableRule) checkFunctions(line string, lineNum int, file *
 		// parallel rule (unknown-function or the project's own definition)
 		// handles it. We only fire when the function is NOT in the index but
 		// IS a known builtin — which means it was excluded by the profile.
-		if functionExists(name, file, index) {
+		written := writtenName(line, start, name)
+		if functionExists(written, file, index) {
 			continue
 		}
 
-		avail, ok := symbols.LookupAvailability(bare)
+		bare, avail, ok := builtinFunctionAvailability(written, file)
 		if !ok {
 			// Not a known builtin — UnknownFunctionRule handles this.
 			continue
@@ -202,13 +206,7 @@ func (r *BuiltinUnavailableRule) classLikeFinding(name string, lineNum, start, e
 		return nil
 	}
 
-	bare := strings.TrimPrefix(name, "\\")
-	if strings.Contains(bare, "\\") {
-		// Namespaced reference — not a global builtin.
-		return nil
-	}
-
-	avail, ok := symbols.LookupAvailability(bare)
+	bare, avail, ok := builtinClassAvailability(name, lineNum, file)
 	if !ok {
 		// Not a known builtin — UnknownClassRule handles this.
 		return nil
@@ -295,7 +293,7 @@ func (r *BuiltinUnavailableRule) checkConstants(line string, lineNum int) []Find
 
 func (r *BuiltinUnavailableRule) constantMessage(name string, avail symbols.BuiltinAvailability) string {
 	if avail.Extension != "" {
-		return fmt.Sprintf("Constant '%s' requires ext-%s (PHP >= %s)", name, avail.Extension, avail.Since)
+		return fmt.Sprintf("Constant '%s' requires ext-%s%s", name, avail.Extension, sinceSuffix(avail))
 	}
 	return fmt.Sprintf("Constant '%s' requires PHP >= %s", name, avail.Since)
 }
@@ -304,7 +302,7 @@ func (r *BuiltinUnavailableRule) constantMessage(name string, avail symbols.Buil
 // constraint. Returns true if the builtin can be used under the current profile.
 func (r *BuiltinUnavailableRule) satisfies(avail symbols.BuiltinAvailability) bool {
 	if avail.Since != "" && compareBuiltinVersionsStrings(avail.Since, r.PHPVersion) > 0 {
-		return false
+		return r.versionChecked && avail.Extension == ""
 	}
 	if avail.Extension != "" {
 		for _, e := range r.Extensions {
@@ -351,14 +349,14 @@ func parseMajorMinor(v string) (int, int) {
 
 func (r *BuiltinUnavailableRule) functionMessage(name string, avail symbols.BuiltinAvailability) string {
 	if avail.Extension != "" {
-		return fmt.Sprintf("Function '%s' requires ext-%s (PHP >= %s)", name, avail.Extension, avail.Since)
+		return fmt.Sprintf("Function '%s' requires ext-%s%s", name, avail.Extension, sinceSuffix(avail))
 	}
 	return fmt.Sprintf("Function '%s' requires PHP >= %s", name, avail.Since)
 }
 
 func (r *BuiltinUnavailableRule) classMessage(name string, avail symbols.BuiltinAvailability) string {
 	if avail.Extension != "" {
-		return fmt.Sprintf("Class '%s' requires ext-%s (PHP >= %s)", name, avail.Extension, avail.Since)
+		return fmt.Sprintf("Class '%s' requires ext-%s%s", name, avail.Extension, sinceSuffix(avail))
 	}
 	return fmt.Sprintf("Class '%s' requires PHP >= %s", name, avail.Since)
 }
@@ -377,13 +375,7 @@ func (r *BuiltinUnavailableRule) attributeFinding(name string, lineNum, start, e
 		return nil
 	}
 
-	bare := strings.TrimPrefix(name, "\\")
-	if strings.Contains(bare, "\\") {
-		// Namespaced reference — not a global builtin.
-		return nil
-	}
-
-	avail, ok := symbols.LookupAvailability(bare)
+	bare, avail, ok := builtinClassAvailability(name, lineNum, file)
 	if !ok {
 		// Not a known builtin — UnknownClassRule handles this.
 		return nil
@@ -409,7 +401,56 @@ func (r *BuiltinUnavailableRule) attributeFinding(name string, lineNum, start, e
 
 func (r *BuiltinUnavailableRule) attributeMessage(name string, avail symbols.BuiltinAvailability) string {
 	if avail.Extension != "" {
-		return fmt.Sprintf("Attribute '%s' has no effect without ext-%s (PHP >= %s); it is ignored until then", name, avail.Extension, avail.Since)
+		return fmt.Sprintf("Attribute '%s' has no effect without ext-%s%s; it is ignored until then", name, avail.Extension, sinceSuffix(avail))
 	}
 	return fmt.Sprintf("Attribute '%s' has no effect before PHP >= %s; PHP %s ignores it", name, avail.Since, r.PHPVersion)
+}
+
+// builtinFunctionAvailability finds the PHP builtin a function call names,
+// with its version and extension constraints: the name it resolves to, as
+// PHP looks it up (the namespaced name, then the global one). ok is false
+// when it isn't a builtin. Builtin function names are matched in lowercase,
+// as the registry lists them.
+func builtinFunctionAvailability(name string, file *parser.FileNode) (string, symbols.BuiltinAvailability, bool) {
+	fqns, ok := resolveFunctionNames(name, file)
+	if !ok {
+		return "", symbols.BuiltinAvailability{}, false
+	}
+	for _, fqn := range fqns {
+		if avail, ok := symbols.LookupAvailability(fqn); ok {
+			return fqn, avail, true
+		}
+		if avail, ok := symbols.LookupAvailability(strings.ToLower(fqn)); ok {
+			return fqn, avail, true
+		}
+	}
+	return "", symbols.BuiltinAvailability{}, false
+}
+
+// builtinClassAvailability is builtinFunctionAvailability for a class-like
+// name, resolved through the file's namespace and imports.
+func builtinClassAvailability(name string, line int, file *parser.FileNode) (string, symbols.BuiltinAvailability, bool) {
+	fqn, ok := resolveClassLikeName(name, line, file)
+	if !ok || fqn == "" {
+		return "", symbols.BuiltinAvailability{}, false
+	}
+	avail, ok := symbols.LookupAvailability(fqn)
+	return fqn, avail, ok
+}
+
+// checksPHPVersion reports whether source checks the running PHP's version,
+// as in `if (\PHP_VERSION_ID < 80500) { return …; }`. It reads text, not
+// tokens: it only ever makes the rule quieter.
+func checksPHPVersion(source string) bool {
+	return strings.Contains(source, "PHP_VERSION") || strings.Contains(source, "PHP_MAJOR_VERSION") ||
+		strings.Contains(source, "PHP_MINOR_VERSION") || strings.Contains(source, "phpversion(")
+}
+
+// sinceSuffix is " (PHP >= X.Y)" for an extension builtin that also needs a
+// PHP version, and nothing for one that doesn't.
+func sinceSuffix(avail symbols.BuiltinAvailability) string {
+	if avail.Since == "" {
+		return ""
+	}
+	return " (PHP >= " + avail.Since + ")"
 }

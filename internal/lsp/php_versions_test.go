@@ -303,6 +303,59 @@ function run(Logger $a): void { $b = clone($a); $b-><|> }`},
 function run(Logger $a, int $n): Logger { return clone($a, ['level' => $n]); }`},
 	{name: "8.5/clone with reads its arguments", diag: []string{"undefined-variable"}, src: `
 function run(Logger $a): Logger { return clone($a, ['level' => $nope]); }`},
+
+	// PHP 8.6
+	{name: "8.6/partial application is a Closure of the open parameters", hover: []string{"Closure(int): Logger"}, src: `
+function make(string $name, int $level): Logger { return new Logger(); }
+function run(): void { $m<|>k = make('app', ?); }`},
+	{name: "8.6/partial application with a rest placeholder", hover: []string{"Closure(string, int): Logger"}, src: `
+function make(string $name, int $level): Logger { return new Logger(); }
+function run(): void { $m<|>k = make(...); }`},
+	{name: "8.6/partial application of a method", hover: []string{"Closure(string) $info"}, src: `
+function run(Logger $l): void { $i<|>nfo = $l->info(?); }`},
+	{name: "8.6/calling a partial application gives the return type", completion: []string{"info"}, src: `
+function make(string $name, int $level): Logger { return new Logger(); }
+function run(): void { $mk = make('app', ?); $l = $mk(1); $l-><|> }`},
+	{name: "8.6/partial application is clean", clean: true, src: `
+function make(string $name, int $level = 0): Logger { return new Logger(); }
+function run(): Logger { $mk = make(?, level: ?); $all = make(...); $named = make(name: 'x', level: ?); return $mk('a', 1) ?? $all('b') ?? $named(2); }`},
+	{name: "8.6/readonly property default is clean", clean: true, src: `
+final class Env { public readonly string $name = 'prod'; public function name(): string { return $this->name; } }
+readonly class Point { public int $x = 0; }`},
+	{name: "8.6/Override on a class constant is clean", clean: true, src: `
+class Base { public const LIMIT = 1; }
+final class Child extends Base { #[\Override] public const LIMIT = 2; }`},
+	{name: "8.6/enum __debugInfo is clean", clean: true, src: `
+enum Suit: string { case Hearts = 'h'; public function __debugInfo(): array { return ['suit' => $this->value]; } }`},
+	{name: "8.6/writing to an object held in a constant is clean", clean: true, src: `
+const DEFAULTS = new Logger();
+function run(): void { DEFAULTS->level = 3; }`},
+	{name: "8.6/parameter doc comment shows in hover", hover: []string{"The request ID"}, src: `
+function handle(
+	/** The request ID. */
+	string $id,
+): string { return $i<|>d; }`},
+	{name: "8.6/@var in a parameter doc comment types it", completion: []string{"info"}, src: `
+function handle(
+	/** @var Logger */
+	$log,
+): void { $log-><|> }`},
+	{name: "8.6/clamp is known and keeps the argument type", hover: []string{"int"}, src: `
+function run(): void { $c<|>lamped = \clamp(5, 1, 3); }`},
+	{name: "8.6/SortDirection cases complete", completion: []string{"Ascending", "Descending"}, src: `
+function run(): void { $d = \SortDirection::<|> }`},
+	{name: "8.6/Duration methods complete", completion: []string{"add", "multiplyBy", "seconds"}, src: `
+function run(): void { $d = \Time\Duration::fromSeconds(5); $d-><|> }`},
+	{name: "8.6/new builtins are clean", clean: true, src: `
+function run(): int { $d = \Time\Duration::fromMinutes(1)->add(\Time\Duration::fromSeconds(5)); $e = stream_last_errors(); return \clamp($d->seconds, 0, 60) + count($e) + (\SortDirection::Ascending === \SortDirection::Descending ? 1 : 0); }`},
+	{name: "8.6/polling API completes", completion: []string{"add", "wait"}, src: `
+function run(): void { $ctx = new \Io\Poll\Context(); $ctx-><|> }`},
+	{name: "8.6/deprecated alias function is reported", diag: []string{"deprecated"}, src: `
+function run(mixed $v): bool { return is_integer($v); }`},
+	{name: "8.6/deprecated ArrayIterator method is reported", diag: []string{"deprecated"}, src: `
+function run(\ArrayIterator $it): void { $it->asort(); }`},
+	{name: "8.6/new namespaced function is known", clean: true, src: `
+function run(): string { return \Uri\WhatWg\url_percent_encode('a b', \Uri\WhatWg\UrlPercentEncodingMode::Path); }`},
 }
 
 func TestPHPVersionFeatures(t *testing.T) {
@@ -330,7 +383,11 @@ func runPHPVersionCase(t *testing.T, tc phpVersionCase) {
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	composer := `{"require": {"php": "^8.5", "ext-json": "*"}}`
+	constraint := "^8.5"
+	if strings.HasPrefix(tc.name, "8.6/") {
+		constraint = "^8.6"
+	}
+	composer := `{"require": {"php": "` + constraint + `", "ext-json": "*"}}`
 	if err := os.WriteFile(filepath.Join(root, "composer.json"), []byte(composer), 0o644); err != nil {
 		t.Fatal(err)
 	}

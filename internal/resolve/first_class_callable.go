@@ -135,3 +135,91 @@ func (r *Resolver) callableParams(sym *symbols.Symbol, env typeEnv) []ResolvedTy
 	}
 	return out
 }
+
+// PHP 8.6's partial function application, f(?, 'x'), f('x', ...) and
+// f(?, name: ?), also makes a Closure instead of calling: of the parameters
+// the `?` placeholders leave open, plus every parameter not given when a
+// `...` placeholder ends the list. f(...) is the case where nothing is given.
+
+// IsPartialApplicationArgs reports whether args, the text between a call's
+// parentheses, has a `?` or bare `...` placeholder, so the call makes a
+// Closure. f(...) on its own is first-class callable syntax and counts too.
+func IsPartialApplicationArgs(args string) bool {
+	if !strings.Contains(args, "?") && !strings.Contains(args, "...") {
+		return false
+	}
+	for _, a := range ParseCallArgs(args) {
+		if isPlaceholderArg(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsCallableArgs reports whether a call with these arguments makes a Closure
+// rather than calling: first-class callable syntax or partial application.
+func IsCallableArgs(args string) bool {
+	return IsFirstClassCallableArgs(args) || IsPartialApplicationArgs(args)
+}
+
+// isPartialApplicationCall reports whether expr is a single call whose
+// arguments are a partial application: `greet('Hi', ?)`.
+func isPartialApplicationCall(expr string) bool {
+	s := strings.TrimRight(strings.TrimSpace(expr), "; \t")
+	open := strings.IndexByte(s, '(')
+	if open < 0 || !strings.Contains(s, "?") && !strings.Contains(s, "...") {
+		return false
+	}
+	end := matchingParen(s, open)
+	return end == len(s)-1 && IsPartialApplicationArgs(s[open+1:end])
+}
+
+func isPlaceholderArg(a CallArg) bool {
+	return (!a.Spread && a.Expr == "?") || (a.Spread && a.Expr == "")
+}
+
+// PartialClosure narrows full, the Closure of the whole callee sym, to the
+// parameters a partial application's args leave open. A first-class
+// callable, or a callee or signature that isn't known, keeps full.
+func PartialClosure(full ResolvedType, sym *symbols.Symbol, args string) ResolvedType {
+	if IsFirstClassCallableArgs(args) || sym == nil || full.Callable == nil || len(full.Callable.Params) != len(sym.Params) {
+		return full
+	}
+	open := make([]bool, len(sym.Params))
+	given := make([]bool, len(sym.Params))
+	rest := false
+	pos := 0
+	for _, a := range ParseCallArgs(args) {
+		if a.Spread && a.Expr == "" {
+			rest = true
+			continue
+		}
+		i := -1
+		if a.Name != "" {
+			for j, p := range sym.Params {
+				if strings.TrimPrefix(p.Name, "$") == a.Name {
+					i = j
+					break
+				}
+			}
+		} else if pos < len(sym.Params) {
+			i = pos
+			pos++
+		}
+		if i < 0 {
+			continue
+		}
+		if a.Expr == "?" {
+			open[i] = true
+		} else {
+			given[i] = true
+		}
+	}
+	sig := &CallableType{Return: full.Callable.Return}
+	for i, p := range full.Callable.Params {
+		if open[i] || (rest && !given[i]) {
+			sig.Params = append(sig.Params, p)
+		}
+	}
+	return ResolvedType{FQN: "Closure", Callable: sig}
+}

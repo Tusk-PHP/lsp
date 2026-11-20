@@ -339,7 +339,7 @@ func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext
 	if st.op == "[" {
 		return r.OffsetType(cur, st.offset)
 	}
-	fcc := st.call && IsFirstClassCallableArgs(st.args)
+	fcc := st.call && IsCallableArgs(st.args)
 	if st.op == "()" {
 		if fcc {
 			return r.CallableOf(cur)
@@ -380,7 +380,7 @@ func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext
 		return ResolvedType{}
 	}
 	if fcc {
-		return r.MemberCallableType(member, ctx.File, r.ReceiverFor(cur, member), cur.Params)
+		return PartialClosure(r.MemberCallableType(member, ctx.File, r.ReceiverFor(cur, member), cur.Params), member, st.args)
 	}
 	var call *CallSite
 	if st.call {
@@ -451,9 +451,10 @@ func (r *Resolver) FunctionCallType(name, args string, ctx ExprContext) Resolved
 		return ResolvedType{}
 	}
 	fn := r.lookupFunction(name, ctx.File)
-	if IsFirstClassCallableArgs(args) {
-		// strlen(...) is a Closure of strlen, known or not.
-		return r.FunctionCallableType(fn, ctx.File)
+	if IsCallableArgs(args) {
+		// strlen(...) is a Closure of strlen, known or not, and so is a
+		// partial application such as str_replace('a', 'b', ?).
+		return PartialClosure(r.FunctionCallableType(fn, ctx.File), fn, args)
 	}
 	if fn == nil {
 		return ResolvedType{}

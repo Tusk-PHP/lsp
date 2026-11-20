@@ -1105,6 +1105,17 @@ func (idx *Index) HasAttributedSymbols() bool {
 // from a parent, interface or trait. known is false when one of those isn't
 // indexed, so the answer can't be trusted.
 func (idx *Index) OverridesInherited(classFQN, method string) (overrides, known bool) {
+	return idx.overridesInherited(classFQN, method, KindMethod)
+}
+
+// OverridesInheritedConstant is OverridesInherited for a class constant or
+// enum case, which PHP 8.6's #[\Override] may mark: whether an ancestor
+// declares a constant of that name. Constant names are case-sensitive.
+func (idx *Index) OverridesInheritedConstant(classFQN, name string) (overrides, known bool) {
+	return idx.overridesInherited(classFQN, name, KindConstant)
+}
+
+func (idx *Index) overridesInherited(classFQN, method string, kind SymbolKind) (overrides, known bool) {
 	idx.ensureGenerated(classFQN)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
@@ -1124,7 +1135,11 @@ func (idx *Index) OverridesInherited(classFQN, method string) (overrides, known 
 		for _, child := range sym.Children {
 			// Of a trait's methods, only abstract ones are overridden rather than
 			// just being the same method.
-			if child.Kind == KindMethod && strings.EqualFold(child.Name, method) && child.Visibility != "private" && (!viaTrait || child.IsAbstract) {
+			sameName := strings.EqualFold(child.Name, method)
+			if kind == KindConstant {
+				sameName = child.Name == method
+			}
+			if child.Kind == kind && sameName && child.Visibility != "private" && (!viaTrait || child.IsAbstract) {
 				overrides = true
 			}
 		}

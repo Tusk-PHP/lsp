@@ -1867,12 +1867,20 @@ func (p *structParser) parseParams() []ParamDef {
 						break
 					}
 					depth--
-				} else if k == TokenComma && depth == 0 {
+				} else if (k == TokenComma || k == TokenDocComment) && depth == 0 {
 					break
 				}
 				p.advance()
 			}
 			param.DefaultValue = tokensText(p.tokens[start:p.pos])
+		}
+		// PHP 8.6 also attaches a doc comment written after the parameter,
+		// before its comma: `string $name /** The name. */,`.
+		if p.peek().Kind == TokenDocComment {
+			if param.DocComment == "" {
+				param.DocComment = p.peek().Value
+			}
+			p.advance()
 		}
 		// PHP 8.4 hooks on a promoted property.
 		if p.peek().Kind == TokenOpenBrace && param.IsPromoted {

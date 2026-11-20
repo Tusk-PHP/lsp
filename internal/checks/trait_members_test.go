@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -71,5 +72,48 @@ class ExampleTest extends TestCase {
 	// is only replaced, as PHP reports.
 	if len(got) != 1 || got[0] != "'helper' has #[\\Override], but there's no such method to override" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// PHP 8.6: #[\Override] on a class constant or enum case must override one.
+func TestOverrideOnConstants(t *testing.T) {
+	idx := symbols.NewIndex()
+	parentSrc := `<?php
+namespace App;
+interface HasLimit { const LIMIT = 1; }
+class Base { public const NAME = 'base'; private const SECRET = 1; }
+`
+	idx.IndexFile("file:///base.php", parentSrc)
+	src := `<?php
+namespace App;
+final class Child extends Base implements HasLimit {
+    #[\Override]
+    public const NAME = 'child';
+    #[\Override]
+    public const LIMIT = 2;
+    #[\Override]
+    public const SECRET = 2;
+    #[\Override]
+    public const name = 'x';
+}
+enum Size: int implements HasLimit {
+    #[\Override]
+    case LIMIT = 3;
+    #[\Override]
+    case Small = 1;
+}
+`
+	idx.IndexFile("file:///child.php", src)
+	var got []string
+	for _, f := range (&InvalidOverrideRule{}).Check(parser.ParseFile(src), src, idx) {
+		got = append(got, f.Message)
+	}
+	want := []string{
+		"'SECRET' has #[\\Override], but there's no such constant to override",
+		"'name' has #[\\Override], but there's no such constant to override",
+		"'Small' has #[\\Override], but there's no such constant to override",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got %q", got)
 	}
 }

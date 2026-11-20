@@ -14,7 +14,7 @@
   <a href="https://codecov.io/gh/Tusk-PHP/lsp"><img alt="codecov" src="https://codecov.io/gh/Tusk-PHP/lsp/graph/badge.svg?token=BgBvrfITKq"></a>
   <a href="https://github.com/Tusk-PHP/lsp/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/Tusk-PHP/lsp"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
-  <img alt="PHP 7.4-8.5" src="https://img.shields.io/badge/PHP-7.4--8.5-777BB4?logo=php&logoColor=white">
+  <img alt="PHP 7.4-8.6" src="https://img.shields.io/badge/PHP-7.4--8.6-777BB4?logo=php&logoColor=white">
 </p>
 
 <p align="center">
@@ -80,7 +80,7 @@ Setup for each editor is in [docs/editors.md](docs/editors.md), and every settin
 
 ## PHP support
 
-Tusk PHP indexes PHP 7.4 through 8.5. It picks the version from your Composer platform, `.tusk-php.json` or your local `php`, and defaults to 8.5.
+Tusk PHP indexes PHP 7.4 through 8.6. It picks the version from your Composer platform, `.tusk-php.json` or your local `php`, and defaults to 8.6.
 
 | Version | Understood |
 |---|---|
@@ -91,6 +91,7 @@ Tusk PHP indexes PHP 7.4 through 8.5. It picks the version from your Composer pl
 | **8.3** | `json_validate()`, typed class constants, `#[\Override]`, dynamic constant fetch |
 | **8.4** | property hooks, asymmetric visibility, `new` without parentheses, `#[\Deprecated]`, `array_find()` and friends, lazy objects |
 | **8.5** | pipe operator `\|>`, `#[\NoDiscard]`, `clone` with |
+| **8.6** | partial function application (`f(?, 1)`, `f('x', ...)`), parameter doc comments, `readonly` property defaults, `#[\Override]` on constants and enum cases, `clamp()`, `SortDirection`, `Time\Duration`, stream errors, the polling API and the 8.6 deprecations |
 
 Every entry is checked through the running server by `internal/lsp/php_versions_test.go`, so it means completion, hover, go-to-definition and diagnostics see the feature, not just that it parses.
 

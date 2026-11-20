@@ -12,7 +12,7 @@ import (
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.PHPVersion != "8.5" {
+	if cfg.PHPVersion != "8.6" {
 		t.Errorf("PHPVersion = %q", cfg.PHPVersion)
 	}
 	if cfg.Framework != "auto" {
@@ -55,7 +55,7 @@ func TestLoadFromFile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if cfg.PHPVersion != "8.5" {
+		if cfg.PHPVersion != "8.6" {
 			t.Errorf("expected default PHPVersion, got %q", cfg.PHPVersion)
 		}
 	})
@@ -112,7 +112,7 @@ func TestMergeClientOptions(t *testing.T) {
 	t.Run("zero values don't override", func(t *testing.T) {
 		cfg2 := DefaultConfig()
 		cfg2.MergeClientOptions(&protocol.InitializationOptions{})
-		if cfg2.PHPVersion != "8.5" {
+		if cfg2.PHPVersion != "8.6" {
 			t.Error("empty string shouldn't override PHPVersion")
 		}
 	})

@@ -681,8 +681,6 @@ app/code/Magento/WishlistGraphQl/Model/CartItems/CustomizableOptionDataProvider.
 app/code/Magento/WishlistGraphQl/Model/Resolver/RemoveProductsFromWishlist.php	unused-import	Unused import 'Magento\Wishlist\Model\Wishlist\Data\WishlistItemFactory'
 app/code/Magento/WishlistGraphQl/Model/Resolver/UpdateProductsInWishlist.php	unused-import	Unused import 'Magento\Framework\GraphQl\Exception\GraphQlNoSuchEntityException'
 lib/internal/Magento/Framework/Acl.php	unknown-member	Unknown member 'addParent' on 'Registry'
-lib/internal/Magento/Framework/Amqp/Config.php	builtin-unavailable	Function 'Deprecated' requires PHP >= 8.4
-lib/internal/Magento/Framework/Amqp/Queue.php	builtin-unavailable	Function 'Deprecated' requires PHP >= 8.4
 lib/internal/Magento/Framework/Amqp/Queue.php	deprecated	'getConnectionName' is deprecated: Connection name is just a config alias. It should not be used outside of loading config data.
 lib/internal/Magento/Framework/Api/ImageProcessor.php	unknown-member	Unknown member 'isValid' on 'Filesystem'
 lib/internal/Magento/Framework/App/Action/Forward.php	unused-import	Unused import 'Magento\Framework\App\ResponseInterface'
@@ -717,21 +715,16 @@ lib/internal/Magento/Framework/Cache/Backend/Decorator/AbstractDecorator.php	unk
 lib/internal/Magento/Framework/Cache/Backend/Decorator/Compression.php	unknown-member	Unknown member 'load' on 'Zend_Cache_Backend'
 lib/internal/Magento/Framework/Cache/Backend/Decorator/Compression.php	unknown-member	Unknown member 'save' on 'Zend_Cache_Backend'
 lib/internal/Magento/Framework/Cache/Backend/Eaccelerator.php	unused-variable	Variable $data is assigned but never read
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	unknown-class	Unknown class 'Redis'
+lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	builtin-unavailable	Class 'Redis' requires ext-redis
 lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	unknown-member	Unknown member 'get' on 'RedisBase'
 lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	unknown-member	Unknown member 'mget' on 'RedisBase'
 lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	unknown-member	Unknown member 'mget' on 'RedisBase'
 lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	unknown-member	Unknown member 'mget' on 'RedisBase'
 lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	unknown-member	Unknown member 'mget' on 'RedisBase'
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	unknown-class	Unknown class 'Redis'
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	unknown-class	Unknown class 'Redis'
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	unknown-class	Unknown class 'Redis'
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	unknown-class	Unknown class 'RedisCluster'
+lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
+lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
+lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
+lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/TagAdapterInterface.php	unused-import	Unused import 'Psr\Cache\CacheItemPoolInterface'
 lib/internal/Magento/Framework/Cache/Frontend/Decorator/Compression.php	syntax-error	malformed match arm
 lib/internal/Magento/Framework/Composer/DependencyChecker.php	unused-import	Unused import 'Composer\Console\Application'
@@ -773,18 +766,12 @@ lib/internal/Magento/Framework/HTTP/Client/Socket.php	unused-private-property	Pr
 lib/internal/Magento/Framework/HTTP/Client/Socket.php	unused-private-property	Private property 'Socket::$_redirectCount' is never used
 lib/internal/Magento/Framework/HTTP/Client/Socket.php	unused-variable	Variable $response is assigned but never read
 lib/internal/Magento/Framework/Image.php	unknown-member	Unknown member 'display' on 'AdapterInterface'
-lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable	Class 'ImagickDraw' requires ext-imagick (PHP >= )
-lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable	Class 'ImagickException' requires ext-imagick (PHP >= )
-lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable	Class 'ImagickException' requires ext-imagick (PHP >= )
-lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable	Class 'ImagickPixel' requires ext-imagick (PHP >= )
-lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable	Class 'ImagickPixel' requires ext-imagick (PHP >= )
-lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable	Class 'ImagickPixel' requires ext-imagick (PHP >= )
-lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	unknown-class	Unknown class 'ImagickDraw'
-lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	unknown-class	Unknown class 'ImagickException'
-lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	unknown-class	Unknown class 'ImagickException'
-lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	unknown-class	Unknown class 'ImagickPixel'
-lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	unknown-class	Unknown class 'ImagickPixel'
-lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	unknown-class	Unknown class 'ImagickPixel'
+lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable	Class 'ImagickDraw' requires ext-imagick
+lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable	Class 'ImagickException' requires ext-imagick
+lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable	Class 'ImagickException' requires ext-imagick
+lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable	Class 'ImagickPixel' requires ext-imagick
+lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable	Class 'ImagickPixel' requires ext-imagick
+lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable	Class 'ImagickPixel' requires ext-imagick
 lib/internal/Magento/Framework/Indexer/GridStructure.php	unused-import	Unused import 'Magento\Framework\Search\Request\Dimension'
 lib/internal/Magento/Framework/Indexer/IndexStructure.php	unused-import	Unused import 'Magento\Framework\Search\Request\Dimension'
 lib/internal/Magento/Framework/Jwt/JwkFactory.php	unused-private-method	Private method 'JwkFactory::base64Decode' is never used
@@ -798,7 +785,6 @@ lib/internal/Magento/Framework/Mail/EmailMessage.php	unused-import	Unused import
 lib/internal/Magento/Framework/Mail/Message.php	unused-import	Unused import 'Symfony\Component\Mime\Part\HtmlPart'
 lib/internal/Magento/Framework/Mail/MimeMessage.php	unknown-member	Unknown member 'getBodyAsString' on 'MimePartInterface'
 lib/internal/Magento/Framework/Mail/MimePart.php	unknown-member	Unknown member 'getBodyAsString' on 'TextPart|DataPart'
-lib/internal/Magento/Framework/MessageQueue/Bulk/Queue/QueueFactory.php	builtin-unavailable	Function 'Deprecated' requires PHP >= 8.4
 lib/internal/Magento/Framework/MessageQueue/Bulk/Rpc/Publisher.php	unused-import	Unused import 'PhpAmqpLib\Message\AMQPMessage'
 lib/internal/Magento/Framework/MessageQueue/Consumer/Config/CompositeReader.php	unused-import	Unused import 'Magento\Framework\Phrase'
 lib/internal/Magento/Framework/MessageQueue/Consumer/Config/CompositeValidator.php	unused-import	Unused import 'Magento\Framework\Phrase'
@@ -833,14 +819,7 @@ lib/internal/Magento/Framework/Setup/Declaration/Schema/Operations/ModifyTable.p
 lib/internal/Magento/Framework/Setup/Patch/PatchReader.php	unused-import	Unused import 'Magento\Framework\Config\ReaderInterface'
 lib/internal/Magento/Framework/Stdlib/DateTime/DateTime.php	argument-count-mismatch	Too many arguments to gmdate(): 1 passed, at most 0 expected
 lib/internal/Magento/Framework/Stdlib/DateTime/DateTimeFormatter.php	unknown-member	Unknown member 'toDateTimeZone' on 'DateTimeZone'
-lib/internal/Magento/Framework/Stomp/Bulk/Queue.php	builtin-unavailable	Function 'Deprecated' requires PHP >= 8.4
-lib/internal/Magento/Framework/Stomp/Bulk/Queue.php	builtin-unavailable	Function 'Deprecated' requires PHP >= 8.4
 lib/internal/Magento/Framework/Stomp/Bulk/Queue.php	deprecated	'getConnectionName' is deprecated: Connection name is just a config alias. It should not be used outside of loading config data.
-lib/internal/Magento/Framework/Stomp/Config.php	builtin-unavailable	Function 'Deprecated' requires PHP >= 8.4
-lib/internal/Magento/Framework/Stomp/Queue.php	builtin-unavailable	Function 'Deprecated' requires PHP >= 8.4
-lib/internal/Magento/Framework/Stomp/Queue.php	builtin-unavailable	Function 'Deprecated' requires PHP >= 8.4
-lib/internal/Magento/Framework/Stomp/Queue.php	builtin-unavailable	Function 'Deprecated' requires PHP >= 8.4
-lib/internal/Magento/Framework/Stomp/Queue.php	builtin-unavailable	Function 'Deprecated' requires PHP >= 8.4
 lib/internal/Magento/Framework/Stomp/Queue.php	deprecated	'getConnectionName' is deprecated: Connection name is just a config alias. It should not be used outside of loading config data.
 lib/internal/Magento/Framework/Stomp/Queue.php	deprecated	'readMessage' is deprecated: Method returns protocol-specific data. Use dequeue() method to read messages.
 lib/internal/Magento/Framework/Stomp/QueueFactory.php	unused-import	Unused import 'Magento\Framework\Stomp\Exception\ClientException'

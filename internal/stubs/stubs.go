@@ -33,7 +33,7 @@ func BuiltinPHP() ([]Entry, error) {
 // older callers that do not yet provide Composer platform information.
 func DefaultProfile() Profile {
 	return Profile{
-		PHPVersion: "8.5",
+		PHPVersion: "8.6",
 		Extensions: []string{
 			"json",
 		},
@@ -82,7 +82,7 @@ func BuiltinPHPForProfile(profile Profile) ([]Entry, error) {
 
 func normalizeProfile(profile Profile) Profile {
 	if strings.TrimSpace(profile.PHPVersion) == "" {
-		profile.PHPVersion = "8.5"
+		profile.PHPVersion = "8.6"
 	}
 
 	seen := make(map[string]struct{}, len(profile.Extensions))

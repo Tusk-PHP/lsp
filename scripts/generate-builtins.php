@@ -37,7 +37,7 @@ function main(array $argv): void
     $symbols = collectBuiltinSymbols();
 
     $output = match ($mode) {
-        'registry' => generateGoRegistry($symbols['functions'], $symbols['classLikes']),
+        'registry' => generateGoRegistry(...keepRegistryNames($symbols, $options['keep'])),
         'stubs' => generatePhpStubs($symbols['functions'], $symbols['classLikes']),
     };
 
@@ -48,7 +48,7 @@ function usage(): string
 {
     return <<<TXT
 Usage:
-  php scripts/generate-builtins.php registry [--output=PATH]
+  php scripts/generate-builtins.php registry [--keep=PATH] [--output=PATH]
   php scripts/generate-builtins.php stubs [--output=PATH]
   php scripts/generate-builtins.php availability --stubs=PATH [--output=PATH]
 
@@ -62,6 +62,9 @@ Modes:
 
 Options:
   --stubs=PATH   Path to a local phpstorm-stubs checkout (required for availability mode).
+  --keep=PATH    Registry mode: also keep every name already listed in this
+                 generated Go registry, so names from extensions the running
+                 PHP doesn't have (redis, brotli, ...) aren't dropped.
   --output=PATH  Write to PATH instead of stdout (availability mode writes to
                  internal/symbols/builtin_availability_generated.go by default).
   -h, --help     Show this help.
@@ -74,11 +77,16 @@ TXT;
  */
 function parseOptions(array $argv): array
 {
-    $options = ['output' => null, 'stubs' => null];
+    $options = ['output' => null, 'stubs' => null, 'keep' => null];
 
     foreach ($argv as $arg) {
         if (str_starts_with($arg, '--output=')) {
             $options['output'] = substr($arg, strlen('--output='));
+            continue;
+        }
+
+        if (str_starts_with($arg, '--keep=')) {
+            $options['keep'] = substr($arg, strlen('--keep='));
             continue;
         }
 
@@ -129,10 +137,43 @@ function isBuiltinClassLike(string $name): bool
 }
 
 /**
+ * Adds the names an existing generated registry lists to the running PHP's,
+ * so regenerating on a build without some extensions doesn't drop them.
+ *
+ * @param array{functions:list<string>, classLikes:list<string>} $symbols
+ * @return array{functions:list<string>, classLikes:list<string>, kept:?string}
+ */
+function keepRegistryNames(array $symbols, ?string $keepPath): array
+{
+    if ($keepPath === null) {
+        return ['functions' => $symbols['functions'], 'classLikes' => $symbols['classLikes'], 'kept' => null];
+    }
+    $source = @file_get_contents($keepPath);
+    if ($source === false) {
+        fwrite(STDERR, "Cannot read {$keepPath}\n");
+        exit(1);
+    }
+    $lists = [];
+    foreach (['functions' => 'generatedBuiltinFunctionNames', 'classLikes' => 'generatedBuiltinClassLikeNames'] as $key => $var) {
+        if (!preg_match('/' . $var . ' = \[\]string\{(.*?)\n\}/s', $source, $block)) {
+            fwrite(STDERR, "{$keepPath} has no {$var} list\n");
+            exit(1);
+        }
+        preg_match_all('/"((?:[^"\\\\]|\\\\.)*)"/', $block[1], $names);
+        $kept = array_map('stripcslashes', $names[1]);
+        $merged = array_values(array_unique(array_merge($symbols[$key], $kept)));
+        sort($merged, SORT_STRING);
+        $lists[$key] = $merged;
+    }
+
+    return ['functions' => $lists['functions'], 'classLikes' => $lists['classLikes'], 'kept' => basename($keepPath)];
+}
+
+/**
  * @param list<string> $functions
  * @param list<string> $classLikes
  */
-function generateGoRegistry(array $functions, array $classLikes): string
+function generateGoRegistry(array $functions, array $classLikes, ?string $kept = null): string
 {
     $phpVersion = PHP_VERSION;
 
@@ -144,6 +185,7 @@ function generateGoRegistry(array $functions, array $classLikes): string
             '// Generated with PHP %s using get_defined_functions(), get_declared_classes(), get_declared_interfaces(), and get_declared_traits().',
             $phpVersion
         ),
+        ...($kept === null ? [] : ['// Names from extensions this PHP build lacks are kept from the previous registry (--keep).']),
         '',
         'var generatedBuiltinFunctionNames = []string{',
         renderGoStringList($functions),

@@ -176,32 +176,21 @@ src/Symfony/Component/BrowserKit/Test/Constraint/BrowserCookieValueSame.php	unkn
 src/Symfony/Component/BrowserKit/Test/Constraint/BrowserHasCookie.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/BrowserKit/Test/Constraint/BrowserHistoryIsOnFirstPage.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/BrowserKit/Test/Constraint/BrowserHistoryIsOnLastPage.php	unknown-class	Unknown class 'Constraint'
-src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
-src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
+src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Couchbase\Collection'
-src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Memcached'
-src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'RedisArray'
-src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'RedisCluster'
 src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Relay\Cluster'
 src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Relay\Relay'
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Constant 'APC_ITER_KEY' requires ext-apcu (PHP >= )
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_add' requires ext-apcu (PHP >= )
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_clear_cache' requires ext-apcu (PHP >= )
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_delete' requires ext-apcu (PHP >= )
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_delete' requires ext-apcu (PHP >= )
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_exists' requires ext-apcu (PHP >= )
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_exists' requires ext-apcu (PHP >= )
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_store' requires ext-apcu (PHP >= )
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_add'
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_clear_cache'
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_delete'
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_delete'
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_exists'
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_exists'
-src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	unknown-function	Unknown function 'apcu_store'
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Constant 'APC_ITER_KEY' requires ext-apcu
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_add' requires ext-apcu
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_clear_cache' requires ext-apcu
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_delete' requires ext-apcu
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_delete' requires ext-apcu
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_exists' requires ext-apcu
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_exists' requires ext-apcu
+src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_store' requires ext-apcu
 src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'Cluster'
 src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'ClusterOptions'
 src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'UpsertOptions'
@@ -218,35 +207,22 @@ src/Symfony/Component/Cache/Adapter/PdoTagAwareAdapter.php	unknown-member	Unknow
 src/Symfony/Component/Cache/Adapter/PdoTagAwareAdapter.php	unused-private-method	Private method 'PdoTagAwareAdapter::createTables' is never used
 src/Symfony/Component/Cache/Adapter/PhpFilesAdapter.php	unknown-member	Unknown member 'doCommonClear' on 'PhpFilesAdapter'
 src/Symfony/Component/Cache/Adapter/PhpFilesAdapter.php	unknown-member	Unknown member 'doCommonDelete' on 'PhpFilesAdapter'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis (PHP >= )
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis
+src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'ClusterInterface'
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'PredisCluster'
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'PredisCluster'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'RedisArray'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'RedisCluster'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'RedisException'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'RedisException'
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'RedisException'
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'Relay'
@@ -283,14 +259,10 @@ src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown membe
 src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'getCollection' on 'Client'
 src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'getCollection' on 'Database'
 src/Symfony/Component/Cache/Traits/MongoDbTrait.php	unknown-member	Unknown member 'withOptions' on 'Collection'
-src/Symfony/Component/Cache/Traits/RedisClusterProxy.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Traits/RedisClusterProxy.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Traits/RedisClusterProxy.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Cache/Traits/RedisClusterProxy.php	unknown-class	Unknown class 'RedisCluster'
-src/Symfony/Component/Cache/Traits/RedisProxy.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Traits/RedisProxy.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Cache/Traits/RedisProxy.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Cache/Traits/RedisProxy.php	unknown-class	Unknown class 'Redis'
+src/Symfony/Component/Cache/Traits/RedisClusterProxy.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Cache/Traits/RedisClusterProxy.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
+src/Symfony/Component/Cache/Traits/RedisProxy.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Cache/Traits/RedisProxy.php	builtin-unavailable	Class 'Redis' requires ext-redis
 src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'ClusterInterface'
 src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'ClusterInterface'
 src/Symfony/Component/Cache/Traits/RedisTrait.php	unknown-class	Unknown class 'ClusterInterface'
@@ -367,41 +339,28 @@ src/Symfony/Component/HttpClient/CachingHttpClient.php	unknown-member	Unknown me
 src/Symfony/Component/HttpClient/CachingHttpClient.php	unknown-member	Unknown member 'asyncStream' on 'CachingHttpClient'
 src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
 src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown class 'Rize\UriTemplate'
-src/Symfony/Component/HttpClient/Internal/AmpResolver.php	unknown-function	Unknown function 'Dns\resolve'
-src/Symfony/Component/HttpClient/Internal/AmpResolver.php	unknown-function	Unknown function 'Dns\resolve'
 src/Symfony/Component/HttpClient/Recorder/Redactor/DefaultRedactor.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
-src/Symfony/Component/HttpClient/Recorder/Redactor/DefaultRedactor.php	unknown-function	Unknown function 'json_validate'
 src/Symfony/Component/HttpClient/Resources/config/http_client.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
 src/Symfony/Component/HttpClient/Resources/config/http_client.php	unknown-class	Unknown class 'Rize\UriTemplate'
 src/Symfony/Component/HttpClient/Response/CurlResponse.php	unknown-member	Unknown member 'doGetContent' on 'CurlResponse'
 src/Symfony/Component/HttpClient/Response/JsonMockResponse.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
-src/Symfony/Component/HttpClient/Response/JsonMockResponse.php	unknown-function	Unknown function 'json_validate'
 src/Symfony/Component/HttpClient/ThrottlingHttpClient.php	unknown-member	Unknown member 'traitReset' on 'ThrottlingHttpClient'
 src/Symfony/Component/HttpFoundation/AcceptHeader.php	syntax-error	malformed match arm
 src/Symfony/Component/HttpFoundation/RequestMatcher/IsJsonRequestMatcher.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
-src/Symfony/Component/HttpFoundation/RequestMatcher/IsJsonRequestMatcher.php	unknown-function	Unknown function 'json_validate'
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	unknown-class	Unknown class 'Memcached'
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	unknown-class	Unknown class 'Memcached'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'Query'
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/RedisSessionHandler.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/RedisSessionHandler.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/RedisSessionHandler.php	unknown-class	Unknown class 'RedisArray'
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/RedisSessionHandler.php	unknown-class	Unknown class 'RedisCluster'
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	unknown-class	Unknown class 'Memcached'
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	unknown-class	Unknown class 'RedisArray'
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/RedisSessionHandler.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/RedisSessionHandler.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
+src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/HttpFoundation/Test/Constraint/RequestAttributeValueSame.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseCookieValueSame.php	unknown-class	Unknown class 'Constraint'
@@ -442,7 +401,6 @@ src/Symfony/Component/JsonSchema/Dialect.php	undefined-variable	Undefined variab
 src/Symfony/Component/JsonSchema/Dialect.php	undefined-variable	Undefined variable $value
 src/Symfony/Component/JsonSchema/DialectKeywords.php	undefined-variable	Undefined variable $values
 src/Symfony/Component/JsonStreamer/Read/Decoder.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
-src/Symfony/Component/JsonStreamer/Read/Decoder.php	unknown-function	Unknown function 'json_validate'
 src/Symfony/Component/JsonStreamer/Write/StreamWriterGenerator.php	unused-variable	Variable $classReflection is assigned but never read
 src/Symfony/Component/KeyManagement/Bridge/DoctrineOrm/EventListener/EncryptedColumnListener.php	unknown-function	Unknown function 'readonly'
 src/Symfony/Component/KeyManagement/Bridge/Kmip/Kmip/StreamTransport.php	undefined-variable	Undefined variable $written
@@ -466,25 +424,17 @@ src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $r
 src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $result is assigned but never read
 src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $result is assigned but never read
 src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $result is assigned but never read
-src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
-src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'RedisArray'
-src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'RedisCluster'
-src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
+src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
+src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'RelayCluster'
 src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'RelayCluster'
-src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
-src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
-src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'Memcached'
-src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'RedisArray'
-src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
+src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
+src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'Zookeeper'
 src/Symfony/Component/Lock/Store/ZookeeperStore.php	unknown-class	Unknown class 'Zookeeper'
@@ -637,23 +587,16 @@ src/Symfony/Component/Security/Core/Test/AccessDecisionStrategyTestCase.php	unkn
 src/Symfony/Component/Security/Core/Test/AccessDecisionStrategyTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Security/Http/AccessToken/OAuth2/Oauth2TokenHandler.php	unknown-class	Unknown class 'Symfony\Component\String\u'
 src/Symfony/Component/Security/Http/Firewall/ContextListener.php	unknown-class	Unknown class 'LazyLoadingInterface'
-src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
-src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'RedisArray'
-src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'RedisCluster'
-src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
+src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
+src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'RelayCluster'
 src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'RelayCluster'
-src/Symfony/Component/Semaphore/Store/StoreFactory.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/Semaphore/Store/StoreFactory.php	builtin-unavailable	Class 'RedisArray' requires ext-redis (PHP >= )
-src/Symfony/Component/Semaphore/Store/StoreFactory.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/Semaphore/Store/StoreFactory.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/Semaphore/Store/StoreFactory.php	unknown-class	Unknown class 'RedisArray'
-src/Symfony/Component/Semaphore/Store/StoreFactory.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/Semaphore/Store/StoreFactory.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/Semaphore/Store/StoreFactory.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
+src/Symfony/Component/Semaphore/Store/StoreFactory.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 src/Symfony/Component/Semaphore/Store/StoreFactory.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/Semaphore/Store/StoreFactory.php	unknown-class	Unknown class 'RelayCluster'
 src/Symfony/Component/Serializer/Normalizer/ArrayDenormalizer.php	unknown-class	Unknown class 'LegacyType'
@@ -678,7 +621,6 @@ src/Symfony/Component/TypeInfo/TypeContext/TypeContextFactory.php	unused-variabl
 src/Symfony/Component/TypeInfo/TypeFactoryTrait.php	undefined-variable	Undefined variable $backingType
 src/Symfony/Component/TypeInfo/TypeFactoryTrait.php	undefined-variable	Undefined variable $className
 src/Symfony/Component/Validator/Constraints/JsonValidator.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
-src/Symfony/Component/Validator/Constraints/JsonValidator.php	unknown-function	Unknown function 'json_validate'
 src/Symfony/Component/Validator/Test/CompoundConstraintTestCase.php	unknown-class	Unknown class 'ExpectationFailedException'
 src/Symfony/Component/Validator/Test/CompoundConstraintTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'Assert'
@@ -702,32 +644,19 @@ src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-cla
 src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/VarDumper/Caster/DsCaster.php	unknown-class	Unknown class 'Map'
 src/Symfony/Component/VarDumper/Caster/DsCaster.php	unknown-class	Unknown class 'Pair'
-src/Symfony/Component/VarDumper/Caster/MemcachedCaster.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
-src/Symfony/Component/VarDumper/Caster/MemcachedCaster.php	builtin-unavailable	Class 'Memcached' requires ext-memcached (PHP >= )
-src/Symfony/Component/VarDumper/Caster/MemcachedCaster.php	unknown-class	Unknown class 'Memcached'
-src/Symfony/Component/VarDumper/Caster/MemcachedCaster.php	unknown-class	Unknown class 'Memcached'
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis (PHP >= )
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis (PHP >= )
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Redis'
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'RedisCluster'
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'RedisCluster'
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'RedisCluster'
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'RedisCluster'
-src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'RedisCluster'
+src/Symfony/Component/VarDumper/Caster/MemcachedCaster.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
+src/Symfony/Component/VarDumper/Caster/MemcachedCaster.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
+src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/VarDumper/Caster/RedisCaster.php	unknown-class	Unknown class 'Relay'

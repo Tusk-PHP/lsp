@@ -24,12 +24,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Package components and views**: components and views that providers register are found, completed, hovered and opened. This covers `Blade::component()` and `Blade::components()` aliases (with prefixes), `loadViewComponentsAs()`, `componentNamespace()` (`<x-nightshade::calendar>`), `anonymousComponentPath()` and `anonymousComponentNamespace()`, and view namespaces from `loadViewsFrom()`, `View::addNamespace()` and Spatie's package tools (`->hasViews()`), with an app's published copies in `resources/views/vendor/{namespace}` taking precedence. `@include('courier::mail.welcome')` and `view('courier::…')` complete too, and a view missing from a namespace whose directories are all known is reported as `unknown-view`.
 - **Flux and Filament components**: `<flux:` completes Flux's components and `<x-filament::` Filament's, each with the attributes from its `@props`, hover and go to definition to its view. Filament's own directives such as `@captureSlots` and `@filamentScripts` are known.
 
+- **PHP 8.6 support** ([#91](https://github.com/Tusk-PHP/lsp/issues/91)). `8.6` is read from `composer.json` and configuration, and is now the default when a project doesn't say.
+  - **Partial function application:** `f(?, 'x')`, `f('x', ...)` and named placeholders such as `f(?, times: ?)` type as a `Closure` of the parameters left open, so calling the result is typed, and the same goes for methods.
+  - **Parameter doc comments:** a `/** … */` before a parameter, or after it before the comma, shows in hover, and a `@var` there types the parameter.
+  - **`#[\Override]` on class constants and enum cases** is understood, and reported as `invalid-override` when there's nothing to override.
+  - **New functions and classes:** `clamp()` (typed from its arguments), `SortDirection`, `Time\Duration`, the stream error API (`stream_last_errors()`, `StreamError` and its enums), the `Io\Poll` polling API, the URI builders, new Reflection methods, and the new intl, sodium, SNMP and OpenSSL additions. They complete and hover with their members on PHP 8.6 projects, and are reported as `builtin-unavailable` on older ones.
+  - **8.6 deprecations** are reported as `deprecated` when a project's lowest PHP version is 8.6: `is_double()`, `is_integer()`, `is_long()`, `doubleval()`, `strcoll()`, `metaphone()`, `spl_classes()`, `spl_object_hash()`, `mysqli_get_charset()`, `mysqli_stmt_init()`, the `mb_ereg*` family, and `ArrayIterator`'s sort, flag and serialize methods, each with the replacement PHP suggests.
+
 ### Changed
 
 - `tusk-php check` now checks Blade views too when given a directory or the whole project, as the editor does.
 
 ### Fixed
 
+- A fully qualified function call inside a namespace, such as `\Vendor\Lib\helper()`, is no longer reported as `unknown-function`, and a qualified call like `Lib\helper()` resolves through `use Vendor\Lib;` as PHP does.
+- Functions and classes added in PHP 8.5, such as `array_first()`, `NoDiscard` and the `Uri` classes, are reported as `builtin-unavailable` on projects that require an older PHP instead of being treated as known.
+- A PHP builtin the project's PHP version or extensions don't have, such as `Redis` without `ext-redis`, is reported once, as `builtin-unavailable`, instead of also as `unknown-class` or `unknown-function`, and the message no longer ends in an empty "(PHP >= )".
+- `builtin-unavailable` no longer reports an attribute's arguments as a function call (`#[\NoDiscard('…')]`, `#[\Deprecated('…')]`), and stays quiet about newer builtins in a file that checks `PHP_VERSION_ID` or `PHP_VERSION`, where they're used behind that check.
 - **Laravel facade aliases are known classes.** `Route::has('login')` in a Blade view, or `Cache::get()` in a file without a namespace, is no longer reported as `unknown-class`, and hover and go to definition lead to the class the alias stands for. This covers Laravel's default aliases, the `aliases` in `config/app.php` and the ones packages register in `extra.laravel.aliases` (such as Flux's `Flux`), except packages listed under `dont-discover`. An alias whose class isn't installed is still reported.
 - A method called straight on a function's result, such as `map($input)->to(CreateProjectData::class)`, now gives the method's return type, with its `@template` bound from the arguments, instead of the function's. This removes false `unknown-member` warnings on the result.
 - A private method or property that only a trait the class uses calls, reads or declares as `abstract private` is no longer reported as `unused-private-method` or `unused-private-property`. A class using a trait the server can't find isn't checked.

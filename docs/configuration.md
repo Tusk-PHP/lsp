@@ -8,7 +8,7 @@ Back to the [README](../README.md).
 |---------|---------|-------------|
 | `tuskPhpLsp.enable` | `true` | Enable/disable the extension |
 | `tuskPhpLsp.executablePath` | `""` | Custom path to the binary |
-| `tuskPhpLsp.phpVersion` | `"8.5"` | Target PHP version (`8.0`-`8.5`) |
+| `tuskPhpLsp.phpVersion` | `"8.6"` | Target PHP version (`8.0`-`8.6`) |
 | `tuskPhpLsp.framework` | `"auto"` | Framework: `auto`, `laravel`, `symfony`, `magento`, `none` |
 | `tuskPhpLsp.containerAware` | `true` | Enable DI container analysis |
 | `tuskPhpLsp.diagnostics.enable` | `true` | Enable diagnostics |
@@ -26,7 +26,7 @@ Create `.tusk-php.json` in your project root to override settings per project:
 
 ```json
 {
-  "phpVersion": "8.5",
+  "phpVersion": "8.6",
   "framework": "auto",
   "containerAware": true,
   "diagnosticsEnabled": true,

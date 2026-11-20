@@ -24,6 +24,9 @@ type ParamNode struct {
 	DefaultValue string
 	IsVariadic   bool
 	IsReference  bool
+	// DocComment is the parameter's own doc comment (PHP 8.6), written
+	// before it or after it before the comma.
+	DocComment string
 }
 
 type PropertyNode struct {
@@ -700,6 +703,7 @@ func toParamNode(paramDef ParamDef) ParamNode {
 		DefaultValue: paramDef.DefaultValue,
 		IsVariadic:   paramDef.IsVariadic,
 		IsReference:  paramDef.IsReference,
+		DocComment:   paramDef.DocComment,
 	}
 }
 

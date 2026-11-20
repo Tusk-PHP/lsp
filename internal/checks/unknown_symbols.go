@@ -53,7 +53,7 @@ func checkUnknownClassMatches(line string, lineNum int, file *parser.FileNode, i
 		}
 		start, end := match[2], match[3]
 		name := line[start:end]
-		if classLikeExists(name, lineNum, file, index) {
+		if classLikeKnown(name, lineNum, file, index) {
 			continue
 		}
 		findings = append(findings, Finding{
@@ -99,7 +99,7 @@ func checkUnknownStaticClassMatches(line, prevLine string, lineNum int, file *pa
 		if followsObjectOperator(line, prevLine, start) {
 			continue
 		}
-		if classLikeExists(name, lineNum, file, index) {
+		if classLikeKnown(name, lineNum, file, index) {
 			continue
 		}
 		findings = append(findings, Finding{
@@ -144,7 +144,7 @@ func checkUnknownCatchClasses(line string, lineNum int, file *parser.FileNode, i
 			rel := strings.Index(part, trimmed)
 			start := listStart + offset + rel
 			end := start + len(trimmed)
-			if classLikeExists(trimmed, lineNum, file, index) {
+			if classLikeKnown(trimmed, lineNum, file, index) {
 				offset += len(part) + 1
 				continue
 			}
@@ -181,7 +181,7 @@ func checkUnknownImplementsClasses(line string, lineNum int, file *parser.FileNo
 			rel := strings.Index(part, trimmed)
 			start := listStart + offset + rel
 			end := start + len(trimmed)
-			if classLikeExists(trimmed, lineNum, file, index) {
+			if classLikeKnown(trimmed, lineNum, file, index) {
 				offset += len(part) + 1
 				continue
 			}
@@ -208,7 +208,7 @@ func checkUnknownAttributeClasses(line string, lineNum int, file *parser.FileNod
 	var findings []Finding
 	for _, g := range scanAttributeGroups(line) {
 		for _, tok := range g.names {
-			if classLikeExists(tok.name, lineNum, file, index) || isPHPBuiltinAttribute(tok.name, lineNum, file) {
+			if classLikeKnown(tok.name, lineNum, file, index) || isPHPBuiltinAttribute(tok.name, lineNum, file) {
 				continue
 			}
 			findings = append(findings, Finding{
@@ -389,7 +389,12 @@ func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index 
 			if shouldSkipFunctionCall(line, start, name) {
 				continue
 			}
-			if functionExists(name, file, index) {
+			if functionExists(writtenName(line, start, name), file, index) {
+				continue
+			}
+			// A PHP builtin the project's PHP version or extensions don't
+			// have is reported once, by builtin-unavailable.
+			if _, _, builtin := builtinFunctionAvailability(writtenName(line, start, name), file); builtin {
 				continue
 			}
 			findings = append(findings, Finding{
@@ -908,6 +913,17 @@ func heredocOpenLabel(rest string) (string, bool) {
 	return rest, true
 }
 
+// classLikeKnown is classLikeExists for unknown-class: a PHP builtin the
+// project's PHP version or extensions don't have counts as known, since
+// builtin-unavailable reports it, once.
+func classLikeKnown(name string, line int, file *parser.FileNode, index *symbols.Index) bool {
+	if classLikeExists(name, line, file, index) {
+		return true
+	}
+	_, _, builtin := builtinClassAvailability(name, line, file)
+	return builtin
+}
+
 func classLikeExists(name string, line int, file *parser.FileNode, index *symbols.Index) bool {
 	// self, static and parent name the class being edited or its parent. If
 	// that parent is missing, its `extends` is what's reported, not every
@@ -1258,16 +1274,32 @@ func resolveClassLikeName(name string, line int, file *parser.FileNode) (string,
 	return resolveImportedName(name, file.Namespace, file.Uses, "class"), true
 }
 
+// writtenName returns a name matched at line[start:] with the leading `\` of a
+// fully qualified name, which the name regexes leave out of the match.
+func writtenName(line string, start int, name string) string {
+	if start > 0 && line[start-1] == '\\' {
+		return "\\" + name
+	}
+	return name
+}
+
 func resolveFunctionNames(name string, file *parser.FileNode) ([]string, bool) {
 	if file == nil {
 		return nil, false
 	}
-	name = strings.TrimSpace(strings.TrimPrefix(name, "\\"))
+	name = strings.TrimSpace(name)
+	fullyQualified := strings.HasPrefix(name, "\\")
+	name = strings.TrimPrefix(name, "\\")
 	if name == "" {
 		return nil, false
 	}
+	if fullyQualified {
+		return []string{name}, true
+	}
 	if strings.Contains(name, "\\") {
-		return []string{resolveImportedName(name, file.Namespace, file.Uses, "function")}, true
+		// A qualified name's first segment is resolved like a class name, by
+		// the class and namespace imports, never by `use function`.
+		return []string{resolveImportedName(name, file.Namespace, file.Uses, "class")}, true
 	}
 	for _, u := range file.Uses {
 		if u.Kind == "function" && u.Alias == name {

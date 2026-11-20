@@ -50,7 +50,7 @@ Zed-specific Tusk PHP settings can be passed through `lsp.tusk-php`:
         "arguments": ["--transport", "stdio"]
       },
       "initialization_options": {
-        "phpVersion": "8.5",
+        "phpVersion": "8.6",
         "framework": "auto",
         "containerAware": true,
         "diagnosticsEnabled": true,

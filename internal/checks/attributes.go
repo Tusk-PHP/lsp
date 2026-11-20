@@ -61,9 +61,10 @@ func (r *UnusedResultRule) Check(file *parser.FileNode, source string, index *sy
 	return findings
 }
 
-// InvalidOverrideRule flags methods with PHP 8.3's #[\Override] that override
-// nothing, which PHP refuses to compile. It stays quiet when an ancestor isn't
-// indexed, since the method could be overriding something there.
+// InvalidOverrideRule flags methods with PHP 8.3's #[\Override], and class
+// constants and enum cases with PHP 8.6's, that override nothing, which PHP
+// refuses to compile. It stays quiet when an ancestor isn't indexed, since
+// the member could be overriding something there.
 type InvalidOverrideRule struct{}
 
 func (r *InvalidOverrideRule) Code() string { return "invalid-override" }
@@ -95,11 +96,41 @@ func (r *InvalidOverrideRule) Check(file *parser.FileNode, _ string, index *symb
 			}
 		}
 	}
+	// PHP 8.6 allows #[\Override] on class constants and enum cases too.
+	checkConstant := func(class, name string, attrs []parser.AttributeDef, line, col int) {
+		if !hasOverrideAttribute(attrs, file) {
+			return
+		}
+		fqn := class
+		if file.Namespace != "" {
+			fqn = file.Namespace + "\\" + class
+		}
+		if overrides, known := index.OverridesInheritedConstant(fqn, name); known && !overrides {
+			findings = append(findings, Finding{
+				StartLine: line,
+				StartCol:  col,
+				EndLine:   line,
+				EndCol:    col + len(name),
+				Severity:  SeverityError,
+				Code:      "invalid-override",
+				Message:   fmt.Sprintf("'%s' has #[\\Override], but there's no such constant to override", name),
+			})
+		}
+	}
 	for _, c := range file.Classes {
 		check(c.Name, c.Methods)
+		for _, k := range c.Constants {
+			checkConstant(c.Name, k.Name, k.Attributes, k.StartLine, k.StartCol)
+		}
 	}
 	for _, e := range file.Enums {
 		check(e.Name, e.Methods)
+		for _, k := range e.Constants {
+			checkConstant(e.Name, k.Name, k.Attributes, k.StartLine, k.StartCol)
+		}
+		for _, k := range e.Cases {
+			checkConstant(e.Name, k.Name, k.Attributes, k.StartLine, k.StartCol)
+		}
 	}
 	return findings
 }

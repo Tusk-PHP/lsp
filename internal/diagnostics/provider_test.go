@@ -200,6 +200,7 @@ func TestUnknownFunctionRespectsPHPBuiltinProfile(t *testing.T) {
 	cfg.PHPStanEnabled = &f
 	cfg.PintEnabled = &f
 	p := NewProvider(idx, "none", "/tmp", logger, cfg)
+	p.BuiltinUnavailableRule = &checks.BuiltinUnavailableRule{PHPVersion: "7.4"}
 
 	source := `<?php
 array_reverse([]);
@@ -207,16 +208,21 @@ str_contains('haystack', 'needle');
 json_validate('{}');
 `
 
+	// A builtin from a newer PHP is reported once, as builtin-unavailable,
+	// not also as an unknown function.
 	diags := p.Analyze("file:///test.php", source)
-	unknownFunctions := filterByCode(diags, "unknown-function")
-	if len(unknownFunctions) != 2 {
-		t.Fatalf("expected 2 unknown-function diagnostics, got %#v", unknownFunctions)
+	if unknown := filterByCode(diags, "unknown-function"); len(unknown) != 0 {
+		t.Fatalf("expected no unknown-function diagnostics, got %#v", unknown)
 	}
-	if unknownFunctions[0].Message != "Unknown function 'str_contains'" {
-		t.Fatalf("expected str_contains diagnostic first, got %q", unknownFunctions[0].Message)
+	unavailable := filterByCode(diags, "builtin-unavailable")
+	if len(unavailable) != 2 {
+		t.Fatalf("expected 2 builtin-unavailable diagnostics, got %#v", unavailable)
 	}
-	if unknownFunctions[1].Message != "Unknown function 'json_validate'" {
-		t.Fatalf("expected json_validate diagnostic second, got %q", unknownFunctions[1].Message)
+	if unavailable[0].Message != "Function 'str_contains' requires PHP >= 8.0" {
+		t.Fatalf("expected str_contains first, got %q", unavailable[0].Message)
+	}
+	if unavailable[1].Message != "Function 'json_validate' requires ext-json (PHP >= 8.3)" {
+		t.Fatalf("expected json_validate second, got %q", unavailable[1].Message)
 	}
 }
 

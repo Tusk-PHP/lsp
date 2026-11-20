@@ -59,8 +59,14 @@ func TestUnknownSymbolsSkipGuardedExtensionNames(t *testing.T) {
 	for _, f := range (&UnknownFunctionRule{}).Check(file, guardedImagickSource, idx) {
 		got = append(got, f.Message)
 	}
-	want := []string{"Unknown class 'NotAnExtensionClass'", "Unknown function 'ssh2_connect'"}
+	// ssh2_connect() isn't guarded in this file, but it's a PHP builtin from
+	// an extension the project doesn't have: builtin-unavailable reports it,
+	// once, rather than unknown-function.
+	for _, f := range (&BuiltinUnavailableRule{PHPVersion: "7.4"}).Check(file, guardedImagickSource, idx) {
+		got = append(got, f.Message)
+	}
+	want := []string{"Unknown class 'NotAnExtensionClass'", "Function 'ssh2_connect' requires ext-ssh2"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
-		t.Errorf("got %q, want %q (ssh2 isn't guarded in this file)", got, want)
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

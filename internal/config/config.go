@@ -159,7 +159,7 @@ type Config struct {
 	Extensions []string `json:"extensions,omitempty"`
 	// phpVersionExplicitlySet is true when PHPVersion was loaded from a file
 	// or set via initializationOptions, distinguishing it from the default
-	// "8.5" so the resolution chain can skip the default correctly.
+	// "8.6" so the resolution chain can skip the default correctly.
 	phpVersionExplicitlySet bool
 	Framework               string                       `json:"framework"`
 	ComposerPath            string                       `json:"composerPath"`
@@ -209,7 +209,7 @@ func (c *Config) SetDiagnosticRulesJSON(raw string) error {
 
 // IsPHPVersionExplicitlySet reports whether PHPVersion was supplied by a
 // .tusk-php.json file or by client initializationOptions. When false the
-// value is the compiled-in default ("8.5") and must not shadow a Composer
+// value is the compiled-in default ("8.6") and must not shadow a Composer
 // or local-PHP detection result.
 func (c *Config) IsPHPVersionExplicitlySet() bool {
 	return c.phpVersionExplicitlySet
@@ -245,7 +245,7 @@ func (c *Config) RuleSeverity(code string, defaultSeverity checks.Severity) chec
 
 func DefaultConfig() *Config {
 	return &Config{
-		PHPVersion:         "8.5",
+		PHPVersion:         "8.6",
 		Framework:          "auto",
 		IncludePaths:       []string{"src", "app", "lib"},
 		ExcludePaths:       []string{"vendor", "node_modules", ".git", "storage", "var/cache"},

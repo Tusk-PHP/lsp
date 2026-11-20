@@ -480,6 +480,21 @@ func (r *Resolver) resolveResolvedType(rt ResolvedType, file *parser.FileNode) R
 	return rt
 }
 
+// paramDocType is a parameter's PHPDoc type: a `@var` in its own doc comment
+// (PHP 8.6), else the function's `@param` for it.
+func paramDocType(param parser.ParamNode, fnDoc *parser.DocBlock, varName string) string {
+	if param.DocComment != "" {
+		if doc := parser.ParseDocBlock(param.DocComment); doc != nil {
+			for _, v := range doc.Vars {
+				if v.Type != "" && (v.Name == "" || v.Name == varName) {
+					return v.Type
+				}
+			}
+		}
+	}
+	return resolveDocParam(fnDoc, varName)
+}
+
 func resolveDocParam(doc *parser.DocBlock, varName string) string {
 	if doc == nil {
 		return ""
@@ -552,7 +567,7 @@ func (r *Resolver) resolveMethodParamTypeTyped(method *parser.MethodNode, varNam
 		if param.Name != varName {
 			continue
 		}
-		if docType := resolveDocParam(parser.ParseDocBlock(method.DocComment), varName); docType != "" {
+		if docType := paramDocType(param, parser.ParseDocBlock(method.DocComment), varName); docType != "" {
 			docType = r.expandTypeAliases(docType, FindEnclosingClass(file, protocol.Position{Line: method.StartLine}), file)
 			if rt := r.resolveDocType(docType, file); !rt.IsEmpty() {
 				return rt
@@ -568,7 +583,7 @@ func (r *Resolver) resolveFunctionParamTypeTyped(fn *parser.FunctionNode, varNam
 		if param.Name != varName {
 			continue
 		}
-		if docType := resolveDocParam(parser.ParseDocBlock(fn.DocComment), varName); docType != "" {
+		if docType := paramDocType(param, parser.ParseDocBlock(fn.DocComment), varName); docType != "" {
 			if rt := r.resolveDocType(docType, file); !rt.IsEmpty() {
 				return rt
 			}
@@ -1162,8 +1177,8 @@ func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos 
 		}
 		// $var = funcName(...) — look up function return type in symbol index
 		if funcName := extractFunctionCallName(rhs); funcName != "" && r.Index != nil {
-			if IsFirstClassCallable(rhs) {
-				return "Closure" // strlen(...) makes a Closure, it doesn't call
+			if IsFirstClassCallable(rhs) || isPartialApplicationCall(rhs) {
+				return "Closure" // strlen(...) and f(?, 1) make a Closure, they don't call
 			}
 			for _, sym := range r.Index.LookupByName(funcName) {
 				if sym.Kind == symbols.KindFunction && sym.ReturnType != "" {
@@ -1472,4 +1487,31 @@ func ExtractContainerCallArg(expr string) string {
 	}
 	arg = strings.Trim(arg, "'\"")
 	return arg
+}
+
+// ParamDocSummary returns the summary of the doc comment written on the
+// parameter varName (PHP 8.6) of the method or function enclosing pos, or ""
+// when it has none.
+func ParamDocSummary(file *parser.FileNode, pos protocol.Position, varName string) string {
+	if file == nil {
+		return ""
+	}
+	var params []parser.ParamNode
+	if m := FindEnclosingMethod(file, pos); m != nil {
+		params = m.Params
+	}
+	for _, fn := range file.Functions {
+		if pos.Line >= fn.StartLine && (fn.EndLine == 0 || pos.Line <= fn.EndLine) {
+			params = append(params, fn.Params...)
+		}
+	}
+	for _, p := range params {
+		if p.Name != varName || p.DocComment == "" {
+			continue
+		}
+		if doc := parser.ParseDocBlock(p.DocComment); doc != nil && doc.Summary != "" {
+			return doc.Summary
+		}
+	}
+	return ""
 }
