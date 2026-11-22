@@ -1,6 +1,7 @@
 package completion
 
 import (
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"strings"
 	"testing"
 
@@ -149,6 +150,11 @@ abstract class Model {
      * @return static
      */
     public function refresh() {}
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection<int, static>
+     */
+    public static function all($columns = ['*']) {}
 }
 `)
 	idx.IndexFile("file:///vendor/Builder.php", `<?php
@@ -161,9 +167,14 @@ class Builder {
     public function where($column, $operator = null, $value = null) {}
 
     /**
-     * @return \Illuminate\Database\Eloquent\Model|null
+     * @return TModel|null
      */
     public function first() {}
+
+    /**
+     * @return TModel|null
+     */
+    public function find($id) {}
 
     /**
      * @return \Illuminate\Database\Eloquent\Collection
@@ -226,6 +237,7 @@ class Category extends Model {
 `
 	idx.IndexFile("file:///app/Models/Category.php", categorySource)
 
+	idx.SetCallForwards(laravel.CallForwards()) // as workspace.New does for Laravel
 	models.AnalyzeEloquentModels(idx, "/tmp")
 
 	return NewProvider(idx, nil, "laravel")

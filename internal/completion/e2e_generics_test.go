@@ -1,6 +1,7 @@
 package completion
 
 import (
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,6 +29,7 @@ func setupLaravelE2E(t *testing.T) *Provider {
 		"vendor/laravel/framework/src/Illuminate/Collections",
 		"vendor/laravel/framework/src/Illuminate/Database/Eloquent/Relations",
 		"vendor/laravel/framework/src/Illuminate/Database/Query",
+		"vendor/laravel/framework/src/Illuminate/Database/Concerns", // BuildsQueries::first()
 	} {
 		absDir := filepath.Join(root, dir)
 		filepath.Walk(absDir, func(path string, info os.FileInfo, err error) error {
@@ -58,6 +60,7 @@ func setupLaravelE2E(t *testing.T) *Provider {
 	}
 
 	// Run Eloquent model analysis
+	idx.SetCallForwards(laravel.CallForwards()) // as workspace.New does for Laravel
 	models.AnalyzeEloquentModels(idx, root)
 
 	ca := container.NewContainerAnalyzer(idx, root, "laravel")
@@ -172,10 +175,11 @@ func TestE2EVariableGenericPropagation(t *testing.T) {
 		}
 	})
 
-	t.Run("$category = Category::first() is Category (static resolved)", func(t *testing.T) {
+	t.Run("$category = Category::first() is ?Category (forwarded to the builder)", func(t *testing.T) {
 		source := "<?php\nuse App\\Models\\Category;\n$category = Category::first();\n"
 		typ := resolveTyped("$category", source, 3)
-		if typ != "App\\Models\\Category" {
+		// BuildsQueries::first() is TValue|null, TValue being the builder's model.
+		if typ != "?App\\Models\\Category" {
 			t.Errorf("got %q", typ)
 		}
 	})

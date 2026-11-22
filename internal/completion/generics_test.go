@@ -76,9 +76,9 @@ func TestGenericChainResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("Category::first() returns Category (static already correct)", func(t *testing.T) {
+	t.Run("Category::first() returns ?Category (forwarded to the builder)", func(t *testing.T) {
 		typ := resolveTyped("Category::first()", preamble)
-		if typ != "App\\Models\\Category" {
+		if typ != "?App\\Models\\Category" {
 			t.Errorf("got %q", typ)
 		}
 	})

@@ -1,6 +1,7 @@
 package completion
 
 import (
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,6 +42,7 @@ func benchLaravelProvider(b *testing.B) *Provider {
 			idx.IndexFileWithSource("file:///"+rel, string(data), symbols.SourceProject)
 		}
 	}
+	idx.SetCallForwards(laravel.CallForwards()) // as workspace.New does for Laravel
 	models.AnalyzeEloquentModels(idx, root)
 	return NewProvider(idx, container.NewContainerAnalyzer(idx, root, "laravel"), "laravel")
 }

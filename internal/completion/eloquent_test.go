@@ -1,6 +1,7 @@
 package completion
 
 import (
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,13 +28,22 @@ abstract class Model {
     public function delete(): bool { return true; }
     public function toArray(): array { return []; }
     public function refresh(): static { return $this; }
+    /** @return \Illuminate\Database\Eloquent\Collection<int, static> */
+    public static function all($columns = ['*']) {}
 }
 `)
+	// What Category::find() and friends are forwarded to. Its model type
+	// comes from resolve's built-in Builder<TModel> mapping.
 	idx.IndexFile("file:///vendor/Builder.php", `<?php
 namespace Illuminate\Database\Eloquent;
 class Builder {
     public function where($column, $operator = null, $value = null): static { return $this; }
-    public function first(): ?Model { return null; }
+    /** @return TModel|null */
+    public function first() { return null; }
+    /** @return TModel|null */
+    public function find($id) { return null; }
+    /** @return TModel */
+    public function create(array $attributes = []) {}
     public function get(): Collection { return new Collection(); }
     public function with($relations): static { return $this; }
     public function orderBy($column, $direction = 'asc'): static { return $this; }
@@ -131,6 +141,7 @@ return new class extends Migration {
 `)
 
 	// Run the analysis pipeline (same order as server init)
+	idx.SetCallForwards(laravel.CallForwards()) // as workspace.New does for Laravel
 	models.AnalyzeEloquentModels(idx, tmpDir)
 	models.AnalyzeMigrations(idx, tmpDir)
 

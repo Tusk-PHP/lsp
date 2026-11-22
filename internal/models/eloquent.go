@@ -44,60 +44,17 @@ var relationCallRe = regexp.MustCompile(
 // Regex for legacy accessor: getNameAttribute()
 var legacyAccessorRe = regexp.MustCompile(`^get([A-Z][A-Za-z0-9]*)Attribute$`)
 
-// Builder methods that are forwarded from Model via __callStatic.
-// These return either the model itself (static/self) or a Builder instance.
-// eloquentStaticForwards defines virtual static methods injected on Eloquent models.
-// Return types use {MODEL} as a placeholder replaced with the actual model FQN,
-// and generic syntax like Builder<{MODEL}> to carry the model type through chains.
+// eloquentStaticForwards are static methods injected on Eloquent models that
+// no class declares: the SoftDeletes scope adds them to the builder at
+// runtime. Everything else a model forwards to its query builder (where(),
+// find(), first(), orderBy(), …) is looked up on the builder itself, through
+// the Model → Builder<static> call forward the Laravel framework registers
+// (framework/laravel.CallForwards). Return types use {MODEL} for the model.
 var eloquentStaticForwards = []struct {
 	name       string
-	returnType string // "static"={MODEL} FQN, "Builder"=Builder<{MODEL}>, etc.
+	returnType string
 	params     []symbols.ParamInfo
 }{
-	// query() is NOT included — it's a real method on Model, not magic.
-	// Late static binding in MemberTypeResolved resolves Category::query() → Builder<Category>.
-	{"find", "static", []symbols.ParamInfo{{Name: "$id", Type: "mixed"}}},
-	{"findOrFail", "static", []symbols.ParamInfo{{Name: "$id", Type: "mixed"}}},
-	{"findMany", "Illuminate\\Database\\Eloquent\\Collection<int, {MODEL}>", []symbols.ParamInfo{{Name: "$ids", Type: "array"}}},
-	{"first", "static", nil},
-	{"firstOrFail", "static", nil},
-	{"firstOrNew", "static", []symbols.ParamInfo{{Name: "$attributes", Type: "array"}, {Name: "$values", Type: "array"}}},
-	{"firstOrCreate", "static", []symbols.ParamInfo{{Name: "$attributes", Type: "array"}, {Name: "$values", Type: "array"}}},
-	{"updateOrCreate", "static", []symbols.ParamInfo{{Name: "$attributes", Type: "array"}, {Name: "$values", Type: "array"}}},
-	{"create", "static", []symbols.ParamInfo{{Name: "$attributes", Type: "array"}}},
-	{"all", "Illuminate\\Database\\Eloquent\\Collection<int, {MODEL}>", []symbols.ParamInfo{{Name: "$columns", Type: "array"}}},
-	{"where", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$column", Type: "mixed"}, {Name: "$operator", Type: "mixed"}, {Name: "$value", Type: "mixed"}}},
-	{"whereIn", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$column", Type: "string"}, {Name: "$values", Type: "array"}}},
-	{"whereNotIn", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$column", Type: "string"}, {Name: "$values", Type: "array"}}},
-	{"whereNull", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$columns", Type: "string|array"}}},
-	{"whereNotNull", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$columns", Type: "string|array"}}},
-	{"whereBetween", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$column", Type: "string"}, {Name: "$values", Type: "array"}}},
-	{"orderBy", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$column", Type: "string"}, {Name: "$direction", Type: "string"}}},
-	{"latest", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$column", Type: "string"}}},
-	{"oldest", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$column", Type: "string"}}},
-	{"limit", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$value", Type: "int"}}},
-	{"take", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$value", Type: "int"}}},
-	{"skip", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$value", Type: "int"}}},
-	{"offset", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$value", Type: "int"}}},
-	{"get", "Illuminate\\Database\\Eloquent\\Collection<int, {MODEL}>", []symbols.ParamInfo{{Name: "$columns", Type: "array"}}},
-	{"paginate", "mixed", []symbols.ParamInfo{{Name: "$perPage", Type: "?int"}}},
-	{"count", "int", nil},
-	{"exists", "bool", nil},
-	{"pluck", "Illuminate\\Support\\Collection", []symbols.ParamInfo{{Name: "$column", Type: "string"}, {Name: "$key", Type: "?string"}}},
-	{"with", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$relations", Type: "mixed"}}},
-	{"without", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$relations", Type: "mixed"}}},
-	{"has", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$relation", Type: "string"}}},
-	{"whereHas", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$relation", Type: "string"}, {Name: "$callback", Type: "?\\Closure"}}},
-	{"doesntHave", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$relation", Type: "string"}}},
-	{"withCount", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$relations", Type: "mixed"}}},
-	{"select", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$columns", Type: "mixed"}}},
-	{"distinct", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", nil},
-	{"groupBy", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$groups", Type: "mixed"}}},
-	{"having", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$column", Type: "string"}, {Name: "$operator", Type: "mixed"}, {Name: "$value", Type: "mixed"}}},
-	{"join", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$table", Type: "string"}, {Name: "$first", Type: "string"}, {Name: "$operator", Type: "?string"}, {Name: "$second", Type: "?string"}}},
-	{"leftJoin", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", []symbols.ParamInfo{{Name: "$table", Type: "string"}, {Name: "$first", Type: "string"}, {Name: "$operator", Type: "?string"}, {Name: "$second", Type: "?string"}}},
-	{"destroy", "int", []symbols.ParamInfo{{Name: "$ids", Type: "mixed"}}},
-	{"forceDelete", "int", nil},
 	{"withTrashed", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", nil},
 	{"onlyTrashed", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", nil},
 }

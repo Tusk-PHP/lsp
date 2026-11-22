@@ -361,6 +361,10 @@ func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext
 	if st.op == "::" {
 		cur = ClassStringTarget(cur)
 	}
+	if fwd, ok := r.ForwardedReceiver(cur, name, st.call); ok {
+		// Category::where() runs on Builder<Category>.
+		cur = fwd
+	}
 	member, owner := r.FindMemberOn(cur, name, st.call)
 	if member != nil && owner.FQN != cur.FQN {
 		// Through @mixin: a fluent method of the mixin gives back the object

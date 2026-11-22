@@ -1,6 +1,7 @@
 package completion
 
 import (
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/models"
@@ -107,6 +108,8 @@ namespace Illuminate\Database\Eloquent;
 abstract class Model {
     /** @return \Illuminate\Database\Eloquent\Builder<static> */
     public static function query() {}
+    /** @return \Illuminate\Database\Eloquent\Collection<int, static> */
+    public static function all($columns = ['*']) {}
     public function save(): bool {}
     public function toArray(): array {}
 }
@@ -155,6 +158,7 @@ class Category extends Model {
 }
 `)
 
+	idx.SetCallForwards(laravel.CallForwards()) // as workspace.New does for Laravel
 	models.AnalyzeEloquentModels(idx, "/tmp")
 	p := NewProvider(idx, nil, "laravel")
 
@@ -282,6 +286,7 @@ class Category extends Model {
 }
 `)
 
+	idx.SetCallForwards(laravel.CallForwards()) // as workspace.New does for Laravel
 	models.AnalyzeEloquentModels(idx, "/tmp")
 	p := NewProvider(idx, nil, "laravel")
 
@@ -359,11 +364,11 @@ $fc = $categories->first();
 	})
 }
 
-// TestEloquentMagicMethodGenerics verifies that all Eloquent virtual static
-// methods (magic methods forwarded from __callStatic) correctly propagate
-// the model type through Builder and Collection generics.
+// TestEloquentMagicMethodGenerics verifies that static calls a model forwards
+// to its query builder (Model::__callStatic) propagate the model type through
+// Builder and Collection generics, on the real Laravel sources.
 func TestEloquentMagicMethodGenerics(t *testing.T) {
-	p := setupRealisticEloquentTest(t)
+	p := setupLaravelE2E(t)
 
 	resolveTyped := func(expr, source string) string {
 		file := parser.ParseFile(source)
@@ -408,18 +413,17 @@ func TestEloquentMagicMethodGenerics(t *testing.T) {
 		})
 	}
 
-	// Methods returning the model itself
-	modelMethods := []string{
-		"Category::first()",
-		"Category::find(1)",
-		"Category::firstOrFail()",
-		"Category::findOrFail(1)",
-		"Category::create(['name' => 'test'])",
+	// Methods returning the model itself, or null when none matches
+	modelMethods := map[string]string{
+		"Category::first()":                    "?App\\Models\\Category",
+		"Category::find(1)":                    "?App\\Models\\Category",
+		"Category::firstOrFail()":              "App\\Models\\Category",
+		"Category::findOrFail(1)":              "App\\Models\\Category",
+		"Category::create(['name' => 'test'])": "App\\Models\\Category",
 	}
-	for _, expr := range modelMethods {
-		t.Run(expr+" returns Category", func(t *testing.T) {
-			typ := resolveTyped(expr, preamble)
-			if typ != "App\\Models\\Category" {
+	for expr, want := range modelMethods {
+		t.Run(expr+" returns "+want, func(t *testing.T) {
+			if typ := resolveTyped(expr, preamble); typ != want {
 				t.Errorf("got %q", typ)
 			}
 		})

@@ -494,14 +494,26 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 	var items []protocol.CompletionItem
 	seen := map[string]bool{}
 	memberSets := []string{typeName}
+	forwarded := map[string]bool{}
 	if facadeConcrete != "" {
 		memberSets = append(memberSets, facadeConcrete)
+		forwarded[facadeConcrete] = true
+	}
+	// What the class forwards static calls to, as an Eloquent model does to
+	// its query builder, and that type's @mixin (the base query builder).
+	for _, fwd := range p.resolver.ForwardTypes(resolve.ResolvedType{FQN: typeName}) {
+		for _, t := range append([]resolve.ResolvedType{fwd}, p.resolver.MixinTypes(fwd)...) {
+			if fqn := t.MemberOwner(); fqn != "" && !forwarded[fqn] {
+				memberSets = append(memberSets, fqn)
+				forwarded[fqn] = true
+			}
+		}
 	}
 	for set, fqn := range memberSets {
 		members := p.index.GetClassMembers(fqn)
 		distance := memberDistances(members)
 		for _, m := range members {
-			isFacadeForwarded := fqn == facadeConcrete && m.Kind == symbols.KindMethod
+			isFacadeForwarded := forwarded[fqn] && m.Kind == symbols.KindMethod && m.Visibility == "public" && !strings.HasPrefix(m.Name, "__")
 			isInstanceCall := instanceCalls && m.Kind == symbols.KindMethod
 			if !isFacadeForwarded && !isInstanceCall && !m.IsStatic && m.Kind != symbols.KindConstant && m.Kind != symbols.KindEnumCase {
 				continue
@@ -763,6 +775,9 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 	if strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
 		ownerResolved = resolve.ClassStringTarget(ownerResolved) // $class::create()
 	}
+	if fwd, ok := p.resolver.ForwardedReceiver(ownerResolved, target, parenEnd > 0); ok {
+		ownerResolved = fwd // Category::where() runs on Builder<Category>
+	}
 	member, foundOn := p.resolver.FindMemberOn(ownerResolved, target, parenEnd > 0)
 	firstClass := parenEnd > 0 && resolve.IsCallableArgs(callArgStr)
 	if member != nil && foundOn.FQN != ownerResolved.FQN {
@@ -990,7 +1005,20 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 	}
 	member := p.resolver.FindAccessedMember(ownerFQN, target, parenEnd > 0)
 	if member == nil {
-		return ""
+		// Category::where() runs on Builder<Category>, and a fluent builder
+		// method gives back the builder.
+		fwd, ok := p.resolver.ForwardedReceiver(resolve.ResolvedType{FQN: ownerFQN}, target, parenEnd > 0)
+		if !ok {
+			return ""
+		}
+		member, _ = p.resolver.FindMemberOn(fwd, target, parenEnd > 0)
+		if member == nil {
+			return ""
+		}
+		if p.resolver.ReturnsCallingClass(member) {
+			return fwd.BaseFQN()
+		}
+		return resolve.PlainTypeName(p.resolver.MemberTypeResolved(member, file, fwd.BaseFQN(), fwd.Params))
 	}
 	// A method returning static/$this/self gives back the class it was called
 	// on, not the one that declares it: Child::create() is a Child. Calls through
