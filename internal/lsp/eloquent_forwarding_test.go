@@ -76,3 +76,84 @@ func TestEloquentStaticCallsRightAfterStartup(t *testing.T) {
 		t.Errorf("definition of $category->products: %s", got)
 	}
 }
+
+// TestEloquentLocalScopesThroughTheServer checks hover and go to definition
+// on local scopes, called statically on the model and on its query builder.
+// The model and the code using it are open, unsaved documents.
+func TestEloquentLocalScopesThroughTheServer(t *testing.T) {
+	root, err := filepath.Abs("../../testdata/laravel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "vendor")); err != nil {
+		t.Skip("testdata/laravel isn't available")
+	}
+	h := newHarness(t)
+	defer h.close()
+	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": "file://" + root, "capabilities": map[string]interface{}{}}))
+	h.notify("initialized", map[string]interface{}{})
+	deadline := time.Now().Add(20 * time.Second)
+	for !h.server.index.Ready() {
+		if time.Now().After(deadline) {
+			t.Fatal("the index never became ready")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	modelURI := "file://" + filepath.Join(root, "app/Models/ScopedPost.php")
+	model := `<?php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+
+class ScopedPost extends Model
+{
+    /** Only posts that are out. */
+    public function scopePublished(Builder $query): void {}
+
+    /** Posts with many votes. */
+    #[Scope]
+    protected function popular(Builder $query): void {}
+}
+`
+	useURI := "file://" + filepath.Join(root, "app/Http/Controllers/ScopedPostController.php")
+	use := `<?php
+namespace App\Http\Controllers;
+
+use App\Models\ScopedPost;
+
+class ScopedPostController
+{
+    public function index()
+    {
+        $a = ScopedPost::published()->get();
+        $b = ScopedPost::query()->popular()->first();
+    }
+}
+`
+	for uri, text := range map[string]string{modelURI: model, useURI: use} {
+		h.notify("textDocument/didOpen", map[string]interface{}{
+			"textDocument": map[string]interface{}{"uri": uri, "languageId": "php", "version": 1, "text": text},
+		})
+	}
+	at := func(anchor string, offset int) map[string]interface{} {
+		i := strings.Index(use, anchor) + offset
+		return map[string]interface{}{
+			"textDocument": map[string]interface{}{"uri": useURI},
+			"position":     map[string]interface{}{"line": strings.Count(use[:i], "\n"), "character": i - strings.LastIndex(use[:i], "\n") - 1},
+		}
+	}
+	if got := responseText(h.readResponse(h.send("textDocument/hover", at("published()", 2)))); !strings.Contains(got, "Only posts that are out") {
+		t.Errorf("hover on ScopedPost::published(): %s", got)
+	}
+	if got := responseText(h.readResponse(h.send("textDocument/hover", at("popular()", 2)))); !strings.Contains(got, "Posts with many votes") {
+		t.Errorf("hover on ->popular(): %s", got)
+	}
+	for _, anchor := range []string{"published()", "popular()"} {
+		if got := responseText(h.readResponse(h.send("textDocument/definition", at(anchor, 2)))); !strings.Contains(got, "ScopedPost.php") {
+			t.Errorf("definition of %s: %s", anchor, got)
+		}
+	}
+}

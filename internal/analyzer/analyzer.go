@@ -176,6 +176,13 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 		if sym := a.resolver.FindMemberAnywhere(classFQN, word); sym != nil {
 			return symbolLocation(sym)
 		}
+		// With the receiver's type arguments: a local scope on Builder<Post>
+		// is found on Post.
+		if owner := a.resolveAccessChainTyped(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file); !owner.IsEmpty() {
+			if sym := a.resolver.FindMemberAnywhereOn(owner, word); sym != nil {
+				return symbolLocation(sym)
+			}
+		}
 		return nil
 	}
 
@@ -328,7 +335,15 @@ func (a *Analyzer) resolveDefinitionSymbol(uri, source string, pos protocol.Posi
 		if classFQN == "" {
 			return nil, nil, nil
 		}
-		if member := a.resolver.FindMemberAnywhere(classFQN, word); member != nil {
+		member := a.resolver.FindMemberAnywhere(classFQN, word)
+		if member == nil {
+			// With the receiver's type arguments: a local scope on
+			// Builder<Post> is found on Post.
+			if owner := a.resolveAccessChainTyped(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file); !owner.IsEmpty() {
+				member = a.resolver.FindMemberAnywhereOn(owner, word)
+			}
+		}
+		if member != nil {
 			// Owner is the *declaring* class (member.ParentFQN), not the
 			// receiver — that's how php.net documents methods/properties:
 			// ReflectionMethod::getParameters lives at
@@ -648,7 +663,7 @@ func (a *Analyzer) resolveAccessChainTyped(line string, wordStart int, source st
 	if ownerResolved.IsEmpty() {
 		return resolve.ResolvedType{}
 	}
-	member := a.resolver.FindMemberAnywhere(ownerResolved.BaseFQN(), target)
+	member := a.resolver.FindMemberAnywhereOn(ownerResolved, target)
 	if member == nil {
 		return resolve.ResolvedType{}
 	}

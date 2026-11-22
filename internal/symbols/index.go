@@ -144,8 +144,9 @@ type Index struct {
 	foldIndex            map[string][]string // lowercase FQN → FQNs of class-likes and functions, whose names PHP matches case-insensitively
 	fileSymbols          map[string][]*Symbol
 	namespaceIndex       map[string][]string
-	optionalNamespaces   []string            // lowercase prefixes of optional packages that aren't installed; see SetOptionalNamespaces
-	callForwards         map[string][]string // class FQN → types it forwards unknown calls to; see SetCallForwards
+	optionalNamespaces   []string                   // lowercase prefixes of optional packages that aren't installed; see SetOptionalNamespaces
+	callForwards         map[string][]string        // class FQN → types it forwards unknown calls to; see SetCallForwards
+	scopeConventions     map[string]ScopeConvention // builder class FQN → how it finds its model's scopes; see SetScopeConventions
 	inheritanceMap       map[string]string
 	childrenMap          map[string][]string // lowercase parent FQN → direct subclass FQNs, the reverse of inheritanceMap
 	implementsMap        map[string][]string // class → interfaces it implements

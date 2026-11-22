@@ -162,6 +162,13 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 			return nil
 		}
 		sym := p.resolver.FindMemberAnywhere(classFQN, word)
+		if sym == nil {
+			// With the receiver's type arguments: a local scope on
+			// Builder<Post> is found on Post.
+			if owner := p.resolveAccessChainTyped(ctx.JoinedLine, ctx.JoinedWordStart, lines, pos, file); !owner.IsEmpty() {
+				sym = p.resolver.FindMemberAnywhereOn(owner, word)
+			}
+		}
 		// For Laravel facades, also look up the member on the concrete class
 		if sym == nil && p.container != nil && p.framework == "laravel" {
 			if concrete := p.container.ResolveFacade(classFQN); concrete != "" {
@@ -423,7 +430,7 @@ func (p *Provider) resolveAccessChainTyped(line string, wordStart int, lines []s
 	if ownerResolved.IsEmpty() {
 		return resolve.ResolvedType{}
 	}
-	member := p.resolver.FindMemberAnywhere(ownerResolved.BaseFQN(), target)
+	member := p.resolver.FindMemberAnywhereOn(ownerResolved, target)
 	if member == nil {
 		return resolve.ResolvedType{}
 	}
