@@ -302,12 +302,7 @@ func extractDoctrineRelations(entity *symbols.Symbol) (result []Relation) {
 		}
 		propName := strings.TrimPrefix(m[2], "$") // strip leading $
 
-		// Gather attribute lines above this property (up to 6 lines back).
-		attrStart := i - 6
-		if attrStart < classNode.StartLine {
-			attrStart = classNode.StartLine
-		}
-		attrBlock := strings.Join(lines[attrStart:i+1], "\n")
+		attrBlock := propertyAttributeBlock(lines, i, classNode.StartLine)
 
 		rm := ormRelationRe.FindStringSubmatch(attrBlock)
 		if rm == nil {

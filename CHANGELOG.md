@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Doctrine entities:** each property reads only its own attributes, so an `#[ORM\Id]` no longer makes the next property read-only, and in the model relations `tusk-php introspect` and the MCP server list, a relation no longer takes the type of the one declared just above it. A bare `#[ORM\Column]` without arguments, as Symfony's maker bundle writes for `$id`, is recognised as a column.
 - A fully qualified function call inside a namespace, such as `\Vendor\Lib\helper()`, is no longer reported as `unknown-function`, and a qualified call like `Lib\helper()` resolves through `use Vendor\Lib;` as PHP does.
 - Functions and classes added in PHP 8.5, such as `array_first()`, `NoDiscard` and the `Uri` classes, are reported as `builtin-unavailable` on projects that require an older PHP instead of being treated as known.
 - A PHP builtin the project's PHP version or extensions don't have, such as `Redis` without `ext-redis`, is reported once, as `builtin-unavailable`, instead of also as `unknown-class` or `unknown-function`, and the message no longer ends in an empty "(PHP >= )".

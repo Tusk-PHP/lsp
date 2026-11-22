@@ -43,7 +43,7 @@ var (
 	// Matches #[ORM\Entity(...)] or #[ORM\Entity]
 	ormEntityRe = regexp.MustCompile(`#\[\s*(?:ORM\\)?Entity\b(?:\(([^)]*)\))?`)
 	// Matches #[ORM\Column(...)] with named args
-	ormColumnRe = regexp.MustCompile(`#\[\s*(?:ORM\\)?Column\b\(([^)]*)\)`)
+	ormColumnRe = regexp.MustCompile(`#\[\s*(?:ORM\\)?Column\b(?:\(([^)]*)\))?`) // arguments are optional: #[ORM\Column]
 	// Matches #[ORM\Id]
 	ormIdRe = regexp.MustCompile(`#\[\s*(?:ORM\\)?Id\b`)
 	// Matches #[ORM\GeneratedValue]
@@ -189,12 +189,7 @@ func analyzeDoctrineAttributes(index *symbols.Index, entitySym *symbols.Symbol, 
 		propTypeHint := m[1] // may be empty
 		propName := m[2]     // includes $
 
-		// Gather attribute lines above this property (up to 6 lines back)
-		attrStart := i - 6
-		if attrStart < cls.StartLine {
-			attrStart = cls.StartLine
-		}
-		attrBlock := strings.Join(lines[attrStart:i+1], "\n")
+		attrBlock := propertyAttributeBlock(lines, i, cls.StartLine)
 
 		// Check for #[ORM\Column]
 		if cm := ormColumnRe.FindStringSubmatch(attrBlock); cm != nil {
@@ -588,4 +583,21 @@ func parseDoctrineXMLMapping(index *symbols.Index, entitySym *symbols.Symbol, en
 			DocComment: "ManyToMany relation",
 		})
 	}
+}
+
+// propertyAttributeBlock returns the property declaration at lines[i] with
+// the attribute lines written above it: up to 6 lines back, stopping at the
+// previous statement (a line ending in `;`, `{` or `}`) or the class's first
+// line, so another property's #[ORM\Id] or #[ORM\ManyToOne] isn't read as
+// this one's.
+func propertyAttributeBlock(lines []string, i, classStart int) string {
+	start := i
+	for start > classStart && start > i-6 {
+		prev := strings.TrimSpace(lines[start-1])
+		if strings.HasSuffix(prev, ";") || strings.HasSuffix(prev, "{") || strings.HasSuffix(prev, "}") {
+			break
+		}
+		start--
+	}
+	return strings.Join(lines[start:i+1], "\n")
 }
