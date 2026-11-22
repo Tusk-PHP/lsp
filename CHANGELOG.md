@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-22
+
 ### Added
 
 - **Eloquent static calls** such as `Category::where()`, `Category::find(1)` and `Category::orderBy()` are understood as Laravel runs them, on a query builder for the model: `Category::` completes every builder and query builder method, hover and go to definition reach them, and `Category::where(...)->first()` is a `?Category`. It works as soon as the project is indexed, instead of after a background pass over the models, and covers every builder method rather than a fixed list. Hover and go to definition also follow `@mixin`, so `->orderBy()` on an Eloquent query reaches the base query builder's method.
