@@ -61,6 +61,7 @@ func setupLaravelE2E(t *testing.T) *Provider {
 
 	// Run Eloquent model analysis
 	idx.SetCallForwards(laravel.CallForwards()) // as workspace.New does for Laravel
+	idx.SetScopeConventions(laravel.ScopeConventions())
 	models.AnalyzeEloquentModels(idx, root)
 
 	ca := container.NewContainerAnalyzer(idx, root, "laravel")

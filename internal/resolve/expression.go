@@ -374,6 +374,10 @@ func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext
 		}
 		cur = owner
 	}
+	if member == nil && st.call && r.ScopeMethod(cur, name) != nil {
+		// A local scope: Builder<Category>->active() is the builder again.
+		return cur
+	}
 	if member == nil {
 		// A member of an object shape.
 		for _, f := range cur.Fields {

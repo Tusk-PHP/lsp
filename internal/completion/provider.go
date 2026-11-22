@@ -368,6 +368,11 @@ func (p *Provider) completeMemberAccess(uri, source string, pos protocol.Positio
 	}
 	distance := memberDistances(members)
 	seen := make(map[string]bool, len(members))
+	// Local scopes of the model a query builder is for: $query->active().
+	for _, sc := range p.resolver.Scopes(resolved) {
+		seen[sc.Name] = true
+		items = append(items, p.scopeItem(sc, parenAfterCursor))
+	}
 	for _, m := range members {
 		// A class can reach its own private members, on any instance of itself.
 		if m.IsStatic || (m.Visibility == "private" && (enclosing == "" || m.ParentFQN != enclosing)) {
@@ -507,6 +512,16 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 				memberSets = append(memberSets, fqn)
 				forwarded[fqn] = true
 			}
+		}
+	}
+	// Local scopes, callable statically through the forward: Category::active().
+	for _, fwd := range p.resolver.ForwardTypes(resolve.ResolvedType{FQN: typeName}) {
+		for _, sc := range p.resolver.Scopes(fwd) {
+			if seen[sc.Name] {
+				continue
+			}
+			seen[sc.Name] = true
+			items = append(items, p.scopeItem(sc, parenAfterCursor))
 		}
 	}
 	for set, fqn := range memberSets {
@@ -789,6 +804,9 @@ func (p *Provider) resolveChainWithContext(line string, wordStart int, source st
 		ownerResolved = foundOn
 	}
 	ownerFQN = ownerResolved.BaseFQN()
+	if member == nil && parenEnd > 0 && p.resolver.ScopeMethod(ownerResolved, target) != nil {
+		return ownerResolved // a local scope gives back the builder
+	}
 	if member == nil {
 		// A property of an object shape: object{user: User}.
 		if ownerResolved.FQN == "object" && parenEnd == 0 {
@@ -1013,6 +1031,9 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 		}
 		member, _ = p.resolver.FindMemberOn(fwd, target, parenEnd > 0)
 		if member == nil {
+			if parenEnd > 0 && p.resolver.ScopeMethod(fwd, target) != nil {
+				return fwd.BaseFQN() // Category::active() is the builder
+			}
 			return ""
 		}
 		if p.resolver.ReturnsCallingClass(member) {
@@ -1624,4 +1645,20 @@ func formatDocumentation(sym *symbols.Symbol) string {
 		return ""
 	}
 	return doc.Summary
+}
+
+// scopeItem is the completion item for a model's local scope, called by its
+// scope name (active for scopeActive) on the model or its query builder.
+func (p *Provider) scopeItem(sc resolve.Scope, parenAfterCursor bool) protocol.CompletionItem {
+	item := protocol.CompletionItem{Label: sc.Name, SortText: rankKey(rankMember, 0, sc.Name)}
+	p.describeMember(&item, sc.Method)
+	item.Label = sc.Name
+	item.Kind = protocol.CompletionItemKindMethod
+	if parenAfterCursor {
+		item.InsertText = sc.Name
+	} else {
+		item.InsertText = sc.Name + "($0)"
+		item.InsertTextFormat = 2
+	}
+	return item
 }
