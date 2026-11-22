@@ -516,10 +516,7 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 	}
 	// Local scopes, callable statically through the forward: Category::active().
 	for _, fwd := range p.resolver.ForwardTypes(resolve.ResolvedType{FQN: typeName}) {
-		for _, sc := range p.resolver.Scopes(fwd) {
-			if seen[sc.Name] {
-				continue
-			}
+		for _, sc := range p.resolver.Scopes(fwd) { // Scopes has no repeats
 			seen[sc.Name] = true
 			items = append(items, p.scopeItem(sc, parenAfterCursor))
 		}
@@ -907,6 +904,7 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 
 	// Skip past a method call's closing paren: $foo->bar()->baz
 	parenEnd := 0
+	callArgs := "" // the call's arguments, when there is one
 	if i > 0 && line[i-1] == ')' {
 		parenEnd = i
 		depth := 1
@@ -940,6 +938,9 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 		}
 		if line[i] == '(' && resolve.IsCallableArgs(line[i+1:parenEnd-1]) {
 			return "Closure" // f(...), $obj->m(...), f(?, 1): a Closure, not a call
+		}
+		if line[i] == '(' {
+			callArgs = line[i+1 : parenEnd-1]
 		}
 
 		// Skip whitespace before paren
@@ -1021,25 +1022,20 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 	if ownerFQN == "" {
 		return ""
 	}
-	member := p.resolver.FindAccessedMember(ownerFQN, target, parenEnd > 0)
-	if member == nil {
-		// Category::where() runs on Builder<Category>, and a fluent builder
-		// method gives back the builder.
-		fwd, ok := p.resolver.ForwardedReceiver(resolve.ResolvedType{FQN: ownerFQN}, target, parenEnd > 0)
-		if !ok {
-			return ""
-		}
-		member, _ = p.resolver.FindMemberOn(fwd, target, parenEnd > 0)
-		if member == nil {
-			if parenEnd > 0 && p.resolver.ScopeMethod(fwd, target) != nil {
-				return fwd.BaseFQN() // Category::active() is the builder
-			}
-			return ""
-		}
-		if p.resolver.ReturnsCallingClass(member) {
+	// Category::where() runs on Builder<Category>, and so does a #[Scope]
+	// method the model declares: a fluent builder method or a scope gives back
+	// the builder.
+	if fwd, ok := p.resolver.ForwardedReceiver(resolve.ResolvedType{FQN: ownerFQN}, target, parenEnd > 0); ok {
+		fwdMember, _ := p.resolver.FindMemberOn(fwd, target, parenEnd > 0)
+		if fwdMember == nil || p.resolver.ReturnsCallingClass(fwdMember) {
 			return fwd.BaseFQN()
 		}
-		return resolve.PlainTypeName(p.resolver.MemberTypeResolved(member, file, fwd.BaseFQN(), fwd.Params))
+		call := p.resolver.CallSiteFor(callArgs, resolve.ExprContext{Lines: p.resolver.Lines(source), Pos: pos, File: file})
+		return resolve.PlainTypeName(p.resolver.MemberTypeForCall(fwdMember, file, fwd.BaseFQN(), fwd.Params, call))
+	}
+	member := p.resolver.FindAccessedMember(ownerFQN, target, parenEnd > 0)
+	if member == nil {
+		return ""
 	}
 	// A method returning static/$this/self gives back the class it was called
 	// on, not the one that declares it: Child::create() is a Child. Calls through

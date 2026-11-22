@@ -53,12 +53,12 @@ func TestEloquentLocalScopes(t *testing.T) {
 		return p.ResolveExpressionTypeTyped(expr, preamble, protocol.Position{Line: 4}, file).String()
 	}
 	for expr, want := range map[string]string{
-		"Post::published()":                      "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
-		"Post::ofType('news')":                   "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
-		"Post::popular()":                        "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
-		"Post::query()->published()":             "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
+		"Post::published()":                       "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
+		"Post::ofType('news')":                    "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
+		"Post::popular()":                         "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
+		"Post::query()->published()":              "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
 		"Post::where('a', 1)->popular()->first()": "?App\\Models\\Post",
-		"Post::published()->get()":               "Illuminate\\Database\\Eloquent\\Collection<int, App\\Models\\Post>",
+		"Post::published()->get()":                "Illuminate\\Database\\Eloquent\\Collection<int, App\\Models\\Post>",
 	} {
 		if got := typed(expr); got != want {
 			t.Errorf("%s: got %q, want %q", expr, got, want)
@@ -88,4 +88,36 @@ func TestEloquentLocalScopes(t *testing.T) {
 			t.Errorf("Post::query()-> is missing %s", want)
 		}
 	}
+}
+
+// The string-typed chain path (used where only a class name is wanted) and
+// completing a scope name when its parentheses are already written.
+func TestEloquentLocalScopesPlainTypesAndInsertText(t *testing.T) {
+	p := setupLaravelE2E(t)
+	p.index.IndexFile("file:///app/Models/Post.php", postModelSource)
+	preamble := "<?php\nuse App\\Models\\Post;\n\n\n\n"
+	file := parser.ParseFile(preamble)
+	for expr, want := range map[string]string{
+		"Post::published()":   "Illuminate\\Database\\Eloquent\\Builder",
+		"Post::popular()":     "Illuminate\\Database\\Eloquent\\Builder",
+		"Post::where('a')":    "Illuminate\\Database\\Eloquent\\Builder",
+		"Post::find(1)":       "App\\Models\\Post",
+		"Post::nothingHere()": "",
+	} {
+		if got := p.ResolveExpressionType(expr, preamble, protocol.Position{Line: 4}, file); got != want {
+			t.Errorf("%s = %q, want %q", expr, got, want)
+		}
+	}
+
+	src := "<?php\nuse App\\Models\\Post;\nPost::publ()"
+	pos := protocol.Position{Line: 2, Character: len("Post::publ")}
+	for _, it := range p.GetCompletions("file:///test.php", src, pos) {
+		if it.Label == "published" {
+			if it.InsertText != "published" {
+				t.Errorf("with ( after the cursor, published inserts %q", it.InsertText)
+			}
+			return
+		}
+	}
+	t.Error("Post::publ| didn't offer published")
 }

@@ -5,3 +5,16 @@
 ignore:
   - "bench/**"
   - "**/*_generated.go"
+
+# Go measures each package by its own tests only (no -coverpkg), so code
+# used by another package's tests still needs tests of its own.
+coverage:
+  status:
+    # The whole project stays at 70% or more.
+    project:
+      default:
+        target: 70%
+    # A pull request's new and changed lines are 70% covered or more.
+    patch:
+      default:
+        target: 70%

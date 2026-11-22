@@ -235,11 +235,16 @@ cross-file answer on a 9,700-file Laravel app. Every change must keep it.
 4. New behaviour has a test that fails without it. Tests use the mock project in
    `testdata/project/`; corpus tests fetch real projects with
    `scripts/fetch-corpus.sh`.
-5. Performance numbers are in the PR when the rules above ask for them.
-6. `CHANGELOG.md` has an entry under `[Unreleased]` for anything a user would
+5. New and changed lines are at least 70% covered, and the project stays at
+   70% or more (Codecov's patch and project checks). Go counts a package's
+   coverage from its own tests only, so code that another package's tests
+   exercise (a resolver helper used by completion, say) still needs tests in
+   its own package.
+6. Performance numbers are in the PR when the rules above ask for them.
+7. `CHANGELOG.md` has an entry under `[Unreleased]` for anything a user would
    notice, written for users ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)):
    what changed for them, not which functions moved.
-7. Commit messages follow the existing style: `fix: …`, `feat: …`, `docs: …`,
+8. Commit messages follow the existing style: `fix: …`, `feat: …`, `docs: …`,
    `chore: …`, `refactor: …`.
 
 ## Direction

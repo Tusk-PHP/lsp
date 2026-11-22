@@ -663,9 +663,16 @@ func (a *Analyzer) resolveAccessChainTyped(line string, wordStart int, source st
 	if ownerResolved.IsEmpty() {
 		return resolve.ResolvedType{}
 	}
+	// Category::where() and Category::active() run on Builder<Category>.
+	if fwd, ok := a.resolver.ForwardedReceiver(ownerResolved, target, true); ok {
+		ownerResolved = fwd
+	}
 	member := a.resolver.FindMemberAnywhereOn(ownerResolved, target)
 	if member == nil {
 		return resolve.ResolvedType{}
+	}
+	if a.resolver.ScopeMethod(ownerResolved, target) == member {
+		return ownerResolved // a local scope gives back the builder
 	}
 	return a.resolver.MemberTypeResolved(member, file, ownerResolved.BaseFQN(), ownerResolved.Params)
 }
