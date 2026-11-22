@@ -69,6 +69,13 @@ class ShelterRepository extends PersonRepository {}
 class LoggerRepository implements Repository {
     public function find(int $id) {}
 }
+/**
+ * @template TEntity
+ * @implements Repository<TEntity>
+ */
+abstract class InterfaceRepository implements Repository {}
+/** @extends InterfaceRepository<Person> */
+class PeopleRepository extends InterfaceRepository {}
 
 /**
  * @phpstan-type PersonMap array<string, Person>
@@ -161,6 +168,7 @@ func TestGenericExpressionTypes(t *testing.T) {
 		"(new PersonRepository())->find(1)":  "App\\Person", // @extends through a generic parent
 		"(new ShelterRepository())->find(1)": "App\\Person", // and one more plain level
 		"(new LoggerRepository())->find(1)":  "App\\Logger", // @implements
+		"(new PeopleRepository())->find(1)":  "App\\Person", // declared only on the parent's interface
 		"(new Types())->map()":               "array<string, App\\Person>",
 		"(new Types())->shape()":             "array{person: App\\Person, count: int}",
 		"(new Types())->anyValue()":          "App\\Person|int",

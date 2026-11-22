@@ -1084,18 +1084,41 @@ func (idx *Index) getClassMembersRecursive(fqn string, visited map[string]bool) 
 	if parent, ok := idx.inheritanceMap[fqn]; ok {
 		members = append(members, idx.getClassMembersRecursive(parent, visited)...)
 	}
-	// Interfaces are read for their constants only: the methods they declare are
-	// the class's own to implement.
+	// Interfaces come last: their constants, and the methods nothing above
+	// declares, which an abstract class may leave to its subclasses. A method
+	// the class or a parent declares wins over the interface's signature.
 	if interfaces, ok := idx.implementsMap[fqn]; ok {
+		var declared map[string]bool
 		for _, iface := range interfaces {
 			for _, member := range idx.getClassMembersRecursive(iface, visited) {
-				if member.Kind == KindConstant {
+				switch member.Kind {
+				case KindConstant:
 					members = append(members, member)
+				case KindMethod:
+					if declared == nil {
+						declared = methodNames(members)
+					}
+					key := strings.ToLower(member.Name)
+					if !declared[key] {
+						declared[key] = true
+						members = append(members, member)
+					}
 				}
 			}
 		}
 	}
 	return members
+}
+
+// methodNames returns the lowercased names of the methods in members.
+func methodNames(members []*Symbol) map[string]bool {
+	names := make(map[string]bool, len(members))
+	for _, m := range members {
+		if m.Kind == KindMethod {
+			names[strings.ToLower(m.Name)] = true
+		}
+	}
+	return names
 }
 
 // HasAttributedSymbols reports whether anything indexed so far has attributes.

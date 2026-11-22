@@ -99,6 +99,11 @@ func (a *Analyzer) collectImplementMissingMethods(source string, target *impleme
 		if member == nil || member.Kind != symbols.KindMethod || member.IsAbstract {
 			continue
 		}
+		// An interface's methods are listed with the class's members, but
+		// they're only declared there, never implemented.
+		if owner := a.index.Lookup(member.ParentFQN); owner != nil && owner.Kind == symbols.KindInterface {
+			continue
+		}
 		implementedConcrete[strings.ToLower(member.Name)] = true
 	}
 

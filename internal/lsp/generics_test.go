@@ -266,6 +266,62 @@ abstract class Repository {
 class CachedRepository extends Repository {}
 /** @param CachedRepository<Dog> $r */
 function run($r): void { $r->find(1)-><|> }`},
+	{name: "inheritance/a method only on the abstract parent's interface", completion: []string{"name"}, src: `
+/** @template T */
+interface Repository {
+	/** @return T */
+	public function find(int $id);
+}
+/**
+ * @template TEntity
+ * @implements Repository<TEntity>
+ */
+abstract class BaseRepository implements Repository {}
+/** @extends BaseRepository<Person> */
+class PersonRepository extends BaseRepository {}
+function run(PersonRepository $r): void { $r->find(1)-><|> }`},
+	{name: "inheritance/hover on a method only on the abstract parent's interface", hover: []string{"Person $person"}, src: `
+/** @template T */
+interface Repository {
+	/** @return T */
+	public function find(int $id);
+}
+/**
+ * @template TEntity
+ * @implements Repository<TEntity>
+ */
+abstract class BaseRepository implements Repository {}
+/** @extends BaseRepository<Person> */
+class PersonRepository extends BaseRepository {}
+function run(PersonRepository $r): void { $person = $r->find(1); echo $per<|>son; }`},
+	{name: "inheritance/a method only on the abstract parent's interface isn't unknown", noDiag: []string{"unknown-member"}, src: `
+/** @template T */
+interface Repository {
+	/** @return T */
+	public function find(int $id);
+}
+/**
+ * @template TEntity
+ * @implements Repository<TEntity>
+ */
+abstract class BaseRepository implements Repository {}
+/** @extends BaseRepository<Person> */
+class PersonRepository extends BaseRepository {}
+function run(PersonRepository $r): void { $r->find(1)->name(); }`},
+	{name: "inheritance/definition of a method only on the abstract parent's interface", definition: true, src: `
+/** @template T */
+interface Repository {
+	/** @return T */
+	public function find(int $id);
+}
+/**
+ * @template TEntity
+ * @implements Repository<TEntity>
+ */
+abstract class BaseRepository implements Repository {}
+/** @extends BaseRepository<Person> */
+class PersonRepository extends BaseRepository {}
+function run(PersonRepository $r): void { $r->fi<|>nd(1); }`},
 	{name: "inheritance/@use above a trait use statement", completion: []string{"bark"}, src: `
 class Dog { public function bark(): void {} }
 /** @template T */

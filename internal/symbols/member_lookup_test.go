@@ -79,3 +79,66 @@ func TestClassMembersNamedFollowsChanges(t *testing.T) {
 		t.Errorf("member tables grew to %d, past %d", n, memberTableLimit)
 	}
 }
+
+const interfaceMembersSource = `<?php
+namespace App;
+
+interface Readable {
+    const MODE = 'r';
+    public function read(): string;
+}
+interface Repository extends Readable {
+    public function find(int $id);
+    public function count(): int;
+}
+abstract class BaseRepository implements Repository {
+    public function count(): int { return 0; }
+}
+class PersonRepository extends BaseRepository {
+    public function FIND(int $id) { return null; }
+}
+class EmptyRepository extends BaseRepository {}
+`
+
+// A method an interface declares is a member of every class implementing it,
+// directly or through an abstract parent, after what the classes declare.
+func TestClassMembersIncludeInterfaceMethods(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///i.php", interfaceMembersSource)
+	owner := func(class, name string) []string {
+		var owners []string
+		for _, m := range idx.ClassMembersNamed(class, name) {
+			owners = append(owners, m.ParentFQN)
+		}
+		return owners
+	}
+	for _, c := range []struct {
+		class, name string
+		want        []string
+	}{
+		{"App\\EmptyRepository", "find", []string{"App\\Repository"}},
+		{"App\\EmptyRepository", "read", []string{"App\\Readable"}}, // through the interface's parent
+		{"App\\EmptyRepository", "MODE", []string{"App\\Readable"}},
+		{"App\\EmptyRepository", "count", []string{"App\\BaseRepository"}}, // the class's own wins, once
+		{"App\\BaseRepository", "find", []string{"App\\Repository"}},
+		{"App\\Repository", "read", []string{"App\\Readable"}},
+	} {
+		got := owner(c.class, c.name)
+		if len(got) != len(c.want) || (len(got) > 0 && got[0] != c.want[0]) {
+			t.Errorf("ClassMembersNamed(%s, %s) owners = %v, want %v", c.class, c.name, got, c.want)
+		}
+	}
+	// The class's own declaration comes first.
+	if got := idx.ClassMembersNamed("App\\PersonRepository", "FIND"); len(got) != 1 || got[0].ParentFQN != "App\\PersonRepository" {
+		t.Errorf("PersonRepository::FIND = %v, want only its own", got)
+	}
+	names := map[string]int{}
+	for _, m := range idx.GetClassMembers("App\\EmptyRepository") {
+		names[m.Name]++
+	}
+	for _, n := range []string{"find", "read", "count", "MODE"} {
+		if names[n] != 1 {
+			t.Errorf("GetClassMembers(EmptyRepository) lists %s %d times, want once", n, names[n])
+		}
+	}
+}
