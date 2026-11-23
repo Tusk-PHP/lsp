@@ -350,10 +350,60 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 	}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
+	foreign := idx.foreignMembersLocked(uri)
 	idx.removeFileSymbols(uri)
 	// Store the raw source text for this URI (replaces any previous version)
 	idx.fileSource[uri] = source
 	idx.indexParsedLocked(uri, file, src)
+	idx.reattachForeignMembersLocked(foreign)
+}
+
+// foreignMembersLocked returns, by class, the members other files added to
+// the classes uri declares, such as an IDE helper file's @property columns
+// on a model. Re-indexing uri replaces those classes, so the members are
+// attached again to the new ones afterwards.
+func (idx *Index) foreignMembersLocked(uri string) map[string][]*Symbol {
+	var out map[string][]*Symbol
+	for _, sym := range idx.fileSymbols[uri] {
+		if !isTopLevelSymbol(sym.Kind) {
+			continue
+		}
+		for _, child := range sym.Children {
+			if child.URI != uri && idx.symbols[child.FQN] == child {
+				if out == nil {
+					out = map[string][]*Symbol{}
+				}
+				out[sym.FQN] = append(out[sym.FQN], child)
+			}
+		}
+	}
+	return out
+}
+
+// reattachForeignMembersLocked gives each class back the members other files
+// added to it, unless the class now declares a member of that name itself.
+func (idx *Index) reattachForeignMembersLocked(foreign map[string][]*Symbol) {
+	for fqn, members := range foreign {
+		parent := idx.symbols[fqn]
+		if parent == nil {
+			continue
+		}
+		for _, m := range members {
+			if idx.symbols[m.FQN] != m {
+				continue
+			}
+			declared := false
+			for _, c := range parent.Children {
+				if c.Kind == m.Kind && c.Name == m.Name {
+					declared = true
+					break
+				}
+			}
+			if !declared {
+				parent.Children = append(parent.Children, m)
+			}
+		}
+	}
 }
 
 // indexParsedLocked adds the symbols a parsed file declares. The caller holds
@@ -557,6 +607,13 @@ func (idx *Index) addSymbolWithSource(uri string, sym *Symbol, src SymbolSource)
 func (idx *Index) removeFileSymbols(uri string) {
 	idx.generation.Add(1)
 	for _, sym := range idx.fileSymbols[uri] {
+		// A member this file added to a class another file declares (an IDE
+		// helper's @property) leaves that class's members with it.
+		if !isTopLevelSymbol(sym.Kind) && sym.ParentFQN != "" {
+			if parent := idx.symbols[sym.ParentFQN]; parent != nil && parent.URI != uri {
+				parent.Children = withoutSymbol(parent.Children, sym)
+			}
+		}
 		if narrowsTypes(sym) {
 			key := strings.ToLower(sym.Name)
 			if idx.narrowingNames[key] <= 1 {
@@ -612,6 +669,19 @@ func (idx *Index) removeFileSymbols(uri string) {
 	delete(idx.fileSymbols, uri)
 	delete(idx.fileSource, uri)
 	delete(idx.generatedURIs, uri)
+}
+
+// withoutSymbol returns a copy of syms without sym; readers may hold the
+// original slice.
+func withoutSymbol(syms []*Symbol, sym *Symbol) []*Symbol {
+	for i, s := range syms {
+		if s == sym {
+			out := make([]*Symbol, 0, len(syms)-1)
+			out = append(out, syms[:i]...)
+			return append(out, syms[i+1:]...)
+		}
+	}
+	return syms
 }
 
 func isTopLevelSymbol(kind SymbolKind) bool {
