@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Inline variable** is offered in editors that only ask for the code action kinds the server announces: its kind, `refactor.inline`, was missing from the list.
 - **Calling a closure stored in a variable** is now typed: after `$g = fn (int $i): Foo => new Foo();`, hover on `$g` shows `Closure(int): Foo`, `$g(1)->` completes `Foo`'s members, hover and go-to-definition work on them, and `$g(1)->nope()` is reported as `unknown-member`. Before, the variable had no type, so none of these worked.
 - `tusk-php introspect` and the editor's debug dump list the same native diagnostics the editor shows: syntax errors, abstract methods in a class that isn't abstract, and calls to deprecated PHP functions were missing from them.
 - **`redundant-nullsafe`** no longer reports `?->` on values that can be null. It used to flag nullable parameters (`?LoggerInterface $logger = null`), variables that a ternary may set to `null`, and chains after another `?->`; it now reports only `$this?->` and a parameter declared with a non-nullable type that its function never reassigns.

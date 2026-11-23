@@ -104,7 +104,7 @@ interface Logger {}
 	diag := unknownClassDiagnostic(5, 12, 18, "Unknown class 'Logger'")
 	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
-		Context:      protocol.CodeActionContext{Diagnostics: []protocol.Diagnostic{diag}, Only: []string{"quickfix"}},
+		Context:      protocol.CodeActionContext{Diagnostics: []protocol.Diagnostic{diag}, Only: []protocol.CodeActionKind{"quickfix"}},
 	})
 
 	if len(actions) != 2 {
@@ -140,7 +140,7 @@ class StreamHandler {}
 	diag := unknownClassDiagnostic(5, 12, 33, "Unknown class 'Handler\\StreamHandler'")
 	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
-		Context:      protocol.CodeActionContext{Diagnostics: []protocol.Diagnostic{diag}, Only: []string{"quickfix"}},
+		Context:      protocol.CodeActionContext{Diagnostics: []protocol.Diagnostic{diag}, Only: []protocol.CodeActionKind{"quickfix"}},
 	})
 
 	if len(actions) != 1 {
@@ -185,7 +185,7 @@ class Logger {}
 	diag := unknownClassDiagnostic(7, 12, 26, "Unknown class 'Monolog\\Logger'")
 	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
-		Context:      protocol.CodeActionContext{Diagnostics: []protocol.Diagnostic{diag}, Only: []string{"quickfix"}},
+		Context:      protocol.CodeActionContext{Diagnostics: []protocol.Diagnostic{diag}, Only: []protocol.CodeActionKind{"quickfix"}},
 	})
 
 	if len(actions) != 0 {
@@ -202,7 +202,7 @@ class User {}
 
 	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
-		Context:      protocol.CodeActionContext{Only: []string{"quickfix"}},
+		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"quickfix"}},
 	})
 
 	for _, action := range actions {

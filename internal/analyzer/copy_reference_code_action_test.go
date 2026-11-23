@@ -17,7 +17,7 @@ class Widget {
 }
 `
 	a, _ := setupRenameAnalyzer(map[string]string{"file:///app/Widget.php": source})
-	a.SetClientCommands([]string{"tuskPhpLsp.copyReference"})
+	a.SetClientCommands([]protocol.CommandName{"tuskPhpLsp.copyReference"})
 
 	// Cursor on the class name "Widget" (line 3, character 6).
 	actions := a.GetCodeActions("file:///app/Widget.php", source, protocol.CodeActionParams{
@@ -26,7 +26,7 @@ class Widget {
 			Start: protocol.Position{Line: 3, Character: 6},
 			End:   protocol.Position{Line: 3, Character: 12},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 	})
 
 	var found *protocol.CodeAction
@@ -65,7 +65,7 @@ class Widget {
 
 `
 	a, _ := setupRenameAnalyzer(map[string]string{"file:///app/Widget.php": source})
-	a.SetClientCommands([]string{"tuskPhpLsp.copyReference"})
+	a.SetClientCommands([]protocol.CommandName{"tuskPhpLsp.copyReference"})
 
 	// Cursor on a blank line (line 8) — not a symbol.
 	actions := a.GetCodeActions("file:///app/Widget.php", source, protocol.CodeActionParams{
@@ -74,7 +74,7 @@ class Widget {
 			Start: protocol.Position{Line: 8, Character: 0},
 			End:   protocol.Position{Line: 8, Character: 0},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 	})
 
 	for _, action := range actions {
@@ -95,7 +95,7 @@ class Widget {
 }
 `
 	a, _ := setupRenameAnalyzer(map[string]string{"file:///app/Widget.php": source})
-	a.SetClientCommands([]string{"tuskPhpLsp.copyReference"})
+	a.SetClientCommands([]protocol.CommandName{"tuskPhpLsp.copyReference"})
 
 	// Request only "quickfix" — refactor actions must not appear.
 	actions := a.GetCodeActions("file:///app/Widget.php", source, protocol.CodeActionParams{
@@ -104,7 +104,7 @@ class Widget {
 			Start: protocol.Position{Line: 3, Character: 6},
 			End:   protocol.Position{Line: 3, Character: 12},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"quickfix"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"quickfix"}},
 	})
 
 	for _, action := range actions {
@@ -130,7 +130,7 @@ class Widget {
 			Start: protocol.Position{Line: 3, Character: 6},
 			End:   protocol.Position{Line: 3, Character: 12},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 	})
 	for _, action := range actions {
 		if action.Title == "Copy reference..." {

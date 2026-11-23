@@ -9,8 +9,8 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
-func (a *Analyzer) generateGetterSetterCodeActions(uri, source string, result *parser.ParseResult, only []string, pos protocol.Position) []protocol.CodeAction {
-	if !codeActionKindAllowed(only, "refactor") {
+func (a *Analyzer) generateGetterSetterCodeActions(uri, source string, result *parser.ParseResult, only []protocol.CodeActionKind, pos protocol.Position) []protocol.CodeAction {
+	if !protocol.CodeActionRefactor.In(only) {
 		return nil
 	}
 	if result == nil {
@@ -48,21 +48,21 @@ func (a *Analyzer) generateGetterSetterCodeActions(uri, source string, result *p
 	if getterMissing && setterMissing {
 		actions = append(actions, protocol.CodeAction{
 			Title: "Generate getter and setter for " + target.property.Name,
-			Kind:  "refactor",
+			Kind:  protocol.CodeActionRefactor,
 			Edit:  insertion(true, true),
 		})
 	}
 	if getterMissing {
 		actions = append(actions, protocol.CodeAction{
 			Title: "Generate getter for " + target.property.Name,
-			Kind:  "refactor",
+			Kind:  protocol.CodeActionRefactor,
 			Edit:  insertion(true, false),
 		})
 	}
 	if setterMissing {
 		actions = append(actions, protocol.CodeAction{
 			Title: "Generate setter for " + target.property.Name,
-			Kind:  "refactor",
+			Kind:  protocol.CodeActionRefactor,
 			Edit:  insertion(false, true),
 		})
 	}

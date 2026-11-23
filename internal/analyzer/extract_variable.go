@@ -10,7 +10,7 @@ import (
 )
 
 func (a *Analyzer) extractVariableCodeAction(uri, source string, params protocol.CodeActionParams) *protocol.CodeAction {
-	if !codeActionKindAllowed(params.Context.Only, "refactor.extract") {
+	if !protocol.CodeActionRefactorExtract.In(params.Context.Only) {
 		return nil
 	}
 	if params.Range.Start.Line != params.Range.End.Line {
@@ -46,7 +46,7 @@ func (a *Analyzer) extractVariableCodeAction(uri, source string, params protocol
 
 	action := &protocol.CodeAction{
 		Title: "Extract variable",
-		Kind:  "refactor.extract",
+		Kind:  protocol.CodeActionRefactorExtract,
 		Edit: &protocol.WorkspaceEdit{
 			Changes: map[string][]protocol.TextEdit{
 				uri: {

@@ -10,7 +10,7 @@ import (
 )
 
 func (a *Analyzer) inlineVariableCodeAction(uri, source string, params protocol.CodeActionParams) *protocol.CodeAction {
-	if !codeActionKindAllowed(params.Context.Only, "refactor.inline") {
+	if !protocol.CodeActionRefactorInline.In(params.Context.Only) {
 		return nil
 	}
 
@@ -37,7 +37,7 @@ func (a *Analyzer) inlineVariableCodeAction(uri, source string, params protocol.
 
 	return &protocol.CodeAction{
 		Title: "Inline variable",
-		Kind:  "refactor.inline",
+		Kind:  protocol.CodeActionRefactorInline,
 		Edit: &protocol.WorkspaceEdit{
 			Changes: map[string][]protocol.TextEdit{
 				uri: edits,

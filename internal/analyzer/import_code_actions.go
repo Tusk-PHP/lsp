@@ -21,7 +21,7 @@ type importCodeActionBlock struct {
 }
 
 func (a *Analyzer) importUnusedImportQuickFixes(uri, source string, params protocol.CodeActionParams) []protocol.CodeAction {
-	if !codeActionKindAllowed(params.Context.Only, "quickfix") {
+	if !protocol.CodeActionQuickFix.In(params.Context.Only) {
 		return nil
 	}
 
@@ -45,7 +45,7 @@ func (a *Analyzer) importUnusedImportQuickFixes(uri, source string, params proto
 
 		actions = append(actions, protocol.CodeAction{
 			Title:       "Remove unused import",
-			Kind:        "quickfix",
+			Kind:        protocol.CodeActionQuickFix,
 			Diagnostics: []protocol.Diagnostic{diag},
 			IsPreferred: true,
 			Edit: &protocol.WorkspaceEdit{
@@ -62,8 +62,8 @@ func (a *Analyzer) importUnusedImportQuickFixes(uri, source string, params proto
 	return actions
 }
 
-func (a *Analyzer) importOrganizeImportsAction(uri, source string, file *parser.FileNode, only []string) *protocol.CodeAction {
-	if !codeActionKindAllowed(only, "source.organizeImports") {
+func (a *Analyzer) importOrganizeImportsAction(uri, source string, file *parser.FileNode, only []protocol.CodeActionKind) *protocol.CodeAction {
+	if !protocol.CodeActionSourceOrganizeImports.In(only) {
 		return nil
 	}
 
@@ -102,7 +102,7 @@ func (a *Analyzer) importOrganizeImportsAction(uri, source string, file *parser.
 
 	return &protocol.CodeAction{
 		Title: "Organize Imports",
-		Kind:  "source.organizeImports",
+		Kind:  protocol.CodeActionSourceOrganizeImports,
 		Edit: &protocol.WorkspaceEdit{
 			Changes: map[string][]protocol.TextEdit{
 				uri: {{

@@ -20,7 +20,7 @@ function run($user) {
 			Start: protocol.Position{Line: 2, Character: 11},
 			End:   protocol.Position{Line: 2, Character: 28},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor.extract"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor.extract"}},
 	})
 
 	var action *protocol.CodeAction
@@ -63,7 +63,7 @@ function run($user) {
 			Start: protocol.Position{Line: 2, Character: 11},
 			End:   protocol.Position{Line: 2, Character: 28},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 	})
 
 	for _, action := range actions {
@@ -89,7 +89,7 @@ function run($user) {
 			Start: protocol.Position{Line: 2, Character: 23},
 			End:   protocol.Position{Line: 2, Character: 40},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor.extract"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor.extract"}},
 	})
 
 	for _, action := range actions {
@@ -114,7 +114,7 @@ function run($user) {
 			Start: protocol.Position{Line: 3, Character: 11},
 			End:   protocol.Position{Line: 3, Character: 28},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor.extract"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor.extract"}},
 	})
 
 	for _, action := range actions {

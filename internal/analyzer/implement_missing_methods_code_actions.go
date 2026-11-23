@@ -10,8 +10,8 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func (a *Analyzer) implementMissingMethodsCodeActions(uri, source string, result *parser.ParseResult, only []string, pos protocol.Position) []protocol.CodeAction {
-	if !codeActionKindAllowed(only, "refactor") {
+func (a *Analyzer) implementMissingMethodsCodeActions(uri, source string, result *parser.ParseResult, only []protocol.CodeActionKind, pos protocol.Position) []protocol.CodeAction {
+	if !protocol.CodeActionRefactor.In(only) {
 		return nil
 	}
 	if result == nil {
@@ -35,7 +35,7 @@ func (a *Analyzer) implementMissingMethodsCodeActions(uri, source string, result
 
 	return []protocol.CodeAction{{
 		Title: "Implement missing methods",
-		Kind:  "refactor",
+		Kind:  protocol.CodeActionRefactor,
 		Edit:  edit,
 	}}
 }
