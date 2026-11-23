@@ -116,3 +116,51 @@ class Beta {
 		}
 	}
 }
+
+// Interfaces, traits, enums and functions carry the parser's EndLine through
+// the compat layer, as classes do.
+func TestClassLikeNodesEndLine(t *testing.T) {
+	source := `<?php
+interface Shape
+{
+    public function area(): float;
+}
+
+trait Named
+{
+    public function name(): string { return ''; }
+}
+
+enum Suit
+{
+    case Hearts;
+}
+
+function helper(): void
+{
+}
+`
+	result := New().Parse(source)
+	file := ParseFile(source)
+	if len(result.Interfaces) != 1 || len(result.Traits) != 1 || len(result.Enums) != 1 || len(result.Functions) != 1 ||
+		len(file.Interfaces) != 1 || len(file.Traits) != 1 || len(file.Enums) != 1 || len(file.Functions) != 1 {
+		t.Fatalf("want one of each declaration, got %+v", file)
+	}
+	checks := []struct {
+		name               string
+		node, def, startAt int
+	}{
+		{"interface", file.Interfaces[0].EndLine, result.Interfaces[0].EndLine, file.Interfaces[0].StartLine},
+		{"trait", file.Traits[0].EndLine, result.Traits[0].EndLine, file.Traits[0].StartLine},
+		{"enum", file.Enums[0].EndLine, result.Enums[0].EndLine, file.Enums[0].StartLine},
+		{"function", file.Functions[0].EndLine, result.Functions[0].EndLine, file.Functions[0].StartLine},
+	}
+	for _, c := range checks {
+		if c.node != c.def {
+			t.Errorf("%s: node EndLine = %d, parser EndLine = %d", c.name, c.node, c.def)
+		}
+		if c.node <= c.startAt {
+			t.Errorf("%s: EndLine %d should be after StartLine %d", c.name, c.node, c.startAt)
+		}
+	}
+}

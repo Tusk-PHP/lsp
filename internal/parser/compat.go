@@ -104,6 +104,7 @@ type InterfaceNode struct {
 	Properties []PropertyNode
 	Constants  []ConstantNode
 	StartLine  int
+	EndLine    int
 	StartCol   int
 	DocComment string
 }
@@ -117,6 +118,7 @@ type TraitNode struct {
 	Methods    []MethodNode
 	Traits     []string
 	StartLine  int
+	EndLine    int
 	StartCol   int
 	DocComment string
 	// TraitUseDoc holds the docblocks above the trait's own trait `use`
@@ -563,6 +565,7 @@ func toFileNode(result *ParseResult) *FileNode {
 			Extends:    append([]string(nil), interfaceDef.Extends...),
 			DocComment: interfaceDef.DocComment,
 			StartLine:  interfaceDef.Line,
+			EndLine:    interfaceDef.EndLine,
 			StartCol:   startColumnForDeclaration(result, interfaceDef.Name, interfaceDef.Line, TokenInterface),
 		}
 		for _, methodDef := range interfaceDef.Methods {
@@ -586,6 +589,7 @@ func toFileNode(result *ParseResult) *FileNode {
 			TraitUseDoc: traitDef.TraitUseDoc,
 			DocComment:  traitDef.DocComment,
 			StartLine:   traitDef.Line,
+			EndLine:     traitDef.EndLine,
 			StartCol:    startColumnForDeclaration(result, traitDef.Name, traitDef.Line, TokenTrait),
 		}
 		for _, propertyDef := range traitDef.Properties {
