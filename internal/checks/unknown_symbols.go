@@ -997,6 +997,10 @@ type memberHierarchy struct {
 	members []*symbols.Symbol
 	open    bool
 	visited map[string]bool
+	// subclass is set for a hierarchy looked at as a subclass of the receiver,
+	// where a class declared inside a block still has its own members and its
+	// parents': it doesn't stand for a class defined elsewhere.
+	subclass string
 }
 
 func anyOwnerMayHaveMember(owners []string, access memberAccess, file *parser.FileNode, index *symbols.Index, hierarchies map[string]*memberHierarchy) bool {
@@ -1052,6 +1056,12 @@ func (h *memberHierarchy) walk(fqn string, index *symbols.Index) {
 	h.visited[fqn] = true
 	sym := index.Lookup(fqn)
 	if !isClassLikeSymbol(sym) {
+		h.open = true
+		return
+	}
+	// A class declared inside a block is a placeholder or polyfill: the class
+	// code runs with may be another one, with more members.
+	if sym.IsConditional && fqn != h.subclass {
 		h.open = true
 		return
 	}
@@ -1156,6 +1166,21 @@ func anyImplementationHasMember(owners []string, lateBound bool, access memberAc
 			continue
 		}
 		for _, sub := range index.Implementations(owner) {
+			if sym := index.Lookup(sub); sym != nil && sym.IsConditional {
+				// As `if ($c) { class ftp extends ftp_sockets {} }`: the subclass
+				// is one of the variants, whose members are its own and its parents'.
+				key := "subclass|" + sub
+				h, ok := hierarchies[key]
+				if !ok {
+					h = &memberHierarchy{visited: map[string]bool{}, subclass: sub}
+					h.walk(sub, index)
+					hierarchies[key] = h
+				}
+				if h.open || h.answers(access) {
+					return true
+				}
+				continue
+			}
 			if ownerMayHaveMember(sub, access, file, index, hierarchies) {
 				return true
 			}

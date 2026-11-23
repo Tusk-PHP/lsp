@@ -65,6 +65,10 @@ type ClassDef struct {
 	Line        int
 	EndLine     int
 	DocComment  string
+	// Conditional is set for a class declared inside a block, such as
+	// `if (false) { class Foo {} }` or `if (!class_exists(Foo::class)) { … }`:
+	// a placeholder or polyfill that may not be the class code runs with.
+	Conditional bool
 	// BodyLine and BodyCol are where an anonymous class's `{` is.
 	BodyLine, BodyCol int
 }
@@ -878,6 +882,20 @@ type structParser struct {
 	// traitUseDocs collects the docblocks above trait `use` statements in the
 	// class body being parsed, where @use gives the trait's type arguments.
 	traitUseDocs []string
+	// blocks holds the braces open at the top level: true for a braced
+	// namespace, false for any other block (if, else, try, …).
+	blocks []bool
+}
+
+// inBlock reports whether the parser is inside a top-level block other than
+// a braced namespace.
+func (p *structParser) inBlock() bool {
+	for _, namespace := range p.blocks {
+		if !namespace {
+			return true
+		}
+	}
+	return false
 }
 
 // parseClassBodyWithTraitDocs parses a class-like body and also returns the
@@ -1001,6 +1019,10 @@ func (p *structParser) parse() {
 			continue
 		case TokenNamespace:
 			p.parseNamespace()
+			if p.peek().Kind == TokenOpenBrace {
+				p.blocks = append(p.blocks, true)
+				p.advance()
+			}
 		case TokenUse:
 			p.parseUse()
 		case TokenClass:
@@ -1018,6 +1040,14 @@ func (p *structParser) parse() {
 			p.parseFunction(lastDocComment)
 		case TokenConst:
 			p.parseConst()
+		case TokenOpenBrace:
+			p.blocks = append(p.blocks, false)
+			p.advance()
+		case TokenCloseBrace:
+			if len(p.blocks) > 0 {
+				p.blocks = p.blocks[:len(p.blocks)-1]
+			}
+			p.advance()
 		default:
 			p.advance()
 		}
@@ -1250,6 +1280,7 @@ afterMod:
 		}
 	}
 	cls.EndLine = p.peek().Line
+	cls.Conditional = p.inBlock()
 	p.result.Classes = append(p.result.Classes, cls)
 }
 

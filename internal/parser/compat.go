@@ -81,10 +81,12 @@ type ClassNode struct {
 	IsAbstract bool
 	IsFinal    bool
 	IsReadonly bool
-	StartLine  int
-	EndLine    int
-	StartCol   int
-	DocComment string
+	// Conditional is set for a class declared inside a block (see ClassDef).
+	Conditional bool
+	StartLine   int
+	EndLine     int
+	StartCol    int
+	DocComment  string
 	// TraitUseDoc holds the docblocks above the class's trait `use`
 	// statements, where @use gives a trait its type arguments.
 	TraitUseDoc string
@@ -771,6 +773,7 @@ func toClassNode(result *ParseResult, classDef ClassDef) ClassNode {
 		IsAbstract:  classDef.IsAbstract,
 		IsFinal:     classDef.IsFinal,
 		IsReadonly:  classDef.IsReadonly,
+		Conditional: classDef.Conditional,
 		StartLine:   classDef.Line,
 		EndLine:     classDef.EndLine,
 		StartCol:    startColumnForDeclaration(result, classDef.Name, classDef.Line, TokenClass),

@@ -64,6 +64,10 @@ type Symbol struct {
 	BackedType    string
 	Value         string
 	IsVirtual     bool
+	// IsConditional marks a class declared inside a block, such as a
+	// placeholder under `if (false)` or a polyfill under `if (!class_exists())`:
+	// its members may not be those of the class code runs with.
+	IsConditional bool
 	Templates     []TemplateParam
 	Supertypes    []Supertype
 	TypeAliases   map[string]TypeAlias
@@ -306,7 +310,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 				resolvedImpls = append(resolvedImpls, resolve(impl))
 			}
 			sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, file.Uses),
-				IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly,
+				IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly, IsConditional: c.Conditional,
 				Implements: resolvedImpls,
 				Range:      symRange(c.StartLine, c.StartCol, len(c.Name))}
 			if c.Extends != "" {
@@ -382,7 +386,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 			resolvedImpls = append(resolvedImpls, resolve(impl))
 		}
 		sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, file.Uses),
-			IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly,
+			IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly, IsConditional: c.Conditional,
 			Implements: resolvedImpls, Attributes: indexAttributes(c.Attributes, resolve),
 			Range: symRange(c.StartLine, c.StartCol, len(c.Name))}
 		previous := idx.symbols[fqn]

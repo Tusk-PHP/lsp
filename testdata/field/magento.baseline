@@ -716,11 +716,6 @@ lib/internal/Magento/Framework/Cache/Backend/Decorator/Compression.php	unknown-m
 lib/internal/Magento/Framework/Cache/Backend/Decorator/Compression.php	unknown-member	Unknown member 'save' on 'Zend_Cache_Backend'
 lib/internal/Magento/Framework/Cache/Backend/Eaccelerator.php	unused-variable	Variable $data is assigned but never read
 lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	builtin-unavailable	Class 'Redis' requires ext-redis
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	unknown-member	Unknown member 'get' on 'RedisBase'
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	unknown-member	Unknown member 'mget' on 'RedisBase'
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	unknown-member	Unknown member 'mget' on 'RedisBase'
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	unknown-member	Unknown member 'mget' on 'RedisBase'
-lib/internal/Magento/Framework/Cache/Frontend/Adapter/Symfony/SlaveAwareRedis.php	unknown-member	Unknown member 'mget' on 'RedisBase'
 lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
 lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
 lib/internal/Magento/Framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
