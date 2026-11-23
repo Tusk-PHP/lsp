@@ -1189,7 +1189,7 @@ func (s *Service) symbolCatalog() []SymbolMatch {
 	})
 	out := make([]SymbolMatch, 0, len(all))
 	for _, sym := range all {
-		if sym.Kind == symbols.KindMethod || sym.Kind == symbols.KindProperty || sym.Kind == symbols.KindConstant || sym.Kind == symbols.KindEnumCase {
+		if sym.Kind.IsMember() {
 			continue
 		}
 		out = append(out, toSymbolMatch(sym))

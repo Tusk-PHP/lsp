@@ -376,7 +376,7 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 func (idx *Index) foreignMembersLocked(uri string) map[string][]*Symbol {
 	var out map[string][]*Symbol
 	for _, sym := range idx.fileSymbols[uri] {
-		if !isTopLevelSymbol(sym.Kind) {
+		if sym.Kind.IsMember() {
 			continue
 		}
 		for _, child := range sym.Children {
@@ -563,7 +563,7 @@ func (idx *Index) addSymbol(uri string, sym *Symbol) {
 		}
 		idx.narrowingNames[strings.ToLower(sym.Name)]++
 	}
-	if sym.Source != SourceGenerated && isTopLevelSymbol(sym.Kind) {
+	if sym.Source != SourceGenerated && !sym.Kind.IsMember() {
 		// A real declaration replaces a class generated under the same name.
 		idx.dropGeneratedLocked(sym.FQN)
 	}
@@ -580,7 +580,7 @@ func (idx *Index) addSymbol(uri string, sym *Symbol) {
 	idx.sortedNamesDirty = true
 	idx.sortedFQNsDirty = true
 	// Index top-level symbols by their namespace
-	if isTopLevelSymbol(sym.Kind) {
+	if !sym.Kind.IsMember() {
 		idx.namespaceIndex[namespaceForFQN(sym.FQN)] = appendUnique(idx.namespaceIndex[namespaceForFQN(sym.FQN)], sym.FQN)
 		idx.addFoldLocked(sym.FQN)
 	}
@@ -620,7 +620,7 @@ func (idx *Index) removeFileSymbols(uri string) {
 	for _, sym := range idx.fileSymbols[uri] {
 		// A member this file added to a class another file declares (an IDE
 		// helper's @property) leaves that class's members with it.
-		if !isTopLevelSymbol(sym.Kind) && sym.ParentFQN != "" {
+		if sym.Kind.IsMember() && sym.ParentFQN != "" {
 			if parent := idx.symbols[sym.ParentFQN]; parent != nil && parent.URI != uri {
 				parent.Children = withoutSymbol(parent.Children, sym)
 			}
@@ -633,7 +633,7 @@ func (idx *Index) removeFileSymbols(uri string) {
 				idx.narrowingNames[key]--
 			}
 		}
-		if isTopLevelSymbol(sym.Kind) {
+		if !sym.Kind.IsMember() {
 			// Classes generated from this one are rebuilt on their next lookup.
 			idx.dropGeneratedFromLocked(sym.FQN)
 		}
@@ -644,7 +644,7 @@ func (idx *Index) removeFileSymbols(uri string) {
 		idx.sortedNamesDirty = true
 		idx.sortedFQNsDirty = true
 		// Clean up namespace index
-		if isTopLevelSymbol(sym.Kind) {
+		if !sym.Kind.IsMember() {
 			ns := namespaceForFQN(sym.FQN)
 			if fqns, ok := idx.namespaceIndex[ns]; ok {
 				idx.namespaceIndex[ns] = removeFromSlice(fqns, sym.FQN)
@@ -693,10 +693,6 @@ func withoutSymbol(syms []*Symbol, sym *Symbol) []*Symbol {
 		}
 	}
 	return syms
-}
-
-func isTopLevelSymbol(kind SymbolKind) bool {
-	return kind != KindMethod && kind != KindProperty && kind != KindConstant && kind != KindEnumCase
 }
 
 func namespaceForFQN(fqn string) string {
@@ -1028,7 +1024,7 @@ func (idx *Index) rebuildSortedFQNs() {
 	idx.sortedFQNs = make([]string, 0, len(idx.symbols))
 	for fqn, sym := range idx.symbols {
 		// Only top-level symbols are needed for FQN-prefix search
-		if sym.Kind == KindMethod || sym.Kind == KindProperty || sym.Kind == KindConstant || sym.Kind == KindEnumCase {
+		if sym.Kind.IsMember() {
 			continue
 		}
 		// Never store a symbol with an empty short name (M1 guard), nor an
