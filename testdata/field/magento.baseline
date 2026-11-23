@@ -1,6 +1,7 @@
 app/code/Magento/AdminNotification/Controller/Adminhtml/Notification/Index.php	unknown-member	Unknown member 'addBreadcrumb' on 'Page'
 app/code/Magento/AdminNotification/Controller/Adminhtml/Notification/Index.php	unknown-member	Unknown member 'setActiveMenu' on 'Page'
 app/code/Magento/AdvancedPricingImportExport/Model/Import/AdvancedPricing.php	unknown-member	Unknown member 'getCustomerGroups' on 'Validator|Website'
+app/code/Magento/AdvancedPricingImportExport/Model/Import/AdvancedPricing.php	unused-private-constant	Private constant 'AdvancedPricing::VALIDATOR_TEAR_PRICE' is never used
 app/code/Magento/Analytics/Model/ExportDataHandler.php	unused-import	Unused import 'Magento\Framework\Exception\FileSystemException'
 app/code/Magento/ApplicationPerformanceMonitorNewRelic/Profiler/Output/NewRelicOutput.php	unused-import	Unused import 'Magento\ApplicationPerformanceMonitor\Profiler\Metric'
 app/code/Magento/AsyncConfig/Setup/ConfigOptionsList.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
@@ -84,6 +85,7 @@ app/code/Magento/Catalog/Model/ResourceModel/Product/Indexer/Eav/AbstractEav.php
 app/code/Magento/Catalog/Model/ResourceModel/Product/Price/SpecialPrice.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
 app/code/Magento/Catalog/Plugin/CategoryManagementPerformanceOptimizer.php	unused-import	Unused import 'Magento\Catalog\Api\Data\CategoryTreeInterface'
 app/code/Magento/Catalog/Pricing/Price/FinalPrice.php	unused-import	Unused import 'Magento\Catalog\Model\Product'
+app/code/Magento/Catalog/Pricing/Price/TierPrice.php	unused-private-constant	Private constant 'TierPrice::XML_PATH_TAX_DISPLAY_TYPE' is never used
 app/code/Magento/Catalog/Pricing/Render/FinalPriceBox.php	unused-import	Unused import 'Magento\Framework\Pricing\Adjustment\CalculatorInterface'
 app/code/Magento/Catalog/Setup/CategorySetup.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/Catalog/Setup/Patch/Data/ChangePriceAttributeDefaultScope.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
@@ -115,6 +117,7 @@ app/code/Magento/CatalogImportExport/Model/Import/Product/TaxClassProcessor.php	
 app/code/Magento/CatalogImportExport/Model/Import/Product/TaxClassProcessor.php	unknown-member	Unknown member 'setClassType' on 'ClassModelFactory'
 app/code/Magento/CatalogImportExport/Model/Import/Product/Validator.php	unknown-class	Unknown class 'SKU'
 app/code/Magento/CatalogImportExport/Model/Import/Product/Validator.php	unused-import	Unused import 'Magento\Catalog\Model\Product\Attribute\Backend\Sku'
+app/code/Magento/CatalogImportExport/Model/Import/Product/Validator/Media.php	unused-private-constant	Private constant 'Media::ADDITIONAL_IMAGES_DELIMITER' is never used
 app/code/Magento/CatalogInventory/Model/ProductCollectionStockCondition.php	unused-import	Unused import 'Magento\Catalog\Model\CollectionConditionInterface'
 app/code/Magento/CatalogInventory/Model/Stock/Item.php	unknown-member	Unknown member 'save' on 'StockConfigurationInterface'
 app/code/Magento/CatalogInventory/Model/Stock/StockItemRepository.php	unknown-member	Unknown member 'getTypeId' on 'AbstractType'
@@ -333,6 +336,8 @@ app/code/Magento/MediaGallery/Model/ResourceModel/GetAssetsBySearchCriteria.php	
 app/code/Magento/MediaGallery/Model/ResourceModel/SaveAssets.php	unused-import	Unused import 'Magento\Framework\Reflection\DataObjectProcessor'
 app/code/Magento/MediaGallery/Model/ResourceModel/SaveAssets.php	unused-import	Unused import 'Magento\MediaGalleryApi\Api\Data\AssetInterface'
 app/code/Magento/MediaGalleryApi/Api/SearchAssetsInterface.php	unused-import	Unused import 'Magento\Framework\Api\Search\SearchResultInterface'
+app/code/Magento/MediaGalleryMetadata/Model/Gif/Segment/WriteXmp.php	unused-private-constant	Private constant 'WriteXmp::MAGIC_TRAILER_END' is never used
+app/code/Magento/MediaGalleryMetadata/Model/Gif/Segment/WriteXmp.php	unused-private-constant	Private constant 'WriteXmp::MAGIC_TRAILER_START' is never used
 app/code/Magento/MediaGalleryUi/Controller/Adminhtml/Image/SaveDetails.php	unused-import	Unused import 'Magento\MediaGalleryApi\Api\Data\AssetInterfaceFactory'
 app/code/Magento/MediaGalleryUi/Controller/Adminhtml/Image/SaveDetails.php	unused-import	Unused import 'Magento\MediaGalleryApi\Api\Data\AssetKeywordsInterfaceFactory'
 app/code/Magento/MediaGalleryUi/Controller/Adminhtml/Image/SaveDetails.php	unused-import	Unused import 'Magento\MediaGalleryApi\Api\GetAssetsByIdsInterface'
@@ -605,7 +610,10 @@ app/code/Magento/UrlRewrite/Setup/Patch/Data/ConvertSerializedDataToJson.php	unu
 app/code/Magento/User/Setup/Patch/Data/UpgradeSerializedFields.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/Usps/Model/Carrier.php	unknown-class	Unknown class 'ProxyDeferredFactory'
 app/code/Magento/Usps/Model/Carrier.php	unused-variable	Variable $defaults is assigned but never read
+app/code/Magento/Usps/Model/Config/Backend/AllowedMethods.php	unused-private-constant	Private constant 'AllowedMethods::USPS_TYPE_REST' is never used
+app/code/Magento/Usps/Model/Config/Backend/AllowedMethods.php	unused-private-constant	Private constant 'AllowedMethods::USPS_TYPE_XML' is never used
 app/code/Magento/Usps/Model/ShipmentService.php	unknown-class	Unknown class 'ProxyDeferredFactory'
+app/code/Magento/Usps/Model/ShipmentService.php	unused-private-constant	Private constant 'ShipmentService::ERROR_LOG_MESSAGE' is never used
 app/code/Magento/Usps/Model/TrackingService.php	unused-import	Unused import 'Magento\Shipping\Model\Rate\Result'
 app/code/Magento/Usps/Setup/Patch/Data/UpdateAllowedMethods.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/Vault/Block/Form.php	unused-import	Unused import 'Magento\Payment\Model\Config'
