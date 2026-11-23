@@ -44,6 +44,8 @@ func (s *Server) handleMessage(msg *jsonRPCMessage) {
 		s.handleTypeHierarchyRelations(msg, s.analyzer.Supertypes)
 	case "typeHierarchy/subtypes":
 		s.handleTypeHierarchyRelations(msg, s.analyzer.Subtypes)
+	case "textDocument/documentLink":
+		s.handleDocumentLink(msg)
 	case "textDocument/typeDefinition":
 		s.handleTypeDefinition(msg)
 	case "textDocument/implementation":
