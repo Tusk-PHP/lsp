@@ -139,7 +139,7 @@ func applyDeps(g *Graph, idx *symbols.Index, opts Options) *Graph {
 		// Track per-boundary: distinctSymbols (vendor FQNs mapped to it) and
 		// edgeCount (distinct edges from first-party to this boundary).
 		boundaryDistinctSymbols := map[string]map[string]struct{}{} // boundaryID → set of vendor FQNs
-		boundaryEdgeSet := map[string]map[string]struct{}{}          // boundaryID → set of first-party sources
+		boundaryEdgeSet := map[string]map[string]struct{}{}         // boundaryID → set of first-party sources
 
 		// Remap edges.
 		type edgeKey2 struct{ from, to, kind string }

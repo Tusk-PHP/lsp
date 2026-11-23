@@ -179,11 +179,11 @@ func TestDefinitionOnWhenEnabled(t *testing.T) {
 
 func TestIsComposerJSON(t *testing.T) {
 	cases := map[string]bool{
-		"file:///workspace/composer.json":              true,
+		"file:///workspace/composer.json":                true,
 		"file:///workspace/vendor/foo/bar/composer.json": true,
-		"file:///workspace/package.json":               false,
-		"/some/path/composer.json":                     true,
-		"/some/path/notcomposer.json":                  false,
+		"file:///workspace/package.json":                 false,
+		"/some/path/composer.json":                       true,
+		"/some/path/notcomposer.json":                    false,
 	}
 	for uri, want := range cases {
 		if got := IsComposerJSON(uri); got != want {

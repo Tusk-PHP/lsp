@@ -14,7 +14,7 @@ import (
 // provider consumes.
 type LockedPackage struct {
 	Name        string
-	Version     string   // exact resolved version, e.g. "v10.48.4"
+	Version     string // exact resolved version, e.g. "v10.48.4"
 	Description string
 	PHPRequire  string   // raw constraint from require.php, e.g. ">=8.1"
 	License     []string // licenses, e.g. ["MIT"]

@@ -76,24 +76,24 @@ class OrderItem extends Model {}
 
 	// A to-one relation: stored with the concrete FQN.
 	idx.AddVirtualMember(`App\Models\Order`, &symbols.Symbol{
-		Name:      "$customer",
-		FQN:       `App\Models\Order::$customer`,
-		Kind:      symbols.KindProperty,
-		URI:       testURI,
-		Type:      `App\Models\Customer`,
-		IsVirtual: true,
+		Name:       "$customer",
+		FQN:        `App\Models\Order::$customer`,
+		Kind:       symbols.KindProperty,
+		URI:        testURI,
+		Type:       `App\Models\Customer`,
+		IsVirtual:  true,
 		DocComment: "← relation belongsTo",
 	})
 
 	// A to-many relation: stored with the collapsed type "Collection".
 	// This is the fidelity wart we must surface.
 	idx.AddVirtualMember(`App\Models\Order`, &symbols.Symbol{
-		Name:      "$items",
-		FQN:       `App\Models\Order::$items`,
-		Kind:      symbols.KindProperty,
-		URI:       testURI,
-		Type:      "Collection",
-		IsVirtual: true,
+		Name:       "$items",
+		FQN:        `App\Models\Order::$items`,
+		Kind:       symbols.KindProperty,
+		URI:        testURI,
+		Type:       "Collection",
+		IsVirtual:  true,
 		DocComment: "← relation hasMany(OrderItem)",
 	})
 

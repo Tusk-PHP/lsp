@@ -302,10 +302,10 @@ type PhpContainerBindingsOutput struct {
 
 // SymfonyRouteRecord is a single Symfony route entry returned by the MCP tools.
 type SymfonyRouteRecord struct {
-	Name          string         `json:"name"`
-	Path          string         `json:"path,omitempty"`
-	URI           string         `json:"uri,omitempty"`
-	DeclRange     protocol.Range `json:"declRange"`
+	Name      string         `json:"name"`
+	Path      string         `json:"path,omitempty"`
+	URI       string         `json:"uri,omitempty"`
+	DeclRange protocol.Range `json:"declRange"`
 }
 
 type SymfonyRoutesOutput struct {
@@ -315,7 +315,6 @@ type SymfonyRoutesOutput struct {
 type SymfonyRouteInput struct {
 	Name string `json:"name" jsonschema:"Symfony route name"`
 }
-
 
 func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, error) {
 	if rootPath == "" {
@@ -1101,7 +1100,6 @@ func (s *Service) findSymfonyRoute(name string) *SymfonyRouteRecord {
 	return nil
 }
 
-
 func (s *Service) laravelModelSchema(fqn string) (LaravelModelSchemaOutput, error) {
 	ws := s.runtime().Workspace
 	sym := ws.Index.Lookup(fqn)
@@ -1518,8 +1516,6 @@ func (w *slogWriter) Write(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
-
-
 
 // readFile reads a file by URI, or returns "" when it can't be read.
 func readFile(uri string) string {

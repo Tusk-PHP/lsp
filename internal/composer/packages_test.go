@@ -58,7 +58,7 @@ func fakePackages() []map[string]interface{} {
 			"autoload": map[string]interface{}{
 				"psr-4": map[string]interface{}{
 					"Psr\\Log\\": "src/",
-					"Psr\\":     "src-base/",
+					"Psr\\":      "src-base/",
 				},
 			},
 		},

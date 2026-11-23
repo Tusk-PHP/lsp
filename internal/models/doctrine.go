@@ -13,29 +13,29 @@ import (
 
 // Doctrine SQL type → PHP type mapping.
 var doctrineTypeMap = map[string]string{
-	"string":          "string",
-	"text":            "string",
-	"integer":         "int",
-	"smallint":        "int",
-	"bigint":          "int",
-	"boolean":         "bool",
-	"decimal":         "string",
-	"float":           "float",
-	"datetime":        "\\DateTimeInterface",
+	"string":             "string",
+	"text":               "string",
+	"integer":            "int",
+	"smallint":           "int",
+	"bigint":             "int",
+	"boolean":            "bool",
+	"decimal":            "string",
+	"float":              "float",
+	"datetime":           "\\DateTimeInterface",
 	"datetime_immutable": "\\DateTimeImmutable",
-	"datetimetz":      "\\DateTimeInterface",
-	"date":            "\\DateTimeInterface",
-	"date_immutable":  "\\DateTimeImmutable",
-	"time":            "\\DateTimeInterface",
-	"time_immutable":  "\\DateTimeImmutable",
-	"array":           "array",
-	"simple_array":    "array",
-	"json":            "array",
-	"json_array":      "array",
-	"object":          "object",
-	"binary":          "string",
-	"blob":            "string",
-	"guid":            "string",
+	"datetimetz":         "\\DateTimeInterface",
+	"date":               "\\DateTimeInterface",
+	"date_immutable":     "\\DateTimeImmutable",
+	"time":               "\\DateTimeInterface",
+	"time_immutable":     "\\DateTimeImmutable",
+	"array":              "array",
+	"simple_array":       "array",
+	"json":               "array",
+	"json_array":         "array",
+	"object":             "object",
+	"binary":             "string",
+	"blob":               "string",
+	"guid":               "string",
 }
 
 // Regexes for PHP 8 attribute syntax.
@@ -54,8 +54,8 @@ var (
 	ormTableRe = regexp.MustCompile(`#\[\s*(?:ORM\\)?Table\b\(([^)]*)\)`)
 
 	// Annotation syntax: @ORM\Column(type="string")
-	ormColumnAnnotRe  = regexp.MustCompile(`@ORM\\Column\(([^)]*)\)`)
-	ormEntityAnnotRe  = regexp.MustCompile(`@ORM\\Entity\b(?:\(([^)]*)\))?`)
+	ormColumnAnnotRe   = regexp.MustCompile(`@ORM\\Column\(([^)]*)\)`)
+	ormEntityAnnotRe   = regexp.MustCompile(`@ORM\\Entity\b(?:\(([^)]*)\))?`)
 	ormRelationAnnotRe = regexp.MustCompile(`@ORM\\(OneToOne|OneToMany|ManyToOne|ManyToMany)\(([^)]*)\)`)
 
 	// Matches a PHP property declaration line: visibility [static] [readonly] [?Type] $name
@@ -63,10 +63,10 @@ var (
 	ormIdAnnotRe      = regexp.MustCompile(`@ORM\\Id\b`)
 
 	// Extract named argument values
-	typeArgRe       = regexp.MustCompile(`type\s*[:=]\s*['"]([^'"]+)['"]`)
-	targetEntityRe  = regexp.MustCompile(`targetEntity\s*[:=]\s*([A-Za-z_\\]+)::class`)
-	repoClassRe     = regexp.MustCompile(`repositoryClass\s*[:=]\s*([A-Za-z_\\]+)::class`)
-	nameArgRe       = regexp.MustCompile(`name\s*[:=]\s*['"]([^'"]+)['"]`)
+	typeArgRe      = regexp.MustCompile(`type\s*[:=]\s*['"]([^'"]+)['"]`)
+	targetEntityRe = regexp.MustCompile(`targetEntity\s*[:=]\s*([A-Za-z_\\]+)::class`)
+	repoClassRe    = regexp.MustCompile(`repositoryClass\s*[:=]\s*([A-Za-z_\\]+)::class`)
+	nameArgRe      = regexp.MustCompile(`name\s*[:=]\s*['"]([^'"]+)['"]`)
 )
 
 // Singular Doctrine relations (result is nullable entity).
@@ -450,14 +450,14 @@ type doctrineMappingXML struct {
 }
 
 type doctrineEntityXML struct {
-	Name       string                 `xml:"name,attr"`
-	Table      string                 `xml:"table,attr"`
-	Fields     []doctrineFieldXML     `xml:"field"`
-	Id         []doctrineFieldXML     `xml:"id"`
-	OneToOne   []doctrineRelationXML  `xml:"one-to-one"`
-	OneToMany  []doctrineRelationXML  `xml:"one-to-many"`
-	ManyToOne  []doctrineRelationXML  `xml:"many-to-one"`
-	ManyToMany []doctrineRelationXML  `xml:"many-to-many"`
+	Name       string                `xml:"name,attr"`
+	Table      string                `xml:"table,attr"`
+	Fields     []doctrineFieldXML    `xml:"field"`
+	Id         []doctrineFieldXML    `xml:"id"`
+	OneToOne   []doctrineRelationXML `xml:"one-to-one"`
+	OneToMany  []doctrineRelationXML `xml:"one-to-many"`
+	ManyToOne  []doctrineRelationXML `xml:"many-to-one"`
+	ManyToMany []doctrineRelationXML `xml:"many-to-many"`
 }
 
 type doctrineFieldXML struct {

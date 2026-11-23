@@ -8,18 +8,18 @@ import (
 
 func TestIsPartialApplicationArgs(t *testing.T) {
 	for args, want := range map[string]bool{
-		"?":                   true,
-		"'Hello', ?":          true,
-		"?, ?, times: 2":      true,
-		"'Hi', ...":           true,
-		"...":                 true, // first-class callable: partial application of nothing
-		"attempt: ?":          true,
-		"...$args":            false,
-		"$a ? $b : $c":        false,
-		"$a ?? 'x'":           false,
-		"'?'":                 false,
-		"fn () => $a?->b":     false,
-		"":                    false,
+		"?":               true,
+		"'Hello', ?":      true,
+		"?, ?, times: 2":  true,
+		"'Hi', ...":       true,
+		"...":             true, // first-class callable: partial application of nothing
+		"attempt: ?":      true,
+		"...$args":        false,
+		"$a ? $b : $c":    false,
+		"$a ?? 'x'":       false,
+		"'?'":             false,
+		"fn () => $a?->b": false,
+		"":                false,
 	} {
 		if got := IsPartialApplicationArgs(args); got != want {
 			t.Errorf("%q: got %v, want %v", args, got, want)

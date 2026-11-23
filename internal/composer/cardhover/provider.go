@@ -19,10 +19,10 @@ import (
 // fresh on each hover so edits to composer.lock are picked up without
 // invalidation.
 type Provider struct {
-	rootPath        string
-	projectPHPVer   string                                 // "MAJOR.MINOR" of the workspace platform
-	loadLockfile    func(root string) (*lockfile.Lockfile, error) // injectable for tests
-	enabled         bool
+	rootPath         string
+	projectPHPVer    string                                        // "MAJOR.MINOR" of the workspace platform
+	loadLockfile     func(root string) (*lockfile.Lockfile, error) // injectable for tests
+	enabled          bool
 	openOnDefinition bool
 }
 
@@ -123,10 +123,10 @@ func isPlatformConstraint(name string) bool {
 // then the in-document constraint as the always-present fallback.
 func (p *Provider) buildCard(entry manifest.RequireEntry, repos []manifest.RepositoryEntry) card {
 	c := card{
-		Name:            entry.Name,
-		Constraint:      entry.Value,
-		ExternalURL:     ExternalURL(entry.Name, repos, p.rootPath),
-		ProjectPHPVer:   p.projectPHPVer,
+		Name:          entry.Name,
+		Constraint:    entry.Value,
+		ExternalURL:   ExternalURL(entry.Name, repos, p.rootPath),
+		ProjectPHPVer: p.projectPHPVer,
 	}
 	// Locked data, if available.
 	if lock, err := p.loadLockfile(p.rootPath); err == nil && lock != nil {

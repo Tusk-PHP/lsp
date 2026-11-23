@@ -9,10 +9,10 @@ import (
 
 func TestDetectSymfonyTranslationContext(t *testing.T) {
 	tests := []struct {
-		name    string
-		line    string
-		cursor  int
-		wantKey string
+		name     string
+		line     string
+		cursor   int
+		wantKey  string
 		wantPart string
 	}{
 		{
@@ -193,9 +193,9 @@ func TestTranslationResolverMalformedXLIFF(t *testing.T) {
 
 func TestParseSymfonyTranslationFilename(t *testing.T) {
 	tests := []struct {
-		input          string
-		wantDomain     string
-		wantLocale     string
+		input      string
+		wantDomain string
+		wantLocale string
 	}{
 		{"messages.en.yaml", "messages", "en"},
 		{"validators.fr.yml", "validators", "fr"},

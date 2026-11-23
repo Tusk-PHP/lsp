@@ -200,9 +200,9 @@ func TestExtractCommandNameContext(t *testing.T) {
 
 func TestParseAsCommandBlock(t *testing.T) {
 	tests := []struct {
-		block   string
-		name    string
-		desc    string
+		block string
+		name  string
+		desc  string
 	}{
 		{`#[AsCommand(name: 'app:do-thing', description: 'Does the thing')]`, "app:do-thing", "Does the thing"},
 		{`#[AsCommand('app:simple')]`, "app:simple", ""},

@@ -114,7 +114,7 @@ func TestParseMalformedDoesNotPanic(t *testing.T) {
 		``,
 		`{`,
 		`{ "require": { "foo": `,
-		`{ "require": { "foo/bar": "^1.0", }`,    // trailing comma
+		`{ "require": { "foo/bar": "^1.0", }`,   // trailing comma
 		`{ "require": { "broken": "missing-end`, // unterminated
 	}
 	for _, src := range bads {

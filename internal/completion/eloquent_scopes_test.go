@@ -53,12 +53,12 @@ func TestEloquentLocalScopes(t *testing.T) {
 		return p.ResolveExpressionTypeTyped(expr, preamble, protocol.Position{Line: 4}, file).String()
 	}
 	for expr, want := range map[string]string{
-		"Post::published()":                      "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
-		"Post::ofType('news')":                   "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
-		"Post::popular()":                        "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
-		"Post::query()->published()":             "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
+		"Post::published()":                       "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
+		"Post::ofType('news')":                    "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
+		"Post::popular()":                         "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
+		"Post::query()->published()":              "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",
 		"Post::where('a', 1)->popular()->first()": "?App\\Models\\Post",
-		"Post::published()->get()":               "Illuminate\\Database\\Eloquent\\Collection<int, App\\Models\\Post>",
+		"Post::published()->get()":                "Illuminate\\Database\\Eloquent\\Collection<int, App\\Models\\Post>",
 	} {
 		if got := typed(expr); got != want {
 			t.Errorf("%s: got %q, want %q", expr, got, want)

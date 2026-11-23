@@ -1022,7 +1022,6 @@ func TestProjectSummaryContractVersion(t *testing.T) {
 	}
 }
 
-
 func TestPhpContainerBindings(t *testing.T) {
 	ctx := context.Background()
 	svc := sharedLaravelSvc(t)
@@ -1228,4 +1227,3 @@ func TestLaravelModelSchemaRelations(t *testing.T) {
 		t.Errorf("expected products() relation in App\\Models\\Category relations, got %#v", relations)
 	}
 }
-

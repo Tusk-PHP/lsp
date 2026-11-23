@@ -14,9 +14,9 @@ import (
 // FrameworkArrayResolver provides array key suggestions for framework-specific
 // patterns like Laravel config(), $request->validated(), $model->toArray().
 type FrameworkArrayResolver struct {
-	index        *symbols.Index
-	rootPath     string
-	framework    string
+	index         *symbols.Index
+	rootPath      string
+	framework     string
 	vendorConfigs map[string]string // config key → absolute file path (cached)
 }
 
