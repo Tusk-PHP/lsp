@@ -30,11 +30,7 @@ func TestHandleInitializeWiresGenericResolvers(t *testing.T) {
 	if s.completion == nil || s.hover == nil {
 		t.Fatal("expected completion and hover providers to be initialized")
 	}
-	if s.hover.GenericExprResolver == nil {
-		t.Fatal("expected GenericExprResolver to be wired")
-	}
-
-	if rt := s.hover.GenericExprResolver("", "", protocol.Position{}, nil); !rt.IsEmpty() {
+	if rt := s.completion.ResolveExpressionTypeTyped("", "", protocol.Position{}, nil); !rt.IsEmpty() {
 		t.Fatalf("expected empty generic expression result, got %#v", rt)
 	}
 

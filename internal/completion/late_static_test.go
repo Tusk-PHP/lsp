@@ -63,14 +63,3 @@ final class Child extends Base {
 		}
 	}
 }
-
-func TestForwardsCallingClass(t *testing.T) {
-	for before, want := range map[string]bool{
-		"parent::": true, "  self :: ": true, "return STATIC::": true,
-		"Base::": false, "$this->": false, "$parent::": false, "": false,
-	} {
-		if got := forwardsCallingClass(before); got != want {
-			t.Errorf("forwardsCallingClass(%q) = %v, want %v", before, got, want)
-		}
-	}
-}

@@ -395,7 +395,8 @@ Server.handleHover()
   ↓
 hover.Provider.GetHover(uri, source, position)
   ├─ sourcectx.Analyze() → AccessKind = instance, subject = "$this->logger"
-  ├─ resolveAccessChain() walks left:
+  ├─ resolve.Resolver.AccessOwnerType() walks left (the same walker
+  │  completion, go-to-definition, inlay hints and diagnostics use):
   │   "info" ← "->" ← "logger" ← "->" ← "$this"
   │   $this → App\Service (enclosing class from sourcectx)
   │   logger → property type Monolog\Logger (via resolve/)

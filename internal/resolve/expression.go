@@ -100,8 +100,8 @@ func (r *Resolver) ExpressionTypeExpecting(expr string, expected *ResolvedType, 
 			return r.chainOriginType(origin, ctx)
 		}
 		_, local := ctx.Locals[origin.text]
-		if !local && r.TypedChainResolver != nil && ctx.File != nil && len(ctx.Lines) > 0 {
-			if rt := r.TypedChainResolver(expr, r.JoinLines(ctx.Lines), ctx.Pos, ctx.File); !rt.IsEmpty() {
+		if !local && ctx.File != nil && len(ctx.Lines) > 0 {
+			if rt := r.ChainType(expr, r.JoinLines(ctx.Lines), ctx.Pos, ctx.File); !rt.IsEmpty() {
 				return rt
 			}
 		}
@@ -114,8 +114,8 @@ func (r *Resolver) ExpressionTypeExpecting(expr string, expected *ResolvedType, 
 		}
 		return cur
 	}
-	if r.TypedChainResolver != nil && ctx.File != nil && len(ctx.Lines) > 0 && (strings.Contains(expr, "->") || strings.Contains(expr, "::")) {
-		return r.TypedChainResolver(expr, r.JoinLines(ctx.Lines), ctx.Pos, ctx.File)
+	if ctx.File != nil && len(ctx.Lines) > 0 && (strings.Contains(expr, "->") || strings.Contains(expr, "::")) {
+		return r.ChainType(expr, r.JoinLines(ctx.Lines), ctx.Pos, ctx.File)
 	}
 	return ResolvedType{}
 }

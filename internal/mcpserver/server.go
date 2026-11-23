@@ -728,9 +728,6 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.Hover = hover.NewProvider(ws.Index, ws.Container, s.Framework)
 	rt.Hover.SetArrayResolver(arrayResolver)
 	rt.Hover.SetConfig(s.Config)
-	rt.Hover.GenericExprResolver = func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return rt.Completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	}
 	rt.Hover.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 		return rt.Completion.ResolveExpressionTypeTyped(expr, source, pos, file)
 	})

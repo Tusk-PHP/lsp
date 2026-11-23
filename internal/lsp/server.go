@@ -452,9 +452,6 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if s.coverageNotifications {
 		s.coverage.OnChange(func() { s.sendNotification("tusk/coverageChanged", nil) })
 	}
-	s.hover.GenericExprResolver = func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	}
 	s.hover.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
 	})

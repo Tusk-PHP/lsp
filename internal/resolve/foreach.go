@@ -81,16 +81,12 @@ func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos
 
 		var iterableType ResolvedType
 		hasChain := strings.Contains(iterableExpr, "->") || strings.Contains(iterableExpr, "::")
-		if source == "" && (hasChain || r.TypedChainResolver != nil) {
+		if source == "" && hasChain {
 			source = r.JoinLines(lines)
 		}
 		switch {
-		case r.TypedChainResolver != nil && hasChain:
-			iterableType = r.TypedChainResolver(iterableExpr, source, pos, file)
-		case r.ChainResolver != nil && hasChain:
-			if t := r.ChainResolver(iterableExpr, source, pos, file); t != "" {
-				iterableType = ResolvedType{FQN: t}
-			}
+		case hasChain:
+			iterableType = r.ChainType(iterableExpr, source, pos, file)
 		case strings.HasPrefix(iterableExpr, "$") && extractLeadingVariable(iterableExpr) == iterableExpr:
 			iterableType = r.ResolveVariableTypeTyped(iterableExpr, lines, pos, file)
 		default:

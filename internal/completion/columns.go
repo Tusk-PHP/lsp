@@ -308,7 +308,7 @@ func (p *Provider) resolveBuilderModel(prefix, method, source string, pos protoc
 		if className == "" {
 			return ""
 		}
-		typeFQN = p.resolveClassNameFromSource(className, source, file)
+		typeFQN = p.resolver.ResolveClassNameLoose(className, file)
 	} else {
 		// Instance/chain call: Category::query()->where( or $query->where(
 		// Use resolveAccessChain to walk the chain
@@ -368,7 +368,7 @@ func (p *Provider) findModelInChain(expr, source string, pos protocol.Position, 
 			}
 		}
 		if className != "" {
-			fqn := p.resolveClassNameFromSource(className, source, file)
+			fqn := p.resolver.ResolveClassNameLoose(className, file)
 			if p.isEloquentModel(fqn) {
 				return fqn
 			}

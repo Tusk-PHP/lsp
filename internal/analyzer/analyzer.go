@@ -33,9 +33,6 @@ type Analyzer struct {
 	// makes sense client-side (e.g. copying to the clipboard) are offered only
 	// when their command is listed here.
 	clientCommands map[string]bool
-	// sharedExprResolver is the generic-aware expression resolver the server
-	// shares between providers, when it wires one.
-	sharedExprResolver func(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType
 }
 
 // DefinitionResult is the extended return shape from FindDefinitionWithManual.
@@ -56,20 +53,10 @@ func NewAnalyzer(index *symbols.Index, ca *container.ContainerAnalyzer) *Analyze
 		framework = ca.Framework()
 	}
 	a := &Analyzer{index: index, container: ca, resolver: resolve.NewResolver(index), framework: framework}
-	a.resolver.TypedChainResolver = a.resolveExpressionTypeTyped
-	return a
-}
-
-// resolveExpressionTypeTyped resolves the type of a chain expression preserving
-// generic parameters, so that array<int, ReflectionMethod> is not collapsed to array.
-func (a *Analyzer) resolveExpressionTypeTyped(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-	expr = strings.TrimSpace(expr)
-	if expr == "" {
-		return resolve.ResolvedType{}
+	if ca != nil {
+		a.resolver.ContainerCall = a.resolveContainerCallType
 	}
-	dummyLine := expr + "->__dummy__"
-	wordStart := len(expr) + 2
-	return a.resolveAccessChainTyped(dummyLine, wordStart, source, pos, file)
+	return a
 }
 
 func (a *Analyzer) SetChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) string) {
@@ -78,7 +65,6 @@ func (a *Analyzer) SetChainResolver(fn func(expr string, source string, pos prot
 
 func (a *Analyzer) SetTypedChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType) {
 	a.resolver.TypedChainResolver = fn
-	a.sharedExprResolver = fn
 }
 
 func (a *Analyzer) SetTranslationResolver(resolver *frameworklaravel.TranslationResolver) {
@@ -181,19 +167,18 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 
 	// Check for -> or :: access (method/property on a class)
 	if ctx.AccessKind != sourcectx.AccessNone {
-		classFQN := a.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		owner := a.resolver.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		classFQN := owner.BaseFQN()
 		if classFQN == "" {
 			return nil
 		}
 		if sym := a.resolver.FindMemberAnywhere(classFQN, word); sym != nil {
 			return symbolLocation(sym)
 		}
-		// With the receiver's type arguments: a local scope on Builder<Post>
-		// is found on Post.
-		if owner := a.resolveAccessChainTyped(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file); !owner.IsEmpty() {
-			if sym := a.resolver.FindMemberAnywhereOn(owner, word); sym != nil {
-				return symbolLocation(sym)
-			}
+		// With the receiver's type arguments and every class of a union: a
+		// local scope on Builder<Post> is found on Post.
+		if sym := a.resolver.FindMemberAnywhereOn(owner, word); sym != nil {
+			return symbolLocation(sym)
 		}
 		return nil
 	}
@@ -343,17 +328,16 @@ func (a *Analyzer) resolveDefinitionSymbol(uri, source string, pos protocol.Posi
 
 	// Check for -> or :: access (method/property on a class)
 	if ctx.AccessKind != sourcectx.AccessNone {
-		classFQN := a.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		owner := a.resolver.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		classFQN := owner.BaseFQN()
 		if classFQN == "" {
 			return nil, nil, nil
 		}
 		member := a.resolver.FindMemberAnywhere(classFQN, word)
 		if member == nil {
-			// With the receiver's type arguments: a local scope on
-			// Builder<Post> is found on Post.
-			if owner := a.resolveAccessChainTyped(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file); !owner.IsEmpty() {
-				member = a.resolver.FindMemberAnywhereOn(owner, word)
-			}
+			// With the receiver's type arguments and every class of a union:
+			// a local scope on Builder<Post> is found on Post.
+			member = a.resolver.FindMemberAnywhereOn(owner, word)
 		}
 		if member != nil {
 			// Owner is the *declaring* class (member.ParentFQN), not the
@@ -593,135 +577,6 @@ func (a *Analyzer) definitionForContainerArg(line string, pos protocol.Position,
 	return nil
 }
 
-// resolveAccessChain walks left through -> and :: chains to return the FQN
-// of the class that owns the member at wordStart.
-func (a *Analyzer) resolveAccessChain(line string, wordStart int, source string, pos protocol.Position, file *parser.FileNode) string {
-	return a.resolveAccessChainTyped(line, wordStart, source, pos, file).BaseFQN()
-}
-
-// resolveAccessChainTyped is the generic-aware variant of resolveAccessChain.
-// It propagates receiver template params through method-call steps so that
-// @return T substitution fires correctly for template-typed receivers.
-func (a *Analyzer) resolveAccessChainTyped(line string, wordStart int, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-	i := wordStart
-	for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {
-		i--
-	}
-	if i < 2 {
-		return resolve.ResolvedType{}
-	}
-
-	if line[i-2] == '-' && line[i-1] == '>' {
-		i -= 2
-		if i > 0 && line[i-1] == '?' {
-			i-- // ?->
-		}
-	} else if line[i-2] == ':' && line[i-1] == ':' {
-		i -= 2
-	} else {
-		return resolve.ResolvedType{}
-	}
-
-	// Type the owner with the shared generic-aware resolver when the server
-	// wired one, so definitions agree with hover and completion.
-	if a.sharedExprResolver != nil && file != nil {
-		owner := strings.TrimSpace(line[:i])
-		if owner != "" {
-			if rt := a.sharedExprResolver(owner, source, pos, file); !rt.IsEmpty() {
-				return rt
-			}
-		}
-	}
-
-	for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {
-		i--
-	}
-
-	// Skip past closing paren for method chains
-	if i > 0 && line[i-1] == ')' {
-		parenEnd := i
-		depth := 1
-		i--
-		for i > 0 && depth > 0 {
-			i--
-			if line[i] == ')' {
-				depth++
-			} else if line[i] == '(' {
-				depth--
-			}
-		}
-
-		// Check if this is a container call: app(...), resolve(...)
-		if a.container != nil {
-			callExpr := strings.TrimSpace(line[:parenEnd])
-			if concrete := a.resolveContainerCallType(callExpr, source, file); concrete != "" {
-				return resolve.ResolvedType{FQN: concrete}
-			}
-		}
-
-		for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {
-			i--
-		}
-	}
-
-	end := i
-	for i > 0 && resolve.IsWordChar(line[i-1]) {
-		i--
-	}
-	if i > 0 && line[i-1] == '$' {
-		i--
-	}
-	if i >= end {
-		return resolve.ResolvedType{}
-	}
-	target := line[i:end]
-
-	if file == nil {
-		return resolve.ResolvedType{}
-	}
-
-	switch target {
-	case "$this", "self", "static":
-		return resolve.ResolvedType{FQN: resolve.FindEnclosingClass(file, pos)}
-	case "parent":
-		classFQN := resolve.FindEnclosingClass(file, pos)
-		if classFQN == "" {
-			return resolve.ResolvedType{}
-		}
-		chain := a.index.GetInheritanceChain(classFQN)
-		if len(chain) > 0 {
-			return resolve.ResolvedType{FQN: chain[0]}
-		}
-		return resolve.ResolvedType{}
-	}
-
-	if strings.HasPrefix(target, "$") {
-		// Use typed resolution to preserve generic params
-		return a.resolver.ResolveVariableTypeTyped(target, a.resolver.Lines(source), pos, file)
-	}
-
-	// Try as a class name (for static access like Logger::create)
-	if fqn := a.resolver.ResolveClassName(target, file); fqn != "" {
-		if sym := a.index.Lookup(fqn); sym != nil {
-			switch sym.Kind {
-			case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
-				return resolve.ResolvedType{FQN: fqn}
-			}
-		}
-	}
-
-	// Recursive chain resolution — propagate template-bound return through method-call chain.
-	ownerResolved := a.resolveAccessChainTyped(line, i, source, pos, file)
-	if ownerResolved.IsEmpty() {
-		return resolve.ResolvedType{}
-	}
-	member := a.resolver.FindMemberAnywhereOn(ownerResolved, target)
-	if member == nil {
-		return resolve.ResolvedType{}
-	}
-	return a.resolver.MemberTypeResolved(member, file, ownerResolved.BaseFQN(), ownerResolved.Params)
-}
-
 // resolveContainerCallType resolves a container call expression to a concrete FQN.
 // Uses the shared ExtractContainerCallArg helper from the resolve package.
 func (a *Analyzer) resolveContainerCallType(expr string, source string, file *parser.FileNode) string {
@@ -779,7 +634,7 @@ func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position)
 	}
 
 	if ctx.AccessKind != sourcectx.AccessNone {
-		classFQN := a.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		classFQN := a.resolver.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file).BaseFQN()
 		if classFQN == "" {
 			return nil
 		}
@@ -959,7 +814,7 @@ func (a *Analyzer) resolveSymbolAtCursor(uri, source string, pos protocol.Positi
 	// the member, return nil — do not fall through to name-based lookups that
 	// would match unrelated symbols across the project.
 	if ctx != nil && ctx.AccessKind != sourcectx.AccessNone {
-		classFQN := a.resolveAccessChain(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		classFQN := a.resolver.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file).BaseFQN()
 		if classFQN != "" {
 			if member := a.resolver.FindMemberAnywhere(classFQN, word); member != nil {
 				return member

@@ -59,8 +59,9 @@ func providerLineContaining(t *testing.T, source, needle string) int {
 func TestProviderGenericCoverageHelpers(t *testing.T) {
 	p, idx, source, file := setupTemplateProviderCoverage(t)
 
-	if p.resolver.TypedChainResolver == nil {
-		t.Fatal("expected NewProvider to wire TypedChainResolver")
+	// Completion types chains with its own resolver, never through a callback.
+	if p.resolver.TypedChainResolver != nil {
+		t.Fatal("expected NewProvider to leave TypedChainResolver unset")
 	}
 
 	if got := p.ResolveExpressionTypeTyped("   ", source, protocol.Position{}, file); !got.IsEmpty() {

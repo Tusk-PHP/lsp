@@ -24,9 +24,8 @@ type Provider struct {
 }
 
 // NewProvider creates a Provider backed by the shared symbol index and optional
-// container analyzer.  Call SetTypedChainResolver after construction to wire
-// chain-expression resolution (required for variable-type and param-name hints
-// that involve method chains).
+// container analyzer. SetTypedChainResolver wires it to the resolver the other
+// features share, so its hints type chains as they do.
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer) *Provider {
 	return &Provider{
 		index:     index,

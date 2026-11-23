@@ -40,8 +40,9 @@ func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framewor
 	p := &Provider{index: index, container: ca, resolver: resolve.NewResolver(index), framework: framework}
 	// Wire up chain resolution so ResolveVariableType can handle $var = Class::method()->chain()
 	p.resolver.ChainResolver = p.ResolveExpressionType
-	// Wire up typed chain resolution for generic-aware variable type inference
-	p.resolver.TypedChainResolver = p.ResolveExpressionTypeTyped
+	if ca != nil {
+		p.resolver.ContainerCall = p.resolveContainerCallType
+	}
 	return p
 }
 
@@ -75,13 +76,7 @@ func (p *Provider) ResolveDiagnosticType(expr string, source string, pos protoco
 // ResolveExpressionTypeTyped resolves the type of an expression preserving
 // generic parameters (e.g., returns Collection<int, Category> instead of bare Collection).
 func (p *Provider) ResolveExpressionTypeTyped(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-	expr = strings.TrimSpace(expr)
-	if expr == "" {
-		return resolve.ResolvedType{}
-	}
-	dummyLine := expr + "->__dummy__"
-	wordStart := len(expr) + 2
-	return p.resolveAccessChainTyped(dummyLine, wordStart, source, pos, file)
+	return p.resolver.ChainType(expr, source, pos, file)
 }
 
 // SetArrayResolver sets the framework array resolver for config/request/model key completion.
@@ -535,7 +530,7 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 	// keep $this. Private members of another class stay out of reach.
 	instanceCalls := false
 	enclosing := ""
-	if op := strings.LastIndex(prefix, "::"); op >= 0 && forwardsCallingClass(prefix[:op+2]) {
+	if op := strings.LastIndex(prefix, "::"); op >= 0 && resolve.ForwardsCallingClass(prefix[:op+2]) {
 		enclosing = resolve.FindEnclosingClass(file, pos)
 		if m := resolve.FindEnclosingMethod(file, pos); m != nil && !m.IsStatic {
 			instanceCalls = true
@@ -621,7 +616,7 @@ func (p *Provider) ResolveChainTypeTyped(source, prefix, op string, pos protocol
 	if idx < 0 {
 		return resolve.ResolvedType{}
 	}
-	return p.resolveAccessChainTyped(prefix, idx+len(op), source, pos, file)
+	return p.resolver.AccessOwnerType(prefix, idx+len(op), source, pos, file)
 }
 
 // resolveChainType resolves the class FQN from the expression before op (-> or ::).
@@ -635,284 +630,6 @@ func (p *Provider) resolveChainType(source, prefix, op string, pos protocol.Posi
 	}
 	// wordStart is after the operator (where the member name would be)
 	return p.resolveAccessChain(prefix, idx+len(op), source, pos, file)
-}
-
-// resolveAccessChainTyped resolves the chain like resolveAccessChain but returns
-// a ResolvedType that preserves generic context (e.g., Builder<Category>).
-func (p *Provider) resolveAccessChainTyped(line string, wordStart int, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-	return p.resolveChainWithContext(line, wordStart, source, pos, file, nil)
-}
-
-// resolveChainWithContext is the generic-aware chain resolver. It walks backward
-// through the chain and tracks generic type parameters at each step.
-func (p *Provider) resolveChainWithContext(line string, wordStart int, source string, pos protocol.Position, file *parser.FileNode, ctx []resolve.ResolvedType) resolve.ResolvedType {
-	i := wordStart
-
-	for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {
-		i--
-	}
-	if i < 2 {
-		return resolve.ResolvedType{}
-	}
-
-	op := ""
-	if line[i-2] == '-' && line[i-1] == '>' {
-		op = "->"
-		i -= 2
-		if i > 0 && line[i-1] == '?' {
-			i-- // ?->
-		}
-	} else if line[i-2] == ':' && line[i-1] == ':' {
-		op = "::"
-		i -= 2
-	} else {
-		return resolve.ResolvedType{}
-	}
-
-	for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {
-		i--
-	}
-
-	parenEnd := 0
-	callArgStr := "" // captures the text inside (...) for method-level template inference
-	if i > 0 && line[i-1] == ')' {
-		parenEnd = i
-		depth := 1
-		i--
-		for i > 0 && depth > 0 {
-			i--
-			if line[i] == ')' {
-				depth++
-			} else if line[i] == '(' {
-				depth--
-			}
-		}
-		// Capture argument content: text between ( and )
-		if i >= 0 && i+1 < parenEnd-1 {
-			callArgStr = strings.TrimSpace(line[i+1 : parenEnd-1])
-		}
-
-		if op == "->" && p.container != nil {
-			callExpr := strings.TrimSpace(line[:parenEnd])
-			if concrete := p.resolveContainerCallType(callExpr, source, file); concrete != "" {
-				if concrete == "-" {
-					return resolve.ResolvedType{}
-				}
-				return resolve.ResolvedType{FQN: concrete}
-			}
-		}
-
-		if op == "->" {
-			callExpr := strings.TrimSpace(line[:parenEnd])
-			if newClass := extractNewClass(callExpr); newClass != "" {
-				fqn := p.resolveClassNameFromSource(newClass, source, file)
-				if args := extractNewArgs(callExpr); args != "" {
-					ctx := resolve.ExprContext{Lines: p.resolver.Lines(source), Pos: pos, File: file}
-					if rt := p.resolver.NewExpressionType(newClass, args, ctx); rt.FQN == fqn {
-						return rt
-					}
-				}
-				return resolve.ResolvedType{FQN: fqn}
-			}
-		}
-
-		for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {
-			i--
-		}
-	}
-
-	// An offset: $data['user']->, $rows[0]->
-	if parenEnd == 0 && i > 0 && line[i-1] == ']' {
-		closeAt := i - 1
-		depth := 0
-		j := closeAt
-		for ; j >= 0; j-- {
-			if line[j] == ']' {
-				depth++
-			} else if line[j] == '[' {
-				depth--
-				if depth == 0 {
-					break
-				}
-			}
-		}
-		if j <= 0 {
-			return resolve.ResolvedType{}
-		}
-		base := p.ResolveExpressionTypeTyped(strings.TrimSpace(line[:j]), source, pos, file)
-		if base.IsEmpty() {
-			return resolve.ResolvedType{}
-		}
-		return p.resolver.OffsetType(base, line[j+1:closeAt])
-	}
-
-	end := i
-	for i > 0 && resolve.IsWordChar(line[i-1]) {
-		i--
-	}
-	if i > 0 && line[i-1] == '$' {
-		i--
-	}
-	if i >= end {
-		return resolve.ResolvedType{}
-	}
-	target := line[i:end]
-
-	// Resolve variables and keywords using standard resolution. self, static
-	// and parent are keywords, which PHP matches regardless of case.
-	switch keywordOrTarget(target) {
-	case "$this":
-		if file != nil {
-			return p.resolver.ResolveVariableTypeTyped("$this", p.resolver.Lines(source), pos, file)
-		}
-		return resolve.ResolvedType{}
-	case "self", "static":
-		if file != nil {
-			return resolve.ResolvedType{FQN: resolve.FindEnclosingClass(file, pos)}
-		}
-		return resolve.ResolvedType{}
-	case "parent":
-		if file != nil {
-			classFQN := resolve.FindEnclosingClass(file, pos)
-			if classFQN != "" {
-				chain := p.index.GetInheritanceChain(classFQN)
-				if len(chain) > 0 {
-					return resolve.ResolvedType{FQN: chain[0]}
-				}
-			}
-		}
-		return resolve.ResolvedType{}
-	}
-
-	if strings.HasPrefix(target, "$") {
-		rt := p.resolver.ResolveVariableTypeTyped(target, p.resolver.Lines(source), pos, file)
-		if parenEnd > 0 && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "->") && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
-			// $fn(…): what calling it gives; $fn(...) is a Closure of it.
-			if resolve.IsCallableArgs(callArgStr) {
-				return p.resolver.CallableOf(rt)
-			}
-			return p.resolver.InvokeType(rt)
-		}
-		return rt
-	}
-
-	// Try as class name — this is the chain origin (e.g., Category::). A word
-	// after -> or :: is a member (UserRole::Client, $x->Client), never a class.
-	if fqn := p.chainOriginClassName(line, i, target, source, file); fqn != "" {
-		if sym := p.index.Lookup(fqn); sym != nil {
-			switch sym.Kind {
-			case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
-				return resolve.ResolvedType{FQN: fqn}
-			}
-		} else if fqn != target && !strings.Contains(fqn, "::") {
-			return resolve.ResolvedType{FQN: fqn}
-		}
-	}
-
-	// Recursive chain resolution with context propagation
-	if file == nil {
-		return resolve.ResolvedType{}
-	}
-	// A function call starts the chain: identity($x)->…
-	if parenEnd > 0 && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "->") && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
-		ctx := resolve.ExprContext{Lines: p.resolver.Lines(source), Pos: pos, File: file}
-		if rt := p.resolver.FunctionCallType(target, callArgStr, ctx); !rt.IsEmpty() {
-			return rt
-		}
-	}
-	ownerResolved := p.resolveChainWithContext(line, i, source, pos, file, nil)
-	if ownerResolved.IsEmpty() {
-		return resolve.ResolvedType{}
-	}
-
-	if parenEnd > 0 && strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "->") {
-		// $closure->call($newThis): what the closure returns.
-		if rt, ok := resolve.ClosureCallType(ownerResolved, target); ok {
-			return rt
-		}
-	}
-	ownerFQN := ownerResolved.BaseFQN()
-	if strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
-		ownerResolved = resolve.ClassStringTarget(ownerResolved) // $class::create()
-	}
-	if fwd, ok := p.resolver.ForwardedReceiver(ownerResolved, target, parenEnd > 0); ok {
-		ownerResolved = fwd // Category::where() runs on Builder<Category>
-	}
-	member, foundOn := p.resolver.FindMemberOn(ownerResolved, target, parenEnd > 0)
-	firstClass := parenEnd > 0 && resolve.IsCallableArgs(callArgStr)
-	if member != nil && foundOn.FQN != ownerResolved.FQN {
-		// A member a @mixin brings in. A fluent one gives back the object it
-		// was called on, as forwarding through __call does.
-		if !firstClass && p.resolver.ReturnsCallingClass(member) {
-			return ownerResolved
-		}
-		ownerResolved = foundOn
-	}
-	ownerFQN = ownerResolved.BaseFQN()
-	if member == nil && parenEnd > 0 && p.resolver.ScopeMethod(ownerResolved, target) != nil {
-		return ownerResolved // a local scope gives back the builder
-	}
-	if member == nil {
-		// A property of an object shape: object{user: User}.
-		if ownerResolved.FQN == "object" && parenEnd == 0 {
-			for _, f := range ownerResolved.Fields {
-				if f.Key == target {
-					return f.Type
-				}
-			}
-		}
-		return resolve.ResolvedType{}
-	}
-	ownerFQN = p.resolver.ReceiverFor(ownerResolved, member)
-
-	// Pass the owner's generic params as context for template resolution.
-	// E.g., Builder<Category> passes [Category] so Builder::get() → Collection<int, Category>.
-	// callerFQN is the owner class for late static binding (Category::query() → static=Category).
-	ownerContext := ownerResolved.Params
-
-	// self::, parent:: and static:: pass the calling class along, so a method
-	// returning static gives the class being edited: parent::create() in Child
-	// is a Child.
-	callerFQN := ownerFQN
-	if forwardsCallingClass(line[:i]) {
-		if enclosing := p.resolveAccessChain("static->__dummy__", len("static->"), source, pos, file); enclosing != "" {
-			callerFQN = enclosing
-		}
-	}
-	if firstClass {
-		// $obj->m(...) and $obj->m(?, 1) make a Closure of m instead of calling it.
-		return resolve.PartialClosure(p.resolver.MemberCallableType(member, file, callerFQN, ownerContext), member, callArgStr)
-	}
-	var call *resolve.CallSite
-	if parenEnd > 0 {
-		call = p.resolver.CallSiteFor(callArgStr, resolve.ExprContext{Lines: p.resolver.Lines(source), Pos: pos, File: file})
-	}
-	return p.resolver.MemberTypeForCall(member, file, callerFQN, ownerContext, call)
-}
-
-// extractNewArgs returns the constructor arguments of the `new Foo(…)`
-// expression that s ends with, as extractNewClass reads it.
-func extractNewArgs(s string) string {
-	t := strings.TrimSpace(s)
-	for strings.HasPrefix(t, "(") && strings.HasSuffix(t, ")") && parenBalanced(t[1:len(t)-1]) {
-		t = strings.TrimSpace(t[1 : len(t)-1])
-	}
-	if !strings.HasSuffix(t, ")") {
-		return ""
-	}
-	depth := 0
-	for i := len(t) - 1; i >= 0; i-- {
-		switch t[i] {
-		case ')':
-			depth++
-		case '(':
-			depth--
-			if depth == 0 {
-				return t[i+1 : len(t)-1]
-			}
-		}
-	}
-	return ""
 }
 
 // resolveAccessChain walks left through a chain of -> and :: accesses in the
@@ -979,8 +696,8 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 		// Check for "new ClassName(...)" pattern
 		if op == "->" {
 			callExpr := strings.TrimSpace(line[:parenEnd])
-			if newClass := extractNewClass(callExpr); newClass != "" {
-				return p.resolveClassNameFromSource(newClass, source, file)
+			if newClass := resolve.ExtractNewClass(callExpr); newClass != "" {
+				return p.resolver.ResolveClassNameLoose(newClass, file)
 			}
 		}
 		if line[i] == '(' && resolve.IsCallableArgs(line[i+1:parenEnd-1]) {
@@ -1008,7 +725,7 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 	target := line[i:end]
 
 	// Resolve the target to a class FQN
-	switch keywordOrTarget(target) {
+	switch resolve.ClassKeyword(target) {
 	case "$this", "self", "static":
 		if file != nil {
 			return resolve.FindEnclosingClass(file, pos)
@@ -1043,7 +760,7 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 
 	// Try as a class name (for static access or direct use). A word after
 	// -> or :: is a member (UserRole::Client, $x->Client), never a class.
-	if fqn := p.chainOriginClassName(line, i, target, source, file); fqn != "" {
+	if fqn := p.resolver.ChainOriginClassName(line, i, target, file); fqn != "" {
 		if sym := p.index.Lookup(fqn); sym != nil {
 			switch sym.Kind {
 			case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
@@ -1091,7 +808,7 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 	// self::, parent:: and static:: pass the calling class along, which here is
 	// the class being edited.
 	if p.resolver.ReturnsCallingClass(member) {
-		if forwardsCallingClass(line[:i]) {
+		if resolve.ForwardsCallingClass(line[:i]) {
 			if enclosing := p.resolveAccessChain("static->__dummy__", len("static->"), source, pos, file); enclosing != "" {
 				return enclosing
 			}
@@ -1099,163 +816,6 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 		return ownerFQN
 	}
 	return p.resolver.MemberType(member, file)
-}
-
-// forwardsCallingClass reports whether the code before a member name ends in
-// `self::`, `parent::` or `static::`, which keep the calling class for static.
-func forwardsCallingClass(before string) bool {
-	before = strings.TrimRight(before, " \t")
-	if !strings.HasSuffix(before, "::") {
-		return false
-	}
-	before = strings.TrimRight(before[:len(before)-2], " \t")
-	start := len(before)
-	for start > 0 && (isWordByte(before[start-1])) {
-		start--
-	}
-	if start > 0 && before[start-1] == '$' {
-		return false // $parent:: is a variable
-	}
-	switch strings.ToLower(before[start:]) {
-	case "self", "parent", "static":
-		return true
-	}
-	return false
-}
-
-// keywordOrTarget lower-cases target when it's one of the class keywords
-// self, static or parent, so SELF:: and Parent:: resolve like their lower-case
-// forms; any other name is returned as it is.
-func keywordOrTarget(target string) string {
-	switch lower := strings.ToLower(target); lower {
-	case "self", "static", "parent":
-		return lower
-	}
-	return target
-}
-
-func isWordByte(b byte) bool {
-	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
-}
-
-// chainOriginClassName resolves target, which starts at line[start], as a
-// class name, unless it follows a member operator (-> or ::) and so names a
-// member such as an enum case, constant or property.
-func (p *Provider) chainOriginClassName(line string, start int, target, source string, file *parser.FileNode) string {
-	before := strings.TrimRight(line[:start], " \t")
-	if strings.HasSuffix(before, "->") || strings.HasSuffix(before, "::") {
-		return ""
-	}
-	return p.resolveClassNameFromSource(target, source, file)
-}
-
-// resolveClassNameFromSource resolves a short or FQN class name using
-// the source file's use statements and namespace.
-func (p *Provider) resolveClassNameFromSource(name, source string, file *parser.FileNode) string {
-	if name == "" {
-		return ""
-	}
-	// Already fully qualified
-	if strings.HasPrefix(name, "\\") {
-		fqn := strings.TrimPrefix(name, "\\")
-		if p.index.Lookup(fqn) != nil {
-			return fqn
-		}
-		return fqn
-	}
-
-	if file == nil {
-		// Try direct lookup by name
-		syms := p.index.LookupByName(name)
-		if best := symbols.PickBestStandalone(syms, name); best != nil {
-			return best.FQN
-		}
-		return name
-	}
-
-	// Check use statements
-	parts := strings.SplitN(name, "\\", 2)
-	for _, u := range file.Uses {
-		if u.Alias == parts[0] {
-			if len(parts) > 1 {
-				return u.FullName + "\\" + parts[1]
-			}
-			return u.FullName
-		}
-	}
-	// Try in current namespace
-	if file.Namespace != "" {
-		fqn := file.Namespace + "\\" + name
-		if p.index.Lookup(fqn) != nil {
-			return fqn
-		}
-	}
-	// Try as global
-	if p.index.Lookup(name) != nil {
-		return name
-	}
-	// Fallback: search by short name
-	syms := p.index.LookupByName(name)
-	if best := symbols.PickBestStandalone(syms, name); best != nil {
-		return best.FQN
-	}
-	return name
-}
-
-// extractNewClass extracts the class name from patterns like:
-// "new ClassName()", "(new ClassName())", "new ClassName", "(new ClassName)"
-func extractNewClass(s string) string {
-	t := strings.TrimSpace(s)
-
-	// Strip wrapping parens: "(new ClassName())" → "new ClassName()"
-	for strings.HasPrefix(t, "(") && strings.HasSuffix(t, ")") {
-		inner := t[1 : len(t)-1]
-		// Only strip if the parens are balanced wrapping parens (not constructor args)
-		if parenBalanced(inner) {
-			t = strings.TrimSpace(inner)
-		} else {
-			break
-		}
-	}
-
-	// Strip constructor args: "new ClassName(...)" → "new ClassName"
-	if strings.HasSuffix(t, ")") {
-		depth := 1
-		i := len(t) - 2
-		for i >= 0 && depth > 0 {
-			if t[i] == ')' {
-				depth++
-			} else if t[i] == '(' {
-				depth--
-			}
-			i--
-		}
-		t = strings.TrimSpace(t[:i+1])
-	}
-
-	// Extract class name after "new"
-	if idx := strings.LastIndex(t, "new "); idx >= 0 {
-		className := strings.TrimSpace(t[idx+4:])
-		if className != "" && !strings.ContainsAny(className, " \t(") {
-			return className
-		}
-	}
-	return ""
-}
-
-func parenBalanced(s string) bool {
-	depth := 0
-	for _, ch := range s {
-		if ch == '(' {
-			depth++
-		} else if ch == ')' {
-			depth--
-			if depth < 0 {
-				return false
-			}
-		}
-	}
-	return depth == 0
 }
 
 func (p *Provider) completeNew(prefix, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {

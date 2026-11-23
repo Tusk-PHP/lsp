@@ -471,20 +471,15 @@ func resolveExprToken(
 		}
 		return resolve.ResolvedType{FQN: fqn}
 	}
-	// For chain expressions, use the TypedChainResolver if available.
-	if p.resolver.TypedChainResolver != nil {
-		// Build a small expression string from the token's line up to and
-		// including the token.
-		if tok.Line < len(lines) {
-			lineStr := lines[tok.Line]
-			end := tok.Column + len(tok.Value)
-			if end > len(lineStr) {
-				end = len(lineStr)
-			}
-			expr := strings.TrimSpace(lineStr[:end])
-			if expr != "" {
-				return p.resolver.TypedChainResolver(expr, source, pos, file)
-			}
+	// A chain expression: the token's line up to and including the token.
+	if tok.Line < len(lines) {
+		lineStr := lines[tok.Line]
+		end := tok.Column + len(tok.Value)
+		if end > len(lineStr) {
+			end = len(lineStr)
+		}
+		if expr := strings.TrimSpace(lineStr[:end]); expr != "" {
+			return p.resolver.ChainType(expr, source, pos, file)
 		}
 	}
 	return resolve.ResolvedType{}
@@ -876,12 +871,9 @@ func (p *Provider) resolveCalleeParams(
 ) []paramEntry {
 	switch kind {
 	case calleeMethod:
-		if p.resolver.TypedChainResolver == nil {
-			return nil
-		}
 		// Find the position of the call-site so the resolver has context.
 		callPos := protocol.Position{Line: tokens[openParen].Line, Character: tokens[openParen].Column}
-		rt := p.resolver.TypedChainResolver(receiverOrClass, source, callPos, file)
+		rt := p.resolver.ChainType(receiverOrClass, source, callPos, file)
 		if rt.IsEmpty() {
 			return nil
 		}

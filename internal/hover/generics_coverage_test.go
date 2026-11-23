@@ -63,7 +63,7 @@ $service->fetch();
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///hover.php", source)
 	p := NewProvider(idx, nil, "none")
-	p.GenericExprResolver = func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
+	p.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 		if expr == "$service" {
 			return resolve.ResolvedType{FQN: "App\\Service"}
 		}
@@ -71,7 +71,7 @@ $service->fetch();
 			FQN:    "App\\Collection",
 			Params: []resolve.ResolvedType{{FQN: "int"}, {FQN: "App\\User"}},
 		}
-	}
+	})
 
 	pos := hoverLineContaining(t, source, "$service->fetch")
 	pos.Character = strings.Index(strings.Split(source, "\n")[pos.Line], "fetch")

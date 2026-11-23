@@ -150,8 +150,8 @@ func (r *Resolver) calleeForClosure(site closureCallSite, lines []string, file *
 	case "->", "::":
 		recv := strings.TrimSpace(site.receiver)
 		var rt ResolvedType
-		if r.TypedChainResolver != nil && file != nil {
-			rt = r.TypedChainResolver(recv, r.JoinLines(lines), site.at, file)
+		if file != nil {
+			rt = r.ChainType(recv, r.JoinLines(lines), site.at, file)
 		}
 		if rt.IsEmpty() {
 			rt = r.ExpressionType(lastExpression(recv), ctx)

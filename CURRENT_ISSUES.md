@@ -30,15 +30,11 @@ _None open._
 - **What:** After parsing the body, `EndLine` is taken from the next token, so it is the line of the following declaration, or EOF, rather than the `}`. With blank lines or another declaration after it, a class "ends" further down than it does. Found while closing L40; about a dozen packages read `EndLine` (scope ranges, selection ranges, semantic tokens, guards, unused-private), so it wasn't changed there.
 - **Fix:** Record the line of the closing brace the body parser consumed, then check each reader, starting with `source/context.go` and `lsp/selection_range.go`.
 
-### L60 — Hover and go-to-definition find nothing on a member of a called closure's result
-- **Where:** member hover in `internal/hover/provider.go`, member definition in `internal/analyzer/analyzer.go` (their fallback chain walkers, see L49).
-- **What:** With `$g = fn (int $i): Foo => new Foo();`, `$x = $g(1);` types `$x` as `Foo`, but hover and go-to-definition on `fooOnly` in `$g(1)->fooOnly()` find nothing, and `$g(1)->nope()` isn't reported as an unknown member on `Foo`. The same on 0.13.0.
-- **Fix:** Route both through `resolve`'s chain resolution, which knows what calling a variable gives.
+### ~~L60~~ — Hover and go-to-definition find nothing on a member of a called closure's result — **RESOLVED**
+- Assigning a closure to a variable now gives it its `Closure(…): T` type, so calling it types the result for every feature. Hover and go-to-definition type the receiver with the shared walker (`resolve/chain.go`), as completion does.
 
-### L58 — Hover and go-to-definition on a member of a union receiver look at one class
-- **Where:** member hover in `internal/hover/provider.go`, member definition in `internal/analyzer/analyzer.go`.
-- **What:** After `if ($c) { $x = new Foo(); } else { $x = new Bar(); }`, `$x->barOnly()` is accepted and completed, but hover and go-to-definition on `barOnly` find nothing: they look the member up on one class of `Foo|Bar`. The same on 0.13.0 for any union receiver; branch-assigned variables now make it more common.
-- **Fix:** Look the member up on each class of the receiver's `MemberOwner()`, as completion and `unknown-member` do.
+### ~~L58~~ — Hover and go-to-definition on a member of a union receiver look at one class — **RESOLVED**
+- Hover and go-to-definition take the receiver from the shared walker and look the member up on every class of its `MemberOwner()`. `internal/lsp/member_owner_test.go` checks a branch-assigned union through the server.
 
 ### L57 — Branch shapes that still give a wider union than they should
 - **Where:** `internal/scope/reach.go` (`ReachingWrites`), `internal/scope/flow.go`.
@@ -71,14 +67,12 @@ _None open._
 - **Fix:** Move the callers to `ResolveVariableTypeTyped` and `MemberOwner()`/`ClassNames()`, then drop the plain form (root `AGENTS.md`: structured types).
 
 ### L50 — `completion/provider.go` and `resolve/resolve.go` are well past the 800-line guideline
-- **Where:** `internal/completion/provider.go` (1,564 lines), `internal/resolve/resolve.go` (1,459 lines), `internal/scope/collector.go` (1,539 lines).
-- **What:** All three were already over the guideline in root `AGENTS.md` before the false-warning fixes, which added only call-site lines to them (new logic went to `scope/flow.go`, `scope/reach.go`, `resolve/reaching.go`, `resolve/concat.go`). Every new typing rule lands in the same two functions (`resolveChainWithContext`, `resolveVariableTypeTypedBase`).
-- **Fix:** Split within the package before the next feature there: the chain walkers out of `provider.go`, the assignment branches of `resolveVariableTypeTypedBase` into one file per right-hand-side form.
+- **Where:** `internal/completion/provider.go` (1,269 lines, down from 1,564 since the generic-aware chain walker moved to `resolve/chain.go`), `internal/resolve/resolve.go` (1,527 lines), `internal/scope/collector.go` (1,539 lines).
+- **What:** All three were already over the guideline in root `AGENTS.md` before the false-warning fixes, which added only call-site lines to them (new logic went to `scope/flow.go`, `scope/reach.go`, `resolve/reaching.go`, `resolve/concat.go`). Every new typing rule lands in the same two functions (`accessOwnerType` in `resolve/chain.go`, `resolveVariableTypeTypedBase`).
+- **Fix:** Split within the package before the next feature there: completion's remaining plain walker goes with L52, the assignment branches of `resolveVariableTypeTypedBase` into one file per right-hand-side form.
 
-### L49 — Hover's and the analyzer's fallback chain walkers read `f(...)` as a call
-- **Where:** `internal/hover/provider.go` (`resolveAccessChainTyped`, line 311); `internal/analyzer/analyzer.go` (`resolveAccessChainTyped`, about line 532).
-- **What:** First-class callable syntax is a `Closure` in the shared resolver and in completion's walkers, but these two copies still type `$obj->m(...)` as what `m()` returns. They run only when the shared resolver returns nothing, so it isn't visible today.
-- **Fix:** Route both through `resolve.IsFirstClassCallableArgs`, or remove the copies once `session` wires one resolver for every feature.
+### ~~L49~~ — Hover's and the analyzer's fallback chain walkers read `f(...)` as a call — **RESOLVED**
+- The two fallback walkers are gone. Completion's generic-aware walker moved into `resolve` (`ChainType`, `AccessOwnerType`), and hover, the analyzer, inlay hints and the resolver itself call it, so `f(...)` is a `Closure` everywhere. Completion's plain string walker (`resolveAccessChain`) remains until L52.
 
 ### L48 — `unknown-member` stays quiet on a receiver typed `Closure(…): T`
 - **Where:** `internal/checks/unknown_symbols.go` (`collectClassLikes`, line 706).
