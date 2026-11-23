@@ -578,6 +578,7 @@ src/Symfony/Component/Translation/Test/ProviderTestCase.php	unknown-class	Unknow
 src/Symfony/Component/Tui/Input/KeyParser.php	unused-variable	Variable $isDigit is assigned but never read
 src/Symfony/Component/TypeInfo/TypeContext/TypeContextFactory.php	unused-variable	Variable $typeContext is assigned but never read
 src/Symfony/Component/Validator/Constraints/JsonValidator.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
+src/Symfony/Component/Validator/Constraints/NoSuspiciousCharactersValidator.php	unused-private-constant	Private constant 'NoSuspiciousCharactersValidator::CHECK_SINGLE_SCRIPT' is never used
 src/Symfony/Component/Validator/Test/CompoundConstraintTestCase.php	unknown-class	Unknown class 'ExpectationFailedException'
 src/Symfony/Component/Validator/Test/CompoundConstraintTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Validator/Test/ConstraintValidatorTestCase.php	unknown-class	Unknown class 'Assert'
