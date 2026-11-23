@@ -6,6 +6,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -276,7 +277,7 @@ func TestClearCache(t *testing.T) {
 	}
 }
 
-func TestFindingsToDiagnosticsWithTags(t *testing.T) {
+func TestFindingToDiagnosticWithTags(t *testing.T) {
 	findings := []checks.Finding{
 		{
 			StartLine: 1,
@@ -286,11 +287,8 @@ func TestFindingsToDiagnosticsWithTags(t *testing.T) {
 			Tags:      []checks.Tag{checks.TagUnnecessary},
 		},
 	}
-	diags := findingsToDiagnostics(findings)
-	if len(diags) != 1 {
-		t.Fatalf("expected 1, got %d", len(diags))
-	}
-	if len(diags[0].Tags) != 1 {
-		t.Error("expected Unnecessary tag")
+	d := findingToDiagnostic(findings[0])
+	if len(d.Tags) != 1 || d.Severity != protocol.DiagnosticSeverityHint || d.Code != "unused-import" {
+		t.Errorf("got %+v", d)
 	}
 }

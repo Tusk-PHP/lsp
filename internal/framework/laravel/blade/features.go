@@ -225,9 +225,12 @@ func (f *Features) Definition(uri, src string, offset int) ([]Location, bool) {
 }
 
 // Diagnostic is a problem found in a template, with its rule code.
+var Codes = []rule.Code{rule.UnclosedDirective, rule.UnknownView, rule.UnknownComponent}
+
 type Diagnostic struct {
 	Problem
-	Code rule.Code
+	Code     rule.Code
+	Severity rule.Severity
 }
 
 // Diagnose reports the template's unbalanced blocks, and the views and
@@ -236,7 +239,7 @@ func (f *Features) Diagnose(src string) []Diagnostic {
 	nodes := ParseCustom(src, f.custom())
 	var out []Diagnostic
 	for _, p := range CheckStructureCustom(src, nodes, f.custom()) {
-		out = append(out, Diagnostic{Problem: p, Code: rule.UnclosedDirective})
+		out = append(out, Diagnostic{Problem: p, Code: rule.UnclosedDirective, Severity: rule.SeverityError})
 	}
 	out = append(out, f.unknownComponents(src, nodes)...)
 	if f.Views == nil {
@@ -258,7 +261,7 @@ func (f *Features) Diagnose(src string) []Diagnostic {
 		if _, ok := f.Views.ViewURI(r.Name); ok {
 			continue
 		}
-		out = append(out, Diagnostic{Code: rule.UnknownView, Problem: Problem{Span: r.Span, Message: "View `" + r.Name + "` not found"}})
+		out = append(out, Diagnostic{Code: rule.UnknownView, Severity: rule.SeverityWarning, Problem: Problem{Span: r.Span, Message: "View `" + r.Name + "` not found"}})
 	}
 	return out
 }

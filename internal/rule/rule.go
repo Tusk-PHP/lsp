@@ -76,6 +76,8 @@ const (
 	SeverityHint    Severity = 4
 )
 
+var Severities = []Severity{SeverityError, SeverityWarning, SeverityInfo, SeverityHint}
+
 var severityNames = map[Severity]string{
 	SeverityError:   "error",
 	SeverityWarning: "warning",

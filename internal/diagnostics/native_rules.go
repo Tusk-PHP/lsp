@@ -6,74 +6,65 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
-// NativeRulesOptions carries the optional resolver dependencies used by rules
-// that require cross-file context. Nil fields cause those rules to be omitted
-// (matching what server.go and cmd/tusk-php already do) so callers that lack
-// certain resolvers at call time still get a consistent, usable rule set.
 type NativeRulesOptions struct {
-	// TypeResolver resolves the type of a PHP expression at a given source line.
-	// Required by UnknownMemberRule and RedundantNullsafeRule; omit both when nil.
-	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
-
-	// BuiltinUnavailableRule is the pre-built rule that reports usages of PHP
-	// built-ins not available in the resolved PHP profile. Omitted when nil.
+	TypeResolver           func(expr string, source string, line, col int, file *parser.FileNode) string
 	BuiltinUnavailableRule *checks.BuiltinUnavailableRule
-
-	// BuilderModelResolver and BuilderMemberChecker are required together for
-	// InvalidBuilderArgRule. Omitted when either is nil.
-	BuilderModelResolver checks.ModelResolverFunc
-	BuilderMemberChecker checks.MemberChecker
+	BuilderModelResolver   checks.ModelResolverFunc
+	BuilderMemberChecker   checks.MemberChecker
+	BladePHP               bool
+	IncludedFile           bool
 }
 
-// NativeRules returns the ordered list of native (non-external) static analysis
-// rules for a given set of optional resolver dependencies. The list is the
-// canonical one used by the LSP server's debugDocument command, the CLI
-// introspect command, and — at the rule-set level — by the diagnostics provider.
-//
-// Rules are always returned in a deterministic order: parameterless rules first,
-// followed by dependency-requiring rules (UnknownMember, BuiltinUnavailable,
-// RedundantNullsafe, InvalidBuilderArg) only when the required deps are present.
-//
-// NOTE: the diagnostics provider (provider.go/Analyze+AnalyzeOnSave) runs rules
-// individually rather than through this list so it can apply per-rule severity
-// overrides and enable/disable flags. Callers that need per-rule config filtering
-// should continue to use the provider directly; this constructor is for the
-// "run all native rules, no per-rule config" path (CLI and debugDocument).
-func NativeRules(opts NativeRulesOptions) []checks.Rule {
-	// The rules returned are run together over one file: they share what
-	// they learn about types and attribute uses.
-	opts.TypeResolver = MemoizeTypeResolver(opts.TypeResolver)
+func EditRules(opts NativeRulesOptions) []checks.Rule {
+	typeResolver := MemoizeTypeResolver(opts.TypeResolver)
 	shared := &checks.Shared{}
 	uses := &checks.MemberUseCache{Shared: shared}
+	deprecatedFunctions := &checks.DeprecatedFunctionRule{}
+	if opts.BuiltinUnavailableRule != nil {
+		deprecatedFunctions.PHPVersion = opts.BuiltinUnavailableRule.PHPVersion
+	}
 	rules := []checks.Rule{
+		&checks.SyntaxErrorRule{},
+		&checks.AbstractInConcreteRule{},
 		&checks.UnknownClassRule{},
 		&checks.UnknownFunctionRule{},
-		&checks.UnusedImportsRule{},
-		&checks.UnusedPrivateRule{},
-		&checks.UnreachableCodeRule{Shared: shared},
-		&checks.RedundantUnionRule{},
-		&checks.UndefinedVariableRule{Shared: shared},
-		&checks.UnusedVariableRule{Shared: shared},
-		&checks.ArgumentCountRule{Shared: shared, TypeResolver: opts.TypeResolver},
-		&checks.InvalidOverrideRule{},
-		&checks.DeprecatedUsageRule{TypeResolver: opts.TypeResolver, Uses: uses},
-		&checks.UnusedResultRule{TypeResolver: opts.TypeResolver, Uses: uses},
 	}
-	// Rules that require optional deps follow in a stable order.
 	if opts.TypeResolver != nil {
-		rules = append(rules, &checks.UnknownMemberRule{TypeResolver: opts.TypeResolver, ConventionMethod: frameworklaravel.ConventionMethod, Shared: shared})
+		rules = append(rules, &checks.UnknownMemberRule{TypeResolver: typeResolver, ConventionMethod: frameworklaravel.ConventionMethod, Shared: shared})
 	}
 	if opts.BuiltinUnavailableRule != nil {
 		rules = append(rules, opts.BuiltinUnavailableRule)
 	}
+	rules = append(rules,
+		&checks.UnusedImportsRule{},
+		&checks.UnusedPrivateRule{},
+		&checks.UnreachableCodeRule{Shared: shared},
+		&checks.RedundantUnionRule{},
+		&checks.UndefinedVariableRule{IncludedFile: opts.IncludedFile, Shared: shared},
+	)
+	if !opts.BladePHP {
+		rules = append(rules, &checks.UnusedVariableRule{Shared: shared})
+	}
+	return append(rules,
+		&checks.DeprecatedUsageRule{TypeResolver: typeResolver, Uses: uses},
+		deprecatedFunctions,
+		&checks.UnusedResultRule{TypeResolver: typeResolver, Uses: uses},
+		&checks.InvalidOverrideRule{},
+		&checks.ArgumentCountRule{Shared: shared, TypeResolver: typeResolver},
+	)
+}
+
+func SaveRules(opts NativeRulesOptions) []checks.Rule {
+	var rules []checks.Rule
 	if opts.TypeResolver != nil {
 		rules = append(rules, &checks.RedundantNullsafeRule{TypeResolver: opts.TypeResolver})
 	}
 	if opts.BuilderModelResolver != nil && opts.BuilderMemberChecker != nil {
-		rules = append(rules, &checks.InvalidBuilderArgRule{
-			ModelResolver: opts.BuilderModelResolver,
-			Members:       opts.BuilderMemberChecker,
-		})
+		rules = append(rules, &checks.InvalidBuilderArgRule{ModelResolver: opts.BuilderModelResolver, Members: opts.BuilderMemberChecker})
 	}
 	return rules
+}
+
+func NativeRules(opts NativeRulesOptions) []checks.Rule {
+	return append(EditRules(opts), SaveRules(opts)...)
 }

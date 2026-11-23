@@ -65,11 +65,14 @@ func TestParseCode(t *testing.T) {
 }
 
 func TestSeverityNamesRoundTrip(t *testing.T) {
-	for _, severity := range []Severity{SeverityError, SeverityWarning, SeverityInfo, SeverityHint} {
+	for _, severity := range Severities {
 		parsed, err := ParseSeverity(severity.String())
 		if err != nil || parsed != severity {
 			t.Errorf("%d: %q parsed to %d, %v", severity, severity.String(), parsed, err)
 		}
+	}
+	if len(severityNames) != len(Severities) {
+		t.Errorf("%d severities have names, %d are listed", len(severityNames), len(Severities))
 	}
 	if _, err := ParseSeverity("loud"); err == nil {
 		t.Error("an unknown severity must not parse")
