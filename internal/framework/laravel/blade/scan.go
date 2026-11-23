@@ -55,10 +55,17 @@ func ParseCustom(src string, custom *Custom) []Node {
 	return s.nodes
 }
 
+func Comments(src string) []Span {
+	s := scanner{src: src}
+	s.scan(0, len(src))
+	return s.comments
+}
+
 type scanner struct {
-	src    string
-	nodes  []Node
-	custom *Custom
+	src      string
+	nodes    []Node
+	comments []Span
+	custom   *Custom
 }
 
 func (s *scanner) add(n Node) { s.nodes = append(s.nodes, n) }
@@ -71,7 +78,9 @@ func (s *scanner) scan(start, end int) {
 		c := src[i]
 		switch {
 		case c == '{' && strings.HasPrefix(src[i:end], "{{--"):
-			i = indexFrom(src, "--}}", i+4, end, 4)
+			next := indexFrom(src, "--}}", i+4, end, 4)
+			s.comments = append(s.comments, Span{i, next})
+			i = next
 		case c == '{' && strings.HasPrefix(src[i:end], "{!!"):
 			i = s.echo(i, end, "{!!", "!!}", true)
 		case c == '{' && strings.HasPrefix(src[i:end], "{{{"):

@@ -29,10 +29,10 @@ $user = new User();
 	a, _ := setupRenameAnalyzer(map[string]string{"file:///test.php": source})
 
 	diag := unusedImportCodeActionDiagnostic(2, len("use App\\Models\\Post;"), "Unused import 'App\\Models\\Post'")
-	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
+	actions := withoutIgnoreActions(a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
 		Context:      protocol.CodeActionContext{Diagnostics: []protocol.Diagnostic{diag}, Only: []protocol.CodeActionKind{"quickfix"}},
-	})
+	}))
 
 	if len(actions) != 1 {
 		t.Fatalf("expected one quickfix action, got %#v", actions)
@@ -68,10 +68,10 @@ $name = formatName('Ada');
 `
 	a, _ := setupRenameAnalyzer(map[string]string{"file:///test.php": source})
 
-	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
+	actions := withoutIgnoreActions(a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
 		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"source.organizeImports"}},
-	})
+	}))
 
 	if len(actions) != 1 {
 		t.Fatalf("expected one organize imports action, got %#v", actions)
@@ -102,10 +102,10 @@ $user = new User();
 `
 	a, _ := setupRenameAnalyzer(map[string]string{"file:///test.php": source})
 
-	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
+	actions := withoutIgnoreActions(a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
 		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"source"}},
-	})
+	}))
 
 	for _, action := range actions {
 		if action.Kind == "source.organizeImports" {
@@ -126,10 +126,10 @@ $user = new User();
 `
 	a, _ := setupRenameAnalyzer(map[string]string{"file:///test.php": source})
 
-	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
+	actions := withoutIgnoreActions(a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
 		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"source.organizeImports"}},
-	})
+	}))
 
 	if len(actions) != 0 {
 		t.Fatalf("expected no organize imports action for commented block, got %#v", actions)

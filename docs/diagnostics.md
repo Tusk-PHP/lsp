@@ -97,6 +97,9 @@ It uses `vendor/bin/pint`, otherwise `pint` on your `PATH`, and Pint's own
 To keep PHPStan and drop the built-in checks, leave diagnostics on and turn off
 the built-in rules one by one in `diagnosticRules`.
 
+To silence a single finding, or every finding in some files, see
+[Ignoring a finding](#ignoring-a-finding).
+
 ### Rule severity
 
 `diagnosticRules` takes each rule's code with one of these values:
@@ -119,6 +122,58 @@ the built-in rules one by one in `diagnosticRules`.
 
 Rules you don't list stay on at their default severity. PHPStan and Pint
 findings can't be re-graded this way; use their own configuration.
+
+## Ignoring a finding
+
+To silence one finding, put a `@tusk-ignore` comment on the line or on its own
+line directly above it, naming the codes to ignore:
+
+```php
+// @tusk-ignore unknown-member
+$legacy->magicCall();
+
+$value = $row->total; // @tusk-ignore unknown-member, undefined-variable (set by an include)
+```
+
+Codes are separated by commas; anything after the list, such as a reason in
+parentheses, is ignored. A bare `@tusk-ignore` ignores every finding on that
+line. In a Blade view, use a Blade comment: `{{-- @tusk-ignore unknown-view --}}`.
+
+Findings from external tools are named with the tool in front of their code:
+`@tusk-ignore phpstan:argument.type` ignores one PHPStan identifier, and
+`@tusk-ignore phpstan` ignores all of PHPStan's findings on the line. The
+"Ignore … on this line" quick fix writes the comment for you; for PHPStan it
+writes PHPStan's own `@phpstan-ignore`, so PHPStan in CI agrees.
+
+Comments already written for PHPStan work as they are, with PHPStan's rules for
+which line they cover: `@phpstan-ignore-line`, `@phpstan-ignore-next-line` and
+`@phpstan-ignore <identifier>, …` silence PHPStan's findings on that line, and
+the Tusk PHP finding that matches each identifier too, for example
+`method.notFound` → `unknown-member`, `variable.undefined` →
+`undefined-variable`, `arguments.count` → `argument-count-mismatch` and
+`deadCode.unreachable` → `unreachable-code`. A bare `@phpstan-ignore`, which
+PHPStan rejects, silences nothing.
+
+To ignore findings across files, list rules under `diagnosticIgnore` in
+`.tusk-php.json`. Each rule has any of `code`, `path` (a glob relative to the
+project root, where `**` matches any number of directories) and `message` (a
+regular expression); a finding is ignored when it matches everything its rule
+gives:
+
+```json
+{
+  "diagnosticIgnore": [
+    { "path": "app/Legacy/**" },
+    { "code": "unknown-member", "message": "^Method .*::__" },
+    { "code": "phpstan:missingType.iterableValue", "path": "tests/**" }
+  ]
+}
+```
+
+An unknown `code` (a rule that doesn't exist, or a tool other than `phpstan` and
+`pint`) or an invalid `path` or `message` stops the configuration from loading,
+with the rule named in the error. Both kinds of suppression apply in the editor and to
+`tusk-php check`.
 
 ## Where settings come from
 

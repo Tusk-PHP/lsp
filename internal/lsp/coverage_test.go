@@ -844,8 +844,10 @@ class User {}
 	if !ok {
 		t.Fatalf("expected quickfix-only result array, got %T", quickfixOnlyResp["result"])
 	}
-	if len(quickfixActions) != 0 {
-		t.Fatalf("expected no quickfix actions before analyzer implementation, got %#v", quickfixActions)
+	for _, raw := range quickfixActions {
+		if kind, _ := raw.(map[string]interface{})["kind"].(string); kind != "quickfix" {
+			t.Fatalf("expected only quickfix actions, got kind %q in %#v", kind, raw)
+		}
 	}
 }
 

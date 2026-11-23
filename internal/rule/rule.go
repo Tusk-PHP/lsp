@@ -3,6 +3,7 @@ package rule
 import (
 	"fmt"
 	"slices"
+	"strings"
 )
 
 type Code string
@@ -112,3 +113,67 @@ const (
 	SourcePHPStan ExternalSource = "phpstan"
 	SourcePint    ExternalSource = "pint"
 )
+
+var ExternalSources = []ExternalSource{SourcePHPStan, SourcePint}
+
+func parseExternalSource(s string) (ExternalSource, bool) {
+	source := ExternalSource(s)
+	return source, slices.Contains(ExternalSources, source)
+}
+
+type Target struct {
+	source string
+	code   string
+}
+
+func NativeTarget(code Code) Target {
+	return Target{source: string(SourceTusk), code: string(code)}
+}
+
+func ExternalTarget(source ExternalSource, identifier string) Target {
+	return Target{source: string(source), code: identifier}
+}
+
+func TargetOf(source, code string) (Target, error) {
+	if external, ok := parseExternalSource(source); ok {
+		return ExternalTarget(external, code), nil
+	}
+	if Source(source) != SourceTusk {
+		return Target{}, fmt.Errorf("unknown diagnostic source %q", source)
+	}
+	parsed, err := ParseCode(code)
+	if err != nil {
+		return Target{}, err
+	}
+	return NativeTarget(parsed), nil
+}
+
+func ParseTarget(s string) (Target, error) {
+	name, identifier, qualified := strings.Cut(s, ":")
+	if external, ok := parseExternalSource(name); ok {
+		return ExternalTarget(external, identifier), nil
+	}
+	if qualified {
+		return Target{}, fmt.Errorf("unknown diagnostic source %q", name)
+	}
+	code, err := ParseCode(s)
+	if err != nil {
+		return Target{}, err
+	}
+	return NativeTarget(code), nil
+}
+
+func (t Target) Matches(source, code string) bool {
+	return t.source == source && (t.code == "" || t.code == code)
+}
+
+func (t Target) String() string {
+	switch {
+	case t.source == string(SourceTusk):
+		return t.code
+	case t.code == "":
+		return t.source
+	default:
+		return t.source + ":" + t.code
+	}
+}

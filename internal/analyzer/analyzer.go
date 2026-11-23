@@ -1653,6 +1653,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 
 	actions = append(actions, a.unknownClassCodeActions(uri, source, file, params)...)
 	actions = append(actions, a.importUnusedImportQuickFixes(uri, source, params)...)
+	actions = append(actions, IgnoreDiagnosticActions(uri, source, params)...)
 	if action := a.generateConstructorCodeAction(uri, source, parseResult, params.Context.Only, params.Range.Start); action != nil {
 		actions = append(actions, *action)
 	}
