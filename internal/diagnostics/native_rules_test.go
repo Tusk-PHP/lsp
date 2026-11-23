@@ -90,6 +90,7 @@ func TestNativeRulesDeterministicOrder(t *testing.T) {
 		rule.UnusedResult,
 		rule.InvalidOverride,
 		rule.ArgumentCountMismatch,
+		rule.UnknownNamedArgument,
 	}
 	if len(rules) != len(wantOrder) {
 		t.Fatalf("expected %d parameterless rules, got %d", len(wantOrder), len(rules))

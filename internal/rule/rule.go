@@ -26,6 +26,7 @@ const (
 	UnusedResult          Code = "unused-result"
 	InvalidOverride       Code = "invalid-override"
 	ArgumentCountMismatch Code = "argument-count-mismatch"
+	UnknownNamedArgument  Code = "unknown-named-argument"
 	UnknownColumn         Code = "unknown-column"
 	UnknownRelation       Code = "unknown-relation"
 	UnknownView           Code = "unknown-view"
@@ -52,6 +53,7 @@ var All = []Code{
 	UnusedResult,
 	InvalidOverride,
 	ArgumentCountMismatch,
+	UnknownNamedArgument,
 	UnknownColumn,
 	UnknownRelation,
 	UnknownView,
