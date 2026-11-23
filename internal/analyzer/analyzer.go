@@ -249,6 +249,14 @@ func (a *Analyzer) classKeywordFQN(word string, ctx *sourcectx.CursorContext) st
 //
 // locale is forwarded to symbols.PHPManualURL. Empty string is fine —
 // the URL builder falls back to "en".
+func (a *Analyzer) FindDeclaration(uri, source string, pos protocol.Position) *protocol.Location {
+	sym, _, loc := a.resolveDefinitionSymbol(uri, source, pos)
+	if declared := symbolLocation(a.index.Prototype(sym)); declared != nil {
+		return declared
+	}
+	return loc
+}
+
 func (a *Analyzer) FindDefinitionWithManual(uri, source string, pos protocol.Position, openManualEnabled bool, locale string) DefinitionResult {
 	// Quick path: when the flag is off, behave exactly like FindDefinition.
 	if !openManualEnabled {

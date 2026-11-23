@@ -13,6 +13,7 @@ var capabilityRequests = map[string][]string{
 	"definitionProvider":         {"textDocument/definition"},
 	"typeHierarchyProvider":      {"textDocument/prepareTypeHierarchy", "typeHierarchy/supertypes", "typeHierarchy/subtypes"},
 	"documentLinkProvider":       {"textDocument/documentLink"},
+	"declarationProvider":        {"textDocument/declaration"},
 	"typeDefinitionProvider":     {"textDocument/typeDefinition"},
 	"implementationProvider":     {"textDocument/implementation"},
 	"referencesProvider":         {"textDocument/references"},
@@ -106,5 +107,25 @@ func TestEveryAdvertisedCommandIsHandled(t *testing.T) {
 		if message, _ := errObj["message"].(string); message == "Unknown command: "+command.(string) {
 			t.Errorf("%s is advertised but not handled", command)
 		}
+	}
+}
+
+func TestDeclarationThroughTheServer(t *testing.T) {
+	h := newHarness(t)
+	defer h.close()
+	h.readResponse(h.send("initialize", initParams()))
+	h.notify("initialized", map[string]interface{}{})
+	uri := rootURI() + "/declaration_probe.php"
+	text := "<?php\ninterface Probe { public function run(): void; }\nclass ProbeImpl implements Probe { public function run(): void {} }\nfunction go_(ProbeImpl $p) { $p->run(); }\n"
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri, "languageId": "php", "version": 1, "text": text},
+	})
+	resp := h.readResponse(h.send("textDocument/declaration", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 3, "character": 34},
+	}))
+	loc, _ := resp["result"].(map[string]interface{})
+	if loc == nil || loc["range"].(map[string]interface{})["start"].(map[string]interface{})["line"] != float64(1) {
+		t.Errorf("want the interface's run on line 1, got %v", resp["result"])
 	}
 }

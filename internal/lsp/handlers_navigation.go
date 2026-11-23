@@ -60,6 +60,24 @@ func (s *Server) handleDefinition(msg *jsonRPCMessage) {
 	s.sendResponse(msg.ID, req.location(result.Location))
 }
 
+func (s *Server) handleDeclaration(msg *jsonRPCMessage) {
+	var params protocol.TextDocumentPositionParams
+	if json.Unmarshal(msg.Params, &params) != nil {
+		s.sendError(msg.ID, -32602, "Invalid params")
+		return
+	}
+	if locs, ok := s.bladeDefinition(params.TextDocument.URI, params.Position); ok {
+		s.sendResponse(msg.ID, locs)
+		return
+	}
+	req, ok := s.phpRequest(params.TextDocument.URI, params.Position)
+	if !ok {
+		s.sendResponse(msg.ID, nil)
+		return
+	}
+	s.sendResponse(msg.ID, req.location(s.analyzer.FindDeclaration(req.uri, req.source, req.pos)))
+}
+
 func (s *Server) handleTypeDefinition(msg *jsonRPCMessage) {
 	var params protocol.TextDocumentPositionParams
 	if json.Unmarshal(msg.Params, &params) != nil {

@@ -464,6 +464,7 @@ type ServerCapabilities struct {
 	DefinitionProvider         bool                      `json:"definitionProvider"`
 	TypeHierarchyProvider      bool                      `json:"typeHierarchyProvider"`
 	DocumentLinkProvider       *DocumentLinkOptions      `json:"documentLinkProvider,omitempty"`
+	DeclarationProvider        bool                      `json:"declarationProvider"`
 	TypeDefinitionProvider     bool                      `json:"typeDefinitionProvider"`
 	ImplementationProvider     bool                      `json:"implementationProvider"`
 	ReferencesProvider         bool                      `json:"referencesProvider"`
