@@ -953,6 +953,12 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 			}
 		}
 
+		// $var = fn (int $i): Foo => …, or function () use (…): Foo { …: a
+		// Closure with that signature, so calling $var gives a Foo.
+		if closure := strings.TrimSuffix(strings.TrimSpace(rhs), ";"); isClosureExpr(closure) {
+			return r.ExpressionType(closure, exprCtx)
+		}
+
 		// $var = $fn(…): what calling it gives; $fn(...) is a Closure of it.
 		if rt, ok := r.invokedVariableType(rhs, varName, exprCtx); ok {
 			return rt

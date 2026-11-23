@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Calling a closure stored in a variable** is now typed: after `$g = fn (int $i): Foo => new Foo();`, hover on `$g` shows `Closure(int): Foo`, `$g(1)->` completes `Foo`'s members, hover and go-to-definition work on them, and `$g(1)->nope()` is reported as `unknown-member`. Before, the variable had no type, so none of these worked.
 - **`redundant-nullsafe`** no longer reports `?->` on values that can be null. It used to flag nullable parameters (`?LoggerInterface $logger = null`), variables that a ternary may set to `null`, and chains after another `?->`; it now reports only `$this?->` and a parameter declared with a non-nullable type that its function never reassigns.
 - Group and comma-separated imports, `use App\Lib\{Alpha, Beta as B};` and `use App\A, App\B;`, now import every name, including `function` and `const` items in a group. Before, only the first name of a comma list counted and a group imported nothing, so the classes were reported as `unknown-class`.
 - A model's columns from an IDE helper file (`_ide_helper_models.php`) no longer disappear when the model is opened or edited, and re-reading the helper no longer lists them twice.
