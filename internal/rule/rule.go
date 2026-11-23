@@ -17,6 +17,7 @@ const (
 	UnusedImport          Code = "unused-import"
 	UnusedPrivateMethod   Code = "unused-private-method"
 	UnusedPrivateProperty Code = "unused-private-property"
+	UnusedPrivateConstant Code = "unused-private-constant"
 	UnreachableCode       Code = "unreachable-code"
 	RedundantUnionMember  Code = "redundant-union-member"
 	RedundantNullsafe     Code = "redundant-nullsafe"
@@ -44,6 +45,7 @@ var All = []Code{
 	UnusedImport,
 	UnusedPrivateMethod,
 	UnusedPrivateProperty,
+	UnusedPrivateConstant,
 	UnreachableCode,
 	RedundantUnionMember,
 	RedundantNullsafe,
