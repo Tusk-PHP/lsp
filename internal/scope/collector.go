@@ -482,6 +482,23 @@ func resolveVariable(active []scopeFrame, name string) *Binding {
 	return nil
 }
 
+// isWordToken reports whether t is a word, such as a keyword, rather than
+// punctuation, a variable or a literal.
+func isWordToken(t parser.Token) bool {
+	v := t.Value
+	if v == "" || t.Kind == parser.TokenVariable || t.Kind == parser.TokenStringLiteral {
+		return false
+	}
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || i > 0 && c >= '0' && c <= '9' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Document, declByToken map[int]*Binding) (*pendingScope, map[int]*Binding) {
 	name := ""
 	kind := ScopeClosure
@@ -490,7 +507,9 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 	if nameIdx >= 0 && tokens[nameIdx].Kind == parser.TokenAmpersand {
 		nameIdx = nextSignificant(tokens, nameIdx+1)
 	}
-	if nameIdx >= 0 && tokens[nameIdx].Kind == parser.TokenIdentifier {
+	// A method may be named with a reserved word (`function use(…)`,
+	// `function list(…)`), which the tokenizer reads as a keyword.
+	if nameIdx >= 0 && (tokens[nameIdx].Kind == parser.TokenIdentifier || isWordToken(tokens[nameIdx])) {
 		name = tokens[nameIdx].Value
 		kind = ScopeFunction
 		if enclosingClassName(tokens, start) != "" {

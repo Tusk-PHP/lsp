@@ -1203,7 +1203,9 @@ func (p *structParser) parseUse() {
 		}
 	}
 
-	fullName := strings.Join(parts, "")
+	// An imported name is always fully qualified, so a leading backslash
+	// (`use \App\Thing;`) is legal and means the same as none.
+	fullName := strings.TrimPrefix(strings.Join(parts, ""), "\\")
 	alias := ""
 	if p.peek().Value == "as" {
 		p.advance()

@@ -577,6 +577,8 @@ func (s *exprScanner) parseMatchExpression() (MatchDef, bool) {
 
 	// Parse arms until '}' or EOF
 	for {
+		// A comment between arms, or after the last one, is not an arm.
+		s.skipComments()
 		startPos := s.pos
 
 		if s.peek().Kind == TokenEOF {
@@ -606,6 +608,18 @@ func (s *exprScanner) parseMatchExpression() (MatchDef, bool) {
 		// Progress guard
 		if s.pos == startPos {
 			s.advance()
+		}
+	}
+}
+
+// skipComments steps over comment tokens at the current position.
+func (s *exprScanner) skipComments() {
+	for {
+		switch s.peek().Kind {
+		case TokenComment, TokenDocComment:
+			s.advance()
+		default:
+			return
 		}
 	}
 }
@@ -713,6 +727,8 @@ func (s *exprScanner) collectMatchCondition() string {
 	for s.peek().Kind != TokenEOF {
 		t := s.peek()
 		switch t.Kind {
+		case TokenComment, TokenDocComment:
+			s.advance() // not part of the condition
 		case TokenOpenParen, TokenOpenBracket, TokenOpenBrace:
 			depth++
 			parts = append(parts, t.Value)

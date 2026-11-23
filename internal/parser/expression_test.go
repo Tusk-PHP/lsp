@@ -954,3 +954,42 @@ $d = match ($a) {
 		t.Errorf("class Str and its methods not parsed correctly: %+v", r.Classes)
 	}
 }
+
+// TestMatchCommentsBetweenArms verifies that comments after the last arm,
+// between arms and between conditions are not read as malformed arms.
+func TestMatchCommentsBetweenArms(t *testing.T) {
+	src := `<?php
+$label = match ($code) {
+    // leading comment
+    200, // ok
+    201 => 'success', // trailing comment on an arm
+    /* block */ 404 => 'missing',
+    default => 'unknown',
+    // comment after the last arm
+};
+$other = match ($x) {
+    1 => 'one' // no trailing comma, then a comment
+    # hash comment
+};
+`
+	r := New().Parse(src)
+	for _, e := range r.Errors {
+		t.Errorf("unexpected parse error line %d: %s", e.Line, e.Message)
+	}
+	if len(r.Matches) != 2 {
+		t.Fatalf("expected 2 match expressions, got %d", len(r.Matches))
+	}
+	m := r.Matches[0]
+	if len(m.Arms) != 3 {
+		t.Fatalf("expected 3 arms, got %d", len(m.Arms))
+	}
+	if got := m.Arms[0].Conditions; len(got) != 2 || got[0] != "200" || got[1] != "201" {
+		t.Errorf("arm[0] conditions: want [200 201], got %q", got)
+	}
+	if got := m.Arms[1].Conditions; len(got) != 1 || got[0] != "404" {
+		t.Errorf("arm[1] conditions: want [404], got %q", got)
+	}
+	if len(r.Matches[1].Arms) != 1 {
+		t.Errorf("second match: expected 1 arm, got %d", len(r.Matches[1].Arms))
+	}
+}

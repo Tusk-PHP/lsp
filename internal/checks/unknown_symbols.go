@@ -359,6 +359,8 @@ var skippedFunctionLikeKeywords = map[string]bool{
 	"fn": true, "use": true, "return": true, "list": true, "case": true,
 	"and": true, "or": true, "xor": true, "instanceof": true, "throw": true,
 	"yield": true, "static": true, "declare": true,
+	// `break(2);` and `continue(2);` are legal: the level is an expression.
+	"break": true, "continue": true,
 	// `new ($class)()`, `new\nclass($args)`, and the PHP 8.4 asymmetric
 	// visibility and DNF types of `public private(set)` and
 	// `private (A&B)|null $x` are not calls; none of these names can be a

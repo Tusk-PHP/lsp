@@ -3,6 +3,7 @@ package scope
 import (
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -437,5 +438,47 @@ $h = fn &($d) => $d;
 		if !found {
 			t.Errorf("%s: no %s binding", tc.name, tc.kind)
 		}
+	}
+}
+
+// TestCollectMethodNamedWithKeyword checks that a method named with a
+// reserved word, which the tokenizer reads as a keyword, still gets its own
+// scope with its parameters.
+func TestCollectMethodNamedWithKeyword(t *testing.T) {
+	source := `<?php
+class Pipeline {
+    public function use(string $name) { return $name; }
+    public function list($items) { return $items; }
+}
+`
+	doc := Collect(source)
+	for _, tc := range []struct {
+		line, char int
+		method     string
+	}{
+		{2, 31, "use"},
+		{3, 26, "list"},
+	} {
+		b := doc.BindingAt(protocol.Position{Line: tc.line, Character: tc.char})
+		if b == nil || b.Kind != BindingParameter {
+			t.Fatalf("%s(): expected a parameter binding, got %+v", tc.method, b)
+		}
+		if b.Scope.Kind != ScopeMethod || b.Scope.Name != tc.method {
+			t.Errorf("%s(): parameter is in scope %q %q", tc.method, b.Scope.Kind, b.Scope.Name)
+		}
+		if got := len(doc.Occurrences(b)); got != 2 {
+			t.Errorf("%s(): expected 2 occurrences, got %d", tc.method, got)
+		}
+	}
+}
+
+func TestIsWordToken(t *testing.T) {
+	for v, want := range map[string]bool{"use": true, "list_2": true, "_x": true, "(": false, "2x": false, "": false} {
+		if got := isWordToken(parser.Token{Kind: parser.TokenIdentifier, Value: v}); got != want {
+			t.Errorf("isWordToken(%q) = %v, want %v", v, got, want)
+		}
+	}
+	if isWordToken(parser.Token{Kind: parser.TokenVariable, Value: "x"}) {
+		t.Error("a variable is not a word")
 	}
 }

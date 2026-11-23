@@ -417,3 +417,78 @@ func TestUnknownFunctionWindowsBuiltins(t *testing.T) {
 		t.Errorf("got %v", unknownMemberMessages(got))
 	}
 }
+
+// TestUnknownClassLeadingBackslashImport verifies that `use \Ns\Thing;`, which
+// PHP reads the same as `use Ns\Thing;`, resolves the imported class.
+func TestUnknownClassLeadingBackslashImport(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///lib.php", `<?php
+namespace Vendor\Lib;
+class Thing {}
+interface Contract {}
+`)
+	source := `<?php
+namespace App;
+
+use \Vendor\Lib\Thing;
+use \Vendor\Lib\Contract;
+
+class Consumer implements Contract
+{
+    public function make(): Thing
+    {
+        return new Thing();
+    }
+}
+`
+	file := parser.ParseFile(source)
+	for _, f := range (&UnknownClassRule{}).Check(file, source, idx) {
+		t.Errorf("unexpected unknown-class finding: %q at line %d", f.Message, f.StartLine)
+	}
+	for _, f := range (&UnusedImportsRule{}).Check(file, source, idx) {
+		t.Errorf("unexpected unused-import finding: %q at line %d", f.Message, f.StartLine)
+	}
+}
+
+// TestUnknownFunctionIgnoresKeywordsWithParentheses verifies that language
+// constructs written with parentheses, such as `break(2);`, are not read as
+// calls to unknown functions.
+func TestUnknownFunctionIgnoresKeywordsWithParentheses(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.3"})
+	source := `<?php
+function run(array $rows) {
+    foreach ($rows as $row) {
+        foreach ($row as $cell) {
+            if ($cell === null) { continue(2); }
+            if ($cell === false) { break(2); }
+            print($cell);
+        }
+    }
+    include('a.php');
+    require_once('b.php');
+    if (!$rows) { exit(1); }
+    return(count($rows));
+}
+`
+	file := parser.ParseFile(source)
+	for _, f := range (&UnknownFunctionRule{}).Check(file, source, idx) {
+		t.Errorf("unexpected unknown-function finding: %q at line %d", f.Message, f.StartLine)
+	}
+}
+
+// TestUndefinedVariableInMethodNamedUse verifies that a method named with a
+// reserved word, such as use(), sees its own parameters.
+func TestUndefinedVariableInMethodNamedUse(t *testing.T) {
+	source := `<?php
+class Manager {
+    public function use(string $name) { return $name; }
+}
+trait Pipes { public function use($value, ...$rest) { return [$value, $rest]; } }
+enum Mode: string { case A = 'a'; public function use(int $n): int { return $n; } }
+`
+	file := parser.ParseFile(source)
+	for _, f := range (&UndefinedVariableRule{}).Check(file, source, symbols.NewIndex()) {
+		t.Errorf("unexpected undefined-variable finding: %q at line %d", f.Message, f.StartLine)
+	}
+}

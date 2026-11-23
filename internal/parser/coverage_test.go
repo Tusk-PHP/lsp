@@ -270,3 +270,25 @@ class Foo {
 		}
 	}
 }
+
+func TestParseFileUseStatementLeadingBackslash(t *testing.T) {
+	file := ParseFile(`<?php
+namespace App;
+use \Vendor\Lib\Thing;
+use \Vendor\Lib\Other as Renamed;
+use function \Vendor\Lib\helper;
+`)
+	want := map[string]string{
+		"Thing":   `Vendor\Lib\Thing`,
+		"Renamed": `Vendor\Lib\Other`,
+		"helper":  `Vendor\Lib\helper`,
+	}
+	if len(file.Uses) != len(want) {
+		t.Fatalf("expected %d use statements, got %d", len(want), len(file.Uses))
+	}
+	for _, u := range file.Uses {
+		if got := want[u.Alias]; got != u.FullName {
+			t.Errorf("use %q: want full name %q, got %q", u.Alias, got, u.FullName)
+		}
+	}
+}
