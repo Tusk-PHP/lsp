@@ -3,7 +3,6 @@ package models
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -62,32 +61,6 @@ var blueprintTypeMap = map[string]string{
 	"foreignUlid":           "string",
 	"foreignUuid":           "string",
 }
-
-// Regex patterns for migration parsing.
-var (
-	// Schema::create('tablename', function (Blueprint $table) {
-	schemaCreateRe = regexp.MustCompile(`Schema::create\(\s*['"]([^'"]+)['"]`)
-	// Schema::table('tablename', function (Blueprint $table) {
-	schemaTableRe = regexp.MustCompile(`Schema::table\(\s*['"]([^'"]+)['"]`)
-	// $table->string('name') or $table->string('name', 100)
-	blueprintCallRe = regexp.MustCompile(`\$table\s*->\s*(\w+)\(\s*'([^']+)'`)
-	// ->nullable() chain
-	nullableRe = regexp.MustCompile(`->\s*nullable\s*\(`)
-	// ->default(value) chain
-	defaultRe = regexp.MustCompile(`->\s*default\s*\(\s*(.+?)\s*\)`)
-	// $table->dropColumn('name') or $table->dropColumn(['name', 'other'])
-	dropColumnRe       = regexp.MustCompile(`\$table\s*->\s*dropColumn\(\s*['"\[]`)
-	dropColumnSingleRe = regexp.MustCompile(`\$table\s*->\s*dropColumn\(\s*'([^']+)'`)
-	dropColumnArrayRe  = regexp.MustCompile(`'([^']+)'`)
-	// $table->timestamps() — no column name arg
-	timestampsRe = regexp.MustCompile(`\$table\s*->\s*timestamps\s*\(`)
-	// $table->softDeletes() — no column name arg
-	softDeletesRe = regexp.MustCompile(`\$table\s*->\s*softDeletes\s*\(`)
-	// $table->id() — no column name arg (or optional name)
-	idRe = regexp.MustCompile(`\$table\s*->\s*id\s*\((?:\s*'([^']*)')?\s*\)`)
-	// $table->rememberToken()
-	rememberTokenRe = regexp.MustCompile(`\$table\s*->\s*rememberToken\s*\(`)
-)
 
 // AnalyzeMigrations scans Laravel migration files and injects virtual properties
 // for columns that don't already have a source from DB, IDE helper, or docblocks.
@@ -177,105 +150,6 @@ func injectMigrationColumnsInto(index *symbols.Index, modelSym *symbols.Symbol, 
 			IsVirtual:  true,
 			DocComment: docComment,
 		})
-	}
-}
-
-// parseMigrationFile extracts column definitions from a single migration file.
-func parseMigrationFile(source string, tableColumns map[string]map[string]*MigrationColumn) {
-	lines := strings.Split(source, "\n")
-
-	var currentTable string
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		// Detect Schema::create or Schema::table
-		if m := schemaCreateRe.FindStringSubmatch(trimmed); m != nil {
-			currentTable = m[1]
-			if tableColumns[currentTable] == nil {
-				tableColumns[currentTable] = make(map[string]*MigrationColumn)
-			}
-			continue
-		}
-		if m := schemaTableRe.FindStringSubmatch(trimmed); m != nil {
-			currentTable = m[1]
-			if tableColumns[currentTable] == nil {
-				tableColumns[currentTable] = make(map[string]*MigrationColumn)
-			}
-			continue
-		}
-
-		if currentTable == "" {
-			continue
-		}
-		cols := tableColumns[currentTable]
-
-		// Handle $table->id()
-		if m := idRe.FindStringSubmatch(trimmed); m != nil {
-			name := "id"
-			if m[1] != "" {
-				name = m[1]
-			}
-			cols[name] = &MigrationColumn{Name: name, Type: "int", RawType: "bigint"}
-			continue
-		}
-
-		// Handle $table->timestamps()
-		if timestampsRe.MatchString(trimmed) {
-			cols["created_at"] = &MigrationColumn{Name: "created_at", Type: "\\DateTimeInterface", RawType: "datetime", Nullable: true}
-			cols["updated_at"] = &MigrationColumn{Name: "updated_at", Type: "\\DateTimeInterface", RawType: "datetime", Nullable: true}
-			continue
-		}
-
-		// Handle $table->softDeletes()
-		if softDeletesRe.MatchString(trimmed) {
-			cols["deleted_at"] = &MigrationColumn{Name: "deleted_at", Type: "\\DateTimeInterface", RawType: "datetime", Nullable: true}
-			continue
-		}
-
-		// Handle $table->rememberToken()
-		if rememberTokenRe.MatchString(trimmed) {
-			cols["remember_token"] = &MigrationColumn{Name: "remember_token", Type: "string", RawType: "string", Nullable: true}
-			continue
-		}
-
-		// Handle $table->dropColumn(...)
-		if strings.Contains(trimmed, "dropColumn") {
-			if m := dropColumnSingleRe.FindStringSubmatch(trimmed); m != nil {
-				delete(cols, m[1])
-			} else if strings.Contains(trimmed, "[") {
-				// Array form: dropColumn(['col1', 'col2'])
-				for _, m := range dropColumnArrayRe.FindAllStringSubmatch(trimmed, -1) {
-					delete(cols, m[1])
-				}
-			}
-			continue
-		}
-
-		// Handle $table->type('name') blueprint calls
-		if m := blueprintCallRe.FindStringSubmatch(trimmed); m != nil {
-			method := m[1]
-			colName := m[2]
-
-			phpType, ok := blueprintTypeMap[method]
-			if !ok {
-				continue
-			}
-
-			col := &MigrationColumn{Name: colName, Type: phpType, RawType: method}
-
-			// Check for ->nullable()
-			if nullableRe.MatchString(trimmed) {
-				col.Nullable = true
-			}
-
-			// Check for ->default(value)
-			if dm := defaultRe.FindStringSubmatch(trimmed); dm != nil {
-				col.Default = dm[1]
-			}
-
-			cols[colName] = col
-		}
 	}
 }
 
