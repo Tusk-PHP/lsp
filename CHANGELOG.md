@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fewer false `unknown-member` and `unknown-function` warnings on real projects:
+  - A class declared inside a block, such as a placeholder under `if (false)` or a polyfill under `if (!class_exists(…))`, no longer has its members checked, since the class code runs with may be another one. Symfony's MongoDB and PHPUnit bridges and Magento's Redis adapter are no longer flagged.
+  - A variable written by a destructuring, such as `[$name, $route] = $route;`, no longer keeps the type it had before. A `foreach` variable is also known to take a new value on every turn of the loop.
+  - Methods Laravel calls on a notification by convention (`via()`, `toMail()`, `toArray()`, `toDatabase()`, `toBroadcast()` and the rest) are no longer reported on `Illuminate\Notifications\Notification`.
+  - A member call with a space or comment after `->` or `::`, as in `parent:: build()` or `$f->/* note */bindTo()`, is no longer reported as an unknown function.
+  - A member after a nullsafe link, as in `$a?->post->missing()`, is now checked against the class the whole chain gives.
+
 ## [0.15.0] - 2026-11-22
 
 ### Added
