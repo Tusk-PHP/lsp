@@ -25,6 +25,11 @@ _None open._
 
 ## Low / performance
 
+### L63 — A declaration's `EndLine` is the line of the token after its closing brace
+- **Where:** `internal/parser/parser.go` (`cls.EndLine = p.peek().Line` and the same for interfaces, traits, enums, functions and methods).
+- **What:** After parsing the body, `EndLine` is taken from the next token, so it is the line of the following declaration, or EOF, rather than the `}`. With blank lines or another declaration after it, a class "ends" further down than it does. Found while closing L40; about a dozen packages read `EndLine` (scope ranges, selection ranges, semantic tokens, guards, unused-private), so it wasn't changed there.
+- **Fix:** Record the line of the closing brace the body parser consumed, then check each reader, starting with `source/context.go` and `lsp/selection_range.go`.
+
 ### L60 — Hover and go-to-definition find nothing on a member of a called closure's result
 - **Where:** member hover in `internal/hover/provider.go`, member definition in `internal/analyzer/analyzer.go` (their fallback chain walkers, see L49).
 - **What:** With `$g = fn (int $i): Foo => new Foo();`, `$x = $g(1);` types `$x` as `Foo`, but hover and go-to-definition on `fooOnly` in `$g(1)->fooOnly()` find nothing, and `$g(1)->nope()` isn't reported as an unknown member on `Foo`. The same on 0.13.0.
@@ -85,15 +90,11 @@ _None open._
 - **What:** `method_exists(` with its arguments on following lines, and `METHOD_EXISTS(…)`, don't register as guards, so the guarded member is still reported. It fails towards warning, not towards silence.
 - **Fix:** Read the guard call from the shared tokens instead of one masked line; compare the function name case-insensitively.
 
-### L44 — 17 files under `internal/` aren't gofmt-clean
-- **Where:** `gofmt -l internal/`, for example `internal/config/config.go`, `internal/mcpserver/server.go`, `internal/workspace/workspace.go`.
-- **What:** Pre-existing on 0.13.0; unrelated diffs pick up formatting noise when an editor formats on save.
-- **Fix:** One `chore: gofmt` commit, and `gofmt -l` as a CI step.
+### ~~L44~~ — Go files weren't all gofmt-clean — **RESOLVED**
+- The 16 files are formatted, and the Test workflow fails on any tracked `.go` file `gofmt -l` lists.
 
-### L43 — Tests that need `testdata/laravel/vendor` fail instead of skipping
-- **Where:** `internal/analyzer/container_test.go` (`TestDefinitionAppStringBinding`, `TestDefinitionAppChainedMethod`, `TestDefinitionResolveHelper`); 15 end-to-end tests in `internal/completion`; `TestE2ESymfonyCompletions` in `internal/lsp` with an incomplete `testdata/symfony/vendor`.
-- **What:** `testdata/laravel/vendor` is git-ignored, so in a fresh clone or worktree these fail with or without any change. They pass in a checkout where `composer install` has been run there.
-- **Fix:** Skip with a message naming the setup step when the vendor directory is missing, and add that step to `make test` or the contributing notes.
+### ~~L43~~ — Tests that need the fixtures' `vendor` folders failed instead of skipping — **RESOLVED**
+- The 20 tests that read `testdata/laravel/vendor` and the one that reads `testdata/symfony/vendor` skip with a message naming the `composer install` to run, and `CONTRIBUTING.md` lists that step. The conformance walker also leaves those `vendor` folders and `testdata/field/_repos` out, as CI never has them, so `make conformance-pr` no longer times out in a checkout that has them.
 
 ### L42 — `unknown-class` before `::` is still matched with a regular expression per line
 - **Where:** `internal/checks/unknown_symbols.go` (`unknownClassStaticRe`, line 21; `checkUnknownStaticClassMatches`).
@@ -105,23 +106,17 @@ _None open._
 - **What:** The handler calls `models.ModelRelations` over the whole project and then filters to the requested model FQN — O(all project relations) per single-model query. Accepted per the graph-cli-removal plan ("revisit only if it shows up in profiling"); not a correctness issue.
 - **Fix:** Add a per-model relation derivation (filter during iteration, or index relations by `SourceModel`) if profiling shows it matters.
 
-### L40 — `InterfaceNode`/`TraitNode`/`EnumNode`/`FunctionNode` (compat layer) lack `EndLine`
-- **Where:** `internal/parser/compat.go` (struct defs ~80-128; `toFileNode` conversion ~550-617).
-- **What:** Same gap L23 fixed for `ClassNode`: the compat nodes for interfaces, traits, enums, and functions don't expose `EndLine`, although `InterfaceDef`/`TraitDef`/`EnumDef`/`FunctionDef` all carry it. (Discovered while fixing L23.)
-- **Fix:** Add `EndLine` to those four compat node types and map it through `toFileNode`, mirroring the `ClassNode` fix.
+### ~~L40~~ — Compat interface/trait nodes lacked `EndLine` — **RESOLVED**
+- `InterfaceNode` and `TraitNode` now carry `EndLine`, as `EnumNode` and `FunctionNode` already did. The value is the parser's, which has its own quirk (L63).
 
-### L39 — `checks.AllRules()` is stale dead code
-- **Where:** `internal/checks/checks.go` (`AllRules`, ~line 58).
-- **What:** `AllRules()` returns only three rules (UnusedImports/UnusedPrivate/UnreachableCode) and was never updated as new rules were added; it has zero production callers, so it silently misrepresents the rule set. (Discovered during the L34 unification.)
-- **Fix:** Delete `AllRules()` — the canonical native set now lives in `diagnostics.NativeRules`. (`checks` cannot import `diagnostics`, so don't delegate; just remove.)
+### ~~L39~~ — `checks.AllRules()` was stale dead code — **RESOLVED**
+- Deleted; `diagnostics.NativeRules` is the rule set.
 
 ### ~~L38~~ — Document introspection dumps only the first top-level symbol — **RESOLVED**
 - `introspect.Document` now builds a section for every top-level class/interface/trait/enum (`Dump.Symbols`), rendered with dividers; `PrimarySymbol` retained as the first element for back-compat. Cursor-first ordering deferred (no Position plumbing needed for "dump all").
 
-### L37 — `introspect` CLI URI derivation: not a bug (corrected)
-- **Where:** `cmd/tusk-php/main.go` (`runIntrospect`) vs `internal/workspace/workspace.go`.
-- **What:** CORRECTION — `workspace` keys files as `"file://"+path` (raw OS path, no `ToSlash`), and `runIntrospect` uses the same `"file://"+absFile` convention, so the two MATCH on every OS and the dump works (verified on Unix). The earlier "empty dump on Windows" premise was wrong.
-- **Fix:** No introspect-specific fix needed. The shared non-standard `file://` form on Windows (backslashes) is a pre-existing, workspace-wide concern; if proper RFC-8089 `file://` URIs are wanted, normalise in ONE shared path→URI helper used by both `workspace` and the CLI. Low-priority hygiene, not a correctness bug.
+### ~~L37~~ — `introspect` CLI URI derivation — **CLOSED, not a bug**
+- `workspace` and `runIntrospect` both use `"file://"+path`. Proper RFC 8089 URIs on Windows would be one shared path→URI helper, if ever wanted.
 
 ### ~~L36~~ — `tuskPhpLsp.debugDocument` lacks test coverage — **RESOLVED**
 - `execute_command_test.go` now asserts `tuskPhpLsp.debugDocument` in the advertised set and adds `TestExecuteCommandDebugDocument` (round-trip: invokes the command, asserts a non-empty string containing the dump header + class name).
