@@ -51,7 +51,7 @@ Setup for each editor is in [docs/editors.md](docs/editors.md), every setting is
 **Code intelligence**
 - Completion that follows method chains through return types and docblocks, so `User::query()->with('posts')->where()->` offers `Builder` methods. Picking a class adds its `use` line.
 - Hover with signatures, docblocks, inheritance and container bindings, plus php.net links for built-ins.
-- Go to definition, type definition and implementation. Find references, workspace symbols, highlights, folding, signature help.
+- Go to definition, type definition and implementation. Type hierarchy: the parents, interfaces and traits of a class, and the classes below it. Find references, workspace symbols, highlights, folding, signature help.
 - Inlay hints for inferred variable types, `foreach` types, closure and method return types, and parameter names.
 
 **Smart renames and refactoring**

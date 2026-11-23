@@ -9,6 +9,7 @@ var capabilityRequests = map[string][]string{
 	"completionProvider":         {"textDocument/completion", "completionItem/resolve"},
 	"hoverProvider":              {"textDocument/hover"},
 	"definitionProvider":         {"textDocument/definition"},
+	"typeHierarchyProvider":      {"textDocument/prepareTypeHierarchy", "typeHierarchy/supertypes", "typeHierarchy/subtypes"},
 	"typeDefinitionProvider":     {"textDocument/typeDefinition"},
 	"implementationProvider":     {"textDocument/implementation"},
 	"referencesProvider":         {"textDocument/references"},

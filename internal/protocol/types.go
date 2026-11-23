@@ -459,6 +459,7 @@ type ServerCapabilities struct {
 	CompletionProvider         *CompletionOptions        `json:"completionProvider,omitempty"`
 	HoverProvider              bool                      `json:"hoverProvider"`
 	DefinitionProvider         bool                      `json:"definitionProvider"`
+	TypeHierarchyProvider      bool                      `json:"typeHierarchyProvider"`
 	TypeDefinitionProvider     bool                      `json:"typeDefinitionProvider"`
 	ImplementationProvider     bool                      `json:"implementationProvider"`
 	ReferencesProvider         bool                      `json:"referencesProvider"`
@@ -756,4 +757,27 @@ type ShowDocumentParams struct {
 	External  bool   `json:"external,omitempty"`
 	TakeFocus bool   `json:"takeFocus,omitempty"`
 	Selection *Range `json:"selection,omitempty"`
+}
+
+type SymbolTag int
+
+const SymbolTagDeprecated SymbolTag = 1
+
+type TypeHierarchyItem struct {
+	Name           string            `json:"name"`
+	Kind           SymbolKind        `json:"kind"`
+	Tags           []SymbolTag       `json:"tags,omitempty"`
+	Detail         string            `json:"detail,omitempty"`
+	URI            string            `json:"uri"`
+	Range          Range             `json:"range"`
+	SelectionRange Range             `json:"selectionRange"`
+	Data           TypeHierarchyData `json:"data"`
+}
+
+type TypeHierarchyData struct {
+	FQN string `json:"fqn"`
+}
+
+type TypeHierarchyItemParams struct {
+	Item TypeHierarchyItem `json:"item"`
 }

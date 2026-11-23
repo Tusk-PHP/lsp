@@ -75,6 +75,10 @@ type Symbol struct {
 	Attributes    []Attribute
 }
 
+func (s *Symbol) IsDeprecated() bool {
+	return s.Attribute("Deprecated") != nil || (s.DocComment != "" && parser.ParseDocBlock(s.DocComment).Deprecated)
+}
+
 // Attribute is a PHP 8 attribute on a symbol.
 type Attribute struct {
 	Name string   // as written
@@ -1684,10 +1688,39 @@ func (idx *Index) Implementations(fqn string) []string {
 	for len(queue) > 0 {
 		next := queue[0]
 		queue = queue[1:]
-		visit(idx.childrenMap[strings.ToLower(next)])
-		visit(idx.reverseImplementsMap[next])
-		visit(idx.subInterfaceMap[next])
+		idx.directSubtypesLocked(next, visit)
 	}
+	return out
+}
+
+func (idx *Index) DirectSubtypes(fqn string) []string {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	var out []string
+	seen := map[string]bool{strings.ToLower(fqn): true}
+	idx.directSubtypesLocked(fqn, func(names []string) {
+		for _, name := range names {
+			if key := strings.ToLower(name); !seen[key] {
+				seen[key] = true
+				out = append(out, name)
+			}
+		}
+	})
+	return out
+}
+
+func (idx *Index) directSubtypesLocked(fqn string, visit func([]string)) {
+	visit(idx.childrenMap[strings.ToLower(fqn)])
+	visit(idx.reverseImplementsMap[fqn])
+	visit(idx.subInterfaceMap[fqn])
+}
+
+func (idx *Index) DirectSupertypes(fqn string) []string {
+	idx.ensureGenerated(fqn)
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	var out []string
+	idx.walkAncestors(fqn, func(next string, _ bool) { out = append(out, next) })
 	return out
 }
 
