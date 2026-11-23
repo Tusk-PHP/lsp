@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -290,5 +291,29 @@ use function \Vendor\Lib\helper;
 		if got := want[u.Alias]; got != u.FullName {
 			t.Errorf("use %q: want full name %q, got %q", u.Alias, got, u.FullName)
 		}
+	}
+}
+
+func TestParseFileGroupAndCommaImports(t *testing.T) {
+	file := ParseFile(`<?php
+namespace App;
+use Foo\A, Bar\B as BB;
+use Lib\{C, D as E, function f, const K,};
+use function Fn\{g, h};
+use \Lib\{Deep\X};
+$f = function () use ($x) {};
+`)
+	want := []string{
+		`class Foo\A A`, `class Bar\B BB`,
+		`class Lib\C C`, `class Lib\D E`, `function Lib\f f`, `const Lib\K K`,
+		`function Fn\g g`, `function Fn\h h`,
+		`class Lib\Deep\X X`,
+	}
+	var got []string
+	for _, u := range file.Uses {
+		got = append(got, u.Kind+" "+u.FullName+" "+u.Alias)
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("imports:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
