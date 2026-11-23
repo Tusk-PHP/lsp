@@ -178,7 +178,6 @@ app/code/Magento/Config/Model/Config.php	unknown-function	Unknown function 'brea
 app/code/Magento/Config/Model/Config/Backend/Admin/Robots.php	unused-import	Unused import 'Magento\Config\Model\Config\Reader\Source\Deployed\DocumentRoot'
 app/code/Magento/Config/Model/Config/Backend/Admin/Robots.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
 app/code/Magento/Config/Model/Config/Structure/Element/Group/Proxy.php	unknown-member	Unknown member 'isAllowed' on 'Group'
-app/code/Magento/Config/Model/Config/StructureLazy.php	unknown-function	Unknown function 'getElementByPathParts'
 app/code/Magento/ConfigurableProduct/Block/Adminhtml/Product/Composite/Fieldset/Configurable.php	unused-import	Unused import 'Magento\Catalog\Helper\Product'
 app/code/Magento/ConfigurableProduct/Block/Adminhtml/Product/Composite/Fieldset/Configurable.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
 app/code/Magento/ConfigurableProduct/Block/Adminhtml/Product/Edit/AttributeSet/Form.php	unknown-member	Unknown member 'get' on 'SetFactory'

@@ -445,7 +445,11 @@ func shouldSkipFunctionCall(line string, start int, name string) bool {
 		prefix = strings.TrimSpace(trimmed)
 	}
 	switch {
-	case strings.HasSuffix(prefix, "function"),
+	// A member called with space or a comment after the operator, as in
+	// `$f->/* note */bindTo()`: comments are masked to spaces.
+	case strings.HasSuffix(prefix, "->"),
+		strings.HasSuffix(prefix, "::"),
+		strings.HasSuffix(prefix, "function"),
 		strings.HasSuffix(prefix, "fn"),
 		strings.HasSuffix(prefix, "new"),
 		strings.HasSuffix(prefix, "new \\"),
@@ -1627,7 +1631,9 @@ func backwardExprStart(line string, end int) int {
 		if depthParen > 0 || depthBracket > 0 {
 			continue
 		}
-		if isExprChar(line[i]) {
+		// The `?` of a nullsafe `?->` is part of the chain, as in `$a?->b->c()`;
+		// a ternary's isn't.
+		if isExprChar(line[i]) || line[i] == '?' && strings.HasPrefix(line[i+1:], "->") {
 			continue
 		}
 		return i + 1
