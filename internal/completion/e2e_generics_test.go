@@ -18,6 +18,7 @@ import (
 // This tests against the actual Laravel framework source code.
 func setupLaravelE2E(t *testing.T) *Provider {
 	t.Helper()
+	requireLaravelVendor(t)
 	root := filepath.Join("..", "..", "testdata", "laravel")
 
 	idx := symbols.NewIndex()

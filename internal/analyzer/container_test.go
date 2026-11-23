@@ -47,6 +47,7 @@ func indexPHPDir(t *testing.T, idx *symbols.Index, root, dir string, src symbols
 
 func setupLaravelAnalyzer(t *testing.T) *Analyzer {
 	t.Helper()
+	requireLaravelVendor(t)
 	root := laravelTestdataPath()
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()

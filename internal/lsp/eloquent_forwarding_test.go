@@ -14,6 +14,7 @@ import (
 // Category::find() are forwarded to the query builder, which the index
 // already knows.
 func TestEloquentStaticCallsRightAfterStartup(t *testing.T) {
+	requireLaravelVendor(t)
 	root, err := filepath.Abs("../../testdata/laravel")
 	if err != nil {
 		t.Fatal(err)

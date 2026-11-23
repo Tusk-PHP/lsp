@@ -16,6 +16,7 @@ import (
 // setupSymfonyE2E indexes the real testdata/symfony vendor and app files.
 func setupSymfonyE2E(t *testing.T) *Provider {
 	t.Helper()
+	requireSymfonyVendor(t)
 	root := filepath.Join("..", "..", "testdata", "symfony")
 
 	idx := symbols.NewIndex()

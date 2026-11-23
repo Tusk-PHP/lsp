@@ -46,6 +46,7 @@ func indexPHPDir(t *testing.T, idx *symbols.Index, root, dir string, src symbols
 
 func setupLaravelIndex(t *testing.T) (*symbols.Index, *container.ContainerAnalyzer) {
 	t.Helper()
+	requireLaravelVendor(t)
 	root := filepath.Join("..", "..", "testdata", "laravel")
 
 	idx := symbols.NewIndex()

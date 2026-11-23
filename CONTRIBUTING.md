@@ -23,6 +23,11 @@ cd tusk-php
 # Build the server
 make build
 
+# Install the Laravel and Symfony fixtures' dependencies (needs Composer).
+# Without them, the tests that read those frameworks' sources are skipped.
+composer install --working-dir testdata/laravel --no-scripts
+composer install --working-dir testdata/symfony --no-scripts
+
 # Run tests
 make test
 
