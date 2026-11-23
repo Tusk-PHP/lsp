@@ -44,6 +44,7 @@ disappear a moment later.
 | `unused-import` | A `use` statement nothing in the file uses | Hint |
 | `unused-private-method` | A private method nothing calls | Info |
 | `unused-private-property` | A private property nothing reads | Hint |
+| `unused-private-constant` | A private class constant nothing reads | Hint |
 | `unreachable-code` | Code after a `return`, `throw`, `exit` and the like | Warning |
 | `redundant-union-member` | A union type with a duplicate member, or a member already covered by another (`int\|mixed`) | Warning |
 | `deprecated` | Use of a PHP function deprecated in your PHP version, or of anything marked `#[\Deprecated]` | Warning |

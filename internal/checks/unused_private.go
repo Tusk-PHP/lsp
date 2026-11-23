@@ -12,10 +12,12 @@ import (
 // UnusedPrivateRule detects private methods and properties that are never
 // referenced within their declaring class or the traits it uses, which can
 // call the class's private members as their own.
-type UnusedPrivateRule struct{}
+type UnusedPrivateRule struct {
+	Shared *Shared
+}
 
 func (r *UnusedPrivateRule) Codes() []rule.Code {
-	return []rule.Code{rule.UnusedPrivateMethod, rule.UnusedPrivateProperty}
+	return []rule.Code{rule.UnusedPrivateMethod, rule.UnusedPrivateProperty, rule.UnusedPrivateConstant}
 }
 
 func (r *UnusedPrivateRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
@@ -36,6 +38,7 @@ func (r *UnusedPrivateRule) Check(file *parser.FileNode, source string, index *s
 		}
 		findings = append(findings, checkUnusedPrivateMethods(cls, lines, traits)...)
 		findings = append(findings, checkUnusedPrivateProperties(cls, lines, traits)...)
+		findings = append(findings, checkUnusedPrivateConstants(cls, r.Shared.parse(source).Tokens, lines, traits)...)
 	}
 	return findings
 }
@@ -99,18 +102,7 @@ func sourceUsesProperty(src, name string) bool {
 	if strings.Contains(src, "::$"+name) {
 		return true
 	}
-	pattern := "->" + name
-	for rest := src; ; {
-		i := strings.Index(rest, pattern)
-		if i < 0 {
-			return false
-		}
-		after := i + len(pattern)
-		if after >= len(rest) || !isIdentChar(rest[after]) {
-			return true
-		}
-		rest = rest[after:]
-	}
+	return containsWord(src, "->"+name)
 }
 
 // magicMethods are methods that PHP calls implicitly — never flag these as unused.
