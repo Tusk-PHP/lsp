@@ -7,10 +7,14 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
-// memberGuardCallRe finds the calls code makes to ask whether an object has a
-// member before using it. It runs on masked lines, so calls in comments and
-// strings are already blanked.
-var memberGuardCallRe = regexp.MustCompile(`(?i)\b(method_exists|property_exists|is_callable)\s*\(`)
+// memberGuardHintRe is a cheap test for whether a file may call one of the
+// guard functions at all, before it's read as tokens. Function names ignore
+// case in PHP, so it does too.
+var memberGuardHintRe = regexp.MustCompile(`(?i)_exists|is_callable`)
+
+// memberGuardFuncs are the calls code makes to ask whether an object has a
+// member before using it, lowercased.
+var memberGuardFuncs = map[string]bool{"method_exists": true, "property_exists": true, "is_callable": true}
 
 // memberGuard is one `method_exists($x, 'name')`, `property_exists($x, 'name')`
 // or `is_callable([$x, 'name'])` check.
@@ -27,8 +31,8 @@ type memberGuard struct {
 // lines; the zero-width {-1, -1} is code outside any function.
 type funcScope struct{ start, end int }
 
-// memberGuards collects the guards in a file as UnknownMemberRule reads it
-// line by line, so a guard only answers for accesses after it.
+// memberGuards holds the guards in a file, read from its tokens, so a call
+// written over several lines counts; a guard only answers for accesses after it.
 //
 // A guard counts for accesses of the same member on the same receiver
 // expression, later in the same function or method body. That covers
@@ -42,45 +46,62 @@ type memberGuards struct {
 	byName map[string][]memberGuard
 }
 
-// add records the guards on one line. masked is the line with comments and
-// strings blanked, raw the same line as written; they have the same length.
-func (g *memberGuards) add(masked, raw string, lineNum int) {
-	if !strings.Contains(masked, "xists") && !strings.Contains(masked, "allable") {
-		return
-	}
-	for _, m := range memberGuardCallRe.FindAllStringSubmatchIndex(masked, -1) {
-		if m[0] > 0 {
-			// A method or a variable of that name isn't the builtin function.
-			switch masked[m[0]-1] {
-			case '>', ':', '$':
-				continue
-			}
+// collect records the guards among tokens: `method_exists($x, 'name')`,
+// `property_exists($x, 'name')` and `is_callable([$x, 'name'])`, in any case
+// and over any number of lines.
+func (g *memberGuards) collect(tokens []parser.Token) {
+	for i, tok := range tokens {
+		if tok.Kind != parser.TokenIdentifier {
+			continue
 		}
-		fn := strings.ToLower(masked[m[2]:m[3]])
-		pos := m[1]
-		closer := byte(')')
+		fn := strings.ToLower(tok.Value)
+		if !memberGuardFuncs[fn] || !isGlobalFunctionCall(tokens, i) {
+			continue
+		}
+		open := nextSignificantTokenIdx(tokens, i+1)
+		if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
+			continue
+		}
+		start, closer := open+1, parser.TokenCloseParen
 		if fn == "is_callable" {
-			pos = skipBlanks(masked, pos)
-			if pos >= len(masked) || masked[pos] != '[' {
+			bracket := nextSignificantTokenIdx(tokens, start)
+			if bracket < 0 || tokens[bracket].Kind != parser.TokenOpenBracket {
 				continue
 			}
-			pos++
-			closer = ']'
+			start, closer = bracket+1, parser.TokenCloseBracket
 		}
-		receiver, name, ok := guardArguments(masked, raw, pos, closer)
+		receiver, name, ok := guardArguments(tokens, start, closer)
 		if !ok {
 			continue
 		}
-		guard := memberGuard{receiver: receiver, name: name, method: fn != "property_exists", line: lineNum, col: m[0]}
+		guard := memberGuard{receiver: receiver, name: name, method: fn != "property_exists", line: tok.Line, col: tok.Column}
 		if guard.method {
 			guard.name = strings.ToLower(name)
 		}
-		guard.scope = g.scopeAt(lineNum)
+		guard.scope = g.scopeAt(tok.Line)
 		if g.byName == nil {
 			g.byName = map[string][]memberGuard{}
 		}
 		g.byName[guard.name] = append(g.byName[guard.name], guard)
 	}
+}
+
+// isGlobalFunctionCall reports whether the name at tokens[i] calls a global
+// function: not a method or static method of that name, a declaration, or a
+// function in another namespace (`Foo\method_exists()`).
+func isGlobalFunctionCall(tokens []parser.Token, i int) bool {
+	prev := prevSignificantTokenIdx(tokens, i-1)
+	if prev < 0 {
+		return true
+	}
+	switch tokens[prev].Kind {
+	case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenFunction, parser.TokenNew:
+		return false
+	case parser.TokenBackslash:
+		before := prevSignificantTokenIdx(tokens, prev-1)
+		return before < 0 || tokens[before].Kind != parser.TokenIdentifier
+	}
+	return true
 }
 
 // covers reports whether a guard before the access at lineNum:col checks for
@@ -118,54 +139,77 @@ func (g *memberGuards) covers(ownerExpr, member string, isCall, isStatic bool, l
 	return false
 }
 
-// guardArguments reads `receiver, 'name'` followed by closer from pos. The
-// receiver must be a variable, a property chain or a class reference
+// guardArguments reads `receiver, 'name'` followed by closer from tokens[start].
+// The receiver must be a variable, a property chain or a class reference
 // (`$x`, `$this->items`, `static::class`, `$x::class`, `Foo::class`); the name
 // must be a plain string literal naming a member.
-func guardArguments(masked, raw string, pos int, closer byte) (receiver, name string, ok bool) {
+func guardArguments(tokens []parser.Token, start int, closer parser.TokenKind) (receiver, name string, ok bool) {
+	var b strings.Builder
 	depth := 0
 	comma := -1
-	for i := pos; i < len(masked) && comma < 0; i++ {
-		switch masked[i] {
-		case '(', '[':
+	for i := start; i < len(tokens) && comma < 0; i++ {
+		switch tokens[i].Kind {
+		case parser.TokenOpenParen, parser.TokenOpenBracket:
 			depth++
-		case ')', ']':
+		case parser.TokenCloseParen, parser.TokenCloseBracket:
 			if depth == 0 {
 				return "", "", false
 			}
 			depth--
-		case ',':
+		case parser.TokenComma:
 			if depth == 0 {
 				comma = i
+				continue
 			}
+		case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace, parser.TokenEOF:
+			return "", "", false
+		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
+			continue
 		}
+		b.WriteString(tokens[i].Value)
 	}
 	if comma < 0 {
 		return "", "", false
 	}
-	receiver = normalizeGuardReceiver(masked[pos:comma])
+	receiver = normalizeGuardReceiver(b.String())
 	if !isGuardReceiver(receiver) {
 		return "", "", false
 	}
+	lit := nextSignificantTokenIdx(tokens, comma+1)
+	if lit < 0 || tokens[lit].Kind != parser.TokenStringLiteral {
+		return "", "", false
+	}
+	name, ok = plainMemberName(tokens[lit].Value)
+	if !ok {
+		return "", "", false
+	}
+	end := nextSignificantTokenIdx(tokens, lit+1)
+	// A trailing comma, as in `[$x, 'name',]` written over several lines.
+	if end >= 0 && tokens[end].Kind == parser.TokenComma {
+		end = nextSignificantTokenIdx(tokens, end+1)
+	}
+	if end < 0 || tokens[end].Kind != closer {
+		return "", "", false
+	}
+	return receiver, name, true
+}
 
-	i := skipBlanks(raw, comma+1)
-	if i >= len(raw) || (raw[i] != '\'' && raw[i] != '"') {
-		return "", "", false
+// plainMemberName returns the member a quoted string literal names, as
+// `'save'` or `"save"`, and false for anything else, such as `"get$name"`.
+func plainMemberName(lit string) (string, bool) {
+	if len(lit) < 3 || (lit[0] != '\'' && lit[0] != '"') || lit[len(lit)-1] != lit[0] {
+		return "", false
 	}
-	quote := raw[i]
-	start := i + 1
-	end := start
-	for end < len(raw) && isIdentChar(raw[end]) {
-		end++
+	name := lit[1 : len(lit)-1]
+	if name[0] >= '0' && name[0] <= '9' {
+		return "", false
 	}
-	if end == start || end >= len(raw) || raw[end] != quote || raw[start] >= '0' && raw[start] <= '9' {
-		return "", "", false
+	for i := 0; i < len(name); i++ {
+		if !isIdentChar(name[i]) {
+			return "", false
+		}
 	}
-	i = skipBlanks(masked, end+1)
-	if i >= len(masked) || masked[i] != closer {
-		return "", "", false
-	}
-	return receiver, raw[start:end], true
+	return name, true
 }
 
 // normalizeGuardReceiver puts a guard's receiver and an access's owner in the
@@ -257,11 +301,4 @@ func functionScopes(file *parser.FileNode) []funcScope {
 		scopes = append(scopes, funcScope{fn.StartLine, fn.EndLine})
 	}
 	return scopes
-}
-
-func skipBlanks(s string, i int) int {
-	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
-		i++
-	}
-	return i
 }

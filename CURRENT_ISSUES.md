@@ -85,10 +85,8 @@ _None open._
 - **What:** There is no branch for the callable type kind, so a closure with a signature (written, or from `f(...)`) reads as an unknown owner and `$closure->fooOnly()` is not reported. Safe, but a real error is missed. A plain `Closure` is checked, now that the stubs declare its members.
 - **Fix:** Treat a callable kind named `Closure` as the class `Closure`; leave `callable(…)` alone.
 
-### L46 — Existence guards written over several lines, or in upper case, aren't recognised
-- **Where:** `internal/checks/member_guards.go` (`memberGuardCallRe`, `memberGuards.add`).
-- **What:** `method_exists(` with its arguments on following lines, and `METHOD_EXISTS(…)`, don't register as guards, so the guarded member is still reported. It fails towards warning, not towards silence.
-- **Fix:** Read the guard call from the shared tokens instead of one masked line; compare the function name case-insensitively.
+### ~~L46~~ — Existence guards over several lines, or in upper case, weren't recognised — **RESOLVED**
+- `memberGuards` reads `method_exists()`, `property_exists()` and `is_callable()` from the tokens, sharing the file's parse with the other rules, so arguments on following lines, comments between them and a trailing comma count; function names ignore case. A call to a method, a static method or a namespaced function of that name is no longer taken for the builtin.
 
 ### ~~L44~~ — Go files weren't all gofmt-clean — **RESOLVED**
 - The 16 files are formatted, and the Test workflow fails on any tracked `.go` file `gofmt -l` lists.

@@ -512,6 +512,9 @@ type UnknownMemberRule struct {
 	// without the class declaring it, as Laravel does with a notification's
 	// toMail().
 	ConventionMethod func(class, method string) bool
+	// Shared, when set, shares the file's parse with the other rules. The
+	// rule reads tokens only in a file that may check for a member first.
+	Shared *Shared
 }
 
 func (r *UnknownMemberRule) Code() string { return "unknown-member" }
@@ -528,10 +531,14 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 	hierarchies := map[string]*memberHierarchy{}
 	instanceofLines := linesWithInstanceof(lines)
 	guards := memberGuards{file: file}
+	if memberGuardHintRe.MatchString(source) {
+		if result := r.Shared.parse(source); result != nil {
+			guards.collect(result.Tokens)
+		}
+	}
 
 	for lineNum, raw := range lines {
 		line := maskPHPLine(raw, &mask)
-		guards.add(line, raw, lineNum)
 		for _, match := range unknownMemberAccessRe.FindAllStringSubmatchIndex(line, -1) {
 			opStart, opEnd := match[2], match[3]
 			nameStart, nameEnd := match[4], match[5]

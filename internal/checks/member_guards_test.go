@@ -38,6 +38,15 @@ class Other {}
 		{"$x::class", "if (method_exists($v::class, 'toArray')) { $v->toArray(); }", nil},
 		{"method names ignore case", "if (method_exists($v, 'TOARRAY')) { $v->toArray(); }", nil},
 		{"guard in a closure of the same method", "$f = function () use ($v) { return method_exists($v, 'toArray'); };\nif ($f()) { $v->toArray(); }", nil},
+		{"arguments over several lines", "if (method_exists(\n    $v,\n    'toArray'\n)) {\n$v->toArray();\n}", nil},
+		{"is_callable over several lines", "if (is_callable([\n    $v,\n    'toArray',\n])) { $v->toArray(); }", nil},
+		{"function name in upper case", "if (METHOD_EXISTS($v, 'toArray')) { $v->toArray(); }", nil},
+		{"function name in mixed case", "if (Property_Exists($v, 'extra')) { return $v->extra; }", nil},
+		{"a comment between the arguments", "if (method_exists($v, /* the hook */ 'toArray')) { $v->toArray(); }", nil},
+
+		{"a function of that name in another namespace", "if (Lib\\method_exists($v, 'toArray')) { $v->toArray(); }", []string{"Unknown member 'toArray' on 'Note'"}},
+		{"a static method of that name", "if (Util::method_exists($v, 'toArray')) { $v->toArray(); }", []string{"Unknown member 'toArray' on 'Note'"}},
+		{"an interpolated name", "if (method_exists($v, \"to{$x}\")) { $v->toArray(); }", []string{"Unknown member 'toArray' on 'Note'"}},
 
 		{"property names don't ignore case", "if (property_exists($v, 'Extra')) { return $v->extra; }", []string{"Unknown member 'extra' on 'Note'"}},
 		{"a different member", "if (method_exists($v, 'toArray')) { $v->toMail(); }", []string{"Unknown member 'toMail' on 'Note'"}},

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Methods Laravel calls on a notification by convention (`via()`, `toMail()`, `toArray()`, `toDatabase()`, `toBroadcast()` and the rest) are no longer reported on `Illuminate\Notifications\Notification`.
   - A member call with a space or comment after `->` or `::`, as in `parent:: build()` or `$f->/* note */bindTo()`, is no longer reported as an unknown function.
   - A member after a nullsafe link, as in `$a?->post->missing()`, is now checked against the class the whole chain gives.
+  - A member checked for first with `method_exists()`, `property_exists()` or `is_callable()` is no longer reported when the check is written over several lines or with the function name in another case, as in `METHOD_EXISTS($x, 'save')`.
 
 ## [0.15.0] - 2026-11-22
 

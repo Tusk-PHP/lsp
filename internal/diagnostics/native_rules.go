@@ -61,7 +61,7 @@ func NativeRules(opts NativeRulesOptions) []checks.Rule {
 	}
 	// Rules that require optional deps follow in a stable order.
 	if opts.TypeResolver != nil {
-		rules = append(rules, &checks.UnknownMemberRule{TypeResolver: opts.TypeResolver, ConventionMethod: frameworklaravel.ConventionMethod})
+		rules = append(rules, &checks.UnknownMemberRule{TypeResolver: opts.TypeResolver, ConventionMethod: frameworklaravel.ConventionMethod, Shared: shared})
 	}
 	if opts.BuiltinUnavailableRule != nil {
 		rules = append(rules, opts.BuiltinUnavailableRule)
