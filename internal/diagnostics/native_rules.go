@@ -2,6 +2,7 @@ package diagnostics
 
 import (
 	"github.com/Tusk-PHP/lsp/internal/checks"
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
@@ -60,7 +61,7 @@ func NativeRules(opts NativeRulesOptions) []checks.Rule {
 	}
 	// Rules that require optional deps follow in a stable order.
 	if opts.TypeResolver != nil {
-		rules = append(rules, &checks.UnknownMemberRule{TypeResolver: opts.TypeResolver})
+		rules = append(rules, &checks.UnknownMemberRule{TypeResolver: opts.TypeResolver, ConventionMethod: frameworklaravel.ConventionMethod})
 	}
 	if opts.BuiltinUnavailableRule != nil {
 		rules = append(rules, opts.BuiltinUnavailableRule)

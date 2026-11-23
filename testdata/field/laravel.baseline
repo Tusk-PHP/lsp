@@ -35,8 +35,6 @@ src/Illuminate/JsonSchema/Types/Type.php	undefined-variable	Undefined variable $
 src/Illuminate/Mail/MailManager.php	unknown-class	Unknown class 'MailgunTransportFactory'
 src/Illuminate/Mail/MailManager.php	unknown-class	Unknown class 'PostmarkTransportFactory'
 src/Illuminate/Mail/SentMessage.php	unknown-member	Unknown member 'getAttachments' on 'RawMessage'
-src/Illuminate/Notifications/Channels/MailChannel.php	unknown-member	Unknown member 'toMail' on 'Notification'
-src/Illuminate/Notifications/NotificationSender.php	unknown-member	Unknown member 'via' on 'Notification'
 src/Illuminate/Redis/Connectors/PhpRedisConnector.php	unknown-member	Unknown member 'OPT_PACK_IGNORE_NUMBERS' on 'Redis'
 src/Illuminate/Routing/RouteUrlGenerator.php	unused-variable	Variable $root is assigned but never read
 src/Illuminate/Routing/SortedMiddleware.php	undefined-variable	Undefined variable $lastPriorityIndex

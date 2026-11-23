@@ -126,7 +126,7 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP, includedFile bool
 			diags = append(diags, p.applyRuleSeverity("unknown-function", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.TypeResolver != nil && p.cfg.IsRuleEnabled("unknown-member") {
-			fs := (&checks.UnknownMemberRule{TypeResolver: typeResolver}).Check(file, source, p.index)
+			fs := (&checks.UnknownMemberRule{TypeResolver: typeResolver, ConventionMethod: frameworklaravel.ConventionMethod}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("unknown-member", checks.SeverityWarning, findingsToDiagnostics(fs))...)
 		}
 		if p.BuiltinUnavailableRule != nil && p.cfg.IsRuleEnabled("builtin-unavailable") {

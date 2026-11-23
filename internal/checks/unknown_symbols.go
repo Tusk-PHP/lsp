@@ -503,6 +503,11 @@ func hasKeywordSuffix(s, kw string) bool {
 // the receiver type can be resolved reliably.
 type UnknownMemberRule struct {
 	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
+	// ConventionMethod, when set, reports whether a framework calls method on
+	// instances of class (one class of the receiver's hierarchy) by convention,
+	// without the class declaring it, as Laravel does with a notification's
+	// toMail().
+	ConventionMethod func(class, method string) bool
 }
 
 func (r *UnknownMemberRule) Code() string { return "unknown-member" }
@@ -563,7 +568,7 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 					continue
 				}
 			}
-			if anyOwnerMayHaveMember(owners, access, file, index, hierarchies) {
+			if anyOwnerMayHaveMember(owners, access, file, index, hierarchies) || r.conventionMethod(owners, access, hierarchies) {
 				continue
 			}
 			if anyImplementationHasMember(owners, isLateBoundOwner(ownerExpr), access, file, index, hierarchies) {
@@ -1001,6 +1006,27 @@ type memberHierarchy struct {
 	// where a class declared inside a block still has its own members and its
 	// parents': it doesn't stand for a class defined elsewhere.
 	subclass string
+}
+
+// conventionMethod reports whether a framework calls the accessed method on
+// one of owners, or a class it extends, by convention.
+func (r *UnknownMemberRule) conventionMethod(owners []string, access memberAccess, hierarchies map[string]*memberHierarchy) bool {
+	if r.ConventionMethod == nil || !access.isCall || access.isStatic {
+		return false
+	}
+	for _, owner := range owners {
+		if r.ConventionMethod(owner, access.name) {
+			return true
+		}
+		if h := hierarchies[owner]; h != nil {
+			for class := range h.visited {
+				if r.ConventionMethod(class, access.name) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func anyOwnerMayHaveMember(owners []string, access memberAccess, file *parser.FileNode, index *symbols.Index, hierarchies map[string]*memberHierarchy) bool {
