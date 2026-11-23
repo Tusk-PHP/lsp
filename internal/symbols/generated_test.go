@@ -80,3 +80,16 @@ func TestGeneratedClassesAreBuiltOnLookup(t *testing.T) {
 		t.Error("reindexing the source class removed the real ProductFactory")
 	}
 }
+
+func TestGeneratorSkipsAClassIndexedUnderAnotherCase(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///BoxFactory.php", "<?php\nnamespace App;\nclass BoxFactory {}\nclass Box {}\n")
+	gen := &factories{}
+	idx.SetClassGenerator(gen)
+	if sym := idx.Lookup(`app\boxFactory`); sym != nil {
+		t.Errorf("no class is generated beside the real one under another case: %+v", sym)
+	}
+	if gen.calls != 0 {
+		t.Errorf("the generator ran %d times for a class that exists", gen.calls)
+	}
+}

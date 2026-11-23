@@ -285,7 +285,7 @@ func memberUses(file *parser.FileNode, source string, index *symbols.Index, type
 // resolveMemberOwner returns the class-like a member is accessed on.
 func resolveMemberOwner(ownerExpr string, line, col int, source string, file *parser.FileNode, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string) string {
 	if !strings.HasPrefix(ownerExpr, "$") && !strings.HasSuffix(ownerExpr, ")") && !strings.HasSuffix(ownerExpr, "]") {
-		if fqn, ok := resolveClassLikeName(ownerExpr, line, file); ok && isClassLikeSymbol(index.Lookup(fqn)) {
+		if fqn, ok := resolveClassLikeName(ownerExpr, line, file); ok && index.Lookup(fqn).IsClassLike() {
 			return fqn
 		}
 	}
