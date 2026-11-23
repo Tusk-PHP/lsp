@@ -215,7 +215,7 @@ func (pl *importPlanner) namespaceMembers(kind importKind) map[string]string {
 				case symbols.KindConstant:
 					k = importConst
 				default:
-					if !isClassLike(s) {
+					if !s.IsClassLike() {
 						continue
 					}
 				}
@@ -314,14 +314,6 @@ func (pl *importPlanner) useInsertLine() int {
 	}
 	pl.insertLine = line
 	return line
-}
-
-func isClassLike(s *symbols.Symbol) bool {
-	switch s.Kind {
-	case symbols.KindClass, symbols.KindInterface, symbols.KindTrait, symbols.KindEnum:
-		return true
-	}
-	return false
 }
 
 // foldKey lower-cases an ASCII s into buf, so that a lookup such as

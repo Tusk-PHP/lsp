@@ -972,7 +972,7 @@ func canonicalClassLike(fqn string, file *parser.FileNode, index *symbols.Index)
 	if index == nil {
 		return "", false
 	}
-	if sym := index.LookupFold(fqn, isClassLikeSymbol); sym != nil {
+	if sym := index.LookupFold(fqn, (*symbols.Symbol).IsClassLike); sym != nil {
 		return sym.FQN, true
 	}
 	return "", false
@@ -1095,7 +1095,7 @@ func (h *memberHierarchy) walk(fqn string, index *symbols.Index) {
 	}
 	h.visited[fqn] = true
 	sym := index.Lookup(fqn)
-	if !isClassLikeSymbol(sym) {
+	if !sym.IsClassLike() {
 		h.open = true
 		return
 	}
@@ -1129,7 +1129,7 @@ func (h *memberHierarchy) walk(fqn string, index *symbols.Index) {
 		h.walk(sym.Extends, index)
 	}
 	for _, tr := range index.TraitsOf(fqn) {
-		if isClassLikeSymbol(index.Lookup(tr)) {
+		if index.Lookup(tr).IsClassLike() {
 			h.members = append(h.members, index.GetClassMembers(tr)...)
 		} else {
 			h.open = true
@@ -1604,18 +1604,6 @@ func functionNodeFQN(fn *parser.FunctionNode, file *parser.FileNode) string {
 		return file.Namespace + "\\" + fn.Name
 	}
 	return fn.Name
-}
-
-func isClassLikeSymbol(sym *symbols.Symbol) bool {
-	if sym == nil {
-		return false
-	}
-	switch sym.Kind {
-	case symbols.KindClass, symbols.KindInterface, symbols.KindTrait, symbols.KindEnum:
-		return true
-	default:
-		return false
-	}
 }
 
 func backwardExprStart(line string, end int) int {

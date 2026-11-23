@@ -259,8 +259,7 @@ func checkLookupNoPanic(entry corpusEntry, idx *symbols.Index) *violation {
 			}
 			idx.LookupByName(sym.Name)
 			idx.SearchByPrefix(sym.Name)
-			if sym.Kind == symbols.KindClass || sym.Kind == symbols.KindInterface ||
-				sym.Kind == symbols.KindTrait || sym.Kind == symbols.KindEnum {
+			if sym.Kind.IsClassLike() {
 				idx.GetClassMembers(sym.FQN)
 			}
 		}
