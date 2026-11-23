@@ -155,9 +155,13 @@ func TestChainTypeWired(t *testing.T) {
 	if got := r.ChainType("$p->logger()", chainSource, pos, file).FQN; got != `App\Logger` {
 		t.Errorf("ChainType = %q", got)
 	}
-	for line, ws := range map[string]int{"$p->info": 4, "$p?->info": 5, "Person :: make": 10} {
-		if got := r.AccessOwnerType(line, ws, chainSource, pos, file).FQN; got != `App\Logger` {
-			t.Errorf("AccessOwnerType(%q) = %q", line, got)
+	// A slice, not a map: the order of the calls is checked below.
+	for _, tc := range []struct {
+		line string
+		ws   int
+	}{{"$p->info", 4}, {"$p?->info", 5}, {"Person :: make", 10}} {
+		if got := r.AccessOwnerType(tc.line, tc.ws, chainSource, pos, file).FQN; got != `App\Logger` {
+			t.Errorf("AccessOwnerType(%q) = %q", tc.line, got)
 		}
 	}
 	if got := r.AccessOwnerType("info", 0, chainSource, pos, file); !got.IsEmpty() {
