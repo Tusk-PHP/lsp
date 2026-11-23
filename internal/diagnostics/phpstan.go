@@ -10,6 +10,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
 type phpstanRunner struct {
@@ -165,7 +166,7 @@ func (r *phpstanRunner) parseOutput(data []byte, sourceLines []string) []protoco
 					End:   protocol.Position{Line: line, Character: endCol},
 				},
 				Severity: protocol.DiagnosticSeverityError,
-				Source:   "phpstan",
+				Source:   string(rule.SourcePHPStan),
 				Message:  msg.Message,
 				Code:     code,
 			})

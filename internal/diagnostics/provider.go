@@ -118,12 +118,8 @@ func (p *Provider) analyze(uri, source string, withSaveRules bool) []protocol.Di
 }
 
 func (p *Provider) analyzeNative(source string, bladePHP, includedFile bool) []protocol.Diagnostic {
-	file := parser.ParseFile(source)
-	if file == nil {
-		return nil
-	}
 	rules := EditRules(p.ruleOptions(bladePHP, includedFile))
-	return p.toDiagnostics(p.runRules(rules, file, source))
+	return p.toDiagnostics(p.runRules(rules, parser.ParseFile(source), source))
 }
 
 func (p *Provider) ruleOptions(bladePHP, includedFile bool) NativeRulesOptions {
@@ -222,11 +218,7 @@ func (p *Provider) saveDiagnostics(uri, source string) []protocol.Diagnostic {
 		doc = blade.CompileWith(source, blade.CompileOptions{Vars: p.ViewTypes.For(uri).BladeVars(), Custom: p.bladeCustom()})
 		source = doc.PHP
 	}
-	file := parser.ParseFile(source)
-	if file == nil {
-		return nil
-	}
-	diags := p.toDiagnostics(p.runRules(SaveRules(p.ruleOptions(doc != nil, false)), file, source))
+	diags := p.toDiagnostics(p.runRules(SaveRules(p.ruleOptions(doc != nil, false)), parser.ParseFile(source), source))
 	if doc != nil {
 		diags = toTemplate(doc, diags)
 	}

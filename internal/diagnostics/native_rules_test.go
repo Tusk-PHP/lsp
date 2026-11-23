@@ -35,6 +35,20 @@ func TestEveryRuleCodeIsEmittedByARule(t *testing.T) {
 	}
 }
 
+func TestEveryRuleAcceptsAFileThatDidNotParse(t *testing.T) {
+	rules := NativeRules(NativeRulesOptions{
+		TypeResolver:           func(expr, source string, line, col int, file *parser.FileNode) string { return "" },
+		BuiltinUnavailableRule: &checks.BuiltinUnavailableRule{PHPVersion: "8.4"},
+		BuilderModelResolver:   func(prefix, method, source string, line int, file *parser.FileNode) string { return "" },
+		BuilderMemberChecker:   &stubMemberChecker{},
+	})
+	for _, r := range rules {
+		if got := r.Check(nil, "<?php $a?->b; missing();", nil); len(got) != 0 {
+			t.Errorf("%v reported %+v for a file that didn't parse", r.Codes(), got)
+		}
+	}
+}
+
 func TestEverySeverityHasAnLSPSeverity(t *testing.T) {
 	for _, severity := range rule.Severities {
 		if lspSeverity[severity] == 0 {

@@ -100,8 +100,11 @@ func ParseSeverity(s string) (Severity, error) {
 
 type Source string
 
+const SourceTusk Source = "tusk-php"
+
+type ExternalSource string
+
 const (
-	SourceTusk    Source = "tusk-php"
-	SourcePHPStan Source = "phpstan"
-	SourcePint    Source = "pint"
+	SourcePHPStan ExternalSource = "phpstan"
+	SourcePint    ExternalSource = "pint"
 )

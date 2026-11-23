@@ -664,3 +664,10 @@ func TestAutoImportAliasStyle(t *testing.T) {
 		t.Errorf("empty client option overrode aliasStyle: %q", cfg.AutoImport.AliasStyle)
 	}
 }
+
+func TestLoadFromFileReportsUnreadableFile(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := LoadFromFile(dir); err == nil || !strings.Contains(err.Error(), "reading "+dir) {
+		t.Errorf("got %v", err)
+	}
+}

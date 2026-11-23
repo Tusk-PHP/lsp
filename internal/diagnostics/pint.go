@@ -12,6 +12,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
 type pintRunner struct {
@@ -132,7 +133,7 @@ func (r *pintRunner) parseOutput(data []byte) []protocol.Diagnostic {
 						End:   protocol.Position{Line: 0, Character: 0},
 					},
 					Severity: protocol.DiagnosticSeverityWarning,
-					Source:   "pint",
+					Source:   string(rule.SourcePint),
 					Message:  formatFixerName(fixer),
 					Code:     fixer,
 				})
@@ -191,7 +192,7 @@ func parseDiffDiagnostics(diff string, fixers []string) []protocol.Diagnostic {
 						End:   protocol.Position{Line: lspLine, Character: col + len(strings.TrimSpace(content))},
 					},
 					Severity: protocol.DiagnosticSeverityWarning,
-					Source:   "pint",
+					Source:   string(rule.SourcePint),
 					Message:  message,
 					Code:     fixerDesc,
 				})
