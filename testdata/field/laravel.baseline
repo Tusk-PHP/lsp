@@ -16,7 +16,6 @@ src/Illuminate/Database/Eloquent/Relations/Concerns/CanBeOneOfMany.php	undefined
 src/Illuminate/Database/Eloquent/Relations/Concerns/CanBeOneOfMany.php	undefined-variable	Undefined variable $previous
 src/Illuminate/Foundation/Cloud/ExceptionReporter.php	unknown-class	Unknown class 'IgnitionViewException'
 src/Illuminate/Foundation/ComposerScripts.php	unknown-class	Unknown class 'IOInterface'
-src/Illuminate/Foundation/Configuration/Middleware.php	undefined-variable	Undefined variable $middleware
 src/Illuminate/Foundation/Configuration/Middleware.php	unknown-class	Unknown class 'Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful'
 src/Illuminate/Foundation/Console/DownCommand.php	unknown-class	Unknown class 'AppPreventRequestsDuringMaintenance'
 src/Illuminate/Foundation/DevCommands.php	unknown-class	Unknown class 'PailServiceProvider'
@@ -30,8 +29,6 @@ src/Illuminate/Foundation/Providers/FoundationServiceProvider.php	unused-variabl
 src/Illuminate/Foundation/Providers/FoundationServiceProvider.php	unused-variable	Variable $absolute is assigned but never read
 src/Illuminate/Http/Client/PendingRequest.php	unknown-member	Unknown member 'getResponse' on 'RequestException'
 src/Illuminate/JsonSchema/Deserializer.php	unknown-member	Unknown member 'default' on 'Deserializer'
-src/Illuminate/JsonSchema/Types/Type.php	undefined-variable	Undefined variable $values
-src/Illuminate/JsonSchema/Types/Type.php	undefined-variable	Undefined variable $values
 src/Illuminate/Mail/MailManager.php	unknown-class	Unknown class 'MailgunTransportFactory'
 src/Illuminate/Mail/MailManager.php	unknown-class	Unknown class 'PostmarkTransportFactory'
 src/Illuminate/Mail/SentMessage.php	unknown-member	Unknown member 'getAttachments' on 'RawMessage'
@@ -41,12 +38,8 @@ src/Illuminate/Routing/SortedMiddleware.php	undefined-variable	Undefined variabl
 src/Illuminate/Routing/SortedMiddleware.php	unused-variable	Variable $lastPriorityIndex is assigned but never read
 src/Illuminate/Session/SessionManager.php	unused-variable	Variable $id is assigned but never read
 src/Illuminate/Session/SessionManager.php	unused-variable	Variable $id is assigned but never read
-src/Illuminate/Support/DateFactory.php	undefined-variable	Undefined variable $handler
-src/Illuminate/Support/DateFactory.php	undefined-variable	Undefined variable $handler
 src/Illuminate/Support/Facades/Auth.php	unknown-class	Unknown class 'UiServiceProvider'
 src/Illuminate/Support/ServiceProvider.php	unknown-class	Unknown class 'ModelFactory'
-src/Illuminate/Support/Traits/InteractsWithData.php	undefined-variable	Undefined variable $default
-src/Illuminate/Support/Traits/InteractsWithData.php	undefined-variable	Undefined variable $default
 src/Illuminate/Support/Traits/Localizable.php	unknown-member	Unknown member 'getLocale' on 'Container'
 src/Illuminate/Support/Traits/Localizable.php	unknown-member	Unknown member 'setLocale' on 'Container'
 src/Illuminate/Support/Traits/Localizable.php	unknown-member	Unknown member 'setLocale' on 'Container'

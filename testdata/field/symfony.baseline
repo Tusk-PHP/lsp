@@ -327,7 +327,6 @@ src/Symfony/Component/HttpClient/Resources/config/http_client.php	unknown-class	
 src/Symfony/Component/HttpClient/Response/CurlResponse.php	unknown-member	Unknown member 'doGetContent' on 'CurlResponse'
 src/Symfony/Component/HttpClient/Response/JsonMockResponse.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/HttpClient/ThrottlingHttpClient.php	unknown-member	Unknown member 'traitReset' on 'ThrottlingHttpClient'
-src/Symfony/Component/HttpFoundation/AcceptHeader.php	syntax-error	malformed match arm
 src/Symfony/Component/HttpFoundation/RequestMatcher/IsJsonRequestMatcher.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
@@ -379,15 +378,10 @@ src/Symfony/Component/JsonPath/Test/JsonPathNotContains.php	unknown-class	Unknow
 src/Symfony/Component/JsonPath/Test/JsonPathNotEquals.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/JsonPath/Test/JsonPathNotSame.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/JsonPath/Test/JsonPathSame.php	unknown-class	Unknown class 'Constraint'
-src/Symfony/Component/JsonSchema/Dialect.php	undefined-variable	Undefined variable $value
-src/Symfony/Component/JsonSchema/Dialect.php	undefined-variable	Undefined variable $value
-src/Symfony/Component/JsonSchema/DialectKeywords.php	undefined-variable	Undefined variable $values
 src/Symfony/Component/JsonStreamer/Read/Decoder.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/JsonStreamer/Write/StreamWriterGenerator.php	unused-variable	Variable $classReflection is assigned but never read
 src/Symfony/Component/KeyManagement/Bridge/DoctrineOrm/EventListener/EncryptedColumnListener.php	unknown-function	Unknown function 'readonly'
 src/Symfony/Component/KeyManagement/Bridge/Kmip/Kmip/StreamTransport.php	undefined-variable	Undefined variable $written
-src/Symfony/Component/KeyManagement/DataKey.php	undefined-variable	Undefined variable $consumer
-src/Symfony/Component/KeyManagement/DataKeyHandle.php	undefined-variable	Undefined variable $consumer
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWrite'
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWrite'
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWriteException'
@@ -514,7 +508,6 @@ src/Symfony/Component/Mime/Test/Constraint/EmailSubjectContains.php	unknown-clas
 src/Symfony/Component/Mime/Test/Constraint/EmailTextBodyContains.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/Mime/Test/Constraint/EmailTextBodyContains.php	unknown-member	Unknown member 'getTextBody' on 'RawMessage'
 src/Symfony/Component/Notifier/Bridge/Firebase/FirebaseOptions.php	unused-private-property	Private property 'FirebaseOptions::$target' is never used
-src/Symfony/Component/Notifier/Bridge/GatewayApi/GatewayApiOptions.php	undefined-variable	Undefined variable $class
 src/Symfony/Component/Notifier/Bridge/MicrosoftTeams/Test/Action/Input/AbstractInputTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Notifier/Bridge/Sipgate/SipgateTransport.php	unused-private-property	Private property 'SipgateTransport::$token' is never used
 src/Symfony/Component/Notifier/Test/AbstractTransportFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
@@ -537,7 +530,6 @@ src/Symfony/Component/PasswordHasher/Hasher/NativePasswordHasher.php	unknown-fun
 src/Symfony/Component/PasswordHasher/Hasher/SodiumPasswordHasher.php	unknown-function	Unknown function 'Sodium\crypto_pwhash_str'
 src/Symfony/Component/PasswordHasher/Hasher/SodiumPasswordHasher.php	unknown-function	Unknown function 'Sodium\crypto_pwhash_str_needs_rehash'
 src/Symfony/Component/PasswordHasher/Hasher/SodiumPasswordHasher.php	unknown-function	Unknown function 'Sodium\crypto_pwhash_str_verify'
-src/Symfony/Component/PropertyInfo/Util/PhpDocTypeHelper.php	syntax-error	malformed match arm
 src/Symfony/Component/PropertyInfo/Util/PhpDocTypeHelper.php	unknown-class	Unknown class 'Collection'
 src/Symfony/Component/PropertyInfo/Util/PhpDocTypeHelper.php	unknown-class	Unknown class 'LegacyScalar'
 src/Symfony/Component/Routing/Loader/YamlFileLoader.php	unknown-member	Unknown member 'doParseImport' on 'YamlFileLoader'
@@ -584,11 +576,7 @@ src/Symfony/Component/Translation/Test/IncompleteDsnTestTrait.php	unknown-class	
 src/Symfony/Component/Translation/Test/ProviderTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Translation/Test/ProviderTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Tui/Input/KeyParser.php	unused-variable	Variable $isDigit is assigned but never read
-src/Symfony/Component/Tui/Input/StdinBuffer.php	syntax-error	malformed match arm
-src/Symfony/Component/Tui/Widget/MarkdownWidget.php	syntax-error	malformed match arm
 src/Symfony/Component/TypeInfo/TypeContext/TypeContextFactory.php	unused-variable	Variable $typeContext is assigned but never read
-src/Symfony/Component/TypeInfo/TypeFactoryTrait.php	undefined-variable	Undefined variable $backingType
-src/Symfony/Component/TypeInfo/TypeFactoryTrait.php	undefined-variable	Undefined variable $className
 src/Symfony/Component/Validator/Constraints/JsonValidator.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/Validator/Test/CompoundConstraintTestCase.php	unknown-class	Unknown class 'ExpectationFailedException'
 src/Symfony/Component/Validator/Test/CompoundConstraintTestCase.php	unknown-class	Unknown class 'TestCase'

@@ -206,8 +206,6 @@ src/wp-includes/php-ai-client/third-party/Nyholm/Psr7/Factory/HttplugFactory.php
 src/wp-includes/php-ai-client/third-party/Nyholm/Psr7/Factory/HttplugFactory.php	unknown-class	Unknown class 'UriFactory'
 src/wp-includes/php-ai-client/third-party/Nyholm/Psr7/StreamTrait.php	unknown-class	Unknown class 'SymfonyErrorHandler'
 src/wp-includes/php-ai-client/third-party/Nyholm/Psr7/StreamTrait.php	unknown-class	Unknown class 'SymfonyLegacyErrorHandler'
-src/wp-includes/php-compat/readonly.php	undefined-variable	Undefined variable $readonly_value
-src/wp-includes/php-compat/readonly.php	undefined-variable	Undefined variable $readonly_value
 src/wp-includes/post-template.php	unused-variable	Variable $t is assigned but never read
 src/wp-includes/rss.php	unknown-function	Unknown function 'debug'
 src/wp-includes/rss.php	unknown-function	Unknown function 'debug'
