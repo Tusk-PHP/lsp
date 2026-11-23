@@ -37,168 +37,46 @@ func (r *ArgumentCountRule) Check(file *parser.FileNode, source string, index *s
 }
 
 func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.Index, shared *Shared, typeResolver func(string, string, int, int, *parser.FileNode) string) []Finding {
-	result := shared.parse(source)
-	if result == nil {
-		return nil
-	}
-
 	var findings []Finding
-	var lines []string
-	var scopes *scope.Document
-	tokens := result.Tokens
-	// Calls behind a version check are left alone; the spans are worked out
-	// only once a call would be reported.
 	var gatedSpans []tokenSpan
 	gatedDone := false
-	versionGated := func(i int) bool {
-		if !gatedDone {
-			gatedSpans, gatedDone = versionGatedSpans(tokens), true
+	skipUntil := -1
+	eachResolvedCall(file, source, index, shared, typeResolver, func(call resolvedCall) {
+		if call.kind == callConstructor || call.at <= skipUntil {
+			return
 		}
-		return inTokenSpans(gatedSpans, i)
-	}
-	for i := 0; i < len(tokens); i++ {
-		tok := tokens[i]
-		// We're looking for plain function call: IDENTIFIER (  or  IDENTIFIER::IDENTIFIER (
-		// and method call via -> is too risky without type resolution.
-		if tok.Kind != parser.TokenIdentifier {
-			continue
+		versionGated := func() bool {
+			if !gatedDone {
+				gatedSpans, gatedDone = versionGatedSpans(call.tokens), true
+			}
+			return inTokenSpans(gatedSpans, call.at)
 		}
-		name := tok.Value
-		if isSkippedCallKeyword(name) {
-			continue
-		}
-
-		next := nextSignificantTokenIdx(tokens, i+1)
-		if next < 0 {
-			continue
-		}
-
-		// Static call: Foo::bar(...)
-		if tokens[next].Kind == parser.TokenDoubleColon {
-			methodIdx := nextSignificantTokenIdx(tokens, next+1)
-			if methodIdx < 0 {
-				continue
+		switch call.kind {
+		case callFunction:
+			if call.sym.Source == symbols.SourceBuiltin || hasVariadicParam(call.sym.Params) {
+				return
 			}
-			methodTok := tokens[methodIdx]
-			if methodTok.Kind != parser.TokenIdentifier {
-				continue
-			}
-			openIdx := nextSignificantTokenIdx(tokens, methodIdx+1)
-			if openIdx < 0 || tokens[openIdx].Kind != parser.TokenOpenParen {
-				continue
-			}
-			// Resolve class FQN from left side
-			classFQN, ok := resolveClassLikeName(name, tok.Line, file)
-			if !ok || classFQN == "" {
-				continue
-			}
-			// Look up the method
-			sym := findProjectMethod(classFQN, methodTok.Value, index)
-			if sym == nil {
-				continue
-			}
-			if !shouldCheckArgCount(sym, classFQN, index) {
-				continue
-			}
-			closeIdx := findMatchingTokenIdx(tokens, openIdx, parser.TokenOpenParen, parser.TokenCloseParen)
-			if closeIdx < 0 {
-				continue
-			}
-			argCount, safe := countArguments(tokens, openIdx, closeIdx)
-			if !safe {
-				continue
-			}
-			// As for -> calls, too many arguments to a method is left alone.
-			if f := buildArgCountFinding(sym, argCount, tok.Line, tok.Column, methodTok.Value); f != nil && argCount < len(sym.Params) && !versionGated(i) {
-				findings = append(findings, *f)
-			}
-			i = closeIdx
-			continue
-		}
-
-		// Plain function call: name(...)
-		if tokens[next].Kind != parser.TokenOpenParen {
-			continue
-		}
-		// Skip names that aren't calls to a global function:
-		//   $obj->name( / Foo::name(   method calls we can't resolve without types
-		//   function name( / function &name(   declarations, including methods
-		//   new name(   a class, not a function
-		prev := prevSignificantTokenIdx(tokens, i-1)
-		if prev >= 0 && tokens[prev].Kind == parser.TokenArrow {
-			if typeResolver == nil {
-				continue
-			}
-			if lines == nil {
-				lines = strings.Split(source, "\n")
-			}
-			sym, owner, receiver := calledMethod(tokens, prev, tok, lines, source, file, index, typeResolver)
-			if sym == nil || !shouldCheckArgCount(sym, owner, index) {
-				continue
-			}
-			// $this in a closure may be bound to another object, as
-			// Closure::bind() does.
-			if receiver == "$this" || strings.HasPrefix(receiver, "$this->") || strings.HasPrefix(receiver, "$this?->") {
-				if scopes == nil {
-					scopes = scope.Collect(source)
-				}
-				if inClosure(scopes, tok) {
-					continue
-				}
-			}
-			closeIdx := findMatchingTokenIdx(tokens, next, parser.TokenOpenParen, parser.TokenCloseParen)
-			if closeIdx < 0 {
-				continue
-			}
-			argCount, safe := countArguments(tokens, next, closeIdx)
-			if !safe {
-				continue
-			}
-			// Too many arguments to a method is left alone: PHP allows it, and
-			// libraries read extra ones with func_get_args() to stay compatible.
-			if f := buildArgCountFinding(sym, argCount, tok.Line, tok.Column, name); f != nil && argCount < len(sym.Params) && !versionGated(i) {
-				findings = append(findings, *f)
-			}
-			continue
-		}
-		if prev >= 0 {
-			switch tokens[prev].Kind {
-			case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenFunction, parser.TokenNew:
-				continue
-			case parser.TokenAmpersand:
-				if pp := prevSignificantTokenIdx(tokens, prev-1); pp >= 0 && tokens[pp].Kind == parser.TokenFunction {
-					continue
-				}
+		default:
+			if !shouldCheckArgCount(call.sym, call.owner, index) {
+				return
 			}
 		}
-		// Resolve function FQN
-		fqns, ok := resolveFunctionNames(name, file)
-		if !ok || len(fqns) == 0 {
-			continue
-		}
-		sym := findProjectFunction(fqns, index)
-		if sym == nil {
-			continue
-		}
-		if sym.Source == symbols.SourceBuiltin {
-			continue
-		}
-		if hasVariadicParam(sym.Params) {
-			continue
-		}
-		closeIdx := findMatchingTokenIdx(tokens, next, parser.TokenOpenParen, parser.TokenCloseParen)
-		if closeIdx < 0 {
-			continue
-		}
-		argCount, safe := countArguments(tokens, next, closeIdx)
+		argCount, safe := countArguments(call.tokens, call.open, call.close)
 		if !safe {
-			continue
+			return
 		}
-		if f := buildArgCountFinding(sym, argCount, tok.Line, tok.Column, name); f != nil && !versionGated(i) {
-			findings = append(findings, *f)
+		if call.kind != callMethod {
+			skipUntil = call.close
 		}
-		i = closeIdx
-	}
+		f := buildArgCountFinding(call.sym, argCount, call.site.Line, call.site.Column, call.name)
+		if f == nil || versionGated() {
+			return
+		}
+		if call.kind != callFunction && argCount >= len(call.sym.Params) {
+			return
+		}
+		findings = append(findings, *f)
+	})
 	return findings
 }
 
