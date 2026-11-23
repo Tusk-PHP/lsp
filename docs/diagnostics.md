@@ -31,6 +31,8 @@ disappear a moment later.
 
 | Code | Reports | Default severity |
 |---|---|---|
+| `syntax-error` | Code that doesn't parse | Error |
+| `abstract-in-concrete` | An abstract method in a class that isn't declared abstract, which PHP refuses to compile | Error |
 | `unknown-class` | A class, interface, trait or enum that isn't defined in the project, its Composer dependencies or PHP | Warning |
 | `unknown-function` | A function that isn't defined anywhere | Warning |
 | `unknown-member` | A method, property or constant that the receiver's class doesn't have | Warning |
@@ -52,10 +54,6 @@ disappear a moment later.
 | `unclosed-directive` | In a Blade view, a block directive such as `@if` or `@foreach` with no matching `@end…` | Error |
 | `unknown-view` | In a Blade view, an `@include`, `@extends` or other view name that has no view file | Warning |
 | `unknown-component` | In a Blade view, an `<x-…>` component that the project and its packages don't define | Warning |
-
-Two more are always on and can't be configured, because the code wouldn't run:
-`syntax-error` (the file doesn't parse) and `abstract-in-concrete` (a class with
-an abstract method isn't declared abstract).
 
 ## PHPStan
 
