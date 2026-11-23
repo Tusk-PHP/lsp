@@ -6,6 +6,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
 type importCodeActionLine struct {
@@ -32,7 +33,7 @@ func (a *Analyzer) importUnusedImportQuickFixes(uri, source string, params proto
 	seen := make(map[int]bool)
 	var actions []protocol.CodeAction
 	for _, diag := range params.Context.Diagnostics {
-		if diag.Code != "unused-import" {
+		if diag.Code != string(rule.UnusedImport) {
 			continue
 		}
 

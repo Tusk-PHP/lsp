@@ -7,6 +7,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -19,7 +20,7 @@ func (a *Analyzer) unknownClassCodeActions(uri, source string, file *parser.File
 	seen := make(map[string]bool)
 
 	for _, diag := range params.Context.Diagnostics {
-		if diag.Code != "unknown-class" {
+		if diag.Code != string(rule.UnknownClass) {
 			continue
 		}
 
