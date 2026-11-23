@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **"Ignore … on this line" quick fix** writes that comment for you, above the docblock and attributes so they stay attached. For PHPStan findings it writes PHPStan's own `@phpstan-ignore` at the end of the line, so PHPStan agrees.
 - **Existing `@phpstan-ignore` comments are honoured**, so a codebase that already silences PHPStan needs no changes: `@phpstan-ignore-line` and `@phpstan-ignore-next-line` silence PHPStan's and Tusk PHP's findings on that line (not Pint's), and `@phpstan-ignore <identifier> (reason), …` silences those identifiers and the matching Tusk PHP finding (`method.notFound` → `unknown-member`, `class.notFound` → `unknown-class`, `variable.undefined` → `undefined-variable`, and 31 more).
 - **Ignore diagnostics across files** with `diagnosticIgnore` rules in `.tusk-php.json`, matching by code, by a path glob read like a `.gitignore` entry (`app/Legacy`, `*.blade.php`), and by a regular expression on the message. A rule that can't be read is skipped and shown in the editor; the rest of the configuration still applies. Both kinds of suppression apply in the editor and to `tusk-php check`. See [Ignoring a finding](docs/diagnostics.md#ignoring-a-finding).
+- **Go to declaration** (`textDocument/declaration`): on a method, property or constant, it opens the interface or parent class that first declares it, such as the interface method a class implements, while go to definition keeps opening the implementation. It works in Blade views too.
 
 ### Changed
 
