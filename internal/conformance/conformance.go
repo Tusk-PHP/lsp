@@ -25,6 +25,19 @@ type corpusEntry struct {
 	source string // raw PHP source
 }
 
+// skippedTestdataDir reports whether dir, under the testdata root, holds code
+// installed locally for other tests: a fixture's Composer vendor folder
+// (testdata/laravel/vendor) or the field-baseline checkouts
+// (testdata/field/_repos). corpus/_repos is walked as a root of its own.
+func skippedTestdataDir(root, dir string) bool {
+	rel, err := filepath.Rel(root, dir)
+	if err != nil {
+		return false
+	}
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	return len(parts) == 2 && (parts[1] == "vendor" || parts[0] == "field" && parts[1] == "_repos" || parts[0] == "corpus" && parts[1] == "_repos")
+}
+
 // testdataRoot returns the absolute path to the testdata directory.
 func testdataRoot() string {
 	_, file, _, _ := runtime.Caller(0)
@@ -33,7 +46,9 @@ func testdataRoot() string {
 
 // collectCorpus walks testdata/ and, if present, testdata/corpus/_repos/ for
 // every .php file. Absence of the _repos directory is normal (CI only) and
-// never causes an error.
+// never causes an error. Folders that git ignores and CI's conformance jobs
+// don't have are left out (see skippedTestdataDir), so a local run reads the
+// same files as CI.
 func collectCorpus() ([]corpusEntry, error) {
 	roots := []string{testdataRoot()}
 
@@ -52,6 +67,9 @@ func collectCorpus() ([]corpusEntry, error) {
 				return nil
 			}
 			if info.IsDir() {
+				if root == testdataRoot() && skippedTestdataDir(root, path) {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			if !strings.HasSuffix(path, ".php") {
