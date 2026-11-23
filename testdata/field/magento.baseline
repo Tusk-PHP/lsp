@@ -396,6 +396,13 @@ app/code/Magento/ProductVideo/view/adminhtml/templates/helper/gallery.phtml	unus
 app/code/Magento/Quote/Model/AddressAdditionalDataProcessor.php	unused-import	Unused import 'Magento\Framework\Model\AbstractExtensibleModel'
 app/code/Magento/Quote/Model/Cart/AddProductsToCart.php	unused-import	Unused import 'Magento\Framework\Message\MessageInterface'
 app/code/Magento/Quote/Model/CustomerCartMutex.php	unused-import	Unused import 'Magento\Framework\Exception\CouldNotSaveException'
+app/code/Magento/Quote/Model/CustomerManagement.php	redundant-nullsafe	Redundant nullsafe operator: type 'QuoteAddress' is non-nullable
+app/code/Magento/Quote/Model/CustomerManagement.php	redundant-nullsafe	Redundant nullsafe operator: type 'QuoteAddress' is non-nullable
+app/code/Magento/Quote/Model/CustomerManagement.php	redundant-nullsafe	Redundant nullsafe operator: type 'QuoteAddress' is non-nullable
+app/code/Magento/Quote/Model/CustomerManagement.php	redundant-nullsafe	Redundant nullsafe operator: type 'QuoteAddress' is non-nullable
+app/code/Magento/Quote/Model/CustomerManagement.php	redundant-nullsafe	Redundant nullsafe operator: type 'QuoteAddress' is non-nullable
+app/code/Magento/Quote/Model/CustomerManagement.php	redundant-nullsafe	Redundant nullsafe operator: type 'QuoteAddress' is non-nullable
+app/code/Magento/Quote/Model/Quote/Item/CartItemCustomOptionsValidator.php	redundant-nullsafe	Redundant nullsafe operator: type 'CartItemInterface' is non-nullable
 app/code/Magento/Quote/Model/Quote/TotalsCollectorList.php	unused-import	Unused import 'Magento\Quote\Model\Quote\Address\Total\CollectorInterface'
 app/code/Magento/Quote/Model/ResourceModel/Quote/Address/Rate/Collection.php	argument-count-mismatch	Too few arguments to save(): 0 passed, at least 1 required
 app/code/Magento/Quote/Plugin/ValidateQuoteOrigOrder.php	unused-import	Unused import 'Magento\Framework\Webapi\Rest\Request'

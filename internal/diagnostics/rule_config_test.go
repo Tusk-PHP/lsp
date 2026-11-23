@@ -127,3 +127,21 @@ func TestBuilderRulesAreConfigurable(t *testing.T) {
 		t.Errorf("unknown-relation turned off: got %d diagnostics", len(rels))
 	}
 }
+
+// TestAnalyzeAllRunsSaveRulesWithoutCaching checks that AnalyzeAll returns
+// the on-save rules' findings and keeps nothing for later.
+func TestAnalyzeAllRunsSaveRulesWithoutCaching(t *testing.T) {
+	const uri = "file:///t.php"
+	p := builderProvider(t, `{}`)
+	diags := p.AnalyzeAll(uri, builderSource)
+	if len(filterByCode(diags, "unknown-column")) != 1 || len(filterByCode(diags, "unknown-relation")) != 1 {
+		t.Fatalf("AnalyzeAll: %#v", diags)
+	}
+	if got := filterByCode(p.Analyze(uri, builderSource), "unknown-relation"); len(got) != 0 {
+		t.Errorf("AnalyzeAll cached its save findings: %#v", got)
+	}
+	p.AnalyzeOnSave(uri, builderSource)
+	if got := filterByCode(p.AnalyzeAll(uri, builderSource), "unknown-relation"); len(got) != 1 {
+		t.Errorf("AnalyzeAll after a save reported the relation %d times", len(got))
+	}
+}

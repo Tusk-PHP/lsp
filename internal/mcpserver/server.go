@@ -959,7 +959,7 @@ func (s *Service) projectDiagnostics(path string) (DiagnosticsOutput, error) {
 			continue
 		}
 		uri := "file://" + absPath
-		diags := rt.Diagnostics.Analyze(uri, string(data))
+		diags := rt.Diagnostics.AnalyzeAll(uri, string(data))
 		out.Files = append(out.Files, FileDiagnostics{
 			Path:        normalizedRelativePath(s.RootPath, absPath),
 			Diagnostics: diags,

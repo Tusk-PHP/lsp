@@ -121,3 +121,18 @@ func TestCheckExclude(t *testing.T) {
 		t.Errorf("by a glob path: %q", got)
 	}
 }
+
+// check also runs the rules the editor runs on save, such as
+// redundant-nullsafe.
+func TestCheckRunsOnSaveRules(t *testing.T) {
+	root := writeProject(t, map[string]string{
+		"composer.json": `{"autoload": {"psr-4": {"App\\": "src/"}}}`,
+		"src/Service.php": "<?php\nnamespace App;\nclass Logger { public function info(): void {} }\n" +
+			"class Service {\n    public function run(Logger $logger): void\n    {\n        $logger?->info();\n    }\n}\n",
+	})
+	_, out, _ := check(t, "--root", root)
+	want := "src/Service.php:7:16: info redundant-nullsafe: Redundant nullsafe operator: type 'Logger' is non-nullable\n"
+	if out != want {
+		t.Errorf("got %q, want %q", out, want)
+	}
+}

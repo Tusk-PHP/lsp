@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -86,7 +87,7 @@ class Foo {
 		assertNoFindings(t, findings)
 	})
 
-	t.Run("nullsafe on always null expression flagged as warning", func(t *testing.T) {
+	t.Run("a variable the resolver calls null is not judged", func(t *testing.T) {
 		source := `<?php
 class Foo {
     public function bar(): void {
@@ -101,14 +102,7 @@ class Foo {
 				return "null"
 			},
 		}
-		findings := rule.Check(file, source, nil)
-		assertFindingCodes(t, findings, []string{"redundant-nullsafe"})
-		if findings[0].Severity != SeverityWarning {
-			t.Errorf("expected SeverityWarning for always-null, got %d", findings[0].Severity)
-		}
-		if !containsStr(findings[0].Message, "always null") {
-			t.Errorf("expected 'always null' message, got: %s", findings[0].Message)
-		}
+		assertNoFindings(t, rule.Check(file, source, nil))
 	})
 
 	t.Run("no type resolver is no-op", func(t *testing.T) {
@@ -235,4 +229,84 @@ func containsStr(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// TestRedundantNullsafeStaysQuietWhenUnsure covers receivers the resolver
+// types without their null: nullable parameters, defaults of null,
+// reassigned parameters, closures' own parameters, properties and ternaries.
+func TestRedundantNullsafeStaysQuietWhenUnsure(t *testing.T) {
+	source := `<?php
+class Registry {
+    private ?Logger $logger = null;
+
+    public function compute(?Logger $logger = null, ?Vote $vote = null, Logger $other = null) {
+        $logger?->info('x');
+        $vote?->addReason('y');
+        $other?->info('z');
+        $this->logger?->info('w');
+    }
+
+    public function reassigned(Logger $logger) {
+        if (rand()) { $logger = null; }
+        $logger?->info('x');
+    }
+
+    public function shadowed(Logger $logger) {
+        $logger->info('a');
+        return function (?Logger $logger) { return $logger?->info('b'); };
+    }
+
+    public function ternary($value) {
+        $date = is_null($value) ? null : new \DateTime();
+        return $date?->getTimestamp();
+    }
+}
+`
+	file := parser.ParseFile(source)
+	rule := &RedundantNullsafeRule{
+		// What the resolver gives today: the types without their null.
+		TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
+			switch expr {
+			case "$logger", "$other", "$this->logger":
+				return "Logger"
+			case "$vote":
+				return "Vote"
+			case "$date":
+				return "DateTime"
+			}
+			return ""
+		},
+	}
+	assertNoFindings(t, rule.Check(file, source, nil))
+}
+
+func TestRedundantNullsafeOnThisAndPlainParameters(t *testing.T) {
+	source := `<?php
+class Service {
+    public function run(Logger $logger): void {
+        $this?->helper();
+        $logger?->info('a');
+        $logger->info('b');
+    }
+}
+function standalone(Clock $clock) { return $clock?->now(); }
+`
+	file := parser.ParseFile(source)
+	rule := &RedundantNullsafeRule{TypeResolver: func(string, string, int, int, *parser.FileNode) string { return "" }}
+	findings := rule.Check(file, source, nil)
+	var got []string
+	for _, f := range findings {
+		got = append(got, f.Message)
+	}
+	want := []string{
+		"Redundant nullsafe operator: $this is never null",
+		"Redundant nullsafe operator: type 'Logger' is non-nullable",
+		"Redundant nullsafe operator: type 'Clock' is non-nullable",
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if len(findings) > 0 && (findings[0].StartLine != 3 || findings[0].StartCol != 13) {
+		t.Errorf("first finding at %d:%d", findings[0].StartLine, findings[0].StartCol)
+	}
 }

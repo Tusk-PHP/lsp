@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `tusk-php check` and the MCP diagnostics tool now also run the rules the editor runs on save (`redundant-nullsafe`, `unknown-column`, `unknown-relation`), so they report what an editor shows after saving.
+
 ### Fixed
 
+- **`redundant-nullsafe`** no longer reports `?->` on values that can be null. It used to flag nullable parameters (`?LoggerInterface $logger = null`), variables that a ternary may set to `null`, and chains after another `?->`; it now reports only `$this?->` and a parameter declared with a non-nullable type that its function never reassigns.
+- Group and comma-separated imports, `use App\Lib\{Alpha, Beta as B};` and `use App\A, App\B;`, now import every name, including `function` and `const` items in a group. Before, only the first name of a comma list counted and a group imported nothing, so the classes were reported as `unknown-class`.
+- A model's columns from an IDE helper file (`_ide_helper_models.php`) no longer disappear when the model is opened or edited, and re-reading the helper no longer lists them twice.
+- **Columns from migrations** are read more faithfully: only what a migration's `up()` does counts, so a column its `down()` drops is no longer lost; `morphs()` and its variants, `foreignIdFor()`, `increments()` and the like, `renameColumn()`, `dropMorphs()`, `dropTimestamps()`, `Schema::rename()` and `Schema::connection(…)->create()` are understood; and double-quoted names and a closure parameter named other than `$table` work.
 - **Symfony translation keys** now complete and go to their definition, as documented: inside `->trans('…')`, `t('…')` and `new TranslatableMessage('…')`, keys come from the project's `translations/` folder (YAML, PHP and XLIFF files), filtered by the domain argument when one is given. They were never connected before.
 - **Symfony console command names** now complete and go to the command's class inside a console application's `find('…')`, `get('…')` and `has('…')`, as documented. Commands come from `#[AsCommand]` and the older `$defaultName`, and a command added or renamed while the editor is open is picked up when its file changes. Other classes' `get('…')`, such as a container's, are left alone.
 - **Unknown Eloquent relations** in `with()`, `has()`, `whereHas()`, `load()` and the other relation methods are now reported on save as `unknown-relation`, as documented; the rule never ran before. To avoid false warnings it only reports a name the model has no method for at all, and stays quiet when part of the model (a parent class or a trait) isn't indexed or the model handles undeclared calls itself.

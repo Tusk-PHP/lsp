@@ -492,3 +492,34 @@ enum Mode: string { case A = 'a'; public function use(int $n): int { return $n; 
 		t.Errorf("unexpected undefined-variable finding: %q at line %d", f.Message, f.StartLine)
 	}
 }
+
+// TestUnknownClassGroupAndCommaImports verifies that every name a group or
+// comma-separated import brings in resolves.
+func TestUnknownClassGroupAndCommaImports(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///lib.php", `<?php
+namespace Vendor\Lib;
+class Alpha {}
+class Beta {}
+class Gamma {}
+`)
+	idx.IndexFile("file:///other.php", `<?php
+namespace Vendor\Other;
+class Delta {}
+`)
+	source := `<?php
+namespace App;
+
+use Vendor\Lib\{Alpha, Beta as B};
+use Vendor\Lib\Gamma, Vendor\Other\Delta;
+
+function make() { return [new Alpha(), new B(), new Gamma(), new Delta()]; }
+`
+	file := parser.ParseFile(source)
+	for _, f := range (&UnknownClassRule{}).Check(file, source, idx) {
+		t.Errorf("unexpected unknown-class finding: %q", f.Message)
+	}
+	for _, f := range (&UnusedImportsRule{}).Check(file, source, idx) {
+		t.Errorf("unexpected unused-import finding: %q", f.Message)
+	}
+}

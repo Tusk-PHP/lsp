@@ -72,6 +72,18 @@ func NewProvider(index *symbols.Index, framework, rootPath string, logger *log.L
 // Analyze runs fast static checks and merges cached external tool results.
 // Called on every file change — only includes lightweight checks.
 func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
+	return p.analyze(uri, source, false)
+}
+
+// AnalyzeAll returns what Analyze does plus the on-save rules' findings for
+// this source, computed now and not cached: for one-shot runs over files on
+// disk, such as `tusk-php check` and the MCP diagnostics tool, where every
+// file counts as saved.
+func (p *Provider) AnalyzeAll(uri, source string) []protocol.Diagnostic {
+	return p.analyze(uri, source, true)
+}
+
+func (p *Provider) analyze(uri, source string, withSaveRules bool) []protocol.Diagnostic {
 	var diags []protocol.Diagnostic
 	if workspace.IsBlade(uri) {
 		// A Blade view is checked through the PHP it contains, and only what
@@ -87,10 +99,13 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 	if cached, ok := p.toolResults[uri]; ok {
 		diags = append(diags, cached...)
 	}
-	if cached, ok := p.saveResults[uri]; ok {
+	if cached, ok := p.saveResults[uri]; ok && !withSaveRules {
 		diags = append(diags, cached...)
 	}
 	p.mu.RUnlock()
+	if withSaveRules {
+		diags = append(diags, p.saveDiagnostics(uri, source)...)
+	}
 
 	// Soft-mode the unknown-* rules until the workspace + composer index has
 	// completed at least once. The rules still ran (for testability), but their
@@ -256,6 +271,14 @@ func toTemplate(doc *blade.Document, diags []protocol.Diagnostic) []protocol.Dia
 // AnalyzeOnSave runs heavier checks that need type resolution or model lookups.
 // Called on file save only. Results are cached and merged into Analyze() output.
 func (p *Provider) AnalyzeOnSave(uri, source string) {
+	diags := p.saveDiagnostics(uri, source)
+	p.mu.Lock()
+	p.saveResults[uri] = diags
+	p.mu.Unlock()
+}
+
+// saveDiagnostics runs the rules that wait for a save.
+func (p *Provider) saveDiagnostics(uri, source string) []protocol.Diagnostic {
 	var doc *blade.Document
 	if workspace.IsBlade(uri) {
 		doc = blade.CompileWith(source, blade.CompileOptions{Vars: p.ViewTypes.For(uri).BladeVars(), Custom: p.bladeCustom()})
@@ -263,7 +286,7 @@ func (p *Provider) AnalyzeOnSave(uri, source string) {
 	}
 	file := parser.ParseFile(source)
 	if file == nil {
-		return
+		return nil
 	}
 	var diags []protocol.Diagnostic
 
@@ -289,9 +312,7 @@ func (p *Provider) AnalyzeOnSave(uri, source string) {
 	if doc != nil {
 		diags = toTemplate(doc, diags)
 	}
-	p.mu.Lock()
-	p.saveResults[uri] = diags
-	p.mu.Unlock()
+	return diags
 }
 
 // RunTools executes external analysis tools (PHPStan, Pint) on a file.

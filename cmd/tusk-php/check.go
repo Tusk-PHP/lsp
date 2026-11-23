@@ -99,7 +99,7 @@ func runCheck(args []string, stdout, stderr io.Writer) (int, error) {
 			continue
 		}
 		rel := relativePath(root, path)
-		for _, d := range svc.Diagnostics.Analyze("file://"+path, string(data)) {
+		for _, d := range svc.Diagnostics.AnalyzeAll("file://"+path, string(data)) {
 			all = append(all, finding{
 				Path:     rel,
 				Line:     d.Range.Start.Line + 1,

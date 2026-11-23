@@ -8,75 +8,153 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-// RedundantNullsafeRule detects ?-> on expressions whose type is known
-// to be non-nullable. Requires a TypeResolver to resolve expression types.
+// RedundantNullsafeRule reports `?->` on a receiver that can't be null.
+// It only reports what it can be sure of without following types: `$this`,
+// and a parameter declared with a type that excludes null, with no `null`
+// default, that its function only ever uses as a receiver, so nothing
+// reassigns it. Anything else stays quiet: the types the resolver gives
+// lose nullability (a `?Foo $x = null` parameter, a ternary with `null`).
 type RedundantNullsafeRule struct {
-	// TypeResolver resolves the type of an expression at a given line.
-	// Returns the type string (e.g., "string", "?Foo", "Foo|null", "mixed").
-	// If nil, the rule is a no-op.
+	// TypeResolver is kept for the rule set's wiring; the rule no longer
+	// relies on it. If nil, the rule is a no-op.
 	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
 }
 
 func (r *RedundantNullsafeRule) Code() string { return "redundant-nullsafe" }
 
 func (r *RedundantNullsafeRule) Check(file *parser.FileNode, source string, _ *symbols.Index) []Finding {
-	if r.TypeResolver == nil || file == nil {
+	if r.TypeResolver == nil || file == nil || !strings.Contains(source, "?->") {
 		return nil
 	}
-	lines := strings.Split(source, "\n")
+	toks := significantTokens(parser.Tokenize(source))
+	fns := functionSpans(file)
 	var findings []Finding
-
-	for i, line := range lines {
-		idx := 0
-		for {
-			pos := strings.Index(line[idx:], "?->")
-			if pos < 0 {
-				break
-			}
-			absPos := idx + pos
-
-			// Extract expression before ?->
-			expr := strings.TrimSpace(line[:absPos])
-			// Walk back to find the start of the expression
-			exprStart := len(expr)
-			for exprStart > 0 {
-				ch := expr[exprStart-1]
-				if isIdentChar(ch) || ch == '$' || ch == '>' || ch == '-' || ch == ':' || ch == '(' || ch == ')' || ch == '\\' {
-					exprStart--
-				} else {
-					break
-				}
-			}
-			expr = strings.TrimSpace(expr[exprStart:])
-
-			if expr != "" {
-				resolved := r.TypeResolver(expr, source, i, 0, file)
-				if resolved == "null" {
-					findings = append(findings, Finding{
-						StartLine: i,
-						StartCol:  absPos,
-						EndLine:   i,
-						EndCol:    absPos + 3,
-						Severity:  SeverityWarning,
-						Code:      "redundant-nullsafe",
-						Message:   "Expression is always null, method call will never execute",
-					})
-				} else if resolved != "" && !isNullable(resolved) {
-					findings = append(findings, Finding{
-						StartLine: i,
-						StartCol:  absPos,
-						EndLine:   i,
-						EndCol:    absPos + 3,
-						Severity:  SeverityInfo,
-						Code:      "redundant-nullsafe",
-						Message:   fmt.Sprintf("Redundant nullsafe operator: type '%s' is non-nullable", resolved),
-					})
-				}
-			}
-			idx = absPos + 3
+	for i := 1; i+1 < len(toks); i++ {
+		q := toks[i]
+		if q.Kind != parser.TokenQuestion || toks[i+1].Kind != parser.TokenArrow || toks[i+1].Offset != q.Offset+1 {
+			continue
 		}
+		recv := toks[i-1]
+		if recv.Kind != parser.TokenVariable {
+			continue
+		}
+		// `$a->b?->` and `A::$b?->` are properties, not the variable.
+		if i >= 2 && (toks[i-2].Kind == parser.TokenArrow || toks[i-2].Kind == parser.TokenDoubleColon) {
+			continue
+		}
+		message := ""
+		if recv.Value == "$this" {
+			message = "Redundant nullsafe operator: $this is never null"
+		} else if typ, ok := nonNullParameter(toks, fns, recv); ok {
+			message = fmt.Sprintf("Redundant nullsafe operator: type '%s' is non-nullable", typ)
+		} else {
+			continue
+		}
+		findings = append(findings, Finding{
+			StartLine: q.Line,
+			StartCol:  q.Column,
+			EndLine:   q.Line,
+			EndCol:    q.Column + 3,
+			Severity:  SeverityInfo,
+			Code:      "redundant-nullsafe",
+			Message:   message,
+		})
 	}
 	return findings
+}
+
+// significantTokens drops comments.
+func significantTokens(all []parser.Token) []parser.Token {
+	out := make([]parser.Token, 0, len(all))
+	for _, t := range all {
+		if t.Kind != parser.TokenComment && t.Kind != parser.TokenDocComment && t.Kind != parser.TokenEOF {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+type functionSpan struct {
+	start, end int
+	params     []parser.ParamNode
+}
+
+// functionSpans lists the file's functions and methods by line.
+func functionSpans(file *parser.FileNode) []functionSpan {
+	var out []functionSpan
+	addMethods := func(methods []parser.MethodNode) {
+		for _, m := range methods {
+			out = append(out, functionSpan{m.StartLine, m.EndLine, m.Params})
+		}
+	}
+	for _, c := range file.Classes {
+		addMethods(c.Methods)
+	}
+	for _, c := range file.AnonymousClasses {
+		addMethods(c.Methods)
+	}
+	for _, t := range file.Traits {
+		addMethods(t.Methods)
+	}
+	for _, e := range file.Enums {
+		addMethods(e.Methods)
+	}
+	for _, f := range file.Functions {
+		out = append(out, functionSpan{f.StartLine, f.EndLine, f.Params})
+	}
+	return out
+}
+
+// nonNullParameter reports whether recv is a parameter of the innermost
+// function around it whose declared type excludes null, with no null
+// default, and which the function only uses as a receiver (`$x->`, `$x?->`)
+// after declaring it, so it is never reassigned or passed by reference.
+func nonNullParameter(toks []parser.Token, fns []functionSpan, recv parser.Token) (string, bool) {
+	var fn *functionSpan
+	for i := range fns {
+		f := &fns[i]
+		if f.start <= recv.Line && recv.Line <= f.end && (fn == nil || f.end-f.start < fn.end-fn.start) {
+			fn = f
+		}
+	}
+	if fn == nil {
+		return "", false
+	}
+	var param *parser.ParamNode
+	for i := range fn.params {
+		if fn.params[i].Name == recv.Value {
+			param = &fn.params[i]
+		}
+	}
+	if param == nil || param.IsVariadic || param.IsReference || strings.EqualFold(strings.TrimSpace(param.DefaultValue), "null") {
+		return "", false
+	}
+	typ := strings.TrimSpace(param.Type.Name)
+	if typ == "" || isNullable(typ) || strings.Contains(strings.ToLower(typ), "mixed") {
+		return "", false
+	}
+	declared := false
+	for i, t := range toks {
+		if t.Line < fn.start || t.Line > fn.end || t.Kind != parser.TokenVariable || t.Value != recv.Value {
+			continue
+		}
+		if !declared {
+			declared = true // the parameter itself, in the signature
+			continue
+		}
+		next := parser.Token{Kind: parser.TokenEOF}
+		if i+1 < len(toks) {
+			next = toks[i+1]
+		}
+		if next.Kind == parser.TokenArrow {
+			continue
+		}
+		if next.Kind == parser.TokenQuestion && i+2 < len(toks) && toks[i+2].Kind == parser.TokenArrow {
+			continue
+		}
+		return "", false
+	}
+	return typ, declared
 }
 
 // isNullable returns true if the type can be null.
