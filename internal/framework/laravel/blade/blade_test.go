@@ -195,3 +195,17 @@ func TestPHPPositionRoundTrip(t *testing.T) {
 		t.Fatal("expected the directive's argument to map")
 	}
 }
+
+func TestCommentsListsBladeComments(t *testing.T) {
+	src := "<p>{{-- one --}}</p>\n@if($a)\n{{-- two\nlines --}}\n@endif\n{{-- unclosed"
+	got := Comments(src)
+	want := []string{"{{-- one --}}", "{{-- two\nlines --}}", "{{-- unclosed"}
+	if len(got) != len(want) {
+		t.Fatalf("got %d comments, want %d", len(got), len(want))
+	}
+	for i, span := range got {
+		if src[span.Start:span.End] != want[i] {
+			t.Errorf("comment %d: got %q, want %q", i, src[span.Start:span.End], want[i])
+		}
+	}
+}

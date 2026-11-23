@@ -31,6 +31,10 @@ indexed PHP files under them, so paths in `excludePaths` stay out.
 It exits with `1` when there's an error or a warning (hints and information don't
 count), `0` when there's none, and `2` when it can't run.
 
+Findings silenced with a `@tusk-ignore` comment or a `diagnosticIgnore` rule
+aren't reported, as in the editor; see
+[Ignoring a finding](diagnostics.md#ignoring-a-finding).
+
 ### Baselines
 
 To adopt it in CI on a project that already has findings, record them once:

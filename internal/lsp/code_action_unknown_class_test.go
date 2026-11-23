@@ -64,12 +64,18 @@ class Demo {
 		t.Fatalf("codeAction returned error: %v", resp["error"])
 	}
 
-	result, ok := resp["result"].([]interface{})
+	all, ok := resp["result"].([]interface{})
 	if !ok {
 		t.Fatalf("expected codeAction array, got %T", resp["result"])
 	}
+	var result []interface{}
+	for _, raw := range all {
+		if title, _ := raw.(map[string]interface{})["title"].(string); title != "Ignore unknown-class on this line" {
+			result = append(result, raw)
+		}
+	}
 	if len(result) != 1 {
-		t.Fatalf("expected one quickfix action, got %#v", result)
+		t.Fatalf("expected one import quickfix besides the ignore action, got %#v", all)
 	}
 
 	action, ok := result[0].(map[string]interface{})

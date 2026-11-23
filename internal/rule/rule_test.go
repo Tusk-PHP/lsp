@@ -78,3 +78,48 @@ func TestSeverityNamesRoundTrip(t *testing.T) {
 		t.Error("an unknown severity must not parse")
 	}
 }
+
+func TestTargets(t *testing.T) {
+	cases := []struct {
+		text, source, code string
+		matches            bool
+	}{
+		{"unknown-member", "tusk-php", "unknown-member", true},
+		{"unknown-member", "phpstan", "unknown-member", false},
+		{"phpstan:argument.type", "phpstan", "argument.type", true},
+		{"phpstan:argument.type", "phpstan", "return.type", false},
+		{"phpstan", "phpstan", "return.type", true},
+		{"pint", "phpstan", "braces", false},
+	}
+	for _, c := range cases {
+		target, err := ParseTarget(c.text)
+		if err != nil {
+			t.Fatalf("%s: %v", c.text, err)
+		}
+		if target.String() != c.text {
+			t.Errorf("%s prints as %q", c.text, target.String())
+		}
+		if got := target.Matches(c.source, c.code); got != c.matches {
+			t.Errorf("%s on %s:%s: got %v", c.text, c.source, c.code, got)
+		}
+	}
+	for _, bad := range []string{"unknown-members", "psalm:x", "psalm"} {
+		if _, err := ParseTarget(bad); err == nil {
+			t.Errorf("%q must not parse", bad)
+		}
+	}
+}
+
+func TestTargetOf(t *testing.T) {
+	if target, err := TargetOf("tusk-php", "unknown-member"); err != nil || target != NativeTarget(UnknownMember) {
+		t.Errorf("native: %v, %v", target, err)
+	}
+	if target, err := TargetOf("phpstan", "argument.type"); err != nil || target.String() != "phpstan:argument.type" {
+		t.Errorf("external: %v, %v", target, err)
+	}
+	for _, bad := range [][2]string{{"tusk-php", "nope"}, {"psalm", "x"}} {
+		if _, err := TargetOf(bad[0], bad[1]); err == nil {
+			t.Errorf("%v must not make a target", bad)
+		}
+	}
+}

@@ -114,7 +114,7 @@ func (p *Provider) analyze(uri, source string, withSaveRules bool) []protocol.Di
 		diags = filterOutCodes(diags, rule.UnknownClass, rule.UnknownFunction, rule.UnknownMember, rule.InvalidOverride)
 	}
 
-	return diags
+	return p.dropSuppressed(uri, source, diags)
 }
 
 func (p *Provider) analyzeNative(source string, bladePHP, includedFile bool) []protocol.Diagnostic {

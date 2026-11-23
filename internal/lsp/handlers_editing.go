@@ -3,6 +3,7 @@ package lsp
 import (
 	"encoding/json"
 
+	"github.com/Tusk-PHP/lsp/internal/analyzer"
 	"github.com/Tusk-PHP/lsp/internal/composer/cardhover"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -138,12 +139,11 @@ func (s *Server) handleCodeAction(msg *jsonRPCMessage) {
 		s.sendError(msg.ID, -32602, "Invalid params")
 		return
 	}
+	source := s.getDocument(params.TextDocument.URI)
 	if workspace.IsBlade(params.TextDocument.URI) {
-		// The code actions edit PHP files; none of them knows a view yet.
-		s.sendResponse(msg.ID, []protocol.CodeAction{})
+		s.sendResponse(msg.ID, analyzer.IgnoreDiagnosticActions(params.TextDocument.URI, source, params))
 		return
 	}
-	source := s.getDocument(params.TextDocument.URI)
 	result := s.analyzer.GetCodeActions(params.TextDocument.URI, source, params)
 	if len(params.Context.Only) > 0 {
 		filtered := result[:0]

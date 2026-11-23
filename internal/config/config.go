@@ -168,6 +168,7 @@ type Config struct {
 	DatabaseEnabled         *bool           `json:"databaseEnabled,omitempty"`
 	DatabaseSource          string          `json:"databaseSource,omitempty"`
 	DiagnosticRules         DiagnosticRules `json:"diagnosticRules,omitempty"`
+	DiagnosticIgnore        []IgnoreRule    `json:"diagnosticIgnore,omitempty"`
 	// MaxIndexFiles caps how many workspace PHP files are indexed; 0 means no
 	// limit (the native default). Composer dependencies aren't counted.
 	MaxIndexFiles             int                 `json:"maxIndexFiles"`
