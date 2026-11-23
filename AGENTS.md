@@ -114,7 +114,7 @@ What each piece owns once it exists:
   between them. `lsp` and `mcpserver` ask it for providers and add only
   transport-specific parts (client commands, notifications, tool registration).
   Until it exists, any wiring change must be made in both
-  `lsp/server.go` (`handleInitialize`) and `mcpserver/server.go` (`buildRuntime`).
+  `lsp/initialize.go` (`handleInitialize`) and `mcpserver/server.go` (`buildRuntime`).
 - **`document`** owns the latest text of each open file and its version. Analysis
   runs on an immutable snapshot and its result is dropped if a newer version
   arrived meanwhile.
@@ -136,8 +136,8 @@ What each piece owns once it exists:
   `scope`, types and PHPDoc from `resolve`. Don't re-derive them with string
   scanning in a feature.
 - Keep files to one responsibility. Past roughly 800 lines, split within the same
-  package (for example `lsp/server.go` into transport, dispatch, initialize,
-  documents and handler files) before adding more. Don't create a new package
+  package (as `lsp` is split into transport, dispatch, initialize, documents,
+  commands and handler files) before adding more. Don't create a new package
   just to split a file.
 - Platform differences go in build-tagged files (`*_wasip1.go`), not runtime
   checks. Everything must still build with `make wasm`.
