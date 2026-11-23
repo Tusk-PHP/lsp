@@ -53,12 +53,3 @@ func CheckFile(file *parser.FileNode, source string, index *symbols.Index, rules
 	}
 	return all
 }
-
-// AllRules returns all built-in rules with default configuration.
-func AllRules() []Rule {
-	return []Rule{
-		&UnusedImportsRule{},
-		&UnusedPrivateRule{},
-		&UnreachableCodeRule{},
-	}
-}
