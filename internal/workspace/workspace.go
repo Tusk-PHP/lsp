@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/config"
@@ -41,8 +42,18 @@ type Bootstrapped struct {
 	// with the Composer dependencies.
 	Aliases       *frameworklaravel.Aliases
 	SymfonyRoutes []frameworksymfony.Route
-	SchemaCache   *models.SchemaCache
-	Schema        *models.Schema
+	// SymfonyCommands are the project's console commands; nil unless the
+	// framework is Symfony. Filled by ScanSymfonyCommands, then kept current
+	// file by file with UpdateFile.
+	SymfonyCommands *frameworksymfony.CommandIndex
+	SchemaCache     *models.SchemaCache
+	Schema          *models.Schema
+
+	// modelMu guards what model analysis read, for re-analysing one file
+	// later: Schema once AnalyzeModels has set it, and the following.
+	modelMu          sync.RWMutex
+	modelsAnalyzed   bool
+	migrationColumns map[string]map[string]*models.MigrationColumn
 }
 
 func New(opts Options) *Bootstrapped {
@@ -61,6 +72,10 @@ func New(opts Options) *Bootstrapped {
 	var routeIndex *frameworklaravel.RouteIndex
 	var aliases *frameworklaravel.Aliases
 	var viewData *frameworklaravel.ViewData
+	var commands *frameworksymfony.CommandIndex
+	if opts.Framework == "symfony" {
+		commands = frameworksymfony.NewCommandIndex()
+	}
 	if opts.Framework == "laravel" {
 		index.SetCallForwards(frameworklaravel.CallForwards())
 		index.SetScopeConventions(frameworklaravel.ScopeConventions())
@@ -71,17 +86,18 @@ func New(opts Options) *Bootstrapped {
 	}
 
 	return &Bootstrapped{
-		RootPath:       opts.RootPath,
-		Framework:      opts.Framework,
-		Config:         cfg,
-		Logger:         opts.Logger,
-		BuiltinProfile: opts.BuiltinProfile,
-		Index:          index,
-		Container:      container.NewContainerAnalyzer(index, opts.RootPath, opts.Framework),
-		RouteIndex:     routeIndex,
-		ViewData:       viewData,
-		Aliases:        aliases,
-		SchemaCache:    models.NewSchemaCache(),
+		RootPath:        opts.RootPath,
+		Framework:       opts.Framework,
+		Config:          cfg,
+		Logger:          opts.Logger,
+		BuiltinProfile:  opts.BuiltinProfile,
+		Index:           index,
+		Container:       container.NewContainerAnalyzer(index, opts.RootPath, opts.Framework),
+		RouteIndex:      routeIndex,
+		ViewData:        viewData,
+		Aliases:         aliases,
+		SymfonyCommands: commands,
+		SchemaCache:     models.NewSchemaCache(),
 	}
 }
 
@@ -113,6 +129,7 @@ func Build(ctx context.Context, opts Options) (*Bootstrapped, error) {
 		return nil, err
 	}
 	ws.AnalyzeModels()
+	ws.ScanSymfonyCommands()
 	ws.Index.WarmSearchIndexes()
 	ws.Index.MarkReady()
 	return ws, nil
@@ -265,11 +282,69 @@ func (ws *Bootstrapped) AnalyzeModels() {
 		models.AnalyzeDoctrineEntities(ws.Index, ws.RootPath)
 	}
 
-	ws.Schema, _ = models.ScanSchema(ws.RootPath, ws.Framework, ws.Config, ws.Logger, ws.SchemaCache)
-	models.InjectDatabaseSchema(ws.Index, ws.RootPath, ws.Framework, ws.Schema)
-	if ws.Framework == "laravel" && (ws.Schema == nil || ws.Schema.Source != models.SchemaSourceMigrations) {
-		models.AnalyzeMigrations(ws.Index, ws.RootPath)
+	schema, _ := models.ScanSchema(ws.RootPath, ws.Framework, ws.Config, ws.Logger, ws.SchemaCache)
+	models.InjectDatabaseSchema(ws.Index, ws.RootPath, ws.Framework, schema)
+	var migrationColumns map[string]map[string]*models.MigrationColumn
+	if ws.Framework == "laravel" && (schema == nil || schema.Source != models.SchemaSourceMigrations) {
+		migrationColumns = models.ScanMigrationColumns(ws.RootPath)
+		models.InjectMigrationColumns(ws.Index, ws.RootPath, migrationColumns)
 	}
+	ws.modelMu.Lock()
+	ws.Schema = schema
+	ws.migrationColumns = migrationColumns
+	ws.modelsAnalyzed = true
+	ws.modelMu.Unlock()
+}
+
+// ScanSymfonyCommands finds the console commands the project declares. It
+// reads every indexed project file, so it runs once the workspace is indexed,
+// off any request path.
+func (ws *Bootstrapped) ScanSymfonyCommands() {
+	if ws == nil || ws.SymfonyCommands == nil {
+		return
+	}
+	ws.SymfonyCommands.ReplaceWith(frameworksymfony.DiscoverCommands(ws.Index))
+}
+
+// UpdateFile keeps what the workspace derives file by file current after
+// uri was re-indexed with source: the models it declares and its console
+// commands. Its work grows with the file only.
+func (ws *Bootstrapped) UpdateFile(uri, source string) {
+	if ws == nil {
+		return
+	}
+	ws.AnalyzeModelFile(uri, source)
+	ws.SymfonyCommands.UpdateFile(uri, source)
+}
+
+// AnalyzeModelFile re-runs model analysis for the models declared in one file
+// after it was re-indexed, which drops the members model analysis added to
+// them (relations, accessors, database columns). source is the file's
+// current text. It does nothing until AnalyzeModels has run, and its work
+// grows with the file only.
+func (ws *Bootstrapped) AnalyzeModelFile(uri, source string) {
+	if ws == nil {
+		return
+	}
+	ws.modelMu.RLock()
+	analyzed, schema, migrationColumns := ws.modelsAnalyzed, ws.Schema, ws.migrationColumns
+	ws.modelMu.RUnlock()
+	if !analyzed {
+		return
+	}
+	models.AnalyzeModelFile(ws.Index, ws.RootPath, ws.Framework, uri, source, schema, migrationColumns)
+}
+
+// SchemaIsLive reports whether the database columns given to models were
+// read from a live database, which lists every column of a table, rather
+// than worked out from migrations, which can miss some.
+func (ws *Bootstrapped) SchemaIsLive() bool {
+	if ws == nil {
+		return false
+	}
+	ws.modelMu.RLock()
+	defer ws.modelMu.RUnlock()
+	return ws.Schema != nil && ws.Schema.Source == models.SchemaSourceLive
 }
 
 func IsIDEHelperFile(path string) bool {

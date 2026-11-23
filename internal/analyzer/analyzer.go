@@ -27,6 +27,7 @@ type Analyzer struct {
 	views               *frameworklaravel.Views
 	translations        *frameworklaravel.TranslationResolver
 	symfonyTranslations *frameworksymfony.TranslationResolver
+	symfonyCommands     *frameworksymfony.CommandIndex
 	// clientCommands lists the commands the client handles itself, from the
 	// clientCommands initialization option. Code actions whose result only
 	// makes sense client-side (e.g. copying to the clipboard) are offered only
@@ -88,6 +89,12 @@ func (a *Analyzer) SetSymfonyTranslationResolver(resolver *frameworksymfony.Tran
 	a.symfonyTranslations = resolver
 }
 
+// SetSymfonyCommands gives go-to-definition the project's console commands,
+// for the name argument of a console application's find(), get() and has().
+func (a *Analyzer) SetSymfonyCommands(commands *frameworksymfony.CommandIndex) {
+	a.symfonyCommands = commands
+}
+
 // SetClientCommands records the commands the client says it handles itself.
 func (a *Analyzer) SetClientCommands(commands []string) {
 	a.clientCommands = make(map[string]bool, len(commands))
@@ -109,6 +116,11 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 		if routeName, _, ok := frameworksymfony.RouteNameAtPosition(source, pos); ok {
 			if route := frameworksymfony.FindRoute(a.index, routeName); route != nil {
 				return &protocol.Location{URI: route.URI, Range: route.DeclRange}
+			}
+		}
+		if a.symfonyCommands != nil {
+			if loc := a.definitionForSymfonyCommand(uri, source, pos); loc != nil {
+				return loc
 			}
 		}
 		if a.symfonyTranslations != nil {
@@ -437,6 +449,46 @@ func (a *Analyzer) definitionForLaravelView(line string, character int) *protoco
 
 // definitionForSymfonyTranslationKey resolves a translation key to its source file
 // when the cursor is inside a Symfony translation call.
+// definitionForSymfonyCommand returns the command a console application's
+// find(), get() or has() names at pos.
+func (a *Analyzer) definitionForSymfonyCommand(uri, source string, pos protocol.Position) *protocol.Location {
+	line, ok := sourceLine(source, pos.Line)
+	if !ok || a.resolver.ChainResolver == nil {
+		return nil
+	}
+	receiver, name, ok := frameworksymfony.CommandNameAt(line, pos.Character)
+	if !ok {
+		return nil
+	}
+	cmd := a.symfonyCommands.Find(name)
+	if cmd == nil {
+		return nil
+	}
+	file := parser.ParseFile(source)
+	if !frameworksymfony.IsConsoleApplication(a.index, a.resolver.ChainResolver(receiver, source, pos, file)) {
+		return nil
+	}
+	return &protocol.Location{URI: cmd.URI, Range: cmd.Range}
+}
+
+// sourceLine returns line n of source without splitting the whole text.
+func sourceLine(source string, n int) (string, bool) {
+	if n < 0 {
+		return "", false
+	}
+	for ; n > 0; n-- {
+		i := strings.IndexByte(source, '\n')
+		if i < 0 {
+			return "", false
+		}
+		source = source[i+1:]
+	}
+	if i := strings.IndexByte(source, '\n'); i >= 0 {
+		source = source[:i]
+	}
+	return strings.TrimSuffix(source, "\r"), true
+}
+
 func (a *Analyzer) definitionForSymfonyTranslationKey(source string, pos protocol.Position) *protocol.Location {
 	lines := strings.Split(source, "\n")
 	if pos.Line < 0 || pos.Line >= len(lines) {

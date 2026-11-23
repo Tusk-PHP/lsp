@@ -256,6 +256,14 @@ func (p *Provider) completeBuilderArg(method, partial, quote, prefix, source str
 	return p.completeBuilderRelations(modelFQN, partial, quote)
 }
 
+// ResolveBuilderModel returns the Eloquent model a builder call on line is
+// made on, for the unknown-column and unknown-relation diagnostics: prefix is
+// the line up to the call, method the called method. It returns "" when the
+// model can't be worked out.
+func (p *Provider) ResolveBuilderModel(prefix, method, source string, line int, file *parser.FileNode) string {
+	return p.resolveBuilderModel(prefix, method, source, protocol.Position{Line: line, Character: len(prefix)}, file)
+}
+
 // resolveBuilderModel finds the Eloquent model FQN from the expression before
 // the Builder method call. Works for both static calls (Category::where) and
 // chained calls (Category::query()->where, $query->where).

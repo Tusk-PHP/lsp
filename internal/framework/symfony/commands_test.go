@@ -107,7 +107,8 @@ class BarCommand extends Command {}
 }
 
 func TestCommandIndexFind(t *testing.T) {
-	ci := &CommandIndex{entries: []CommandEntry{{Name: "app:test", ClassFQN: "App\\Command\\TestCommand"}}}
+	ci := NewCommandIndex()
+	ci.UpdateFile("file:///src/Command/TestCommand.php", "<?php\nnamespace App\\Command;\n#[AsCommand(name: 'app:test')]\nclass TestCommand {}\n")
 	if e := ci.Find("app:test"); e == nil {
 		t.Fatal("expected to find app:test")
 	}
@@ -251,5 +252,91 @@ class PositionalCommand extends Command {}
 	}
 	if !strings.Contains(cmd.ClassFQN, "PositionalCommand") {
 		t.Errorf("ClassFQN = %q", cmd.ClassFQN)
+	}
+}
+
+func TestCommandNameCall(t *testing.T) {
+	for _, tt := range []struct {
+		prefix, receiver, partial, quote string
+		ok                               bool
+	}{
+		{"$application->find('app:sy", "$application", "app:sy", "'", true},
+		{`    $this->application->get("`, "$this->application", "", `"`, true},
+		{"$kernel->getApplication()->has(", "$kernel->getApplication()", "", "", true},
+		{"$app?->find('a", "$app", "a", "'", true},
+		{"$application->find('done')", "", "", "", false},
+		{"$application->find($name", "", "", "", false},
+		{"$application->run('x", "", "", "", false},
+		{"find('x", "", "", "", false},
+	} {
+		receiver, partial, quote, ok := CommandNameCall(tt.prefix)
+		if ok != tt.ok || receiver != tt.receiver || partial != tt.partial || quote != tt.quote {
+			t.Errorf("CommandNameCall(%q) = %q, %q, %q, %v; want %q, %q, %q, %v",
+				tt.prefix, receiver, partial, quote, ok, tt.receiver, tt.partial, tt.quote, tt.ok)
+		}
+	}
+}
+
+func TestCommandNameAt(t *testing.T) {
+	line := `$tester = new CommandTester($application->find('app:sync-products'));`
+	at := strings.Index(line, "sync")
+	receiver, name, ok := CommandNameAt(line, at)
+	if !ok || receiver != "$application" || name != "app:sync-products" {
+		t.Errorf("got %q, %q, %v", receiver, name, ok)
+	}
+	if _, _, ok := CommandNameAt(line, strings.Index(line, "CommandTester")); ok {
+		t.Error("cursor outside the argument")
+	}
+	if _, _, ok := CommandNameAt(line, len(line)+1); ok {
+		t.Error("cursor past the line")
+	}
+}
+
+func TestIsConsoleApplication(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///vendor/FrameworkApplication.php", `<?php
+namespace Symfony\Bundle\FrameworkBundle\Console;
+use Symfony\Component\Console\Application as BaseApplication;
+class Application extends BaseApplication {}
+`)
+	for fqn, want := range map[string]bool{
+		`Symfony\Component\Console\Application`:              true,
+		`\Symfony\Component\Console\Application`:             true,
+		`Symfony\Bundle\FrameworkBundle\Console\Application`: true,
+		`Symfony\Component\DependencyInjection\Container`:    false,
+		``: false,
+	} {
+		if got := IsConsoleApplication(idx, fqn); got != want {
+			t.Errorf("IsConsoleApplication(%q) = %v, want %v", fqn, got, want)
+		}
+	}
+}
+
+func TestCommandIndexUpdateFile(t *testing.T) {
+	ci := NewCommandIndex()
+	const uri = "file:///src/Command/A.php"
+	ci.UpdateFile(uri, "<?php\n#[AsCommand(name: 'app:a')]\nclass A {}\n")
+	ci.UpdateFile("file:///vendor/x/B.php", "<?php\n#[AsCommand(name: 'vendor:b')]\nclass B {}\n")
+	if got := strings.Join(ci.Names(), ","); got != "app:a" {
+		t.Fatalf("names = %q", got)
+	}
+	ci.UpdateFile(uri, "<?php\n#[AsCommand(name: 'app:renamed')]\nclass A {}\n")
+	if got := strings.Join(ci.Names(), ","); got != "app:renamed" {
+		t.Errorf("after rename: names = %q", got)
+	}
+	ci.UpdateFile(uri, "<?php\nclass A {}\n")
+	if len(ci.All()) != 0 {
+		t.Errorf("after removing the attribute: %v", ci.All())
+	}
+	other := NewCommandIndex()
+	other.UpdateFile(uri, "<?php\n#[AsCommand(name: 'app:z')]\nclass A {}\n")
+	ci.ReplaceWith(other)
+	if ci.Find("app:z") == nil {
+		t.Error("ReplaceWith lost app:z")
+	}
+	var nilIndex *CommandIndex
+	nilIndex.UpdateFile(uri, "")
+	if nilIndex.All() != nil || nilIndex.Names() != nil || nilIndex.Find("x") != nil {
+		t.Error("a nil index should be empty")
 	}
 }

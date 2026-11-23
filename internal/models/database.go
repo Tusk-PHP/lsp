@@ -265,36 +265,45 @@ func injectSymfonySchemaProperties(index *symbols.Index, schema *Schema, rootPat
 	for _, uri := range uris {
 		path := symbols.URIToPath(uri)
 		content, err := readFileQuick(path)
-		if err != nil || !strings.Contains(content, "ORM\\Entity") {
+		if err != nil {
+			continue
+		}
+		injectDoctrineSchemaSource(index, schema, content)
+	}
+}
+
+// injectDoctrineSchemaSource adds the schema's columns to the Doctrine
+// entities declared in source, one file's text.
+func injectDoctrineSchemaSource(index *symbols.Index, schema *Schema, content string) {
+	if !strings.Contains(content, "ORM\\Entity") {
+		return
+	}
+
+	file := parser.ParseFile(content)
+	if file == nil {
+		return
+	}
+
+	for _, cls := range file.Classes {
+		fqn := file.Namespace + "\\" + cls.Name
+		if file.Namespace == "" {
+			fqn = cls.Name
+		}
+		sym := index.Lookup(fqn)
+		if sym == nil {
 			continue
 		}
 
-		file := parser.ParseFile(content)
-		if file == nil {
+		tableName := resolveDoctrineTableName(content, &cls, fqn)
+		if tableName == "" {
 			continue
 		}
 
-		for _, cls := range file.Classes {
-			fqn := file.Namespace + "\\" + cls.Name
-			if file.Namespace == "" {
-				fqn = cls.Name
-			}
-			sym := index.Lookup(fqn)
-			if sym == nil {
-				continue
-			}
-
-			tableName := resolveDoctrineTableName(content, &cls, fqn)
-			if tableName == "" {
-				continue
-			}
-
-			table := schema.Table(tableName)
-			if table == nil {
-				continue
-			}
-			injectColumnsAsProperties(index, sym, table.Columns)
+		table := schema.Table(tableName)
+		if table == nil {
+			continue
 		}
+		injectColumnsAsProperties(index, sym, table.Columns)
 	}
 }
 
@@ -336,12 +345,18 @@ func ResolveModelTableName(index *symbols.Index, model *symbols.Symbol, rootPath
 	// Read source file and look for $table = 'name'
 	path := symbols.URIToPath(model.URI)
 	content, err := readFileQuick(path)
-	if err == nil {
-		if m := tablePropertyRe.FindStringSubmatch(content); m != nil {
-			return m[1]
-		}
+	if err != nil {
+		content = ""
 	}
+	return modelTableName(model, content)
+}
 
+// modelTableName is the table of model, given the source of the file that
+// declares it and once an indexed $table default has been ruled out.
+func modelTableName(model *symbols.Symbol, source string) string {
+	if m := tablePropertyRe.FindStringSubmatch(source); m != nil {
+		return m[1]
+	}
 	// Convention: snake_case plural of class name
 	return pluralize(toSnakeCase(model.Name))
 }

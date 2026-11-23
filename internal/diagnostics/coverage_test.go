@@ -116,7 +116,8 @@ class Product extends Model {}
 		DocComment: "From migration",
 	})
 
-	checker := NewIndexMemberChecker(idx)
+	live := false
+	checker := NewIndexMemberChecker(idx, func() bool { return live })
 
 	t.Run("IsColumn finds declared property", func(t *testing.T) {
 		if !checker.IsColumn("App\\Models\\Category", "name") {
@@ -182,6 +183,75 @@ class Product extends Model {}
 			t.Error("expected empty for unknown relation")
 		}
 	})
+
+	t.Run("KnowsColumns needs a live database schema", func(t *testing.T) {
+		live = false
+		if checker.KnowsColumns("App\\Models\\Category") {
+			t.Error("columns from migrations are not a complete list")
+		}
+		live = true
+		if checker.KnowsColumns("App\\Models\\Category") {
+			t.Error("a model with no column read from the database has no known list")
+		}
+		idx.AddVirtualMember("App\\Models\\Category", &symbols.Symbol{
+			Name: "$id", FQN: "App\\Models\\Category::$id", Kind: symbols.KindProperty,
+			IsVirtual: true, Type: "int", DocComment: "(database column) bigint — bigint(20)",
+		})
+		if !checker.KnowsColumns("App\\Models\\Category") {
+			t.Error("a model whose table was read from a live database has a known list")
+		}
+		live = false
+	})
+}
+
+func TestIndexMemberCheckerRelations(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///vendor/Model.php", `<?php
+namespace Illuminate\Database\Eloquent;
+abstract class Model { public function __call($m, $a) {} }
+`)
+	idx.IndexFile("file:///app/Models.php", `<?php
+namespace App\Models;
+use Illuminate\Database\Eloquent\Model;
+trait HasTags { public function tags() { return $this->morphToMany(Tag::class, 'taggable'); } }
+class Post extends Model {
+    use HasTags;
+    public function comments() { return $this->hasMany(Comment::class); }
+}
+class Draft extends Model { use MissingTrait; }
+class Magic extends Model { public function __call($m, $a) {} }
+class Orphan extends MissingBase {}
+`)
+	checker := NewIndexMemberChecker(idx, nil)
+	for _, tc := range []struct {
+		model, name string
+		want        bool
+	}{
+		{`App\Models\Post`, "comments", true}, // no return type
+		{`App\Models\Post`, "Comments", true}, // method names ignore case
+		{`App\Models\Post`, "tags", true},     // from a trait
+		{`App\Models\Post`, "missing", false},
+	} {
+		if got := checker.IsRelation(tc.model, tc.name); got != tc.want {
+			t.Errorf("IsRelation(%s, %s) = %v, want %v", tc.model, tc.name, got, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		model string
+		want  bool
+	}{
+		{`App\Models\Post`, true},
+		{`App\Models\Draft`, false},  // uses a trait that isn't indexed
+		{`App\Models\Magic`, false},  // handles undeclared methods itself
+		{`App\Models\Orphan`, false}, // its parent isn't indexed
+	} {
+		if got := checker.KnowsRelations(tc.model); got != tc.want {
+			t.Errorf("KnowsRelations(%s) = %v, want %v", tc.model, got, tc.want)
+		}
+	}
+	if checker.KnowsColumns(`App\Models\Post`) {
+		t.Error("KnowsColumns without a live schema should be false")
+	}
 }
 
 func TestClearCache(t *testing.T) {

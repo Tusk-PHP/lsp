@@ -3,6 +3,7 @@ package diagnostics
 import (
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 	"sync"
 
@@ -115,8 +116,12 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP, includedFile bool
 		typeResolver := MemoizeTypeResolver(p.TypeResolver)
 		shared := &checks.Shared{}
 		uses := &checks.MemberUseCache{Shared: shared}
-		diags = append(diags, parserErrorsToDiagnostics(file.Errors, source)...)
-		diags = append(diags, p.checkClassStructure(file)...)
+		if p.cfg.IsRuleEnabled("syntax-error") {
+			diags = append(diags, p.applyRuleSeverity("syntax-error", checks.SeverityError, parserErrorsToDiagnostics(file.Errors, source))...)
+		}
+		if p.cfg.IsRuleEnabled("abstract-in-concrete") {
+			diags = append(diags, p.applyRuleSeverity("abstract-in-concrete", checks.SeverityError, p.checkClassStructure(file))...)
+		}
 		if p.cfg.IsRuleEnabled("unknown-class") {
 			fs := (&checks.UnknownClassRule{}).Check(file, source, p.index)
 			diags = append(diags, p.applyRuleSeverity("unknown-class", checks.SeverityWarning, findingsToDiagnostics(fs))...)
@@ -146,7 +151,7 @@ func (p *Provider) analyzeNative(uri, source string, bladePHP, includedFile bool
 		}
 		if p.cfg.IsRuleEnabled("redundant-union-member") {
 			fs := (&checks.RedundantUnionRule{}).Check(file, source, p.index)
-			diags = append(diags, p.applyRuleSeverity("redundant-union-member", checks.SeverityWarning, findingsToDiagnostics(fs))...)
+			diags = append(diags, p.applyRuleSeverity("redundant-union-member", checks.SeverityInfo, findingsToDiagnostics(fs))...)
 		}
 		if p.cfg.IsRuleEnabled("undefined-variable") {
 			fs := (&checks.UndefinedVariableRule{IncludedFile: includedFile, Shared: shared}).Check(file, source, p.index)
@@ -275,7 +280,9 @@ func (p *Provider) AnalyzeOnSave(uri, source string) {
 				ModelResolver: p.BuilderModelResolver,
 				Members:       p.BuilderMemberChecker,
 			}
-			diags = append(diags, p.filterByConfig(findingsToDiagnostics(rule.Check(file, source, p.index)))...)
+			fs := findingsToDiagnostics(rule.Check(file, source, p.index))
+			// Both codes default to a warning.
+			diags = append(diags, p.applySeverityByCode(p.filterByConfig(fs), "unknown-column", "unknown-relation")...)
 		}
 	}
 
@@ -321,12 +328,14 @@ func (p *Provider) filterByConfig(diags []protocol.Diagnostic) []protocol.Diagno
 	return filtered
 }
 
-// applyRuleSeverity overrides the severity of diagnostics for a specific rule
-// code if the config has an explicit severity set. If no override is configured
-// the default severity is used (diagnostics are returned as-is).
+// applyRuleSeverity sets the severity of a rule's diagnostics to the one the
+// config gives that rule. Without one, each diagnostic keeps the severity its
+// rule gave it, which is defaultSeverity unless the rule grades its findings
+// (a hint for a builtin attribute that does nothing yet, a warning for a
+// nullsafe call on a value that is always null).
 func (p *Provider) applyRuleSeverity(code string, defaultSeverity checks.Severity, diags []protocol.Diagnostic) []protocol.Diagnostic {
-	override := p.cfg.RuleSeverity(code, defaultSeverity)
-	if override == defaultSeverity {
+	override := p.cfg.RuleSeverity(code, 0)
+	if override == 0 || len(diags) == 0 {
 		return diags
 	}
 	var lspSev protocol.DiagnosticSeverity
@@ -365,6 +374,31 @@ func (p *Provider) checkClassStructure(file *parser.FileNode) []protocol.Diagnos
 		}
 	}
 	return diags
+}
+
+// applySeverityByCode applies the configured severity of each of codes to
+// the diagnostics of a rule that reports several codes. Like
+// applyRuleSeverity, a code with no configured severity is left as reported.
+func (p *Provider) applySeverityByCode(diags []protocol.Diagnostic, codes ...string) []protocol.Diagnostic {
+	var out []protocol.Diagnostic
+	for i, d := range diags {
+		if !slices.Contains(codes, d.Code) {
+			continue
+		}
+		override := p.cfg.RuleSeverity(d.Code, 0)
+		if override == 0 || severityToLSP(override) == d.Severity {
+			continue
+		}
+		if out == nil {
+			out = make([]protocol.Diagnostic, len(diags))
+			copy(out, diags)
+		}
+		out[i].Severity = severityToLSP(override)
+	}
+	if out == nil {
+		return diags
+	}
+	return out
 }
 
 // applyUnusedPrivateSeverity applies per-code severity overrides for

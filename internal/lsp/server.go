@@ -26,6 +26,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
+	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/introspect"
@@ -413,6 +414,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	arrayResolver := models.NewFrameworkArrayResolver(s.index, s.rootPath, s.framework)
 	viewResolver := frameworklaravel.NewViews(s.rootPath)
 	translationResolver := frameworklaravel.NewTranslationResolver(s.rootPath)
+	symfonyTranslations := frameworksymfony.NewTranslationResolver(s.rootPath)
 	s.completion = completion.NewProvider(s.index, s.container, s.framework)
 	// Clients that resolve documentation and detail later get member items
 	// without them, which keeps long member lists cheap to send.
@@ -435,6 +437,8 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	}
 	s.completion.SetViewResolver(viewResolver)
 	s.completion.SetTranslationResolver(translationResolver)
+	s.completion.SetSymfonyTranslationResolver(symfonyTranslations)
+	s.completion.SetSymfonyCommands(s.workspace.SymfonyCommands)
 	s.inlayHint = inlayhint.NewProvider(s.index, s.container)
 	s.inlayHint.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
@@ -469,7 +473,8 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.diag.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
 		return s.completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
 	}
-	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(s.index)
+	s.diag.BuilderModelResolver = s.completion.ResolveBuilderModel
+	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(s.index, s.workspace.SchemaIsLive)
 	s.diag.BuiltinUnavailableRule = &checks.BuiltinUnavailableRule{
 		PHPVersion: profile.PHPVersion,
 		Extensions: profile.Extensions,
@@ -501,6 +506,8 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	}
 	s.analyzer.SetViewResolver(viewResolver)
 	s.analyzer.SetTranslationResolver(translationResolver)
+	s.analyzer.SetSymfonyTranslationResolver(symfonyTranslations)
+	s.analyzer.SetSymfonyCommands(s.workspace.SymfonyCommands)
 	s.sendResponse(msg.ID, protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
 			TextDocumentSync: protocol.TextDocumentSyncOptions{
@@ -605,6 +612,10 @@ func (s *Server) handleInitialized(msg *jsonRPCMessage) {
 	s.goSafe("analyzeModels", func() {
 		indexWg.Wait()
 		s.workspace.AnalyzeModels()
+	})
+	s.goSafe("symfonyCommands", func() {
+		indexWg.Wait()
+		s.workspace.ScanSymfonyCommands()
 	})
 }
 
@@ -1239,6 +1250,9 @@ func (s *Server) indexFileByURI(uri string, source string) {
 		s.index.IndexIDEHelperFile(uri, source)
 	} else {
 		s.index.IndexFile(uri, source)
+		// Re-indexing replaced the file's classes, and with them the
+		// relations and columns model analysis gave its models.
+		s.workspace.UpdateFile(uri, source)
 	}
 	if s.routeIndex != nil {
 		s.routeIndex.IndexFile(uri, source)

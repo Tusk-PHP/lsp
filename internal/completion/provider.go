@@ -27,6 +27,7 @@ type Provider struct {
 	views               *frameworklaravel.Views
 	translations        *frameworklaravel.TranslationResolver
 	symfonyTranslations *frameworksymfony.TranslationResolver
+	symfonyCommands     *frameworksymfony.CommandIndex
 	// lazyDocumentation and lazyDetail leave those properties of member
 	// items to completionItem/resolve, for clients that ask for them later.
 	lazyDocumentation, lazyDetail bool
@@ -102,6 +103,12 @@ func (p *Provider) SetTranslationResolver(resolver *frameworklaravel.Translation
 
 func (p *Provider) SetSymfonyTranslationResolver(resolver *frameworksymfony.TranslationResolver) {
 	p.symfonyTranslations = resolver
+}
+
+// SetSymfonyCommands gives completion the project's console commands, for
+// the name argument of a console application's find(), get() and has().
+func (p *Provider) SetSymfonyCommands(commands *frameworksymfony.CommandIndex) {
+	p.symfonyCommands = commands
 }
 
 // sanitizeCompletions is the authoritative post-processing step applied to every
@@ -246,6 +253,12 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		if partial, quote, ok := frameworksymfony.ExtractRouteNameContext(trimmed); ok {
 			return sanitizeCompletions(p.completeSymfonyRouteNames(partial, quote))
 		}
+		if p.symfonyCommands != nil {
+			if receiver, partial, quote, ok := frameworksymfony.CommandNameCall(trimmed); ok &&
+				frameworksymfony.IsConsoleApplication(p.index, p.ResolveExpressionType(receiver, source, pos, file)) {
+				return sanitizeCompletions(p.completeSymfonyCommandNames(partial, quote))
+			}
+		}
 		if p.symfonyTranslations != nil {
 			if txCtx := frameworksymfony.DetectSymfonyTranslationContext(line, pos.Character); txCtx != nil {
 				return sanitizeCompletions(p.symfonyTranslations.Complete(txCtx))
@@ -337,6 +350,38 @@ func (p *Provider) completeSymfonyRouteNames(partial, quote string) []protocol.C
 		})
 	}
 
+	return items
+}
+
+// completeSymfonyCommandNames offers the project's console command names
+// starting with partial.
+func (p *Provider) completeSymfonyCommandNames(partial, quote string) []protocol.CompletionItem {
+	var items []protocol.CompletionItem
+	lowerPartial := strings.ToLower(partial)
+	wrap := "'"
+	if quote == `"` {
+		wrap = `"`
+	}
+	for _, cmd := range p.symfonyCommands.All() {
+		if lowerPartial != "" && !strings.HasPrefix(strings.ToLower(cmd.Name), lowerPartial) {
+			continue
+		}
+		insertText := cmd.Name
+		if quote == "" {
+			insertText = wrap + cmd.Name + wrap
+		}
+		detail := cmd.Description
+		if detail == "" {
+			detail = cmd.ClassFQN
+		}
+		items = append(items, protocol.CompletionItem{
+			Label:      cmd.Name,
+			Kind:       protocol.CompletionItemKindValue,
+			Detail:     detail,
+			InsertText: insertText,
+			SortText:   "0" + cmd.Name,
+		})
+	}
 	return items
 }
 

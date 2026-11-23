@@ -117,3 +117,5 @@ func (s *stubMemberChecker) IsColumn(modelFQN, name string) bool          { retu
 func (s *stubMemberChecker) IsDBColumn(modelFQN, name string) bool        { return false }
 func (s *stubMemberChecker) IsRelation(modelFQN, name string) bool        { return false }
 func (s *stubMemberChecker) RelatedModelFQN(modelFQN, name string) string { return "" }
+func (s *stubMemberChecker) KnowsColumns(modelFQN string) bool            { return true }
+func (s *stubMemberChecker) KnowsRelations(modelFQN string) bool          { return true }

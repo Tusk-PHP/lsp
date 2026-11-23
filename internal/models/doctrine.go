@@ -89,53 +89,57 @@ func AnalyzeDoctrineEntities(index *symbols.Index, rootPath string) {
 		if err != nil {
 			continue
 		}
-		source := string(content)
+		analyzeDoctrineSource(index, rootPath, string(content))
+	}
+}
 
-		// Quick check: does this file mention ORM\Entity?
-		if !strings.Contains(source, "ORM\\Entity") && !strings.Contains(source, "ORM\\Column") {
+// analyzeDoctrineSource injects the members of the Doctrine entities declared
+// in source, one file's text.
+func analyzeDoctrineSource(index *symbols.Index, rootPath, source string) {
+	// Quick check: does this file mention ORM\Entity?
+	if !strings.Contains(source, "ORM\\Entity") && !strings.Contains(source, "ORM\\Column") {
+		return
+	}
+
+	file := parser.ParseFile(source)
+	if file == nil {
+		return
+	}
+
+	for i := range file.Classes {
+		cls := &file.Classes[i]
+		fqn := file.Namespace + "\\" + cls.Name
+		if file.Namespace == "" {
+			fqn = cls.Name
+		}
+
+		sym := index.Lookup(fqn)
+		if sym == nil {
 			continue
 		}
 
-		file := parser.ParseFile(source)
-		if file == nil {
+		resolve := func(name string) string {
+			return resolveWithUses(name, file.Namespace, file.Uses)
+		}
+
+		// Check for ORM\Entity in class docblock (annotation syntax) or source around class declaration
+		classSource := extractClassSource(source, cls)
+		if !isDoctrineEntity(classSource, cls.DocComment) {
 			continue
 		}
 
-		for i := range file.Classes {
-			cls := &file.Classes[i]
-			fqn := file.Namespace + "\\" + cls.Name
-			if file.Namespace == "" {
-				fqn = cls.Name
-			}
+		// Try PHP 8 attributes on properties first, then XML fallback
+		foundAttrs := analyzeDoctrineAttributes(index, sym, source, cls, resolve)
 
-			sym := index.Lookup(fqn)
-			if sym == nil {
-				continue
-			}
+		if !foundAttrs {
+			// XML mapping fallback
+			analyzeDoctrineXML(index, sym, rootPath, fqn, cls, resolve)
+		}
 
-			resolve := func(name string) string {
-				return resolveWithUses(name, file.Namespace, file.Uses)
-			}
-
-			// Check for ORM\Entity in class docblock (annotation syntax) or source around class declaration
-			classSource := extractClassSource(source, cls)
-			if !isDoctrineEntity(classSource, cls.DocComment) {
-				continue
-			}
-
-			// Try PHP 8 attributes on properties first, then XML fallback
-			foundAttrs := analyzeDoctrineAttributes(index, sym, source, cls, resolve)
-
-			if !foundAttrs {
-				// XML mapping fallback
-				analyzeDoctrineXML(index, sym, rootPath, fqn, cls, resolve)
-			}
-
-			// Repository magic methods
-			repoFQN := extractRepositoryClass(classSource, cls.DocComment, resolve)
-			if repoFQN != "" {
-				injectRepositoryMagicMethods(index, repoFQN, fqn, sym)
-			}
+		// Repository magic methods
+		repoFQN := extractRepositoryClass(classSource, cls.DocComment, resolve)
+		if repoFQN != "" {
+			injectRepositoryMagicMethods(index, repoFQN, fqn, sym)
 		}
 	}
 }

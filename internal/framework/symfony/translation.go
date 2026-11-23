@@ -74,6 +74,10 @@ func DetectSymfonyTranslationContext(line string, cursor int) *TranslationContex
 			}
 			idx += searchFrom
 			argStart := idx + len(pattern)
+			if !translationCallStartsAt(line, idx, pattern) {
+				searchFrom = argStart
+				continue
+			}
 			ctx := detectSymfonyTranslationContextAt(line, cursor, argStart)
 			if ctx != nil && idx >= bestStart {
 				best = ctx
@@ -83,6 +87,24 @@ func DetectSymfonyTranslationContext(line string, cursor int) *TranslationContex
 		}
 	}
 	return best
+}
+
+// translationCallStartsAt reports whether the pattern found at line[idx] is
+// the whole name of the call: `t(` is Symfony's t() function, not the end of
+// get(, count( or $this->t(, and `TranslatableMessage(` not the end of
+// another class name.
+func translationCallStartsAt(line string, idx int, pattern string) bool {
+	if pattern[0] == '-' || idx == 0 {
+		return true
+	}
+	c := line[idx-1]
+	if c == '_' || c == '$' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
+		return false
+	}
+	if pattern == "t(" && (c == '>' || c == ':') {
+		return false
+	}
+	return true
 }
 
 func detectSymfonyTranslationContextAt(line string, cursor, argStart int) *TranslationContext {

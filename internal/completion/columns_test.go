@@ -3,6 +3,7 @@ package completion
 import (
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -272,4 +273,22 @@ func TestBuilderRelationCompletion(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestResolveBuilderModelForDiagnostics checks the model the unknown-column
+// and unknown-relation diagnostics get for a call, from the line up to the
+// call's opening parenthesis.
+func TestResolveBuilderModelForDiagnostics(t *testing.T) {
+	p, _ := setupEloquentCompletionTest(t)
+	source := "<?php\nuse App\\Models\\Category;\nCategory::query()->where('name', 1)->with('products');\n"
+	file := parser.ParseFile(source)
+	for _, tc := range []struct{ prefix, method, want string }{
+		{"Category::query()->where(", "where", `App\Models\Category`},
+		{"Category::query()->where('name', 1)->with(", "with", `App\Models\Category`},
+		{"$unknown->where(", "where", ""},
+	} {
+		if got := p.ResolveBuilderModel(tc.prefix, tc.method, source, 2, file); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.prefix, got, tc.want)
+		}
+	}
 }

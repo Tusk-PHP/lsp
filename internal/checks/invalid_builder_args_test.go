@@ -13,6 +13,7 @@ type mockMemberChecker struct {
 	dbColumns    map[string]map[string]bool
 	relations    map[string]map[string]bool
 	relatedModel map[string]map[string]string // modelFQN → relationName → relatedModelFQN
+	partial      map[string]bool              // models whose members aren't all known
 }
 
 func (m *mockMemberChecker) IsColumn(modelFQN, name string) bool {
@@ -41,6 +42,17 @@ func (m *mockMemberChecker) RelatedModelFQN(modelFQN, relationName string) strin
 		return rels[relationName]
 	}
 	return ""
+}
+
+// KnowsColumns and KnowsRelations treat a model listed in columns as fully
+// known, unless it is listed in partial.
+func (m *mockMemberChecker) KnowsColumns(modelFQN string) bool {
+	_, ok := m.columns[modelFQN]
+	return ok && !m.partial[modelFQN]
+}
+
+func (m *mockMemberChecker) KnowsRelations(modelFQN string) bool {
+	return m.KnowsColumns(modelFQN)
 }
 
 func setupBuilderArgRule() *InvalidBuilderArgRule {
@@ -197,14 +209,15 @@ Product::orderBy('title');
 		assertNoFindings(t, findings)
 	})
 
-	t.Run("Product orderBy unknown column flagged", func(t *testing.T) {
+	t.Run("Product orderBy unknown name not flagged: it may be a select alias", func(t *testing.T) {
 		source := `<?php
 use App\Models\Product;
-Product::orderBy('nonexistent');
+Product::selectRaw('count(*) as total')->orderBy('total');
+Product::withCount('category')->having('category_count', '>', 1);
 `
 		file := parser.ParseFile(source)
 		findings := rule.Check(file, source, nil)
-		assertFindingCodes(t, findings, []string{"unknown-column"})
+		assertNoFindings(t, findings)
 	})
 
 	t.Run("severity is warning", func(t *testing.T) {
@@ -286,4 +299,64 @@ Category::orderBy('relation.column');
 		// Dot-notation in column methods is join-qualified — skip validation
 		assertNoFindings(t, findings)
 	})
+}
+
+// TestInvalidBuilderArgRuleStaysQuietWhenUnsure covers code the rule can't
+// judge: calls in comments and strings, arguments that are not plain names,
+// and models whose columns or relations aren't all known.
+func TestInvalidBuilderArgRuleStaysQuietWhenUnsure(t *testing.T) {
+	rule := setupBuilderArgRule()
+	rule.Members.(*mockMemberChecker).columns["App\\Models\\Draft"] = map[string]bool{"id": true}
+	rule.Members.(*mockMemberChecker).partial = map[string]bool{"App\\Models\\Draft": true}
+	rule.ModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) string {
+		switch {
+		case strings.Contains(prefix, "Draft"):
+			return "App\\Models\\Draft"
+		case strings.Contains(prefix, "Category"):
+			return "App\\Models\\Category"
+		}
+		return ""
+	}
+	source := `<?php
+use App\Models\Category;
+use App\Models\Draft;
+
+/**
+ * Not Category::where('reportable_type', ...) but the relation.
+ */
+// Category::with('commented_out');
+$sql = "Category::where('in_a_string', 1)";
+Category::where('options->locale', 'en');
+Category::select('*');
+Category::select('categories.*');
+Category::with('products:id,title');
+Draft::where('not_in_migrations', 1);
+Draft::with('fromAnUnindexedTrait');
+`
+	file := parser.ParseFile(source)
+	assertNoFindings(t, rule.Check(file, source, nil))
+}
+
+// TestInvalidBuilderArgRulePassesCallPrefix checks that the model resolver
+// gets the line up to the call's opening parenthesis, the form completion
+// resolves builder models from.
+func TestInvalidBuilderArgRulePassesCallPrefix(t *testing.T) {
+	rule := setupBuilderArgRule()
+	var prefixes []string
+	rule.ModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) string {
+		prefixes = append(prefixes, prefix)
+		return ""
+	}
+	source := `<?php
+Category::query()->where('name', 1)->with('products');
+`
+	file := parser.ParseFile(source)
+	rule.Check(file, source, nil)
+	want := []string{
+		"Category::query()->where(",
+		"Category::query()->where('name', 1)->with(",
+	}
+	if strings.Join(prefixes, "|") != strings.Join(want, "|") {
+		t.Errorf("prefixes: want %q, got %q", want, prefixes)
+	}
 }

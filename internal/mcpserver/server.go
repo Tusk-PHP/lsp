@@ -23,6 +23,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
+	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/models"
@@ -704,6 +705,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	arrayResolver := models.NewFrameworkArrayResolver(ws.Index, s.RootPath, s.Framework)
 	viewResolver := frameworklaravel.NewViews(s.RootPath)
 	translationResolver := frameworklaravel.NewTranslationResolver(s.RootPath)
+	symfonyTranslations := frameworksymfony.NewTranslationResolver(s.RootPath)
 
 	rt.Completion = completion.NewProvider(ws.Index, ws.Container, s.Framework)
 	rt.Completion.SetArrayResolver(arrayResolver)
@@ -715,6 +717,8 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	}
 	rt.Completion.SetViewResolver(viewResolver)
 	rt.Completion.SetTranslationResolver(translationResolver)
+	rt.Completion.SetSymfonyTranslationResolver(symfonyTranslations)
+	rt.Completion.SetSymfonyCommands(ws.SymfonyCommands)
 
 	rt.InlayHint = inlayhint.NewProvider(ws.Index, ws.Container)
 	rt.InlayHint.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
@@ -739,12 +743,15 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.Analyzer.SetTypedChainResolver(rt.Completion.ResolveExpressionTypeTyped)
 	rt.Analyzer.SetViewResolver(viewResolver)
 	rt.Analyzer.SetTranslationResolver(translationResolver)
+	rt.Analyzer.SetSymfonyTranslationResolver(symfonyTranslations)
+	rt.Analyzer.SetSymfonyCommands(ws.SymfonyCommands)
 
 	rt.Diagnostics = diagnostics.NewProvider(ws.Index, s.Framework, s.RootPath, newStdLogger(nil), s.Config)
 	rt.Diagnostics.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
 		return rt.Completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
 	}
-	rt.Diagnostics.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(ws.Index)
+	rt.Diagnostics.BuilderModelResolver = rt.Completion.ResolveBuilderModel
+	rt.Diagnostics.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(ws.Index, ws.SchemaIsLive)
 	rt.Diagnostics.BuiltinUnavailableRule = &checks.BuiltinUnavailableRule{
 		PHPVersion: s.BuiltinProfile.PHPVersion,
 		Extensions: s.BuiltinProfile.Extensions,

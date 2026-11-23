@@ -108,12 +108,17 @@ func analyzeModel(index *symbols.Index, model *symbols.Symbol) {
 		return
 	}
 	source := string(content)
-	lines := strings.Split(source, "\n")
-
 	file := parser.ParseFile(source)
 	if file == nil {
 		return
 	}
+	analyzeModelSource(index, model, source, file)
+}
+
+// analyzeModelSource injects the relations and accessors model declares in
+// source, the text of the file that declares it.
+func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source string, file *parser.FileNode) {
+	lines := strings.Split(source, "\n")
 
 	// Find the class in the parsed file
 	var classNode *parser.ClassNode

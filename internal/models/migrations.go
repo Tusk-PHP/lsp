@@ -92,10 +92,16 @@ var (
 // AnalyzeMigrations scans Laravel migration files and injects virtual properties
 // for columns that don't already have a source from DB, IDE helper, or docblocks.
 func AnalyzeMigrations(index *symbols.Index, rootPath string) {
+	InjectMigrationColumns(index, rootPath, ScanMigrationColumns(rootPath))
+}
+
+// ScanMigrationColumns reads the columns of each table from the Laravel
+// migration files under rootPath, by table name.
+func ScanMigrationColumns(rootPath string) map[string]map[string]*MigrationColumn {
 	migrationsDir := filepath.Join(rootPath, "database", "migrations")
 	entries, err := os.ReadDir(migrationsDir)
 	if err != nil {
-		return
+		return nil
 	}
 
 	// Sort by filename (timestamped, so lexicographic order = chronological)
@@ -117,7 +123,15 @@ func AnalyzeMigrations(index *symbols.Index, rootPath string) {
 		}
 		parseMigrationFile(string(content), tableColumns)
 	}
+	return tableColumns
+}
 
+// InjectMigrationColumns adds the columns migrations give each model's table
+// as virtual properties of the model.
+func InjectMigrationColumns(index *symbols.Index, rootPath string, tableColumns map[string]map[string]*MigrationColumn) {
+	if len(tableColumns) == 0 {
+		return
+	}
 	// Map tables to models and inject virtual properties
 	modelsByTable := buildModelTableMap(index, rootPath)
 
@@ -126,39 +140,43 @@ func AnalyzeMigrations(index *symbols.Index, rootPath string) {
 		if !ok {
 			continue
 		}
-		modelSym := index.Lookup(modelFQN)
-		if modelSym == nil {
+		if modelSym := index.Lookup(modelFQN); modelSym != nil {
+			injectMigrationColumnsInto(index, modelSym, columns)
+		}
+	}
+}
+
+// injectMigrationColumnsInto adds columns to model as virtual properties,
+// leaving any property the model already has.
+func injectMigrationColumnsInto(index *symbols.Index, modelSym *symbols.Symbol, columns map[string]*MigrationColumn) {
+	modelFQN := modelSym.FQN
+	for _, col := range columns {
+		propName := "$" + col.Name
+		// Skip if already discovered from another source
+		if index.Lookup(modelFQN+"::"+propName) != nil {
 			continue
 		}
 
-		for _, col := range columns {
-			propName := "$" + col.Name
-			// Skip if already discovered from another source
-			if index.Lookup(modelFQN+"::"+propName) != nil {
-				continue
-			}
-
-			phpType := col.Type
-			if col.Nullable && phpType != "mixed" {
-				phpType = "?" + phpType
-			}
-
-			docComment := "From migration"
-			if col.Default != "" {
-				docComment += ", default: " + col.Default
-			}
-
-			index.AddVirtualMember(modelFQN, &symbols.Symbol{
-				Name:       propName,
-				FQN:        modelFQN + "::" + propName,
-				Kind:       symbols.KindProperty,
-				URI:        modelSym.URI,
-				Visibility: "public",
-				Type:       phpType,
-				IsVirtual:  true,
-				DocComment: docComment,
-			})
+		phpType := col.Type
+		if col.Nullable && phpType != "mixed" {
+			phpType = "?" + phpType
 		}
+
+		docComment := "From migration"
+		if col.Default != "" {
+			docComment += ", default: " + col.Default
+		}
+
+		index.AddVirtualMember(modelFQN, &symbols.Symbol{
+			Name:       propName,
+			FQN:        modelFQN + "::" + propName,
+			Kind:       symbols.KindProperty,
+			URI:        modelSym.URI,
+			Visibility: "public",
+			Type:       phpType,
+			IsVirtual:  true,
+			DocComment: docComment,
+		})
 	}
 }
 
