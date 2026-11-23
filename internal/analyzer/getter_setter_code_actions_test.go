@@ -23,7 +23,7 @@ class User {
 			Start: protocol.Position{Line: 4, Character: 4},
 			End:   protocol.Position{Line: 4, Character: 24},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 	})
 
 	if len(actions) != 3 {
@@ -94,7 +94,7 @@ class User {
 			Start: protocol.Position{Line: 4, Character: 4},
 			End:   protocol.Position{Line: 4, Character: 24},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 	})
 
 	if len(actions) != 1 {
@@ -121,7 +121,7 @@ class User {
 			Start: protocol.Position{Line: 4, Character: 4},
 			End:   protocol.Position{Line: 4, Character: 33},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 	})
 
 	if len(actions) != 1 {
@@ -180,7 +180,7 @@ class User {
 					Start: protocol.Position{Line: 4, Character: 4},
 					End:   protocol.Position{Line: 4, Character: 30},
 				},
-				Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+				Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 			})
 			if len(actions) != 0 {
 				t.Fatalf("expected no actions, got %#v", actions)

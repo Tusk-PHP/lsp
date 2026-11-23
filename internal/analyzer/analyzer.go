@@ -32,7 +32,7 @@ type Analyzer struct {
 	// clientCommands initialization option. Code actions whose result only
 	// makes sense client-side (e.g. copying to the clipboard) are offered only
 	// when their command is listed here.
-	clientCommands map[string]bool
+	clientCommands map[protocol.CommandName]bool
 }
 
 // DefinitionResult is the extended return shape from FindDefinitionWithManual.
@@ -82,8 +82,8 @@ func (a *Analyzer) SetSymfonyCommands(commands *frameworksymfony.CommandIndex) {
 }
 
 // SetClientCommands records the commands the client says it handles itself.
-func (a *Analyzer) SetClientCommands(commands []string) {
-	a.clientCommands = make(map[string]bool, len(commands))
+func (a *Analyzer) SetClientCommands(commands []protocol.CommandName) {
+	a.clientCommands = make(map[protocol.CommandName]bool, len(commands))
 	for _, c := range commands {
 		a.clientCommands[c] = true
 	}
@@ -1703,11 +1703,11 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 
 	if fqn != "" {
 		uriJSON, _ := json.Marshal(uri)
-		if codeActionKindAllowed(params.Context.Only, "source") {
+		if protocol.CodeActionSource.In(params.Context.Only) {
 			actions = append(actions, protocol.CodeAction{
 				Title:   "Copy Namespace: " + fqn,
-				Kind:    "source",
-				Command: &protocol.Command{Title: "Copy Namespace", Command: "tuskPhpLsp.copyNamespace", Arguments: []json.RawMessage{uriJSON}},
+				Kind:    protocol.CodeActionSource,
+				Command: &protocol.Command{Title: "Copy Namespace", Command: protocol.CommandCopyNamespace, Arguments: []json.RawMessage{uriJSON}},
 			})
 		}
 	}
@@ -1751,13 +1751,13 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 			uriJSON, _ := json.Marshal(uri)
 			// The target namespace will be prompted by the editor extension
 			// For now, provide the command with URI; the extension fills in the target
-			if codeActionKindAllowed(params.Context.Only, "refactor.move") {
+			if protocol.CodeActionRefactorMove.In(params.Context.Only) {
 				actions = append(actions, protocol.CodeAction{
 					Title: "Move to namespace...",
-					Kind:  "refactor.move",
+					Kind:  protocol.CodeActionRefactorMove,
 					Command: &protocol.Command{
 						Title:     "Move to namespace",
-						Command:   "tuskPhpLsp.moveToNamespace",
+						Command:   protocol.CommandMoveToNamespace,
 						Arguments: []json.RawMessage{uriJSON},
 					},
 				})
@@ -1769,16 +1769,16 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 	// The command only returns the reference strings; copying one is up to the
 	// client, so the action is offered only to clients that declare they handle
 	// tuskPhpLsp.copyReference. Elsewhere it would be a menu entry that does nothing.
-	if a.clientCommands["tuskPhpLsp.copyReference"] && codeActionKindAllowed(params.Context.Only, "refactor") {
+	if a.clientCommands[protocol.CommandCopyReference] && protocol.CodeActionRefactor.In(params.Context.Only) {
 		if refs := a.CopyReference(uri, source, params.Range.Start); len(refs) > 0 {
 			uriJSON, _ := json.Marshal(uri)
 			posJSON, _ := json.Marshal(params.Range.Start)
 			actions = append(actions, protocol.CodeAction{
 				Title: "Copy reference...",
-				Kind:  "refactor",
+				Kind:  protocol.CodeActionRefactor,
 				Command: &protocol.Command{
 					Title:     "Copy reference",
-					Command:   "tuskPhpLsp.copyReference",
+					Command:   protocol.CommandCopyReference,
 					Arguments: []json.RawMessage{uriJSON, posJSON},
 				},
 			})

@@ -18,7 +18,7 @@ function run($name) {
 	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
 		Range:        protocol.Range{Start: protocol.Position{Line: 3, Character: 12}, End: protocol.Position{Line: 3, Character: 12}},
-		Context:      protocol.CodeActionContext{Only: []string{"refactor.inline"}},
+		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor.inline"}},
 	})
 
 	var action *protocol.CodeAction
@@ -122,7 +122,7 @@ func assertNoInlineVariableAction(t *testing.T, source string, pos protocol.Posi
 	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
 		Range:        protocol.Range{Start: pos, End: pos},
-		Context:      protocol.CodeActionContext{Only: []string{"refactor.inline"}},
+		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor.inline"}},
 	})
 
 	for _, action := range actions {

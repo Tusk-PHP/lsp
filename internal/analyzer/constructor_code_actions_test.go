@@ -26,7 +26,7 @@ class User {
 			Start: protocol.Position{Line: 3, Character: 0},
 			End:   protocol.Position{Line: 3, Character: 10},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 	})
 
 	var constructor *protocol.CodeAction
@@ -86,7 +86,7 @@ class User {
 			Start: protocol.Position{Line: 3, Character: 0},
 			End:   protocol.Position{Line: 3, Character: 10},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 	})
 
 	for _, action := range actions {
@@ -108,7 +108,7 @@ class User { private string $name; }
 			Start: protocol.Position{Line: 1, Character: 0},
 			End:   protocol.Position{Line: 1, Character: 10},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 	})
 
 	var constructor *protocol.CodeAction

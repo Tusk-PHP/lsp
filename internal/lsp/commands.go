@@ -20,7 +20,7 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 		return
 	}
 	switch params.Command {
-	case "tuskPhpLsp.copyNamespace":
+	case protocol.CommandCopyNamespace:
 		if len(params.Arguments) > 0 {
 			var uri string
 			if json.Unmarshal(params.Arguments[0], &uri) == nil {
@@ -31,7 +31,7 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 			}
 		}
 		s.sendResponse(msg.ID, nil)
-	case "tuskPhpLsp.namespaceForPath":
+	case protocol.CommandNamespaceForPath:
 		// Returns the expected namespace for a file path based on PSR-4 autoload
 		if len(params.Arguments) > 0 {
 			var uri string
@@ -44,7 +44,7 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 			}
 		}
 		s.sendResponse(msg.ID, nil)
-	case "tuskPhpLsp.moveToNamespace":
+	case protocol.CommandMoveToNamespace:
 		// Arguments: [uri, targetNamespace]
 		if len(params.Arguments) >= 2 {
 			var uri, targetNS string
@@ -57,7 +57,7 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 			}
 		}
 		s.sendResponse(msg.ID, nil)
-	case "tuskPhpLsp.createObject":
+	case protocol.CommandCreateObject:
 		// Arguments: [dirUri, kind, name]
 		if len(params.Arguments) >= 3 {
 			var dirURI, kind, name string
@@ -71,7 +71,7 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 			}
 		}
 		s.sendResponse(msg.ID, nil)
-	case "tuskPhpLsp.copyReference":
+	case protocol.CommandCopyReference:
 		// Arguments: [uri (string), position ({"line":N,"character":N})]
 		if len(params.Arguments) >= 2 {
 			var uri string
@@ -85,7 +85,7 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 			}
 		}
 		s.sendResponse(msg.ID, nil)
-	case "tuskPhpLsp.debugDocument":
+	case protocol.CommandDebugDocument:
 		if len(params.Arguments) > 0 {
 			var uri string
 			if json.Unmarshal(params.Arguments[0], &uri) == nil {

@@ -2,7 +2,6 @@ package lsp
 
 import (
 	"encoding/json"
-	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/composer/cardhover"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -149,25 +148,13 @@ func (s *Server) handleCodeAction(msg *jsonRPCMessage) {
 	if len(params.Context.Only) > 0 {
 		filtered := result[:0]
 		for _, action := range result {
-			if matchesCodeActionKind(action.Kind, params.Context.Only) {
+			if action.Kind.In(params.Context.Only) {
 				filtered = append(filtered, action)
 			}
 		}
 		result = filtered
 	}
 	s.sendResponse(msg.ID, result)
-}
-
-func matchesCodeActionKind(kind string, only []string) bool {
-	if kind == "" {
-		return false
-	}
-	for _, filter := range only {
-		if kind == filter || strings.HasPrefix(kind, filter+".") {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *Server) handleInlayHint(msg *jsonRPCMessage) {

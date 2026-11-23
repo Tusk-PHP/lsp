@@ -38,7 +38,7 @@ class User {}
 			Start: protocol.Position{Line: 3, Character: 0},
 			End:   protocol.Position{Line: 3, Character: 52},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 	})
 
 	var action *protocol.CodeAction
@@ -93,7 +93,7 @@ abstract class BaseHandler {
 			Start: protocol.Position{Line: 3, Character: 0},
 			End:   protocol.Position{Line: 3, Character: 39},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 	})
 
 	if len(actions) == 0 {
@@ -134,7 +134,7 @@ interface RepositoryInterface {
 			Start: protocol.Position{Line: 4, Character: 4},
 			End:   protocol.Position{Line: 4, Character: 24},
 		},
-		Context: protocol.CodeActionContext{Only: []string{"refactor"}},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
 	})
 
 	for _, action := range actions {

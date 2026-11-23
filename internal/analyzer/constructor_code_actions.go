@@ -7,8 +7,8 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
-func (a *Analyzer) generateConstructorCodeAction(uri, source string, result *parser.ParseResult, only []string, pos protocol.Position) *protocol.CodeAction {
-	if result == nil || !codeActionKindAllowed(only, "refactor") {
+func (a *Analyzer) generateConstructorCodeAction(uri, source string, result *parser.ParseResult, only []protocol.CodeActionKind, pos protocol.Position) *protocol.CodeAction {
+	if result == nil || !protocol.CodeActionRefactor.In(only) {
 		return nil
 	}
 
@@ -36,7 +36,7 @@ func (a *Analyzer) generateConstructorCodeAction(uri, source string, result *par
 	newText := renderGeneratedConstructor(classDef, props, memberIndent, indentUnit, closeTok.Line == classDef.Line)
 	return &protocol.CodeAction{
 		Title: "Generate Constructor",
-		Kind:  "refactor",
+		Kind:  protocol.CodeActionRefactor,
 		Edit: &protocol.WorkspaceEdit{
 			Changes: map[string][]protocol.TextEdit{
 				uri: {{

@@ -12,7 +12,7 @@ import (
 )
 
 func (a *Analyzer) unknownClassCodeActions(uri, source string, file *parser.FileNode, params protocol.CodeActionParams) []protocol.CodeAction {
-	if !codeActionKindAllowed(params.Context.Only, "quickfix") {
+	if !protocol.CodeActionQuickFix.In(params.Context.Only) {
 		return nil
 	}
 
@@ -123,7 +123,7 @@ func buildUnknownClassImportAction(uri, source string, file *parser.FileNode, di
 
 	return protocol.CodeAction{
 		Title:       "Import " + candidate.FQN,
-		Kind:        "quickfix",
+		Kind:        protocol.CodeActionQuickFix,
 		Diagnostics: []protocol.Diagnostic{diag},
 		IsPreferred: preferred,
 		Edit: &protocol.WorkspaceEdit{

@@ -31,7 +31,7 @@ $user = new User();
 	diag := unusedImportCodeActionDiagnostic(2, len("use App\\Models\\Post;"), "Unused import 'App\\Models\\Post'")
 	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
-		Context:      protocol.CodeActionContext{Diagnostics: []protocol.Diagnostic{diag}, Only: []string{"quickfix"}},
+		Context:      protocol.CodeActionContext{Diagnostics: []protocol.Diagnostic{diag}, Only: []protocol.CodeActionKind{"quickfix"}},
 	})
 
 	if len(actions) != 1 {
@@ -70,7 +70,7 @@ $name = formatName('Ada');
 
 	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
-		Context:      protocol.CodeActionContext{Only: []string{"source.organizeImports"}},
+		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"source.organizeImports"}},
 	})
 
 	if len(actions) != 1 {
@@ -104,7 +104,7 @@ $user = new User();
 
 	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
-		Context:      protocol.CodeActionContext{Only: []string{"source"}},
+		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"source"}},
 	})
 
 	for _, action := range actions {
@@ -128,7 +128,7 @@ $user = new User();
 
 	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
-		Context:      protocol.CodeActionContext{Only: []string{"source.organizeImports"}},
+		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"source.organizeImports"}},
 	})
 
 	if len(actions) != 0 {
