@@ -187,6 +187,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 			CompletionProvider:        &protocol.CompletionOptions{TriggerCharacters: []string{".", ">", ":", "$", "\\", "|", "#", "[", "(", "'", "\"", "@"}, ResolveProvider: true},
 			HoverProvider:             true,
 			DefinitionProvider:        true,
+			TypeHierarchyProvider:     true,
 			TypeDefinitionProvider:    true,
 			ImplementationProvider:    true,
 			ReferencesProvider:        true,

@@ -38,6 +38,12 @@ func (s *Server) handleMessage(msg *jsonRPCMessage) {
 		s.handleHover(msg)
 	case "textDocument/definition":
 		s.handleDefinition(msg)
+	case "textDocument/prepareTypeHierarchy":
+		s.handlePrepareTypeHierarchy(msg)
+	case "typeHierarchy/supertypes":
+		s.handleTypeHierarchyRelations(msg, s.analyzer.Supertypes)
+	case "typeHierarchy/subtypes":
+		s.handleTypeHierarchyRelations(msg, s.analyzer.Subtypes)
 	case "textDocument/typeDefinition":
 		s.handleTypeDefinition(msg)
 	case "textDocument/implementation":

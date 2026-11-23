@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Type hierarchy** (`textDocument/prepareTypeHierarchy`): from a class, interface, trait or enum, browse up to its parent, interfaces and traits, and down to the classes that extend or implement it, one level at a time. Deprecated types are marked.
+
 ### Changed
 
 - **`diagnosticRules` in `.tusk-php.json` is checked**: a rule name that doesn't exist, such as `unused-imports`, or a severity other than `error`, `warning`, `info`, `hint` or `off` is reported instead of being silently treated as "on". The editor shows the error and the server runs with the default settings; `tusk-php check` and `tusk-php mcp` stop with it.
