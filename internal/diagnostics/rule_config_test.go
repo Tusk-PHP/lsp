@@ -145,3 +145,19 @@ func TestAnalyzeAllRunsSaveRulesWithoutCaching(t *testing.T) {
 		t.Errorf("AnalyzeAll after a save reported the relation %d times", len(got))
 	}
 }
+
+func TestUnknownNamedArgumentIsReported(t *testing.T) {
+	p := newTestProvider()
+	p.index.IndexFile("file:///lib.php", "<?php\nfunction greet(string $name) {}\n")
+	p.index.MarkReady()
+	got := filterByCode(p.Analyze("file:///t.php", "<?php\ngreet(nmae: 'x');\n"), "unknown-named-argument")
+	if len(got) != 1 || got[0].Severity != protocol.DiagnosticSeverityError || got[0].Range.Start.Line != 1 {
+		t.Errorf("got %#v", got)
+	}
+	off := providerWithRules(t, `{"unknown-named-argument": false}`)
+	off.index.IndexFile("file:///lib.php", "<?php\nfunction greet(string $name) {}\n")
+	off.index.MarkReady()
+	if got := filterByCode(off.Analyze("file:///t.php", "<?php\ngreet(nmae: 'x');\n"), "unknown-named-argument"); len(got) != 0 {
+		t.Errorf("turned off: %#v", got)
+	}
+}

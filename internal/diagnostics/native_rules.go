@@ -51,6 +51,7 @@ func EditRules(opts NativeRulesOptions) []checks.Rule {
 		&checks.UnusedResultRule{TypeResolver: typeResolver, Uses: uses},
 		&checks.InvalidOverrideRule{},
 		&checks.ArgumentCountRule{Shared: shared, TypeResolver: typeResolver},
+		&checks.UnknownNamedArgumentRule{Shared: shared, TypeResolver: typeResolver},
 	)
 }
 

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Type hierarchy** (`textDocument/prepareTypeHierarchy`): from a class, interface, trait or enum, browse up to its parent, interfaces and traits, and down to the classes that extend or implement it, one level at a time. Deprecated types are marked.
+- **`unknown-named-argument`** (error): a named argument the function, method or constructor has no parameter for, such as `new User(nmae: 'x')` or `$user->rename(nme: 'y')`, which PHP throws on. Calls to variadic functions, to classes with `__call`, with an argument unpacked by `...`, and to PHP's own functions are left alone.
 
 ### Changed
 

@@ -40,6 +40,7 @@ disappear a moment later.
 | `undefined-variable` | A variable used before it's assigned | Warning |
 | `unused-variable` | A variable assigned and never read | Hint |
 | `argument-count-mismatch` | A call with too few or too many arguments | Warning |
+| `unknown-named-argument` | A named argument the function, method or constructor has no parameter for, such as `new User(nmae: 'x')`, which PHP throws on | Error |
 | `unused-import` | A `use` statement nothing in the file uses | Hint |
 | `unused-private-method` | A private method nothing calls | Info |
 | `unused-private-property` | A private property nothing reads | Hint |
