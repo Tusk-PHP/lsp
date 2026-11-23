@@ -43,8 +43,10 @@ func (r *Resolver) reachingType(varName string, lines []string, pos protocol.Pos
 	rt := r.writeValueType(varName, lines, file, b, reach.Latest)
 	if rt.IsEmpty() && !rt.Nullable {
 		// The line scan would read the same assignment, only with the wrong
-		// values for the variables on its right.
-		return ResolvedType{}, inRHS || readableWrite(lines, b, reach.Latest)
+		// values for the variables on its right; and for a destructuring it
+		// would find an earlier write instead, as a foreach over the same
+		// variable before `[$a, $route] = $route;`.
+		return ResolvedType{}, inRHS || readableWrite(lines, b, reach.Latest) || b.Site(reach.Latest).Destructure
 	}
 	return r.narrowVariable(varName, rt, lines, pos, file), true
 }

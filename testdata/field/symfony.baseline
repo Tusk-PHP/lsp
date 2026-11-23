@@ -543,7 +543,6 @@ src/Symfony/Component/PropertyInfo/Util/PhpDocTypeHelper.php	unknown-class	Unkno
 src/Symfony/Component/Routing/Loader/YamlFileLoader.php	unknown-member	Unknown member 'doParseImport' on 'YamlFileLoader'
 src/Symfony/Component/Routing/Loader/YamlFileLoader.php	unknown-member	Unknown member 'doParseRoute' on 'YamlFileLoader'
 src/Symfony/Component/Routing/Loader/YamlFileLoader.php	unknown-member	Unknown member 'doValidate' on 'YamlFileLoader'
-src/Symfony/Component/Routing/Matcher/Dumper/CompiledUrlMatcherDumper.php	unknown-member	Unknown member 'compile' on 'StaticPrefixCollection'
 src/Symfony/Component/Routing/Matcher/Dumper/CompiledUrlMatcherTrait.php	unused-variable	Variable $request is assigned but never read
 src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'EventSubscriberInterface'
 src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'Factory'

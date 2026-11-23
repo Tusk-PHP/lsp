@@ -30,8 +30,11 @@ const (
 // block is a pair of braces.
 type block struct {
 	open, close protocol.Position // the `{` and the `}`
-	parent      int               // the block around it, or -1
-	kind        blockKind
+	// head is a loop's `(`, where a foreach writes its variables again at the
+	// start of each turn; the `{` when there's none.
+	head   protocol.Position
+	parent int // the block around it, or -1
+	kind   blockKind
 	// prev and next link the blocks of one if/elseif/else chain, or -1.
 	prev, next int
 }
@@ -73,6 +76,14 @@ func (f *flowState) current() int {
 func (f *flowState) openBlock(tokens []parser.Token, i int) int {
 	b := block{open: tokenRange(tokens[i]).Start, parent: f.current(), prev: -1, next: -1}
 	b.kind, b.prev = f.blockOpener(tokens, i)
+	b.head = b.open
+	if b.kind == blockLoop {
+		if c := prevSignificant(tokens, i-1); c >= 0 && tokens[c].Kind == parser.TokenCloseParen {
+			if o := matchingOpenParen(tokens, c); o >= 0 {
+				b.head = tokenRange(tokens[o]).Start
+			}
+		}
+	}
 	idx := len(f.doc.blocks)
 	if b.prev >= 0 {
 		f.doc.blocks[b.prev].next = idx
@@ -285,6 +296,11 @@ type effect struct {
 	end protocol.Position // the end of the assignment, where the new value holds
 	// statement is set when the assignment is a whole statement ended by `;`.
 	statement bool
+	// destructure is set for a variable written by `[…] = …` or `list(…) = …`,
+	// whose value is one element of the right-hand side.
+	destructure bool
+	// foreach is set for a foreach variable, written at the start of each turn.
+	foreach bool
 }
 
 // writeEffect returns the effect of the write to the variable at token i. An
@@ -293,7 +309,7 @@ type effect struct {
 // write, right after the variable.
 func writeEffect(tokens []parser.Token, i int, foreach bool) effect {
 	end := tokenRange(tokens[i]).End
-	e := effect{rhs: end, end: end}
+	e := effect{rhs: end, end: end, foreach: foreach}
 	op := assignmentOperator(tokens, i)
 	if foreach || op < 0 {
 		return e

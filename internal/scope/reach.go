@@ -49,6 +49,8 @@ func (r Reach) Single() bool {
 type WriteSite struct {
 	At, RHS, End protocol.Position
 	Statement    bool
+	// Destructure is set for a write by `[…] = …` or `list(…) = …`.
+	Destructure bool
 }
 
 // Site returns where a write of the binding is.
@@ -58,7 +60,7 @@ func (b *Binding) Site(write int) WriteSite {
 	if write != DeclWrite {
 		at = b.Rebinds[write].At
 	}
-	return WriteSite{At: at, RHS: e.rhs, End: e.end, Statement: e.statement}
+	return WriteSite{At: at, RHS: e.rhs, End: e.end, Statement: e.statement, Destructure: e.destructure}
 }
 
 // Caught returns the classes a write catches, as written, when it is the
@@ -157,6 +159,7 @@ func (d *Document) ReachingWrites(b *Binding, pos protocol.Position) Reach {
 	covered := coveredBuf[:0] // blocks of an if/elseif/else chain written in throughout
 	writes := writeBuf[:0]
 	stopAt, stopped := protocol.Position{}, false
+	stopForeach := false // the write stopped at is a foreach variable
 	for i, steps := latest, 0; i >= 0 && !stopped; i-- {
 		if steps++; steps > MaxReachingWrites {
 			return Reach{Latest: reach.Latest, TooMany: true}
@@ -167,7 +170,7 @@ func (d *Document) ReachingWrites(b *Binding, pos protocol.Position) Reach {
 		}
 		writes = append(writes, i)
 		if rb.HoldsAt(pos) && !d.entersBetween(rb.block, rb.At, pos) {
-			stopAt, stopped = rb.At, true
+			stopAt, stopped, stopForeach = rb.At, true, rb.effect.foreach
 			break
 		}
 		if rb.Conditional {
@@ -191,10 +194,10 @@ func (d *Document) ReachingWrites(b *Binding, pos protocol.Position) Reach {
 	}
 	if !stopped && declBefore && !d.killed(b.Decl.Start, killers, pos) {
 		writes = append(writes, DeclWrite)
-		stopAt, stopped = b.Decl.Start, true
+		stopAt, stopped, stopForeach = b.Decl.Start, true, b.declEffectOrToken().foreach
 	}
 	reach.Writes = append(make([]int, 0, len(writes)+1), writes...)
-	reach = d.addLoopWrites(b, pos, reach, stopAt, stopped)
+	reach = d.addLoopWrites(b, pos, reach, stopAt, stopped, stopForeach)
 	// DeclWrite is -1 and comes first, and rebinds are in order.
 	slices.Sort(reach.Writes)
 	return reach
@@ -235,11 +238,16 @@ func (d *Document) chainCovered(idx int, covered []int) (head, last int, ok bool
 
 // addLoopWrites adds the writes that reach pos from a later point of a loop
 // around it, through the next iteration: those that take effect after pos in
-// a loop that started after the write the walk stopped at.
-func (d *Document) addLoopWrites(b *Binding, pos protocol.Position, reach Reach, stopAt protocol.Position, stopped bool) Reach {
+// a loop that started after the write the walk stopped at. A foreach variable
+// stopped at in the loop's own header is written again at the start of each
+// turn, so nothing later in the body reaches back past it.
+func (d *Document) addLoopWrites(b *Binding, pos protocol.Position, reach Reach, stopAt protocol.Position, stopped, stopForeach bool) Reach {
 	end, inLoop := protocol.Position{}, false
 	for idx := d.innermostBlockAt(pos); idx >= 0; idx = d.blocks[idx].parent {
 		bl := &d.blocks[idx]
+		if stopped && stopForeach && !positionBefore(stopAt, bl.head) && positionBefore(stopAt, bl.open) {
+			continue
+		}
 		if bl.kind == blockLoop && (!stopped || positionBefore(stopAt, bl.open)) {
 			end, inLoop = bl.close, true
 		}
