@@ -15,7 +15,6 @@ src/Illuminate/Database/Console/Migrations/TableGuesser.php	unused-variable	Vari
 src/Illuminate/Database/Eloquent/Relations/Concerns/CanBeOneOfMany.php	undefined-variable	Undefined variable $previous
 src/Illuminate/Database/Eloquent/Relations/Concerns/CanBeOneOfMany.php	undefined-variable	Undefined variable $previous
 src/Illuminate/Foundation/Cloud/ExceptionReporter.php	unknown-class	Unknown class 'IgnitionViewException'
-src/Illuminate/Foundation/ComposerScripts.php	unknown-class	Unknown class 'IOInterface'
 src/Illuminate/Foundation/Configuration/Middleware.php	unknown-class	Unknown class 'Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful'
 src/Illuminate/Foundation/Console/DownCommand.php	unknown-class	Unknown class 'AppPreventRequestsDuringMaintenance'
 src/Illuminate/Foundation/DevCommands.php	unknown-class	Unknown class 'PailServiceProvider'

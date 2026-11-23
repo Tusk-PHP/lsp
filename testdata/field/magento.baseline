@@ -67,7 +67,6 @@ app/code/Magento/Catalog/Model/Product/Attribute/Backend/TierPrice/SaveHandler.p
 app/code/Magento/Catalog/Model/Product/Option/ReadHandler.php	unused-import	Unused import 'Magento\Catalog\Model\Product\OptionFactory'
 app/code/Magento/Catalog/Model/Product/Option/ReadHandler.php	unused-import	Unused import 'Magento\Framework\EntityManager\MetadataPool'
 app/code/Magento/Catalog/Model/ProductRender/Button.php	unused-import	Unused import 'Magento\Catalog\Api\Data\ProductRender\AddToCartInterface'
-app/code/Magento/Catalog/Model/ProductRepository.php	unknown-class	Unknown class 'Magento\Catalog\Model\Api\SearchCriteria\ProductCollectionProcessor'
 app/code/Magento/Catalog/Model/ProductRepository/MediaGalleryProcessor.php	unused-import	Unused import 'Magento\Store\Model\Store'
 app/code/Magento/Catalog/Model/ResourceModel/Category/Tree.php	unknown-member	Unknown member 'move' on 'Category'
 app/code/Magento/Catalog/Model/ResourceModel/CategoryProduct.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
@@ -123,8 +122,6 @@ app/code/Magento/CatalogInventory/Model/Stock/Item.php	unknown-member	Unknown me
 app/code/Magento/CatalogInventory/Model/Stock/StockItemRepository.php	unknown-member	Unknown member 'getTypeId' on 'AbstractType'
 app/code/Magento/CatalogInventory/Observer/AddStockItemsObserver.php	unused-import	Unused import 'Magento\CatalogInventory\Api\StockItemCriteriaInterfaceFactory'
 app/code/Magento/CatalogInventoryGraphQl/Model/Resolver/StockStatusProvider.php	unused-import	Unused import 'Magento\CatalogInventory\Api\Data\StockStatusInterface'
-app/code/Magento/CatalogRule/Model/ResourceModel/Rule.php	unknown-class	Unknown class 'Magento\CatalogRule\Model\ResourceModel\Rule\AssociatedEntityMap'
-app/code/Magento/CatalogRule/Model/ResourceModel/Rule/Collection.php	unknown-class	Unknown class 'Magento\CatalogRule\Model\ResourceModel\Rule\AssociatedEntityMap'
 app/code/Magento/CatalogSearch/Block/Advanced/Form.php	unused-import	Unused import 'Magento\Framework\View\Element\AbstractBlock'
 app/code/Magento/CatalogSearch/Block/Advanced/Result.php	unused-import	Unused import 'Magento\Framework\View\Element\AbstractBlock'
 app/code/Magento/CatalogSearch/Model/ResourceModel/Fulltext/Collection.php	unused-import	Unused import 'Magento\Framework\Data\Collection\Db\SizeResolverInterfaceFactory'
@@ -149,7 +146,6 @@ app/code/Magento/CheckoutAgreements/Model/CheckoutAgreementsRepository.php	unkno
 app/code/Magento/Cms/Block/Block.php	unknown-member	Unknown member 'setStoreId' on 'Template'
 app/code/Magento/Cms/Block/Widget/Block.php	unknown-member	Unknown member 'setStoreId' on 'Template'
 app/code/Magento/Cms/Controller/Adminhtml/Page/NewAction.php	unknown-member	Unknown member 'create' on 'Forward'
-app/code/Magento/Cms/Model/PageRepository.php	unknown-class	Unknown class 'PageCollectionProcessor'
 app/code/Magento/Cms/Setup/Patch/Data/ConvertWidgetConditionsToJson.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/CmsUrlRewrite/Plugin/Cms/Model/Store/View.php	unknown-member	Unknown member 'getId' on 'Store'
 app/code/Magento/CmsUrlRewrite/Plugin/Cms/Model/Store/View.php	unknown-member	Unknown member 'isObjectNew' on 'Store'
@@ -389,10 +385,6 @@ app/code/Magento/Paypal/Block/Adminhtml/System/Config/MultiSelect/DisabledFundin
 app/code/Magento/Paypal/Block/Adminhtml/System/Config/MultiSelect/DisabledFundingOptions.php	unused-import	Unused import 'Magento\Paypal\Model\Config\StructurePlugin'
 app/code/Magento/Paypal/Block/PayLater/LayoutProcessor.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
 app/code/Magento/Paypal/Block/Payflow/Customer/CardRenderer.php	unused-import	Unused import 'Magento\Framework\View\Element\Template'
-app/code/Magento/Paypal/Observer/AddPaypalShortcutsObserver.php	unknown-class	Unknown class 'Magento\Paypal\Block\PayflowExpress\Shortcut'
-app/code/Magento/Paypal/Observer/AddPaypalShortcutsObserver.php	unknown-class	Unknown class 'Magento\Paypal\Block\Payflow\Bml\Shortcut'
-app/code/Magento/Paypal/Observer/AddPaypalShortcutsObserver.php	unknown-class	Unknown class 'Magento\Paypal\Block\WpsBml\Shortcut'
-app/code/Magento/Paypal/Observer/AddPaypalShortcutsObserver.php	unknown-class	Unknown class 'Magento\Paypal\Block\WpsExpress\Shortcut'
 app/code/Magento/Paypal/Plugin/CheckoutIndex.php	unknown-member	Unknown member 'create' on 'Config'
 app/code/Magento/Paypal/Setup/Patch/Data/AddPaypalOrderStatuses.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/Persistent/Controller/Index/SaveMethod.php	unknown-member	Unknown member 'setGuest' on 'Observer'
@@ -531,8 +523,6 @@ app/code/Magento/SalesRule/Model/ResourceModel/Report/Rule/Createdat.php	unused-
 app/code/Magento/SalesRule/Model/ResourceModel/Report/Rule/Createdat.php	unused-private-property	Private property 'Createdat::$logger' is never used
 app/code/Magento/SalesRule/Model/ResourceModel/Report/Rule/Createdat.php	unused-private-property	Private property 'Createdat::$reportsFlagFactory' is never used
 app/code/Magento/SalesRule/Model/ResourceModel/Report/Rule/Createdat.php	unused-private-property	Private property 'Createdat::$timezoneValidator' is never used
-app/code/Magento/SalesRule/Model/ResourceModel/Rule.php	unknown-class	Unknown class 'Magento\SalesRule\Model\ResourceModel\Rule\AssociatedEntityMap'
-app/code/Magento/SalesRule/Model/ResourceModel/Rule/Collection.php	unknown-class	Unknown class 'Magento\SalesRule\Model\ResourceModel\Rule\AssociatedEntityMap'
 app/code/Magento/SalesRule/Model/Rule/Action/Discount/CartFixed.php	unknown-function	Unknown function 'getShippingDiscountAmount'
 app/code/Magento/SalesRule/Model/Validator.php	unknown-function	Unknown function 'getShippingDiscountAmount'
 app/code/Magento/Search/Model/ResourceModel/Query.php	unused-import	Unused import 'Magento\Framework\DB\Select'
@@ -690,7 +680,6 @@ lib/internal/Magento/Framework/Composer/Remove.php	unused-import	Unused import '
 lib/internal/Magento/Framework/Config/FileResolver.php	unknown-member	Unknown member 'getCustomization' on 'DesignInterface'
 lib/internal/Magento/Framework/Console/Cli.php	unused-import	Unused import 'Magento\Framework\Config\ConfigOptionsListConstants'
 lib/internal/Magento/Framework/DB/Adapter/Pdo/MysqlFactory.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
-lib/internal/Magento/Framework/DB/Tree.php	unknown-class	Unknown class 'Zend'
 lib/internal/Magento/Framework/DB/Tree.php	unused-variable	Variable $leftKeyNear is assigned but never read
 lib/internal/Magento/Framework/DB/Tree.php	unused-variable	Variable $level is assigned but never read
 lib/internal/Magento/Framework/DB/Tree.php	unused-variable	Variable $levelUp is assigned but never read

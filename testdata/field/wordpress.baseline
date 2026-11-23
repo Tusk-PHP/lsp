@@ -36,7 +36,6 @@ src/wp-admin/includes/template.php	unused-variable	Variable $widget_title is ass
 src/wp-admin/includes/theme-install.php	unused-variable	Variable $theme_field_defaults is assigned but never read
 src/wp-admin/includes/theme-install.php	unused-variable	Variable $themes_allowedtags is assigned but never read
 src/wp-admin/options-head.php	unused-variable	Variable $action is assigned but never read
-src/wp-admin/press-this.php	unknown-class	Unknown class 'WP_Press_This_Plugin'
 src/wp-content/themes/twentyeleven/functions.php	unused-variable	Variable $content_width is assigned but never read
 src/wp-content/themes/twentyfifteen/inc/back-compat.php	argument-count-mismatch	Too many arguments to switch_theme(): 2 passed, at most 1 expected
 src/wp-content/themes/twentyfourteen/inc/back-compat.php	argument-count-mismatch	Too many arguments to switch_theme(): 2 passed, at most 1 expected
