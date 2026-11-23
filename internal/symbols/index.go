@@ -1747,3 +1747,11 @@ func (idx *Index) Subclasses(fqn string) []string {
 	}
 	return out
 }
+
+func PathToURI(path string) string {
+	slashed := filepath.ToSlash(path)
+	if !strings.HasPrefix(slashed, "/") {
+		slashed = "/" + slashed
+	}
+	return (&url.URL{Scheme: "file", Path: slashed}).String()
+}

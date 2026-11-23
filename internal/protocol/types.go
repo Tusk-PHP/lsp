@@ -463,6 +463,7 @@ type ServerCapabilities struct {
 	HoverProvider              bool                      `json:"hoverProvider"`
 	DefinitionProvider         bool                      `json:"definitionProvider"`
 	TypeHierarchyProvider      bool                      `json:"typeHierarchyProvider"`
+	DocumentLinkProvider       *DocumentLinkOptions      `json:"documentLinkProvider,omitempty"`
 	TypeDefinitionProvider     bool                      `json:"typeDefinitionProvider"`
 	ImplementationProvider     bool                      `json:"implementationProvider"`
 	ReferencesProvider         bool                      `json:"referencesProvider"`
@@ -837,4 +838,17 @@ type TypeHierarchyData struct {
 
 type TypeHierarchyItemParams struct {
 	Item TypeHierarchyItem `json:"item"`
+}
+
+type DocumentLinkOptions struct {
+	ResolveProvider bool `json:"resolveProvider"`
+}
+
+type DocumentLinkParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+type DocumentLink struct {
+	Range  Range  `json:"range"`
+	Target string `json:"target"`
 }

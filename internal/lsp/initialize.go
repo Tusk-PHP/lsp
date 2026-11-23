@@ -188,6 +188,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 			HoverProvider:             true,
 			DefinitionProvider:        true,
 			TypeHierarchyProvider:     true,
+			DocumentLinkProvider:      &protocol.DocumentLinkOptions{},
 			TypeDefinitionProvider:    true,
 			ImplementationProvider:    true,
 			ReferencesProvider:        true,
