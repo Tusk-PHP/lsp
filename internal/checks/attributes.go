@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -16,7 +17,7 @@ type DeprecatedUsageRule struct {
 	Uses *MemberUseCache
 }
 
-func (r *DeprecatedUsageRule) Code() string { return "deprecated" }
+func (r *DeprecatedUsageRule) Codes() []rule.Code { return []rule.Code{rule.Deprecated} }
 
 func (r *DeprecatedUsageRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	var findings []Finding
@@ -29,7 +30,7 @@ func (r *DeprecatedUsageRule) Check(file *parser.FileNode, source string, index 
 		if reason := attributeMessage(attr); reason != "" {
 			message += ": " + reason
 		}
-		findings = append(findings, use.finding("deprecated", message, []Tag{TagDeprecated}))
+		findings = append(findings, use.finding(rule.Deprecated, message, []Tag{TagDeprecated}))
 	}
 	return findings
 }
@@ -43,7 +44,7 @@ type UnusedResultRule struct {
 	Uses *MemberUseCache
 }
 
-func (r *UnusedResultRule) Code() string { return "unused-result" }
+func (r *UnusedResultRule) Codes() []rule.Code { return []rule.Code{rule.UnusedResult} }
 
 func (r *UnusedResultRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	var findings []Finding
@@ -56,7 +57,7 @@ func (r *UnusedResultRule) Check(file *parser.FileNode, source string, index *sy
 		if reason := attributeMessage(attr); reason != "" {
 			message += ": " + reason
 		}
-		findings = append(findings, use.finding("unused-result", message, nil))
+		findings = append(findings, use.finding(rule.UnusedResult, message, nil))
 	}
 	return findings
 }
@@ -67,7 +68,7 @@ func (r *UnusedResultRule) Check(file *parser.FileNode, source string, index *sy
 // the member could be overriding something there.
 type InvalidOverrideRule struct{}
 
-func (r *InvalidOverrideRule) Code() string { return "invalid-override" }
+func (r *InvalidOverrideRule) Codes() []rule.Code { return []rule.Code{rule.InvalidOverride} }
 
 func (r *InvalidOverrideRule) Check(file *parser.FileNode, _ string, index *symbols.Index) []Finding {
 	if file == nil || index == nil {
@@ -89,8 +90,8 @@ func (r *InvalidOverrideRule) Check(file *parser.FileNode, _ string, index *symb
 					StartCol:  m.StartCol,
 					EndLine:   m.StartLine,
 					EndCol:    m.StartCol + len(m.Name),
-					Severity:  SeverityError,
-					Code:      "invalid-override",
+					Severity:  rule.SeverityError,
+					Code:      rule.InvalidOverride,
 					Message:   fmt.Sprintf("'%s' has #[\\Override], but there's no such method to override", m.Name),
 				})
 			}
@@ -111,8 +112,8 @@ func (r *InvalidOverrideRule) Check(file *parser.FileNode, _ string, index *symb
 				StartCol:  col,
 				EndLine:   line,
 				EndCol:    col + len(name),
-				Severity:  SeverityError,
-				Code:      "invalid-override",
+				Severity:  rule.SeverityError,
+				Code:      rule.InvalidOverride,
 				Message:   fmt.Sprintf("'%s' has #[\\Override], but there's no such constant to override", name),
 			})
 		}
@@ -194,13 +195,13 @@ func (c *MemberUseCache) get(file *parser.FileNode, source string, index *symbol
 	return c.uses
 }
 
-func (u memberUse) finding(code, message string, tags []Tag) Finding {
+func (u memberUse) finding(code rule.Code, message string, tags []Tag) Finding {
 	return Finding{
 		StartLine: u.token.Line,
 		StartCol:  u.token.Column,
 		EndLine:   u.token.Line,
 		EndCol:    u.token.Column + len(u.token.Value),
-		Severity:  SeverityWarning,
+		Severity:  rule.SeverityWarning,
 		Code:      code,
 		Message:   message,
 		Tags:      tags,

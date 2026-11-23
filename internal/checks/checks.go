@@ -5,6 +5,7 @@ package checks
 
 import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -22,25 +23,15 @@ type Finding struct {
 	StartCol  int
 	EndLine   int
 	EndCol    int
-	Severity  Severity
-	Code      string // machine-readable: "unused-import", "unused-private-method", etc.
+	Severity  rule.Severity
+	Code      rule.Code
 	Message   string // human-readable description
 	Tags      []Tag  // optional LSP diagnostic tags (Unnecessary, Deprecated)
 }
 
-// Severity levels mirror LSP DiagnosticSeverity values.
-type Severity int
-
-const (
-	SeverityError   Severity = 1
-	SeverityWarning Severity = 2
-	SeverityInfo    Severity = 3
-	SeverityHint    Severity = 4
-)
-
 // Rule is a single diagnostic check that can be enabled/disabled.
 type Rule interface {
-	Code() string
+	Codes() []rule.Code
 	Check(file *parser.FileNode, source string, index *symbols.Index) []Finding
 }
 

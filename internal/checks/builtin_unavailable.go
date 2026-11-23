@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -39,16 +40,16 @@ type BuiltinUnavailableRule struct {
 }
 
 // Code returns the machine-readable rule identifier.
-func (r *BuiltinUnavailableRule) Code() string { return "builtin-unavailable" }
+func (r *BuiltinUnavailableRule) Codes() []rule.Code { return []rule.Code{rule.BuiltinUnavailable} }
 
 // Check runs the rule against a parsed file and returns any findings.
 func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	if file == nil || r == nil || r.PHPVersion == "" {
 		return nil
 	}
-	rule := *r
-	rule.versionChecked = checksPHPVersion(source)
-	r = &rule
+	copied := *r
+	copied.versionChecked = checksPHPVersion(source)
+	r = &copied
 	lines := strings.Split(source, "\n")
 	var findings []Finding
 	mask := newMaskState(source)
@@ -104,8 +105,8 @@ func (r *BuiltinUnavailableRule) checkFunctions(line string, lineNum int, file *
 			StartCol:  start,
 			EndLine:   lineNum,
 			EndCol:    end,
-			Severity:  SeverityWarning,
-			Code:      "builtin-unavailable",
+			Severity:  rule.SeverityWarning,
+			Code:      rule.BuiltinUnavailable,
 			Message:   r.functionMessage(bare, avail),
 		})
 	}
@@ -221,8 +222,8 @@ func (r *BuiltinUnavailableRule) classLikeFinding(name string, lineNum, start, e
 		StartCol:  start,
 		EndLine:   lineNum,
 		EndCol:    end,
-		Severity:  SeverityWarning,
-		Code:      "builtin-unavailable",
+		Severity:  rule.SeverityWarning,
+		Code:      rule.BuiltinUnavailable,
 		Message:   r.classMessage(bare, avail),
 	}}
 }
@@ -283,8 +284,8 @@ func (r *BuiltinUnavailableRule) checkConstants(line string, lineNum int) []Find
 			StartCol:  start,
 			EndLine:   lineNum,
 			EndCol:    end,
-			Severity:  SeverityWarning,
-			Code:      "builtin-unavailable",
+			Severity:  rule.SeverityWarning,
+			Code:      rule.BuiltinUnavailable,
 			Message:   r.constantMessage(name, avail),
 		})
 	}
@@ -393,8 +394,8 @@ func (r *BuiltinUnavailableRule) attributeFinding(name string, lineNum, start, e
 		StartCol:  start,
 		EndLine:   lineNum,
 		EndCol:    end,
-		Severity:  SeverityHint,
-		Code:      "builtin-unavailable",
+		Severity:  rule.SeverityHint,
+		Code:      rule.BuiltinUnavailable,
 		Message:   r.attributeMessage(bare, avail),
 	}}
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -12,7 +13,7 @@ import (
 // referenced in the file.
 type UnusedImportsRule struct{}
 
-func (r *UnusedImportsRule) Code() string { return "unused-import" }
+func (r *UnusedImportsRule) Codes() []rule.Code { return []rule.Code{rule.UnusedImport} }
 
 func (r *UnusedImportsRule) Check(file *parser.FileNode, source string, _ *symbols.Index) []Finding {
 	if file == nil {
@@ -36,8 +37,8 @@ func (r *UnusedImportsRule) Check(file *parser.FileNode, source string, _ *symbo
 			StartCol:  0,
 			EndLine:   u.StartLine,
 			EndCol:    endCol,
-			Severity:  SeverityHint,
-			Code:      "unused-import",
+			Severity:  rule.SeverityHint,
+			Code:      rule.UnusedImport,
 			Message:   fmt.Sprintf("Unused import '%s'", u.FullName),
 			Tags:      []Tag{TagUnnecessary},
 		})

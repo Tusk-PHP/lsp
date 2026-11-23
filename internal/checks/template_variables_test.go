@@ -41,8 +41,8 @@ $cb = function () { return $escaper; };
 func undefinedNames(t *testing.T, src string, included bool) map[string]int {
 	t.Helper()
 	got := map[string]int{}
-	rule := &UndefinedVariableRule{IncludedFile: included}
-	for _, f := range rule.Check(parser.ParseFile(src), src, nil) {
+	checker := &UndefinedVariableRule{IncludedFile: included}
+	for _, f := range checker.Check(parser.ParseFile(src), src, nil) {
 		got[strings.TrimPrefix(f.Message, "Undefined variable ")]++
 	}
 	return got

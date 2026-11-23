@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`diagnosticRules` in `.tusk-php.json` is checked**: a rule name that doesn't exist, such as `unused-imports`, or a severity other than `error`, `warning`, `info`, `hint` or `off` is reported instead of being silently treated as "on". The editor shows the error and the server runs with the default settings; `tusk-php check` and `tusk-php mcp` stop with it.
 - `tusk-php check` and the MCP diagnostics tool now also run the rules the editor runs on save (`redundant-nullsafe`, `unknown-column`, `unknown-relation`), so they report what an editor shows after saving.
 
 ### Fixed

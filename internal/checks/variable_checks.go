@@ -5,6 +5,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -54,7 +55,7 @@ type UndefinedVariableRule struct {
 	Shared *Shared
 }
 
-func (r *UndefinedVariableRule) Code() string { return "undefined-variable" }
+func (r *UndefinedVariableRule) Codes() []rule.Code { return []rule.Code{rule.UndefinedVariable} }
 
 func (r *UndefinedVariableRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	if file == nil {
@@ -69,7 +70,7 @@ type UnusedVariableRule struct {
 	Shared *Shared
 }
 
-func (r *UnusedVariableRule) Code() string { return "unused-variable" }
+func (r *UnusedVariableRule) Codes() []rule.Code { return []rule.Code{rule.UnusedVariable} }
 
 func (r *UnusedVariableRule) Check(file *parser.FileNode, source string, _ *symbols.Index) []Finding {
 	if file == nil {
@@ -208,8 +209,8 @@ func checkUndefinedVariables(file *parser.FileNode, source string, outArg func(s
 			StartCol:  tok.Column,
 			EndLine:   tok.Line,
 			EndCol:    tok.Column + len(name),
-			Severity:  SeverityWarning,
-			Code:      "undefined-variable",
+			Severity:  rule.SeverityWarning,
+			Code:      rule.UndefinedVariable,
 			Message:   "Undefined variable " + name,
 		})
 	}
@@ -272,8 +273,8 @@ func checkUnusedVariables(source string, shared *Shared) []Finding {
 			StartCol:  b.Decl.Start.Character,
 			EndLine:   b.Decl.End.Line,
 			EndCol:    b.Decl.End.Character,
-			Severity:  SeverityHint,
-			Code:      "unused-variable",
+			Severity:  rule.SeverityHint,
+			Code:      rule.UnusedVariable,
 			Message:   "Variable $" + name + " is assigned but never read",
 			Tags:      []Tag{TagUnnecessary},
 		})

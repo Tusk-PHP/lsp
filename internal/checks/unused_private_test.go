@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
 func TestUnusedPrivateRule(t *testing.T) {
-	rule := &UnusedPrivateRule{}
+	checker := &UnusedPrivateRule{}
 
 	t.Run("unused private method detected", func(t *testing.T) {
 		source := `<?php
@@ -19,7 +20,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unused-private-method"})
 		if findings[0].Message != "Private method 'Foo::unusedMethod' is never used" {
 			t.Errorf("unexpected message: %s", findings[0].Message)
@@ -36,7 +37,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -50,7 +51,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -64,7 +65,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unused-private-property"})
 	})
 
@@ -78,7 +79,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -91,7 +92,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -105,7 +106,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -117,7 +118,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -129,17 +130,17 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		if len(findings) != 2 {
 			t.Fatalf("expected 2 findings, got %d", len(findings))
 		}
 		// Methods checked first, then properties
 		methF := findings[0]
 		propF := findings[1]
-		if propF.Code != "unused-private-property" || propF.Severity != SeverityHint {
+		if propF.Code != "unused-private-property" || propF.Severity != rule.SeverityHint {
 			t.Errorf("property finding: code=%s sev=%d", propF.Code, propF.Severity)
 		}
-		if methF.Code != "unused-private-method" || methF.Severity != SeverityInfo {
+		if methF.Code != "unused-private-method" || methF.Severity != rule.SeverityInfo {
 			t.Errorf("method finding: code=%s sev=%d", methF.Code, methF.Severity)
 		}
 	})
@@ -154,7 +155,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 }

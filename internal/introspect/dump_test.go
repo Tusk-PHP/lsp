@@ -6,6 +6,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/container"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -439,8 +440,8 @@ func TestDocument_Diagnostics(t *testing.T) {
 		Verbosity:   Compact,
 		BufferState: "disk",
 		Diagnostics: []checks.Finding{
-			{StartLine: 20, Code: "unused-import", Severity: checks.SeverityHint, Message: "unused import Foo"},
-			{StartLine: 5, Code: "unknown-class", Severity: checks.SeverityWarning, Message: "unknown class Bar"},
+			{StartLine: 20, Code: "unused-import", Severity: rule.SeverityHint, Message: "unused import Foo"},
+			{StartLine: 5, Code: "unknown-class", Severity: rule.SeverityWarning, Message: "unknown class Bar"},
 		},
 	})
 

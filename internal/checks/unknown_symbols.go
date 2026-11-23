@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
@@ -14,7 +15,7 @@ import (
 // stable runtime and declaration contexts.
 type UnknownClassRule struct{}
 
-func (r *UnknownClassRule) Code() string { return "unknown-class" }
+func (r *UnknownClassRule) Codes() []rule.Code { return []rule.Code{rule.UnknownClass} }
 
 var unknownClassNewRe = regexp.MustCompile(`\bnew\s+(\\?[A-Za-z_][A-Za-z0-9_\\]*)`)
 var unknownClassSingleRefRe = regexp.MustCompile(`\b(?:extends|instanceof)\s+(\\?[A-Za-z_][A-Za-z0-9_\\]*)`)
@@ -61,8 +62,8 @@ func checkUnknownClassMatches(line string, lineNum int, file *parser.FileNode, i
 			StartCol:  start,
 			EndLine:   lineNum,
 			EndCol:    end,
-			Severity:  SeverityWarning,
-			Code:      "unknown-class",
+			Severity:  rule.SeverityWarning,
+			Code:      rule.UnknownClass,
 			Message:   fmt.Sprintf("Unknown class '%s'", strings.TrimPrefix(name, "\\")),
 		})
 	}
@@ -107,8 +108,8 @@ func checkUnknownStaticClassMatches(line, prevLine string, lineNum int, file *pa
 			StartCol:  start,
 			EndLine:   lineNum,
 			EndCol:    end,
-			Severity:  SeverityWarning,
-			Code:      "unknown-class",
+			Severity:  rule.SeverityWarning,
+			Code:      rule.UnknownClass,
 			Message:   fmt.Sprintf("Unknown class '%s'", strings.TrimPrefix(name, "\\")),
 		})
 	}
@@ -153,8 +154,8 @@ func checkUnknownCatchClasses(line string, lineNum int, file *parser.FileNode, i
 				StartCol:  start,
 				EndLine:   lineNum,
 				EndCol:    end,
-				Severity:  SeverityWarning,
-				Code:      "unknown-class",
+				Severity:  rule.SeverityWarning,
+				Code:      rule.UnknownClass,
 				Message:   fmt.Sprintf("Unknown class '%s'", strings.TrimPrefix(trimmed, "\\")),
 			})
 			offset += len(part) + 1
@@ -190,8 +191,8 @@ func checkUnknownImplementsClasses(line string, lineNum int, file *parser.FileNo
 				StartCol:  start,
 				EndLine:   lineNum,
 				EndCol:    end,
-				Severity:  SeverityWarning,
-				Code:      "unknown-class",
+				Severity:  rule.SeverityWarning,
+				Code:      rule.UnknownClass,
 				Message:   fmt.Sprintf("Unknown class '%s'", strings.TrimPrefix(trimmed, "\\")),
 			})
 			offset += len(part) + 1
@@ -216,8 +217,8 @@ func checkUnknownAttributeClasses(line string, lineNum int, file *parser.FileNod
 				StartCol:  tok.start,
 				EndLine:   lineNum,
 				EndCol:    tok.start + len(tok.name),
-				Severity:  SeverityWarning,
-				Code:      "unknown-class",
+				Severity:  rule.SeverityWarning,
+				Code:      rule.UnknownClass,
 				Message:   fmt.Sprintf("Unknown attribute '%s'", strings.TrimPrefix(tok.name, "\\")),
 			})
 		}
@@ -346,7 +347,7 @@ func posInAttributeGroup(pos int, groups []attrGroup) bool {
 // UnknownFunctionRule detects unresolved plain function calls.
 type UnknownFunctionRule struct{}
 
-func (r *UnknownFunctionRule) Code() string { return "unknown-function" }
+func (r *UnknownFunctionRule) Codes() []rule.Code { return []rule.Code{rule.UnknownFunction} }
 
 var unknownFunctionCallRe = regexp.MustCompile(`\b([A-Za-z_][A-Za-z0-9_\\]*)\s*\(`)
 
@@ -404,8 +405,8 @@ func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index 
 				StartCol:  start,
 				EndLine:   lineNum,
 				EndCol:    end,
-				Severity:  SeverityWarning,
-				Code:      "unknown-function",
+				Severity:  rule.SeverityWarning,
+				Code:      rule.UnknownFunction,
 				Message:   fmt.Sprintf("Unknown function '%s'", strings.TrimPrefix(name, "\\")),
 			})
 		}
@@ -519,7 +520,7 @@ type UnknownMemberRule struct {
 	Shared *Shared
 }
 
-func (r *UnknownMemberRule) Code() string { return "unknown-member" }
+func (r *UnknownMemberRule) Codes() []rule.Code { return []rule.Code{rule.UnknownMember} }
 
 var unknownMemberAccessRe = regexp.MustCompile(`(\?\->|\->|::)\s*([A-Za-z_][A-Za-z0-9_]*)`)
 
@@ -596,8 +597,8 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 				StartCol:  nameStart,
 				EndLine:   lineNum,
 				EndCol:    nameEnd,
-				Severity:  SeverityWarning,
-				Code:      "unknown-member",
+				Severity:  rule.SeverityWarning,
+				Code:      rule.UnknownMember,
 				Message:   fmt.Sprintf("Unknown member '%s' on '%s'", member, strings.Join(names, "|")),
 			})
 		}

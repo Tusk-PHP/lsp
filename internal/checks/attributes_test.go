@@ -51,10 +51,10 @@ func attributeFindings(t *testing.T, src string) []string {
 	uses := &MemberUseCache{}
 	var got []string
 	for _, f := range (&DeprecatedUsageRule{TypeResolver: typeOf, Uses: uses}).Check(file, src, idx) {
-		got = append(got, f.Code+": "+f.Message)
+		got = append(got, string(f.Code)+": "+f.Message)
 	}
 	for _, f := range (&UnusedResultRule{TypeResolver: typeOf, Uses: uses}).Check(file, src, idx) {
-		got = append(got, f.Code+": "+f.Message)
+		got = append(got, string(f.Code)+": "+f.Message)
 	}
 	return got
 }

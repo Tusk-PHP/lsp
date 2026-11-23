@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -20,7 +21,7 @@ type RedundantNullsafeRule struct {
 	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
 }
 
-func (r *RedundantNullsafeRule) Code() string { return "redundant-nullsafe" }
+func (r *RedundantNullsafeRule) Codes() []rule.Code { return []rule.Code{rule.RedundantNullsafe} }
 
 func (r *RedundantNullsafeRule) Check(file *parser.FileNode, source string, _ *symbols.Index) []Finding {
 	if r.TypeResolver == nil || file == nil || !strings.Contains(source, "?->") {
@@ -55,8 +56,8 @@ func (r *RedundantNullsafeRule) Check(file *parser.FileNode, source string, _ *s
 			StartCol:  q.Column,
 			EndLine:   q.Line,
 			EndCol:    q.Column + 3,
-			Severity:  SeverityInfo,
-			Code:      "redundant-nullsafe",
+			Severity:  rule.SeverityInfo,
+			Code:      rule.RedundantNullsafe,
 			Message:   message,
 		})
 	}
@@ -178,7 +179,7 @@ func isNullable(typ string) bool {
 // or types that are supertypes of other members.
 type RedundantUnionRule struct{}
 
-func (r *RedundantUnionRule) Code() string { return "redundant-union-member" }
+func (r *RedundantUnionRule) Codes() []rule.Code { return []rule.Code{rule.RedundantUnionMember} }
 
 func (r *RedundantUnionRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	if file == nil {
@@ -252,8 +253,8 @@ func checkUnionType(typeStr string, line int, index *symbols.Index) []Finding {
 				StartCol:  0,
 				EndLine:   line,
 				EndCol:    0,
-				Severity:  SeverityInfo,
-				Code:      "redundant-union-member",
+				Severity:  rule.SeverityInfo,
+				Code:      rule.RedundantUnionMember,
 				Message:   fmt.Sprintf("Duplicate type '%s' in union", p),
 			})
 		}
@@ -270,8 +271,8 @@ func checkUnionType(typeStr string, line int, index *symbols.Index) []Finding {
 					StartCol:  0,
 					EndLine:   line,
 					EndCol:    0,
-					Severity:  SeverityInfo,
-					Code:      "redundant-union-member",
+					Severity:  rule.SeverityInfo,
+					Code:      rule.RedundantUnionMember,
 					Message:   fmt.Sprintf("Redundant 'null' in union: '?' already makes '%s' nullable", typeStr),
 				})
 				break
@@ -300,8 +301,8 @@ func checkUnionType(typeStr string, line int, index *symbols.Index) []Finding {
 					StartCol:  0,
 					EndLine:   line,
 					EndCol:    0,
-					Severity:  SeverityInfo,
-					Code:      "redundant-union-member",
+					Severity:  rule.SeverityInfo,
+					Code:      rule.RedundantUnionMember,
 					Message:   fmt.Sprintf("Redundant type '%s' in union: already covered by 'mixed'", p),
 				})
 				break
@@ -314,8 +315,8 @@ func checkUnionType(typeStr string, line int, index *symbols.Index) []Finding {
 						StartCol:  0,
 						EndLine:   line,
 						EndCol:    0,
-						Severity:  SeverityInfo,
-						Code:      "redundant-union-member",
+						Severity:  rule.SeverityInfo,
+						Code:      rule.RedundantUnionMember,
 						Message:   fmt.Sprintf("Redundant type '%s' in union: already covered by '%s'", p, super),
 					})
 					break
@@ -328,8 +329,8 @@ func checkUnionType(typeStr string, line int, index *symbols.Index) []Finding {
 					StartCol:  0,
 					EndLine:   line,
 					EndCol:    0,
-					Severity:  SeverityInfo,
-					Code:      "redundant-union-member",
+					Severity:  rule.SeverityInfo,
+					Code:      rule.RedundantUnionMember,
 					Message:   fmt.Sprintf("Redundant type '%s' in union: already covered by 'object'", p),
 				})
 			}
@@ -345,8 +346,8 @@ func checkUnionType(typeStr string, line int, index *symbols.Index) []Finding {
 						StartCol:  0,
 						EndLine:   line,
 						EndCol:    0,
-						Severity:  SeverityInfo,
-						Code:      "redundant-union-member",
+						Severity:  rule.SeverityInfo,
+						Code:      rule.RedundantUnionMember,
 						Message:   fmt.Sprintf("Redundant type '%s' in union: already covered by parent '%s'", p, parent),
 					})
 					break

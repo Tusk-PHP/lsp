@@ -39,13 +39,13 @@ class Invoice extends \Fw\Notification {}
 				idx.IndexFileWithSource("file:///c"+strconv.Itoa(i)+".php", src, symbols.SourceProject)
 			}
 			source := "<?php\nnamespace App\\Http;\n" + tc.use + "\n"
-			rule := &UnknownMemberRule{
+			checker := &UnknownMemberRule{
 				TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string {
 					return map[string]string{"$v": tc.typ}[expr]
 				},
 				ConventionMethod: convention,
 			}
-			got := unknownMemberMessages(rule.Check(parser.ParseFile(source), source, idx))
+			got := unknownMemberMessages(checker.Check(parser.ParseFile(source), source, idx))
 			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
 				t.Errorf("got %v, want %v", got, tc.want)
 			}

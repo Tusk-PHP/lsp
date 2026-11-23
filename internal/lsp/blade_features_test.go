@@ -172,7 +172,7 @@ func TestBladeStructureAndUnknownViewDiagnostics(t *testing.T) {
 		}
 		var got []string
 		for _, d := range params.Diagnostics {
-			got = append(got, d.Code+": "+d.Message)
+			got = append(got, string(d.Code)+": "+d.Message)
 		}
 		want := "unclosed-directive: `@if` is never closed with `@endif`\nunknown-view: View `partials.missing` not found"
 		if strings.Join(got, "\n") == want {

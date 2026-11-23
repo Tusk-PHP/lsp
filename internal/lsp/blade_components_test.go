@@ -139,7 +139,7 @@ func TestBladeUnknownComponent(t *testing.T) {
 		}
 		last = last[:0]
 		for _, d := range params.Diagnostics {
-			last = append(last, d.Code+": "+d.Message)
+			last = append(last, string(d.Code)+": "+d.Message)
 		}
 		if strings.Join(last, "\n") == "unknown-component: Component `x-missing` not found" {
 			return

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -53,7 +54,7 @@ func TestForwardCompatibleAttributesOnPHP8(t *testing.T) {
 		t.Fatalf("expected 4 hints, got %+v", unavailable)
 	}
 	for _, f := range unavailable {
-		if f.Severity != SeverityHint || !strings.Contains(f.Message, "has no effect before PHP >=") {
+		if f.Severity != rule.SeverityHint || !strings.Contains(f.Message, "has no effect before PHP >=") {
 			t.Errorf("expected a hint that the attribute does nothing yet, got %+v", f)
 		}
 	}

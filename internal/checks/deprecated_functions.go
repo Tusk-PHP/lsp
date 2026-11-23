@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -61,7 +62,7 @@ type DeprecatedFunctionRule struct {
 	PHPVersion string
 }
 
-func (r *DeprecatedFunctionRule) Code() string { return "deprecated" }
+func (r *DeprecatedFunctionRule) Codes() []rule.Code { return []rule.Code{rule.Deprecated} }
 
 func (r *DeprecatedFunctionRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	if file == nil {
@@ -88,8 +89,8 @@ func (r *DeprecatedFunctionRule) Check(file *parser.FileNode, source string, ind
 				StartCol:  start,
 				EndLine:   lineNum,
 				EndCol:    end,
-				Severity:  SeverityWarning,
-				Code:      "deprecated",
+				Severity:  rule.SeverityWarning,
+				Code:      rule.Deprecated,
 				Message:   dep.message,
 				Tags:      []Tag{TagDeprecated},
 			})

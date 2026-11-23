@@ -69,7 +69,7 @@ class RelationProbeController
 		var got []string
 		for _, d := range params.Diagnostics {
 			if strings.HasPrefix(d.Code, "unknown-") {
-				got = append(got, d.Code+": "+d.Message)
+				got = append(got, string(d.Code)+": "+d.Message)
 			}
 		}
 		if len(got) == 0 {

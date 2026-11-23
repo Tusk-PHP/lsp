@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -14,7 +15,7 @@ type UnreachableCodeRule struct {
 	Shared *Shared
 }
 
-func (r *UnreachableCodeRule) Code() string { return "unreachable-code" }
+func (r *UnreachableCodeRule) Codes() []rule.Code { return []rule.Code{rule.UnreachableCode} }
 
 func (r *UnreachableCodeRule) Check(file *parser.FileNode, source string, _ *symbols.Index) []Finding {
 	if file == nil {
@@ -108,8 +109,8 @@ func findUnreachable(tokens []parser.Token, startLine, endLine int) []Finding {
 			StartCol:  first.Column,
 			EndLine:   last.Line,
 			EndCol:    last.Column + len(last.Value),
-			Severity:  SeverityWarning,
-			Code:      "unreachable-code",
+			Severity:  rule.SeverityWarning,
+			Code:      rule.UnreachableCode,
 			Message:   "Unreachable code detected",
 		})
 	}

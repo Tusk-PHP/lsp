@@ -13,6 +13,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/container"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -176,7 +177,7 @@ type InjectedDep struct {
 type DiagnosticEntry struct {
 	Severity string
 	Line     int
-	Code     string
+	Code     rule.Code
 	Message  string
 }
 
@@ -599,15 +600,15 @@ func sourceLabel(src symbols.SymbolSource) string {
 	}
 }
 
-func severityLabel(s checks.Severity) string {
+func severityLabel(s rule.Severity) string {
 	switch s {
-	case checks.SeverityError:
+	case rule.SeverityError:
 		return "error"
-	case checks.SeverityWarning:
+	case rule.SeverityWarning:
 		return "warn"
-	case checks.SeverityInfo:
+	case rule.SeverityInfo:
 		return "info"
-	case checks.SeverityHint:
+	case rule.SeverityHint:
 		return "hint"
 	default:
 		return "unknown"

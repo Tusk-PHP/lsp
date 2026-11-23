@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -13,7 +14,9 @@ import (
 // call the class's private members as their own.
 type UnusedPrivateRule struct{}
 
-func (r *UnusedPrivateRule) Code() string { return "unused-private" }
+func (r *UnusedPrivateRule) Codes() []rule.Code {
+	return []rule.Code{rule.UnusedPrivateMethod, rule.UnusedPrivateProperty}
+}
 
 func (r *UnusedPrivateRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	if file == nil {
@@ -141,8 +144,8 @@ func checkUnusedPrivateMethods(cls parser.ClassNode, lines, traits []string) []F
 			StartCol:  m.StartCol,
 			EndLine:   m.StartLine,
 			EndCol:    endCol,
-			Severity:  SeverityInfo,
-			Code:      "unused-private-method",
+			Severity:  rule.SeverityInfo,
+			Code:      rule.UnusedPrivateMethod,
 			Message:   fmt.Sprintf("Private method '%s::%s' is never used", cls.Name, m.Name),
 			Tags:      []Tag{TagUnnecessary},
 		})
@@ -169,8 +172,8 @@ func checkUnusedPrivateProperties(cls parser.ClassNode, lines, traits []string) 
 			StartCol:  p.StartCol,
 			EndLine:   p.StartLine,
 			EndCol:    endCol,
-			Severity:  SeverityHint,
-			Code:      "unused-private-property",
+			Severity:  rule.SeverityHint,
+			Code:      rule.UnusedPrivateProperty,
 			Message:   fmt.Sprintf("Private property '%s::$%s' is never used", cls.Name, propName),
 			Tags:      []Tag{TagUnnecessary},
 		})

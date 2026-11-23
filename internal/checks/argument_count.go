@@ -6,6 +6,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -26,7 +27,7 @@ type ArgumentCountRule struct {
 	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
 }
 
-func (r *ArgumentCountRule) Code() string { return "argument-count-mismatch" }
+func (r *ArgumentCountRule) Codes() []rule.Code { return []rule.Code{rule.ArgumentCountMismatch} }
 
 func (r *ArgumentCountRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	if file == nil || index == nil {
@@ -416,8 +417,8 @@ func buildArgCountFinding(sym *symbols.Symbol, argCount, line, col int, callName
 			StartCol:  col,
 			EndLine:   line,
 			EndCol:    col + len(callName),
-			Severity:  SeverityWarning,
-			Code:      "argument-count-mismatch",
+			Severity:  rule.SeverityWarning,
+			Code:      rule.ArgumentCountMismatch,
 			Message: fmt.Sprintf(
 				"Too few arguments to %s(): %d passed, at least %d required",
 				callName, argCount, required,
@@ -430,8 +431,8 @@ func buildArgCountFinding(sym *symbols.Symbol, argCount, line, col int, callName
 			StartCol:  col,
 			EndLine:   line,
 			EndCol:    col + len(callName),
-			Severity:  SeverityWarning,
-			Code:      "argument-count-mismatch",
+			Severity:  rule.SeverityWarning,
+			Code:      rule.ArgumentCountMismatch,
 			Message: fmt.Sprintf(
 				"Too many arguments to %s(): %d passed, at most %d expected",
 				callName, argCount, total,

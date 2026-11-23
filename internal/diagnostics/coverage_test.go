@@ -6,6 +6,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -279,7 +280,7 @@ func TestFindingsToDiagnosticsWithTags(t *testing.T) {
 	findings := []checks.Finding{
 		{
 			StartLine: 1,
-			Severity:  checks.SeverityHint,
+			Severity:  rule.SeverityHint,
 			Code:      "unused-import",
 			Message:   "test",
 			Tags:      []checks.Tag{checks.TagUnnecessary},

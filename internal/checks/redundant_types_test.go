@@ -18,7 +18,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		rule := &RedundantNullsafeRule{
+		checker := &RedundantNullsafeRule{
 			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				if expr == "$user" {
 					return "User"
@@ -26,7 +26,7 @@ class Foo {
 				return ""
 			},
 		}
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"redundant-nullsafe"})
 	})
 
@@ -39,7 +39,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		rule := &RedundantNullsafeRule{
+		checker := &RedundantNullsafeRule{
 			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				if expr == "$user" {
 					return "?User"
@@ -47,7 +47,7 @@ class Foo {
 				return ""
 			},
 		}
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -60,12 +60,12 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		rule := &RedundantNullsafeRule{
+		checker := &RedundantNullsafeRule{
 			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				return "mixed"
 			},
 		}
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -78,12 +78,12 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		rule := &RedundantNullsafeRule{
+		checker := &RedundantNullsafeRule{
 			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				return "User|null"
 			},
 		}
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -97,12 +97,12 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		rule := &RedundantNullsafeRule{
+		checker := &RedundantNullsafeRule{
 			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				return "null"
 			},
 		}
-		assertNoFindings(t, rule.Check(file, source, nil))
+		assertNoFindings(t, checker.Check(file, source, nil))
 	})
 
 	t.Run("no type resolver is no-op", func(t *testing.T) {
@@ -114,14 +114,14 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		rule := &RedundantNullsafeRule{}
-		findings := rule.Check(file, source, nil)
+		checker := &RedundantNullsafeRule{}
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 }
 
 func TestRedundantUnionRule(t *testing.T) {
-	rule := &RedundantUnionRule{}
+	checker := &RedundantUnionRule{}
 
 	t.Run("duplicate union member flagged", func(t *testing.T) {
 		source := `<?php
@@ -130,7 +130,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		hasFinding(t, findings, "redundant-union-member", "Duplicate type")
 	})
 
@@ -141,7 +141,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		hasFinding(t, findings, "redundant-union-member", "already makes")
 	})
 
@@ -152,7 +152,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		hasFinding(t, findings, "redundant-union-member", "covered by 'object'")
 	})
 
@@ -163,7 +163,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		hasFinding(t, findings, "redundant-union-member", "covered by 'mixed'")
 	})
 
@@ -181,7 +181,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		hasFinding(t, findings, "redundant-union-member", "covered by parent 'Animal'")
 	})
 
@@ -192,7 +192,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -203,7 +203,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		hasFinding(t, findings, "redundant-union-member", "covered by 'iterable'")
 	})
 }
@@ -211,7 +211,7 @@ class Foo {
 func hasFinding(t *testing.T, findings []Finding, code, msgSubstr string) {
 	t.Helper()
 	for _, f := range findings {
-		if f.Code == code && (msgSubstr == "" || contains(f.Message, msgSubstr)) {
+		if string(f.Code) == code && (msgSubstr == "" || contains(f.Message, msgSubstr)) {
 			return
 		}
 	}
@@ -263,7 +263,7 @@ class Registry {
 }
 `
 	file := parser.ParseFile(source)
-	rule := &RedundantNullsafeRule{
+	checker := &RedundantNullsafeRule{
 		// What the resolver gives today: the types without their null.
 		TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 			switch expr {
@@ -277,7 +277,7 @@ class Registry {
 			return ""
 		},
 	}
-	assertNoFindings(t, rule.Check(file, source, nil))
+	assertNoFindings(t, checker.Check(file, source, nil))
 }
 
 func TestRedundantNullsafeOnThisAndPlainParameters(t *testing.T) {
@@ -292,8 +292,8 @@ class Service {
 function standalone(Clock $clock) { return $clock?->now(); }
 `
 	file := parser.ParseFile(source)
-	rule := &RedundantNullsafeRule{TypeResolver: func(string, string, int, int, *parser.FileNode) string { return "" }}
-	findings := rule.Check(file, source, nil)
+	checker := &RedundantNullsafeRule{TypeResolver: func(string, string, int, int, *parser.FileNode) string { return "" }}
+	findings := checker.Check(file, source, nil)
 	var got []string
 	for _, f := range findings {
 		got = append(got, f.Message)

@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
 func TestUnusedImportsRule(t *testing.T) {
-	rule := &UnusedImportsRule{}
+	checker := &UnusedImportsRule{}
 
 	t.Run("simple unused import detected", func(t *testing.T) {
 		source := `<?php
@@ -17,7 +18,7 @@ use App\Models\Post;
 $user = new User();
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 
 		assertFindingCodes(t, findings, []string{"unused-import"})
 		if findings[0].Message != "Unused import 'App\\Models\\Post'" {
@@ -32,7 +33,7 @@ use App\Models\User;
 $user = new User();
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -43,7 +44,7 @@ use App\Models\User;
 function handle(User $user): void {}
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -58,7 +59,7 @@ use App\Models\User;
 function handle($user) {}
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -69,7 +70,7 @@ use App\Models\User;
 $class = User::class;
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -84,7 +85,7 @@ try {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -95,7 +96,7 @@ use App\Models\User as UserModel;
 $user = new UserModel();
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -106,7 +107,7 @@ use App\Models\User as UserModel;
 $user = new User();
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unused-import"})
 	})
 
@@ -117,7 +118,7 @@ use function App\Helpers\formatName;
 $name = formatName('John');
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -128,7 +129,7 @@ use const App\Config\MAX_RETRIES;
 $limit = MAX_RETRIES;
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -140,7 +141,7 @@ use Symfony\Component\Routing\Attribute\Route;
 class UserController {}
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -153,7 +154,7 @@ use App\Models\Comment;
 echo "nothing";
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unused-import", "unused-import", "unused-import"})
 	})
 
@@ -166,7 +167,7 @@ if ($obj instanceof User) {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -179,7 +180,7 @@ function getUser(): User {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -190,12 +191,12 @@ use App\Models\User;
 echo "nothing";
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %d", len(findings))
 		}
-		if findings[0].Severity != SeverityHint {
-			t.Errorf("expected SeverityHint, got %d", findings[0].Severity)
+		if findings[0].Severity != rule.SeverityHint {
+			t.Errorf("expected rule.SeverityHint, got %d", findings[0].Severity)
 		}
 	})
 }
@@ -213,7 +214,7 @@ func assertFindingCodes(t *testing.T, findings []Finding, codes []string) {
 		t.Fatalf("expected %d findings, got %d: %v", len(codes), len(findings), findings)
 	}
 	for i, code := range codes {
-		if findings[i].Code != code {
+		if string(findings[i].Code) != code {
 			t.Errorf("finding[%d].Code = %q, want %q", i, findings[i].Code, code)
 		}
 	}

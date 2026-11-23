@@ -15,13 +15,13 @@ func unavailableAndUnknown(t *testing.T, src, version string) []string {
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: version})
 	var got []string
 	for _, f := range (&BuiltinUnavailableRule{PHPVersion: version}).Check(file, src, idx) {
-		got = append(got, f.Code+": "+f.Message)
+		got = append(got, string(f.Code)+": "+f.Message)
 	}
 	for _, f := range (&UnknownFunctionRule{}).Check(file, src, idx) {
-		got = append(got, f.Code+": "+f.Message)
+		got = append(got, string(f.Code)+": "+f.Message)
 	}
 	for _, f := range (&UnknownClassRule{}).Check(file, src, idx) {
-		got = append(got, f.Code+": "+f.Message)
+		got = append(got, string(f.Code)+": "+f.Message)
 	}
 	return got
 }

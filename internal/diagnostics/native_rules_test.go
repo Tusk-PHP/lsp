@@ -21,7 +21,8 @@ func TestNativeRulesParityWithProvider(t *testing.T) {
 		"unknown-class":           true,
 		"unknown-function":        true,
 		"unused-import":           true,
-		"unused-private":          true,
+		"unused-private-method":   true,
+		"unused-private-property": true,
 		"unreachable-code":        true,
 		"redundant-union-member":  true,
 		"undefined-variable":      true,
@@ -37,7 +38,8 @@ func TestNativeRulesParityWithProvider(t *testing.T) {
 		// AnalyzeOnSave() — requires TypeResolver
 		"redundant-nullsafe": true,
 		// AnalyzeOnSave() — requires BuilderModelResolver + BuilderMemberChecker
-		"invalid-builder-arg": true,
+		"unknown-column":   true,
+		"unknown-relation": true,
 	}
 
 	tr := func(expr, source string, line, col int, file *parser.FileNode) string { return "" }
@@ -54,7 +56,9 @@ func TestNativeRulesParityWithProvider(t *testing.T) {
 	rules := NativeRules(opts)
 	nativeRuleCodes := make(map[string]bool, len(rules))
 	for _, r := range rules {
-		nativeRuleCodes[r.Code()] = true
+		for _, code := range r.Codes() {
+			nativeRuleCodes[string(code)] = true
+		}
 	}
 
 	for code := range providerRuleCodes {
@@ -74,9 +78,9 @@ func TestNativeRulesParityWithProvider(t *testing.T) {
 func TestNativeRulesWithoutDepsOmitsDependentRules(t *testing.T) {
 	rules := NativeRules(NativeRulesOptions{}) // no deps
 	for _, r := range rules {
-		switch r.Code() {
-		case "unknown-member", "redundant-nullsafe", "builtin-unavailable", "invalid-builder-arg":
-			t.Errorf("rule %q should be omitted when no deps provided, but was included", r.Code())
+		switch r.Codes()[0] {
+		case "unknown-member", "redundant-nullsafe", "builtin-unavailable", "unknown-column":
+			t.Errorf("rule %v should be omitted when no deps provided, but was included", r.Codes())
 		}
 	}
 }
@@ -90,7 +94,7 @@ func TestNativeRulesDeterministicOrder(t *testing.T) {
 		"unknown-class",
 		"unknown-function",
 		"unused-import",
-		"unused-private",
+		"unused-private-method",
 		"unreachable-code",
 		"redundant-union-member",
 		"undefined-variable",
@@ -104,7 +108,7 @@ func TestNativeRulesDeterministicOrder(t *testing.T) {
 		t.Fatalf("expected %d parameterless rules, got %d", len(wantOrder), len(rules))
 	}
 	for i, want := range wantOrder {
-		if got := rules[i].Code(); got != want {
+		if got := string(rules[i].Codes()[0]); got != want {
 			t.Errorf("rules[%d]: expected %q, got %q", i, want, got)
 		}
 	}

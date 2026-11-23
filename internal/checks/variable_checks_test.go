@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // ---- UndefinedVariableRule tests ----
 
 func TestUndefinedVariableRule(t *testing.T) {
-	rule := &UndefinedVariableRule{}
+	checker := &UndefinedVariableRule{}
 
 	t.Run("simple defined variable is not flagged", func(t *testing.T) {
 		source := `<?php
@@ -21,7 +22,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -32,7 +33,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"undefined-variable"})
 	})
 
@@ -43,7 +44,7 @@ function run($param) {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -62,7 +63,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -76,7 +77,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -89,7 +90,7 @@ function run(array $items) {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -102,7 +103,7 @@ function run(array $items) {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -117,7 +118,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -131,7 +132,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -143,7 +144,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -155,7 +156,7 @@ function run(array $data) {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -167,7 +168,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -179,12 +180,12 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
 	t.Run("nil file returns nil", func(t *testing.T) {
-		findings := rule.Check(nil, "", nil)
+		findings := checker.Check(nil, "", nil)
 		assertNoFindings(t, findings)
 	})
 }
@@ -192,7 +193,7 @@ function run() {
 // ---- UnusedVariableRule tests ----
 
 func TestUnusedVariableRule(t *testing.T) {
-	rule := &UnusedVariableRule{}
+	checker := &UnusedVariableRule{}
 
 	t.Run("used variable not flagged", func(t *testing.T) {
 		source := `<?php
@@ -202,7 +203,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -214,10 +215,10 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unused-variable"})
-		if findings[0].Severity != SeverityHint {
-			t.Errorf("expected SeverityHint, got %d", findings[0].Severity)
+		if findings[0].Severity != rule.SeverityHint {
+			t.Errorf("expected rule.SeverityHint, got %d", findings[0].Severity)
 		}
 	})
 
@@ -228,7 +229,7 @@ function run($unused) {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -240,7 +241,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -252,7 +253,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -265,7 +266,7 @@ function run(array $items) {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -280,7 +281,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -295,7 +296,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		// $value is captured by the closure (origin of a BindingClosureUse), not unused
 		// $fn is used (called), not unused
 		assertNoFindings(t, findings)
@@ -313,7 +314,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		// $value outer is the origin of a closure-use binding, so not flagged as unused
 		assertNoFindings(t, findings)
 	})
@@ -327,7 +328,7 @@ function run(array $data) {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -339,7 +340,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %d", len(findings))
 		}
@@ -355,7 +356,7 @@ function run() {
 	})
 
 	t.Run("nil file returns nil", func(t *testing.T) {
-		findings := rule.Check(nil, "", nil)
+		findings := checker.Check(nil, "", nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -368,7 +369,7 @@ function run() {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		// $ref is a reference binding — should not be flagged
 		// $original is used (by reference and returned)
 		assertNoFindings(t, findings)
@@ -581,7 +582,7 @@ func TestSharedParseGivesTheSameFindings(t *testing.T) {
 	} {
 		alone, together := pair[0].Check(file, source, nil), pair[1].Check(file, source, nil)
 		if len(alone) == 0 || len(alone) != len(together) {
-			t.Errorf("%s: alone %v, with Shared %v", pair[0].Code(), alone, together)
+			t.Errorf("%v: alone %v, with Shared %v", pair[0].Codes(), alone, together)
 		}
 	}
 	if first := shared.parse(source); first != shared.parse(source) {

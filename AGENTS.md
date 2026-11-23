@@ -61,7 +61,9 @@ detail; this is the map.
 Packages are layered. **A package may import only from its own layer or the ones
 above it in this list**, never from a later one:
 
-1. **Wire types:** `protocol` (LSP types, no logic).
+1. **Wire types and identifiers:** `protocol` (LSP types, no logic), `rule`
+   (diagnostic codes, severities and sources: every code a finding carries is a
+   `rule.Code` constant listed in `rule.All`).
 2. **Language core:** `parser` (own tokenizer and lightweight AST, fault-tolerant),
    `types`, `phparray`, `stubs` (embedded builtin stubs by PHP version and
    extension), `phpdetect`.
@@ -77,9 +79,6 @@ above it in this list**, never from a later one:
    `symquery`, `introspect`, `deps`, `unuseddeps`, `graph`, `composer/cardhover`.
 6. **Transports:** `lsp`, `mcpserver`.
 7. **Tests across everything:** `conformance`.
-
-Known exception to fix: `config` imports `checks` for its `Severity` type. Don't
-add more; the type belongs in a lower layer.
 
 Builtins are registered in a fixed order, later layers overriding earlier ones:
 generated registry → PHP 7.4 core baseline → core version deltas up to the

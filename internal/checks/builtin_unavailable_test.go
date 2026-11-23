@@ -21,8 +21,8 @@ str_contains($a, $b);
 	// Register builtins for PHP 7.4 — str_contains is NOT included.
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
 
-	rule := &BuiltinUnavailableRule{PHPVersion: "7.4"}
-	findings := rule.Check(file, source, idx)
+	checker := &BuiltinUnavailableRule{PHPVersion: "7.4"}
+	findings := checker.Check(file, source, idx)
 
 	var relevant []Finding
 	for _, f := range findings {
@@ -57,8 +57,8 @@ json_validate($a);
 	// Register builtins for PHP 8.3 without ext-json — json_validate is excluded.
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.3", Extensions: []string{}})
 
-	rule := &BuiltinUnavailableRule{PHPVersion: "8.3", Extensions: []string{}}
-	findings := rule.Check(file, source, idx)
+	checker := &BuiltinUnavailableRule{PHPVersion: "8.3", Extensions: []string{}}
+	findings := checker.Check(file, source, idx)
 
 	var relevant []Finding
 	for _, f := range findings {
@@ -93,8 +93,8 @@ $fiber = new Fiber($fn);
 	// Register builtins for PHP 7.4 — Fiber is NOT included.
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
 
-	rule := &BuiltinUnavailableRule{PHPVersion: "7.4"}
-	findings := rule.Check(file, source, idx)
+	checker := &BuiltinUnavailableRule{PHPVersion: "7.4"}
+	findings := checker.Check(file, source, idx)
 
 	var relevant []Finding
 	for _, f := range findings {
@@ -130,8 +130,8 @@ str_contains($a, $b);
 	// Register builtins for PHP 8.1 — str_contains IS included.
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.1"})
 
-	rule := &BuiltinUnavailableRule{PHPVersion: "8.1"}
-	findings := rule.Check(file, source, idx)
+	checker := &BuiltinUnavailableRule{PHPVersion: "8.1"}
+	findings := checker.Check(file, source, idx)
 
 	for _, f := range findings {
 		if f.Code == "builtin-unavailable" {
@@ -157,8 +157,8 @@ str_contains($a, $b);
 	// Register builtins for PHP 7.4 — str_contains is NOT in the index.
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
 
-	rule := &BuiltinUnavailableRule{PHPVersion: "7.4"}
-	findings := rule.Check(file, source, idx)
+	checker := &BuiltinUnavailableRule{PHPVersion: "7.4"}
+	findings := checker.Check(file, source, idx)
 
 	for _, f := range findings {
 		if f.Code == "builtin-unavailable" {
@@ -185,8 +185,8 @@ class Foo implements WeakMap {}
 	// Register builtins for PHP 7.4 — WeakMap is NOT included (PHP 8.0+).
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
 
-	rule := &BuiltinUnavailableRule{PHPVersion: "7.4"}
-	findings := rule.Check(file, source, idx)
+	checker := &BuiltinUnavailableRule{PHPVersion: "7.4"}
+	findings := checker.Check(file, source, idx)
 
 	var relevant []Finding
 	for _, f := range findings {
@@ -218,8 +218,8 @@ func TestBuiltinUnavailableAttribute(t *testing.T) {
 	// Register builtins for PHP 8.2 — Override is NOT included (PHP 8.3+).
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.2"})
 
-	rule := &BuiltinUnavailableRule{PHPVersion: "8.2"}
-	findings := rule.Check(file, source, idx)
+	checker := &BuiltinUnavailableRule{PHPVersion: "8.2"}
+	findings := checker.Check(file, source, idx)
 
 	var relevant []Finding
 	for _, f := range findings {
@@ -253,8 +253,8 @@ json_encode($data, $flags);
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.1"})
 
-	rule := &BuiltinUnavailableRule{PHPVersion: "7.1"}
-	findings := rule.Check(file, source, idx)
+	checker := &BuiltinUnavailableRule{PHPVersion: "7.1"}
+	findings := checker.Check(file, source, idx)
 
 	var relevant []Finding
 	for _, f := range findings {
@@ -289,8 +289,8 @@ $opts = JSON_THROW_ON_ERROR | FILTER_VALIDATE_BOOL;
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.3"})
 
-	rule := &BuiltinUnavailableRule{PHPVersion: "7.3"}
-	findings := rule.Check(file, source, idx)
+	checker := &BuiltinUnavailableRule{PHPVersion: "7.3"}
+	findings := checker.Check(file, source, idx)
 
 	var relevant []Finding
 	for _, f := range findings {
@@ -333,8 +333,8 @@ $v = Foo::JSON_THROW_ON_ERROR;
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.1"})
 
-	rule := &BuiltinUnavailableRule{PHPVersion: "7.1"}
-	findings := rule.Check(file, source, idx)
+	checker := &BuiltinUnavailableRule{PHPVersion: "7.1"}
+	findings := checker.Check(file, source, idx)
 
 	for _, f := range findings {
 		if f.Code == "builtin-unavailable" && strings.Contains(f.Message, "JSON_THROW_ON_ERROR") {
@@ -353,8 +353,8 @@ $flags = JSON_THROW_ON_ERROR;
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
 
-	rule := &BuiltinUnavailableRule{PHPVersion: "7.4"}
-	findings := rule.Check(file, source, idx)
+	checker := &BuiltinUnavailableRule{PHPVersion: "7.4"}
+	findings := checker.Check(file, source, idx)
 
 	for _, f := range findings {
 		if f.Code == "builtin-unavailable" && strings.Contains(f.Message, "JSON_THROW_ON_ERROR") {
@@ -373,8 +373,8 @@ $result = array_is_list([1, 2, 3]);
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
 
-	rule := &BuiltinUnavailableRule{PHPVersion: "7.4"}
-	findings := rule.Check(file, source, idx)
+	checker := &BuiltinUnavailableRule{PHPVersion: "7.4"}
+	findings := checker.Check(file, source, idx)
 
 	found := false
 	for _, f := range findings {
@@ -398,8 +398,8 @@ $result = array_is_list([1, 2, 3]);
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.1"})
 
-	rule := &BuiltinUnavailableRule{PHPVersion: "8.1"}
-	findings := rule.Check(file, source, idx)
+	checker := &BuiltinUnavailableRule{PHPVersion: "8.1"}
+	findings := checker.Check(file, source, idx)
 
 	for _, f := range findings {
 		if f.Code == "builtin-unavailable" && strings.Contains(f.Message, "array_is_list") {

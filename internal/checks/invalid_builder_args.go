@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -81,7 +82,9 @@ type InvalidBuilderArgRule struct {
 	Members       MemberChecker
 }
 
-func (r *InvalidBuilderArgRule) Code() string { return "invalid-builder-arg" }
+func (r *InvalidBuilderArgRule) Codes() []rule.Code {
+	return []rule.Code{rule.UnknownColumn, rule.UnknownRelation}
+}
 
 func (r *InvalidBuilderArgRule) Check(file *parser.FileNode, source string, _ *symbols.Index) []Finding {
 	if r.ModelResolver == nil || r.Members == nil || file == nil {
@@ -245,8 +248,8 @@ func (r *InvalidBuilderArgRule) validateAggregateSecondArg(method, relationName,
 			StartCol:  startCol,
 			EndLine:   lineNum,
 			EndCol:    endCol,
-			Severity:  SeverityWarning,
-			Code:      "unknown-column",
+			Severity:  rule.SeverityWarning,
+			Code:      rule.UnknownColumn,
 			Message:   fmt.Sprintf("Unknown column '%s' on related model '%s'", columnName, shortName(relatedFQN)),
 		}
 	}
@@ -327,9 +330,9 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, lineNum, st
 		return nil
 	}
 
-	code := "unknown-column"
+	code := rule.UnknownColumn
 	if isRelMethod {
-		code = "unknown-relation"
+		code = rule.UnknownRelation
 	}
 
 	return &Finding{
@@ -337,7 +340,7 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, lineNum, st
 		StartCol:  startCol,
 		EndLine:   lineNum,
 		EndCol:    endCol,
-		Severity:  SeverityWarning,
+		Severity:  rule.SeverityWarning,
 		Code:      code,
 		Message:   msg,
 	}

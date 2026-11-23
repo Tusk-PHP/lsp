@@ -242,7 +242,7 @@ func TestFeaturesDiagnose(t *testing.T) {
 @if($a)`
 	var got []string
 	for _, d := range f.Diagnose(src) {
-		got = append(got, d.Code+": "+d.Message)
+		got = append(got, string(d.Code)+": "+d.Message)
 	}
 	want := []string{
 		"unclosed-directive: `@if` is never closed with `@endif`",

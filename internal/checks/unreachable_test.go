@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
 func TestUnreachableCodeRule(t *testing.T) {
-	rule := &UnreachableCodeRule{}
+	checker := &UnreachableCodeRule{}
 
 	t.Run("code after return in method body", func(t *testing.T) {
 		source := `<?php
@@ -19,10 +20,10 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
-		if findings[0].Severity != SeverityWarning {
-			t.Errorf("expected SeverityWarning, got %d", findings[0].Severity)
+		if findings[0].Severity != rule.SeverityWarning {
+			t.Errorf("expected rule.SeverityWarning, got %d", findings[0].Severity)
 		}
 	})
 
@@ -36,7 +37,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
 	})
 
@@ -50,7 +51,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
 	})
 
@@ -64,7 +65,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
 	})
 
@@ -78,7 +79,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
 	})
 
@@ -94,7 +95,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -114,7 +115,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -131,7 +132,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
 		if findings[0].StartLine != 7 {
 			t.Errorf("expected unreachable code to start after returned array on line 7, got %d", findings[0].StartLine)
@@ -150,7 +151,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
 	})
 
@@ -163,7 +164,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -180,7 +181,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -191,7 +192,7 @@ abstract class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
@@ -209,7 +210,7 @@ class Foo {
 }
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code", "unreachable-code"})
 	})
 }

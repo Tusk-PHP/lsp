@@ -15,7 +15,7 @@ func indexWithFunctions(php string) *symbols.Index {
 }
 
 func TestArgumentCountRule(t *testing.T) {
-	rule := &ArgumentCountRule{}
+	checker := &ArgumentCountRule{}
 
 	t.Run("trailing comma is not an extra argument", func(t *testing.T) {
 		idx := indexWithFunctions(`<?php
@@ -28,7 +28,7 @@ $a = env(
 );
 `
 		file := parser.ParseFile(source)
-		assertNoFindings(t, rule.Check(file, source, idx))
+		assertNoFindings(t, checker.Check(file, source, idx))
 	})
 
 	t.Run("declarations sharing a global function's name are not calls", func(t *testing.T) {
@@ -49,11 +49,11 @@ function &init( $a, $b ) {}
 $item = new Item( 1, 2, 3 );
 `
 		file := parser.ParseFile(source)
-		assertNoFindings(t, rule.Check(file, source, idx))
+		assertNoFindings(t, checker.Check(file, source, idx))
 
 		// A real call to the global function is still checked.
 		call := "<?php\ninit( 1, 2 );\n"
-		if got := rule.Check(parser.ParseFile(call), call, idx); len(got) != 1 {
+		if got := checker.Check(parser.ParseFile(call), call, idx); len(got) != 1 {
 			t.Errorf("expected the real init() call to be flagged, got %+v", got)
 		}
 	})
@@ -68,7 +68,7 @@ function greet(string $name): string {
 $msg = greet("Alice");
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
 
@@ -85,7 +85,7 @@ $ok = pad('x');
 $ok = pad('x', 3, '-');
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		assertFindingCodes(t, findings, []string{"argument-count-mismatch"})
 		if len(findings) == 1 && findings[0].Message != "Too few arguments to add(): 1 passed, at least 2 required" {
 			t.Errorf("message: %q", findings[0].Message)
@@ -102,7 +102,7 @@ function greet(string $name): string {
 $msg = greet("Alice", "extra");
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		assertFindingCodes(t, findings, []string{"argument-count-mismatch"})
 	})
 
@@ -114,7 +114,7 @@ function doNothing(): void {}
 doNothing();
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
 
@@ -128,7 +128,7 @@ function greet(string $name, string $greeting = "Hello"): string {
 $msg = greet("Alice");
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
 
@@ -142,7 +142,7 @@ function sum(int ...$nums): int {
 $s = sum(1, 2, 3, 4, 5);
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
 
@@ -157,7 +157,7 @@ $args = [1, 2];
 $result = add(...$args);
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
 
@@ -171,7 +171,7 @@ function add(int $a, int $b): int {
 $result = add(a: 1, b: 2);
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
 
@@ -180,13 +180,13 @@ $result = add(a: 1, b: 2);
 doSomething(1, 2, 3);
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, nil)
+		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
 
 	t.Run("nil file returns nil", func(t *testing.T) {
 		idx := indexWithFunctions(`<?php function f(): void {}`)
-		findings := rule.Check(nil, "", idx)
+		findings := checker.Check(nil, "", idx)
 		assertNoFindings(t, findings)
 	})
 
@@ -208,7 +208,7 @@ $result = Math::multiply(1, 2, 3, 4);
 $result = Math::multiply(1);
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		assertFindingCodes(t, findings, []string{"argument-count-mismatch"})
 		if len(findings) == 1 && findings[0].StartLine != 4 {
 			t.Errorf("finding on line %d, want 4", findings[0].StartLine)
@@ -229,7 +229,7 @@ use App\Magic;
 Magic::doThing(1, 2, 3);
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		// __call is defined, so check is skipped
 		assertNoFindings(t, findings)
 	})
@@ -240,7 +240,7 @@ Magic::doThing(1, 2, 3);
 $result = unknownFunction(1, 2, 3);
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
 
@@ -258,7 +258,7 @@ $greeter = new App\Greeter();
 $greeter->greet("Alice", "extra"); // extra arg via arrow, but we cannot check
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		// Arrow method calls are skipped (we can't resolve $greeter's type)
 		assertNoFindings(t, findings)
 	})
@@ -271,7 +271,7 @@ function init(): void {}
 init();
 `
 		file := parser.ParseFile(source)
-		findings := rule.Check(file, source, idx)
+		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
 }
@@ -294,7 +294,7 @@ class Magic { public function __call($n, $a) {} }
 class Tagged {}
 `)
 	types := map[string]string{"$this": `App\Mailer`, "$mailer": `App\Mailer`, "$either": `App\Mailer|App\Other`, "$magic": `App\Magic`, "$tagged": `App\Tagged`}
-	rule := &ArgumentCountRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string { return types[expr] }}
+	checker := &ArgumentCountRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string { return types[expr] }}
 	source := `<?php
 namespace App;
 $mailer->send('a@example.test');
@@ -309,7 +309,7 @@ $f = function () { $this->send('a'); };
 $mailer->send(...$args);
 $mailer->send(to: 'a', subject: 'b');
 `
-	got := rule.Check(parser.ParseFile(source), source, idx)
+	got := checker.Check(parser.ParseFile(source), source, idx)
 	var messages []string
 	for _, f := range got {
 		messages = append(messages, f.Message)
@@ -336,7 +336,7 @@ class Kernel { const VERSION_ID = 70000; }
 function pair($a, $b) {}
 `)
 	types := map[string]string{"$instance": `App\Handler`}
-	rule := &ArgumentCountRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string { return types[expr] }}
+	checker := &ArgumentCountRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string { return types[expr] }}
 	source := `<?php
 namespace App;
 if (version_compare(Version::id(), '12.3.4', '>=')) {
@@ -360,7 +360,7 @@ if ($unrelated) {
     pair(1);
 }
 `
-	got := rule.Check(parser.ParseFile(source), source, idx)
+	got := checker.Check(parser.ParseFile(source), source, idx)
 	var lines []int
 	for _, f := range got {
 		lines = append(lines, f.StartLine)

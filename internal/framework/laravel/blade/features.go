@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
 // Views finds a project's views by name.
@@ -225,18 +227,8 @@ func (f *Features) Definition(uri, src string, offset int) ([]Location, bool) {
 // Diagnostic is a problem found in a template, with its rule code.
 type Diagnostic struct {
 	Problem
-	Code string
+	Code rule.Code
 }
-
-const (
-	// CodeUnknownView is the rule code for a view that doesn't exist.
-	CodeUnknownView = "unknown-view"
-	// CodeUnclosedDirective is the rule code for blocks that don't close.
-	CodeUnclosedDirective = "unclosed-directive"
-	// CodeUnknownComponent is the rule code for an `<x-name>` component that
-	// doesn't exist.
-	CodeUnknownComponent = "unknown-component"
-)
 
 // Diagnose reports the template's unbalanced blocks, and the views and
 // components it names that don't exist.
@@ -244,7 +236,7 @@ func (f *Features) Diagnose(src string) []Diagnostic {
 	nodes := ParseCustom(src, f.custom())
 	var out []Diagnostic
 	for _, p := range CheckStructureCustom(src, nodes, f.custom()) {
-		out = append(out, Diagnostic{Problem: p, Code: CodeUnclosedDirective})
+		out = append(out, Diagnostic{Problem: p, Code: rule.UnclosedDirective})
 	}
 	out = append(out, f.unknownComponents(src, nodes)...)
 	if f.Views == nil {
@@ -266,7 +258,7 @@ func (f *Features) Diagnose(src string) []Diagnostic {
 		if _, ok := f.Views.ViewURI(r.Name); ok {
 			continue
 		}
-		out = append(out, Diagnostic{Code: CodeUnknownView, Problem: Problem{Span: r.Span, Message: "View `" + r.Name + "` not found"}})
+		out = append(out, Diagnostic{Code: rule.UnknownView, Problem: Problem{Span: r.Span, Message: "View `" + r.Name + "` not found"}})
 	}
 	return out
 }

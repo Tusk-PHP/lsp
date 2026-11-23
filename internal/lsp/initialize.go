@@ -39,7 +39,14 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	}
 	s.logger.Printf("Initializing for workspace: %s", s.rootPath)
 	cfgPath := filepath.Join(s.rootPath, ".tusk-php.json")
-	if cfg, err := config.LoadFromFile(cfgPath); err == nil {
+	cfg, err := config.LoadFromFile(cfgPath)
+	if err != nil {
+		s.logger.Printf("Config error: %v", err)
+		s.sendNotification("window/showMessage", map[string]interface{}{
+			"type":    protocol.MessageTypeError,
+			"message": "Tusk PHP ignored its configuration: " + err.Error(),
+		})
+	} else {
 		s.cfg = cfg
 	}
 	// Merge client initializationOptions over file-based config

@@ -29,10 +29,10 @@ function use_them( $p_archive ) {
 	file := parser.ParseFile(src)
 	idx.IndexFile("file:///use.php", src)
 	var got []string
-	for _, rule := range []interface {
+	for _, checker := range []interface {
 		Check(*parser.FileNode, string, *symbols.Index) []Finding
 	}{&UnknownClassRule{}, &UnknownFunctionRule{}, &UnknownMemberRule{TypeResolver: func(string, string, int, int, *parser.FileNode) string { return "" }}} {
-		for _, f := range rule.Check(file, src, idx) {
+		for _, f := range checker.Check(file, src, idx) {
 			got = append(got, f.Message)
 		}
 	}

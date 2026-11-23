@@ -41,9 +41,9 @@ class ftp_base {
 		}
 		return ""
 	}
-	rule := &UnknownMemberRule{TypeResolver: resolver}
+	checker := &UnknownMemberRule{TypeResolver: resolver}
 	var got []string
-	for _, f := range rule.Check(parser.ParseFile(src), src, idx) {
+	for _, f := range checker.Check(parser.ParseFile(src), src, idx) {
 		got = append(got, strings.Split(f.Message, " on ")[0])
 	}
 	// verbose differs from the declared $Verbose (properties are case-sensitive),
@@ -101,9 +101,9 @@ function f(AbstractDb $db, ItemInterface $item, Concrete $c) {
 		}
 		return ""
 	}
-	rule := &UnknownMemberRule{TypeResolver: resolver}
+	checker := &UnknownMemberRule{TypeResolver: resolver}
 	var got []string
-	for _, f := range rule.Check(parser.ParseFile(src), src, idx) {
+	for _, f := range checker.Check(parser.ParseFile(src), src, idx) {
 		got = append(got, f.Message)
 	}
 	// A concrete class may be the object's own class, so a subclass's method

@@ -3,6 +3,8 @@ package blade
 import (
 	"sort"
 	"strings"
+
+	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
 // Attribute is an attribute a component takes.
@@ -388,7 +390,7 @@ func (f *Features) unknownComponents(src string, nodes []Node) []Diagnostic {
 		if _, ok := f.Components.Component(name); ok {
 			continue
 		}
-		out = append(out, Diagnostic{Code: CodeUnknownComponent, Problem: Problem{Span: n.Expr, Message: "Component `x-" + n.Name + "` not found"}})
+		out = append(out, Diagnostic{Code: rule.UnknownComponent, Problem: Problem{Span: n.Expr, Message: "Component `x-" + n.Name + "` not found"}})
 	}
 	return out
 }

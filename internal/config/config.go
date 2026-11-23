@@ -2,83 +2,71 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
-// RuleSeverityValue is the value stored per rule code in DiagnosticRules.
-// It accepts both the legacy boolean form and a string severity name:
-//
-//	true / "warning"  → use the rule's default severity
-//	false / "off"     → disable the rule
-//	"hint"            → override to hint
-//	"info"            → override to info
-//	"warning"         → override to warning (explicit)
-//	"error"           → override to error
 type RuleSeverityValue struct {
 	enabled  bool
-	override checks.Severity // 0 means "use default"
-	hasValue bool            // false → missing (treated as default)
+	override rule.Severity
 }
 
-// MarshalJSON emits the compact form used for writing config back.
+const ruleOff = "off"
+
 func (v RuleSeverityValue) MarshalJSON() ([]byte, error) {
-	if !v.hasValue {
-		return []byte("true"), nil
+	switch {
+	case !v.enabled:
+		return json.Marshal(ruleOff)
+	case v.override == 0:
+		return json.Marshal(true)
+	default:
+		return json.Marshal(v.override.String())
 	}
-	if !v.enabled {
-		return []byte(`"off"`), nil
-	}
-	switch v.override {
-	case checks.SeverityError:
-		return []byte(`"error"`), nil
-	case checks.SeverityWarning:
-		return []byte(`"warning"`), nil
-	case checks.SeverityInfo:
-		return []byte(`"info"`), nil
-	case checks.SeverityHint:
-		return []byte(`"hint"`), nil
-	}
-	return []byte("true"), nil
 }
 
-// UnmarshalJSON accepts both legacy bool and string severity forms.
 func (v *RuleSeverityValue) UnmarshalJSON(data []byte) error {
-	v.hasValue = true
-	// Boolean form: true / false
-	var b bool
-	if err := json.Unmarshal(data, &b); err == nil {
-		v.enabled = b
+	var enabled bool
+	if err := json.Unmarshal(data, &enabled); err == nil {
+		*v = RuleSeverityValue{enabled: enabled}
 		return nil
 	}
-	// String form: "off" | "hint" | "info" | "warning" | "error"
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
+	var name string
+	if err := json.Unmarshal(data, &name); err != nil {
+		return fmt.Errorf("rule setting %s: want true, false, %q or a severity: %w", data, ruleOff, err)
 	}
-	switch s {
-	case "off", "":
-		v.enabled = false
-	case "hint":
-		v.enabled = true
-		v.override = checks.SeverityHint
-	case "info":
-		v.enabled = true
-		v.override = checks.SeverityInfo
-	case "warning":
-		v.enabled = true
-		v.override = checks.SeverityWarning
-	case "error":
-		v.enabled = true
-		v.override = checks.SeverityError
-	default:
-		// Unknown string → treat as enabled with default severity
-		v.enabled = true
+	if name == ruleOff {
+		*v = RuleSeverityValue{}
+		return nil
 	}
+	severity, err := rule.ParseSeverity(name)
+	if err != nil {
+		return fmt.Errorf("rule setting: %w", err)
+	}
+	*v = RuleSeverityValue{enabled: true, override: severity}
+	return nil
+}
+
+type DiagnosticRules map[rule.Code]RuleSeverityValue
+
+func (r *DiagnosticRules) UnmarshalJSON(data []byte) error {
+	var raw map[string]RuleSeverityValue
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("diagnosticRules: %w", err)
+	}
+	parsed := make(DiagnosticRules, len(raw))
+	for name, setting := range raw {
+		code, err := rule.ParseCode(name)
+		if err != nil {
+			return fmt.Errorf("diagnosticRules: %w", err)
+		}
+		parsed[code] = setting
+	}
+	*r = parsed
 	return nil
 }
 
@@ -161,25 +149,25 @@ type Config struct {
 	// or set via initializationOptions, distinguishing it from the default
 	// "8.6" so the resolution chain can skip the default correctly.
 	phpVersionExplicitlySet bool
-	Framework               string                       `json:"framework"`
-	ComposerPath            string                       `json:"composerPath"`
-	IncludePaths            []string                     `json:"includePaths"`
-	ExcludePaths            []string                     `json:"excludePaths"`
-	ContainerAware          bool                         `json:"containerAware"`
-	DiagnosticsEnabled      bool                         `json:"diagnosticsEnabled"`
-	PHPBinary               string                       `json:"phpBinary,omitempty"`
-	PHPDetectTimeoutMs      int                          `json:"phpDetectTimeoutMs,omitempty"`
-	PHPStanEnabled          *bool                        `json:"phpstanEnabled,omitempty"`
-	PHPStanPath             string                       `json:"phpstanPath,omitempty"`
-	PHPStanLevel            string                       `json:"phpstanLevel,omitempty"`
-	PHPStanConfig           string                       `json:"phpstanConfig,omitempty"`
-	CoverageReportPath      string                       `json:"coverageReportPath,omitempty"`
-	PintEnabled             *bool                        `json:"pintEnabled,omitempty"`
-	PintPath                string                       `json:"pintPath,omitempty"`
-	PintConfig              string                       `json:"pintConfig,omitempty"`
-	DatabaseEnabled         *bool                        `json:"databaseEnabled,omitempty"`
-	DatabaseSource          string                       `json:"databaseSource,omitempty"`
-	DiagnosticRules         map[string]RuleSeverityValue `json:"diagnosticRules,omitempty"`
+	Framework               string          `json:"framework"`
+	ComposerPath            string          `json:"composerPath"`
+	IncludePaths            []string        `json:"includePaths"`
+	ExcludePaths            []string        `json:"excludePaths"`
+	ContainerAware          bool            `json:"containerAware"`
+	DiagnosticsEnabled      bool            `json:"diagnosticsEnabled"`
+	PHPBinary               string          `json:"phpBinary,omitempty"`
+	PHPDetectTimeoutMs      int             `json:"phpDetectTimeoutMs,omitempty"`
+	PHPStanEnabled          *bool           `json:"phpstanEnabled,omitempty"`
+	PHPStanPath             string          `json:"phpstanPath,omitempty"`
+	PHPStanLevel            string          `json:"phpstanLevel,omitempty"`
+	PHPStanConfig           string          `json:"phpstanConfig,omitempty"`
+	CoverageReportPath      string          `json:"coverageReportPath,omitempty"`
+	PintEnabled             *bool           `json:"pintEnabled,omitempty"`
+	PintPath                string          `json:"pintPath,omitempty"`
+	PintConfig              string          `json:"pintConfig,omitempty"`
+	DatabaseEnabled         *bool           `json:"databaseEnabled,omitempty"`
+	DatabaseSource          string          `json:"databaseSource,omitempty"`
+	DiagnosticRules         DiagnosticRules `json:"diagnosticRules,omitempty"`
 	// MaxIndexFiles caps how many workspace PHP files are indexed; 0 means no
 	// limit (the native default). Composer dependencies aren't counted.
 	MaxIndexFiles             int                 `json:"maxIndexFiles"`
@@ -199,7 +187,7 @@ type Config struct {
 // SetDiagnosticRulesJSON parses a JSON object of rule code → severity value
 // (bool or string) and stores it as DiagnosticRules. Returns any parse error.
 func (c *Config) SetDiagnosticRulesJSON(raw string) error {
-	var m map[string]RuleSeverityValue
+	var m DiagnosticRules
 	if err := json.Unmarshal([]byte(raw), &m); err != nil {
 		return err
 	}
@@ -217,7 +205,7 @@ func (c *Config) IsPHPVersionExplicitlySet() bool {
 
 // IsRuleEnabled returns whether a diagnostic rule is enabled.
 // Rules default to enabled if not explicitly configured.
-func (c *Config) IsRuleEnabled(code string) bool {
+func (c *Config) IsRuleEnabled(code rule.Code) bool {
 	if c.DiagnosticRules == nil {
 		return true
 	}
@@ -232,7 +220,7 @@ func (c *Config) IsRuleEnabled(code string) bool {
 // If the config has an explicit severity override it is returned; otherwise
 // defaultSeverity is returned. If the rule is disabled, defaultSeverity is
 // still returned — callers should check IsRuleEnabled first.
-func (c *Config) RuleSeverity(code string, defaultSeverity checks.Severity) checks.Severity {
+func (c *Config) RuleSeverity(code rule.Code, defaultSeverity rule.Severity) rule.Severity {
 	if c.DiagnosticRules == nil {
 		return defaultSeverity
 	}
@@ -288,10 +276,10 @@ func LoadFromFile(path string) (*Config, error) {
 		if os.IsNotExist(err) {
 			return cfg, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	// Detect which keys were explicitly present in the file so the profile
 	// resolution chain can distinguish "file-set" from "default" values.

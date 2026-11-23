@@ -95,7 +95,7 @@ func TestUnknownComponent(t *testing.T) {
 	src := `<x-alert/><x-missing/><x-slot:title>t</x-slot><x-slot name="a"/><x-dynamic-component :component="$c"/><x-mail::button/><livewire:counter/><flux:button/>`
 	var got []string
 	for _, d := range f.Diagnose(src) {
-		got = append(got, d.Code+": "+d.Message+" @ "+src[d.Span.Start:d.Span.End])
+		got = append(got, string(d.Code)+": "+d.Message+" @ "+src[d.Span.Start:d.Span.End])
 	}
 	if strings.Join(got, "\n") != "unknown-component: Component `x-missing` not found @ missing" {
 		t.Fatalf("got %q", got)
