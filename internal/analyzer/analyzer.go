@@ -978,12 +978,8 @@ func protocolSymbolKind(kind symbols.SymbolKind) protocol.SymbolKind {
 		return protocol.SymbolKindProperty
 	case symbols.KindConstant:
 		return protocol.SymbolKindConstant
-	case symbols.KindVariable:
-		return protocol.SymbolKindVariable
 	case symbols.KindEnumCase:
 		return protocol.SymbolKindEnumMember
-	case symbols.KindNamespace:
-		return protocol.SymbolKindNamespace
 	default:
 		return protocol.SymbolKindObject
 	}

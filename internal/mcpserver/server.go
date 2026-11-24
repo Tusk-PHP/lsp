@@ -1331,12 +1331,8 @@ func symbolKindName(kind symbols.SymbolKind) string {
 		return "property"
 	case symbols.KindConstant:
 		return "constant"
-	case symbols.KindVariable:
-		return "variable"
 	case symbols.KindEnumCase:
 		return "enum_case"
-	case symbols.KindNamespace:
-		return "namespace"
 	default:
 		return "unknown"
 	}

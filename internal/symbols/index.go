@@ -24,9 +24,7 @@ const (
 	KindMethod
 	KindProperty
 	KindConstant
-	KindVariable
 	KindEnumCase
-	KindNamespace
 )
 
 type SymbolSource int

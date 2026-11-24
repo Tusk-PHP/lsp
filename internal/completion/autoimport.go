@@ -214,10 +214,6 @@ func (pl *importPlanner) namespaceMembers(kind importKind) map[string]string {
 					k = importFunction
 				case symbols.KindConstant:
 					k = importConst
-				default:
-					if !s.IsClassLike() {
-						continue
-					}
 				}
 				if pl.sameNamespace[k] == nil {
 					pl.sameNamespace[k] = map[string]string{}
