@@ -1,6 +1,7 @@
 package token
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -24,10 +25,16 @@ func ParseVersion(s string) (Version, error) {
 	if len(parts) < 2 {
 		return 0, fmt.Errorf("PHP version %q: want major.minor", s)
 	}
-	major, errMajor := strconv.Atoi(parts[0])
-	minor, errMinor := strconv.Atoi(parts[1])
-	if errMajor != nil || errMinor != nil || major != 8 || minor < 0 || minor > int(Latest) {
-		return 0, fmt.Errorf("PHP version %q: only 8.0 to 8.%d are supported", s, Latest)
+	major, errMajor := strconv.ParseUint(parts[0], 10, 8)
+	minor, errMinor := strconv.ParseUint(parts[1], 10, 8)
+	if err := errors.Join(errMajor, errMinor); err != nil {
+		return 0, fmt.Errorf("PHP version %q: want major.minor: %w", s, err)
+	}
+	switch {
+	case major < 8:
+		return PHP80, nil
+	case major > 8 || minor > uint64(Latest):
+		return Latest, nil
 	}
 	return Version(minor), nil
 }
