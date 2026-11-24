@@ -42,14 +42,7 @@ func (idx *Index) SetClassGenerator(g ClassGenerator) {
 // whether it added anything.
 func (idx *Index) ensureGenerated(fqn string) bool {
 	holder := idx.generator.Load()
-	if holder == nil {
-		return false
-	}
-	fqn = strings.TrimPrefix(fqn, "\\")
-	if i := strings.Index(fqn, "::"); i >= 0 {
-		fqn = fqn[:i]
-	}
-	if fqn == "" || !holder.g.Candidate(fqn) {
+	if holder == nil || !holder.g.Candidate(fqn) {
 		return false
 	}
 	idx.mu.RLock()

@@ -166,6 +166,7 @@ type Index struct {
 	fileSource           map[string]string // URI → raw source text stored during IndexFileWithSource
 	ready                atomic.Bool       // true once project + vendor indexing has completed at least once
 	generator            atomic.Pointer[classGeneratorHolder]
+	loader               atomic.Pointer[classLoaderHolder]
 	generatedURIs        map[string]bool     // URIs of generated classes, which are not files on disk
 	generatedFrom        map[string][]string // lowercase source FQN → URIs of the classes generated from it
 	// templateFiles holds the URIs of templates (Blade views) in the
@@ -587,7 +588,7 @@ func (idx *Index) addFoldLocked(fqn string) {
 // wins. match, when not nil, must accept the symbol (for example to want a
 // class and not a function of the same name).
 func (idx *Index) LookupFold(fqn string, match func(*Symbol) bool) *Symbol {
-	idx.ensureGenerated(fqn)
+	idx.ensureClass(fqn)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	if sym := idx.symbols[fqn]; sym != nil && (match == nil || match(sym)) {
@@ -917,7 +918,7 @@ func (idx *Index) Lookup(fqn string) *Symbol {
 	idx.mu.RLock()
 	sym := idx.symbols[fqn]
 	idx.mu.RUnlock()
-	if sym == nil && idx.ensureGenerated(fqn) {
+	if sym == nil && idx.ensureClass(fqn) {
 		idx.mu.RLock()
 		sym = idx.symbols[fqn]
 		idx.mu.RUnlock()
@@ -1127,7 +1128,7 @@ func (idx *Index) GetFileSymbols(uri string) []*Symbol {
 }
 
 func (idx *Index) GetClassMembers(classFQN string) []*Symbol {
-	idx.ensureGenerated(classFQN)
+	idx.ensureClass(classFQN)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.getClassMembersRecursive(classFQN, make(map[string]bool))
@@ -1217,7 +1218,7 @@ func (idx *Index) OverridesInheritedConstant(classFQN, name string) (overrides, 
 }
 
 func (idx *Index) overridesInherited(classFQN, method string, kind SymbolKind) (overrides, known bool) {
-	idx.ensureGenerated(classFQN)
+	idx.ensureClass(classFQN)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	known = true
@@ -1271,7 +1272,7 @@ func (idx *Index) IsSubtypeOf(child, parent string) bool {
 	if strings.EqualFold(child, parent) {
 		return true
 	}
-	idx.ensureGenerated(child)
+	idx.ensureClass(child)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	visited := map[string]bool{child: true}
@@ -1295,7 +1296,7 @@ func (idx *Index) IsSubtypeOf(child, parent string) bool {
 }
 
 func (idx *Index) GetInheritanceChain(classFQN string) []string {
-	idx.ensureGenerated(classFQN)
+	idx.ensureClass(classFQN)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	var chain []string
@@ -1391,7 +1392,7 @@ func (idx *Index) collectImplementorLocked(classFQN string, seen map[string]bool
 }
 
 func (idx *Index) GetImplementedInterfaces(classFQN string) []string {
-	idx.ensureGenerated(classFQN)
+	idx.ensureClass(classFQN)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.implementsMap[classFQN]
@@ -1587,6 +1588,7 @@ func (idx *Index) Ready() bool {
 // multiple times.
 func (idx *Index) MarkReady() {
 	idx.ready.Store(true)
+	idx.loader.Store(nil)
 }
 
 // TraitsOf returns a copy of the trait FQNs used by the class identified by
