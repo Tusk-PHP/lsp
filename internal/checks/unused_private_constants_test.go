@@ -2,6 +2,7 @@ package checks
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -58,6 +59,18 @@ func TestUnusedPrivateConstantStaysQuietWhenUnsure(t *testing.T) {
 	idx.IndexFile("file:///B.php", src)
 	if got := privateConstantFindings(t, src, idx); !slices.Equal(got, []string{"Private constant 'B::Y' is never used"}) {
 		t.Errorf("a trait's use counts: %v", got)
+	}
+}
+
+func TestUnusedPrivateConstantReadsTokensOnlyForClassesWithPrivateConstants(t *testing.T) {
+	src := "<?php\nclass A {\n    public const X = 1;\n    private int $p = 0;\n}\n"
+	cls := parser.ParseFile(src).Classes[0]
+	tokens := func() []parser.Token {
+		t.Fatal("tokens fetched for a class without private constants")
+		return nil
+	}
+	if got := checkUnusedPrivateConstants(cls, tokens, strings.Split(src, "\n"), nil); got != nil {
+		t.Errorf("got %v", got)
 	}
 }
 
