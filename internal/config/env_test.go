@@ -124,6 +124,28 @@ func TestParseSymfonyPostgresURL(t *testing.T) {
 	}
 }
 
+func TestParseDatabaseURLReadsIPv6HostsAsPHPDoes(t *testing.T) {
+	tests := []struct {
+		url, host, port string
+	}{
+		{"mysql://u:p@[::1]/db", "::1", "3306"},
+		{"mysql://u:p@[::1]:3307/db", "::1", "3307"},
+		{"mysql://u:p@::1:3307/db", "::1", "3307"},
+		{"mysql://u:p@::1/db", ":", "1"},
+		{"postgresql://u:p@[fe80::1]:5433/db", "fe80::1", "5433"},
+	}
+	for _, tt := range tests {
+		cfg := parseDatabaseURL(tt.url)
+		if cfg == nil {
+			t.Errorf("parseDatabaseURL(%q) = nil, want host %q port %q", tt.url, tt.host, tt.port)
+			continue
+		}
+		if cfg.Host != tt.host || cfg.Port != tt.port || cfg.Database != "db" {
+			t.Errorf("parseDatabaseURL(%q) = host %q port %q database %q, want host %q port %q database \"db\"", tt.url, cfg.Host, cfg.Port, cfg.Database, tt.host, tt.port)
+		}
+	}
+}
+
 func TestNormalizeDatabaseDriver(t *testing.T) {
 	tests := map[string]string{
 		"mysql":      "mysql",
