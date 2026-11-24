@@ -15,7 +15,7 @@ func ParseFile(source string, version token.Version) *FileNode {
 }
 
 func ParseFileIn(source string, grammars phpparser.GrammarRange) *FileNode {
-	return newFileNode(source, ParseTreeIn(source, grammars))
+	return FileNodeOf(source, ParseTreeIn(source, grammars))
 }
 
 func ParseTree(source string, version token.Version) *ast.File {
@@ -53,7 +53,7 @@ type fileNodeBuilder struct {
 	fileHash string
 }
 
-func newFileNode(src string, tree *ast.File) *FileNode {
+func FileNodeOf(src string, tree *ast.File) *FileNode {
 	b := &fileNodeBuilder{src: src, lines: ast.NewLines(src), file: &FileNode{Grammar: tree.Version}}
 	for _, stmt := range tree.Stmts {
 		b.visit(stmt, scopeFile)
