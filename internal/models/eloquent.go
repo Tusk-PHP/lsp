@@ -2,12 +2,13 @@ package models
 
 import (
 	"os"
-	"regexp"
 	"strings"
 	"unicode"
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -35,14 +36,6 @@ func init() {
 		allRelationTypes[k] = true
 	}
 }
-
-// Regex to extract $this->hasMany(Post::class) style calls.
-var relationCallRe = regexp.MustCompile(
-	`\$this\s*->\s*(hasOne|hasMany|belongsTo|belongsToMany|morphOne|morphMany|morphTo|morphToMany|morphedByMany|hasOneThrough|hasManyThrough)\s*\(\s*([A-Za-z_\\]+)::class`,
-)
-
-// Regex for legacy accessor: getNameAttribute()
-var legacyAccessorRe = regexp.MustCompile(`^get([A-Z][A-Za-z0-9]*)Attribute$`)
 
 // eloquentStaticForwards are static methods injected on Eloquent models that
 // no class declares: the SoftDeletes scope adds them to the builder at
@@ -101,68 +94,118 @@ func injectEloquentStaticMethods(index *symbols.Index, model *symbols.Symbol) {
 }
 
 func analyzeModel(index *symbols.Index, model *symbols.Symbol) {
-	// Read the source file to extract method bodies
-	path := symbols.URIToPath(model.URI)
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(symbols.URIToPath(model.URI))
 	if err != nil {
 		return
 	}
-	source := string(content)
-	file := parser.ParseFileIn(source, index.GrammarOf(model.URI))
-	if file == nil {
-		return
+	analyzeModelSource(index, model, newModelSource(string(content), index.GrammarOf(model.URI)))
+}
+
+type modelSource struct {
+	src     string
+	file    *parser.FileNode
+	classes map[string]*ast.ClassDecl
+}
+
+func newModelSource(source string, grammars phpparser.GrammarRange) modelSource {
+	tree := parser.ParseTreeIn(source, grammars)
+	return modelSource{src: source, file: parser.FileNodeOf(source, tree), classes: parser.DeclaredClasses(source, tree)}
+}
+
+func (m modelSource) class(fqn string) (*parser.ClassNode, map[string]*ast.Method) {
+	for i := range m.file.Classes {
+		if m.file.Classes[i].FullName != fqn {
+			continue
+		}
+		methods := map[string]*ast.Method{}
+		for _, member := range m.classes[fqn].Members {
+			if method, ok := member.(*ast.Method); ok && method.Name != nil {
+				methods[method.Name.Bounds().Text(m.src)] = method
+			}
+		}
+		return &m.file.Classes[i], methods
 	}
-	analyzeModelSource(index, model, source, file)
+	return nil, nil
+}
+
+func (m modelSource) resolve(name string) string {
+	return resolveWithUses(name, m.file.Namespace, m.file.Uses)
+}
+
+type modelRelationMethod struct {
+	kind   string
+	target string
+}
+
+func (m modelSource) relation(method parser.MethodNode, decl *ast.Method) (modelRelationMethod, bool) {
+	kind := shortClassName(method.ReturnType.Name)
+	if !allRelationTypes[kind] {
+		kind = ""
+	}
+	call := m.relationCall(decl)
+	if kind == "" && call != nil && (method.ReturnType.Name == "" || method.ReturnType.Name == "mixed") {
+		kind = ucFirst(m.text(call.Name))
+	}
+	if kind == "" {
+		return modelRelationMethod{}, false
+	}
+	relation := modelRelationMethod{kind: kind}
+	if call != nil && len(call.Args.Args) > 0 {
+		if fetch, ok := call.Args.Args[0].Value.(*ast.ClassConstFetch); ok && strings.EqualFold(m.text(fetch.Name), "class") {
+			if class, ok := fetch.Class.(*ast.ConstFetch); ok && class.Name != nil {
+				relation.target = m.resolve(m.text(class.Name))
+			}
+		}
+	}
+	return relation, true
+}
+
+func (m modelSource) text(n ast.Node) string {
+	return n.Bounds().Text(m.src)
+}
+
+func (m modelSource) relationCall(decl *ast.Method) *ast.MethodCall {
+	if decl == nil || decl.Body == nil {
+		return nil
+	}
+	var found *ast.MethodCall
+	ast.Walk(decl.Body, func(n ast.Node) bool {
+		if found != nil {
+			return false
+		}
+		call, ok := n.(*ast.MethodCall)
+		if !ok {
+			return true
+		}
+		name, named := call.Name.(*ast.IdentifierExpr)
+		if owner, isVar := call.Object.(*ast.Variable); named && isVar && m.text(owner) == "$this" && relationCallMethods[m.text(name)] {
+			found = call
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+var relationCallMethods = map[string]bool{
+	"hasOne": true, "hasMany": true, "belongsTo": true, "belongsToMany": true, "morphOne": true, "morphMany": true,
+	"morphTo": true, "morphToMany": true, "morphedByMany": true, "hasOneThrough": true, "hasManyThrough": true,
 }
 
 // analyzeModelSource injects the relations and accessors model declares in
 // source, the text of the file that declares it.
-func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source string, file *parser.FileNode) {
-	lines := strings.Split(source, "\n")
-
-	// Find the class in the parsed file
-	var classNode *parser.ClassNode
-	for i := range file.Classes {
-		fqn := file.Namespace + "\\" + file.Classes[i].Name
-		if file.Namespace == "" {
-			fqn = file.Classes[i].Name
-		}
-		if fqn == model.FQN {
-			classNode = &file.Classes[i]
-			break
-		}
-	}
+func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source modelSource) {
+	classNode, decls := source.class(model.FQN)
 	if classNode == nil {
 		return
 	}
-
-	resolve := func(name string) string {
-		return resolveWithUses(name, file.Namespace, file.Uses)
-	}
-
 	for _, method := range classNode.Methods {
-		// Check for relation return type
-		returnShort := shortClassName(method.ReturnType.Name)
-		if allRelationTypes[returnShort] {
-			body := extractMethodBody(lines, method.StartLine, method.EndLine)
-			injectRelation(index, model, method.Name, methodNameRange(method), returnShort, body, resolve)
+		if relation, ok := source.relation(method, decls[method.Name]); ok {
+			injectRelation(index, model, method.Name, methodNameRange(method), relation)
 			continue
 		}
-
-		// Check for relation calls in body (no explicit return type)
-		if method.ReturnType.Name == "" || method.ReturnType.Name == "mixed" {
-			body := extractMethodBody(lines, method.StartLine, method.EndLine)
-			if match := relationCallRe.FindStringSubmatch(body); match != nil {
-				relType := match[1]
-				relShort := ucFirst(relType)
-				injectRelation(index, model, method.Name, methodNameRange(method), relShort, body, resolve)
-				continue
-			}
-		}
-
-		// Check for legacy accessor: getNameAttribute() → virtual $name
-		if m := legacyAccessorRe.FindStringSubmatch(method.Name); m != nil {
-			propName := "$" + snakeCase(m[1])
+		if name, ok := legacyAccessorName(method.Name); ok {
+			propName := "$" + snakeCase(name)
 			retType := method.ReturnType.Name
 			if retType == "" && method.DocComment != "" {
 				if doc := parser.ParseDocBlock(method.DocComment); doc != nil && doc.Return.Type != "" {
@@ -175,19 +218,15 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source stri
 				Kind:       symbols.KindProperty,
 				URI:        model.URI,
 				Visibility: "public",
-				Type:       resolve(retType),
+				Type:       source.resolve(retType),
 				IsVirtual:  true,
 				DocComment: "Accessor from " + method.Name + "()",
 				Range:      methodNameRange(method),
 			})
 			continue
 		}
-
-		// Check for modern accessor: protected function name(): Attribute
-		resolvedReturn := resolve(method.ReturnType.Name)
-		if resolvedReturn == "Illuminate\\Database\\Eloquent\\Casts\\Attribute" {
+		if source.resolve(method.ReturnType.Name) == "Illuminate\\Database\\Eloquent\\Casts\\Attribute" {
 			propName := "$" + method.Name
-			// Try to infer type from docblock @return
 			retType := ""
 			if method.DocComment != "" {
 				if doc := parser.ParseDocBlock(method.DocComment); doc != nil && doc.Return.Type != "" {
@@ -203,7 +242,7 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source stri
 				Kind:       symbols.KindProperty,
 				URI:        model.URI,
 				Visibility: "public",
-				Type:       resolve(retType),
+				Type:       source.resolve(retType),
 				IsVirtual:  true,
 				DocComment: "Accessor from " + method.Name + "()",
 				Range:      methodNameRange(method),
@@ -212,25 +251,33 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source stri
 	}
 }
 
-// injectRelation creates virtual property and ensures the method also has the right return type.
-func injectRelation(index *symbols.Index, model *symbols.Symbol, methodName string, methodRange textpos.Range, relType, body string, resolve func(string) string) {
-	// Extract related model from body: $this->hasMany(Post::class)
-	relatedModel := ""
-	if match := relationCallRe.FindStringSubmatch(body); match != nil {
-		relatedModel = resolve(match[2])
+func legacyAccessorName(method string) (string, bool) {
+	name, ok := strings.CutPrefix(method, "get")
+	if !ok {
+		return "", false
 	}
+	name, ok = strings.CutSuffix(name, "Attribute")
+	if !ok || name == "" || name[0] < 'A' || name[0] > 'Z' {
+		return "", false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
+			return "", false
+		}
+	}
+	return name, true
+}
 
-	// Determine property type based on relation cardinality
+func injectRelation(index *symbols.Index, model *symbols.Symbol, methodName string, methodRange textpos.Range, relation modelRelationMethod) {
 	propType := "mixed"
-	if relatedModel != "" {
-		if singularRelations[relType] {
-			propType = "?" + relatedModel
+	if relation.target != "" {
+		if singularRelations[relation.kind] {
+			propType = "?" + relation.target
 		} else {
 			propType = "Illuminate\\Database\\Eloquent\\Collection"
 		}
 	}
-
-	// Create virtual property (e.g. $user->posts as Collection)
 	propName := "$" + methodName
 	index.AddVirtualMember(model.FQN, &symbols.Symbol{
 		Name:       propName,
@@ -240,7 +287,7 @@ func injectRelation(index *symbols.Index, model *symbols.Symbol, methodName stri
 		Visibility: "public",
 		Type:       propType,
 		IsVirtual:  true,
-		DocComment: relType + " relation",
+		DocComment: relation.kind + " relation",
 		Range:      methodRange,
 	})
 }
@@ -253,18 +300,6 @@ func methodNameRange(m parser.MethodNode) textpos.Range {
 		Start: textpos.Position{Line: m.StartLine, Character: m.StartCol},
 		End:   textpos.Position{Line: m.StartLine, Character: m.StartCol + len(m.Name)},
 	}
-}
-
-// extractMethodBody returns the source text between startLine and endLine (0-indexed lines array).
-func extractMethodBody(lines []string, startLine, endLine int) string {
-	// Parser lines are 0-indexed
-	if startLine < 0 || endLine < startLine {
-		return ""
-	}
-	if endLine >= len(lines) {
-		endLine = len(lines) - 1
-	}
-	return strings.Join(lines[startLine:endLine+1], "\n")
 }
 
 // resolveWithUses resolves a type name using the file's use statements.
