@@ -130,6 +130,7 @@ func (l *lexer) scripting(insideBraces bool) {
 		}
 		arrow := l.afterArrow
 		l.afterArrow = false
+		commentKeepsArrow := arrow && l.version >= token.PHP82
 		switch {
 		case c == '?' && strings.HasPrefix(src[start:], "?>"):
 			l.emit(token.CloseTag, closeTagEnd(src, start+2))
@@ -156,12 +157,14 @@ func (l *lexer) scripting(insideBraces bool) {
 			if l.pos < len(l.src) {
 				l.emit(token.Backtick, l.pos+1)
 			}
-		case c == '#' && strings.HasPrefix(src[start:], "#["):
+		case c == '#' && !commentKeepsArrow && strings.HasPrefix(src[start:], "#["):
 			l.emit(token.Attribute, start+2)
 		case c == '#' || strings.HasPrefix(src[start:], "//"):
 			l.emit(token.Comment, lineCommentEnd(src, start))
+			l.afterArrow = commentKeepsArrow
 		case strings.HasPrefix(src[start:], "/*"):
 			l.blockComment()
+			l.afterArrow = commentKeepsArrow
 		case c == '(' && l.cast():
 		case strings.HasPrefix(src[start:], "<<<") && l.heredoc():
 		case strings.HasPrefix(src[start:], "<>"):
