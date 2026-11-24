@@ -159,12 +159,12 @@ type Index struct {
 	reverseImplementsMap map[string][]string // interface → classes that implement it
 	subInterfaceMap      map[string][]string // interface → interfaces that extend it
 	traitMap             map[string][]string
-	sortedNames          []string          // sorted lowercase name keys for binary search
-	sortedNamesDirty     bool              // rebuild flag
-	sortedFQNs           []string          // sorted FQN keys for binary search (SearchByFQNPrefix)
-	sortedFQNsDirty      bool              // rebuild flag for sortedFQNs
-	fileSource           map[string]string // URI → raw source text stored during IndexFileWithSource
-	ready                atomic.Bool       // true once project + vendor indexing has completed at least once
+	sortedNames          []string // sorted lowercase name keys for binary search
+	sortedNamesDirty     bool     // rebuild flag
+	sortedFQNs           []string // sorted FQN keys for binary search (SearchByFQNPrefix)
+	sortedFQNsDirty      bool     // rebuild flag for sortedFQNs
+	fileSource           map[string]indexedText
+	ready                atomic.Bool // true once project + vendor indexing has completed at least once
 	generator            atomic.Pointer[classGeneratorHolder]
 	loader               atomic.Pointer[classLoaderHolder]
 	generatedURIs        map[string]bool     // URIs of generated classes, which are not files on disk
@@ -215,7 +215,7 @@ func NewIndex() *Index {
 		reverseImplementsMap: make(map[string][]string),
 		subInterfaceMap:      make(map[string][]string),
 		traitMap:             make(map[string][]string),
-		fileSource:           make(map[string]string),
+		fileSource:           make(map[string]indexedText),
 		generatedURIs:        make(map[string]bool),
 		generatedFrom:        make(map[string][]string),
 	}
@@ -238,8 +238,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 
 	// Remove any previously indexed symbols from this URI (for re-indexing)
 	idx.removeFileSymbols(uri)
-	// Store the raw source text for this URI, mirroring IndexFileWithSource.
-	idx.fileSource[uri] = source
+	idx.fileSource[uri] = indexedText{text: source, ideHelper: true}
 	if _, ok := idx.fileSymbols[uri]; !ok {
 		idx.fileSymbols[uri] = nil
 	}
@@ -346,7 +345,20 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 	}
 }
 
+type indexedText struct {
+	text      string
+	from      SymbolSource
+	ideHelper bool
+}
+
 func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSource) {
+	indexed := indexedText{text: source, from: src}
+	idx.mu.RLock()
+	previous, indexedBefore := idx.fileSource[uri]
+	idx.mu.RUnlock()
+	if indexedBefore && previous == indexed {
+		return
+	}
 	file := parser.ParseFile(source)
 	if file == nil {
 		return
@@ -355,8 +367,7 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 	defer idx.mu.Unlock()
 	foreign := idx.foreignMembersLocked(uri)
 	idx.removeFileSymbols(uri)
-	// Store the raw source text for this URI (replaces any previous version)
-	idx.fileSource[uri] = source
+	idx.fileSource[uri] = indexed
 	idx.indexParsedLocked(uri, file, src)
 	idx.reattachForeignMembersLocked(foreign)
 }
@@ -1610,7 +1621,7 @@ func (idx *Index) TemplateFileURIs() []string {
 func (idx *Index) GetFileSource(uri string) string {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	return idx.fileSource[uri]
+	return idx.fileSource[uri].text
 }
 
 // Ready reports whether at least one full workspace + composer indexing pass
