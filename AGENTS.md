@@ -43,7 +43,7 @@ make field-baseline   # Laravel, Symfony, WordPress, Magento 2 against testdata/
 make field-baseline-update   # rewrite those baselines after an intended change
 
 go test -v -race -run TestHoverMethodChain ./internal/hover/   # one test
-TUSK_PHP_TOKENIZERS='php;docker run --rm -i php:8.0-cli php' go test ./internal/php/lexer/   # lexer against each PHP's token_get_all
+TUSK_PHP_TOKENIZERS='php;docker run --rm -i -v /tmp:/tmp:ro php:8.0-cli php' go test ./internal/php/lexer/   # lexer against each PHP's token_get_all
 php scripts/generate-builtins.php registry --output=internal/symbols/builtin_registry_generated.go
 php scripts/generate-builtins.php stubs --output=/tmp/php-builtins.generated.php
 ```
@@ -66,7 +66,8 @@ above it in this list**, never from a later one:
    (diagnostic codes, severities and sources: every code a finding carries is a
    `rule.Code` constant listed in `rule.All`).
 2. **Language core:** `php/token` and `php/lexer` (lossless lexer that matches
-   PHP 8.0 to 8.5's own tokenizer, see issue #140), `parser` (own tokenizer and
+   PHP 8.0 to 8.6's own tokenizer with `short_open_tag` off, so `<?` is inline
+   HTML; see issue #140), `parser` (own tokenizer and
    lightweight AST, fault-tolerant),
    `types`, `phparray`, `stubs` (embedded builtin stubs by PHP version and
    extension), `phpdetect`.
@@ -254,4 +255,6 @@ description instead, and the maintainers write the changelog from it when they r
 - **Editors**: VS Code, Zed and Neovim are first-class. Zed users can't configure
   the server, so every default must be sensible.
 - **Non-goals**: no native formatter (Laravel Pint stays the formatting path), and
-  no whole-parser rewrite while the current one can be extended.
+  no big-bang parser rewrite. The current parser can't grow a statement and
+  expression tree, so issue #140 replaces it one step at a time (lexer, parser,
+  then moving callers over); the old parser stays until its last caller has moved.
