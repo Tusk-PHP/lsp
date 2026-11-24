@@ -46,16 +46,18 @@ class Config {
 
 func TestUnusedPrivateConstantStaysQuietWhenUnsure(t *testing.T) {
 	for name, src := range map[string]string{
-		"dynamic fetch":                 "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return self::{$n}; }\n}\n",
-		"constant()":                    "<?php\nclass A {\n    private const X = 1;\n    public function f() { return constant('self::X'); }\n}\n",
-		"constant() of a computed name": "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return constant('self::' . $n); }\n}\n",
-		"defined()":                     "<?php\nclass A {\n    private const X = 1;\n    public function f() { return defined('self::X'); }\n}\n",
-		"defined() of a variable":       "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return defined($n); }\n}\n",
-		"getConstants()":                "<?php\nclass A {\n    private const X = 1;\n    public function f() { return (new \\ReflectionClass($this))->getConstants(); }\n}\n",
-		"getConstant()":                 "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return (new \\ReflectionClass(self::class))->getConstant($n); }\n}\n",
-		"ReflectionClassConstant":       "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return new \\ReflectionClassConstant(self::class, $n); }\n}\n",
-		"class attribute":               "<?php\n#[AsCommand(name: self::NAME)]\nfinal class FooCommand {\n    private const NAME = 'app:foo';\n}\n",
-		"multi-line class attribute":    "<?php\nuse Doctrine\\ORM\\Mapping as ORM;\n#[ORM\\Entity]\n#[ORM\\Table(\n    name: self::TABLE,\n)]\nclass Post {\n    private const TABLE = 'posts';\n}\n",
+		"dynamic fetch":                        "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return self::{$n}; }\n}\n",
+		"constant()":                           "<?php\nclass A {\n    private const X = 1;\n    public function f() { return constant('self::X'); }\n}\n",
+		"constant() of a computed name":        "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return constant('self::' . $n); }\n}\n",
+		"defined()":                            "<?php\nclass A {\n    private const X = 1;\n    public function f() { return defined('self::X'); }\n}\n",
+		"constant() of an interpolated string": "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return constant(\"self::{$n}\"); }\n}\n",
+		"constant() of a nowdoc":               "<?php\nclass A {\n    private const X = 1;\n    public function f() { return constant(<<<'N'\nself::X\nN); }\n}\n",
+		"defined() of a variable":              "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return defined($n); }\n}\n",
+		"getConstants()":                       "<?php\nclass A {\n    private const X = 1;\n    public function f() { return (new \\ReflectionClass($this))->getConstants(); }\n}\n",
+		"getConstant()":                        "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return (new \\ReflectionClass(self::class))->getConstant($n); }\n}\n",
+		"ReflectionClassConstant":              "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return new \\ReflectionClassConstant(self::class, $n); }\n}\n",
+		"class attribute":                      "<?php\n#[AsCommand(name: self::NAME)]\nfinal class FooCommand {\n    private const NAME = 'app:foo';\n}\n",
+		"multi-line class attribute":           "<?php\nuse Doctrine\\ORM\\Mapping as ORM;\n#[ORM\\Entity]\n#[ORM\\Table(\n    name: self::TABLE,\n)]\nclass Post {\n    private const TABLE = 'posts';\n}\n",
 	} {
 		if got := privateConstantFindings(t, src, nil); len(got) != 0 {
 			t.Errorf("%s: %v", name, got)
@@ -75,7 +77,8 @@ func TestUnusedPrivateConstantChecksLiteralLookupsByName(t *testing.T) {
 class A {
     private const READ = 1;
     private const UNREAD = 2;
-    public function f() { return defined('APP_DEBUG') && constant('self::READ'); }
+    private bool $defined = false;
+    public function f() { return $this->defined || defined('APP_DEBUG') && constant('self::READ'); }
 }
 `
 	if got := privateConstantFindings(t, src, nil); !slices.Equal(got, []string{"Private constant 'A::UNREAD' is never used"}) {
