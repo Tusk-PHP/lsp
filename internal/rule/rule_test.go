@@ -90,6 +90,10 @@ func TestTargets(t *testing.T) {
 		{"phpstan:argument.type", "phpstan", "return.type", false},
 		{"phpstan", "phpstan", "return.type", true},
 		{"pint", "phpstan", "braces", false},
+		{"pint:single_quote", "pint", PintCode([]string{"binary_operator_spaces", "single_quote"}), true},
+		{"pint:braces", "pint", PintCode([]string{"binary_operator_spaces", "single_quote"}), false},
+		{"tusk-php", "tusk-php", "unused-variable", true},
+		{"tusk-php", "pint", "braces", false},
 	}
 	for _, c := range cases {
 		target, err := ParseTarget(c.text)
@@ -110,15 +114,19 @@ func TestTargets(t *testing.T) {
 	}
 }
 
-func TestTargetOf(t *testing.T) {
-	if target, err := TargetOf("tusk-php", "unknown-member"); err != nil || target != NativeTarget(UnknownMember) {
-		t.Errorf("native: %v, %v", target, err)
+func TestTargetsOf(t *testing.T) {
+	if targets, err := TargetsOf("tusk-php", "unknown-member"); err != nil || !slices.Equal(targets, []Target{NativeTarget(UnknownMember)}) {
+		t.Errorf("native: %v, %v", targets, err)
 	}
-	if target, err := TargetOf("phpstan", "argument.type"); err != nil || target.String() != "phpstan:argument.type" {
-		t.Errorf("external: %v, %v", target, err)
+	if targets, err := TargetsOf("phpstan", "argument.type"); err != nil || len(targets) != 1 || targets[0].String() != "phpstan:argument.type" {
+		t.Errorf("external: %v, %v", targets, err)
+	}
+	targets, err := TargetsOf("pint", PintCode([]string{"braces", "single_quote"}))
+	if err != nil || len(targets) != 2 || targets[0].String() != "pint:braces" || targets[1].String() != "pint:single_quote" {
+		t.Errorf("a Pint finding names a target per fixer: %v, %v", targets, err)
 	}
 	for _, bad := range [][2]string{{"tusk-php", "nope"}, {"psalm", "x"}} {
-		if _, err := TargetOf(bad[0], bad[1]); err == nil {
+		if _, err := TargetsOf(bad[0], bad[1]); err == nil {
 			t.Errorf("%v must not make a target", bad)
 		}
 	}

@@ -1,7 +1,6 @@
 package checks
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/rule"
@@ -84,7 +83,9 @@ $e->missing();
 		{3, tusk, "undefined-variable", true},
 		{3, tusk, "unknown-member", false},
 		{5, tusk, "unknown-member", true},
-		{5, pint, "braces", true},
+		{5, phpstan, "method.notFound", true},
+		{5, pint, "braces", false},
+		{6, pint, "braces", false},
 		{6, tusk, "unknown-member", true},
 		{8, tusk, "unknown-member", false},
 		{8, phpstan, "method.notFound", false},
@@ -103,7 +104,7 @@ func TestPHPSuppressionsWithoutMarker(t *testing.T) {
 	if got := PHPSuppressions("<?php\n// nothing to see\n$a = 1;\n"); got != nil {
 		t.Errorf("got %#v, want nil", got)
 	}
-	if got := CommentSuppressions("<p>{{-- plain --}}</p>", []CommentSpan{{3, 18}}); got != nil {
+	if got := BladeSuppressions("<p>{{-- plain --}}</p>"); got != nil {
 		t.Errorf("got %#v, want nil", got)
 	}
 }
@@ -117,23 +118,59 @@ func TestSuppressionComments(t *testing.T) {
 	}
 }
 
-func TestCommentSuppressionsForTemplates(t *testing.T) {
-	source := "<div>\n{{-- @tusk-ignore unknown-view --}}\n@include('missing')\n{{ $a }} {{-- @tusk-ignore undefined-variable --}}\n{{-- a note --}}\n</div>\n"
-	var spans []CommentSpan
-	for from := 0; ; {
-		start := strings.Index(source[from:], "{{--")
-		if start < 0 {
-			break
-		}
-		start += from
-		end := start + strings.Index(source[start:], "--}}") + len("--}}")
-		spans = append(spans, CommentSpan{start, end})
-		from = end
-	}
-	checkSuppressions(t, CommentSuppressions(source, spans), []suppressionCase{
+func TestBladeSuppressions(t *testing.T) {
+	source := "<div>\n{{-- @tusk-ignore unknown-view --}}\n@include('missing')\n{{ $a }} {{-- @tusk-ignore undefined-variable --}}\n{{-- a note --}}\n@php\n    // @tusk-ignore unknown-function\n    nope();\n@endphp\n{{-- @tusk-ignore unknown-member--}}\n{{ $b->c }}\n</div>\n"
+	checkSuppressions(t, BladeSuppressions(source), []suppressionCase{
 		{2, tusk, "unknown-view", true},
 		{3, tusk, "undefined-variable", true},
 		{3, tusk, "unknown-view", false},
 		{4, tusk, "undefined-variable", false},
+		{7, tusk, "unknown-function", true},
+		{10, tusk, "unknown-member", true},
+	})
+}
+
+func TestMarkersReachPastCommentsAttributesAndBlankLines(t *testing.T) {
+	source := `<?php
+class Shop
+{
+    // @tusk-ignore unknown-class
+    // @tusk-ignore unknown-member
+    /**
+     * @return Missing
+     */
+    #[Route('/cart', methods: ['GET'])]
+    #[Deprecated]
+    public function cart() {}
+
+    /** @phpstan-ignore-next-line */
+
+    public function checkout() {}
+}
+`
+	checkSuppressions(t, PHPSuppressions(source), []suppressionCase{
+		{10, tusk, "unknown-class", true},
+		{10, tusk, "unknown-member", true},
+		{8, tusk, "unknown-class", false},
+		{14, tusk, "unknown-member", true},
+	})
+}
+
+func TestMarkerCodesStopAtPunctuationAndReasons(t *testing.T) {
+	source := `<?php
+$a = 1; // @tusk-ignore unused-variable.
+$b = 1; // @tusk-ignore unused-variable: read by an include
+$c->d(); // @phpstan-ignore method.notFound (magic), variable.undefined (legacy (old))
+$e->f(); // @phpstan-ignore method.notFound (unclosed
+$g->h(); // @tusk-ignore pint:single_quote
+`
+	checkSuppressions(t, PHPSuppressions(source), []suppressionCase{
+		{1, tusk, "unused-variable", true},
+		{2, tusk, "unused-variable", true},
+		{3, tusk, "unknown-member", true},
+		{3, tusk, "undefined-variable", true},
+		{4, tusk, "unknown-member", true},
+		{5, pint, rule.PintCode([]string{"binary_operator_spaces", "single_quote"}), true},
+		{5, pint, "braces", false},
 	})
 }
