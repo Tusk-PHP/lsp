@@ -46,6 +46,7 @@ func references(t *testing.T) []reference {
 		argv := strings.Fields(command)
 		out, err := exec.Command(argv[0], append(argv[1:], "-r", `if (!function_exists("token_get_all")) exit(1); echo PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION;`)...).Output()
 		if err != nil {
+			t.Logf("skipping %s: no PHP with the tokenizer extension: %v", command, err)
 			continue
 		}
 		version, err := token.ParseVersion(string(out))
@@ -59,9 +60,17 @@ func references(t *testing.T) []reference {
 		refs = append(refs, reference{argv, version})
 	}
 	if len(refs) == 0 {
-		t.Skip("no PHP with the tokenizer extension (set TUSK_PHP_TOKENIZERS to commands separated by ';')")
+		skipOutsideCI(t, "no PHP 8.0 to "+token.Latest.String()+" with the tokenizer extension (set TUSK_PHP_TOKENIZERS to commands separated by ';')")
 	}
 	return refs
+}
+
+func skipOutsideCI(t *testing.T, reason string) {
+	t.Helper()
+	if os.Getenv("CI") != "" {
+		t.Fatal(reason)
+	}
+	t.Skip(reason)
 }
 
 func serialize(src string, version token.Version) string {
@@ -92,7 +101,7 @@ func corpus(t *testing.T) []string {
 		})
 	}
 	if len(files) < 100 {
-		t.Skip("the Laravel and Symfony fixtures' vendor trees aren't installed")
+		skipOutsideCI(t, "the Laravel and Symfony fixtures' vendor trees aren't installed")
 	}
 	return files
 }
