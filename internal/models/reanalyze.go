@@ -2,7 +2,6 @@ package models
 
 import (
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -34,13 +33,10 @@ func analyzeEloquentFile(index *symbols.Index, uri, source string, schema *Schem
 	if len(models) == 0 {
 		return
 	}
-	file := parser.ParseFileIn(source, index.GrammarOf(uri))
-	if file == nil {
-		return
-	}
+	parsed := newModelSource(source, index.GrammarOf(uri))
 	for _, model := range models {
 		injectEloquentStaticMethods(index, model)
-		analyzeModelSource(index, model, source, file)
+		analyzeModelSource(index, model, parsed)
 		// The same order as the workspace analysis: the schema's columns,
 		// then those only migrations know.
 		table := ResolveModelTableName(index, model)

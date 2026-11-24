@@ -72,3 +72,16 @@ func TestStringLiteralEscapes(t *testing.T) {
 		}
 	}
 }
+
+func TestDeclaredClasses(t *testing.T) {
+	src := "<?php\nnamespace A;\nclass One {}\nnamespace B { class Two {} interface I {} }\nnamespace { class Three {} }\n"
+	got := DeclaredClasses(src, ParseTree(src, token.Latest))
+	for _, fqn := range []string{`A\One`, `B\Two`, "Three"} {
+		if got[fqn] == nil {
+			t.Errorf("%s missing from %v", fqn, got)
+		}
+	}
+	if len(got) != 3 {
+		t.Errorf("got %d classes", len(got))
+	}
+}
