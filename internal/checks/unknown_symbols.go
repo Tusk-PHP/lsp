@@ -2,7 +2,6 @@ package checks
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -107,15 +106,13 @@ type UnknownMemberRule struct {
 
 func (r *UnknownMemberRule) Codes() []rule.Code { return []rule.Code{rule.UnknownMember} }
 
-var unknownMemberAccessRe = regexp.MustCompile(`(\?\->|\->|::)\s*([A-Za-z_][A-Za-z0-9_]*)`)
-
 func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	if file == nil || r.TypeResolver == nil {
 		return nil
 	}
+	syntax := r.Shared.tree(source, file.Grammar)
 	lines := strings.Split(source, "\n")
 	var findings []Finding
-	mask := newMaskState(source)
 	hierarchies := map[string]*memberHierarchy{}
 	instanceofLines := linesWithInstanceof(lines)
 	guards := memberGuards{file: file}
@@ -125,68 +122,55 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 		}
 	}
 
-	for lineNum, raw := range lines {
-		line := maskPHPLine(raw, &mask)
-		for _, match := range unknownMemberAccessRe.FindAllStringSubmatchIndex(line, -1) {
-			opStart, opEnd := match[2], match[3]
-			nameStart, nameEnd := match[4], match[5]
-			member := line[nameStart:nameEnd]
-			isStatic := line[opStart:opEnd] == "::"
-			// `Foo::class` and `$foo::class` are part of the language, not members.
-			if isStatic && strings.EqualFold(member, "class") {
-				continue
-			}
-			ownerExpr := strings.TrimSpace(line[backwardExprStart(line, opStart):opStart])
-			// A line like `})->name('x')->middleware()` continues a chain begun on
-			// an earlier line, so its owner can't be worked out from this line.
-			if ownerExpr == "" || strings.Count(ownerExpr, ")") > strings.Count(ownerExpr, "(") {
-				continue
-			}
-			isCall := isCallAfter(line, nameEnd)
-			// method_exists(), property_exists() and is_callable() are how code
-			// asks whether an object has a member before using it.
-			if guards.covers(ownerExpr, member, isCall, isStatic, lineNum, opStart) {
-				continue
-			}
-
-			owners := r.resolveOwners(ownerExpr, lineNum, backwardExprStart(line, opStart), source, file, index)
-			if len(owners) == 0 {
-				continue
-			}
-			narrowed, ok := instanceofOwners(ownerExpr, lines, instanceofLines, lineNum, file, index)
-			if !ok {
-				continue
-			}
-			owners = appendNewOwners(owners, narrowed)
-			access := memberAccess{name: member, isStatic: isStatic, isCall: isCall}
-			if !access.isCall && !isStatic {
-				// isset(), unset(), empty() and ?? are how code asks whether a
-				// property is there; and a class with #[AllowDynamicProperties]
-				// (or stdClass) has whatever properties code gives it.
-				if propertyCheckedForPresence(line, backwardExprStart(line, opStart), nameEnd) || anyOwnerAllowsDynamicProperties(owners, index) {
-					continue
-				}
-			}
-			if anyOwnerMayHaveMember(owners, access, file, index, hierarchies) || r.conventionMethod(owners, access, hierarchies) {
-				continue
-			}
-			if anyImplementationHasMember(owners, isLateBoundOwner(ownerExpr), access, file, index, hierarchies) {
-				continue
-			}
-			names := make([]string, len(owners))
-			for i, owner := range owners {
-				names[i] = unknownSymbolShortName(owner)
-			}
-			findings = append(findings, Finding{
-				StartLine: lineNum,
-				StartCol:  nameStart,
-				EndLine:   lineNum,
-				EndCol:    nameEnd,
-				Severity:  rule.SeverityWarning,
-				Code:      rule.UnknownMember,
-				Message:   fmt.Sprintf("Unknown member '%s' on '%s'", member, strings.Join(names, "|")),
-			})
+	for _, ref := range syntax.references().members {
+		member := syntax.text(ref.name)
+		// `Foo::class` and `$foo::class` are part of the language, not members.
+		if ref.static && !ref.call && strings.EqualFold(member, "class") {
+			continue
 		}
+		ownerSpan := ref.owner.Bounds()
+		ownerLine, ownerCol := syntax.lines.Position(ownerSpan.Start)
+		lineNum, nameCol := syntax.lines.Position(ref.name.Start)
+		if endLine, _ := syntax.lines.Position(ownerSpan.End); endLine != ownerLine || lineNum != ownerLine {
+			continue
+		}
+		ownerExpr := syntax.text(ref.owner)
+		// method_exists(), property_exists() and is_callable() are how code
+		// asks whether an object has a member before using it.
+		if guards.covers(ownerExpr, member, ref.call, ref.static, lineNum, nameCol) {
+			continue
+		}
+		owners := r.resolveOwners(ownerExpr, ownerLine, ownerCol, source, file, index)
+		if len(owners) == 0 {
+			continue
+		}
+		narrowed, ok := instanceofOwners(ownerExpr, lines, instanceofLines, lineNum, file, index)
+		if !ok {
+			continue
+		}
+		owners = appendNewOwners(owners, narrowed)
+		access := memberAccess{name: member, isStatic: ref.static, isCall: ref.call}
+		// isset(), unset(), empty() and ?? are how code asks whether a property
+		// is there; and a class with #[AllowDynamicProperties] (or stdClass)
+		// has whatever properties code gives it.
+		if !ref.call && !ref.static && (ref.presence || anyOwnerAllowsDynamicProperties(owners, index)) {
+			continue
+		}
+		if anyOwnerMayHaveMember(owners, access, file, index, hierarchies) || r.conventionMethod(owners, access, hierarchies) {
+			continue
+		}
+		if anyImplementationHasMember(owners, isLateBoundOwner(ownerExpr), access, file, index, hierarchies) {
+			continue
+		}
+		names := make([]string, len(owners))
+		for i, owner := range owners {
+			names[i] = unknownSymbolShortName(owner)
+		}
+		findings = append(findings, syntax.at(ref.name, Finding{
+			Severity: rule.SeverityWarning,
+			Code:     rule.UnknownMember,
+			Message:  fmt.Sprintf("Unknown member '%s' on '%s'", member, strings.Join(names, "|")),
+		}))
 	}
 
 	return findings
@@ -822,46 +806,6 @@ func isAbstractClassLike(sym *symbols.Symbol) bool {
 	return sym.Kind == symbols.KindInterface || (sym.Kind == symbols.KindClass && sym.IsAbstract)
 }
 
-// propertyCheckedForPresence reports whether the property access running
-// from exprStart to nameEnd is the argument of isset(), unset() or empty(), or
-// the left side of ??, where PHP doesn't require the property to exist.
-func propertyCheckedForPresence(line string, exprStart, nameEnd int) bool {
-	if rest := strings.TrimLeft(line[nameEnd:], " \t"); strings.HasPrefix(rest, "??") {
-		return true
-	}
-	depth := 0
-	for i := exprStart - 1; i >= 0; i-- {
-		switch line[i] {
-		case ')', ']':
-			depth++
-		case '(', '[':
-			if depth > 0 {
-				depth--
-				continue
-			}
-			if line[i] == '[' {
-				return false
-			}
-			j := i
-			for j > 0 && (line[j-1] == ' ' || line[j-1] == '\t') {
-				j--
-			}
-			k := j
-			for k > 0 && parser.IsIdentByte(line[k-1]) {
-				k--
-			}
-			switch strings.ToLower(line[k:j]) {
-			case "isset", "unset", "empty":
-				return true
-			}
-			return false
-		case ';', '{', '}':
-			return false
-		}
-	}
-	return false
-}
-
 // anyOwnerAllowsDynamicProperties reports whether one of the owners, or a
 // class it extends, is stdClass or has #[AllowDynamicProperties].
 func anyOwnerAllowsDynamicProperties(owners []string, index *symbols.Index) bool {
@@ -886,11 +830,6 @@ func anyOwnerAllowsDynamicProperties(owners []string, index *symbols.Index) bool
 		}
 	}
 	return false
-}
-
-func isCallAfter(line string, pos int) bool {
-	rest := strings.TrimLeft(line[pos:], " \t")
-	return strings.HasPrefix(rest, "(")
 }
 
 func resolveClassLikeName(name string, line int, file *parser.FileNode) (string, bool) {

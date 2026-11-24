@@ -13,15 +13,30 @@ type classReference struct {
 	attribute bool
 }
 
+type memberReference struct {
+	owner    ast.Expr
+	name     *ast.IdentifierExpr
+	static   bool
+	call     bool
+	presence bool
+}
+
 type references struct {
 	classes   []classReference
 	calls     []*ast.Name
 	constants []*ast.Name
+	members   []memberReference
 }
 
 func collectReferences(tree *ast.File) *references {
 	refs := &references{}
 	named := map[*ast.ConstFetch]bool{}
+	present := map[ast.Expr]bool{}
+	member := func(n ast.Expr, owner, name ast.Expr, static, call bool) {
+		if id, ok := name.(*ast.IdentifierExpr); ok {
+			refs.members = append(refs.members, memberReference{owner: owner, name: id, static: static, call: call, presence: present[n]})
+		}
+	}
 	class := func(e ast.Expr) {
 		if c, ok := e.(*ast.ConstFetch); ok {
 			named[c] = true
@@ -39,6 +54,34 @@ func collectReferences(tree *ast.File) *references {
 	}
 	ast.Walk(tree, func(n ast.Node) bool {
 		switch n := n.(type) {
+		case *ast.Isset:
+			for _, v := range n.Vars {
+				markPresence(present, v)
+			}
+		case *ast.Unset:
+			for _, v := range n.Vars {
+				markPresence(present, v)
+			}
+		case *ast.Empty:
+			markPresence(present, n.Operand)
+		case *ast.Binary:
+			if n.Op == token.Coalesce {
+				present[n.Left] = true
+			}
+		case *ast.Assign:
+			if n.Op == token.CoalesceEqual {
+				present[n.Target] = true
+			}
+		case *ast.PropertyFetch:
+			member(n, n.Object, n.Name, false, false)
+		case *ast.MethodCall:
+			member(n, n.Object, n.Name, false, true)
+		case *ast.ClassConstFetch:
+			member(n, n.Class, n.Name, true, false)
+			class(n.Class)
+		case *ast.StaticCall:
+			member(n, n.Class, n.Name, true, true)
+			class(n.Class)
 		case *ast.Call:
 			if c, ok := n.Callee.(*ast.ConstFetch); ok {
 				named[c] = true
@@ -53,10 +96,6 @@ func collectReferences(tree *ast.File) *references {
 		case *ast.New:
 			class(n.Class)
 		case *ast.InstanceOf:
-			class(n.Class)
-		case *ast.StaticCall:
-			class(n.Class)
-		case *ast.ClassConstFetch:
 			class(n.Class)
 		case *ast.StaticPropertyFetch:
 			class(n.Class)
@@ -76,6 +115,23 @@ func collectReferences(tree *ast.File) *references {
 		}
 		return true
 	})
+	slices.SortStableFunc(refs.members, func(a, b memberReference) int { return cmp.Compare(a.name.Start, b.name.Start) })
 	slices.SortStableFunc(refs.classes, func(a, b classReference) int { return cmp.Compare(a.name.Start, b.name.Start) })
 	return refs
+}
+
+func markPresence(present map[ast.Expr]bool, e ast.Expr) {
+	for e != nil {
+		present[e] = true
+		switch n := e.(type) {
+		case *ast.PropertyFetch:
+			e = n.Object
+		case *ast.MethodCall:
+			e = n.Object
+		case *ast.ArrayDimFetch:
+			e = n.Array
+		default:
+			return
+		}
+	}
 }

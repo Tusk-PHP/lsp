@@ -94,3 +94,55 @@ func TestSharedTreeIsParsedOncePerSource(t *testing.T) {
 		t.Error("another PHP version gets a new tree")
 	}
 }
+
+func TestMemberReferences(t *testing.T) {
+	src := `<?php
+isset($a->b->c[$d->e]); empty($f->g); unset($h->i); isset($z->y()->x);
+$j->k ?? 1; $l->m ??= 2;
+$n?->o(); P::Q; R::s(); $t->{$u}; $v::$w; $x->$y();
+`
+	var got []string
+	for _, m := range newFileSyntax(src, token.Latest).references().members {
+		desc := m.owner.Bounds().Text(src) + " " + m.name.Bounds().Text(src)
+		if m.static {
+			desc += " static"
+		}
+		if m.call {
+			desc += " call"
+		}
+		if m.presence {
+			desc += " presence"
+		}
+		got = append(got, desc)
+	}
+	want := []string{
+		"$a b presence", "$a->b c presence", "$d e", "$f g presence", "$h i presence", "$z y call presence", "$z->y() x presence",
+		"$j k presence", "$l m presence", "$n o call", "P Q static", "R s static call",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestUnknownMemberReadsAccessesFromTheTree(t *testing.T) {
+	decl := `<?php
+namespace App;
+class Post { public function publish() {} }
+`
+	source := `<?php
+namespace App;
+class C {
+    public function f(): void {
+        if (isset($this->post->draft) || ($this->post->title ?? false)) {}
+        $this->post
+            ->missingOnNextLine();
+        if ($this->other instanceof Unknown) { $this->other->gone(); }
+        $this->post->nope();
+    }
+}
+`
+	got := unknownMemberMessages(checkUnknownMembers(t, map[string]string{"$this->post": `App\Post`, "$this->other": `App\Post`}, decl, source))
+	if want := []string{"Unknown member 'nope' on 'Post'"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
