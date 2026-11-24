@@ -9,6 +9,7 @@ import (
 func prototypeIndex(t *testing.T) *Index {
 	t.Helper()
 	idx := NewIndex()
+	idx.RegisterBuiltins()
 	idx.IndexFile("file:///Shape.php", `<?php
 namespace App;
 interface Named { public function name(): string; const PREFIX = 'x'; }
@@ -31,38 +32,96 @@ class Orphan extends Missing { public function run(): void {} }
 class Loop extends Loop2 { public function run(): void {} }
 class Loop2 extends Loop { public function run(): void {} }
 `)
+	idx.IndexFile("file:///Model.php", `<?php
+namespace App;
+trait HasAttributes { protected function casts(): array { return []; } }
+abstract class Model implements \ArrayAccess, \JsonSerializable {
+    use HasAttributes;
+    abstract public function offsetGet(mixed $offset): mixed;
+}
+class User extends Model {
+    protected function casts(): array { return ['a' => 'b']; }
+    public function offsetGet(mixed $offset): mixed { return null; }
+    public function offsetExists(mixed $offset): bool { return false; }
+    public function jsonSerialize(): mixed { return []; }
+}
+trait Measures { public function area(): float { return 2.0; } }
+class ViaTrait implements Shape { use Measures; public function name(): string { return 'v'; } }
+interface HasLabel { public function label(): string; const DEFAULT = 'none'; }
+enum Suit: string implements HasLabel {
+    case Hearts = 'h';
+    const DEFAULT = 'hearts';
+    public function label(): string { return 'suit'; }
+}
+`)
+	idx.IndexFile("file:///Rules.php", `<?php
+namespace App;
+class Secretive { private function secret(): void {} public function __construct() {} }
+class Teller extends Secretive { public function secret(): void {} public function __construct() {} }
+abstract class Built { abstract public function __construct(int $x); }
+class Builder extends Built { public function __construct(int $x) {} }
+interface Makes { public function __construct(); }
+class Maker implements Makes { public function __construct() {} }
+trait Hidden { abstract private function hidden(): void; }
+class UsesHidden { use Hidden; private function hidden(): void {} }
+class BelowHidden extends UsesHidden { private function hidden(): void {} }
+`)
 	return idx
 }
 
 func TestPrototypeIsTheTopmostDeclaration(t *testing.T) {
 	idx := prototypeIndex(t)
-	cases := map[string]string{
-		`App\Square::area`:   `App\Shape::area`,
-		`App\Square::name`:   `App\Named::name`,
-		`App\Base::NAME`:     `App\Named::name`,
-		`App\Square::draw`:   `App\Base::draw`,
-		`App\Square::$label`: `App\Base::$label`,
-		`App\Square::PREFIX`: `App\Named::PREFIX`,
+	cases := []struct{ receiver, member, want string }{
+		{"", `App\Square::area`, `App\Shape::area`},
+		{"", `App\Square::name`, `App\Named::name`},
+		{"", `App\Base::NAME`, `App\Named::name`},
+		{"", `App\Square::draw`, `App\Base::draw`},
+		{"", `App\Square::$label`, `App\Base::$label`},
+		{"", `App\Square::PREFIX`, `App\Named::PREFIX`},
+		{"", `App\User::casts`, `App\HasAttributes::casts`},
+		{`App\ViaTrait`, `App\Measures::area`, `App\Shape::area`},
+		{"", `App\User::offsetGet`, `App\Model::offsetGet`},
+		{"", `App\Suit::label`, `App\HasLabel::label`},
+		{"", `App\Suit::DEFAULT`, `App\HasLabel::DEFAULT`},
+		{"", `App\Builder::__construct`, `App\Built::__construct`},
+		{"", `App\Maker::__construct`, `App\Makes::__construct`},
+		{"", `App\UsesHidden::hidden`, `App\Hidden::hidden`},
 	}
-	for member, want := range cases {
-		got := idx.Prototype(idx.Lookup(member))
-		if got == nil || got.FQN != want {
-			t.Errorf("%s: got %v, want %s", member, got, want)
+	for _, c := range cases {
+		got := idx.Prototype(c.receiver, idx.Lookup(c.member))
+		if got == nil || got.FQN != c.want {
+			t.Errorf("%s through %q: got %v, want %s", c.member, c.receiver, got, c.want)
 		}
 	}
 }
 
 func TestPrototypeOfAMemberNothingAboveDeclares(t *testing.T) {
 	idx := prototypeIndex(t)
-	for _, fqn := range []string{`App\Square::side`, `App\Named::name`, `App\Square`, `App\Base::missing`, `App\Orphan::run`} {
-		if got := idx.Prototype(idx.Lookup(fqn)); got != nil {
-			t.Errorf("%s: got %s, want none", fqn, got.FQN)
+	cases := []struct{ receiver, member string }{
+		{"", `App\Square::side`},
+		{"", `App\Named::name`},
+		{"", `App\Square`},
+		{"", `App\Base::missing`},
+		{"", `App\Orphan::run`},
+		{`App\Square`, `App\Square::side`},
+		{`App\Square`, `App\Base::draw`},
+		{`App\ViaTrait`, `App\Measures::name`},
+		{`App\Orphan`, `App\Measures::area`},
+		{"", `App\User::offsetExists`},
+		{"", `App\User::jsonSerialize`},
+		{"", `App\Teller::secret`},
+		{"", `App\Teller::__construct`},
+		{"", `App\BelowHidden::hidden`},
+	}
+	for _, c := range cases {
+		if got := idx.Prototype(c.receiver, idx.Lookup(c.member)); got != nil {
+			t.Errorf("%s through %q: got %s, want none", c.member, c.receiver, got.FQN)
 		}
 	}
-	if idx.Prototype(nil) != nil {
+	if idx.Prototype("", nil) != nil {
 		t.Error("no symbol, no prototype")
 	}
-	if got := idx.Prototype(idx.Lookup(`App\Loop::run`)); got == nil || got.FQN != `App\Loop2::run` {
+	if got := idx.Prototype("", idx.Lookup(`App\Loop::run`)); got == nil || got.FQN != `App\Loop2::run` {
 		t.Errorf("a cycle in the hierarchy ends: got %v", got)
 	}
 }
@@ -71,16 +130,16 @@ func BenchmarkPrototype(b *testing.B) {
 	for _, classes := range []int{100, 10000} {
 		idx := NewIndex()
 		var src strings.Builder
-		src.WriteString("<?php\ninterface Root { public function run(): void; }\n")
+		src.WriteString("<?php\ninterface Root { public function run(): void; }\ntrait Runs { public function run(): void {} }\n")
 		for i := 0; i < classes; i++ {
-			fmt.Fprintf(&src, "class C%d implements Root { public function run(): void {} }\n", i)
+			fmt.Fprintf(&src, "class C%d implements Root { use Runs; }\n", i)
 		}
 		idx.IndexFile("file:///bench.php", src.String())
-		member := idx.Lookup("C0::run")
+		member := idx.Lookup("Runs::run")
 		b.Run(fmt.Sprintf("classes=%d", classes), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				if idx.Prototype(member) == nil {
+				if idx.Prototype("C0", member) == nil {
 					b.Fatal("no prototype")
 				}
 			}

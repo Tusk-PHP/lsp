@@ -155,7 +155,7 @@ Open documents are a map guarded by an `RWMutex`. On `didChange` the server stor
 | `textDocument/didOpen`, `didChange`, `didClose`, `didSave` | `lsp` (documents, indexing, diagnostics) |
 | `textDocument/completion`, `completionItem/resolve` | `completion` |
 | `textDocument/hover` | `hover` (`composer/cardhover` for `composer.json`) |
-| `textDocument/definition`, `typeDefinition`, `implementation`, `references` | `analyzer` |
+| `textDocument/definition`, `declaration`, `typeDefinition`, `implementation`, `references` | `analyzer` |
 | `textDocument/documentSymbol`, `workspace/symbol` | `analyzer` |
 | `textDocument/documentHighlight`, `foldingRange` | `analyzer` |
 | `textDocument/documentLink` | `analyzer` (`framework/laravel` for the path helpers) |

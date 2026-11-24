@@ -14,16 +14,47 @@ func TestDeclarationInBladeViews(t *testing.T) {
 		t.Errorf("a view name's declaration is its file, got %+v", locs)
 	}
 
-	h2, modelURI, viewURI := bladeWorkspace(t, bladeTestView)
+	const view = `@php
+    /** @var \App\Models\Admin $admin */
+@endphp
+<h1>{{ $admin->fullName() }}</h1>
+<div class="profile"></div>
+`
+	const admin = `<?php
+
+namespace App\Models;
+
+interface HasFullName
+{
+    public function fullName(string $separator = ' ', bool $short = false): string;
+}
+
+class Admin extends User implements HasFullName
+{
+    public function fullName(string $separator = ' ', bool $short = false): string
+    {
+        return 'admin';
+    }
+}
+`
+	h2, _, viewURI := bladeWorkspace(t, view)
 	defer h2.close()
+	adminURI := strings.TrimSuffix(viewURI, "resources/views/profile.blade.php") + "app/Models/Admin.php"
+	h2.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": adminURI, "languageId": "php", "version": 1, "text": admin},
+	})
 	var loc testLocation
-	request(t, h2, "textDocument/declaration", viewURI, posOf(t, bladeTestView, "fullName", 2), nil, &loc)
-	if loc.URI != modelURI {
-		t.Errorf("a method called in a view is declared in the model, got %+v", loc)
+	request(t, h2, "textDocument/declaration", viewURI, posOf(t, view, "fullName", 2), nil, &loc)
+	if loc.URI != adminURI || loc.Range.Start.Line != 6 {
+		t.Errorf("a method called in a view is declared by the interface its model implements, got %+v", loc)
+	}
+	request(t, h2, "textDocument/definition", viewURI, posOf(t, view, "fullName", 2), nil, &loc)
+	if loc.URI != adminURI || loc.Range.Start.Line != 11 {
+		t.Errorf("its definition stays the model's method, got %+v", loc)
 	}
 	resp := h2.readResponse(h2.send("textDocument/declaration", map[string]interface{}{
 		"textDocument": map[string]interface{}{"uri": viewURI},
-		"position":     posOf(t, bladeTestView, "profile", 1),
+		"position":     posOf(t, view, "profile", 1),
 	}))
 	if resp["result"] != nil {
 		t.Errorf("HTML has no declaration, got %v", resp["result"])
