@@ -41,7 +41,7 @@ func (r *UnknownClassRule) Check(file *parser.FileNode, source string, index *sy
 			Message:  fmt.Sprintf("Unknown %s '%s'", kind, strings.TrimPrefix(name, "\\")),
 		}))
 	}
-	return dropGuarded(findings, strings.Split(source, "\n"), findExtensionGuards(source))
+	return dropGuarded(findings, strings.Split(source, "\n"), syntax.extensionGuards())
 }
 
 // isPHPBuiltinAttribute reports whether an attribute resolves to one of PHP's
@@ -72,7 +72,7 @@ func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index 
 	syntax := r.Shared.tree(source, file.Grammar)
 	var findings []Finding
 	for _, call := range syntax.references().calls {
-		name := syntax.text(call)
+		name := syntax.text(call.name)
 		if functionExists(name, file, index) {
 			continue
 		}
@@ -81,13 +81,13 @@ func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index 
 		if _, _, builtin := builtinFunctionAvailability(name, file); builtin {
 			continue
 		}
-		findings = append(findings, syntax.at(call, Finding{
+		findings = append(findings, syntax.at(call.name, Finding{
 			Severity: rule.SeverityWarning,
 			Code:     rule.UnknownFunction,
 			Message:  fmt.Sprintf("Unknown function '%s'", strings.TrimPrefix(name, "\\")),
 		}))
 	}
-	return dropGuarded(findings, strings.Split(source, "\n"), findExtensionGuards(source))
+	return dropGuarded(findings, strings.Split(source, "\n"), syntax.extensionGuards())
 }
 
 // UnknownMemberRule detects unresolved method/property/constant accesses when
@@ -99,8 +99,7 @@ type UnknownMemberRule struct {
 	// without the class declaring it, as Laravel does with a notification's
 	// toMail().
 	ConventionMethod func(class, method string) bool
-	// Shared, when set, shares the file's parse with the other rules. The
-	// rule reads tokens only in a file that may check for a member first.
+	// Shared, when set, shares the file's syntax tree with the other rules.
 	Shared *Shared
 }
 
@@ -116,11 +115,7 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 	hierarchies := map[string]*memberHierarchy{}
 	instanceofLines := linesWithInstanceof(lines)
 	guards := memberGuards{file: file}
-	if memberGuardHintRe.MatchString(source) {
-		if result := r.Shared.parse(source); result != nil {
-			guards.collect(result.Tokens)
-		}
-	}
+	guards.collect(syntax)
 
 	for _, ref := range syntax.references().members {
 		member := syntax.text(ref.name)
