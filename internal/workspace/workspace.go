@@ -86,7 +86,7 @@ func New(opts Options) *Bootstrapped {
 	var viewData *frameworklaravel.ViewData
 	var commands *frameworksymfony.CommandIndex
 	if opts.Framework == "symfony" {
-		commands = frameworksymfony.NewCommandIndex()
+		commands = frameworksymfony.NewCommandIndex(index.Grammars())
 	}
 	if opts.Framework == "laravel" {
 		index.SetCallForwards(frameworklaravel.CallForwards())
