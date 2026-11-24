@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -12,28 +13,30 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-var commentURL = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `()\[\]{}]+`)
+var commentURL = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `\[\]{}]+`)
 
 const urlTrailingPunctuation = ".,;:!?"
 
 var includeKeywords = map[string]bool{"require": true, "require_once": true, "include": true, "include_once": true}
 
+var memberOrDeclarationPrefixes = map[parser.TokenKind]bool{parser.TokenArrow: true, parser.TokenDoubleColon: true, parser.TokenFunction: true}
+
 func (a *Analyzer) DocumentLinks(uri, source, root string, exists func(path string) bool) []protocol.DocumentLink {
 	links := make([]protocol.DocumentLink, 0)
 	tokens := parser.Tokenize(source)
-	dir := filepath.Dir(symbols.URIToPath(uri))
+	file := symbols.URIToPath(uri)
 	laravel := a.framework == "laravel" && root != ""
-	for i := 0; i < len(tokens); i++ {
-		tok := tokens[i]
+	for i, tok := range tokens {
 		switch {
 		case (tok.Kind == parser.TokenComment || tok.Kind == parser.TokenDocComment) && strings.Contains(tok.Value, "://"):
-			links = append(links, commentURLLinks(tok)...)
-		case tok.Kind == parser.TokenIdentifier && includeKeywords[strings.ToLower(tok.Value)]:
-			if link, ok := includeLink(tokens[i+1:], dir, exists); ok {
+			links = append(links, commentURLLinks(source, tok)...)
+		case tok.Kind != parser.TokenIdentifier || namesMemberOrNamespacedFunction(tokens, i):
+		case includeKeywords[strings.ToLower(tok.Value)]:
+			if link, ok := includeLink(source, tokens[i+1:], file, exists); ok {
 				links = append(links, link)
 			}
-		case laravel && tok.Kind == parser.TokenIdentifier:
-			if link, ok := pathHelperLink(tokens[i:], root, exists); ok {
+		case laravel:
+			if link, ok := pathHelperLink(source, tokens[i:], root, exists); ok {
 				links = append(links, link)
 			}
 		}
@@ -41,63 +44,102 @@ func (a *Analyzer) DocumentLinks(uri, source, root string, exists func(path stri
 	return links
 }
 
-func commentURLLinks(tok parser.Token) []protocol.DocumentLink {
+func namesMemberOrNamespacedFunction(tokens []parser.Token, i int) bool {
+	if i == 0 {
+		return false
+	}
+	prev := tokens[i-1].Kind
+	return memberOrDeclarationPrefixes[prev] || (prev == parser.TokenBackslash && i > 1 && tokens[i-2].Kind == parser.TokenIdentifier)
+}
+
+func commentURLLinks(source string, tok parser.Token) []protocol.DocumentLink {
+	text := tok.Value
+	if strings.HasPrefix(text, "/*") {
+		text = strings.TrimSuffix(text, "*/")
+	}
 	var links []protocol.DocumentLink
-	for _, m := range commentURL.FindAllStringIndex(tok.Value, -1) {
-		url := strings.TrimRight(tok.Value[m[0]:m[1]], urlTrailingPunctuation)
-		start := positionIn(tok, m[0])
-		end := positionIn(tok, m[0]+len(url))
+	for _, m := range commentURL.FindAllStringIndex(text, -1) {
+		url := trimURL(text[m[0]:m[1]])
+		start := position(source, tok, m[0])
+		end := position(source, tok, m[0]+len(url))
 		links = append(links, protocol.DocumentLink{Range: protocol.Range{Start: start, End: end}, Target: url})
 	}
 	return links
 }
 
-func includeLink(tokens []parser.Token, dir string, exists func(string) bool) (protocol.DocumentLink, bool) {
-	e := pathExpr{tokens: tokens, dir: dir}
+func trimURL(url string) string {
+	for {
+		trimmed := strings.TrimRight(url, urlTrailingPunctuation)
+		if strings.HasSuffix(trimmed, ")") && strings.Count(trimmed, "(") < strings.Count(trimmed, ")") {
+			trimmed = trimmed[:len(trimmed)-1]
+		}
+		if trimmed == url {
+			return url
+		}
+		url = trimmed
+	}
+}
+
+func includeLink(source string, tokens []parser.Token, file string, exists func(string) bool) (protocol.DocumentLink, bool) {
+	e := pathExpr{tokens: tokens, file: file}
 	path, ok := e.concat()
 	path = filepath.Clean(path)
 	if !ok || e.i >= len(tokens) || tokens[e.i].Kind != parser.TokenSemicolon || !filepath.IsAbs(path) || !exists(path) {
 		return protocol.DocumentLink{}, false
 	}
-	return fileLink(tokens[0], tokens[e.i-1], path), true
+	return fileLink(source, tokens[0], tokens[e.i-1], path), true
 }
 
-func pathHelperLink(tokens []parser.Token, root string, exists func(string) bool) (protocol.DocumentLink, bool) {
+func pathHelperLink(source string, tokens []parser.Token, root string, exists func(string) bool) (protocol.DocumentLink, bool) {
 	helperDir, ok := frameworklaravel.PathHelperDir(tokens[0].Value)
-	if !ok || len(tokens) < 4 || tokens[1].Kind != parser.TokenOpenParen || tokens[3].Kind != parser.TokenCloseParen {
+	if !ok || len(tokens) < 3 || tokens[1].Kind != parser.TokenOpenParen {
+		return protocol.DocumentLink{}, false
+	}
+	if tokens[2].Kind == parser.TokenCloseParen {
+		return existingFileLink(source, tokens[0], tokens[2], filepath.Join(root, helperDir), exists)
+	}
+	if len(tokens) < 4 || tokens[3].Kind != parser.TokenCloseParen {
 		return protocol.DocumentLink{}, false
 	}
 	relative, ok := parser.ConstantString(tokens[2])
 	if !ok {
 		return protocol.DocumentLink{}, false
 	}
-	path := filepath.Join(root, helperDir, relative)
+	return existingFileLink(source, tokens[2], tokens[2], filepath.Join(root, helperDir, relative), exists)
+}
+
+func existingFileLink(source string, first, last parser.Token, path string, exists func(string) bool) (protocol.DocumentLink, bool) {
 	if !exists(path) {
 		return protocol.DocumentLink{}, false
 	}
-	return fileLink(tokens[2], tokens[2], path), true
+	return fileLink(source, first, last, path), true
 }
 
-func fileLink(first, last parser.Token, path string) protocol.DocumentLink {
+func fileLink(source string, first, last parser.Token, path string) protocol.DocumentLink {
 	return protocol.DocumentLink{
-		Range:  protocol.Range{Start: positionIn(first, 0), End: positionIn(last, len(last.Value))},
+		Range:  protocol.Range{Start: position(source, first, 0), End: position(source, last, len(last.Value))},
 		Target: symbols.PathToURI(path),
 	}
 }
 
-func positionIn(tok parser.Token, offset int) protocol.Position {
-	before := tok.Value[:offset]
-	newlines := strings.Count(before, "\n")
-	if newlines == 0 {
-		return protocol.Position{Line: tok.Line, Character: tok.Column + offset}
+func position(source string, tok parser.Token, offset int) protocol.Position {
+	at := tok.Offset + offset
+	lineStart := strings.LastIndexByte(source[:at], '\n') + 1
+	return protocol.Position{Line: tok.Line + strings.Count(tok.Value[:offset], "\n"), Character: utf16Length(source[lineStart:at])}
+}
+
+func utf16Length(s string) int {
+	n := 0
+	for _, r := range s {
+		n += utf16.RuneLen(r)
 	}
-	return protocol.Position{Line: tok.Line + newlines, Character: len(before) - strings.LastIndexByte(before, '\n') - 1}
+	return n
 }
 
 type pathExpr struct {
 	tokens []parser.Token
 	i      int
-	dir    string
+	file   string
 }
 
 func (e *pathExpr) concat() (string, bool) {
@@ -124,9 +166,24 @@ func (e *pathExpr) term() (string, bool) {
 		value, ok := e.concat()
 		return value, ok && e.expect(parser.TokenCloseParen)
 	case tok.Kind == parser.TokenIdentifier && strings.EqualFold(tok.Value, "__DIR__"):
-		return e.dir, true
-	case tok.Kind == parser.TokenIdentifier && strings.EqualFold(tok.Value, "dirname"):
+		return filepath.Dir(e.file), true
+	case tok.Kind == parser.TokenIdentifier && strings.EqualFold(tok.Value, "__FILE__"):
+		return e.file, true
+	case tok.Kind == parser.TokenIdentifier:
+		return e.globalName(tok.Value)
+	case tok.Kind == parser.TokenBackslash && e.i < len(e.tokens) && e.tokens[e.i].Kind == parser.TokenIdentifier:
+		e.i++
+		return e.globalName(e.tokens[e.i-1].Value)
+	}
+	return "", false
+}
+
+func (e *pathExpr) globalName(name string) (string, bool) {
+	switch {
+	case strings.EqualFold(name, "dirname"):
 		return e.dirname()
+	case name == "DIRECTORY_SEPARATOR":
+		return string(filepath.Separator), true
 	}
 	return "", false
 }
