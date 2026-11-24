@@ -3,6 +3,7 @@ package lexer
 import (
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"testing"
@@ -138,5 +139,25 @@ func TestLexCodeStartsInPHP(t *testing.T) {
 		if toks[i].Kind != k {
 			t.Errorf("token %d: %v, want %v", i, toks[i].Kind, k)
 		}
+	}
+}
+
+func TestDeeplyNestedInterpolationIsBounded(t *testing.T) {
+	defer debug.SetMaxStack(debug.SetMaxStack(8 << 20))
+	src := "<?php " + strings.Repeat(`"{$a[`, 200_000)
+	toks := Lex(src, token.Latest)
+	var b strings.Builder
+	for _, tok := range toks {
+		b.WriteString(tok.Text(src))
+	}
+	if b.String() != src {
+		t.Fatal("tokens don't rebuild the source")
+	}
+	last := toks[len(toks)-1]
+	if last.Kind != token.BadCharacter || int(last.End) != len(src) {
+		t.Fatalf("the source past the nesting limit should be one bad-character token, got %s [%d,%d)", last.Kind, last.Start, last.End)
+	}
+	if opens := strings.Count(src[:last.Start], "{$"); opens != maxNesting {
+		t.Errorf("lexed %d nested interpolations before giving up, want %d", opens, maxNesting)
 	}
 }

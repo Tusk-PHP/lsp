@@ -18,7 +18,10 @@ func (t Token) Text(src string) string {
 	return src[t.Start:t.End]
 }
 
-const haltCompilerTokens = 3
+const (
+	haltCompilerTokens = 3
+	maxNesting         = 256
+)
 
 type lexer struct {
 	version    token.Version
@@ -28,6 +31,7 @@ type lexer struct {
 	afterArrow bool
 	haltLeft   int
 	halted     bool
+	nesting    int
 }
 
 func Lex(src string, version token.Version) []Token {
@@ -483,19 +487,31 @@ func (l *lexer) interpolated(terminator byte, bodyStart int, label string) {
 			if end := labelEndAt(src, l.pos); end > l.pos && end < len(src) && (src[end] == '[' || src[end] == '}') {
 				l.emit(token.StringVarname, end)
 			}
-			l.scripting(true)
+			l.embeddedCode()
 			i = l.pos
 			continue
 		case c == '{' && i+1 < len(src) && src[i+1] == '$':
 			l.text(i)
 			l.emit(token.CurlyOpen, i+1)
-			l.scripting(true)
+			l.embeddedCode()
 			i = l.pos
 			continue
 		}
 		i++
 	}
 	l.text(min(i, len(src)))
+}
+
+func (l *lexer) embeddedCode() {
+	if l.nesting == maxNesting {
+		if l.pos < len(l.src) {
+			l.emit(token.BadCharacter, len(l.src))
+		}
+		return
+	}
+	l.nesting++
+	l.scripting(true)
+	l.nesting--
 }
 
 func (l *lexer) text(end int) {
