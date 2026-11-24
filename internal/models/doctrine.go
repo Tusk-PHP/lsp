@@ -204,21 +204,7 @@ func analyzeDoctrineAttributes(index *symbols.Index, entitySym *symbols.Symbol, 
 			isId := ormIdRe.MatchString(attrBlock)
 			isGenerated := ormGeneratedValueRe.MatchString(attrBlock)
 
-			existing := index.Lookup(entitySym.FQN + "::" + propName)
-			if existing != nil && existing.Type != "" && existing.Type != "mixed" {
-				// Already has a good type, just update readonly if needed
-				if isId || isGenerated {
-					existing.IsReadonly = true
-				}
-				continue
-			}
-
-			if existing != nil {
-				existing.Type = phpType
-				if isId || isGenerated {
-					existing.IsReadonly = true
-				}
-			} else {
+			if !index.RefineProperty(entitySym.FQN+"::"+propName, phpType, isId || isGenerated) {
 				vis := "private"
 				if strings.Contains(line, "public") {
 					vis = "public"
@@ -293,12 +279,7 @@ func injectDoctrineRelation(index *symbols.Index, entitySym *symbols.Symbol, pro
 		propType = "mixed"
 	}
 
-	existing := index.Lookup(entitySym.FQN + "::" + propName)
-	if existing != nil {
-		// Update type if missing
-		if existing.Type == "" || existing.Type == "mixed" {
-			existing.Type = propType
-		}
+	if index.RefineProperty(entitySym.FQN+"::"+propName, propType, false) {
 		return
 	}
 

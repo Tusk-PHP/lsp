@@ -404,3 +404,53 @@ func TestDoctrineTypeMapping(t *testing.T) {
 		}
 	}
 }
+
+func TestDoctrineAnalysisRefinesPropertiesWhileTheyAreRead(t *testing.T) {
+	source := `<?php
+namespace App\Entity;
+
+use Doctrine\ORM\Mapping as ORM;
+
+#[ORM\Entity]
+class Tag
+{
+    #[ORM\Id]
+    #[ORM\Column(type: 'integer')]
+    private $id;
+
+    #[ORM\ManyToOne(targetEntity: Tag::class)]
+    private $parent;
+}
+`
+	idx, rootPath := setupDoctrineIndex(t, source)
+	id := idx.Lookup(`App\Entity\Tag::$id`)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 100; i++ {
+			_ = id.Type + idx.Lookup(`App\Entity\Tag::$parent`).Type
+			_ = id.IsReadonly
+		}
+	}()
+	AnalyzeDoctrineEntities(idx, rootPath)
+	<-done
+
+	if got := idx.Lookup(`App\Entity\Tag::$id`); got == nil || got.Type != "int" || !got.IsReadonly {
+		t.Errorf("the column gets its type and stays readonly: %+v", got)
+	}
+	if got := idx.Lookup(`App\Entity\Tag::$parent`); got == nil || got.Type != `?App\Entity\Tag` {
+		t.Errorf("the relation gets its type: %+v", got)
+	}
+	members := 0
+	for _, m := range idx.GetClassMembers(`App\Entity\Tag`) {
+		if m.Name == "$id" {
+			members++
+			if m.Type != "int" {
+				t.Errorf("the class lists the refined property: %+v", m)
+			}
+		}
+	}
+	if members != 1 {
+		t.Errorf("the property is listed once: %d", members)
+	}
+}

@@ -1365,6 +1365,44 @@ func (idx *Index) AddVirtualMember(parentFQN string, member *Symbol) {
 	idx.addSymbol(member.URI, member)
 }
 
+func (idx *Index) RefineProperty(fqn, fallbackType string, readonly bool) bool {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	existing := idx.symbols[fqn]
+	if existing == nil {
+		return false
+	}
+	refined := *existing
+	if refined.Type == "" || refined.Type == "mixed" {
+		refined.Type = fallbackType
+	}
+	refined.IsReadonly = refined.IsReadonly || readonly
+	if refined.Type != existing.Type || refined.IsReadonly != existing.IsReadonly {
+		idx.replaceSymbolLocked(existing, &refined)
+	}
+	return true
+}
+
+func (idx *Index) replaceSymbolLocked(old, replacement *Symbol) {
+	idx.generation.Add(1)
+	idx.symbols[old.FQN] = replacement
+	idx.fileSymbols[old.URI] = withSymbolReplaced(idx.fileSymbols[old.URI], old, replacement)
+	if parent := idx.symbols[old.ParentFQN]; parent != nil {
+		parent.Children = withSymbolReplaced(parent.Children, old, replacement)
+	}
+}
+
+func withSymbolReplaced(syms []*Symbol, old, replacement *Symbol) []*Symbol {
+	for i, s := range syms {
+		if s == old {
+			out := append([]*Symbol(nil), syms...)
+			out[i] = replacement
+			return out
+		}
+	}
+	return syms
+}
+
 func (idx *Index) GetImplementors(ifaceFQN string) []*Symbol {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
