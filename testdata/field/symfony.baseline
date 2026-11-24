@@ -249,7 +249,6 @@ src/Symfony/Component/Cache/Traits/Relay/Relay502Trait.php	unknown-class	Unknown
 src/Symfony/Component/Cache/Traits/RelayClusterProxy.php	unknown-class	Unknown class 'Relay\Cluster'
 src/Symfony/Component/Cache/Traits/RelayClusterProxy.php	unknown-class	Unknown class 'Relay\Relay'
 src/Symfony/Component/Cache/Traits/RelayProxy.php	unknown-class	Unknown class 'Relay\Relay'
-src/Symfony/Component/Clock/Resources/now.php	unknown-class	Unknown class 'now'
 src/Symfony/Component/Clock/Test/ClockSensitiveTrait.php	unknown-class	Unknown attribute 'After'
 src/Symfony/Component/Clock/Test/ClockSensitiveTrait.php	unknown-class	Unknown attribute 'Before'
 src/Symfony/Component/Clock/Test/ClockSensitiveTrait.php	unknown-class	Unknown attribute 'BeforeClass'
@@ -533,7 +532,6 @@ src/Symfony/Component/Security/Core/Role/SwitchUserRole.php	unused-private-prope
 src/Symfony/Component/Security/Core/Role/SwitchUserRole.php	unused-private-property	Private property 'SwitchUserRole::$source' is never used
 src/Symfony/Component/Security/Core/Test/AccessDecisionStrategyTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Security/Core/Test/AccessDecisionStrategyTestCase.php	unknown-class	Unknown class 'TestCase'
-src/Symfony/Component/Security/Http/AccessToken/OAuth2/Oauth2TokenHandler.php	unknown-class	Unknown class 'Symfony\Component\String\u'
 src/Symfony/Component/Security/Http/Firewall/ContextListener.php	unknown-class	Unknown class 'LazyLoadingInterface'
 src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'Redis' requires ext-redis
 src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
@@ -551,10 +549,6 @@ src/Symfony/Component/Serializer/Normalizer/ArrayDenormalizer.php	unknown-class	
 src/Symfony/Component/Serializer/Normalizer/GetSetMethodNormalizer.php	unknown-class	Unknown class 'LegacyIgnore'
 src/Symfony/Component/String/AbstractString.php	unused-variable	Variable $fromEncoding is assigned but never read
 src/Symfony/Component/String/AbstractUnicodeString.php	unknown-member	Unknown member 'NFKC_CF' on 'Normalizer'
-src/Symfony/Component/String/Resources/functions.php	unknown-class	Unknown class 'b'
-src/Symfony/Component/String/Resources/functions.php	unknown-class	Unknown class 's'
-src/Symfony/Component/String/Resources/functions.php	unknown-class	Unknown class 'u'
-src/Symfony/Component/Translation/Resources/functions.php	unknown-class	Unknown class 't'
 src/Symfony/Component/Translation/Test/AbstractProviderFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Translation/Test/AbstractProviderFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Translation/Test/AbstractProviderFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'

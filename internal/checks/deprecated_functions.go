@@ -72,12 +72,12 @@ func (r *DeprecatedFunctionRule) Check(file *parser.FileNode, source string, ind
 	syntax := r.Shared.tree(source, file.Grammar)
 	var findings []Finding
 	for _, call := range syntax.references().calls {
-		name := strings.TrimPrefix(syntax.text(call), "\\")
+		name := strings.TrimPrefix(syntax.text(call.name), "\\")
 		dep, ok := deprecatedFunctions[strings.ToLower(name)]
 		if !ok || (r.PHPVersion != "" && compareBuiltinVersionsStrings(r.PHPVersion, dep.since) < 0) {
 			continue
 		}
-		findings = append(findings, syntax.at(call, Finding{
+		findings = append(findings, syntax.at(call.name, Finding{
 			Severity: rule.SeverityWarning,
 			Code:     rule.Deprecated,
 			Message:  dep.message,

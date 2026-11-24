@@ -51,7 +51,7 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 	refs := syntax.references()
 	var findings []Finding
 	for _, call := range refs.calls {
-		findings = append(findings, r.functionFinding(syntax, call, file, index)...)
+		findings = append(findings, r.functionFinding(syntax, call.name, file, index)...)
 	}
 	for _, ref := range refs.classes {
 		name, line := syntax.text(ref.name), syntax.line(ref.name)
@@ -67,7 +67,7 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 	slices.SortStableFunc(findings, compareFindingStarts)
 	// Code that checks for an extension or symbol first runs only where it
 	// exists, so it is fine on a profile without it.
-	return dropGuarded(findings, strings.Split(source, "\n"), findExtensionGuards(source))
+	return dropGuarded(findings, strings.Split(source, "\n"), syntax.extensionGuards())
 }
 
 func (r *BuiltinUnavailableRule) functionFinding(syntax *fileSyntax, call *ast.Name, file *parser.FileNode, index *symbols.Index) []Finding {
