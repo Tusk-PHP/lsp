@@ -29,15 +29,15 @@ type resolvedCall struct {
 	tokens []parser.Token
 }
 
-func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index, shared *Shared, typeResolver func(string, string, int, int, *parser.FileNode) string, visit func(resolvedCall)) {
+func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index, shared *Shared, typeResolver func(string, string, int, int, *parser.FileNode) string, wants func(tokens []parser.Token, open, close int) bool, visit func(resolvedCall)) {
 	tokens := shared.parse(source).Tokens
 	var lines []string
 	var scopes *scope.Document
-	emit := func(kind callKind, sym *symbols.Symbol, owner string, site parser.Token, name string, at, open int) {
+	arguments := func(open int) (int, bool) {
 		closeIdx := findMatchingTokenIdx(tokens, open, parser.TokenOpenParen, parser.TokenCloseParen)
-		if closeIdx < 0 {
-			return
-		}
+		return closeIdx, closeIdx >= 0 && (wants == nil || wants(tokens, open, closeIdx))
+	}
+	emit := func(kind callKind, sym *symbols.Symbol, owner string, site parser.Token, name string, at, open, closeIdx int) {
 		visit(resolvedCall{kind: kind, sym: sym, owner: owner, site: site, name: name, at: at, open: open, close: closeIdx, tokens: tokens})
 	}
 	for i := 0; i < len(tokens); i++ {
@@ -55,16 +55,24 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 			if tokens[openIdx].Kind != parser.TokenOpenParen {
 				continue
 			}
+			closeIdx, wanted := arguments(openIdx)
+			if !wanted {
+				continue
+			}
 			classFQN, ok := resolveClassLikeName(tok.Value, tok.Line, file)
 			if !ok || classFQN == "" {
 				continue
 			}
 			if sym := findProjectMethod(classFQN, tokens[methodIdx].Value, index); sym != nil {
-				emit(callStatic, sym, classFQN, tok, tokens[methodIdx].Value, i, openIdx)
+				emit(callStatic, sym, classFQN, tok, tokens[methodIdx].Value, i, openIdx, closeIdx)
 			}
 			continue
 		}
 		if tokens[next].Kind != parser.TokenOpenParen {
+			continue
+		}
+		closeIdx, wanted := arguments(next)
+		if !wanted {
 			continue
 		}
 		prev := prevSignificantTokenIdx(tokens, i-1)
@@ -87,7 +95,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 					continue
 				}
 			}
-			emit(callMethod, sym, owner, tok, tok.Value, i, next)
+			emit(callMethod, sym, owner, tok, tok.Value, i, next, closeIdx)
 			continue
 		}
 		if prev >= 0 && tokens[prev].Kind == parser.TokenNew {
@@ -96,7 +104,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 				continue
 			}
 			if sym := findProjectMethod(classFQN, "__construct", index); sym != nil {
-				emit(callConstructor, sym, classFQN, tok, tok.Value, i, next)
+				emit(callConstructor, sym, classFQN, tok, tok.Value, i, next, closeIdx)
 			}
 			continue
 		}
@@ -112,7 +120,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 		}
 		fqns, _ := resolveFunctionNames(tok.Value, file)
 		if sym := findProjectFunction(fqns, index); sym != nil {
-			emit(callFunction, sym, "", tok, tok.Value, i, next)
+			emit(callFunction, sym, "", tok, tok.Value, i, next, closeIdx)
 		}
 	}
 }
