@@ -74,6 +74,9 @@ func TestLookups(t *testing.T) {
 			t.Errorf("%q: got %v %d, want %v %d", src, k, n, want.kind, want.n)
 		}
 	}
+	if PowEqual.Text() != "**=" || Variable.Text() != "" {
+		t.Error("fixed texts")
+	}
 	if !Semicolon.IsCharacter() || Coalesce.IsCharacter() || !Comment.IsTrivia() || Variable.IsTrivia() {
 		t.Error("kind classes")
 	}

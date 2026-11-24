@@ -459,6 +459,10 @@ var introduced = [kindCount]Version{
 	AmpersandNotFollowedByVarOrVararg: PHP81,
 }
 
+func (k Kind) Text() string {
+	return specs[k].text
+}
+
 func (k Kind) In(v Version) bool {
 	return introduced[k] <= v
 }
