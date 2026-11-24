@@ -50,7 +50,10 @@ func references(t *testing.T) []reference {
 		}
 		version, err := token.ParseVersion(string(out))
 		if err != nil {
-			t.Logf("skipping %s: %v", command, err)
+			t.Fatalf("%s: %v", command, err)
+		}
+		if version.String() != string(out) {
+			t.Logf("skipping %s: PHP %s is outside the lexer's 8.0 to %s", command, out, token.Latest)
 			continue
 		}
 		refs = append(refs, reference{argv, version})

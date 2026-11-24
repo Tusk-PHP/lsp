@@ -25,7 +25,12 @@ func TestParseVersion(t *testing.T) {
 			t.Errorf("%v prints as %s", want, want.String())
 		}
 	}
-	for _, bad := range []string{"8", "7.4", "9.0", "8.7", "8.x", "x.1", ""} {
+	for in, want := range map[string]Version{"7.4": PHP80, "5.6.40": PHP80, "8.7": Latest, "8.10": Latest, "9.0": Latest} {
+		if got, err := ParseVersion(in); err != nil || got != want {
+			t.Errorf("%s lexes with the closest grammar %v, got %v, %v", in, want, got, err)
+		}
+	}
+	for _, bad := range []string{"8", "8.x", "x.1", "-1.0", "8.-1", "8.256", ""} {
 		if _, err := ParseVersion(bad); err == nil {
 			t.Errorf("%q must not parse", bad)
 		}
