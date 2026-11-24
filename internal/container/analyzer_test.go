@@ -222,21 +222,6 @@ return static function (ContainerConfigurator $container): void {
 	}
 }
 
-func TestCleanPHPString(t *testing.T) {
-	tests := []struct{ input, want string }{
-		{"'hello'", "hello"},
-		{`"world"`, "world"},
-		{"  'trimmed'  ", "trimmed"},
-		{"ClassName::class", "ClassName"},
-		{"noQuotes", "noQuotes"},
-	}
-	for _, tt := range tests {
-		if got := cleanPHPString(tt.input); got != tt.want {
-			t.Errorf("cleanPHPString(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
 func TestAnalyzeConstructorInjection(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///app/Controller.php", `<?php
@@ -317,5 +302,74 @@ func TestSymfonyClassesBindTheirImportedInterfaces(t *testing.T) {
 		if b := ca.bindings[abstract]; b == nil || b.Concrete != concrete {
 			t.Errorf("%s: %+v", abstract, b)
 		}
+	}
+}
+
+func TestLaravelProviderBindingsFromTheTree(t *testing.T) {
+	ca := NewContainerAnalyzer(symbols.NewIndex(), "/tmp", "laravel")
+	ca.parseLaravelProvider("/app/Providers/AppServiceProvider.php", `<?php
+namespace App\Providers;
+use App\Contracts\Mailer;
+use App\Services\SmtpMailer;
+class AppServiceProvider {
+    public function register(): void {
+        $this->app->bind(Mailer::class, SmtpMailer::class);
+        $this->app
+            ->singleton('payments', \App\Services\Stripe::class);
+        $this->app->bind("reports", function ($app) { return new Reports(); });
+        $other->bind('ignored', Foo::class);
+        $this->app->bind($dynamic, Foo::class);
+        $this->app->bind('lonely');
+        $this -> app -> bind('spaced', SmtpMailer::class);
+        $this->app->{$method}('dynamic', SmtpMailer::class);
+        $this->app->bind(?, SmtpMailer::class);
+        $this->app->bind($thing::class, SmtpMailer::class);
+    }
+}
+`)
+	want := map[string]ServiceBinding{
+		`App\Contracts\Mailer`: {Abstract: `App\Contracts\Mailer`, Concrete: `App\Services\SmtpMailer`},
+		"payments":             {Abstract: "payments", Concrete: `App\Services\Stripe`, Singleton: true},
+		"reports":              {Abstract: "reports", Concrete: "reports"},
+		"spaced":               {Abstract: "spaced", Concrete: `App\Services\SmtpMailer`},
+	}
+	for abstract, w := range want {
+		b := ca.bindings[abstract]
+		if b == nil || b.Concrete != w.Concrete || b.Singleton != w.Singleton {
+			t.Errorf("%s: %+v", abstract, b)
+		}
+	}
+	for _, abstract := range []string{"ignored", "lonely", "dynamic"} {
+		if ca.bindings[abstract] != nil {
+			t.Errorf("%s should not be bound", abstract)
+		}
+	}
+}
+
+func TestSymfonyPHPConfigFromTheTree(t *testing.T) {
+	ca := NewContainerAnalyzer(symbols.NewIndex(), "/tmp", "symfony")
+	ca.parseSymfonyPHPConfigFile("/app/config/services.php", `<?php
+use App\Mailer;
+return static function ($c) {
+    $s = $c->services();
+    $s->set('app.mailer', Mailer::class);
+    $s->set(Mailer::class);
+    $s->alias('mailer', 'app.mailer');
+    $s->alias('broken', $dynamic);
+    $s->set($dynamic);
+    $s->set();
+};
+`)
+	if b := ca.bindings["app.mailer"]; b == nil || b.Concrete != `App\Mailer` || b.Definition.Start.Line != 4 {
+		t.Errorf("app.mailer: %+v", b)
+	}
+	if b := ca.bindings[`App\Mailer`]; b == nil || b.Concrete != `App\Mailer` {
+		t.Errorf("Mailer: %+v", b)
+	}
+	if b := ca.bindings["mailer"]; b == nil || b.Alias != "app.mailer" || ca.aliases["mailer"] != "app.mailer" {
+		t.Errorf("mailer: %+v", b)
+	}
+	if ca.bindings["broken"] != nil {
+		t.Error("an alias with no readable target is skipped")
 	}
 }
