@@ -124,3 +124,27 @@ func TestRemoveVendorFilesExceptKeepsProjectFiles(t *testing.T) {
 		t.Error("a removed vendor file has no word filter left")
 	}
 }
+
+func BenchmarkGetFileSource(b *testing.B) {
+	path, err := filepath.Abs("../../testdata/laravel/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php")
+	if err != nil {
+		b.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		b.Skip("testdata/laravel/vendor is missing: run `composer install --working-dir testdata/laravel`")
+	}
+	for _, c := range []struct {
+		name string
+		src  SymbolSource
+	}{{"project", SourceProject}, {"vendor", SourceVendor}} {
+		idx := NewIndex()
+		idx.IndexFileWithSource("file://"+path, string(data), c.src)
+		b.Run(c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				idx.GetFileSource("file://" + path)
+			}
+		})
+	}
+}
