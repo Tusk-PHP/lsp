@@ -49,6 +49,9 @@ type Bootstrapped struct {
 	SchemaCache     *models.SchemaCache
 	Schema          *models.Schema
 
+	autoloadOnce    sync.Once
+	autoloadEntries []composer.AutoloadEntry
+
 	// modelMu guards what model analysis read, for re-analysing one file
 	// later: Schema once AnalyzeModels has set it, and the following.
 	modelMu          sync.RWMutex
@@ -207,7 +210,7 @@ func (ws *Bootstrapped) IndexComposerDependencies() int {
 		ws.Aliases.Load()
 	}
 
-	entries := composer.GetAutoloadPaths(ws.RootPath)
+	entries := ws.autoload()
 	if len(entries) == 0 {
 		return 0
 	}
@@ -356,4 +359,44 @@ func (ws *Bootstrapped) logf(format string, args ...any) {
 	if ws != nil && ws.Logger != nil {
 		ws.Logger.Printf(format, args...)
 	}
+}
+
+func (ws *Bootstrapped) autoload() []composer.AutoloadEntry {
+	ws.autoloadOnce.Do(func() {
+		ws.autoloadEntries = composer.GetAutoloadPaths(ws.RootPath)
+	})
+	return ws.autoloadEntries
+}
+
+func (ws *Bootstrapped) ClassLoader() symbols.ClassLoader {
+	if ws == nil {
+		return nil
+	}
+	return autoloader{ws}
+}
+
+type autoloader struct {
+	ws *Bootstrapped
+}
+
+func (l autoloader) Load(fqn string) (symbols.LoadedClass, bool) {
+	for _, file := range composer.ClassFiles(fqn, l.ws.autoload()) {
+		content, err := os.ReadFile(file.Path)
+		if err != nil {
+			continue
+		}
+		from := symbols.SourceProject
+		if file.IsVendor {
+			from = symbols.SourceVendor
+		}
+		return symbols.LoadedClass{URI: "file://" + file.Path, Source: string(content), From: from}, true
+	}
+	return symbols.LoadedClass{}, false
+}
+
+func (l autoloader) Loaded(class symbols.LoadedClass) {
+	if class.From != symbols.SourceProject {
+		return
+	}
+	models.AnalyzeModelFile(l.ws.Index, l.ws.RootPath, l.ws.Framework, class.URI, class.Source, nil, nil)
 }
