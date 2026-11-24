@@ -159,7 +159,7 @@ func formatAttributes(attrs []symbols.Attribute) string {
 	for _, attr := range attrs {
 		sb.WriteString("#[" + attr.Name)
 		if len(attr.Args) > 0 {
-			sb.WriteString("(" + strings.Join(attr.Args, ", ") + ")")
+			sb.WriteString("(" + attr.Args.String() + ")")
 		}
 		sb.WriteString("]\n")
 	}

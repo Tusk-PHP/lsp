@@ -19,6 +19,46 @@ type UseNode struct {
 	StartLine int
 }
 
+type AttributeDef struct {
+	Name string
+	Args AttributeArgs
+	Line int
+}
+
+type AttributeArgs []AttributeArg
+
+type AttributeArg struct {
+	Name  string
+	Value string
+}
+
+func (a AttributeArg) String() string {
+	if a.Name == "" {
+		return a.Value
+	}
+	return a.Name + ":" + a.Value
+}
+
+func (args AttributeArgs) String() string {
+	parts := make([]string, len(args))
+	for i, arg := range args {
+		parts[i] = arg.String()
+	}
+	return strings.Join(parts, ", ")
+}
+
+func (args AttributeArgs) Get(name string, position int) (string, bool) {
+	for _, arg := range args {
+		if arg.Name == name {
+			return arg.Value, true
+		}
+	}
+	if position >= 0 && position < len(args) && args[position].Name == "" {
+		return args[position].Value, true
+	}
+	return "", false
+}
+
 type ParamNode struct {
 	Name         string
 	Type         TypeNode
@@ -33,6 +73,7 @@ type ParamNode struct {
 type PropertyNode struct {
 	Name          string
 	Type          TypeNode
+	DefaultValue  string
 	Visibility    string
 	SetVisibility string // PHP 8.4 asymmetric visibility (e.g. "private" in public private(set))
 	IsStatic      bool

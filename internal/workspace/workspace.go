@@ -341,7 +341,7 @@ func (ws *Bootstrapped) AnalyzeModelSchema() {
 	var migrationColumns map[string]map[string]*models.MigrationColumn
 	if ws.Framework == "laravel" && (schema == nil || schema.Source != models.SchemaSourceMigrations) {
 		migrationColumns = models.ScanMigrationColumns(ws.RootPath)
-		models.InjectMigrationColumns(ws.Index, ws.RootPath, migrationColumns)
+		models.InjectMigrationColumns(ws.Index, migrationColumns)
 	}
 	ws.modelMu.Lock()
 	ws.Schema = schema

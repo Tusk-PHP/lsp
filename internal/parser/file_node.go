@@ -219,13 +219,24 @@ func (b *fileNodeBuilder) attributes(groups []*ast.AttributeGroup) []AttributeDe
 			def := AttributeDef{Name: b.text(attr.Name), Line: b.line(attr.Name.Start)}
 			if attr.Args != nil {
 				for _, arg := range attr.Args.Args {
-					def.Args = append(def.Args, b.compact(arg))
+					def.Args = append(def.Args, b.attributeArg(arg))
 				}
 			}
 			attrs = append(attrs, def)
 		}
 	}
 	return attrs
+}
+
+func (b *fileNodeBuilder) attributeArg(arg *ast.Arg) AttributeArg {
+	value := b.compact(arg.Value)
+	if arg.Unpack {
+		value = "..." + value
+	}
+	if arg.Name == nil {
+		return AttributeArg{Value: value}
+	}
+	return AttributeArg{Name: b.text(arg.Name), Value: value}
 }
 
 func (b *fileNodeBuilder) function(fn *ast.FunctionDecl) FunctionNode {
@@ -421,6 +432,7 @@ func (b *fileNodeBuilder) properties(p *ast.Property, readonly bool) []PropertyN
 		line, col := b.position(item.Var.Start)
 		nodes = append(nodes, PropertyNode{
 			Name:          b.text(item.Var),
+			DefaultValue:  b.scalar(item.Default),
 			Type:          TypeNode{Name: b.typeText(p.Type)},
 			Visibility:    mods.visibility,
 			SetVisibility: mods.setVisibility,
@@ -446,6 +458,7 @@ func (b *fileNodeBuilder) promoted(params []*ast.Param, readonly bool) []Propert
 		line, col := b.position(p.Var.Start)
 		nodes = append(nodes, PropertyNode{
 			Name:          b.text(p.Var),
+			DefaultValue:  b.scalar(p.Default),
 			Type:          TypeNode{Name: b.typeText(p.Type)},
 			Visibility:    mods.visibility,
 			SetVisibility: mods.setVisibility,
@@ -676,6 +689,14 @@ func (b *fileNodeBuilder) typeText(t ast.Type) string {
 		i++
 	}
 	return out.String()
+}
+
+func (b *fileNodeBuilder) scalar(e ast.Expr) string {
+	switch e.(type) {
+	case *ast.Literal, *ast.ConstFetch:
+		return b.text(e)
+	}
+	return ""
 }
 
 func (b *fileNodeBuilder) compact(n ast.Node) string {
