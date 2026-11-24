@@ -288,13 +288,13 @@ func (p *parser) clone() ast.Expr {
 	start := p.start()
 	p.next()
 	if p.version >= token.PHP85 && p.peek() == token.LeftParen {
-		save, saveErrors := p.pos, len(p.errors)
+		save := p.mark()
 		args := p.args()
 		trailingComma := p.toks[p.pos-1].Kind == token.RightParen && p.toks[p.pos-2].Kind == token.Comma
 		if len(args.Args) != 1 || trailingComma || args.RestPlaceholder || args.Args[0].Name != nil || args.Args[0].Unpack {
 			return &ast.Clone{Args: args, Span: p.span(start)}
 		}
-		p.pos, p.errors = save, p.errors[:saveErrors]
+		p.reset(save)
 	}
 	return &ast.Clone{Operand: p.exprBP(bpClone), Span: p.span(start)}
 }
