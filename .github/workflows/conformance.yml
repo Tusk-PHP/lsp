@@ -138,6 +138,9 @@ jobs:
       - name: Fuzz — FuzzTokenize (120 s)
         run: go test -run='^$' -fuzz=FuzzTokenize -fuzztime=120s ./internal/parser/
 
+      - name: Fuzz — FuzzLex (120 s)
+        run: go test -run='^$' -fuzz=FuzzLex -fuzztime=120s ./internal/php/lexer/
+
       - name: Upload fuzz crashers
         if: failure()
         uses: actions/upload-artifact@v4
@@ -147,4 +150,5 @@ jobs:
             testdata/fuzz/
             internal/parser/testdata/fuzz/
             internal/symbols/testdata/fuzz/
+            internal/php/lexer/testdata/fuzz/
           if-no-files-found: ignore
