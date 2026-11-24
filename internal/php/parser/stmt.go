@@ -190,9 +190,9 @@ func (p *parser) isFunctionDecl() bool {
 }
 
 func (p *parser) attributedDecl(start uint32, doc ast.Span) ast.Stmt {
-	save, saveErrors := p.pos, len(p.errors)
+	save := p.mark()
 	attrs := p.attributes()
-	doc = p.docSince(save)
+	doc = p.docSince(save.pos)
 	switch p.peek() {
 	case token.Function:
 		if p.isFunctionDecl() {
@@ -210,7 +210,7 @@ func (p *parser) attributedDecl(start uint32, doc ast.Span) ast.Stmt {
 		p.requires(token.PHP85, start, "attributes on constants")
 		return p.constStmt(start, attrs)
 	}
-	p.pos, p.errors = save, p.errors[:saveErrors]
+	p.reset(save)
 	return nil
 }
 

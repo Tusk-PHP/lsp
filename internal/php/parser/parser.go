@@ -113,6 +113,22 @@ func (p *parser) unterminatedAt(span ast.Span, message string) {
 	p.truncated = true
 }
 
+type mark struct {
+	pos       int
+	errors    int
+	prevEnd   uint32
+	emptyAt   uint32
+	truncated bool
+}
+
+func (p *parser) mark() mark {
+	return mark{pos: p.pos, errors: len(p.errors), prevEnd: p.prevEnd, emptyAt: p.emptyAt, truncated: p.truncated}
+}
+
+func (p *parser) reset(m mark) {
+	p.pos, p.errors, p.prevEnd, p.emptyAt, p.truncated = m.pos, p.errors[:m.errors], m.prevEnd, m.emptyAt, m.truncated
+}
+
 func (p *parser) peek() token.Kind {
 	return p.peekAt(0)
 }
