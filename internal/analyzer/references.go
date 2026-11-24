@@ -44,6 +44,9 @@ func (a *Analyzer) findSymbolOccurrences(sym *symbols.Symbol, readDocument func(
 		// Fall back to disk only when neither the caller-supplied reader nor the index
 		// has a stored copy (e.g. files indexed without source via IndexFile on older paths).
 		if src == "" {
+			if !a.index.MayMention(fileURI, strings.TrimPrefix(sym.Name, "$")) {
+				continue
+			}
 			src = a.index.GetFileSource(fileURI)
 		}
 		if src == "" {

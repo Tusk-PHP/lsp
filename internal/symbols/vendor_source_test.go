@@ -26,6 +26,9 @@ func TestVendorSourcesAreReadFromDisk(t *testing.T) {
 	if got := idx.GetFileSource(uri); got != edited {
 		t.Errorf("a vendor source is read from disk, not kept: %q", got)
 	}
+	if !idx.MayMention(uri, "charge") || idx.MayMention(uri, "refund") {
+		t.Error("a vendor file is skipped only when it can't mention the word")
+	}
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
@@ -34,11 +37,11 @@ func TestVendorSourcesAreReadFromDisk(t *testing.T) {
 	}
 
 	idx.IndexFileWithSource(uri, source, SourceProject)
-	if idx.GetFileSource(uri) != source {
-		t.Error("a project file keeps its source")
+	if idx.GetFileSource(uri) != source || !idx.MayMention(uri, "refund") {
+		t.Error("a project file keeps its source and is never skipped")
 	}
-	if idx.GetFileSource("file:///never/indexed.php") != "" {
-		t.Error("an unknown file has no source")
+	if idx.MayMention("file:///never/indexed.php", "anything") != true || idx.GetFileSource("file:///never/indexed.php") != "" {
+		t.Error("an unknown file is never skipped and has no source")
 	}
 }
 

@@ -352,6 +352,7 @@ type indexedText struct {
 type diskSource struct {
 	size   int
 	digest uint64
+	words  wordFilter
 }
 
 func (d diskSource) sameText(other diskSource) bool {
@@ -373,6 +374,7 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 	}
 	if src == SourceVendor {
 		file.Detach()
+		disk.words = newWordFilter(source)
 	}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -1920,6 +1922,16 @@ func (idx *Index) GetFileSource(uri string) string {
 		return ""
 	}
 	return string(data)
+}
+
+// MayMention reports whether the indexed file at uri may contain word as an
+// identifier, ignoring case. It answers false only for a vendor file that
+// certainly doesn't, so a scan can skip reading that file from disk.
+func (idx *Index) MayMention(uri, word string) bool {
+	idx.mu.RLock()
+	disk, onDisk := idx.diskSources[uri]
+	idx.mu.RUnlock()
+	return !onDisk || disk.words.mayContain(word)
 }
 
 // Ready reports whether at least one full workspace + composer indexing pass
