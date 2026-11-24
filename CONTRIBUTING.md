@@ -10,7 +10,7 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 
 ### Prerequisites
 
-- **Go 1.22+** — for the language server
+- **Go 1.27+** — for the language server
 
 > The editor extensions live in separate repos ([`Tusk-PHP/vscode`](https://github.com/Tusk-PHP/vscode), [`Tusk-PHP/zed`](https://github.com/Tusk-PHP/zed)); their toolchains (Node.js, Rust) are documented there.
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Building from source needs Go 1.27** or later (was 1.25).
+
 ## [0.16.0] - 2026-11-25
 
 Thanks to [@stubbedev](https://github.com/stubbedev) and [@AJenbo](https://github.com/AJenbo), who contributed to this release.
