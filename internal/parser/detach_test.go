@@ -42,12 +42,7 @@ func aliased(v reflect.Value, lo, hi uintptr, path string, seen map[uintptr]bool
 	}
 }
 
-func TestDetachLeavesNoStringInTheSource(t *testing.T) {
-	data, err := os.ReadFile("../../testdata/laravel/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php")
-	if err != nil {
-		t.Skip("the Laravel fixture's vendor tree isn't installed")
-	}
-	extra := `<?php
+const detachSampleSource = `<?php
 namespace App;
 use Foo\{Bar, Baz as Qux};
 #[Attr(name: 'x')]
@@ -66,15 +61,47 @@ enum Size: string { case Small = 's'; const D = self::Small; }
 function helper(callable $c = null): never {}
 const TOP = 1;
 `
-	for _, source := range []string{string(data), extra} {
-		file := ParseFile(source)
-		file.Detach()
-		lo := uintptr(unsafe.Pointer(unsafe.StringData(source)))
-		var found []string
-		aliased(reflect.ValueOf(file).Elem(), lo, lo+uintptr(len(source)), "FileNode", map[uintptr]bool{}, &found)
-		if len(found) > 0 {
-			t.Errorf("%d strings still point into the source, first at %s", len(found), found[0])
+
+const laravelModelPath = "../../testdata/laravel/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php"
+
+func assertDetached(t *testing.T, source string) {
+	t.Helper()
+	file := ParseFile(source)
+	file.Detach()
+	lo := uintptr(unsafe.Pointer(unsafe.StringData(source)))
+	var found []string
+	aliased(reflect.ValueOf(file).Elem(), lo, lo+uintptr(len(source)), "FileNode", map[uintptr]bool{}, &found)
+	if len(found) > 0 {
+		t.Errorf("%d strings still point into the source, first at %s", len(found), found[0])
+	}
+}
+
+func TestDetachLeavesNoStringInTheSource(t *testing.T) {
+	t.Run("every declaration kind", func(t *testing.T) {
+		assertDetached(t, detachSampleSource)
+	})
+	t.Run("Eloquent Model", func(t *testing.T) {
+		data, err := os.ReadFile(laravelModelPath)
+		if err != nil {
+			t.Skip("the Laravel fixture's vendor tree isn't installed")
 		}
+		assertDetached(t, string(data))
+	})
+}
+
+func BenchmarkDetach(b *testing.B) {
+	data, err := os.ReadFile(laravelModelPath)
+	if err != nil {
+		b.Skip("the Laravel fixture's vendor tree isn't installed")
+	}
+	files := make([]*FileNode, b.N)
+	for i := range files {
+		files[i] = ParseFile(string(data))
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		files[i].Detach()
 	}
 }
 
