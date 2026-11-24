@@ -278,17 +278,26 @@ func (ws *Bootstrapped) ScanRoutes() error {
 }
 
 func (ws *Bootstrapped) AnalyzeModels() {
+	ws.AnalyzeModelClasses()
+	ws.AnalyzeModelSchema()
+}
+
+func (ws *Bootstrapped) AnalyzeModelClasses() {
 	if ws == nil {
 		return
 	}
-
 	switch ws.Framework {
 	case "laravel":
 		models.AnalyzeEloquentModels(ws.Index, ws.RootPath)
 	case "symfony":
 		models.AnalyzeDoctrineEntities(ws.Index, ws.RootPath)
 	}
+}
 
+func (ws *Bootstrapped) AnalyzeModelSchema() {
+	if ws == nil {
+		return
+	}
 	schema, _ := models.ScanSchema(ws.RootPath, ws.Framework, ws.Config, ws.Logger, ws.SchemaCache)
 	models.InjectDatabaseSchema(ws.Index, ws.RootPath, ws.Framework, schema)
 	var migrationColumns map[string]map[string]*models.MigrationColumn
