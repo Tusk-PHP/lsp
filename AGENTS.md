@@ -65,11 +65,13 @@ above it in this list**, never from a later one:
 1. **Wire types and identifiers:** `protocol` (LSP types, no logic), `rule`
    (diagnostic codes, severities and sources: every code a finding carries is a
    `rule.Code` constant listed in `rule.All`).
-2. **Language core:** `php/token` and `php/lexer` (lossless lexer that matches
-   the tokenizer of PHP 7.4 and 8.0 to 8.6 with `short_open_tag` off, so `<?` is
-   inline HTML; see issue #140; it leaves out the empty `T_ENCAPSED_AND_WHITESPACE`
-   PHP emits for a space in an unquoted string offset like `"$a[ b]"`), `parser` (own tokenizer and
-   lightweight AST, fault-tolerant),
+2. **Language core:** `php/token`, `php/lexer`, `php/ast` and `php/parser` (a
+   lossless lexer that matches the tokenizer of PHP 7.4 and 8.0 to 8.6, and a full
+   fault-tolerant parser that matches PHP 8.0 to 8.5's own parser and reads PHP
+   8.6, with `short_open_tag` off, so `<?` is inline HTML; see issue #140; the
+   lexer leaves out the empty `T_ENCAPSED_AND_WHITESPACE` PHP emits for a space
+   in an unquoted string offset like `"$a[ b]"`), `parser` (the older tokenizer
+   and lightweight AST the features still use),
    `types`, `phparray`, `stubs` (embedded builtin stubs by PHP version and
    extension), `phpdetect`.
 3. **Index and resolution:** `symbols` (the central index), `scope` (variables,
@@ -105,7 +107,7 @@ internal/
 ├── document/         open documents: versions, immutable snapshots, edits, UTF-16 positions
 ├── indexing/         when and what to (re)index: scheduling, invalidation, caches
 ├── workspace/        roots, Composer discovery, project profile
-├── php/              token, lexer: PHP's own grammar, version by version (issue #140)
+├── php/              token, lexer, ast, parser: PHP's own grammar, version by version (issue #140)
 ├── parser/ types/ symbols/ scope/ resolve/ source/      language core (no transport types over time)
 ├── completion/ hover/ analyzer/ inlayhint/ checks/ diagnostics/   features
 ├── framework/
