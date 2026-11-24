@@ -1,11 +1,14 @@
 package symfony
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -257,5 +260,39 @@ class DashboardController
 	}
 	if got["admin_dashboard"] != "/admin/dashboard" {
 		t.Errorf("the imported controller file's route is found under the import's prefixes: %v", got)
+	}
+}
+
+func TestRouteAttributesFromTheSyntaxTree(t *testing.T) {
+	src := `<?php
+namespace App\Controller;
+use Symfony\Component\Routing\Annotation\Route as LegacyRoute;
+use Symfony\Component\Routing\Attribute\Route;
+use Other\Route as NotSymfony;
+
+#[Route('/blog', name: 'blog_')]
+class BlogController
+{
+    const NAME = 'x';
+    #[Route('/{slug}', 'show')]
+    public function show() {}
+    #[LegacyRoute(
+        path: '/list',
+        name: 'list',
+    )]
+    public function list() {}
+    #[NotSymfony('/other', name: 'other')]
+    public function other() {}
+    #[Route('/dynamic', name: self::NAME), Route]
+    public function dynamic() {}
+}
+`
+	var got []string
+	for _, r := range discoverRoutesInFile("file:///c.php", src, phpparser.OnlyGrammar(token.Latest)) {
+		got = append(got, fmt.Sprintf("%s %s %d:%d-%d", r.Name, r.Path, r.NameRange.Start.Line, r.NameRange.Start.Character, r.NameRange.End.Character))
+	}
+	want := []string{"blog_show /blog/{slug} 10:24-28", "blog_list /blog/list 14:15-19"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got\n%s", strings.Join(got, "\n"))
 	}
 }
