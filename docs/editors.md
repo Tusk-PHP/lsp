@@ -25,7 +25,7 @@ The extension bundles the language server binary — no additional setup require
 > [Tusk-PHP/zed](https://github.com/Tusk-PHP/zed). It downloads the correct binary for your
 > platform automatically.
 
-Keep Zed's built-in **PHP** extension installed. It provides syntax highlighting, PHPDoc highlighting, and other language assets. Install **Tusk PHP** alongside it, then set Tusk PHP as the only PHP language server to avoid collisions with Phpactor, Intelephense, or PHP Tools:
+Keep Zed's built-in **PHP** extension installed. It provides syntax highlighting, PHPDoc highlighting, and other language assets. Install **Tusk PHP** alongside it, then set Tusk PHP as the only PHP language server to avoid collisions with the other servers that extension bundles:
 
 ```json
 {

@@ -99,22 +99,22 @@ PHPDoc generics are read the way [PHPStan](https://phpstan.org/blog/generics-in-
 
 ## Benchmarks
 
-Every server gets the same LSP requests at the same cursor positions in the same workspaces, over stdio, with a cold cache and one server at a time. Measured on an Apple M3 Max: Tusk PHP 0.15.0 on 22 November 2026 with PHP 8.6.0, and Intelephense 1.18.5, Phpactor 2026.06.23.0, php-lsp 0.25.1 and PHPantom 0.10.0 on 13 November 2026 with PHP 8.5.11.
+Every server gets the same LSP requests at the same cursor positions in the same workspaces, over stdio, with a cold cache and one server at a time. Tusk PHP 0.15.0, Intelephense 1.18.5, Phpactor 2026.06.23.0, php-lsp 0.33.0 and PHPantom 1.1.0.
 
 **Time until the first correct cross-file answer, and peak memory**
 
 | Workspace | Tusk PHP | Intelephense | Phpactor | php-lsp | PHPantom |
 |---|---|---|---|---|---|
-| Laravel (9.7k files) | **285 ms · 180 MB** | 3321 ms · 698 MB | 5299 ms · 203 MB | 282 ms · 178 MB | 601 ms · 88 MB |
-| Symfony (1.1k files) | **282 ms · 58 MB** | 709 ms · 359 MB | 3736 ms · 111 MB | 226 ms · 287 MB | 403 ms · 59 MB |
-| Small project (6 files) | **34 ms · 28 MB** | 300 ms · 293 MB | 3849 ms · 168 MB | 213 ms · 118 MB | 176 ms · 32 MB |
+| Laravel (9.7k files) | **285 ms · 180 MB** | 3321 ms · 698 MB | 5299 ms · 203 MB | 387 ms · 484 MB | 376 ms · 110 MB |
+| Symfony (1.1k files) | **282 ms · 58 MB** | 709 ms · 359 MB | 3736 ms · 111 MB | 336 ms · 385 MB | 311 ms · 74 MB |
+| Small project (6 files) | **34 ms · 28 MB** | 300 ms · 293 MB | 3849 ms · 168 MB | 181 ms · 128 MB | 36 ms · 51 MB |
 
 **Correct answers** (completion, definition, hover, references, signature help, symbols and diagnostics)
 
 | Workspace | Tusk PHP | Intelephense | Phpactor | php-lsp | PHPantom |
 |---|---|---|---|---|---|
-| Laravel | **19/19** | 12/19 | 14/19 | 3/3 (+16 errors) | 16/19 |
-| Symfony | 11/11 | 11/11 | 11/11 | 10/11 | 9/11 |
+| Laravel | **19/19** | 12/19 | 14/19 | 14/19 | 19/19 |
+| Symfony | 11/11 | 11/11 | 11/11 | 11/11 | 11/11 |
 | Diagnostics | 6/6 | 6/6 | 5/6 | 6/6 | 6/6 |
 
 Tusk PHP is among the fastest and lightest servers, and answers in well under a millisecond for completion, hover and definition. It answers every Laravel and Symfony question, including completion and hover on Eloquent's static calls (`Category::where()`), and passes all six diagnostics cases. Run `make bench-install && make bench` to reproduce the numbers; [bench/README.md](bench/README.md) explains the method and how answers are graded.

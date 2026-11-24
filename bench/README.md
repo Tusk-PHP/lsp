@@ -80,8 +80,13 @@ that formatting differences do not matter:
   be in the expected file, on a line containing the expected declaration
   (±2 lines, because servers disagree about whether a definition points at the
   docblock, the attribute, or the declaration)
-- *completion* — the expected labels must be offered; the report records their
-  rank and the total item count
+- *completion* — the expected names must be offered; the report records their
+  rank and the total item count. An item's name is what the editor matches the
+  typed text against: its `filterText`, else its label without a parameter
+  list, so `setName` and `setName($name)` grade the same. When the item's edit
+  replaces text already typed before the caret (`app.` → `app.name`), that text
+  is dropped first, so both servers that insert `name` and ones that replace
+  the whole key pass
 - *references* — a minimum count plus the files that must appear
 - *documentSymbol* / *workspaceSymbol* — the expected names must appear
 - *diagnostics* — a finding on the expected line whose message uses any of

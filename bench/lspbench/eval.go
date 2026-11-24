@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf16"
 )
 
 // Status values for a graded case.
@@ -172,7 +173,7 @@ func (s *session) Run(c Case, workspace string, warmup, repeat int) CaseResult {
 		res.LatencyMs = append(res.LatencyMs, float64(elapsed.Microseconds())/1000)
 		last = raw
 	}
-	s.grade(c, last, &res)
+	s.grade(c, last, &res, src, pos)
 	return res
 }
 
@@ -206,7 +207,7 @@ func (s *session) request(c Case, pos Position) (string, map[string]interface{})
 	return "", nil
 }
 
-func (s *session) grade(c Case, raw json.RawMessage, res *CaseResult) {
+func (s *session) grade(c Case, raw json.RawMessage, res *CaseResult, src string, pos Position) {
 	switch c.Feature {
 	case "hover", "signatureHelp":
 		text := normalizeSpace(flattenText(raw))
@@ -255,7 +256,7 @@ func (s *session) grade(c Case, raw json.RawMessage, res *CaseResult) {
 		res.Detail = fmt.Sprintf("no target matched %s / %q", c.Expect.TargetFile, c.Expect.TargetSymbol)
 
 	case "completion":
-		labels := parseCompletionLabels(raw)
+		labels := parseCompletionLabels(raw, lineAt(src, pos.Line), pos)
 		res.Meta["itemCount"] = len(labels)
 		index := map[string]int{}
 		for i, l := range labels {
@@ -569,23 +570,50 @@ func summarizeLocations(locs []location, root string, max int) []string {
 	return out
 }
 
-// parseCompletionLabels accepts CompletionList or CompletionItem[].
-func parseCompletionLabels(raw json.RawMessage) []string {
+// parseCompletionLabels accepts CompletionList or CompletionItem[] and returns
+// the name each item completes to, which is what the editor matches against
+// what the user types. That is the item's filterText when it has one, else its
+// label without a trailing parameter list, so "setName($name)" and "setName"
+// grade the same. When the item's edit range starts before the caret, the text
+// already typed inside that range is dropped, so a server that replaces
+// "app." with "app.name" and one that inserts "name" after it both offer "name".
+func parseCompletionLabels(raw json.RawMessage, line string, caret Position) []string {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
 	}
+	type textEdit struct {
+		Range  *lspRange `json:"range"`
+		Insert *lspRange `json:"insert"`
+	}
 	type item struct {
-		Label      string `json:"label"`
-		FilterText string `json:"filterText"`
-		InsertText string `json:"insertText"`
+		Label      string    `json:"label"`
+		FilterText string    `json:"filterText"`
+		InsertText string    `json:"insertText"`
+		TextEdit   *textEdit `json:"textEdit"`
 	}
 	extract := func(items []item) []string {
 		out := make([]string, 0, len(items))
 		for _, it := range items {
-			label := strings.TrimSpace(it.Label)
-			// Trim decorations some servers add: "$var", "method()", "Class ".
-			label = strings.TrimSuffix(label, "()")
-			out = append(out, label)
+			name := strings.TrimSpace(it.FilterText)
+			if name == "" {
+				name = strings.TrimSpace(it.Label)
+				if i := strings.IndexByte(name, '('); i > 0 && strings.HasSuffix(name, ")") {
+					name = name[:i]
+				}
+			}
+			if it.TextEdit != nil {
+				r := it.TextEdit.Range
+				if r == nil {
+					r = it.TextEdit.Insert
+				}
+				if r != nil && r.Start.Line == caret.Line && r.Start.Character < caret.Character {
+					typed := utf16Slice(line, r.Start.Character, caret.Character)
+					if typed != "" && typed != name && strings.HasPrefix(name, typed) {
+						name = name[len(typed):]
+					}
+				}
+			}
+			out = append(out, name)
 		}
 		return out
 	}
@@ -738,4 +766,39 @@ func percentile(values []float64, p float64) float64 {
 	}
 	idx := int(p * float64(len(sorted)-1))
 	return sorted[idx]
+}
+
+// lineAt returns line n (0-based) of src, without its line break.
+func lineAt(src string, n int) string {
+	for i := 0; i < n; i++ {
+		nl := strings.IndexByte(src, '\n')
+		if nl < 0 {
+			return ""
+		}
+		src = src[nl+1:]
+	}
+	if nl := strings.IndexByte(src, '\n'); nl >= 0 {
+		src = src[:nl]
+	}
+	return strings.TrimSuffix(src, "\r")
+}
+
+// utf16Slice returns the part of line between two UTF-16 column offsets, the
+// unit LSP positions count in.
+func utf16Slice(line string, from, to int) string {
+	col, start, end := 0, -1, len(line)
+	for i, r := range line {
+		if col == from && start < 0 {
+			start = i
+		}
+		if col == to {
+			end = i
+			break
+		}
+		col += len(utf16.Encode([]rune{r}))
+	}
+	if start < 0 || end < start {
+		return ""
+	}
+	return line[start:end]
 }
