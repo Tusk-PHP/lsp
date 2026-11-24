@@ -21,10 +21,12 @@ const (
 	phpstanIgnoreNextLine
 )
 
-var markers = []struct {
+type marker struct {
 	text string
 	kind markerKind
-}{
+}
+
+var markers = []marker{
 	{suppressionMarker, tuskIgnore},
 	{phpstanMarker, phpstanIgnore},
 	{phpstanMarker + "-line", phpstanIgnoreLine},
@@ -65,18 +67,13 @@ func (l Layout) Suppressions() Suppressions {
 		if !HasSuppressionMarker(text) {
 			continue
 		}
-		line := l.Line(span.Start)
-		next := line
-		if l.ownLine(span) {
-			next = l.nextCodeLine(span.End)
-		}
 		for _, m := range markers {
 			at := markerIndex(text, m.text)
 			if at < 0 {
 				continue
 			}
 			list := codeList(text[at+len(m.text):])
-			target, entry := next, suppressedCodes{}
+			var entry suppressedCodes
 			switch m.kind {
 			case tuskIgnore:
 				entry = suppressedCodes{all: len(list) == 0, targets: tuskTargets(list)}
@@ -85,21 +82,85 @@ func (l Layout) Suppressions() Suppressions {
 					continue
 				}
 				entry.targets = phpstanTargets(list)
-			case phpstanIgnoreLine:
-				target, entry.targets = line, phpstanLineTargets
-			case phpstanIgnoreNextLine:
-				target, entry.targets = l.nextCodeLine(span.End), phpstanLineTargets
+			default:
+				entry.targets = phpstanLineTargets
 			}
-			if out == nil {
-				out = Suppressions{}
+			for _, lines := range l.markerScope(span, at, m) {
+				out = out.add(lines, entry)
 			}
-			merged := out[target]
-			merged.all = merged.all || entry.all
-			merged.targets = append(merged.targets, entry.targets...)
-			out[target] = merged
 		}
 	}
 	return out
+}
+
+type lineRange struct{ first, last int }
+
+func (l Layout) markerScope(span Span, at int, m marker) []lineRange {
+	line := l.Line(span.Start)
+	endLine := l.Line(span.End)
+	text := l.source[span.Start:span.End]
+	switch m.kind {
+	case tuskIgnore:
+		if !l.ownLine(span) {
+			return []lineRange{{line, line}}
+		}
+		code, ok := l.reach(span.End)
+		if !ok {
+			return nil
+		}
+		return []lineRange{{endLine + 1, code}}
+	case phpstanIgnore:
+		if l.codeBefore(span.Start) {
+			return []lineRange{{line, line}}
+		}
+		if next := l.Line(l.nextNonComment(span.End)); next == endLine+1 {
+			return []lineRange{{next, next}}
+		}
+		return []lineRange{{endLine, endLine}}
+	case phpstanIgnoreLine:
+		if isDocComment(text) {
+			marker := l.Line(span.Start + at)
+			return []lineRange{{marker, marker}}
+		}
+		return []lineRange{{endLine, endLine}}
+	default:
+		if !isDocComment(text) {
+			return []lineRange{{endLine + 1, endLine + 1}}
+		}
+		next := l.Line(span.Start+at) + 1
+		scope := []lineRange{{next, next}}
+		if !hasTag(text[at+len(m.text):]) {
+			scope = append(scope, lineRange{endLine + 1, endLine + 1})
+		}
+		return scope
+	}
+}
+
+func (s Suppressions) add(lines lineRange, entry suppressedCodes) Suppressions {
+	if s == nil {
+		s = Suppressions{}
+	}
+	for line := lines.first; line <= lines.last; line++ {
+		merged := s[line]
+		merged.all = merged.all || entry.all
+		merged.targets = append(merged.targets, entry.targets...)
+		s[line] = merged
+	}
+	return s
+}
+
+func hasTag(text string) bool {
+	for i := strings.IndexByte(text, '@'); i >= 0; i = strings.IndexByte(text, '@') {
+		text = text[i+1:]
+		if text != "" && isLetter(text[0]) {
+			return true
+		}
+	}
+	return false
+}
+
+func isDocComment(text string) bool {
+	return len(text) > 3 && strings.HasPrefix(text, "/**") && strings.ContainsRune(" \t\r\n", rune(text[3]))
 }
 
 func (l Layout) ownLine(span Span) bool {
@@ -159,7 +220,7 @@ func markerIndex(comment, marker string) int {
 		i += from
 		end := i + len(marker)
 		before := i == 0 || !isCodeByte(comment[i-1])
-		after := end == len(comment) || !isCodeByte(comment[end])
+		after := end == len(comment) || comment[end] == ':' || !isCodeByte(comment[end])
 		if before && after {
 			return i
 		}

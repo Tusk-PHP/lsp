@@ -64,3 +64,51 @@ func TestLayoutLinesAndWhitespace(t *testing.T) {
 		t.Errorf("offset 8 is on line %d", l.Line(8))
 	}
 }
+
+func TestLayoutMarkerLineStopsBeyondOneBlankLine(t *testing.T) {
+	source := "<?php\n/** @var int */\n\n\n$a = 1;\n/** @var int */\n\n$b = 1;\n"
+	l := PHPLayout(source)
+	for line, want := range map[int]int{4: 4, 7: 5} {
+		if got := l.MarkerLine(line); got != want {
+			t.Errorf("marker for line %d goes on line %d, want %d", line, got, want)
+		}
+	}
+}
+
+func TestBladeLayoutMarkerLineSkipsAttributesInPHPBlocks(t *testing.T) {
+	l := BladeLayout("<div>\n@php\n    #[A]\n    function f() {}\n@endphp\n</div>\n")
+	if got := l.MarkerLine(3); got != 2 {
+		t.Errorf("marker goes above the attribute on line 2, got %d", got)
+	}
+}
+
+func TestLayoutTrailingCommentAt(t *testing.T) {
+	source := "<?php\n$a = 'é'; // note\n$b = 1;\n$c = \"x\ny\";\n?>\n<p><?php $d ?></p>\n/* a */ // b\n"
+	l := PHPLayout(source)
+	cases := []struct {
+		line      int
+		ok        bool
+		character int
+		style     CommentStyle
+	}{
+		{1, true, 10, PHPBlockComment},
+		{2, true, 7, PHPComment},
+		{3, false, 0, 0},
+		{4, true, 3, PHPComment},
+		{5, false, 0, 0},
+		{6, false, 0, 0},
+		{7, false, 0, 0},
+	}
+	for _, c := range cases {
+		offset, style, ok := l.TrailingCommentAt(c.line)
+		if ok != c.ok || (ok && (l.Character(offset) != c.character || style != c.style)) {
+			t.Errorf("line %d: offset %d style %v ok %v, want character %d style %v ok %v", c.line, offset, style, ok, c.character, c.style, c.ok)
+		}
+	}
+	if _, _, ok := PHPLayout("<?php\n/* a */ // b\n").TrailingCommentAt(1); ok {
+		t.Error("a line of comments has no code to ignore")
+	}
+	if _, _, ok := l.TrailingCommentAt(99); ok {
+		t.Error("no line past the end")
+	}
+}

@@ -3,6 +3,7 @@ package checks
 import (
 	"sort"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -14,12 +15,16 @@ type CommentStyle int
 
 const (
 	PHPComment CommentStyle = iota
+	PHPBlockComment
 	BladeComment
 )
 
+const maxBlankLinesInReach = 1
+
 var commentDelimiters = map[CommentStyle][2]string{
-	PHPComment:   {"// ", ""},
-	BladeComment: {"{{-- ", " --}}"},
+	PHPComment:      {"// ", ""},
+	PHPBlockComment: {"/* ", " */"},
+	BladeComment:    {"{{-- ", " --}}"},
 }
 
 func (c CommentStyle) Wrap(text string) string {
@@ -33,6 +38,7 @@ type Layout struct {
 	comments   []Span
 	skipFrom   map[int]int
 	skipTo     map[int]int
+	attributes []Span
 	php        []Span
 	opaque     []Span
 	blade      bool
@@ -55,10 +61,9 @@ func PHPLayout(source string) Layout {
 			regionStart = -1
 		case tok.Kind == parser.TokenComment || tok.Kind == parser.TokenDocComment:
 			l.addComment(Span{tok.Offset, tok.Offset + len(tok.Value)})
-		case tok.Kind == parser.TokenHash && tokens[i+1].Kind == parser.TokenOpenBracket:
+		case tok.Kind == parser.TokenHash && i+1 < len(tokens) && tokens[i+1].Kind == parser.TokenOpenBracket:
 			end := attributeEnd(tokens, i+1)
-			l.addSkipped(Span{tok.Offset, tokens[end].Offset + len(tokens[end].Value)})
-			i = end
+			l.addAttribute(Span{tok.Offset, tokens[end].Offset + len(tokens[end].Value)})
 		}
 	}
 	if regionStart >= 0 {
@@ -81,6 +86,9 @@ func BladeLayout(source string) Layout {
 		shift := n.Expr.Start - len("<?php ")
 		for _, c := range body.comments {
 			l.addComment(Span{c.Start + shift, c.End + shift})
+		}
+		for _, a := range body.attributes {
+			l.addAttribute(Span{a.Start + shift, a.End + shift})
 		}
 		for _, o := range body.opaque {
 			l.opaque = append(l.opaque, Span{o.Start + shift, o.End + shift})
@@ -122,6 +130,11 @@ func (l *Layout) addComment(s Span) {
 	l.addSkipped(s)
 }
 
+func (l *Layout) addAttribute(s Span) {
+	l.attributes = append(l.attributes, s)
+	l.addSkipped(s)
+}
+
 func (l *Layout) addSkipped(s Span) {
 	l.skipFrom[s.Start] = s.End
 	l.skipTo[s.End] = s.Start
@@ -138,12 +151,18 @@ func (l Layout) LineStart(line int) (int, bool) {
 	return l.lineStarts[line], true
 }
 
-func (l Layout) nextCodeLine(offset int) int {
+func (l Layout) reach(offset int) (int, bool) {
+	blanks := 0
 	for {
-		offset += len(l.source[offset:]) - len(strings.TrimLeft(l.source[offset:], " \t\r\n"))
+		gap := leadingSpace(l.source[offset:], " \t\r\n")
+		blanks += blankLines(gap)
+		if blanks > maxBlankLinesInReach {
+			return 0, false
+		}
+		offset += len(gap)
 		end, ok := l.skipFrom[offset]
 		if !ok {
-			return l.Line(offset)
+			return l.Line(offset), true
 		}
 		offset = end
 	}
@@ -151,18 +170,97 @@ func (l Layout) nextCodeLine(offset int) int {
 
 func (l Layout) MarkerLine(line int) int {
 	start, _ := l.LineStart(line)
-	offset := start + len(l.source[start:]) - len(strings.TrimLeft(l.source[start:], " \t"))
+	offset := start + len(leadingSpace(l.source[start:], " \t"))
 	marker := offset
+	blanks := 0
 	for {
-		begin, ok := l.skipTo[len(strings.TrimRight(l.source[:offset], " \t\r\n"))]
+		prevEnd := len(strings.TrimRight(l.source[:offset], " \t\r\n"))
+		begin, ok := l.skipTo[prevEnd]
 		if !ok {
-			return l.Line(marker)
+			break
+		}
+		blanks += blankLines(l.source[prevEnd:offset])
+		if blanks > maxBlankLinesInReach {
+			break
 		}
 		offset = begin
 		if l.startsLine(begin) {
 			marker = begin
 		}
 	}
+	return l.Line(marker)
+}
+
+func (l Layout) TrailingCommentAt(line int) (offset int, style CommentStyle, ok bool) {
+	start, ok := l.LineStart(line)
+	if !ok {
+		return 0, 0, false
+	}
+	rest := l.source[start:]
+	if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
+		rest = rest[:nl]
+	}
+	end := start + len(strings.TrimRight(rest, " \t\r"))
+	if s, inPHP := l.StyleAt(end); !inPHP || s != PHPComment {
+		return 0, 0, false
+	}
+	offset, style = end, PHPComment
+	if c, found := spanBefore(l.comments, end); found && c.End == end && c.Start >= start && isLineComment(l.source[c.Start:c.End]) {
+		offset, style = c.Start, PHPBlockComment
+	}
+	if !l.codeBefore(offset) {
+		return 0, 0, false
+	}
+	return offset, style, true
+}
+
+func (l Layout) codeBefore(offset int) bool {
+	lineStart := l.lineStarts[l.Line(offset)]
+	for {
+		trimmed := lineStart + len(strings.TrimRight(l.source[lineStart:offset], " \t"))
+		if trimmed == lineStart {
+			return false
+		}
+		c, ok := spanBefore(l.comments, trimmed)
+		if !ok || c.End != trimmed {
+			return true
+		}
+		if c.Start < lineStart {
+			return false
+		}
+		offset = c.Start
+	}
+}
+
+func (l Layout) nextNonComment(offset int) int {
+	for {
+		offset += len(leadingSpace(l.source[offset:], " \t\r\n"))
+		i := sort.Search(len(l.comments), func(i int) bool { return l.comments[i].Start >= offset })
+		if i == len(l.comments) || l.comments[i].Start != offset {
+			return offset
+		}
+		offset = l.comments[i].End
+	}
+}
+
+func (l Layout) Character(offset int) int {
+	n := 0
+	for _, r := range l.source[l.lineStarts[l.Line(offset)]:offset] {
+		n += utf16.RuneLen(r)
+	}
+	return n
+}
+
+func leadingSpace(s, cutset string) string {
+	return s[:len(s)-len(strings.TrimLeft(s, cutset))]
+}
+
+func blankLines(gap string) int {
+	return max(strings.Count(gap, "\n")-1, 0)
+}
+
+func isLineComment(text string) bool {
+	return strings.HasPrefix(text, "//") || strings.HasPrefix(text, "#")
 }
 
 func (l Layout) startsLine(offset int) bool {
@@ -197,6 +295,5 @@ func (l Layout) LineEnding() string {
 
 func (l Layout) Indent(line int) string {
 	start, _ := l.LineStart(line)
-	rest := l.source[start:]
-	return rest[:len(rest)-len(strings.TrimLeft(rest, " \t"))]
+	return leadingSpace(l.source[start:], " \t")
 }

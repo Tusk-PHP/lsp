@@ -127,8 +127,9 @@ findings can't be re-graded this way; use their own configuration.
 
 To silence one finding, put a `@tusk-ignore` comment on the line or on its own
 line above it, naming the codes to ignore. A comment on its own line covers the
-next line of code: comments, docblocks, attributes and blank lines in between
-are skipped, so markers can be stacked and can sit above a method's docblock:
+next line of code and everything between, so markers can be stacked and can sit
+above a method's docblock and attributes. It reaches across at most one blank
+line; a marker followed by two blank lines covers nothing:
 
 ```php
 // @tusk-ignore unknown-member
@@ -140,8 +141,9 @@ $value = $row->total; // @tusk-ignore unknown-member, undefined-variable (set by
 Codes are separated by commas, and each may be followed by a reason in
 parentheses; anything after the list is ignored, as is punctuation right after a
 code (`unused-variable: read by an include`). A bare `@tusk-ignore` ignores every
-finding on that line. In a Blade view, use a Blade comment:
-`{{-- @tusk-ignore unknown-view --}}`; inside `@php … @endphp`, use a PHP comment.
+finding on that line, and so does `@tusk-ignore: reason`. In a Blade view, use
+a Blade comment: `{{-- @tusk-ignore unknown-view --}}`; inside
+`@php … @endphp`, use a PHP comment.
 
 Findings from external tools are named with the tool in front of their code:
 `@tusk-ignore phpstan:argument.type` ignores one PHPStan identifier, and
@@ -149,12 +151,17 @@ Findings from external tools are named with the tool in front of their code:
 reports a line once for all the fixers that would change it; `pint:single_quote`
 ignores that line when `single_quote` is one of them. `tusk-php` names every
 Tusk PHP finding. The "Ignore … on this line" quick fix writes the comment for
-you, above any docblock and attributes, offering one action per Pint fixer; for
-PHPStan it writes PHPStan's own `@phpstan-ignore`, so PHPStan in CI agrees.
+you, above any docblock and attributes, offering one action per Pint fixer. For
+PHPStan it writes PHPStan's own `@phpstan-ignore` at the end of the line, the
+one place PHPStan reads it however the declaration is laid out, so PHPStan in
+CI agrees.
 
 Comments already written for PHPStan work as they are, with PHPStan's rules for
-which line they cover: `@phpstan-ignore-line` and `@phpstan-ignore-next-line`
-silence PHPStan's and Tusk PHP's findings on that line, but not Pint's.
+which line they cover: a `@phpstan-ignore` on its own line and
+`@phpstan-ignore-next-line` cover the very next line only, not code below a
+docblock, another comment or a blank line. `@phpstan-ignore-line` and
+`@phpstan-ignore-next-line` silence PHPStan's and Tusk PHP's findings on their
+line, but not Pint's.
 `@phpstan-ignore <identifier>, …` silences those PHPStan identifiers, and the
 Tusk PHP finding that matches each identifier too, for example
 `method.notFound` → `unknown-member`, `variable.undefined` →
