@@ -126,7 +126,9 @@ findings can't be re-graded this way; use their own configuration.
 ## Ignoring a finding
 
 To silence one finding, put a `@tusk-ignore` comment on the line or on its own
-line directly above it, naming the codes to ignore:
+line above it, naming the codes to ignore. A comment on its own line covers the
+next line of code: comments, docblocks, attributes and blank lines in between
+are skipped, so markers can be stacked and can sit above a method's docblock:
 
 ```php
 // @tusk-ignore unknown-member
@@ -135,44 +137,52 @@ $legacy->magicCall();
 $value = $row->total; // @tusk-ignore unknown-member, undefined-variable (set by an include)
 ```
 
-Codes are separated by commas; anything after the list, such as a reason in
-parentheses, is ignored. A bare `@tusk-ignore` ignores every finding on that
-line. In a Blade view, use a Blade comment: `{{-- @tusk-ignore unknown-view --}}`.
+Codes are separated by commas, and each may be followed by a reason in
+parentheses; anything after the list is ignored, as is punctuation right after a
+code (`unused-variable: read by an include`). A bare `@tusk-ignore` ignores every
+finding on that line. In a Blade view, use a Blade comment:
+`{{-- @tusk-ignore unknown-view --}}`; inside `@php … @endphp`, use a PHP comment.
 
 Findings from external tools are named with the tool in front of their code:
 `@tusk-ignore phpstan:argument.type` ignores one PHPStan identifier, and
-`@tusk-ignore phpstan` ignores all of PHPStan's findings on the line. The
-"Ignore … on this line" quick fix writes the comment for you; for PHPStan it
-writes PHPStan's own `@phpstan-ignore`, so PHPStan in CI agrees.
+`@tusk-ignore phpstan` ignores all of PHPStan's findings on the line. Pint
+reports a line once for all the fixers that would change it; `pint:single_quote`
+ignores that line when `single_quote` is one of them. `tusk-php` names every
+Tusk PHP finding. The "Ignore … on this line" quick fix writes the comment for
+you, above any docblock and attributes, offering one action per Pint fixer; for
+PHPStan it writes PHPStan's own `@phpstan-ignore`, so PHPStan in CI agrees.
 
 Comments already written for PHPStan work as they are, with PHPStan's rules for
-which line they cover: `@phpstan-ignore-line`, `@phpstan-ignore-next-line` and
-`@phpstan-ignore <identifier>, …` silence PHPStan's findings on that line, and
-the Tusk PHP finding that matches each identifier too, for example
+which line they cover: `@phpstan-ignore-line` and `@phpstan-ignore-next-line`
+silence PHPStan's and Tusk PHP's findings on that line, but not Pint's.
+`@phpstan-ignore <identifier>, …` silences those PHPStan identifiers, and the
+Tusk PHP finding that matches each identifier too, for example
 `method.notFound` → `unknown-member`, `variable.undefined` →
 `undefined-variable`, `arguments.count` → `argument-count-mismatch` and
 `deadCode.unreachable` → `unreachable-code`. A bare `@phpstan-ignore`, which
 PHPStan rejects, silences nothing.
 
 To ignore findings across files, list rules under `diagnosticIgnore` in
-`.tusk-php.json`. Each rule has any of `code`, `path` (a glob relative to the
-project root, where `**` matches any number of directories) and `message` (a
-regular expression); a finding is ignored when it matches everything its rule
-gives:
+`.tusk-php.json`. Each rule has any of `code`, `path` and `message` (a regular
+expression); a finding is ignored when it matches everything its rule gives.
+`path` is a glob relative to the project root, read like a `.gitignore` entry:
+`**` matches any number of directories, a directory covers everything below it,
+a pattern without a `/` (`*.blade.php`) matches at any depth, and a leading `/`
+anchors it to the root. `./` in front and Windows `\` separators are accepted:
 
 ```json
 {
   "diagnosticIgnore": [
     { "path": "app/Legacy/**" },
-    { "code": "unknown-member", "message": "^Method .*::__" },
+    { "code": "unknown-member", "message": "on 'LegacyModel'$" },
     { "code": "phpstan:missingType.iterableValue", "path": "tests/**" }
   ]
 }
 ```
 
-An unknown `code` (a rule that doesn't exist, or a tool other than `phpstan` and
-`pint`) or an invalid `path` or `message` stops the configuration from loading,
-with the rule named in the error. Both kinds of suppression apply in the editor and to
+A rule with an unknown `code` (a rule that doesn't exist, or a tool other than
+`phpstan` and `pint`) or an invalid `path` or `message` is skipped, and the
+editor shows which rule and why; the rest of the configuration still applies. Both kinds of suppression apply in the editor and to
 `tusk-php check`.
 
 ## Where settings come from

@@ -150,7 +150,7 @@ var hunkHeaderRe = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+\d+(?:,\d+)? @@`)
 // Removed lines (starting with '-') represent the original code that needs fixing.
 func parseDiffDiagnostics(diff string, fixers []string) []protocol.Diagnostic {
 	var diags []protocol.Diagnostic
-	fixerDesc := strings.Join(fixers, ", ")
+	fixerDesc := rule.PintCode(fixers)
 	message := formatFixerName(fixerDesc)
 
 	lines := strings.Split(diff, "\n")

@@ -6,7 +6,6 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/config"
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -32,18 +31,10 @@ func (p *Provider) dropSuppressed(uri, source string, diags []protocol.Diagnosti
 }
 
 func sourceSuppressions(uri, source string) checks.Suppressions {
-	if !workspace.IsBlade(uri) {
-		return checks.PHPSuppressions(source)
+	if workspace.IsBlade(uri) {
+		return checks.BladeSuppressions(source)
 	}
-	if !checks.HasSuppressionMarker(source) {
-		return nil
-	}
-	comments := blade.Comments(source)
-	spans := make([]checks.CommentSpan, len(comments))
-	for i, c := range comments {
-		spans[i] = checks.CommentSpan{Start: c.Start, End: c.End}
-	}
-	return checks.CommentSuppressions(source, spans)
+	return checks.PHPSuppressions(source)
 }
 
 func (p *Provider) ignoreRulesFor(uri string) []config.IgnoreRule {

@@ -3,13 +3,13 @@ package checks
 import (
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
 const (
 	suppressionMarker = "@tusk-ignore"
 	phpstanMarker     = "@phpstan-ignore"
+	codeTrailers      = ".:-"
 )
 
 type markerKind int
@@ -38,7 +38,7 @@ type suppressedCodes struct {
 	targets []rule.Target
 }
 
-type CommentSpan struct{ Start, End int }
+var phpstanLineTargets = []rule.Target{rule.ExternalTarget(rule.SourcePHPStan, ""), rule.AllNativeTarget()}
 
 func HasSuppressionMarker(source string) bool {
 	return strings.Contains(source, suppressionMarker) || strings.Contains(source, phpstanMarker)
@@ -48,55 +48,47 @@ func PHPSuppressions(source string) Suppressions {
 	if !HasSuppressionMarker(source) {
 		return nil
 	}
-	var spans []CommentSpan
-	for _, tok := range parser.Tokenize(source) {
-		if tok.Kind == parser.TokenComment || tok.Kind == parser.TokenDocComment {
-			spans = append(spans, CommentSpan{tok.Offset, tok.Offset + len(tok.Value)})
-		}
-	}
-	return CommentSuppressions(source, spans)
+	return PHPLayout(source).Suppressions()
 }
 
-func CommentSuppressions(source string, comments []CommentSpan) Suppressions {
+func BladeSuppressions(source string) Suppressions {
 	if !HasSuppressionMarker(source) {
 		return nil
 	}
+	return BladeLayout(source).Suppressions()
+}
+
+func (l Layout) Suppressions() Suppressions {
 	var out Suppressions
-	line, counted := 0, 0
-	for _, span := range comments {
-		text := source[span.Start:span.End]
+	for _, span := range l.comments {
+		text := l.source[span.Start:span.End]
 		if !HasSuppressionMarker(text) {
 			continue
 		}
-		line += strings.Count(source[counted:span.Start], "\n")
-		counted = span.Start
-		nextLine := line + strings.Count(text, "\n") + 1
-		own := ownLine(source, span)
+		line := l.Line(span.Start)
+		next := line
+		if l.ownLine(span) {
+			next = l.nextCodeLine(span.End)
+		}
 		for _, m := range markers {
 			at := markerIndex(text, m.text)
 			if at < 0 {
 				continue
 			}
 			list := codeList(text[at+len(m.text):])
-			target, entry := line, suppressedCodes{}
+			target, entry := next, suppressedCodes{}
 			switch m.kind {
 			case tuskIgnore:
 				entry = suppressedCodes{all: len(list) == 0, targets: tuskTargets(list)}
-				if own {
-					target = nextLine
-				}
 			case phpstanIgnore:
 				if len(list) == 0 {
 					continue
 				}
 				entry.targets = phpstanTargets(list)
-				if own {
-					target = nextLine
-				}
 			case phpstanIgnoreLine:
-				entry.all = true
+				target, entry.targets = line, phpstanLineTargets
 			case phpstanIgnoreNextLine:
-				entry.all, target = true, nextLine
+				target, entry.targets = l.nextCodeLine(span.End), phpstanLineTargets
 			}
 			if out == nil {
 				out = Suppressions{}
@@ -110,12 +102,11 @@ func CommentSuppressions(source string, comments []CommentSpan) Suppressions {
 	return out
 }
 
-func ownLine(source string, span CommentSpan) bool {
-	lineStart := strings.LastIndexByte(source[:span.Start], '\n') + 1
-	if strings.TrimSpace(source[lineStart:span.Start]) != "" {
+func (l Layout) ownLine(span Span) bool {
+	if !l.startsLine(span.Start) {
 		return false
 	}
-	rest := source[span.End:]
+	rest := l.source[span.End:]
 	if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
 		rest = rest[:nl]
 	}
@@ -131,12 +122,31 @@ func codeList(rest string) []string {
 			return codes
 		}
 		codes = append(codes, rest[:n])
-		rest = strings.TrimLeft(rest[n:], " \t")
+		rest = skipReason(strings.TrimLeft(rest[n:], " \t"))
 		if !strings.HasPrefix(rest, ",") {
 			return codes
 		}
 		rest = rest[1:]
 	}
+}
+
+func skipReason(rest string) string {
+	if !strings.HasPrefix(rest, "(") {
+		return rest
+	}
+	depth := 0
+	for i := 0; i < len(rest); i++ {
+		switch rest[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return strings.TrimLeft(rest[i+1:], " \t")
+			}
+		}
+	}
+	return ""
 }
 
 func markerIndex(comment, marker string) int {
@@ -165,7 +175,7 @@ func codeLength(s string) int {
 	for n < len(s) && isCodeByte(s[n]) {
 		n++
 	}
-	return n
+	return len(strings.TrimRight(s[:n], codeTrailers))
 }
 
 func isLetter(c byte) bool {

@@ -1,10 +1,12 @@
 package analyzer
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
 func ignoreParams(uri string, only []protocol.CodeActionKind, diags ...protocol.Diagnostic) protocol.CodeActionParams {
@@ -94,6 +96,56 @@ func TestIgnoreDiagnosticActionsRespectOnly(t *testing.T) {
 	source := "<?php\n$a;\n"
 	if got := IgnoreDiagnosticActions(uri, source, ignoreParams(uri, []protocol.CodeActionKind{"refactor"}, diagAt(1, "tusk-php", "unused-variable"))); len(got) != 0 {
 		t.Errorf("quick fixes are not refactorings, got %+v", got)
+	}
+}
+
+func TestIgnoreDiagnosticActionsGoAboveDocblocksAndAttributes(t *testing.T) {
+	uri := "file:///app/Shop.php"
+	source := "<?php\nclass Shop\n{\n    /**\n     * @return Cart\n     */\n    #[Route('/cart')]\n    public function cart() {}\n    public function pay() {} /** @return int */\n}\n"
+	actions := IgnoreDiagnosticActions(uri, source, ignoreParams(uri, nil,
+		diagAt(7, "tusk-php", "unknown-class"),
+		diagAt(7, "tusk-php", "unknown-member"),
+		diagAt(8, "tusk-php", "unknown-member"),
+	))
+	lines := map[string][]int{}
+	for _, a := range actions {
+		edit := singleEdit(t, a, uri)
+		lines[a.Title] = append(lines[a.Title], edit.Range.Start.Line)
+	}
+	if got := lines["Ignore unknown-class on this line"]; len(got) != 1 || got[0] != 3 {
+		t.Errorf("the marker goes above the docblock and attribute: %v", lines)
+	}
+	if got := lines["Ignore unknown-member on this line"]; len(got) != 2 || got[0] != 3 || got[1] != 8 {
+		t.Errorf("each line gets its own marker; a docblock after code doesn't move it: %v", lines)
+	}
+}
+
+func TestIgnoreDiagnosticActionsOfferEachPintFixer(t *testing.T) {
+	uri := "file:///app/A.php"
+	source := "<?php\n$a  =  'x';\n"
+	actions := IgnoreDiagnosticActions(uri, source, ignoreParams(uri, nil, diagAt(1, "pint", rule.PintCode([]string{"binary_operator_spaces", "single_quote"}))))
+	var titles []string
+	for _, a := range actions {
+		titles = append(titles, a.Title)
+	}
+	if !slices.Equal(titles, []string{"Ignore pint:binary_operator_spaces on this line", "Ignore pint:single_quote on this line"}) {
+		t.Errorf("got %v", titles)
+	}
+}
+
+func TestIgnoreDiagnosticActionsInBladePHPBlocksUsePHPComments(t *testing.T) {
+	uri := "file:///resources/views/a.blade.php"
+	source := "@php\r\n    nope();\r\n@endphp\r\n"
+	actions := IgnoreDiagnosticActions(uri, source, ignoreParams(uri, nil, diagAt(1, "tusk-php", "unknown-function")))
+	if len(actions) != 1 || singleEdit(t, actions[0], uri).NewText != "    // @tusk-ignore unknown-function\r\n" {
+		t.Errorf("a PHP comment in the file's own line ending: %+v", actions)
+	}
+}
+
+func TestIgnoreDiagnosticActionsWithoutDiagnostics(t *testing.T) {
+	uri := "file:///app/A.php"
+	if got := IgnoreDiagnosticActions(uri, "<?php\n$a;\n", ignoreParams(uri, nil)); got == nil || len(got) != 0 {
+		t.Errorf("got %#v", got)
 	}
 }
 
