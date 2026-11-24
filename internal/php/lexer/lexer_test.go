@@ -1,13 +1,12 @@
 package lexer
 
 import (
-	"os"
-	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/php/phpref"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
@@ -112,20 +111,16 @@ func TestLexIsLosslessAndMatchesPHP(t *testing.T) {
 		}
 	}
 	compare := append(append(append([]string{}, snippets...), versionSnippets...), triviaSnippets...)
-	dir := t.TempDir()
-	paths := make([]string, len(compare))
+	sources := make(map[string]string, len(compare))
 	for i, src := range compare {
-		paths[i] = filepath.Join(dir, "s"+strconv.Itoa(i)+".php")
-		if err := os.WriteFile(paths[i], []byte(src), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		sources["s"+strconv.Itoa(i)] = src
 	}
-	for _, php := range references(t) {
-		t.Run(php.version.String(), func(t *testing.T) {
-			want := runReference(t, php, paths, true)
-			for i, path := range paths {
-				if got, expected := serialize(compare[i], php.version), decode(t, want[path]); got != expected {
-					t.Errorf("%q: %s", compare[i], firstDifference(got, expected))
+	for _, php := range phpref.Versions(t) {
+		t.Run(php.Version.String(), func(t *testing.T) {
+			want := php.Run(t, tokensScript, sources, "detail")
+			for name, src := range sources {
+				if got, expected := serialize(src, php.Version), decode(t, want[name]); got != expected {
+					t.Errorf("%q: %s", src, firstDifference(got, expected))
 				}
 			}
 		})
