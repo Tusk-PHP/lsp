@@ -163,7 +163,7 @@ fairness rules the harness enforces.
 
 - Go: standard `gofmt` formatting (enforced by CI)
 - TypeScript: project `tsconfig.json` settings
-- No external Go dependencies — the server has zero `require` directives in `go.mod` by design
+- Go dependencies stay few: add one only when it is mature and maintained, and say why in the pull request
 
 ### Test Fixtures
 
