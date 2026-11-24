@@ -158,6 +158,7 @@ Open documents are a map guarded by an `RWMutex`. On `didChange` the server stor
 | `textDocument/definition`, `typeDefinition`, `implementation`, `references` | `analyzer` |
 | `textDocument/documentSymbol`, `workspace/symbol` | `analyzer` |
 | `textDocument/documentHighlight`, `foldingRange` | `analyzer` |
+| `textDocument/documentLink` | `analyzer` (`framework/laravel` for the path helpers) |
 | `textDocument/selectionRange` | `lsp` |
 | `textDocument/signatureHelp` | `analyzer` |
 | `textDocument/prepareRename`, `rename` | `analyzer` |

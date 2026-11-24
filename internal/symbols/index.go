@@ -1,9 +1,6 @@
 package symbols
 
 import (
-	"net/url"
-	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -1598,21 +1595,6 @@ func (idx *Index) TraitsOf(fqn string) []string {
 	return append([]string(nil), idx.traitMap[fqn]...)
 }
 
-func URIToPath(uri string) string {
-	if u, err := url.Parse(uri); err == nil && u.Scheme == "file" {
-		// url.Parse decodes percent-encoding in the path (e.g. %3A → :)
-		p := u.Path
-		// On Windows, file URIs look like file:///C:/... → Path="/C:/..."
-		// Strip the leading slash before the drive letter.
-		if runtime.GOOS == "windows" && len(p) >= 3 && p[0] == '/' && p[2] == ':' {
-			p = p[1:]
-		}
-		return filepath.Clean(p)
-	}
-	// Not a URI — treat as a plain path.
-	return filepath.Clean(uri)
-}
-
 // PickBestStandalone selects the most appropriate symbol when multiple symbols
 // share the same short name and the word appears in standalone context (not
 // after -> or ::). Prefers functions over classes over constants over
@@ -1746,12 +1728,4 @@ func (idx *Index) Subclasses(fqn string) []string {
 		}
 	}
 	return out
-}
-
-func PathToURI(path string) string {
-	slashed := filepath.ToSlash(path)
-	if !strings.HasPrefix(slashed, "/") {
-		slashed = "/" + slashed
-	}
-	return (&url.URL{Scheme: "file", Path: slashed}).String()
 }
