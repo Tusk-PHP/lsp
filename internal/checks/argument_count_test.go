@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -367,5 +368,44 @@ if ($unrelated) {
 	}
 	if len(lines) != 2 || lines[0] != 18 || lines[1] != 20 {
 		t.Errorf("findings on lines %v, want [18 20] (only outside the version checks)", lines)
+	}
+}
+
+func TestArgumentCountWithSeveralDeclarations(t *testing.T) {
+	idx := duplicateDeclarationsIndex()
+	source := `<?php
+h(1);
+h(1, 2);
+h();
+h(1, 2, 3);
+Dup::make(1);
+Dup::make();
+$dup->run(1);
+$dup->run();
+`
+	var got []string
+	for _, f := range (&ArgumentCountRule{TypeResolver: dupResolver}).Check(parser.ParseFile(source), source, idx) {
+		got = append(got, f.Message)
+	}
+	want := []string{
+		"Too few arguments to h(): 0 passed, at least 1 required",
+		"Too many arguments to h(): 3 passed, at most 2 expected",
+		"Too few arguments to make(): 0 passed, at least 1 required",
+		"Too few arguments to run(): 0 passed, at least 1 required",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("a count one declaration accepts is fine; one no declaration accepts is reported:\ngot  %v\nwant %v", got, want)
+	}
+}
+
+func TestArgumentCountWhenEveryDeclarationRejectsDifferently(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	idx.IndexFile("file:///a.php", "<?php\nfunction h($a) {}\n")
+	idx.IndexFile("file:///b.php", "<?php\nfunction h($a, $b, $c) {}\n")
+	source := "<?php\nh(1, 2);\n"
+	got := (&ArgumentCountRule{}).Check(parser.ParseFile(source), source, idx)
+	if len(got) != 1 || got[0].Message != "Wrong number of arguments to h(): 2 passed, which none of its 2 declarations accepts" {
+		t.Errorf("too many for one declaration and too few for the other: %+v", got)
 	}
 }
