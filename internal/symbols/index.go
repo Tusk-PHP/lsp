@@ -1273,12 +1273,16 @@ func (idx *Index) walkAncestors(fqn string, visit func(next string, isTrait bool
 // IsSubtypeOf reports whether child is parent or extends, implements or uses
 // it, directly or further up. Only child's ancestors are visited.
 func (idx *Index) IsSubtypeOf(child, parent string) bool {
-	if strings.EqualFold(child, parent) {
-		return true
-	}
 	idx.ensureClass(child)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
+	return idx.isSubtypeOfLocked(child, parent)
+}
+
+func (idx *Index) isSubtypeOfLocked(child, parent string) bool {
+	if strings.EqualFold(child, parent) {
+		return true
+	}
 	visited := map[string]bool{child: true}
 	found := false
 	var walk func(fqn string)

@@ -12,10 +12,13 @@ func TestFindDeclarationGoesToTheInterface(t *testing.T) {
 namespace App;
 interface Shape { public function area(): float; }
 class Square implements Shape { public function area(): float { return 1.0; } public function side(): float { return 1.0; } }
+trait Measures { public function area(): float { return 2.0; } }
+class ViaTrait implements Shape { use Measures; }
 `
 	use := `<?php
 namespace App;
 function measure(Square $s): float { return $s->area() + $s->side(); }
+function viaTrait(ViaTrait $v): float { return $v->area(); }
 `
 	a, _ := setupRenameAnalyzer(map[string]string{"file:///Shape.php": shapes, "file:///use.php": use})
 	at := func(needle string) protocol.Position {
@@ -36,6 +39,9 @@ function measure(Square $s): float { return $s->area() + $s->side(); }
 	}
 	if got := line(a.FindDeclaration("file:///use.php", use, at("side"))); got != 3 {
 		t.Errorf("declaration of a method nothing above declares is its definition: line %d", got)
+	}
+	if got := line(a.FindDeclaration("file:///use.php", use, at("area(); }"))); got != 2 {
+		t.Errorf("declaration of a trait method the class uses: line %d, want the interface the class implements on line 2", got)
 	}
 	if got := a.FindDeclaration("file:///use.php", use, protocol.Position{Line: 0, Character: 0}); got != nil {
 		t.Errorf("nothing under the cursor: got %v", got)

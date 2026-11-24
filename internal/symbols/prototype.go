@@ -2,47 +2,92 @@ package symbols
 
 import "strings"
 
-func (idx *Index) Prototype(member *Symbol) *Symbol {
+// Prototype returns the topmost declaration of member: the interface, parent
+// class or trait member it implements or overrides, as PHP sees it. A parent
+// class's private members aren't inherited, and a constructor's prototype is
+// only an interface's or an abstract one. receiver is the class member was
+// reached through, so a trait method a class uses finds the interface the
+// class implements; when receiver doesn't extend member's class, the walk
+// starts at member's class. Builtin declarations have no location and are
+// passed over, so the project's own declaration below one wins. It returns nil
+// when nothing above declares member.
+func (idx *Index) Prototype(receiver string, member *Symbol) *Symbol {
 	if member == nil || member.ParentFQN == "" || !member.Kind.IsMember() {
 		return nil
 	}
+	idx.ensureClass(receiver)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	return idx.prototypeLocked(member.ParentFQN, member, map[string]bool{strings.ToLower(member.ParentFQN): true})
+	start := member.ParentFQN
+	if receiver != "" && idx.isSubtypeOfLocked(receiver, start) {
+		start = receiver
+	}
+	w := prototypeWalk{idx: idx, member: member, visited: map[string]bool{strings.ToLower(start): true}}
+	return w.above(start, false)
 }
 
-func (idx *Index) prototypeLocked(owner string, member *Symbol, visited map[string]bool) *Symbol {
-	ancestors := idx.implementsMap[owner]
-	if parent, ok := idx.inheritanceMap[owner]; ok {
-		ancestors = append(ancestors[:len(ancestors):len(ancestors)], parent)
+type prototypeWalk struct {
+	idx     *Index
+	member  *Symbol
+	visited map[string]bool
+}
+
+func (w *prototypeWalk) above(owner string, inherited bool) *Symbol {
+	for _, iface := range w.idx.implementsMap[owner] {
+		if found := w.visit(iface, true); found != nil {
+			return found
+		}
 	}
-	for _, ancestor := range ancestors {
-		key := strings.ToLower(ancestor)
-		if visited[key] {
-			continue
+	if parent, ok := w.idx.inheritanceMap[owner]; ok {
+		if found := w.visit(parent, true); found != nil {
+			return found
 		}
-		visited[key] = true
-		if higher := idx.prototypeLocked(ancestor, member, visited); higher != nil {
-			return higher
-		}
-		if declared := idx.declaredMemberLocked(ancestor, member); declared != nil {
-			return declared
+	}
+	for _, trait := range w.idx.traitMap[owner] {
+		if found := w.visit(trait, inherited); found != nil {
+			return found
 		}
 	}
 	return nil
 }
 
+func (w *prototypeWalk) visit(ancestor string, inherited bool) *Symbol {
+	key := strings.ToLower(ancestor)
+	if w.visited[key] {
+		return nil
+	}
+	w.visited[key] = true
+	if higher := w.above(ancestor, inherited); higher != nil {
+		return higher
+	}
+	return w.declared(ancestor, inherited)
+}
+
+func (w *prototypeWalk) declared(ancestor string, inherited bool) *Symbol {
+	sym := w.idx.declaredMemberLocked(ancestor, w.member)
+	switch {
+	case sym == nil, IsBuiltin(sym), strings.EqualFold(sym.ParentFQN, w.member.ParentFQN):
+		return nil
+	case inherited && sym.Visibility == "private":
+		return nil
+	case w.member.Kind == KindMethod && strings.EqualFold(w.member.Name, "__construct") && !sym.IsAbstract:
+		if owner := w.idx.symbols[ancestor]; owner == nil || owner.Kind != KindInterface {
+			return nil
+		}
+	}
+	return sym
+}
+
 func (idx *Index) declaredMemberLocked(owner string, member *Symbol) *Symbol {
-	fqn := owner + "::" + member.Name
-	if sym := idx.symbols[fqn]; sym != nil && sym.Kind == member.Kind {
+	if sym := idx.symbols[owner+"::"+member.Name]; sym != nil && sym.Kind == member.Kind {
 		return sym
 	}
 	ownerSym := idx.symbols[owner]
 	if member.Kind != KindMethod || ownerSym == nil {
 		return nil
 	}
-	for _, sym := range idx.fileSymbols[ownerSym.URI] {
-		if sym.Kind == KindMethod && sym.ParentFQN == owner && strings.EqualFold(sym.Name, member.Name) {
+	for _, sym := range ownerSym.Children {
+		if sym.Kind == KindMethod && strings.EqualFold(sym.Name, member.Name) {
 			return sym
 		}
 	}
