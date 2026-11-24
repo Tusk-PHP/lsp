@@ -129,3 +129,31 @@ class C {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+func TestMemberGuardsComeFromCalls(t *testing.T) {
+	decl := `<?php
+namespace App;
+class Post {}
+`
+	source := `<?php
+namespace App;
+class C {
+    public function f(): void {
+        if (method_exists(
+            $this->post,
+            'publish',
+        )) { $this->post->publish(); }
+        if (is_callable([$this
+            -> post, 'archive'])) { $this->post->archive(); }
+        $partial = method_exists(?, 'x');
+        if (is_callable([$this->post, 'a', 'b']) || is_callable($this->post) || is_callable(['x' => $this->post, 'y' => 'z'])) {}
+        if (method_exists($other->items(), 'count') || method_exists($this->post, $name) || method_exists($this->post)) {}
+        if (Helper::method_exists($this->post, 'draft')) { $this->post->draft(); }
+    }
+}
+`
+	got := unknownMemberMessages(checkUnknownMembers(t, map[string]string{"$this->post": `App\Post`}, decl, source))
+	if want := []string{"Unknown member 'draft' on 'Post'"}; strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}

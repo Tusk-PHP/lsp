@@ -51,7 +51,7 @@ enum E implements M {}
 	if want := []string{"#Attr", "Base", "I", "J", "Made", "Gone", "One", "Two", "Kind", "Stat", "Konst", "Prop", "static", "self", "K", "L", "M"}; !reflect.DeepEqual(classes, want) {
 		t.Errorf("classes: %v", classes)
 	}
-	calls := text(func(i int) string { return refs.calls[i].Bounds().Text(src) }, len(refs.calls))
+	calls := text(func(i int) string { return refs.calls[i].name.Bounds().Text(src) }, len(refs.calls))
 	if want := []string{`\strlen`, "helper"}; !reflect.DeepEqual(calls, want) {
 		t.Errorf("calls: %v", calls)
 	}

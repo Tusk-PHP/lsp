@@ -13,6 +13,11 @@ type classReference struct {
 	attribute bool
 }
 
+type functionCall struct {
+	name *ast.Name
+	args *ast.ArgList
+}
+
 type memberReference struct {
 	owner    ast.Expr
 	name     *ast.IdentifierExpr
@@ -27,7 +32,7 @@ func (m memberReference) call() bool {
 
 type references struct {
 	classes   []classReference
-	calls     []*ast.Name
+	calls     []functionCall
 	constants []*ast.Name
 	members   []memberReference
 }
@@ -90,7 +95,7 @@ func collectReferences(tree *ast.File) *references {
 			if c, ok := n.Callee.(*ast.ConstFetch); ok {
 				named[c] = true
 				if c.Name != nil && c.Name.Kind != token.Static {
-					refs.calls = append(refs.calls, c.Name)
+					refs.calls = append(refs.calls, functionCall{name: c.Name, args: n.Args})
 				}
 			}
 		case *ast.ConstFetch:
