@@ -1,10 +1,16 @@
 package parser
 
 import (
+	"cmp"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
 	"github.com/Tusk-PHP/lsp/internal/php/phpref"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
@@ -120,7 +126,7 @@ func TestParserAgreesWithPHPOnPrograms(t *testing.T) {
 	}
 	for v := token.PHP80; v <= token.Latest; v++ {
 		for _, src := range programs {
-			checkTree(t, src, Parse(src, v))
+			checkTree(t, src, v)
 		}
 	}
 	for _, php := range phpref.Versions(t) {
@@ -128,17 +134,91 @@ func TestParserAgreesWithPHPOnPrograms(t *testing.T) {
 	}
 }
 
-func checkTree(t *testing.T, src string, file *ast.File) {
+func checkTree(t *testing.T, src string, version token.Version) {
 	t.Helper()
+	if problem := treeProblem(src, version); problem != "" {
+		t.Fatalf("%q on PHP %s: %s", src, version, problem)
+	}
+}
+
+func treeProblem(src string, version token.Version) string {
+	file := Parse(src, version)
+	var toks []lexer.Token
+	for _, tok := range lexer.Lex(src, version) {
+		if tok.Kind != token.Whitespace && tok.Kind != token.Comment && tok.Kind != token.DocComment {
+			toks = append(toks, tok)
+		}
+	}
+	clean := len(file.Errors) == 0
+	var problem string
 	var check func(parent ast.Span, n ast.Node)
 	check = func(parent ast.Span, n ast.Node) {
 		b := n.Bounds()
 		if b.Start > b.End || b.Start < parent.Start || b.End > parent.End {
-			t.Fatalf("%q: %T [%d,%d) lies outside its parent [%d,%d)", src, n, b.Start, b.End, parent.Start, parent.End)
+			problem = fmt.Sprintf("%T [%d,%d) lies outside its parent [%d,%d)", n, b.Start, b.End, parent.Start, parent.End)
+			return
 		}
-		ast.Children(n, func(c ast.Node) { check(b, c) })
+		if _, isFile := n.(*ast.File); clean && !isFile && b.Start < b.End {
+			if p := spanProblem(toks, b); p != "" {
+				problem = fmt.Sprintf("%T [%d,%d) %q %s", n, b.Start, b.End, b.Text(src), p)
+				return
+			}
+		}
+		prev := ast.Span{Start: b.Start, End: b.Start}
+		ast.Children(n, func(c ast.Node) {
+			if problem != "" {
+				return
+			}
+			cb := c.Bounds()
+			if cb.Start < prev.End {
+				problem = fmt.Sprintf("in %T, %T [%d,%d) starts before its previous sibling ends [%d,%d)", n, c, cb.Start, cb.End, prev.Start, prev.End)
+				return
+			}
+			prev = cb
+			check(b, c)
+		})
 	}
 	check(file.Span, file)
+	return problem
+}
+
+func spanProblem(toks []lexer.Token, span ast.Span) string {
+	first, _ := slices.BinarySearchFunc(toks, span.Start, func(tok lexer.Token, at uint32) int { return cmp.Compare(tok.Start, at) })
+	if first == len(toks) || toks[first].Start != span.Start {
+		return "doesn't start at a token"
+	}
+	var open []token.Kind
+	for _, tok := range toks[first:] {
+		if tok.End > span.End {
+			return "doesn't end at a token"
+		}
+		switch tok.Kind {
+		case token.LeftParen, token.LeftBracket, token.Attribute, token.LeftBrace, token.CurlyOpen, token.DollarOpenCurlyBraces:
+			open = append(open, tok.Kind)
+		case token.RightParen, token.RightBracket, token.RightBrace:
+			if len(open) == 0 || closer(open[len(open)-1]) != tok.Kind {
+				return "closes a bracket it doesn't open"
+			}
+			open = open[:len(open)-1]
+		}
+		if tok.End == span.End {
+			if len(open) > 0 {
+				return "leaves a bracket open"
+			}
+			return ""
+		}
+	}
+	return "doesn't end at a token"
+}
+
+func closer(open token.Kind) token.Kind {
+	switch open {
+	case token.LeftParen:
+		return token.RightParen
+	case token.LeftBracket, token.Attribute:
+		return token.RightBracket
+	}
+	return token.RightBrace
 }
 
 func TestPartialApplicationNeedsPHP86(t *testing.T) {
@@ -180,5 +260,30 @@ func TestUnterminatedStringPointsAtItsOpening(t *testing.T) {
 		if len(errs) != 1 || errs[0].Message != "unterminated string" || errs[0].Start != 11 {
 			t.Errorf("%q: got %v", src, errs)
 		}
+	}
+}
+
+func TestTreesAreWellFormedOnTheCorpus(t *testing.T) {
+	for path, src := range phpref.ReadAll(t, phpref.Corpus(t)) {
+		if problem := treeProblem(src, token.Latest); problem != "" {
+			t.Errorf("%s: %s", path, problem)
+		}
+	}
+}
+
+func TestTreeIsWellFormedOnTheSyntaxFixture(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "ast", "testdata", "syntax.php"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkTree(t, string(src), token.Latest)
+}
+
+func TestAnonymousClassArgsBelongToTheClass(t *testing.T) {
+	src := "<?php new class(1) extends B {};"
+	file := Parse(src, token.Latest)
+	n := file.Stmts[0].(*ast.ExprStmt).Expr.(*ast.New)
+	if n.Args != nil || n.Anonymous.Args == nil || n.Anonymous.Args.Text(src) != "(1)" {
+		t.Fatalf("got New.Args %v, class args %v", n.Args, n.Anonymous.Args)
 	}
 }

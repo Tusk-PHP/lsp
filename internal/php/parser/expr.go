@@ -586,7 +586,7 @@ func (p *parser) newExpr() ast.Expr {
 	p.next()
 	n := &ast.New{}
 	if p.peek() == token.Class || p.peek() == token.Attribute || p.peek() == token.Readonly {
-		n.Anonymous = p.anonymousClass(&n.Args)
+		n.Anonymous = p.anonymousClass()
 		n.Span = p.span(start)
 		return n
 	}
@@ -781,14 +781,15 @@ func (p *parser) dollarBraces(start uint32) ast.Expr {
 	if p.peek() == token.StringVarname {
 		nameStart := p.start()
 		p.next()
-		var e ast.Expr = &ast.VariableVariable{Name: &ast.Literal{Kind: token.StringVarname, Span: p.span(nameStart)}, Span: p.span(start)}
+		name := &ast.Literal{Kind: token.StringVarname, Span: p.span(nameStart)}
 		if p.accept(token.LeftBracket) {
 			dim := p.expr()
 			p.expect(token.RightBracket)
-			e = &ast.ArrayDimFetch{Array: e, Dim: dim, Span: p.span(start)}
+			p.expect(token.RightBrace)
+			return &ast.ArrayDimFetch{Array: &ast.VariableVariable{Name: name, Span: name.Span}, Dim: dim, Span: p.span(start)}
 		}
 		p.expect(token.RightBrace)
-		return e
+		return &ast.VariableVariable{Name: name, Span: p.span(start)}
 	}
 	name := p.expr()
 	p.expect(token.RightBrace)

@@ -163,6 +163,9 @@ func Children(n Node, visit func(Node)) {
 		if n.Name != nil {
 			visit(n.Name)
 		}
+		if n.Args != nil {
+			visit(n.Args)
+		}
 		if n.Extends != nil {
 			visit(n.Extends)
 		}

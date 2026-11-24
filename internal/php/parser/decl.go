@@ -146,13 +146,14 @@ func (p *parser) typeAtom() ast.Type {
 	if p.accept(token.LeftParen) {
 		inner := p.intersection(p.namedType(), start)
 		p.expect(token.RightParen)
+		inner.Span = p.span(start)
 		p.requires(token.PHP82, start, "disjunctive normal form types")
 		return inner
 	}
 	return p.namedType()
 }
 
-func (p *parser) intersection(first ast.Type, start uint32) ast.Type {
+func (p *parser) intersection(first ast.Type, start uint32) *ast.IntersectionType {
 	types := []ast.Type{first}
 	for p.accept(token.AmpersandNotFollowedByVarOrVararg) {
 		types = append(types, p.namedType())
@@ -224,7 +225,7 @@ func (p *parser) classTail(c *ast.ClassDecl) {
 	c.Members = p.members()
 }
 
-func (p *parser) anonymousClass(args **ast.ArgList) *ast.ClassDecl {
+func (p *parser) anonymousClass() *ast.ClassDecl {
 	start := p.start()
 	c := &ast.ClassDecl{Attrs: p.attributes()}
 	if p.peek() == token.Readonly {
@@ -234,7 +235,7 @@ func (p *parser) anonymousClass(args **ast.ArgList) *ast.ClassDecl {
 	}
 	p.expect(token.Class)
 	if p.peek() == token.LeftParen {
-		*args = p.args()
+		c.Args = p.args()
 	}
 	p.classTail(c)
 	c.Span = p.span(start)
