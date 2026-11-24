@@ -26,8 +26,8 @@ type lexer struct {
 	pos        int
 	tokens     []Token
 	afterArrow bool
-	halting    bool
 	haltLeft   int
+	halted     bool
 }
 
 func Lex(src string, version token.Version) []Token {
@@ -53,8 +53,22 @@ func (l *lexer) run() []Token {
 }
 
 func (l *lexer) emit(kind token.Kind, end int) {
+	if l.halted {
+		return
+	}
 	l.tokens = append(l.tokens, Token{Kind: kind, Start: uint32(l.pos), End: uint32(end)})
 	l.pos = end
+	if l.haltLeft == 0 || kind.IsTrivia() || kind == token.OpenTag {
+		return
+	}
+	l.haltLeft--
+	if l.haltLeft > 0 {
+		return
+	}
+	if end < len(l.src) {
+		l.tokens = append(l.tokens, Token{Kind: token.InlineHTML, Start: uint32(end), End: uint32(len(l.src))})
+	}
+	l.pos, l.halted = len(l.src), true
 }
 
 func (l *lexer) html() {
@@ -171,26 +185,7 @@ func (l *lexer) scripting(insideBraces bool) {
 			l.emit(kind, start+n)
 			l.afterArrow = kind == token.ObjectOperator || kind == token.NullsafeObjectOperator
 		}
-		if l.halting && l.haltReached() {
-			return
-		}
 	}
-}
-
-func (l *lexer) haltReached() bool {
-	last := l.tokens[len(l.tokens)-1].Kind
-	if last == token.HaltCompiler || last.IsTrivia() {
-		return false
-	}
-	l.haltLeft--
-	if l.haltLeft > 0 {
-		return false
-	}
-	l.halting = false
-	if l.pos < len(l.src) {
-		l.emit(token.InlineHTML, len(l.src))
-	}
-	return true
 }
 
 func (l *lexer) word() {
@@ -242,7 +237,11 @@ func (l *lexer) word() {
 			}
 		}
 	case token.HaltCompiler:
-		l.halting, l.haltLeft = true, haltCompilerTokens
+		if l.haltLeft == 0 {
+			l.emit(kind, end)
+			l.haltLeft = haltCompilerTokens
+			return
+		}
 	case token.Readonly:
 		if next := l.wordGap(end); l.version == token.PHP81 && next < len(src) && src[next] == '(' {
 			kind = token.Identifier
