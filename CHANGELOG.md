@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Go to definition on the name of a method, constant or enum case where it's declared stays on it instead of jumping to a same-named member of another class.
+- A function or class declared in two files no longer goes missing from go-to-definition, hover and completion when one of those files is edited or deleted.
 - **Inline variable** is offered in editors that only ask for the code action kinds the server announces: its kind, `refactor.inline`, was missing from the list.
 - **Answers are right from the first request.** While the workspace is still being indexed, a class the editor asks about is read straight away from where Composer's autoload says it lives, with its parents, interfaces and traits, and a project model read this way gets its relations at once and keeps them. Only files indexing would read are loaded: `excludePaths` and `maxIndexFiles` apply, and a class asked for in another case than its file name doesn't appear twice. Before, a class or vendor helper indexed later than the request (such as `Str::of()` in a Laravel app) had no definition, hover or completion until indexing finished. On a 9,700-file Laravel app the first correct cross-file answer now comes after about 80 ms instead of 280 ms.
 - **Doctrine** entity analysis no longer changes property types while a request is reading them.
