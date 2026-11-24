@@ -254,6 +254,9 @@ func scanNewExpressions(
 	r := resolve.NewResolver(idx)
 
 	for _, uri := range idx.GetAllFileURIs() {
+		if !idx.MayMention(uri, "new") {
+			continue
+		}
 		src := idx.GetFileSource(uri)
 		if src == "" {
 			continue
