@@ -250,6 +250,10 @@ func startsExpr(k token.Kind) bool {
 func (p *parser) primary() ast.Expr {
 	start := p.start()
 	k := p.peek()
+	if p.atStatementStart() {
+		p.unexpected("expected an expression")
+		return &ast.BadExpr{Span: p.span(start)}
+	}
 	switch k {
 	case token.Variable:
 		p.next()
