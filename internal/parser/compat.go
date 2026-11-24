@@ -59,6 +59,13 @@ func (args AttributeArgs) Get(name string, position int) (string, bool) {
 	return "", false
 }
 
+func StringLiteral(value string) (string, bool) {
+	if len(value) < 2 || value[0] != value[len(value)-1] || value[0] != '\'' && value[0] != '"' {
+		return "", false
+	}
+	return value[1 : len(value)-1], true
+}
+
 type ParamNode struct {
 	Name         string
 	Type         TypeNode

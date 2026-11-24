@@ -121,19 +121,12 @@ func (e doctrineEntity) repositoryClass() string {
 func (e doctrineEntity) tableName() string {
 	if table := e.attribute(e.class.Attributes, "Table"); table != nil {
 		if name, ok := table.Args.Get("name", 0); ok {
-			if unquoted, ok := phpStringLiteral(name); ok && unquoted != "" {
+			if unquoted, ok := parser.StringLiteral(name); ok && unquoted != "" {
 				return unquoted
 			}
 		}
 	}
 	return toSnakeCase(e.class.Name)
-}
-
-func phpStringLiteral(value string) (string, bool) {
-	if len(value) < 2 || value[0] != value[len(value)-1] || value[0] != '\'' && value[0] != '"' {
-		return "", false
-	}
-	return value[1 : len(value)-1], true
 }
 
 // Singular Doctrine relations (result is nullable entity).
@@ -203,7 +196,7 @@ func resolveColumnType(column *parser.AttributeDef, propType string) string {
 		return propType
 	}
 	value, _ := column.Args.Get("type", 1)
-	name, ok := phpStringLiteral(value)
+	name, ok := parser.StringLiteral(value)
 	if !ok {
 		constant, isConstant := strings.CutPrefix(value, "Types::")
 		name, ok = strings.ToLower(constant), isConstant

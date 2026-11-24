@@ -44,3 +44,16 @@ func TestResolveImportedNameMatchesAliasesIgnoringCase(t *testing.T) {
 		}
 	}
 }
+
+func TestStringLiteral(t *testing.T) {
+	for in, want := range map[string]string{`'a'`: "a", `"b"`: "b", `''`: ""} {
+		if got, ok := StringLiteral(in); !ok || got != want {
+			t.Errorf("%s: %q %v", in, got, ok)
+		}
+	}
+	for _, in := range []string{"", "'", `'a"`, "abc", "1"} {
+		if _, ok := StringLiteral(in); ok {
+			t.Errorf("%q is not a string literal", in)
+		}
+	}
+}
