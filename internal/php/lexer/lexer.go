@@ -97,7 +97,7 @@ func openTag(s string) (token.Kind, int) {
 	if strings.HasPrefix(s, "<?=") {
 		return token.OpenTagWithEcho, 3
 	}
-	if len(s) < 5 || !strings.EqualFold(s[:5], "<?php") {
+	if !hasPrefixFold(s, "<?php") {
 		return token.Invalid, 0
 	}
 	if len(s) == 5 {
@@ -290,8 +290,7 @@ func (l *lexer) enumKind(end int) token.Kind {
 	if next == end || next >= len(l.src) || !isLabelStart(l.src[next]) {
 		return token.Identifier
 	}
-	word := l.src[next:labelEnd(l.src, next+1)]
-	if strings.EqualFold(word, "extends") || strings.EqualFold(word, "implements") {
+	if hasPrefixFold(l.src[next:], "extends") || hasPrefixFold(l.src[next:], "implements") {
 		return token.Identifier
 	}
 	return token.Enum
@@ -299,7 +298,7 @@ func (l *lexer) enumKind(end int) token.Kind {
 
 func (l *lexer) yieldFrom(end int) (int, bool) {
 	next := l.wordGap(end)
-	if next == end || len(l.src)-next < 4 || !strings.EqualFold(l.src[next:next+4], "from") {
+	if next == end || !hasPrefixFold(l.src[next:], "from") {
 		return 0, false
 	}
 	if next+4 < len(l.src) && isLabelChar(l.src[next+4]) {
@@ -321,24 +320,10 @@ func (l *lexer) ampersand() token.Kind {
 
 func (l *lexer) number() {
 	src, start := l.src, l.pos
-	if len(src)-start > 2 && src[start] == '0' {
-		var digit func(byte) bool
-		base := 0
-		switch src[start+1] {
-		case 'x', 'X':
-			digit, base = isHexDigit, 16
-		case 'b', 'B':
-			digit, base = isBinaryDigit, 2
-		case 'o', 'O':
-			if l.version >= token.PHP81 {
-				digit, base = isOctalDigit, 8
-			}
-		}
-		if base != 0 && digit(src[start+2]) {
-			end := digitsEnd(src, start+2, digit)
-			l.emit(integerKind(src[start+2:end], base), end)
-			return
-		}
+	if digit, base := l.radixPrefix(start); base != 0 {
+		end := digitsEnd(src, start+2, digit)
+		l.emit(integerKind(src[start+2:end], base), end)
+		return
 	}
 	end := digitsEnd(src, start, isDigit)
 	float := false
@@ -368,6 +353,29 @@ func (l *lexer) number() {
 	l.emit(integerKind(text, 10), end)
 }
 
+func (l *lexer) radixPrefix(i int) (func(byte) bool, int) {
+	src := l.src
+	if len(src)-i <= 2 || src[i] != '0' {
+		return nil, 0
+	}
+	var digit func(byte) bool
+	base := 0
+	switch src[i+1] {
+	case 'x', 'X':
+		digit, base = isHexDigit, 16
+	case 'b', 'B':
+		digit, base = isBinaryDigit, 2
+	case 'o', 'O':
+		if l.version >= token.PHP81 {
+			digit, base = isOctalDigit, 8
+		}
+	}
+	if base == 0 || !digit(src[i+2]) {
+		return nil, 0
+	}
+	return digit, base
+}
+
 func integerKind(digits string, base int) token.Kind {
 	if strings.IndexByte(digits, '_') >= 0 {
 		digits = strings.ReplaceAll(digits, "_", "")
@@ -379,12 +387,13 @@ func integerKind(digits string, base int) token.Kind {
 }
 
 func digitsEnd(src string, i int, digit func(byte) bool) int {
+	start := i
 	for i < len(src) {
 		if digit(src[i]) {
 			i++
 			continue
 		}
-		if src[i] == '_' && i+1 < len(src) && digit(src[i+1]) {
+		if src[i] == '_' && i > start && i+1 < len(src) && digit(src[i+1]) {
 			i += 2
 			continue
 		}
@@ -536,20 +545,10 @@ func (l *lexer) offsetInString() {
 }
 
 func (l *lexer) offsetNumberEnd(i int) int {
-	src := l.src
-	if len(src)-i > 2 && src[i] == '0' {
-		switch src[i+1] {
-		case 'x', 'X':
-			return digitsEnd(src, i+2, isHexDigit)
-		case 'b', 'B':
-			return digitsEnd(src, i+2, isBinaryDigit)
-		case 'o', 'O':
-			if l.version >= token.PHP81 {
-				return digitsEnd(src, i+2, isOctalDigit)
-			}
-		}
+	if digit, base := l.radixPrefix(i); base != 0 {
+		return digitsEnd(l.src, i+2, digit)
 	}
-	return digitsEnd(src, i, isDigit)
+	return digitsEnd(l.src, i, isDigit)
 }
 
 func (l *lexer) heredoc() bool {
@@ -711,6 +710,10 @@ func skipTrivia(src string, i int) int {
 		}
 	}
 	return i
+}
+
+func hasPrefixFold(s, prefix string) bool {
+	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
 }
 
 func skipSpaces(src string, i int) int {
