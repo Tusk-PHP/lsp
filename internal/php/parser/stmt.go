@@ -28,7 +28,7 @@ func (p *parser) block() *ast.Block {
 }
 
 func (p *parser) endStatement() {
-	if p.accept(token.Semicolon) || p.peek() == token.CloseTag {
+	if p.accept(token.Semicolon) {
 		return
 	}
 	p.unexpected("expected ';'")
@@ -37,9 +37,19 @@ func (p *parser) endStatement() {
 }
 
 func (p *parser) statement() ast.Stmt {
+	start := p.start()
+	if !p.enter() {
+		return &ast.BadStmt{Span: p.span(start)}
+	}
+	s := p.statementBody()
+	p.depth--
+	return s
+}
+
+func (p *parser) statementBody() ast.Stmt {
 	start, doc := p.start(), p.doc()
 	switch k := p.peek(); k {
-	case token.OpenTag, token.CloseTag:
+	case token.CloseTag:
 		p.next()
 		return nil
 	case token.InlineHTML:
@@ -162,10 +172,9 @@ func (p *parser) statement() ast.Stmt {
 			return &ast.Label{Name: name, Span: p.span(start)}
 		}
 	case token.VoidCast:
-		p.next()
-		operand := p.expr()
+		e := p.voidCast()
 		p.endStatement()
-		return &ast.VoidCast{Operand: operand, Span: p.span(start)}
+		return &ast.ExprStmt{Expr: e, Span: p.span(start)}
 	}
 	e := p.expr()
 	p.endStatement()
@@ -183,6 +192,7 @@ func (p *parser) isFunctionDecl() bool {
 func (p *parser) attributedDecl(start uint32, doc ast.Span) ast.Stmt {
 	save, saveErrors := p.pos, len(p.errors)
 	attrs := p.attributes()
+	doc = p.docSince(save)
 	switch p.peek() {
 	case token.Function:
 		if p.isFunctionDecl() {
@@ -336,11 +346,11 @@ func (p *parser) forStmt() ast.Stmt {
 	p.next()
 	s := &ast.For{}
 	p.expect(token.LeftParen)
-	s.Init = p.exprList(token.Semicolon)
+	s.Init = p.forExprs(token.Semicolon, true)
 	p.expect(token.Semicolon)
-	s.Cond = p.exprList(token.Semicolon)
+	s.Cond = p.forExprs(token.Semicolon, false)
 	p.expect(token.Semicolon)
-	s.Loop = p.exprList(token.RightParen)
+	s.Loop = p.forExprs(token.RightParen, true)
 	p.expect(token.RightParen)
 	if p.peek() == token.Colon {
 		s.Body = p.altBody(token.EndFor)
@@ -350,6 +360,32 @@ func (p *parser) forStmt() ast.Stmt {
 	}
 	s.Span = p.span(start)
 	return s
+}
+
+func (p *parser) voidCast() ast.Expr {
+	start := p.start()
+	p.next()
+	return &ast.Cast{Kind: token.VoidCast, Operand: p.expr(), Span: p.span(start)}
+}
+
+func (p *parser) forExprs(end token.Kind, voidLast bool) []ast.Expr {
+	var exprs []ast.Expr
+	for p.peek() != end && p.peek() != eof {
+		void := p.peek() == token.VoidCast
+		if void {
+			exprs = append(exprs, p.voidCast())
+		} else {
+			exprs = append(exprs, p.expr())
+		}
+		if p.accept(token.Comma) {
+			continue
+		}
+		if void && !voidLast {
+			p.unexpected("expected ','")
+		}
+		break
+	}
+	return exprs
 }
 
 func (p *parser) foreachStmt() ast.Stmt {
@@ -381,11 +417,7 @@ func (p *parser) foreachTarget() (ast.Expr, bool) {
 		p.next()
 		return p.exprBP(bpAssign + 1), true
 	}
-	target := p.exprBP(bpAssign + 1)
-	if arr, ok := target.(*ast.Array); ok {
-		target = &ast.List{Span: arr.Span, Short: true, Items: arr.Items}
-	}
-	return target, false
+	return destructuring(p.exprBP(bpAssign + 1)), false
 }
 
 func (p *parser) switchStmt() ast.Stmt {

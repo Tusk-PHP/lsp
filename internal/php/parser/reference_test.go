@@ -13,7 +13,7 @@ import (
 const parseScript = `    try {
         token_get_all($source, TOKEN_PARSE);
         echo $path, "\tok\n";
-    } catch (ParseError $e) {
+    } catch (CompileError $e) {
         echo $path, "\t", $e->getLine(), ": ", str_replace("\n", " ", $e->getMessage()), "\n";
     }`
 

@@ -118,6 +118,423 @@ var programs = []string{
 	"<?php $a = static($c);",
 	"<?php $a = static;",
 	"<?php $a = static::$b + static::C + static::f() + (static fn () => 1)();",
+	"<?php new class {}->foo();",
+	"<?php new class {}::C;",
+	"<?php new class {}[\"x\"];",
+	"<?php new class(1) {}->foo;",
+	"<?php for ((void) $a; (void) $b; (void) $c);",
+	"<?php for ($x, (void) $a;;);",
+	"<?php for (;; $x, (void) $a);",
+	"<?php switch ($a): ?>\n<?php case 1: endswitch;",
+	"<?php switch ($a) { ?>\n<?php case 1: }",
+	"<?php switch ($a) { case 1 ?>\n<?php }",
+	"<?php class C { use T { foo as final bar; foo as final; foo as static; foo as abstract x; foo as readonly y; foo as public(set) z; foo as var; } }",
+	"<?php clone();",
+	"<?php clone(...);",
+	"<?php clone($o,);",
+	"<?php clone($o, ...);",
+	"<?php class C { $a; }",
+	"<?php 1[0];",
+	"<?php $a++ ++;",
+	"<?php [$a] .= 1;",
+	"<?php $a =& new A;",
+	"<?php function f((A&B) $x) {}",
+	"<?php class C { public $a, $b { get => 1; } }",
+	"<?php class C { public public $a; }",
+	"<?php class C { public static static function f() {} }",
+	"<?php class C { final final const X = 1; }",
+	"<?php final final class C {}",
+	"<?php function f(public public $x) {}",
+	"<?php class C { function __construct(public public $x) {} }",
+	"<?php class C { public private $a; }",
+	"<?php class C { abstract final function f(); }",
+	"<?php $x = new readonly readonly class {};",
+	"<?php readonly readonly class C {}",
+	"<?php \"a\"[0];",
+	"<?php __LINE__[0];",
+	"<?php A[0];",
+	"<?php A::B[0];",
+	"<?php (1)[0];",
+	"<?php [1][0];",
+	"<?php $a++--;",
+	"<?php ++$a++;",
+	"<?php (int) $a = 1;",
+	"<?php [$a][0] = 1;",
+	"<?php [$a] = 1;",
+	"<?php [[$a]] += 1;",
+	"<?php list($a) .= 1;",
+	"<?php $a =& f();",
+	"<?php $a =& $b->c();",
+	"<?php $a =& A::b();",
+	"<?php $a =& new class {};",
+	"<?php function f((A&B)|null $x) {}",
+	"<?php function f((A&B)|(C&D) $x) {}",
+	"<?php function f(): (A&B) {}",
+	"<?php class C { public (A&B) $x; }",
+	"<?php class C { public $a { get => 1; } }",
+	"<?php class C { public $a = 1, $b; }",
+	"<?php f() = 1;",
+	"<?php $a->b() = 1;",
+	"<?php (1) = 2;",
+	"<?php 'a' = 1;",
+	"<?php A::B = 1;",
+	"<?php A = 1;",
+	"<?php $a ? $b : $c = 1;",
+	"<?php for ((void) $a, $b;;);",
+	"<?php for (; (void) $a, $b;);",
+	"<?php for (;; (void) $a, $b);",
+	"<?php for (;; (void) $a);",
+	"<?php for ((void) $a;;);",
+	"<?php for (; $b, (void) $a;);",
+	"<?php class C { use T { foo as final bar; } }",
+	"<?php class C { use T { foo as final; } }",
+	"<?php class C { use T { foo as static; } }",
+	"<?php class C { use T { foo as abstract x; } }",
+	"<?php class C { use T { foo as readonly y; } }",
+	"<?php class C { use T { foo as public(set) z; } }",
+	"<?php class C { use T { foo as var; } }",
+	"<?php class C { use T { foo as public final bar; } }",
+	"<?php clone(...$a);",
+	"<?php clone(o: $a);",
+	"<?php clone($a, $b, $c);",
+	"<?php clone($a)->b;",
+	"<?php $x = new class {}->foo;",
+	"<?php new class {};",
+	"<?php new A()->b;",
+	"<?php new A->b;",
+	"<?php switch ($a): ?><?php case 1: endswitch;",
+	"<?php switch ($a): ?> <?php case 1: endswitch;",
+	"<?php switch ($a) { case 1 ?><?php }",
+	"<?php switch ($a) { case 1: ?>x<?php break; }",
+	"<?php if ($a): ?><?php endif ?>",
+	"<?php $a = 1 ?><?php ;",
+	"<?php declare(ticks=1) ?>",
+	"<?php class C { public $a; public $b }",
+	"<?php abstract class C { public function f() {} }",
+	"<?php class C { public int $p; }",
+	"<?php class C { public const X = 1; }",
+	"<?php class C { function __construct(public int $p) {} }",
+	"<?php class C { public $h { public get => 1; } }",
+	"<?php interface I { public const X = 1; }",
+	"<?php abstract class C { static function f() {} }",
+	"<?php class C { static int $p; }",
+	"<?php class C { static const X = 1; }",
+	"<?php class C { function __construct(static int $p) {} }",
+	"<?php class C { public $h { static get => 1; } }",
+	"<?php interface I { static const X = 1; }",
+	"<?php abstract class C { abstract function f() {} }",
+	"<?php class C { abstract int $p; }",
+	"<?php class C { abstract const X = 1; }",
+	"<?php class C { function __construct(abstract int $p) {} }",
+	"<?php class C { public $h { abstract get => 1; } }",
+	"<?php interface I { abstract const X = 1; }",
+	"<?php abstract class C { final function f() {} }",
+	"<?php class C { final int $p; }",
+	"<?php class C { final const X = 1; }",
+	"<?php class C { function __construct(final int $p) {} }",
+	"<?php class C { public $h { final get => 1; } }",
+	"<?php interface I { final const X = 1; }",
+	"<?php abstract class C { readonly function f() {} }",
+	"<?php class C { readonly int $p; }",
+	"<?php class C { readonly const X = 1; }",
+	"<?php class C { function __construct(readonly int $p) {} }",
+	"<?php class C { public $h { readonly get => 1; } }",
+	"<?php interface I { readonly const X = 1; }",
+	"<?php abstract class C { var function f() {} }",
+	"<?php class C { var int $p; }",
+	"<?php class C { var const X = 1; }",
+	"<?php class C { function __construct(var int $p) {} }",
+	"<?php class C { public $h { var get => 1; } }",
+	"<?php interface I { var const X = 1; }",
+	"<?php abstract class C { public(set) function f() {} }",
+	"<?php class C { public(set) int $p; }",
+	"<?php class C { public(set) const X = 1; }",
+	"<?php class C { function __construct(public(set) int $p) {} }",
+	"<?php class C { public $h { public(set) get => 1; } }",
+	"<?php interface I { public(set) const X = 1; }",
+	"<?php abstract final class C {}",
+	"<?php final abstract class C {}",
+	"<?php class C { final private function f() {} }",
+	"<?php class C { public protected(set) protected(set) int $a; }",
+	"<?php class C { public(set) private(set) int $a; }",
+	"<?php class C { abstract abstract function f(); }",
+	"<?php class C { private private const X = 1; }",
+	"<?php new readonly final class {};",
+	"<?php new final class {};",
+	"<?php class C { static abstract function f(); }",
+	"<?php class C { abstract $p; }",
+	"<?php 1->b;",
+	"<?php 1->b();",
+	"<?php 1?->b;",
+	"<?php 1::B;",
+	"<?php 1::b();",
+	"<?php 1::$b;",
+	"<?php 1();",
+	"<?php 1++;",
+	"<?php 1 = 1;",
+	"<?php 1 .= 1;",
+	"<?php 1 =& $b;",
+	"<?php 1.5[0];",
+	"<?php 1.5->b;",
+	"<?php 1.5->b();",
+	"<?php 1.5?->b;",
+	"<?php 1.5::B;",
+	"<?php 1.5::b();",
+	"<?php 1.5::$b;",
+	"<?php 1.5();",
+	"<?php 1.5++;",
+	"<?php 1.5 = 1;",
+	"<?php 1.5 .= 1;",
+	"<?php 1.5 =& $b;",
+	"<?php 'a'[0];",
+	"<?php 'a'->b;",
+	"<?php 'a'->b();",
+	"<?php 'a'?->b;",
+	"<?php 'a'::B;",
+	"<?php 'a'::b();",
+	"<?php 'a'::$b;",
+	"<?php 'a'();",
+	"<?php 'a'++;",
+	"<?php 'a' .= 1;",
+	"<?php 'a' =& $b;",
+	"<?php \"a$b\"[0];",
+	"<?php \"a$b\"->b;",
+	"<?php \"a$b\"->b();",
+	"<?php \"a$b\"?->b;",
+	"<?php \"a$b\"::B;",
+	"<?php \"a$b\"::b();",
+	"<?php \"a$b\"::$b;",
+	"<?php \"a$b\"();",
+	"<?php \"a$b\"++;",
+	"<?php \"a$b\" = 1;",
+	"<?php \"a$b\" .= 1;",
+	"<?php \"a$b\" =& $b;",
+	"<?php <<<E\nx\nE\n[0];",
+	"<?php <<<E\nx\nE\n->b;",
+	"<?php <<<E\nx\nE\n->b();",
+	"<?php <<<E\nx\nE\n?->b;",
+	"<?php <<<E\nx\nE\n::B;",
+	"<?php <<<E\nx\nE\n::b();",
+	"<?php <<<E\nx\nE\n::$b;",
+	"<?php <<<E\nx\nE\n();",
+	"<?php <<<E\nx\nE\n++;",
+	"<?php <<<E\nx\nE\n = 1;",
+	"<?php <<<E\nx\nE\n .= 1;",
+	"<?php <<<E\nx\nE\n =& $b;",
+	"<?php `ls`[0];",
+	"<?php `ls`->b;",
+	"<?php `ls`->b();",
+	"<?php `ls`?->b;",
+	"<?php `ls`::B;",
+	"<?php `ls`::b();",
+	"<?php `ls`::$b;",
+	"<?php `ls`();",
+	"<?php `ls`++;",
+	"<?php `ls` = 1;",
+	"<?php `ls` .= 1;",
+	"<?php `ls` =& $b;",
+	"<?php A->b;",
+	"<?php A->b();",
+	"<?php A?->b;",
+	"<?php A::B;",
+	"<?php A::b();",
+	"<?php A::$b;",
+	"<?php A();",
+	"<?php A++;",
+	"<?php A .= 1;",
+	"<?php A =& $b;",
+	"<?php \\A\\B[0];",
+	"<?php \\A\\B->b;",
+	"<?php \\A\\B->b();",
+	"<?php \\A\\B?->b;",
+	"<?php \\A\\B::B;",
+	"<?php \\A\\B::b();",
+	"<?php \\A\\B::$b;",
+	"<?php \\A\\B();",
+	"<?php \\A\\B++;",
+	"<?php \\A\\B = 1;",
+	"<?php \\A\\B .= 1;",
+	"<?php \\A\\B =& $b;",
+	"<?php A::B->b;",
+	"<?php A::B->b();",
+	"<?php A::B?->b;",
+	"<?php A::B::B;",
+	"<?php A::B::b();",
+	"<?php A::B::$b;",
+	"<?php A::B();",
+	"<?php A::B++;",
+	"<?php A::B .= 1;",
+	"<?php A::B =& $b;",
+	"<?php __LINE__->b;",
+	"<?php __LINE__->b();",
+	"<?php __LINE__?->b;",
+	"<?php __LINE__::B;",
+	"<?php __LINE__::b();",
+	"<?php __LINE__::$b;",
+	"<?php __LINE__();",
+	"<?php __LINE__++;",
+	"<?php __LINE__ = 1;",
+	"<?php __LINE__ .= 1;",
+	"<?php __LINE__ =& $b;",
+	"<?php [1]->b;",
+	"<?php [1]->b();",
+	"<?php [1]?->b;",
+	"<?php [1]::B;",
+	"<?php [1]::b();",
+	"<?php [1]::$b;",
+	"<?php [1]();",
+	"<?php [1]++;",
+	"<?php [1] = 1;",
+	"<?php [1] .= 1;",
+	"<?php [1] =& $b;",
+	"<?php array(1)[0];",
+	"<?php array(1)->b;",
+	"<?php array(1)->b();",
+	"<?php array(1)?->b;",
+	"<?php array(1)::B;",
+	"<?php array(1)::b();",
+	"<?php array(1)::$b;",
+	"<?php array(1)();",
+	"<?php array(1)++;",
+	"<?php array(1) = 1;",
+	"<?php array(1) .= 1;",
+	"<?php array(1) =& $b;",
+	"<?php ($a)[0];",
+	"<?php ($a)->b;",
+	"<?php ($a)->b();",
+	"<?php ($a)?->b;",
+	"<?php ($a)::B;",
+	"<?php ($a)::b();",
+	"<?php ($a)::$b;",
+	"<?php ($a)();",
+	"<?php ($a)++;",
+	"<?php ($a) = 1;",
+	"<?php ($a) .= 1;",
+	"<?php ($a) =& $b;",
+	"<?php $a++[0];",
+	"<?php $a++->b;",
+	"<?php $a++->b();",
+	"<?php $a++?->b;",
+	"<?php $a++::B;",
+	"<?php $a++::b();",
+	"<?php $a++::$b;",
+	"<?php $a++();",
+	"<?php $a++++;",
+	"<?php $a++ = 1;",
+	"<?php $a++ .= 1;",
+	"<?php $a++ =& $b;",
+	"<?php ++$a[0];",
+	"<?php ++$a->b;",
+	"<?php ++$a->b();",
+	"<?php ++$a?->b;",
+	"<?php ++$a::B;",
+	"<?php ++$a::b();",
+	"<?php ++$a::$b;",
+	"<?php ++$a();",
+	"<?php ++$a = 1;",
+	"<?php ++$a .= 1;",
+	"<?php ++$a =& $b;",
+	"<?php f()[0];",
+	"<?php f()->b;",
+	"<?php f()->b();",
+	"<?php f()?->b;",
+	"<?php f()::B;",
+	"<?php f()::b();",
+	"<?php f()::$b;",
+	"<?php f()();",
+	"<?php f()++;",
+	"<?php f() .= 1;",
+	"<?php f() =& $b;",
+	"<?php new A()[0];",
+	"<?php new A()->b();",
+	"<?php new A()?->b;",
+	"<?php new A()::B;",
+	"<?php new A()::b();",
+	"<?php new A()::$b;",
+	"<?php new A()();",
+	"<?php new A()++;",
+	"<?php new A() = 1;",
+	"<?php new A() .= 1;",
+	"<?php new A() =& $b;",
+	"<?php A::class[0];",
+	"<?php A::class->b;",
+	"<?php A::class->b();",
+	"<?php A::class?->b;",
+	"<?php A::class::B;",
+	"<?php A::class::b();",
+	"<?php A::class::$b;",
+	"<?php A::class();",
+	"<?php A::class++;",
+	"<?php A::class = 1;",
+	"<?php A::class .= 1;",
+	"<?php A::class =& $b;",
+	"<?php $a::B[0];",
+	"<?php $a::B->b;",
+	"<?php $a::B->b();",
+	"<?php $a::B?->b;",
+	"<?php $a::B::B;",
+	"<?php $a::B::b();",
+	"<?php $a::B::$b;",
+	"<?php $a::B();",
+	"<?php $a::B++;",
+	"<?php $a::B = 1;",
+	"<?php $a::B .= 1;",
+	"<?php $a::B =& $b;",
+	"<?php static::B[0];",
+	"<?php static::B->b;",
+	"<?php static::B->b();",
+	"<?php static::B?->b;",
+	"<?php static::B::B;",
+	"<?php static::B::b();",
+	"<?php static::B::$b;",
+	"<?php static::B();",
+	"<?php static::B++;",
+	"<?php static::B = 1;",
+	"<?php static::B .= 1;",
+	"<?php static::B =& $b;",
+	"<?php (1)->b;",
+	"<?php (1)->b();",
+	"<?php (1)?->b;",
+	"<?php (1)::B;",
+	"<?php (1)::b();",
+	"<?php (1)::$b;",
+	"<?php (1)();",
+	"<?php (1)++;",
+	"<?php (1) = 1;",
+	"<?php (1) .= 1;",
+	"<?php (1) =& $b;",
+	"<?php $a =& 1;",
+	"<?php [$a] = &$b;",
+	"<?php [&$a] = $b;",
+	"<?php list($a) = &$b;",
+	"<?php $a =& $b ?? $c;",
+	"<?php $a =& [1];",
+	"<?php $a =& ($b);",
+	"<?php ++f();",
+	"<?php ++($a);",
+	"<?php $a->b++;",
+	"<?php [$a, [$b]] = $c;",
+	"<?php [$a, list($b)] = $c;",
+	"<?php list($a, [$b]) = $c;",
+	"<?php foreach ($a as [$b, [$c]]) {}",
+	"<?php [[$a] = $b] = $c;",
+	"<?php ($a) += 1;",
+	"<?php ((($a))) = 1;",
+	"<?php ($a)[0] = 1;",
+	"<?php ($a)->b = 1;",
+	"<?php $a = &new A;",
+	"<?php $a =& new A();",
+	"<?php $a = (clone $b)->c;",
+	"<?php function(){}();",
+	"<?php fn() => 1;",
+	"<?php match(1) { default => 1 }[0];",
+	"<?php isset($a)[0];",
+	"<?php exit()[0];",
+	"<?php $a = 1 ?>\n<?php + 2;",
+	"<?php if ($a): ?>x<?php endif; ?>",
+	"<?php class C { public $a ?>\n<?php }",
+	"<?php $b = (void) f();",
+	"<?php (void) f(); (void) $a->b;",
 }
 
 func TestParserAgreesWithPHPOnPrograms(t *testing.T) {
@@ -333,5 +750,135 @@ func TestMissingSemicolonKeepsTheCodeAfterIt(t *testing.T) {
 	file := Parse("<?php\nuse Foo\\Bar\nclass A { public function f() {} }\nfunction g() {}\n", token.Latest)
 	if class := file.Stmts[1].(*ast.ClassDecl); len(class.Members) != 1 {
 		t.Errorf("the class keeps its method: %v", class.Members)
+	}
+}
+
+func TestDocCommentsSurviveAttributesAndModifiers(t *testing.T) {
+	src := "<?php\n#[A]\n/** fn */\nfunction f(\n    /** Leading. */\n    string $a,\n    string $b = 'x' /** Trailing with a default. */,\n    int $c /** Trailing. */,\n    $d,\n    #[B] /** After attribute. */ $e\n) {}\nclass C {\n    /** Before attribute. */\n    #[Route('/c')]\n    public function index() {}\n    #[Route('/d')]\n    /** After attribute. */\n    public function show() {}\n    #[A] /** Prop. */ public int $p;\n}\n"
+	file := Parse(src, token.Latest)
+	if len(file.Errors) != 0 {
+		t.Fatalf("errors: %v", file.Errors)
+	}
+	fn := file.Stmts[0].(*ast.FunctionDecl)
+	text := func(s ast.Span) string { return s.Text(src) }
+	if got := text(fn.Doc); got != "/** fn */" {
+		t.Errorf("function doc %q", got)
+	}
+	want := []string{"/** Leading. */", "/** Trailing with a default. */", "/** Trailing. */", "", "/** After attribute. */"}
+	for i, p := range fn.Params {
+		if got := text(p.Doc); got != want[i] {
+			t.Errorf("param %d doc %q, want %q", i, got, want[i])
+		}
+	}
+	members := file.Stmts[1].(*ast.ClassDecl).Members
+	for i, w := range []string{"/** Before attribute. */", "/** After attribute. */", "/** Prop. */"} {
+		var doc ast.Span
+		switch m := members[i].(type) {
+		case *ast.Method:
+			doc = m.Doc
+		case *ast.Property:
+			doc = m.Doc
+		}
+		if got := text(doc); got != w {
+			t.Errorf("member %d doc %q, want %q", i, got, w)
+		}
+	}
+}
+
+func TestDeepNestingIsAnErrorNotACrash(t *testing.T) {
+	for _, src := range []string{
+		"<?php $a = " + strings.Repeat("(", 1_000_000) + "1;",
+		"<?php " + strings.Repeat("$", 1_000_000) + "a;",
+		"<?php " + strings.Repeat("{", 1_000_000),
+		"<?php $a = " + strings.Repeat("[", 1_000_000),
+	} {
+		errs := Parse(src, token.Latest).Errors
+		if len(errs) != 1 || errs[0].Message != "nesting is too deep to parse" {
+			t.Errorf("%.20q: got %v", src, errs)
+		}
+	}
+	if errs := Parse("<?php $a = "+strings.Repeat("(", 1000)+"1"+strings.Repeat(")", 1000)+";", token.Latest).Errors; len(errs) != 0 {
+		t.Errorf("realistic nesting parses: %v", errs)
+	}
+}
+
+func TestAPanicKeepsThePartialFileAndReportsIt(t *testing.T) {
+	p := &parser{src: "<?php"}
+	file := &ast.File{}
+	p.guard(func() {
+		file.Stmts = append(file.Stmts, &ast.Nop{})
+		panic("boom")
+	})
+	if len(file.Stmts) != 1 || len(p.errors) != 1 || p.errors[0].Message != "internal parser error: boom" {
+		t.Fatalf("got %v %v", file.Stmts, p.errors)
+	}
+}
+
+func TestErrorMessagesAreForPeople(t *testing.T) {
+	for _, src := range programs {
+		for _, e := range Parse(src, token.Latest).Errors {
+			if strings.Contains(e.Message, "T_") || strings.Contains(e.Message, "''") {
+				t.Errorf("%q: %q names an internal token", src, e.Message)
+			}
+		}
+	}
+	errs := Parse("<?php function f(A) {}", token.Latest).Errors
+	if len(errs) != 1 || errs[0].Message != "syntax error, unexpected ')', expected a variable" {
+		t.Errorf("got %v", errs)
+	}
+}
+
+func TestVersionedSyntaxMatchesPHP(t *testing.T) {
+	never := token.Latest + 1
+	cases := []struct {
+		src    string
+		okFrom token.Version
+	}{
+		{"<?php clone($o,);", token.PHP85},
+		{"<?php clone($o, $p);", token.PHP85},
+		{"<?php new class {}->foo();", token.PHP84},
+		{"<?php new class(1) {}->foo;", token.PHP84},
+		{"<?php for ((void) $a, $b; (void) $c, $d; (void) $e);", token.PHP85},
+		{"<?php for (; $b, (void) $a;);", never},
+		{"<?php switch ($a): ?>\n<?php case 1: endswitch;", token.PHP80},
+		{"<?php switch ($a) { case 1 ?>\n<?php }", token.PHP80},
+		{"<?php class C { use T { foo as final bar; foo as static; } }", token.PHP80},
+		{"<?php class C { $a; }", never},
+		{"<?php 1[0];", never},
+		{"<?php $a++ ++;", never},
+		{"<?php [$a] .= 1;", never},
+		{"<?php $a =& new A;", never},
+		{"<?php ($a) = 1;", never},
+		{"<?php function f((A&B) $x) {}", never},
+		{"<?php class C { public $a, $b { get => 1; } }", never},
+		{"<?php class C { public public $a; }", never},
+		{"<?php abstract final class C {}", never},
+		{"<?php class C { var static $a; }", never},
+	}
+	for _, c := range cases {
+		for v := token.PHP80; v <= token.Latest; v++ {
+			errs := Parse(c.src, v).Errors
+			if ok := len(errs) == 0; ok != (v >= c.okFrom) {
+				t.Errorf("%q on PHP %s: errors %v", c.src, v, errs)
+			}
+		}
+	}
+}
+
+func TestNestedDestructuringIsAList(t *testing.T) {
+	for _, src := range []string{"<?php [$a, [$b, [$c]]] = $d;", "<?php list($a, [$b]) = $d;", "<?php foreach ($a as [$b, ['k' => [$c]]]) {}"} {
+		lists := 0
+		ast.Walk(Parse(src, token.Latest), func(n ast.Node) bool {
+			switch n.(type) {
+			case *ast.List:
+				lists++
+			case *ast.Array:
+				t.Errorf("%q: a nested pattern stayed an array", src)
+			}
+			return true
+		})
+		if lists < 2 {
+			t.Errorf("%q: %d lists", src, lists)
+		}
 	}
 }

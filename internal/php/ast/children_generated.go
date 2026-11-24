@@ -707,8 +707,8 @@ func Children(n Node, visit func(Node)) {
 				visit(c)
 			}
 		}
-		if n.Visibility != nil {
-			visit(n.Visibility)
+		if n.Modifier != nil {
+			visit(n.Modifier)
 		}
 		if n.Alias != nil {
 			visit(n.Alias)
@@ -785,10 +785,6 @@ func Children(n Node, visit func(Node)) {
 	case *VariableVariable:
 		if n.Name != nil {
 			visit(n.Name)
-		}
-	case *VoidCast:
-		if n.Operand != nil {
-			visit(n.Operand)
 		}
 	case *While:
 		if n.Cond != nil {

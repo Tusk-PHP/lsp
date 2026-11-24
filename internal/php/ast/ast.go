@@ -449,12 +449,6 @@ type ExprStmt struct {
 	Expr Expr
 }
 
-type VoidCast struct {
-	stmt
-	Span
-	Operand Expr
-}
-
 type Block struct {
 	stmt
 	Span
@@ -757,11 +751,11 @@ type Method struct {
 
 type TraitAdaptation struct {
 	Span
-	Trait      *Name
-	Method     *Identifier
-	InsteadOf  []*Name
-	Visibility *Modifier
-	Alias      *Identifier
+	Trait     *Name
+	Method    *Identifier
+	InsteadOf []*Name
+	Modifier  *Modifier
+	Alias     *Identifier
 }
 
 type TraitUse struct {
