@@ -84,9 +84,9 @@ func (s *Symbol) IsDeprecated() bool {
 
 // Attribute is a PHP 8 attribute on a symbol.
 type Attribute struct {
-	Name string   // as written
-	FQN  string   // what the name resolves to
-	Args []string // each argument as written
+	Name string // as written
+	FQN  string // what the name resolves to
+	Args parser.AttributeArgs
 }
 
 // Attribute returns the attribute with this fully qualified name, if it has one.
@@ -354,16 +354,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 			}
 			idx.addSymbolWithSource(uri, sym, SourceProject)
 			idx.linkTypeLocked(sym)
-			for _, prop := range c.Properties {
-				ps := &Symbol{Name: prop.Name, FQN: fqn + "::" + prop.Name, Kind: KindProperty, URI: uri,
-					Visibility: prop.Visibility, SetVisibility: prop.SetVisibility,
-					IsStatic: prop.IsStatic, Type: resolve(prop.Type.Name),
-					DocComment: qualifyDocTypes(prop.DocComment, file.Uses), ParentFQN: fqn,
-					Hooks: append([]parser.PropertyHook(nil), prop.Hooks...),
-					Range: symRange(prop.StartLine, prop.StartCol, len(prop.Name))}
-				sym.Children = append(sym.Children, ps)
-				idx.addSymbolWithSource(uri, ps, SourceProject)
-			}
+			idx.indexProperties(uri, sym, fqn, c.Properties, SourceProject, resolve, file.Uses)
 			idx.indexMethods(uri, sym, fqn, c.Methods, SourceProject, resolve, file.Uses)
 			idx.indexVirtualMembers(uri, sym, SourceProject, resolve)
 		}
@@ -874,7 +865,7 @@ func (idx *Index) indexProperties(uri string, parent *Symbol, parentFQN string, 
 	for _, prop := range props {
 		ps := &Symbol{Name: prop.Name, FQN: parentFQN + "::" + prop.Name, Kind: KindProperty, URI: uri,
 			Visibility: prop.Visibility, SetVisibility: prop.SetVisibility,
-			IsStatic: prop.IsStatic, IsReadonly: prop.IsReadonly, Type: resolve(prop.Type.Name),
+			IsStatic: prop.IsStatic, IsReadonly: prop.IsReadonly, Type: resolve(prop.Type.Name), Value: prop.DefaultValue,
 			DocComment: qualifyDocTypes(prop.DocComment, uses), ParentFQN: parentFQN, Attributes: indexAttributes(prop.Attributes, resolve),
 			Hooks: append([]parser.PropertyHook(nil), prop.Hooks...),
 			Range: symRange(prop.StartLine, prop.StartCol, len(prop.Name))}

@@ -1126,7 +1126,7 @@ func (s *Service) laravelModelSchema(fqn string) (LaravelModelSchemaOutput, erro
 	if sym == nil {
 		return LaravelModelSchemaOutput{}, fmt.Errorf("model %q not found", fqn)
 	}
-	tableName := models.ResolveModelTableName(ws.Index, sym, s.RootPath)
+	tableName := models.ResolveModelTableName(ws.Index, sym)
 	out := LaravelModelSchemaOutput{
 		Model:       ptrSymbolMatch(toSymbolMatch(sym)),
 		TableName:   tableName,
@@ -1221,7 +1221,7 @@ func (s *Service) laravelModels() []map[string]any {
 	for _, model := range modelsList {
 		record := map[string]any{
 			"symbol":    toSymbolMatch(model),
-			"tableName": models.ResolveModelTableName(ws.Index, model, s.RootPath),
+			"tableName": models.ResolveModelTableName(ws.Index, model),
 		}
 		out = append(out, record)
 	}

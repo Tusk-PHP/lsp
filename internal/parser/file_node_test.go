@@ -77,7 +77,7 @@ abstract class Base extends \Parent\Base implements A, B {
 	if !reflect.DeepEqual(c.Traits, []string{"T1", "T2", "T3"}) || c.TraitUseDoc != "/** uses */" {
 		t.Errorf("traits: %v %q", c.Traits, c.TraitUseDoc)
 	}
-	if want := []AttributeDef{{Name: "Attr", Args: []string{"1", "name:'x'"}, Line: 2}}; !reflect.DeepEqual(c.Attributes, want) {
+	if want := []AttributeDef{{Name: "Attr", Args: AttributeArgs{{Value: "1"}, {Name: "name", Value: "'x'"}}, Line: 2}}; !reflect.DeepEqual(c.Attributes, want) {
 		t.Errorf("attributes: %+v", c.Attributes)
 	}
 	var consts []string
@@ -278,5 +278,51 @@ func TestParseFileReadsTheGrammarItIsGiven(t *testing.T) {
 	}
 	if current.Grammar != token.PHP80 || len(current.Errors) == 0 {
 		t.Errorf("PHP 8.0: grammar %s, errors %v", current.Grammar, current.Errors)
+	}
+}
+
+func TestFileNodeKeepsScalarPropertyDefaults(t *testing.T) {
+	file := ParseFile(`<?php
+class M {
+    protected $table = 'users';
+    public $limit = 10, $flag = PHP_EOL, $list = ['a' => 1], $none;
+    public function __construct(private string $name = "n", private array $opts = []) {}
+}
+`, token.Latest)
+	var got []string
+	for _, p := range file.Classes[0].Properties {
+		got = append(got, p.Name+"="+p.DefaultValue)
+	}
+	if want := []string{"$table='users'", "$limit=10", "$flag=PHP_EOL", "$list=", "$none=", `$name="n"`, "$opts="}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestAttributeArgs(t *testing.T) {
+	file := ParseFile(`<?php
+#[A('first', name: 'x', ...$rest)]
+#[B(name: 'only')]
+class C {}
+`, token.Latest)
+	a, b := file.Classes[0].Attributes[0].Args, file.Classes[0].Attributes[1].Args
+	if got := a.String(); got != "'first', name:'x', ...$rest" {
+		t.Errorf("A args: %q", got)
+	}
+	for _, c := range []struct {
+		args     AttributeArgs
+		name     string
+		position int
+		want     string
+		ok       bool
+	}{
+		{a, "name", 0, "'x'", true},
+		{a, "missing", 0, "'first'", true},
+		{a, "missing", -1, "", false},
+		{b, "other", 0, "", false},
+		{a, "missing", 5, "", false},
+	} {
+		if got, ok := c.args.Get(c.name, c.position); got != c.want || ok != c.ok {
+			t.Errorf("Get(%q, %d) = %q, %v", c.name, c.position, got, ok)
+		}
 	}
 }
