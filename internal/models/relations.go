@@ -87,93 +87,34 @@ func laravelRelations(index *symbols.Index) []Relation {
 	return relations
 }
 
-// extractEloquentRelations mirrors the relation-detection portion of analyzeModel,
-// but collects Relation structs instead of injecting virtual members.
-func extractEloquentRelations(model *symbols.Symbol, grammars phpparser.GrammarRange) (result []Relation) {
-	defer func() {
-		// Panic-safe: skip the model on any unexpected error.
-		if r := recover(); r != nil {
-			result = nil
-		}
-	}()
-
-	path := symbols.URIToPath(model.URI)
-	content, err := os.ReadFile(path)
+func extractEloquentRelations(model *symbols.Symbol, grammars phpparser.GrammarRange) []Relation {
+	content, err := os.ReadFile(symbols.URIToPath(model.URI))
 	if err != nil {
 		return nil
 	}
-	source := string(content)
-	lines := strings.Split(source, "\n")
-
-	file := parser.ParseFileIn(source, grammars)
-	if file == nil {
-		return nil
-	}
-
-	// Find the class node matching this model's FQN.
-	var classNode *parser.ClassNode
-	for i := range file.Classes {
-		fqn := file.Namespace + "\\" + file.Classes[i].Name
-		if file.Namespace == "" {
-			fqn = file.Classes[i].Name
-		}
-		if fqn == model.FQN {
-			classNode = &file.Classes[i]
-			break
-		}
-	}
+	source := newModelSource(string(content), grammars)
+	classNode, decls := source.class(model.FQN)
 	if classNode == nil {
 		return nil
 	}
-
-	resolve := func(name string) string {
-		return resolveWithUses(name, file.Namespace, file.Uses)
-	}
-
+	var result []Relation
 	for _, method := range classNode.Methods {
-		returnShort := shortClassName(method.ReturnType.Name)
-
-		var relType string
-		if allRelationTypes[returnShort] {
-			// Explicit relation return type.
-			relType = returnShort
-		} else if method.ReturnType.Name == "" || method.ReturnType.Name == "mixed" {
-			// No explicit return type: check method body for a relation call.
-			body := extractMethodBody(lines, method.StartLine, method.EndLine)
-			if match := relationCallRe.FindStringSubmatch(body); match != nil {
-				relType = ucFirst(match[1])
-			}
-		}
-
-		if relType == "" {
+		relation, ok := source.relation(method, decls[method.Name])
+		if !ok || relation.target == "" {
 			continue
 		}
-
-		// Extract the target class from the method body.
-		body := extractMethodBody(lines, method.StartLine, method.EndLine)
-		match := relationCallRe.FindStringSubmatch(body)
-		if match == nil {
-			continue
-		}
-		target := resolve(match[2])
-		if target == "" {
-			continue
-		}
-
 		cardinality := "one"
-		if pluralRelations[relType] {
+		if pluralRelations[relation.kind] {
 			cardinality = "many"
 		}
-
 		result = append(result, Relation{
 			SourceModel:  model.FQN,
-			TargetModel:  target,
-			RelationType: relType,
+			TargetModel:  relation.target,
+			RelationType: relation.kind,
 			Cardinality:  cardinality,
 			MethodName:   method.Name,
 		})
 	}
-
 	return result
 }
 
