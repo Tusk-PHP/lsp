@@ -130,7 +130,7 @@ func TestBladeSuppressions(t *testing.T) {
 	})
 }
 
-func TestMarkersReachPastCommentsAttributesAndBlankLines(t *testing.T) {
+func TestOwnLineMarkersCoverDocblocksAttributesAndTheCodeLine(t *testing.T) {
 	source := `<?php
 class Shop
 {
@@ -143,16 +143,86 @@ class Shop
     #[Deprecated]
     public function cart() {}
 
-    /** @phpstan-ignore-next-line */
-
-    public function checkout() {}
+    #[Route(
+        // @tusk-ignore unknown-class
+        Missing::class,
+    )]
+    public function pay() {}
 }
 `
 	checkSuppressions(t, PHPSuppressions(source), []suppressionCase{
+		{6, tusk, "unknown-class", true},
+		{8, tusk, "unknown-class", true},
+		{9, tusk, "unknown-member", true},
 		{10, tusk, "unknown-class", true},
 		{10, tusk, "unknown-member", true},
-		{8, tusk, "unknown-class", false},
-		{14, tusk, "unknown-member", true},
+		{11, tusk, "unknown-class", false},
+		{12, tusk, "unknown-class", false},
+		{14, tusk, "unknown-class", true},
+		{16, tusk, "unknown-class", false},
+	})
+}
+
+func TestOwnLineMarkersReachAcrossAtMostOneBlankLine(t *testing.T) {
+	source := `<?php
+// @tusk-ignore unused-variable
+
+$a = 1;
+// @tusk-ignore unused-variable
+
+
+$b = 1;
+// @tusk-ignore unused-variable
+
+// unrelated note
+
+$c = 1;
+`
+	checkSuppressions(t, PHPSuppressions(source), []suppressionCase{
+		{3, tusk, "unused-variable", true},
+		{7, tusk, "unused-variable", false},
+		{10, tusk, "unused-variable", false},
+		{12, tusk, "unused-variable", false},
+	})
+}
+
+func TestPHPStanMarkersCoverTheLinesPHPStanIgnores(t *testing.T) {
+	source := `<?php
+class Fixture
+{
+    // @phpstan-ignore method.notFound
+    /**
+     * @return int
+     */
+    public function aboveDocblock(): int { return $this->nope1(); }
+    public function trailing(): int { return $this->nope2(); } // @phpstan-ignore method.notFound
+    public function beforeComment(): int { return $this->nope3(); } /* @phpstan-ignore method.notFound */ // keep this note
+    // @phpstan-ignore attribute.notFound
+
+    #[NoSuchAttr]
+    public function blankGap(): void {}
+    // @phpstan-ignore attribute.notFound
+    #[NoSuchAttr2]
+    // @phpstan-ignore-next-line
+    // note
+    public function nextLinePastComment(): int { return $this->nope6(); }
+    /**
+     * @phpstan-ignore-next-line
+     */
+    public function docNextLine(): int { return $this->nope7(); }
+}
+`
+	checkSuppressions(t, PHPSuppressions(source), []suppressionCase{
+		{7, phpstan, "method.notFound", false},
+		{7, tusk, "unknown-member", false},
+		{8, phpstan, "method.notFound", true},
+		{9, phpstan, "method.notFound", true},
+		{12, phpstan, "attribute.notFound", false},
+		{15, phpstan, "attribute.notFound", true},
+		{18, phpstan, "method.notFound", false},
+		{18, tusk, "unknown-member", false},
+		{22, phpstan, "method.notFound", true},
+		{22, tusk, "unknown-member", true},
 	})
 }
 
@@ -163,6 +233,7 @@ $b = 1; // @tusk-ignore unused-variable: read by an include
 $c->d(); // @phpstan-ignore method.notFound (magic), variable.undefined (legacy (old))
 $e->f(); // @phpstan-ignore method.notFound (unclosed
 $g->h(); // @tusk-ignore pint:single_quote
+$i->j(); // @tusk-ignore: legacy
 `
 	checkSuppressions(t, PHPSuppressions(source), []suppressionCase{
 		{1, tusk, "unused-variable", true},
@@ -172,5 +243,6 @@ $g->h(); // @tusk-ignore pint:single_quote
 		{4, tusk, "unknown-member", true},
 		{5, pint, rule.PintCode([]string{"binary_operator_spaces", "single_quote"}), true},
 		{5, pint, "braces", false},
+		{6, tusk, "unknown-member", true},
 	})
 }

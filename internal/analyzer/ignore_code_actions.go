@@ -11,6 +11,7 @@ import (
 
 type ignoreComment struct {
 	title, text string
+	at          protocol.Position
 }
 
 func IgnoreDiagnosticActions(uri, source string, params protocol.CodeActionParams) []protocol.CodeAction {
@@ -18,28 +19,23 @@ func IgnoreDiagnosticActions(uri, source string, params protocol.CodeActionParam
 	if len(params.Context.Diagnostics) == 0 || !protocol.CodeActionQuickFix.In(params.Context.Only) {
 		return actions
 	}
-	layout := checks.PHPLayout
-	if workspace.IsBlade(uri) {
-		layout = checks.BladeLayout
+	blade := workspace.IsBlade(uri)
+	l := checks.PHPLayout
+	if blade {
+		l = checks.BladeLayout
 	}
-	l := layout(source)
-	type lineTitle struct {
-		line  int
+	layout := l(source)
+	type placedTitle struct {
+		at    protocol.Position
 		title string
 	}
-	seen := map[lineTitle]bool{}
+	seen := map[placedTitle]bool{}
 	for _, d := range params.Context.Diagnostics {
-		if _, ok := l.LineStart(d.Range.Start.Line); !ok || d.Code == "" {
+		if _, ok := layout.LineStart(d.Range.Start.Line); !ok || d.Code == "" {
 			continue
 		}
-		line := l.MarkerLine(d.Range.Start.Line)
-		start, _ := l.LineStart(line)
-		style, ok := l.StyleAt(start)
-		if !ok {
-			continue
-		}
-		for _, c := range ignoreComments(d, style) {
-			key := lineTitle{line, c.title}
+		for _, c := range ignoreComments(layout, d, blade) {
+			key := placedTitle{c.at, c.title}
 			if seen[key] {
 				continue
 			}
@@ -49,8 +45,8 @@ func IgnoreDiagnosticActions(uri, source string, params protocol.CodeActionParam
 				Kind:        protocol.CodeActionQuickFix,
 				Diagnostics: []protocol.Diagnostic{d},
 				Edit: &protocol.WorkspaceEdit{Changes: map[string][]protocol.TextEdit{uri: {{
-					Range:   protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
-					NewText: l.Indent(line) + c.text + l.LineEnding(),
+					Range:   protocol.Range{Start: c.at, End: c.at},
+					NewText: c.text,
 				}}}},
 			})
 		}
@@ -59,17 +55,38 @@ func IgnoreDiagnosticActions(uri, source string, params protocol.CodeActionParam
 	return actions
 }
 
-func ignoreComments(d protocol.Diagnostic, style checks.CommentStyle) []ignoreComment {
+func ignoreComments(layout checks.Layout, d protocol.Diagnostic, blade bool) []ignoreComment {
 	targets, err := rule.TargetsOf(d.Source, d.Code)
 	if err != nil {
 		return nil
 	}
-	if d.Source == string(rule.SourcePHPStan) && style == checks.PHPComment {
-		return []ignoreComment{{"Ignore " + d.Code + " with @phpstan-ignore", style.Wrap(checks.PHPStanSuppressionComment(d.Code))}}
+	if d.Source == string(rule.SourcePHPStan) && !blade {
+		return phpstanIgnoreComment(layout, d)
 	}
+	line := layout.MarkerLine(d.Range.Start.Line)
+	start, _ := layout.LineStart(line)
+	style, ok := layout.StyleAt(start)
+	if !ok {
+		return nil
+	}
+	at := protocol.Position{Line: line}
 	comments := make([]ignoreComment, len(targets))
 	for i, target := range targets {
-		comments[i] = ignoreComment{"Ignore " + target.String() + " on this line", style.Wrap(checks.SuppressionComment(target))}
+		text := layout.Indent(line) + style.Wrap(checks.SuppressionComment(target)) + layout.LineEnding()
+		comments[i] = ignoreComment{"Ignore " + target.String() + " on this line", text, at}
 	}
 	return comments
+}
+
+func phpstanIgnoreComment(layout checks.Layout, d protocol.Diagnostic) []ignoreComment {
+	offset, style, ok := layout.TrailingCommentAt(d.Range.Start.Line)
+	if !ok {
+		return nil
+	}
+	text := " " + style.Wrap(checks.PHPStanSuppressionComment(d.Code))
+	if style == checks.PHPBlockComment {
+		text = style.Wrap(checks.PHPStanSuppressionComment(d.Code)) + " "
+	}
+	at := protocol.Position{Line: d.Range.Start.Line, Character: layout.Character(offset)}
+	return []ignoreComment{{"Ignore " + d.Code + " with @phpstan-ignore", text, at}}
 }

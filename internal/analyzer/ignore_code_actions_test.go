@@ -38,18 +38,47 @@ func TestIgnoreDiagnosticActionsInsertCommentAbove(t *testing.T) {
 		diagAt(3, "phpstan", "argument.type"),
 		diagAt(3, "pint", "braces"),
 	))
-	want := map[string]string{
-		"Ignore undefined-variable on this line":    "    // @tusk-ignore undefined-variable\n",
-		"Ignore argument.type with @phpstan-ignore": "\t// @phpstan-ignore argument.type\n",
-		"Ignore pint:braces on this line":           "\t// @tusk-ignore pint:braces\n",
+	want := map[string]protocol.TextEdit{
+		"Ignore undefined-variable on this line":    {Range: pointRange(2, 0), NewText: "    // @tusk-ignore undefined-variable\n"},
+		"Ignore argument.type with @phpstan-ignore": {Range: pointRange(3, len("\tstrlen(1);")), NewText: " // @phpstan-ignore argument.type"},
+		"Ignore pint:braces on this line":           {Range: pointRange(3, 0), NewText: "\t// @tusk-ignore pint:braces\n"},
 	}
 	if len(actions) != len(want) {
 		t.Fatalf("got %d actions, want %d: %+v", len(actions), len(want), actions)
 	}
 	for _, a := range actions {
-		edit := singleEdit(t, a, uri)
-		if a.Kind != "quickfix" || edit.NewText != want[a.Title] || edit.Range.Start.Character != 0 {
+		if edit := singleEdit(t, a, uri); a.Kind != protocol.CodeActionQuickFix || edit != want[a.Title] {
 			t.Errorf("%q: kind %q, edit %+v", a.Title, a.Kind, edit)
+		}
+	}
+}
+
+func pointRange(line, character int) protocol.Range {
+	at := protocol.Position{Line: line, Character: character}
+	return protocol.Range{Start: at, End: at}
+}
+
+func TestIgnoreDiagnosticActionsForPHPStanEndTheLine(t *testing.T) {
+	uri := "file:///app/Shop.php"
+	source := "<?php\nclass Shop\n{\n    /**\n     * @return int\n     */\n    #[NoSuchAttr]\n    public function total(): int { return $this->sum(); }\n    public function tax(): int { return $this->rate('é'); } // keep this note\n    public function name(): string { return \"a\n    b\"; }\n}\n?>\n<p><?php $this->x() ?></p>\n"
+	cases := []struct {
+		line int
+		want []protocol.TextEdit
+	}{
+		{6, []protocol.TextEdit{{Range: pointRange(6, len("    #[NoSuchAttr]")), NewText: " // @phpstan-ignore method.notFound"}}},
+		{7, []protocol.TextEdit{{Range: pointRange(7, len("    public function total(): int { return $this->sum(); }")), NewText: " // @phpstan-ignore method.notFound"}}},
+		{8, []protocol.TextEdit{{Range: pointRange(8, len("    public function tax(): int { return $this->rate('e'); } ")), NewText: "/* @phpstan-ignore method.notFound */ "}}},
+		{9, nil},
+		{12, nil},
+	}
+	for _, c := range cases {
+		actions := IgnoreDiagnosticActions(uri, source, ignoreParams(uri, nil, diagAt(c.line, "phpstan", "method.notFound")))
+		var got []protocol.TextEdit
+		for _, a := range actions {
+			got = append(got, singleEdit(t, a, uri))
+		}
+		if !slices.Equal(got, c.want) {
+			t.Errorf("line %d: got %+v, want %+v", c.line, got, c.want)
 		}
 	}
 }
