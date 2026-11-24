@@ -2,7 +2,6 @@ package parser
 
 import (
 	"hash/fnv"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -16,10 +15,18 @@ func ParseFile(source string, version token.Version) *FileNode {
 }
 
 func ParseFileIn(source string, grammars phpparser.GrammarRange) *FileNode {
+	return newFileNode(source, ParseTreeIn(source, grammars))
+}
+
+func ParseTree(source string, version token.Version) *ast.File {
+	return ParseTreeIn(source, phpparser.OnlyGrammar(version))
+}
+
+func ParseTreeIn(source string, grammars phpparser.GrammarRange) *ast.File {
 	if !HasOpenTag(source) {
-		return newFileNode(source, grammars.ParseCode(source))
+		return grammars.ParseCode(source)
 	}
-	return newFileNode(source, grammars.Parse(source))
+	return grammars.Parse(source)
 }
 
 type declScope int
@@ -40,14 +47,14 @@ func (s declScope) declaresFunctions() bool {
 }
 
 type fileNodeBuilder struct {
-	src        string
-	lineStarts []uint32
-	file       *FileNode
-	fileHash   string
+	src      string
+	lines    ast.Lines
+	file     *FileNode
+	fileHash string
 }
 
 func newFileNode(src string, tree *ast.File) *FileNode {
-	b := &fileNodeBuilder{src: src, lineStarts: lineStarts(src), file: &FileNode{Grammar: tree.Version}}
+	b := &fileNodeBuilder{src: src, lines: ast.NewLines(src), file: &FileNode{Grammar: tree.Version}}
 	for _, stmt := range tree.Stmts {
 		b.visit(stmt, scopeFile)
 	}
@@ -58,22 +65,8 @@ func newFileNode(src string, tree *ast.File) *FileNode {
 	return b.file
 }
 
-func lineStarts(src string) []uint32 {
-	starts := make([]uint32, 1, len(src)/32+1)
-	for i := strings.IndexByte(src, '\n'); i >= 0; {
-		starts = append(starts, uint32(i+1))
-		next := strings.IndexByte(src[i+1:], '\n')
-		if next < 0 {
-			break
-		}
-		i += next + 1
-	}
-	return starts
-}
-
 func (b *fileNodeBuilder) position(offset uint32) (line, col int) {
-	line = sort.Search(len(b.lineStarts), func(i int) bool { return b.lineStarts[i] > offset }) - 1
-	return line, int(offset - b.lineStarts[line])
+	return b.lines.Position(offset)
 }
 
 func (b *fileNodeBuilder) line(offset uint32) int {
