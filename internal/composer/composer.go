@@ -127,9 +127,8 @@ func GetAutoloadPaths(rootPath string) []AutoloadEntry {
 	}
 
 	// 2. Vendor package autoload mappings from installed.json
-	composerDir := filepath.Join(rootPath, "vendor", "composer")
-	installedPath := filepath.Join(composerDir, "installed.json")
-	data, err := os.ReadFile(installedPath)
+	composerDir := vendorComposerDir(rootPath)
+	data, err := os.ReadFile(InstalledJSONPath(rootPath))
 	if err != nil {
 		return appendComposerAutoloadFiles(entries, rootPath)
 	}
@@ -164,6 +163,14 @@ func GetAutoloadPaths(rootPath string) []AutoloadEntry {
 
 	entries = appendComposerRuntime(entries, composerDir)
 	return appendComposerAutoloadFiles(entries, rootPath)
+}
+
+func vendorComposerDir(rootPath string) string {
+	return filepath.Join(rootPath, "vendor", "composer")
+}
+
+func InstalledJSONPath(rootPath string) string {
+	return filepath.Join(vendorComposerDir(rootPath), "installed.json")
 }
 
 // composerRuntimeClasses are the classes Composer installs into

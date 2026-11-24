@@ -57,11 +57,14 @@ func (l *Lockfile) All() []LockedPackage {
 	return pkgs
 }
 
+func Path(rootPath string) string {
+	return filepath.Join(rootPath, "composer.lock")
+}
+
 // Load reads composer.lock from the given workspace root. Returns nil when
 // the file does not exist; an error only on read or parse failure.
 func Load(rootPath string) (*Lockfile, error) {
-	path := filepath.Join(rootPath, "composer.lock")
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(Path(rootPath))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

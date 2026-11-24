@@ -135,7 +135,7 @@ func discoveredLaravelPackages(rootPath string) []laravelExtra {
 		skip[name] = true
 	}
 
-	data, err := os.ReadFile(filepath.Join(rootPath, "vendor", "composer", "installed.json"))
+	data, err := os.ReadFile(InstalledJSONPath(rootPath))
 	if err != nil {
 		return nil
 	}
