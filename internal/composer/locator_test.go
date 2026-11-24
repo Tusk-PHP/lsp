@@ -15,12 +15,16 @@ func TestClassFilesLongestPrefixFirst(t *testing.T) {
 		{Namespace: "App", Path: "/p/helpers.php", IsFile: true},
 	}
 	got := ClassFiles("\\App\\Models\\User", entries)
-	want := []ClassFile{
-		{Path: filepath.FromSlash("/p/models/User.php")},
-		{Path: filepath.FromSlash("/p/app/Models/User.php")},
+	var paths []string
+	for _, f := range got {
+		paths = append(paths, f.Path())
 	}
-	if !slices.Equal(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
+	want := []string{filepath.FromSlash("/p/models/User.php"), filepath.FromSlash("/p/app/Models/User.php")}
+	if !slices.Equal(paths, want) {
+		t.Errorf("got %v, want %v", paths, want)
+	}
+	if !slices.Equal(got[1].Parts, []string{"Models", "User.php"}) || got[1].Root != "/p/app" {
+		t.Errorf("a candidate keeps its autoload root apart from the parts the class name gives: %+v", got[1])
 	}
 	if got := ClassFiles("Vendor\\Pkg\\Thing", entries); len(got) != 1 || !got[0].IsVendor {
 		t.Errorf("vendor: %+v", got)
