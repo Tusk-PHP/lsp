@@ -121,13 +121,14 @@ plain();
 
 func TestAttributeMessage(t *testing.T) {
 	for _, c := range []struct {
-		args []string
+		args parser.AttributeArgs
 		want string
 	}{
-		{[]string{`'first'`}, "first"},
-		{[]string{`message: "named"`}, "named"},
-		{[]string{`since: '2.0'`, `message: 'later'`}, "later"},
-		{[]string{`since: '2.0'`}, ""},
+		{parser.AttributeArgs{{Value: `'first'`}}, "first"},
+		{parser.AttributeArgs{{Name: "message", Value: `"named"`}}, "named"},
+		{parser.AttributeArgs{{Name: "since", Value: `'2.0'`}, {Name: "message", Value: `'later'`}}, "later"},
+		{parser.AttributeArgs{{Name: "since", Value: `'2.0'`}}, ""},
+		{parser.AttributeArgs{{Value: `'a'`}, {Value: `'b'`}}, "a"},
 		{nil, ""},
 	} {
 		if got := attributeMessage(&symbols.Attribute{Args: c.args}); got != c.want {
