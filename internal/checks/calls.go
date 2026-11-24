@@ -17,16 +17,33 @@ const (
 	callConstructor
 )
 
+type callee struct {
+	sym      *symbols.Symbol
+	forwards bool
+}
+
+func (c callee) checkable() bool {
+	return c.sym.Source != symbols.SourceBuiltin && !hasVariadicParam(c.sym.Params) && !c.forwards
+}
+
+func allCheckable(callees []callee) bool {
+	for _, c := range callees {
+		if !c.checkable() {
+			return false
+		}
+	}
+	return true
+}
+
 type resolvedCall struct {
-	kind   callKind
-	sym    *symbols.Symbol
-	owner  string
-	site   parser.Token
-	name   string
-	at     int
-	open   int
-	close  int
-	tokens []parser.Token
+	kind    callKind
+	callees []callee
+	site    parser.Token
+	name    string
+	at      int
+	open    int
+	close   int
+	tokens  []parser.Token
 }
 
 func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index, shared *Shared, typeResolver func(string, string, int, int, *parser.FileNode) string, wants func(tokens []parser.Token, open, close int) bool, visit func(resolvedCall)) {
@@ -37,8 +54,10 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 		closeIdx := findMatchingTokenIdx(tokens, open, parser.TokenOpenParen, parser.TokenCloseParen)
 		return closeIdx, closeIdx >= 0 && (wants == nil || wants(tokens, open, closeIdx))
 	}
-	emit := func(kind callKind, sym *symbols.Symbol, owner string, site parser.Token, name string, at, open, closeIdx int) {
-		visit(resolvedCall{kind: kind, sym: sym, owner: owner, site: site, name: name, at: at, open: open, close: closeIdx, tokens: tokens})
+	emit := func(kind callKind, callees []callee, site parser.Token, name string, at, open, closeIdx int) {
+		if len(callees) > 0 {
+			visit(resolvedCall{kind: kind, callees: callees, site: site, name: name, at: at, open: open, close: closeIdx, tokens: tokens})
+		}
 	}
 	for i := 0; i < len(tokens); i++ {
 		tok := tokens[i]
@@ -63,9 +82,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 			if !ok || classFQN == "" {
 				continue
 			}
-			if sym := findProjectMethod(classFQN, tokens[methodIdx].Value, index); sym != nil {
-				emit(callStatic, sym, classFQN, tok, tokens[methodIdx].Value, i, openIdx, closeIdx)
-			}
+			emit(callStatic, methodCallees(classFQN, tokens[methodIdx].Value, index), tok, tokens[methodIdx].Value, i, openIdx, closeIdx)
 			continue
 		}
 		if tokens[next].Kind != parser.TokenOpenParen {
@@ -83,8 +100,8 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 			if lines == nil {
 				lines = strings.Split(source, "\n")
 			}
-			sym, owner, receiver := calledMethod(tokens, prev, tok, lines, source, file, index, typeResolver)
-			if sym == nil {
+			callees, receiver := calledMethod(tokens, prev, tok, lines, source, file, index, typeResolver)
+			if len(callees) == 0 {
 				continue
 			}
 			if receiver == "$this" || strings.HasPrefix(receiver, "$this->") || strings.HasPrefix(receiver, "$this?->") {
@@ -95,7 +112,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 					continue
 				}
 			}
-			emit(callMethod, sym, owner, tok, tok.Value, i, next, closeIdx)
+			emit(callMethod, callees, tok, tok.Value, i, next, closeIdx)
 			continue
 		}
 		if prev >= 0 && tokens[prev].Kind == parser.TokenNew {
@@ -103,9 +120,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 			if !ok || classFQN == "" {
 				continue
 			}
-			if sym := findProjectMethod(classFQN, "__construct", index); sym != nil {
-				emit(callConstructor, sym, classFQN, tok, tok.Value, i, next, closeIdx)
-			}
+			emit(callConstructor, methodCallees(classFQN, "__construct", index), tok, tok.Value, i, next, closeIdx)
 			continue
 		}
 		if prev >= 0 {
@@ -119,8 +134,52 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 			}
 		}
 		fqns, _ := resolveFunctionNames(tok.Value, file)
-		if sym := findProjectFunction(fqns, index); sym != nil {
-			emit(callFunction, sym, "", tok, tok.Value, i, next, closeIdx)
+		emit(callFunction, functionCallees(fqns, index), tok, tok.Value, i, next, closeIdx)
+	}
+}
+
+func functionCallees(fqns []string, index *symbols.Index) []callee {
+	for _, fqn := range fqns {
+		var callees []callee
+		for _, def := range index.Definitions(fqn) {
+			if def.Kind == symbols.KindFunction {
+				callees = append(callees, callee{sym: def})
+			}
+		}
+		if len(callees) > 0 {
+			return callees
 		}
 	}
+	return nil
+}
+
+func methodCallees(classFQN, method string, index *symbols.Index) []callee {
+	var callees []callee
+	for _, def := range index.Definitions(classFQN) {
+		if !def.IsClassLike() {
+			continue
+		}
+		c, ok := definitionMethod(index.DefinitionMembers(def), method)
+		if !ok {
+			return nil
+		}
+		callees = append(callees, c)
+	}
+	return callees
+}
+
+func definitionMethod(members []*symbols.Symbol, name string) (callee, bool) {
+	var c callee
+	for _, m := range members {
+		if m.Kind != symbols.KindMethod {
+			continue
+		}
+		if c.sym == nil && m.Name == name {
+			c.sym = m
+		}
+		if m.Name == "__call" || m.Name == "__callStatic" {
+			c.forwards = true
+		}
+	}
+	return c, c.sym != nil
 }

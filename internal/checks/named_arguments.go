@@ -24,7 +24,7 @@ func (r *UnknownNamedArgumentRule) Check(file *parser.FileNode, source string, i
 	}
 	var findings []Finding
 	eachResolvedCall(file, source, index, r.Shared, r.TypeResolver, hasNamedArguments, func(call resolvedCall) {
-		if !shouldCheckArgCount(call.sym, call.owner, index) {
+		if !allCheckable(call.callees) {
 			return
 		}
 		names, ok := namedArguments(call.tokens, call.open, call.close)
@@ -32,7 +32,7 @@ func (r *UnknownNamedArgumentRule) Check(file *parser.FileNode, source string, i
 			return
 		}
 		for _, name := range names {
-			if hasParam(call.sym.Params, name.Value) {
+			if anyHasParam(call.callees, name.Value) {
 				continue
 			}
 			findings = append(findings, Finding{
@@ -47,10 +47,12 @@ func (r *UnknownNamedArgumentRule) Check(file *parser.FileNode, source string, i
 	return findings
 }
 
-func hasParam(params []symbols.ParamInfo, name string) bool {
-	for _, p := range params {
-		if strings.TrimPrefix(p.Name, "$") == name {
-			return true
+func anyHasParam(callees []callee, name string) bool {
+	for _, c := range callees {
+		for _, p := range c.sym.Params {
+			if strings.TrimPrefix(p.Name, "$") == name {
+				return true
+			}
 		}
 	}
 	return false

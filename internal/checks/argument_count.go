@@ -2,6 +2,7 @@ package checks
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -51,15 +52,8 @@ func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.In
 			}
 			return inTokenSpans(gatedSpans, call.at)
 		}
-		switch call.kind {
-		case callFunction:
-			if call.sym.Source == symbols.SourceBuiltin || hasVariadicParam(call.sym.Params) {
-				return
-			}
-		default:
-			if !shouldCheckArgCount(call.sym, call.owner, index) {
-				return
-			}
+		if !allCheckable(call.callees) {
+			return
 		}
 		argCount, safe := countArguments(call.tokens, call.open, call.close)
 		if !safe {
@@ -68,11 +62,8 @@ func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.In
 		if call.kind != callMethod {
 			skipUntil = call.close
 		}
-		f := buildArgCountFinding(call.sym, argCount, call.site.Line, call.site.Column, call.name)
+		f := buildArgCountFinding(call.callees, argCount, call.kind == callFunction, call.site.Line, call.site.Column, call.name)
 		if f == nil || versionGated() {
-			return
-		}
-		if call.kind != callFunction && argCount >= len(call.sym.Params) {
 			return
 		}
 		findings = append(findings, *f)
@@ -94,39 +85,10 @@ func isSkippedCallKeyword(name string) bool {
 	return skippedCallKeywordMap[strings.ToLower(name)]
 }
 
-// findProjectMethod looks up a method on a class in the index, returning
-// only project-source symbols (not builtins).
-func findProjectMethod(classFQN, methodName string, index *symbols.Index) *symbols.Symbol {
-	for _, member := range index.GetClassMembers(classFQN) {
-		if member.Kind != symbols.KindMethod {
-			continue
-		}
-		if member.Name != methodName {
-			continue
-		}
-		return member
-	}
-	return nil
-}
-
-// findProjectFunction looks up a plain function by its candidate FQNs.
-func findProjectFunction(fqns []string, index *symbols.Index) *symbols.Symbol {
-	for _, fqn := range fqns {
-		sym := index.Lookup(fqn)
-		if sym != nil && sym.Kind == symbols.KindFunction {
-			return sym
-		}
-	}
-	return nil
-}
-
-// calledMethod returns the method a `->name(` call calls and the class it's
-// found on, when the receiver's type is exactly one known class-like. arrow
-// is the index of the `->` token.
-func calledMethod(tokens []parser.Token, arrow int, name parser.Token, lines []string, source string, file *parser.FileNode, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string) (sym *symbols.Symbol, owner, receiver string) {
+func calledMethod(tokens []parser.Token, arrow int, name parser.Token, lines []string, source string, file *parser.FileNode, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string) ([]callee, string) {
 	opTok := tokens[arrow]
 	if opTok.Line != name.Line || opTok.Line >= len(lines) {
-		return nil, "", ""
+		return nil, ""
 	}
 	var mask maskState
 	line := maskPHPLine(lines[opTok.Line], &mask)
@@ -135,23 +97,25 @@ func calledMethod(tokens []parser.Token, arrow int, name parser.Token, lines []s
 		opStart = tokens[q].Column
 	}
 	if opStart > len(line) {
-		return nil, "", ""
+		return nil, ""
 	}
 	start := backwardExprStart(line, opStart)
 	ownerExpr := strings.TrimSpace(line[start:opStart])
 	// A line like `})->name()` continues a chain begun on an earlier line.
 	if ownerExpr == "" || strings.Count(ownerExpr, ")") > strings.Count(ownerExpr, "(") {
-		return nil, "", ""
+		return nil, ""
 	}
 	owners := resolvedClassLikes(typeResolver(ownerExpr, source, opTok.Line, start, file), file, index)
 	if len(owners) != 1 {
-		return nil, "", ""
+		return nil, ""
 	}
-	sym = findProjectMethod(owners[0], name.Value, index)
-	if sym == nil || sym.IsVirtual {
-		return nil, "", ""
+	callees := methodCallees(owners[0], name.Value, index)
+	for _, c := range callees {
+		if c.sym.IsVirtual {
+			return nil, ""
+		}
 	}
-	return sym, owners[0], ownerExpr
+	return callees, ownerExpr
 }
 
 // inClosure reports whether a token is inside a closure or arrow function.
@@ -162,27 +126,6 @@ func inClosure(doc *scope.Document, tok parser.Token) bool {
 		}
 	}
 	return false
-}
-
-// shouldCheckArgCount returns false if the given method belongs to a class
-// that defines __call or __callStatic (magic invocation).
-func shouldCheckArgCount(sym *symbols.Symbol, classFQN string, index *symbols.Index) bool {
-	if sym.Source == symbols.SourceBuiltin {
-		return false
-	}
-	if hasVariadicParam(sym.Params) {
-		return false
-	}
-	// Check for __call/__callStatic on the class
-	for _, member := range index.GetClassMembers(classFQN) {
-		if member.Kind != symbols.KindMethod {
-			continue
-		}
-		if member.Name == "__call" || member.Name == "__callStatic" {
-			return false
-		}
-	}
-	return true
 }
 
 // hasVariadicParam reports whether any param in the list is variadic.
@@ -283,39 +226,31 @@ func findMatchingTokenIdx(tokens []parser.Token, start int, openKind, closeKind 
 	return -1
 }
 
-// buildArgCountFinding creates a Finding if the argument count is clearly
-// wrong. Too few arguments is an error PHP throws on; too many is allowed by
-// PHP but almost always a mistake.
-func buildArgCountFinding(sym *symbols.Symbol, argCount, line, col int, callName string) *Finding {
-	total := len(sym.Params)
-
-	if required := countRequired(sym.Params); argCount < required {
-		return &Finding{
-			StartLine: line,
-			StartCol:  col,
-			EndLine:   line,
-			EndCol:    col + len(callName),
-			Severity:  rule.SeverityWarning,
-			Code:      rule.ArgumentCountMismatch,
-			Message: fmt.Sprintf(
-				"Too few arguments to %s(): %d passed, at least %d required",
-				callName, argCount, required,
-			),
+func buildArgCountFinding(callees []callee, argCount int, tooManyCounts bool, line, col int, callName string) *Finding {
+	minRequired, maxTotal := math.MaxInt, 0
+	for _, c := range callees {
+		required, total := countRequired(c.sym.Params), len(c.sym.Params)
+		if argCount >= required && (argCount <= total || !tooManyCounts) {
+			return nil
 		}
+		minRequired, maxTotal = min(minRequired, required), max(maxTotal, total)
 	}
-	if argCount > total {
-		return &Finding{
-			StartLine: line,
-			StartCol:  col,
-			EndLine:   line,
-			EndCol:    col + len(callName),
-			Severity:  rule.SeverityWarning,
-			Code:      rule.ArgumentCountMismatch,
-			Message: fmt.Sprintf(
-				"Too many arguments to %s(): %d passed, at most %d expected",
-				callName, argCount, total,
-			),
-		}
+	var message string
+	switch {
+	case argCount < minRequired:
+		message = fmt.Sprintf("Too few arguments to %s(): %d passed, at least %d required", callName, argCount, minRequired)
+	case argCount > maxTotal:
+		message = fmt.Sprintf("Too many arguments to %s(): %d passed, at most %d expected", callName, argCount, maxTotal)
+	default:
+		message = fmt.Sprintf("Wrong number of arguments to %s(): %d passed, which none of its %d declarations accepts", callName, argCount, len(callees))
 	}
-	return nil
+	return &Finding{
+		StartLine: line,
+		StartCol:  col,
+		EndLine:   line,
+		EndCol:    col + len(callName),
+		Severity:  rule.SeverityWarning,
+		Code:      rule.ArgumentCountMismatch,
+		Message:   message,
+	}
 }

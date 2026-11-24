@@ -120,3 +120,60 @@ class Box { public function __construct(int $size) {} }
 		t.Errorf("only two(1) on line 3 is reported, as before the walker was shared: %v", got)
 	}
 }
+
+func duplicateDeclarationsIndex() *symbols.Index {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	idx.IndexFile("file:///a.php", `<?php
+if (!function_exists('h')) { function h($a) {} }
+class Dup { public function __construct($a) {} public static function make($a) {} public function run($a) {} }
+`)
+	idx.IndexFile("file:///b.php", `<?php
+if (!function_exists('h')) { function h($b, $c) {} }
+class Dup { public function __construct($b, $c) {} public static function make($b, $c) {} public function run($b, $c) {} }
+`)
+	return idx
+}
+
+func dupResolver(expr, _ string, _, _ int, _ *parser.FileNode) string {
+	if expr == "$dup" {
+		return "Dup"
+	}
+	return ""
+}
+
+func TestUnknownNamedArgumentWithSeveralDeclarations(t *testing.T) {
+	idx := duplicateDeclarationsIndex()
+	source := `<?php
+h(a: 1);
+h(c: 1);
+h(z: 1);
+new Dup(a: 1);
+new Dup(z: 1);
+Dup::make(b: 1);
+Dup::make(z: 1);
+$dup->run(a: 1);
+$dup->run(z: 1);
+`
+	var got []int
+	for _, f := range (&UnknownNamedArgumentRule{TypeResolver: dupResolver}).Check(parser.ParseFile(source), source, idx) {
+		got = append(got, f.StartLine)
+	}
+	if !slices.Equal(got, []int{3, 5, 7, 9}) {
+		t.Errorf("a named argument one declaration accepts is fine; one no declaration accepts is reported: lines %v", got)
+	}
+}
+
+func TestUnknownNamedArgumentWhenOneDeclarationForwardsOrLacksTheMethod(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	idx.IndexFile("file:///a.php", "<?php\nclass Dup { public function __call($n, $a) {} public function run($a) {} }\nclass Gap { public function run($a) {} }\n")
+	idx.IndexFile("file:///b.php", "<?php\nclass Dup { public function run($b) {} }\nclass Gap {}\n")
+	source := "<?php\n$dup->run(z: 1);\n$gap->run(z: 1);\n"
+	resolver := func(expr, _ string, _, _ int, _ *parser.FileNode) string {
+		return map[string]string{"$dup": "Dup", "$gap": "Gap"}[expr]
+	}
+	if got := (&UnknownNamedArgumentRule{TypeResolver: resolver}).Check(parser.ParseFile(source), source, idx); len(got) != 0 {
+		t.Errorf("a declaration with __call, or without the method, may accept anything: %+v", got)
+	}
+}
