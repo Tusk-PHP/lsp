@@ -65,11 +65,12 @@ func TestAnalyzeModelFileRestoresWhatReindexingDrops(t *testing.T) {
 		}
 	}
 
-	idx.IndexFile(uri, reanalyzePost)
+	edited := reanalyzePost + "\n"
+	idx.IndexFile(uri, edited)
 	if hasMember(idx, `App\Models\Post`, "$title") {
-		t.Fatal("re-indexing kept an injected column; this test no longer covers the bug")
+		t.Fatal("re-indexing an edit kept an injected column; this test no longer covers the bug")
 	}
-	AnalyzeModelFile(idx, "/", "laravel", uri, reanalyzePost, schema, migrations)
+	AnalyzeModelFile(idx, "/", "laravel", uri, edited, schema, migrations)
 	for _, name := range want {
 		if !hasMember(idx, `App\Models\Post`, name) {
 			t.Errorf("after re-indexing: Post has no %s", name)

@@ -71,3 +71,47 @@ namespace App\Models {
 		t.Errorf("after dropping $id from the helper: it appears %d times", got["$id"])
 	}
 }
+
+func TestReindexingUnchangedTextKeepsMembersAnalysisAdded(t *testing.T) {
+	idx := NewIndex()
+	const uri = "file:///app/Models/Post.php"
+	source := "<?php\nnamespace App\\Models;\nclass Post { public function comments() {} }\n"
+	addRelation := func() {
+		idx.AddVirtualMember(`App\Models\Post`, &Symbol{Name: "$comments", FQN: `App\Models\Post::$comments`, Kind: KindProperty, URI: uri, IsVirtual: true})
+	}
+	idx.IndexFileWithSource(uri, source, SourceProject)
+	addRelation()
+	generation := idx.Generation()
+
+	idx.IndexFileWithSource(uri, source, SourceProject)
+	if idx.Lookup(`App\Models\Post::$comments`) == nil {
+		t.Error("re-indexing the same text keeps the relation analysis added")
+	}
+	if idx.Generation() != generation {
+		t.Error("re-indexing the same text changes nothing")
+	}
+
+	idx.IndexFileWithSource(uri, source, SourceVendor)
+	if sym := idx.Lookup(`App\Models\Post`); sym == nil || sym.Source != SourceVendor {
+		t.Errorf("the same text indexed as another kind of code is indexed again: %+v", sym)
+	}
+
+	idx.IndexFileWithSource(uri, source, SourceProject)
+	addRelation()
+	idx.IndexFileWithSource(uri, source+"\n", SourceProject)
+	if idx.Lookup(`App\Models\Post::$comments`) != nil {
+		t.Error("changed text is indexed again, dropping what analysis added for analysis to add again")
+	}
+}
+
+func TestReindexingAnEmptyFileTracksIt(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFileWithSource("file:///empty.php", "", SourceProject)
+	found := false
+	for _, uri := range idx.GetAllFileURIs() {
+		found = found || uri == "file:///empty.php"
+	}
+	if !found {
+		t.Error("an empty file is indexed like any other")
+	}
+}

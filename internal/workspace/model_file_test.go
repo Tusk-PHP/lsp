@@ -61,11 +61,12 @@ abstract class Model {}
 	if ws.SchemaIsLive() {
 		t.Error("a schema from migrations is not live")
 	}
-	ws.Index.IndexFile(postURI, postSrc)
+	edited := postSrc + "\n"
+	ws.Index.IndexFile(postURI, edited)
 	if title() {
-		t.Fatal("re-indexing kept $title; this test no longer covers the bug")
+		t.Fatal("re-indexing an edit kept $title; this test no longer covers the bug")
 	}
-	ws.AnalyzeModelFile(postURI, postSrc)
+	ws.AnalyzeModelFile(postURI, edited)
 	if !title() {
 		t.Error("AnalyzeModelFile didn't give Post back its $title")
 	}
