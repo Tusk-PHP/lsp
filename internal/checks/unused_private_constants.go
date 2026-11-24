@@ -18,7 +18,7 @@ func checkUnusedPrivateConstants(cls parser.ClassNode, fileTokens func() []parse
 	if len(private) == 0 {
 		return nil
 	}
-	used, dynamic := constantsReferenced(fileTokens(), cls.StartLine, endLineOf(cls, lines))
+	used, dynamic := constantsReferenced(fileTokens(), declarationStartLine(cls), endLineOf(cls, lines))
 	if dynamic {
 		return nil
 	}
@@ -39,6 +39,14 @@ func checkUnusedPrivateConstants(cls parser.ClassNode, fileTokens func() []parse
 		})
 	}
 	return findings
+}
+
+func declarationStartLine(cls parser.ClassNode) int {
+	start := cls.StartLine
+	for _, a := range cls.Attributes {
+		start = min(start, a.Line)
+	}
+	return start
 }
 
 func constantsReferenced(tokens []parser.Token, startLine, endLine int) (used map[string]bool, dynamic bool) {

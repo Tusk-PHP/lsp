@@ -46,8 +46,10 @@ class Config {
 
 func TestUnusedPrivateConstantStaysQuietWhenUnsure(t *testing.T) {
 	for name, src := range map[string]string{
-		"dynamic fetch": "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return self::{$n}; }\n}\n",
-		"constant()":    "<?php\nclass A {\n    private const X = 1;\n    public function f() { return constant('self::X'); }\n}\n",
+		"dynamic fetch":              "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return self::{$n}; }\n}\n",
+		"constant()":                 "<?php\nclass A {\n    private const X = 1;\n    public function f() { return constant('self::X'); }\n}\n",
+		"class attribute":            "<?php\n#[AsCommand(name: self::NAME)]\nfinal class FooCommand {\n    private const NAME = 'app:foo';\n}\n",
+		"multi-line class attribute": "<?php\nuse Doctrine\\ORM\\Mapping as ORM;\n#[ORM\\Entity]\n#[ORM\\Table(\n    name: self::TABLE,\n)]\nclass Post {\n    private const TABLE = 'posts';\n}\n",
 	} {
 		if got := privateConstantFindings(t, src, nil); len(got) != 0 {
 			t.Errorf("%s: %v", name, got)

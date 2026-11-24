@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Type hierarchy** (`textDocument/prepareTypeHierarchy`): from a class, interface, trait or enum, browse up to its parent, interfaces and traits, and down to the classes that extend or implement it, one level at a time. Deprecated types are marked.
 - **`unknown-named-argument`** (error): a named argument the function, method or constructor has no parameter for, such as `new User(nmae: 'x')` or `$user->rename(nme: 'y')`, which PHP throws on. Calls to variadic functions, to classes with `__call`, with an argument unpacked by `...`, and to PHP's own functions are left alone.
 - **Document links**: `require` and `include` paths built from `__DIR__`, `__FILE__`, `dirname()`, `DIRECTORY_SEPARATOR` and string literals, Laravel's path helpers (`base_path('routes/web.php')`, `resource_path('views')` and the rest, and `config_path()` or `storage_path()` alone link to their directory) and URLs in comments are clickable. Only files and directories that exist are linked, and a path built from variables never is.
-- **`unused-private-constant`** (hint, shown faded): a private class constant nothing reads, found from the class's own code and its traits. A class that fetches constants by a computed name (`self::{$name}`) or through `constant()` isn't checked.
+- **`unused-private-constant`** (hint, shown faded): a private class constant nothing reads, found from the class's own code, its attributes (`#[AsCommand(name: self::NAME)]`) and its traits. A class that fetches constants by a computed name (`self::{$name}`) or through `constant()` isn't checked.
 
 ### Changed
 
