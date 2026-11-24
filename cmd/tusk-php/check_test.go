@@ -136,3 +136,40 @@ func TestCheckRunsOnSaveRules(t *testing.T) {
 		t.Errorf("got %q, want %q", out, want)
 	}
 }
+
+func TestCheckReportsSkippedConfiguration(t *testing.T) {
+	root := writeProject(t, map[string]string{
+		".tusk-php.json": `{"diagnosticIgnore":[{"code":"unknown-members"}]}`,
+		"src/Clean.php":  "<?php\nclass Clean {}\n",
+	})
+	_, _, errOut := check(t, "--root", root)
+	if !strings.Contains(errOut, `skipped part of the configuration: diagnosticIgnore code: unknown diagnostic rule "unknown-members"`) {
+		t.Errorf("stderr: %s", errOut)
+	}
+}
+
+func TestProjectMetadataReportsSkippedConfiguration(t *testing.T) {
+	root := writeProject(t, map[string]string{".tusk-php.json": `{"diagnosticIgnore":[{"path":"./"}]}`})
+	var errOut bytes.Buffer
+	if _, _, _, err := loadProjectMetadata(root, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(errOut.String(), "tusk-php: skipped part of the configuration: diagnosticIgnore path") {
+		t.Errorf("stderr: %s", errOut.String())
+	}
+}
+
+func TestBuildWorkspaceIndexesTheRoot(t *testing.T) {
+	root := writeProject(t, map[string]string{"src/Shop.php": "<?php\nnamespace App;\nclass Shop {}\n"})
+	ws, _, err := buildWorkspace(root, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Index.Lookup(`App\Shop`) == nil {
+		t.Error("the root's classes are indexed")
+	}
+	broken := writeProject(t, map[string]string{".tusk-php.json": "{"})
+	if _, _, err := buildWorkspace(broken, "test"); err == nil || !strings.Contains(err.Error(), "loading project metadata") {
+		t.Errorf("a configuration that doesn't load stops the build: %v", err)
+	}
+}

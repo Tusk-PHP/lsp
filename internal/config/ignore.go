@@ -10,6 +10,33 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
+type IgnoreRules struct {
+	Rules   []IgnoreRule
+	Invalid []error
+}
+
+func (r *IgnoreRules) UnmarshalJSON(data []byte) error {
+	var entries []json.RawMessage
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return fmt.Errorf("diagnosticIgnore: %w", err)
+	}
+	parsed := IgnoreRules{}
+	for _, entry := range entries {
+		var rule IgnoreRule
+		if err := json.Unmarshal(entry, &rule); err != nil {
+			parsed.Invalid = append(parsed.Invalid, err)
+			continue
+		}
+		parsed.Rules = append(parsed.Rules, rule)
+	}
+	*r = parsed
+	return nil
+}
+
+func (r IgnoreRules) MarshalJSON() ([]byte, error) {
+	return json.Marshal(r.Rules)
+}
+
 type IgnoreRule struct {
 	target  *rule.Target
 	pattern string
@@ -40,12 +67,11 @@ func (r *IgnoreRule) UnmarshalJSON(data []byte) error {
 		parsed.target = &target
 	}
 	if raw.Path != "" {
-		parsed.glob = strings.Split(strings.Trim(raw.Path, "/"), "/")
-		for _, segment := range parsed.glob {
-			if _, err := path.Match(segment, ""); err != nil {
-				return fmt.Errorf("diagnosticIgnore path %q: %w", raw.Path, err)
-			}
+		glob, err := parseGlob(raw.Path)
+		if err != nil {
+			return err
 		}
+		parsed.glob = glob
 	}
 	if raw.Message != "" {
 		re, err := regexp.Compile(raw.Message)
@@ -74,7 +100,35 @@ func (r IgnoreRule) HasPath() bool {
 }
 
 func (r IgnoreRule) MatchesPath(relPath string) bool {
-	return r.glob == nil || matchGlob(r.glob, strings.Split(relPath, "/"))
+	if r.glob == nil {
+		return true
+	}
+	segments := strings.Split(relPath, "/")
+	for n := len(segments); n > 0; n-- {
+		if matchGlob(r.glob, segments[:n]) {
+			return true
+		}
+	}
+	return false
+}
+
+func parseGlob(pattern string) ([]string, error) {
+	normalized := strings.TrimPrefix(strings.ReplaceAll(strings.TrimSpace(pattern), `\`, "/"), "./")
+	anchored := strings.HasPrefix(normalized, "/")
+	normalized = strings.Trim(normalized, "/")
+	if normalized == "" {
+		return nil, fmt.Errorf("diagnosticIgnore path %q: names no file or directory", pattern)
+	}
+	if !anchored && !strings.Contains(normalized, "/") {
+		normalized = "**/" + normalized
+	}
+	glob := strings.Split(normalized, "/")
+	for _, segment := range glob {
+		if _, err := path.Match(segment, ""); err != nil {
+			return nil, fmt.Errorf("diagnosticIgnore path %q: %w", pattern, err)
+		}
+	}
+	return glob, nil
 }
 
 func (r IgnoreRule) Matches(source, code, message string) bool {

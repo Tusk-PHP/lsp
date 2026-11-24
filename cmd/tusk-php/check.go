@@ -85,6 +85,9 @@ func runCheck(args []string, stdout, stderr io.Writer) (int, error) {
 	if err != nil {
 		return 2, fmt.Errorf("building workspace: %w", err)
 	}
+	for _, problem := range svc.Config.Problems() {
+		fmt.Fprintln(stderr, "skipped part of the configuration:", problem)
+	}
 	files, err := checkTargets(root, fs.Args(), svc.Workspace.Index)
 	if err != nil {
 		return 2, err

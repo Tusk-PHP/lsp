@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -121,11 +122,14 @@ func isTruthy(s string) bool {
 // given root path. It mirrors the unexported helper in internal/mcpserver.
 // config.LoadFromFile returns a default-merged config on missing file, so no
 // special not-exist handling is needed here.
-func loadProjectMetadata(rootPath string) (*config.Config, string, symbols.BuiltinProfile, error) {
+func loadProjectMetadata(rootPath string, stderr io.Writer) (*config.Config, string, symbols.BuiltinProfile, error) {
 	cfgPath := filepath.Join(rootPath, ".tusk-php.json")
 	cfg, err := config.LoadFromFile(cfgPath)
 	if err != nil {
 		return nil, "", symbols.BuiltinProfile{}, err
+	}
+	for _, problem := range cfg.Problems() {
+		fmt.Fprintln(stderr, "tusk-php: skipped part of the configuration:", problem)
 	}
 
 	framework := cfg.Framework
@@ -156,7 +160,7 @@ func emitGraph(g *graph.Graph, format string) error {
 // writes to stderr. Both runDeps and runIntrospect use this shared helper so that
 // the workspace-build logic lives in one place.
 func buildWorkspace(root, logPrefix string) (*workspace.Bootstrapped, string, error) {
-	cfg, framework, profile, err := loadProjectMetadata(root)
+	cfg, framework, profile, err := loadProjectMetadata(root, os.Stderr)
 	if err != nil {
 		return nil, framework, fmt.Errorf("loading project metadata: %w", err)
 	}

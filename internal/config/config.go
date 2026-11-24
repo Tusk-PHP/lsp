@@ -168,7 +168,7 @@ type Config struct {
 	DatabaseEnabled         *bool           `json:"databaseEnabled,omitempty"`
 	DatabaseSource          string          `json:"databaseSource,omitempty"`
 	DiagnosticRules         DiagnosticRules `json:"diagnosticRules,omitempty"`
-	DiagnosticIgnore        []IgnoreRule    `json:"diagnosticIgnore,omitempty"`
+	DiagnosticIgnore        IgnoreRules     `json:"diagnosticIgnore,omitzero"`
 	// MaxIndexFiles caps how many workspace PHP files are indexed; 0 means no
 	// limit (the native default). Composer dependencies aren't counted.
 	MaxIndexFiles             int                 `json:"maxIndexFiles"`
@@ -200,6 +200,10 @@ func (c *Config) SetDiagnosticRulesJSON(raw string) error {
 // .tusk-php.json file or by client initializationOptions. When false the
 // value is the compiled-in default ("8.6") and must not shadow a Composer
 // or local-PHP detection result.
+func (c *Config) Problems() []error {
+	return c.DiagnosticIgnore.Invalid
+}
+
 func (c *Config) IsPHPVersionExplicitlySet() bool {
 	return c.phpVersionExplicitlySet
 }
