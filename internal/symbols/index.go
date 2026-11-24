@@ -143,6 +143,7 @@ type Index struct {
 	members              memberTables
 	mu                   sync.RWMutex
 	symbols              map[string]*Symbol
+	shadowed             map[string][]*Symbol
 	nameIndex            map[string][]string
 	foldIndex            map[string][]string // lowercase FQN → FQNs of class-likes and functions, whose names PHP matches case-insensitively
 	fileSymbols          map[string][]*Symbol
@@ -320,11 +321,11 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 				idx.setParentLocked(fqn, sym.Extends)
 			}
 			for _, impl := range resolvedImpls {
-				idx.implementsMap[fqn] = append(idx.implementsMap[fqn], impl)
+				idx.implementsMap[fqn] = appendUnique(idx.implementsMap[fqn], impl)
 				idx.reverseImplementsMap[impl] = appendUnique(idx.reverseImplementsMap[impl], fqn)
 			}
 			for _, tr := range c.Traits {
-				idx.traitMap[fqn] = append(idx.traitMap[fqn], resolve(tr))
+				idx.traitMap[fqn] = appendUnique(idx.traitMap[fqn], resolve(tr))
 			}
 			for _, prop := range c.Properties {
 				ps := &Symbol{Name: prop.Name, FQN: fqn + "::" + prop.Name, Kind: KindProperty, URI: uri,
@@ -459,11 +460,11 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 			idx.setParentLocked(fqn, sym.Extends)
 		}
 		for _, impl := range resolvedImpls {
-			idx.implementsMap[fqn] = append(idx.implementsMap[fqn], impl)
+			idx.implementsMap[fqn] = appendUnique(idx.implementsMap[fqn], impl)
 			idx.reverseImplementsMap[impl] = appendUnique(idx.reverseImplementsMap[impl], fqn)
 		}
 		for _, tr := range c.Traits {
-			idx.traitMap[fqn] = append(idx.traitMap[fqn], resolve(tr))
+			idx.traitMap[fqn] = appendUnique(idx.traitMap[fqn], resolve(tr))
 		}
 		idx.indexProperties(uri, sym, fqn, c.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, c.Methods, src, resolve, file.Uses)
@@ -486,7 +487,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 			Range: symRange(iface.StartLine, iface.StartCol, len(iface.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
 		for _, parent := range resolvedParents {
-			idx.implementsMap[fqn] = append(idx.implementsMap[fqn], parent)
+			idx.implementsMap[fqn] = appendUnique(idx.implementsMap[fqn], parent)
 			idx.subInterfaceMap[parent] = appendUnique(idx.subInterfaceMap[parent], fqn)
 		}
 		idx.indexProperties(uri, sym, fqn, iface.Properties, src, resolve, file.Uses)
@@ -501,7 +502,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 			Range: symRange(tr.StartLine, tr.StartCol, len(tr.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
 		for _, usedTrait := range tr.Traits {
-			idx.traitMap[fqn] = append(idx.traitMap[fqn], resolve(usedTrait))
+			idx.traitMap[fqn] = appendUnique(idx.traitMap[fqn], resolve(usedTrait))
 		}
 		idx.indexProperties(uri, sym, fqn, tr.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, tr.Methods, src, resolve, file.Uses)
@@ -521,7 +522,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 			Range: symRange(en.StartLine, en.StartCol, len(en.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
 		for _, impl := range resolvedEnumImpls {
-			idx.implementsMap[fqn] = append(idx.implementsMap[fqn], impl)
+			idx.implementsMap[fqn] = appendUnique(idx.implementsMap[fqn], impl)
 			idx.reverseImplementsMap[impl] = appendUnique(idx.reverseImplementsMap[impl], fqn)
 		}
 		for _, ec := range en.Cases {
@@ -532,7 +533,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 			idx.addSymbolWithSource(uri, cs, src)
 		}
 		for _, tr := range en.Traits {
-			idx.traitMap[fqn] = append(idx.traitMap[fqn], resolve(tr))
+			idx.traitMap[fqn] = appendUnique(idx.traitMap[fqn], resolve(tr))
 		}
 		idx.indexProperties(uri, sym, fqn, en.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, en.Methods, src, resolve, file.Uses)
@@ -566,6 +567,9 @@ func (idx *Index) addSymbol(uri string, sym *Symbol) {
 	if sym.Source != SourceGenerated && !sym.Kind.IsMember() {
 		// A real declaration replaces a class generated under the same name.
 		idx.dropGeneratedLocked(sym.FQN)
+	}
+	if !sym.Kind.IsMember() {
+		idx.shadowLocked(sym)
 	}
 	idx.symbols[sym.FQN] = sym
 	if len(sym.Attributes) > 0 {
@@ -637,6 +641,13 @@ func (idx *Index) removeFileSymbols(uri string) {
 			// Classes generated from this one are rebuilt on their next lookup.
 			idx.dropGeneratedFromLocked(sym.FQN)
 		}
+		if idx.symbols[sym.FQN] != sym {
+			idx.unshadowLocked(sym)
+			continue
+		}
+		if !sym.Kind.IsMember() && idx.promoteShadowedLocked(sym.FQN) {
+			continue
+		}
 		delete(idx.symbols, sym.FQN)
 		if fqns, ok := idx.nameIndex[sym.Name]; ok {
 			idx.nameIndex[sym.Name] = removeFromSlice(fqns, sym.FQN)
@@ -666,20 +677,69 @@ func (idx *Index) removeFileSymbols(uri string) {
 			}
 		}
 		delete(idx.implementsMap, sym.FQN)
-		if parent, ok := idx.inheritanceMap[sym.FQN]; ok {
-			key := strings.ToLower(parent)
-			if children := removeFromSlice(idx.childrenMap[key], sym.FQN); len(children) > 0 {
-				idx.childrenMap[key] = children
-			} else {
-				delete(idx.childrenMap, key)
-			}
-		}
-		delete(idx.inheritanceMap, sym.FQN)
+		idx.clearParentLocked(sym.FQN)
 		delete(idx.traitMap, sym.FQN)
 	}
 	delete(idx.fileSymbols, uri)
 	delete(idx.fileSource, uri)
 	delete(idx.generatedURIs, uri)
+}
+
+func (idx *Index) shadowLocked(sym *Symbol) {
+	prev := idx.symbols[sym.FQN]
+	if prev == nil || prev == sym || prev.Kind.IsMember() || prev.Source == SourceGenerated || sym.Source == SourceGenerated ||
+		(prev.Source == SourceBuiltin && sym.Source == SourceBuiltin) {
+		return
+	}
+	if idx.shadowed == nil {
+		idx.shadowed = make(map[string][]*Symbol)
+	}
+	idx.shadowed[sym.FQN] = append(idx.shadowed[sym.FQN], prev)
+}
+
+func (idx *Index) unshadowLocked(sym *Symbol) {
+	defs, ok := idx.shadowed[sym.FQN]
+	if !ok {
+		return
+	}
+	if defs = withoutSymbol(defs, sym); len(defs) > 0 {
+		idx.shadowed[sym.FQN] = defs
+	} else {
+		delete(idx.shadowed, sym.FQN)
+	}
+}
+
+func (idx *Index) promoteShadowedLocked(fqn string) bool {
+	defs := idx.shadowed[fqn]
+	if len(defs) == 0 {
+		return false
+	}
+	promoted := defs[len(defs)-1]
+	idx.unshadowLocked(promoted)
+	idx.symbols[fqn] = promoted
+	for _, child := range promoted.Children {
+		idx.symbols[child.FQN] = child
+	}
+	if promoted.Extends != "" {
+		idx.setParentLocked(fqn, promoted.Extends)
+	} else {
+		idx.clearParentLocked(fqn)
+	}
+	return true
+}
+
+func (idx *Index) clearParentLocked(fqn string) {
+	parent, ok := idx.inheritanceMap[fqn]
+	if !ok {
+		return
+	}
+	key := strings.ToLower(parent)
+	if children := removeFromSlice(idx.childrenMap[key], fqn); len(children) > 0 {
+		idx.childrenMap[key] = children
+	} else {
+		delete(idx.childrenMap, key)
+	}
+	delete(idx.inheritanceMap, fqn)
 }
 
 // withoutSymbol returns a copy of syms without sym; readers may hold the
@@ -1151,39 +1211,62 @@ func (idx *Index) getClassMembersRecursive(fqn string, visited map[string]bool) 
 		return nil
 	}
 	visited[fqn] = true
-	var members []*Symbol
+	var own []*Symbol
 	if sym, ok := idx.symbols[fqn]; ok {
-		members = append(members, sym.Children...)
+		own = sym.Children
 	}
+	return idx.membersLocked(own, idx.traitMap[fqn], idx.inheritanceMap[fqn], idx.implementsMap[fqn], visited)
+}
+
+func (idx *Index) Definitions(fqn string) []*Symbol {
+	idx.ensureGenerated(fqn)
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	current := idx.symbols[fqn]
+	if current == nil {
+		return nil
+	}
+	shadowed := idx.shadowed[fqn]
+	defs := make([]*Symbol, 0, 1+len(shadowed))
+	return append(append(defs, current), shadowed...)
+}
+
+func (idx *Index) DefinitionMembers(def *Symbol) []*Symbol {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	if idx.symbols[def.FQN] == def {
+		return idx.getClassMembersRecursive(def.FQN, make(map[string]bool))
+	}
+	return idx.membersLocked(def.Children, idx.traitMap[def.FQN], def.Extends, def.Implements, map[string]bool{def.FQN: true})
+}
+
+func (idx *Index) membersLocked(own []*Symbol, traits []string, parent string, interfaces []string, visited map[string]bool) []*Symbol {
+	members := append([]*Symbol(nil), own...)
 	// PHP's precedence: the class's own members, then its traits', then the
 	// parent's. Callers take the first match, so the order matters.
-	if traits, ok := idx.traitMap[fqn]; ok {
-		for _, tr := range traits {
-			members = append(members, idx.getClassMembersRecursive(tr, visited)...)
-		}
+	for _, tr := range traits {
+		members = append(members, idx.getClassMembersRecursive(tr, visited)...)
 	}
-	if parent, ok := idx.inheritanceMap[fqn]; ok {
+	if parent != "" {
 		members = append(members, idx.getClassMembersRecursive(parent, visited)...)
 	}
 	// Interfaces come last: their constants, and the methods nothing above
 	// declares, which an abstract class may leave to its subclasses. A method
 	// the class or a parent declares wins over the interface's signature.
-	if interfaces, ok := idx.implementsMap[fqn]; ok {
-		var declared map[string]bool
-		for _, iface := range interfaces {
-			for _, member := range idx.getClassMembersRecursive(iface, visited) {
-				switch member.Kind {
-				case KindConstant:
+	var declared map[string]bool
+	for _, iface := range interfaces {
+		for _, member := range idx.getClassMembersRecursive(iface, visited) {
+			switch member.Kind {
+			case KindConstant:
+				members = append(members, member)
+			case KindMethod:
+				if declared == nil {
+					declared = methodNames(members)
+				}
+				key := strings.ToLower(member.Name)
+				if !declared[key] {
+					declared[key] = true
 					members = append(members, member)
-				case KindMethod:
-					if declared == nil {
-						declared = methodNames(members)
-					}
-					key := strings.ToLower(member.Name)
-					if !declared[key] {
-						declared[key] = true
-						members = append(members, member)
-					}
 				}
 			}
 		}
