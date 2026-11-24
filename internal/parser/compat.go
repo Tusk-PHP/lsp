@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/php/token"
@@ -63,11 +64,77 @@ func StringLiteral(value string) (string, bool) {
 	if len(value) < 2 || value[0] != value[len(value)-1] || value[0] != '\'' && value[0] != '"' {
 		return "", false
 	}
-	return value[1 : len(value)-1], true
+	body := value[1 : len(value)-1]
+	if !strings.ContainsRune(body, '\\') {
+		return body, true
+	}
+	if value[0] == '\'' {
+		return singleQuotedValue(body), true
+	}
+	return doubleQuotedValue(body), true
+}
+
+func doubleQuotedValue(body string) string {
+	var b strings.Builder
+	for i := 0; i < len(body); i++ {
+		c := body[i]
+		if c != '\\' || i+1 == len(body) {
+			b.WriteByte(c)
+			continue
+		}
+		next := body[i+1]
+		if escaped, ok := doubleQuotedEscapes[next]; ok {
+			b.WriteByte(escaped)
+			i++
+			continue
+		}
+		if n, width := escapedNumber(body[i+1:]); width > 0 {
+			b.WriteString(n)
+			i += width
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
+}
+
+func escapedNumber(s string) (string, int) {
+	switch {
+	case s[0] >= '0' && s[0] <= '7':
+		end := 1
+		for end < len(s) && end < 3 && s[end] >= '0' && s[end] <= '7' {
+			end++
+		}
+		v, _ := strconv.ParseUint(s[:end], 8, 16)
+		return string([]byte{byte(v)}), end
+	case s[0] == 'x' && len(s) > 1 && isHexDigit(s[1]):
+		end := 2
+		if end < len(s) && isHexDigit(s[end]) {
+			end++
+		}
+		v, _ := strconv.ParseUint(s[1:end], 16, 8)
+		return string([]byte{byte(v)}), end
+	case s[0] == 'u' && len(s) > 2 && s[1] == '{':
+		close := strings.IndexByte(s, '}')
+		if close < 0 {
+			return "", 0
+		}
+		v, err := strconv.ParseUint(s[2:close], 16, 32)
+		if err != nil {
+			return "", 0
+		}
+		return string(rune(v)), close + 1
+	}
+	return "", 0
+}
+
+func isHexDigit(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
 }
 
 type ParamNode struct {
 	Name         string
+	Attributes   []AttributeDef
 	Type         TypeNode
 	DefaultValue string
 	IsVariadic   bool
