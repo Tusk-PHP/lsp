@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -361,5 +362,31 @@ Category::query()->where('name', 1)->with('products');
 	}
 	if strings.Join(prefixes, "|") != strings.Join(want, "|") {
 		t.Errorf("prefixes: want %q, got %q", want, prefixes)
+	}
+}
+
+func TestInvalidBuilderArgReadsArgumentsFromTheTree(t *testing.T) {
+	checker := setupBuilderArgRule()
+	source := `<?php
+use App\Models\Category;
+Category::query()->select(['name', 'nope', 'name' => 'alias'])->with(['products' => fn ($q) => $q, 'gone']);
+Category::with(
+    'missingOnNextLine');
+Category::withSum('products', 'cost')->get("absent")->where($column)->select();
+// Category::where('commented');
+$s = "Category::where('quoted')";
+`
+	var got []string
+	for _, f := range checker.Check(parser.ParseFile(source, token.Latest), source, nil) {
+		got = append(got, fmt.Sprintf("%d:%d-%d %s", f.StartLine, f.StartCol, f.EndCol, f.Message))
+	}
+	want := []string{
+		"2:36-40 Unknown column 'nope' on model 'Category'",
+		"2:100-104 Unknown relation 'gone' on model 'Category'",
+		"5:31-35 Unknown column 'cost' on related model 'Product'",
+		"5:44-50 Unknown column 'absent' on model 'Category'",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got\n%s", strings.Join(got, "\n"))
 	}
 }

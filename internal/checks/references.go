@@ -16,9 +16,13 @@ type classReference struct {
 type memberReference struct {
 	owner    ast.Expr
 	name     *ast.IdentifierExpr
+	args     *ast.ArgList
 	static   bool
-	call     bool
 	presence bool
+}
+
+func (m memberReference) call() bool {
+	return m.args != nil
 }
 
 type references struct {
@@ -32,9 +36,9 @@ func collectReferences(tree *ast.File) *references {
 	refs := &references{}
 	named := map[*ast.ConstFetch]bool{}
 	present := map[ast.Expr]bool{}
-	member := func(n ast.Expr, owner, name ast.Expr, static, call bool) {
+	member := func(n ast.Expr, owner, name ast.Expr, args *ast.ArgList, static bool) {
 		if id, ok := name.(*ast.IdentifierExpr); ok {
-			refs.members = append(refs.members, memberReference{owner: owner, name: id, static: static, call: call, presence: present[n]})
+			refs.members = append(refs.members, memberReference{owner: owner, name: id, args: args, static: static, presence: present[n]})
 		}
 	}
 	class := func(e ast.Expr) {
@@ -73,14 +77,14 @@ func collectReferences(tree *ast.File) *references {
 				present[n.Target] = true
 			}
 		case *ast.PropertyFetch:
-			member(n, n.Object, n.Name, false, false)
+			member(n, n.Object, n.Name, nil, false)
 		case *ast.MethodCall:
-			member(n, n.Object, n.Name, false, true)
+			member(n, n.Object, n.Name, n.Args, false)
 		case *ast.ClassConstFetch:
-			member(n, n.Class, n.Name, true, false)
+			member(n, n.Class, n.Name, nil, true)
 			class(n.Class)
 		case *ast.StaticCall:
-			member(n, n.Class, n.Name, true, true)
+			member(n, n.Class, n.Name, n.Args, true)
 			class(n.Class)
 		case *ast.Call:
 			if c, ok := n.Callee.(*ast.ConstFetch); ok {

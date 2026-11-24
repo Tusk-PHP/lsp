@@ -62,7 +62,7 @@ func SaveRules(opts NativeRulesOptions) []checks.Rule {
 		rules = append(rules, &checks.RedundantNullsafeRule{TypeResolver: opts.TypeResolver})
 	}
 	if opts.BuilderModelResolver != nil && opts.BuilderMemberChecker != nil {
-		rules = append(rules, &checks.InvalidBuilderArgRule{ModelResolver: opts.BuilderModelResolver, Members: opts.BuilderMemberChecker})
+		rules = append(rules, &checks.InvalidBuilderArgRule{ModelResolver: opts.BuilderModelResolver, Members: opts.BuilderMemberChecker, Shared: &checks.Shared{}})
 	}
 	return rules
 }

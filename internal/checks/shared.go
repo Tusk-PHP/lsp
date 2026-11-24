@@ -1,6 +1,8 @@
 package checks
 
 import (
+	"strings"
+
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
@@ -78,4 +80,28 @@ func (f *fileSyntax) at(n ast.Node, finding Finding) Finding {
 	finding.StartLine, finding.StartCol = f.lines.Position(span.Start)
 	finding.EndLine, finding.EndCol = f.lines.Position(span.End)
 	return finding
+}
+
+func (f *fileSyntax) stringLiteral(e ast.Expr) (string, bool) {
+	lit, ok := e.(*ast.Literal)
+	if !ok || lit.Kind != token.ConstantString {
+		return "", false
+	}
+	text := f.text(lit)
+	return text[1 : len(text)-1], true
+}
+
+func (f *fileSyntax) stringContent(e ast.Expr) (startCol, endCol int) {
+	span := e.Bounds()
+	_, startCol = f.lines.Position(span.Start + 1)
+	_, endCol = f.lines.Position(span.End - 1)
+	return startCol, endCol
+}
+
+func (f *fileSyntax) memberOperator(name ast.Node) uint32 {
+	i := name.Bounds().Start
+	for i > 0 && strings.IndexByte(" \t\r\n", f.src[i-1]) >= 0 {
+		i--
+	}
+	return i - min(i, 2)
 }
