@@ -2,6 +2,7 @@ package parser
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -22,7 +23,12 @@ type parser struct {
 	emptyAt   uint32
 	errors    []ast.Error
 	truncated bool
+
+	parenthesized ast.Expr
+	depth         int
 }
+
+const maxDepth = 4096
 
 func Parse(src string, version token.Version) *ast.File {
 	return parse(src, version, lexer.Lex(src, version))
@@ -37,7 +43,7 @@ func parse(src string, version token.Version, all []lexer.Token) *ast.File {
 	var doc ast.Span
 	for _, tok := range all {
 		switch tok.Kind {
-		case token.Whitespace:
+		case token.Whitespace, token.OpenTag:
 		case token.Comment:
 			p.unterminated(tok)
 		case token.DocComment:
@@ -50,19 +56,47 @@ func parse(src string, version token.Version, all []lexer.Token) *ast.File {
 		}
 	}
 	file := &ast.File{Span: ast.Span{End: uint32(len(src))}}
-	for {
-		file.Stmts = append(file.Stmts, p.statements(isEOF)...)
-		if p.peek() == eof {
-			break
-		}
-		p.unexpected("expected a statement")
-		start := p.start()
-		p.next()
-		file.Stmts = append(file.Stmts, &ast.BadStmt{Span: p.span(start)})
-	}
+	p.guard(func() { p.file(file) })
 	slices.SortStableFunc(p.errors, func(a, b ast.Error) int { return cmp.Compare(a.Start, b.Start) })
 	file.Errors = p.errors
 	return file
+}
+
+func (p *parser) file(file *ast.File) {
+	for k := p.peek(); k != eof; k = p.peek() {
+		start, before := p.start(), p.pos
+		if k == token.RightBrace {
+			p.unexpected("expected a statement")
+			p.next()
+			file.Stmts = append(file.Stmts, &ast.BadStmt{Span: p.span(start)})
+			continue
+		}
+		if s := p.statement(); s != nil {
+			file.Stmts = append(file.Stmts, s)
+		}
+		p.ensureProgress(before)
+	}
+}
+
+func (p *parser) guard(run func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			at := p.start()
+			p.errors = append(p.errors, ast.Error{Span: ast.Span{Start: at, End: at}, Message: fmt.Sprintf("internal parser error: %v", r)})
+		}
+	}()
+	run()
+}
+
+func (p *parser) enter() bool {
+	p.depth++
+	if p.depth <= maxDepth {
+		return true
+	}
+	t := p.tok()
+	p.unterminatedAt(ast.Span{Start: t.Start, End: t.End}, "nesting is too deep to parse")
+	p.pos = len(p.toks)
+	return false
 }
 
 func isEOF(token.Kind) bool { return false }
@@ -103,10 +137,16 @@ func (p *parser) start() uint32 {
 }
 
 func (p *parser) doc() ast.Span {
-	if p.pos >= len(p.docs) {
-		return ast.Span{}
+	return p.docSince(p.pos)
+}
+
+func (p *parser) docSince(from int) ast.Span {
+	for i := min(p.pos, len(p.docs)-1); i >= from; i-- {
+		if p.docs[i] != (ast.Span{}) {
+			return p.docs[i]
+		}
 	}
-	return p.docs[p.pos]
+	return ast.Span{}
 }
 
 func (p *parser) next() lexer.Token {
@@ -131,7 +171,7 @@ func (p *parser) span(start uint32) ast.Span {
 }
 
 func (p *parser) accept(k token.Kind) bool {
-	if p.peek() != k {
+	if next := p.peek(); next != k && (k != token.Semicolon || next != token.CloseTag) {
 		return false
 	}
 	p.next()
@@ -142,8 +182,22 @@ func (p *parser) expect(k token.Kind) bool {
 	if p.accept(k) {
 		return true
 	}
-	p.unexpected("expected '" + k.String() + "'")
+	p.unexpected("expected " + kindName(k))
 	return false
+}
+
+func kindName(k token.Kind) string {
+	switch k {
+	case token.Variable:
+		return "a variable"
+	case token.Identifier:
+		return "an identifier"
+	case token.NumString:
+		return "a number"
+	case token.EndHeredoc:
+		return "the end of the heredoc"
+	}
+	return "'" + k.Text() + "'"
 }
 
 func (p *parser) unexpected(message string) {
@@ -152,7 +206,10 @@ func (p *parser) unexpected(message string) {
 	if t.Kind != eof {
 		found = "'" + t.Text(p.src) + "'"
 	}
-	p.errorAt(ast.Span{Start: t.Start, End: t.End}, "syntax error, unexpected "+found+", "+message)
+	if message != "" {
+		message = ", " + message
+	}
+	p.errorAt(ast.Span{Start: t.Start, End: t.End}, "syntax error, unexpected "+found+message)
 }
 
 func (p *parser) errorAt(span ast.Span, message string) {
@@ -170,7 +227,7 @@ func (p *parser) requires(v token.Version, start uint32, feature string) {
 
 func (p *parser) ensureProgress(before int) {
 	if p.pos == before {
-		p.unexpected("expected something else")
+		p.unexpected("")
 		p.next()
 	}
 }
@@ -207,7 +264,7 @@ func (p *parser) atStatementStart() bool {
 		token.Return, token.Global, token.Echo, token.Unset, token.Try, token.Catch, token.Finally, token.Goto,
 		token.Declare, token.EndDeclare, token.HaltCompiler, token.Namespace, token.Use, token.Const, token.Class,
 		token.Interface, token.Trait, token.Enum, token.Abstract, token.Final, token.Public, token.Protected, token.Private,
-		token.Var, token.InlineHTML, token.OpenTag, token.OpenTagWithEcho:
+		token.Var, token.InlineHTML, token.OpenTagWithEcho:
 		return true
 	case token.Function:
 		return p.isFunctionDecl()

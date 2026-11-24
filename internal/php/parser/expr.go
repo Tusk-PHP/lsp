@@ -96,12 +96,69 @@ func isAssignOp(k token.Kind) bool {
 	return false
 }
 
-func isAssignable(e ast.Expr) bool {
+func isVariable(e ast.Expr) bool {
 	switch e.(type) {
-	case *ast.Variable, *ast.VariableVariable, *ast.PropertyFetch, *ast.StaticPropertyFetch, *ast.ArrayDimFetch, *ast.List, *ast.Array:
+	case *ast.Variable, *ast.VariableVariable, *ast.ArrayDimFetch, *ast.PropertyFetch, *ast.StaticPropertyFetch,
+		*ast.Call, *ast.MethodCall, *ast.StaticCall:
 		return true
 	}
 	return false
+}
+
+func (p *parser) writable(e ast.Expr) bool {
+	return isVariable(e) && e != p.parenthesized
+}
+
+func (p *parser) assignable(target ast.Expr, op token.Kind) bool {
+	if op != token.Equals {
+		return p.writable(target)
+	}
+	switch t := target.(type) {
+	case *ast.List:
+		return true
+	case *ast.Array:
+		return t.Short && target != p.parenthesized
+	}
+	return p.writable(target)
+}
+
+func (p *parser) canFollow(e ast.Expr, k token.Kind) bool {
+	if k == token.Increment || k == token.Decrement {
+		return p.writable(e)
+	}
+	if e == p.parenthesized || isVariable(e) {
+		return true
+	}
+	switch e := e.(type) {
+	case *ast.Literal:
+		return e.Kind == token.ConstantString
+	case *ast.InterpolatedString:
+		return e.Kind == token.DoubleQuote
+	case *ast.Array, *ast.ConstFetch, *ast.ClassConstFetch:
+		return true
+	case *ast.MagicConst:
+		return k == token.LeftBracket || k == token.ObjectOperator || k == token.NullsafeObjectOperator
+	case *ast.New:
+		return p.version >= token.PHP84 && (e.Args != nil || e.Anonymous != nil)
+	}
+	return false
+}
+
+func destructuring(e ast.Expr) ast.Expr {
+	arr, ok := e.(*ast.Array)
+	if !ok || !arr.Short {
+		return e
+	}
+	return &ast.List{Span: arr.Span, Short: true, Items: destructuringItems(arr.Items)}
+}
+
+func destructuringItems(items []*ast.ArrayItem) []*ast.ArrayItem {
+	for _, item := range items {
+		if item != nil {
+			item.Value = destructuring(item.Value)
+		}
+	}
+	return items
 }
 
 func (p *parser) expr() ast.Expr {
@@ -110,10 +167,19 @@ func (p *parser) expr() ast.Expr {
 
 func (p *parser) exprBP(min int) ast.Expr {
 	start := p.start()
+	if !p.enter() {
+		return &ast.BadExpr{Span: p.span(start)}
+	}
+	e := p.exprBody(min, start)
+	p.depth--
+	return e
+}
+
+func (p *parser) exprBody(min int, start uint32) ast.Expr {
 	lhs := p.unary()
 	for {
 		k := p.peek()
-		if isAssignOp(k) && isAssignable(lhs) {
+		if isAssignOp(k) && p.assignable(lhs, k) {
 			lhs = p.assignment(lhs, start)
 			continue
 		}
@@ -155,16 +221,27 @@ func (p *parser) ternary(cond ast.Expr, start uint32) ast.Expr {
 
 func (p *parser) assignment(target ast.Expr, start uint32) ast.Expr {
 	op := p.next().Kind
-	if arr, ok := target.(*ast.Array); ok && op == token.Equals {
-		target = &ast.List{Span: arr.Span, Short: true, Items: arr.Items}
+	if op == token.Equals {
+		target = destructuring(target)
 	}
-	byRef := false
 	if op == token.Equals && isAmpersand(p.peek()) {
+		if _, isList := target.(*ast.List); isList {
+			p.unexpected("a destructuring assignment can't take a reference")
+		}
 		p.next()
-		byRef = true
+		return &ast.Assign{Op: op, ByRef: true, Target: target, Value: p.variable(), Span: p.span(start)}
 	}
 	value := p.exprBP(bpAssign)
-	return &ast.Assign{Span: p.span(start), Op: op, ByRef: byRef, Target: target, Value: value}
+	return &ast.Assign{Span: p.span(start), Op: op, Target: target, Value: value}
+}
+
+func (p *parser) variable() ast.Expr {
+	start := p.start()
+	e := p.postfix(p.primary(), start)
+	if !p.writable(e) {
+		p.errorAt(e.Bounds(), "expected a variable")
+	}
+	return e
 }
 
 func isAmpersand(k token.Kind) bool {
@@ -183,7 +260,7 @@ func (p *parser) unary() ast.Expr {
 		return &ast.Unary{Op: k, Operand: p.exprBP(bpUnary), Span: p.span(start)}
 	case token.Increment, token.Decrement:
 		p.next()
-		return &ast.Unary{Op: k, Operand: p.exprBP(bpUnary), Span: p.span(start)}
+		return &ast.Unary{Op: k, Operand: p.variable(), Span: p.span(start)}
 	case token.IntCast, token.FloatCast, token.StringCast, token.ArrayCast, token.ObjectCast, token.BoolCast, token.UnsetCast:
 		p.next()
 		return &ast.Cast{Kind: k, Operand: p.exprBP(bpUnary), Span: p.span(start)}
@@ -204,11 +281,7 @@ func (p *parser) unary() ast.Expr {
 		p.next()
 		return &ast.Include{Kind: k, Operand: p.expr(), Span: p.span(start)}
 	}
-	e := p.primary()
-	if n, ok := e.(*ast.New); ok && (n.Args == nil || p.version < token.PHP84) {
-		return e
-	}
-	return p.postfix(e, start)
+	return p.postfix(p.primary(), start)
 }
 
 func (p *parser) clone() ast.Expr {
@@ -217,7 +290,8 @@ func (p *parser) clone() ast.Expr {
 	if p.version >= token.PHP85 && p.peek() == token.LeftParen {
 		save, saveErrors := p.pos, len(p.errors)
 		args := p.args()
-		if len(args.Args) != 1 || args.RestPlaceholder || args.Args[0].Name != nil || args.Args[0].Unpack {
+		trailingComma := p.toks[p.pos-1].Kind == token.RightParen && p.toks[p.pos-2].Kind == token.Comma
+		if len(args.Args) != 1 || trailingComma || args.RestPlaceholder || args.Args[0].Name != nil || args.Args[0].Unpack {
 			return &ast.Clone{Args: args, Span: p.span(start)}
 		}
 		p.pos, p.errors = save, p.errors[:saveErrors]
@@ -275,6 +349,7 @@ func (p *parser) primary() ast.Expr {
 		p.next()
 		inner := p.expr()
 		p.expect(token.RightParen)
+		p.parenthesized = inner
 		return p.postfix(inner, start)
 	case token.LeftBracket:
 		return p.array(true)
@@ -351,6 +426,15 @@ func (p *parser) primary() ast.Expr {
 
 func (p *parser) variableVariable() ast.Expr {
 	start := p.start()
+	if !p.enter() {
+		return &ast.BadExpr{Span: p.span(start)}
+	}
+	e := p.variableVariableBody(start)
+	p.depth--
+	return e
+}
+
+func (p *parser) variableVariableBody(start uint32) ast.Expr {
 	p.next()
 	if p.accept(token.LeftBrace) {
 		name := p.expr()
@@ -377,7 +461,11 @@ func (p *parser) simpleVariable() ast.Expr {
 
 func (p *parser) postfix(e ast.Expr, start uint32) ast.Expr {
 	for {
-		switch p.peek() {
+		k := p.peek()
+		if !p.canFollow(e, k) {
+			return e
+		}
+		switch k {
 		case token.LeftBracket:
 			p.next()
 			var dim ast.Expr
@@ -534,7 +622,7 @@ func (p *parser) list() ast.Expr {
 	start := p.start()
 	p.next()
 	p.expect(token.LeftParen)
-	items := p.arrayItems(token.RightParen)
+	items := destructuringItems(p.arrayItems(token.RightParen))
 	p.expect(token.RightParen)
 	return &ast.List{Items: items, Span: p.span(start)}
 }

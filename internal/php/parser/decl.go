@@ -48,11 +48,83 @@ func (p *parser) modifiers() []*ast.Modifier {
 	return mods
 }
 
-func (p *parser) rejectFinal(mods []*ast.Modifier, message string) {
-	for _, m := range mods {
-		if m.Kind == token.Final {
-			p.errorAt(m.Span, message)
+type modifierTarget uint8
+
+const (
+	onClass modifierTarget = iota
+	onMethod
+	onProperty
+	onClassConst
+	onParam
+	onHook
+)
+
+var modifierTargetNames = [...]string{
+	onClass:      "class",
+	onMethod:     "method",
+	onProperty:   "property",
+	onClassConst: "class constant",
+	onParam:      "parameter",
+	onHook:       "property hook",
+}
+
+func isAccess(k token.Kind) bool {
+	return k == token.Public || k == token.Protected || k == token.Private
+}
+
+func isSetAccess(k token.Kind) bool {
+	return k == token.PublicSet || k == token.ProtectedSet || k == token.PrivateSet
+}
+
+func (p *parser) modifierAllowed(k token.Kind, target modifierTarget) bool {
+	switch target {
+	case onHook:
+		return k == token.Final
+	case onParam:
+		return isAccess(k) || isSetAccess(k) || k == token.Readonly || k == token.Final && p.version >= token.PHP85
+	case onClassConst:
+		return p.version < token.PHP83 || isAccess(k) || k == token.Final
+	case onMethod:
+		return !isSetAccess(k) && (k != token.Readonly || p.version < token.PHP83)
+	case onProperty:
+		return p.version != token.PHP83 || k != token.Abstract && k != token.Final
+	}
+	return true
+}
+
+func (p *parser) checkModifiers(mods []*ast.Modifier, target modifierTarget) {
+	var abstract, final *ast.Modifier
+	for i, m := range mods {
+		if m.Kind == token.Var {
+			if target != onProperty || len(mods) > 1 {
+				p.errorAt(m.Span, "var can only be used alone, before a property")
+			}
+			continue
 		}
+		if !p.modifierAllowed(m.Kind, target) {
+			p.errorAt(m.Span, "cannot use the "+m.Kind.Text()+" modifier on a "+modifierTargetNames[target])
+			continue
+		}
+		for _, earlier := range mods[:i] {
+			switch {
+			case isAccess(m.Kind) && isAccess(earlier.Kind), isSetAccess(m.Kind) && isSetAccess(earlier.Kind):
+				p.errorAt(m.Span, "multiple access type modifiers are not allowed")
+			case m.Kind == earlier.Kind:
+				p.errorAt(m.Span, "multiple "+m.Kind.Text()+" modifiers are not allowed")
+			default:
+				continue
+			}
+			break
+		}
+		switch m.Kind {
+		case token.Abstract:
+			abstract = m
+		case token.Final:
+			final = m
+		}
+	}
+	if abstract != nil && final != nil {
+		p.errorAt(final.Span, "cannot use the final modifier on an abstract "+modifierTargetNames[target])
 	}
 }
 
@@ -72,11 +144,9 @@ func (p *parser) params() []*ast.Param {
 }
 
 func (p *parser) param() *ast.Param {
-	start := p.start()
-	param := &ast.Param{Doc: p.doc(), Attrs: p.attributes(), Modifiers: p.modifiers()}
-	if p.version < token.PHP85 {
-		p.rejectFinal(param.Modifiers, "cannot use the final modifier on a parameter")
-	}
+	start, from := p.start(), p.pos
+	param := &ast.Param{Attrs: p.attributes(), Modifiers: p.modifiers()}
+	p.checkModifiers(param.Modifiers, onParam)
 	if startsType(p.peek()) {
 		param.Type = p.typeDecl()
 	}
@@ -86,6 +156,7 @@ func (p *parser) param() *ast.Param {
 	}
 	param.Variadic = p.accept(token.Ellipsis)
 	varStart := p.start()
+	param.Doc = p.docSince(from)
 	if p.expect(token.Variable) {
 		param.Var = &ast.Variable{Span: p.span(varStart)}
 	}
@@ -124,7 +195,7 @@ func (p *parser) typeDecl() ast.Type {
 		return &ast.NullableType{Inner: p.namedType(), Span: p.span(start)}
 	}
 	first := p.typeAtom()
-	switch {
+	switch _, grouped := first.(*ast.IntersectionType); {
 	case p.peek() == token.BitwiseOr:
 		union := &ast.UnionType{Types: []ast.Type{first}}
 		for p.accept(token.BitwiseOr) {
@@ -132,10 +203,9 @@ func (p *parser) typeDecl() ast.Type {
 		}
 		union.Span = p.span(start)
 		return union
+	case grouped:
+		p.unexpected("expected '|'")
 	case p.peek() == token.AmpersandNotFollowedByVarOrVararg:
-		if _, grouped := first.(*ast.IntersectionType); grouped {
-			return first
-		}
 		return p.intersection(first, start)
 	}
 	return first
@@ -208,6 +278,7 @@ func (p *parser) classDecl(start uint32, doc ast.Span, attrs []*ast.AttributeGro
 		}
 		c.Modifiers = append(c.Modifiers, &ast.Modifier{Span: ast.Span{Start: t.Start, End: t.End}, Kind: k})
 	}
+	p.checkModifiers(c.Modifiers, onClass)
 	p.expect(token.Class)
 	c.Name = p.identifier()
 	p.classTail(c)
@@ -290,8 +361,9 @@ func (p *parser) members() []ast.Member {
 }
 
 func (p *parser) member() ast.Member {
-	start, doc := p.start(), p.doc()
+	start, from := p.start(), p.pos
 	attrs := p.attributes()
+	doc := p.docSince(from)
 	switch p.peek() {
 	case token.Use:
 		return p.traitUse(start, doc)
@@ -306,6 +378,7 @@ func (p *parser) member() ast.Member {
 		return c
 	}
 	mods := p.modifiers()
+	doc = p.docSince(from)
 	switch p.peek() {
 	case token.Const:
 		return p.classConst(start, doc, attrs, mods)
@@ -323,6 +396,7 @@ func (p *parser) member() ast.Member {
 
 func (p *parser) classConst(start uint32, doc ast.Span, attrs []*ast.AttributeGroup, mods []*ast.Modifier) ast.Member {
 	p.next()
+	p.checkModifiers(mods, onClassConst)
 	c := &ast.ClassConst{Attrs: attrs, Doc: doc, Modifiers: mods}
 	if p.peekAt(1) != token.Equals {
 		typeStart := p.start()
@@ -352,6 +426,7 @@ func (p *parser) constItems(name func() *ast.Identifier) []*ast.ConstItem {
 
 func (p *parser) method(start uint32, doc ast.Span, attrs []*ast.AttributeGroup, mods []*ast.Modifier) ast.Member {
 	p.next()
+	p.checkModifiers(mods, onMethod)
 	m := &ast.Method{Attrs: attrs, Doc: doc, Modifiers: mods}
 	if isAmpersand(p.peek()) {
 		p.next()
@@ -368,9 +443,10 @@ func (p *parser) method(start uint32, doc ast.Span, attrs []*ast.AttributeGroup,
 }
 
 func (p *parser) property(start uint32, doc ast.Span, attrs []*ast.AttributeGroup, mods []*ast.Modifier) ast.Member {
-	if p.version == token.PHP83 {
-		p.rejectFinal(mods, "cannot use the final modifier on a property")
+	if len(mods) == 0 {
+		p.unexpected("expected a modifier, 'function' or 'const'")
 	}
+	p.checkModifiers(mods, onProperty)
 	prop := &ast.Property{Attrs: attrs, Doc: doc, Modifiers: mods}
 	if p.peek() != token.Variable {
 		prop.Type = p.typeDecl()
@@ -391,6 +467,9 @@ func (p *parser) property(start uint32, doc ast.Span, attrs []*ast.AttributeGrou
 		}
 	}
 	if p.peek() == token.LeftBrace {
+		if len(prop.Items) > 1 {
+			p.unexpected("property hooks can't be used on a list of properties")
+		}
 		prop.Hooks = p.hooks()
 	} else {
 		p.expect(token.Semicolon)
@@ -407,6 +486,7 @@ func (p *parser) hooks() []*ast.PropertyHook {
 	for p.peek() != token.RightBrace && p.peek() != eof {
 		hookStart := p.start()
 		hook := &ast.PropertyHook{Attrs: p.attributes(), Modifiers: p.modifiers()}
+		p.checkModifiers(hook.Modifiers, onHook)
 		if isAmpersand(p.peek()) {
 			p.next()
 			hook.ByRef = true
@@ -465,11 +545,12 @@ func (p *parser) adaptation() *ast.TraitAdaptation {
 	case p.accept(token.InsteadOf):
 		a.InsteadOf = p.names()
 	case p.expect(token.As):
-		if k := p.peek(); k == token.Public || k == token.Protected || k == token.Private {
+		if k := p.peek(); isModifier(k) && k != token.Var {
 			t := p.next()
-			a.Visibility = &ast.Modifier{Span: ast.Span{Start: t.Start, End: t.End}, Kind: k}
+			a.Modifier = &ast.Modifier{Span: ast.Span{Start: t.Start, End: t.End}, Kind: k}
+			p.checkModifiers([]*ast.Modifier{a.Modifier}, onMethod)
 		}
-		if a.Visibility == nil || isSemiReserved(p.peek()) {
+		if a.Modifier == nil || isSemiReserved(p.peek()) {
 			a.Alias = p.memberName()
 		}
 	}
