@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -17,7 +18,7 @@ import (
 const shapeScript = `    static $parser;
     if (!$parser) {
         if (!@include $argv[1]) { echo $path, "\tskip\n"; continue; }
-        $parser = (new PhpParser\ParserFactory)->createForVersion(PhpParser\PhpVersion::fromString('8.4'));
+        $parser = (new PhpParser\ParserFactory)->createForVersion(PhpParser\PhpVersion::fromString($argv[2]));
     }
     try { $stmts = $parser->parse($source); } catch (PhpParser\Error $e) { echo $path, "\tskip\n"; continue; }
     $lines = [];
@@ -131,16 +132,26 @@ func TestOperatorTreesMatchPHPParser(t *testing.T) {
 	_, here, _, _ := runtime.Caller(0)
 	autoload := filepath.Join(filepath.Dir(here), "..", "..", "..", "testdata", "laravel", "vendor", "autoload.php")
 	sources := phpref.ReadAll(t, phpref.Corpus(t))
-	want := php.Run(t, shapeScript, sources, autoload)
+	for i, src := range programs {
+		sources["program "+strconv.Itoa(i)] = src
+	}
+	for _, version := range []token.Version{token.PHP84, token.PHP85} {
+		t.Run(version.String(), func(t *testing.T) { compareShapes(t, *php, version, sources, autoload) })
+	}
+}
+
+func compareShapes(t *testing.T, php phpref.PHP, version token.Version, sources map[string]string, autoload string) {
+	want := php.Run(t, shapeScript, sources, autoload, version.String())
 	compared, mismatched := 0, 0
 	for path, src := range sources {
 		encoded := want[path]
-		if encoded == "skip" {
+		file := Parse(src, version)
+		if encoded == "skip" || len(file.Errors) > 0 {
 			continue
 		}
 		compared++
 		expected := decodeShape(t, encoded)
-		if got := shapes(Parse(src, token.PHP84)); got != expected {
+		if got := shapes(file); got != expected {
 			mismatched++
 			if mismatched <= 5 {
 				t.Errorf("%s:\n%s", path, firstLineDiff(src, got, expected))
@@ -151,7 +162,7 @@ func TestOperatorTreesMatchPHPParser(t *testing.T) {
 		t.Skip("nikic/php-parser isn't installed in the Laravel fixture")
 	}
 	if mismatched > 0 {
-		t.Errorf("%d of %d files have operator trees that differ from nikic/php-parser", mismatched, compared)
+		t.Errorf("%d of %d files have operator trees that differ from nikic/php-parser on PHP %s", mismatched, compared, version)
 	}
 }
 
