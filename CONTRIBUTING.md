@@ -184,13 +184,40 @@ Open an issue with the **feature request** label. Describe the use case and expe
 
 ## Release Process
 
-Releases are automated via GitHub Actions. Pushing a semver tag (e.g., `v0.15.0`) triggers:
+Releases are automated via GitHub Actions. Pushing a semver tag without a `v` prefix (e.g., `0.15.0`) triggers:
 
 1. Full test suite
 2. Cross-platform binary builds
 3. GitHub Release with the binaries, `checksums.txt`, and changelog notes
 
 The editor extensions release independently from their own repos ([`Tusk-PHP/vscode`](https://github.com/Tusk-PHP/vscode), [`Tusk-PHP/zed`](https://github.com/Tusk-PHP/zed)), each pinning a known-good LSP version.
+
+## Internals: releases
+
+This section is for internals, the team behind Tusk PHP who review, merge and release. Contributors don't need to do any of this.
+
+**One tracking issue per release.** The next release always has an open issue titled `Release x.y.z` (for example [Release 0.16.0](https://github.com/Tusk-PHP/lsp/issues/152)). It lists:
+
+- **Merged:** every PR merged into `main` since the last release, ticked.
+- **Planned:** PRs in review that should ship with it, unticked. One that isn't ready by release time moves to the next release's issue.
+- **Not in this release:** open PRs deliberately left out, with the reason.
+- **Before tagging:** the release checklist.
+
+Choose the version from the changes, following [SemVer](https://semver.org/) while we're on `0.x`: a minor bump (`0.16.0`) when anything is added or changes behaviour, a patch bump (`0.15.1`) for fixes only.
+
+**When you merge a PR:**
+
+1. Merge with **Rebase and merge**. No squash merges or merge commits, so `main` keeps each commit as written.
+2. If an earlier merge left the PR conflicting, rebase it onto `main` before merging (maintainers can push to contributors' PR branches), and run the tests for the packages involved.
+3. Add the PR to the release issue: tick it under **Merged**, or add `- [x] #123 title` if it wasn't planned. Linking it there shows the release issue on the PR's timeline, so anyone looking at the PR can see which release it ships in.
+4. Make sure the PR's `CHANGELOG.md` entry under `[Unreleased]` reads as a release note for users.
+
+**When you release:**
+
+1. Check that `[Unreleased]` in `CHANGELOG.md` covers every user-visible change in the issue's **Merged** list, then rename it to the version and date.
+2. Check that CI, conformance and the field baselines are green on `main`.
+3. Push the tag (see [Release Process](#release-process)).
+4. Close the release issue with a link to the GitHub Release, and open the next `Release x.y.z` issue, moving any unticked **Planned** PRs into it.
 
 ## License
 
