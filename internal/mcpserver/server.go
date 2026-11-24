@@ -1220,6 +1220,9 @@ func loadProjectMetadata(rootPath string, logger *slog.Logger) (*config.Config, 
 		return nil, "", symbols.BuiltinProfile{}, "", err
 	}
 	cfg = loaded
+	for _, problem := range cfg.Problems() {
+		logger.Warn("skipped part of the configuration", "problem", problem)
+	}
 
 	framework := cfg.Framework
 	if framework == "" || framework == "auto" {

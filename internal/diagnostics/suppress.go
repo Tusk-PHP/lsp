@@ -47,12 +47,12 @@ func sourceSuppressions(uri, source string) checks.Suppressions {
 }
 
 func (p *Provider) ignoreRulesFor(uri string) []config.IgnoreRule {
-	if len(p.cfg.DiagnosticIgnore) == 0 {
+	if len(p.cfg.DiagnosticIgnore.Rules) == 0 {
 		return nil
 	}
 	rel, inRoot := p.relativePath(uri)
 	var rules []config.IgnoreRule
-	for _, r := range p.cfg.DiagnosticIgnore {
+	for _, r := range p.cfg.DiagnosticIgnore.Rules {
 		if !r.HasPath() || (inRoot && r.MatchesPath(rel)) {
 			rules = append(rules, r)
 		}

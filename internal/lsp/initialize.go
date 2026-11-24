@@ -49,6 +49,13 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	} else {
 		s.cfg = cfg
 	}
+	for _, problem := range s.cfg.Problems() {
+		s.logger.Printf("Config problem: %v", problem)
+		s.sendNotification("window/showMessage", map[string]interface{}{
+			"type":    protocol.MessageTypeWarning,
+			"message": "Tusk PHP skipped part of its configuration: " + problem.Error(),
+		})
+	}
 	// Merge client initializationOptions over file-based config
 	if opts := params.InitializationOptions; opts != nil {
 		s.cfg.MergeClientOptions(opts)
