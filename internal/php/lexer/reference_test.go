@@ -1,77 +1,23 @@
 package lexer
 
 import (
-	"bufio"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
-	"github.com/Tusk-PHP/lsp/internal/php/token"
-	"io/fs"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/php/phpref"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
-const referenceScript = `<?php
-$detail = ($argv[1] ?? '') === 'detail';
-while (($path = fgets(STDIN)) !== false) {
-    $path = rtrim($path, "\n");
-    $length = (int) fgets(STDIN);
-    $source = $length > 0 ? stream_get_contents(STDIN, $length) : '';
-    $out = '';
+const tokensScript = `    $out = '';
     foreach (token_get_all($source) as $t) {
         [$name, $text] = is_array($t) ? [token_name($t[0]), $t[1]] : [$t, $t];
         $out .= $name . "\0" . $text . "\1";
     }
-    echo $path, "\t", $detail ? base64_encode($out) : sha1($out), "\n";
-}
-`
-
-type reference struct {
-	command []string
-	version token.Version
-}
-
-func references(t *testing.T) []reference {
-	t.Helper()
-	commands := os.Getenv("TUSK_PHP_TOKENIZERS")
-	if commands == "" {
-		commands = "php"
-	}
-	var refs []reference
-	for _, command := range strings.Split(commands, ";") {
-		argv := strings.Fields(command)
-		out, err := exec.Command(argv[0], append(argv[1:], "-r", `if (!function_exists("token_get_all")) exit(1); echo PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION;`)...).Output()
-		if err != nil {
-			t.Logf("skipping %s: no PHP with the tokenizer extension: %v", command, err)
-			continue
-		}
-		version, err := token.ParseVersion(string(out))
-		if err != nil {
-			t.Fatalf("%s: %v", command, err)
-		}
-		if version.String() != string(out) {
-			t.Logf("skipping %s: PHP %s is outside the lexer's %s to %s", command, out, token.PHP74, token.Latest)
-			continue
-		}
-		refs = append(refs, reference{argv, version})
-	}
-	if len(refs) == 0 {
-		skipOutsideCI(t, "no PHP "+token.PHP74.String()+" to "+token.Latest.String()+" with the tokenizer extension (set TUSK_PHP_TOKENIZERS to commands separated by ';')")
-	}
-	return refs
-}
-
-func skipOutsideCI(t *testing.T, reason string) {
-	t.Helper()
-	if os.Getenv("CI") != "" {
-		t.Fatal(reason)
-	}
-	t.Skip(reason)
-}
+    echo $path, "\t", ($argv[1] ?? '') === 'detail' ? base64_encode($out) : sha1($out), "\n";`
 
 func serialize(src string, version token.Version) string {
 	var b strings.Builder
@@ -88,84 +34,25 @@ func serialize(src string, version token.Version) string {
 	return b.String()
 }
 
-func corpus(t *testing.T) []string {
-	t.Helper()
-	var files []string
-	for _, root := range []string{"../../../testdata/project", "../../../testdata/laravel/vendor", "../../../testdata/symfony/vendor"} {
-		_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-			if err == nil && !d.IsDir() && strings.HasSuffix(path, ".php") {
-				abs, _ := filepath.Abs(path)
-				files = append(files, abs)
-			}
-			return nil
-		})
-	}
-	if len(files) < 100 {
-		skipOutsideCI(t, "the Laravel and Symfony fixtures' vendor trees aren't installed")
-	}
-	return files
-}
-
-func runReference(t *testing.T, php reference, files []string, detail bool) map[string]string {
-	t.Helper()
-	script := filepath.Join(t.TempDir(), "tokens.php")
-	if err := os.WriteFile(script, []byte(referenceScript), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	args := append(append([]string{}, php.command[1:]...), "-d", "short_open_tag=0", "-d", "memory_limit=-1", script)
-	if detail {
-		args = append(args, "detail")
-	}
-	cmd := exec.Command(php.command[0], args...)
-	var input strings.Builder
-	for _, path := range files {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		input.WriteString(path + "\n" + strconv.Itoa(len(data)) + "\n")
-		input.Write(data)
-	}
-	cmd.Stdin = strings.NewReader(input.String())
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("running PHP's tokenizer: %v", err)
-	}
-	results := map[string]string{}
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
-	scanner.Buffer(nil, 1<<30)
-	for scanner.Scan() {
-		path, sum, _ := strings.Cut(scanner.Text(), "\t")
-		results[path] = sum
-	}
-	return results
-}
-
 func TestLexerMatchesPHPTokenizer(t *testing.T) {
-	refs := references(t)
-	files := corpus(t)
+	refs := phpref.Versions(t)
+	sources := phpref.ReadAll(t, phpref.Corpus(t))
 	for _, php := range refs {
-		t.Run(php.version.String(), func(t *testing.T) {
-			want := runReference(t, php, files, false)
-			var mismatched []string
-			for _, path := range files {
-				data, err := os.ReadFile(path)
-				if err != nil {
-					t.Fatal(err)
-				}
-				sum := sha1.Sum([]byte(serialize(string(data), php.version)))
-				if hex.EncodeToString(sum[:]) != want[path] {
-					mismatched = append(mismatched, path)
+		t.Run(php.Version.String(), func(t *testing.T) {
+			want := php.Run(t, tokensScript, sources)
+			mismatched := map[string]string{}
+			for path, src := range sources {
+				sum := sha1.Sum([]byte(serialize(src, php.Version)))
+				if hex.EncodeToString(sum[:]) != want[path] && len(mismatched) < 5 {
+					mismatched[path] = src
 				}
 			}
 			if len(mismatched) == 0 {
 				return
 			}
-			t.Errorf("%d of %d files lex differently from PHP %s", len(mismatched), len(files), php.version)
-			details := runReference(t, php, mismatched[:min(5, len(mismatched))], true)
-			for path, encoded := range details {
-				data, _ := os.ReadFile(path)
-				t.Errorf("%s: %s", path, firstDifference(serialize(string(data), php.version), decode(t, encoded)))
+			t.Errorf("files lex differently from PHP %s", php.Version)
+			for path, encoded := range php.Run(t, tokensScript, mismatched, "detail") {
+				t.Errorf("%s: %s", path, firstDifference(serialize(mismatched[path], php.Version), decode(t, encoded)))
 			}
 		})
 	}
