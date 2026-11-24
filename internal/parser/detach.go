@@ -2,8 +2,8 @@ package parser
 
 import (
 	"reflect"
+	"strings"
 	"sync"
-	"unsafe"
 )
 
 func (f *FileNode) Detach() {
@@ -13,11 +13,16 @@ func (f *FileNode) Detach() {
 		fields = append(fields, s)
 		size += s.Len()
 	})
-	arena := make([]byte, 0, size)
+	var arena strings.Builder
+	arena.Grow(size)
 	for _, s := range fields {
-		start := len(arena)
-		arena = append(arena, s.String()...)
-		s.SetString(unsafe.String(unsafe.SliceData(arena[start:]), s.Len()))
+		arena.WriteString(s.String())
+	}
+	copied := arena.String()
+	for _, s := range fields {
+		n := s.Len()
+		s.SetString(copied[:n])
+		copied = copied[n:]
 	}
 }
 
