@@ -7,8 +7,13 @@ import (
 )
 
 type ClassFile struct {
-	Path     string
+	Root     string
+	Parts    []string
 	IsVendor bool
+}
+
+func (f ClassFile) Path() string {
+	return filepath.Join(append([]string{f.Root}, f.Parts...)...)
 }
 
 func ClassFiles(fqn string, entries []AutoloadEntry) []ClassFile {
@@ -27,8 +32,9 @@ func ClassFiles(fqn string, entries []AutoloadEntry) []ClassFile {
 	sort.SliceStable(matches, func(i, j int) bool { return matches[i].length > matches[j].length })
 	files := make([]ClassFile, 0, len(matches))
 	for _, m := range matches {
-		relative := strings.ReplaceAll(fqn[len(m.entry.Namespace)+1:], "\\", string(filepath.Separator))
-		files = append(files, ClassFile{Path: filepath.Join(m.entry.Path, relative+".php"), IsVendor: m.entry.IsVendor})
+		parts := strings.Split(fqn[len(m.entry.Namespace)+1:], "\\")
+		parts[len(parts)-1] += ".php"
+		files = append(files, ClassFile{Root: m.entry.Path, Parts: parts, IsVendor: m.entry.IsVendor})
 	}
 	return files
 }
