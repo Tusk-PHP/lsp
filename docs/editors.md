@@ -113,7 +113,7 @@ tusk-php --transport stdio
 curl -fsSL https://raw.githubusercontent.com/Tusk-PHP/lsp/main/scripts/install.sh | bash
 ```
 
-**From source** (requires Go 1.22+):
+**From source** (requires Go 1.27+):
 
 ```bash
 git clone https://github.com/Tusk-PHP/lsp.git tusk-php && cd tusk-php && make install
