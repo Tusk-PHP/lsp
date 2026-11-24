@@ -21,18 +21,30 @@ type ClassLoader interface {
 type classLoaderHolder struct {
 	loader   ClassLoader
 	mu       sync.Mutex
-	attempts map[string]bool
+	attempts map[string]chan struct{}
 }
 
-func (h *classLoaderHolder) firstAttempt(fqn string) bool {
+type loadAttempt int
+
+const (
+	attemptRefused loadAttempt = iota
+	attemptOwned
+	attemptJoined
+)
+
+func (h *classLoaderHolder) begin(fqn string) (chan struct{}, loadAttempt) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	key := strings.ToLower(fqn)
-	if h.attempts[key] || len(h.attempts) >= loaderAttemptLimit {
-		return false
+	if done, ok := h.attempts[key]; ok {
+		return done, attemptJoined
 	}
-	h.attempts[key] = true
-	return true
+	if len(h.attempts) >= loaderAttemptLimit {
+		return nil, attemptRefused
+	}
+	done := make(chan struct{})
+	h.attempts[key] = done
+	return done, attemptOwned
 }
 
 func (idx *Index) SetClassLoader(loader ClassLoader) {
@@ -40,25 +52,42 @@ func (idx *Index) SetClassLoader(loader ClassLoader) {
 		idx.loader.Store(nil)
 		return
 	}
-	idx.loader.Store(&classLoaderHolder{loader: loader, attempts: map[string]bool{}})
+	idx.loader.Store(&classLoaderHolder{loader: loader, attempts: map[string]chan struct{}{}})
 }
 
-func (idx *Index) ensureLoaded(holder *classLoaderHolder, fqn string) bool {
-	idx.mu.RLock()
-	exists := idx.classLikeFoldLocked(fqn)
-	idx.mu.RUnlock()
-	if exists || !holder.firstAttempt(fqn) {
-		return false
-	}
-	class, ok := holder.loader.Load(fqn)
-	if !ok {
-		return false
-	}
-	idx.IndexFileWithSource(class.URI, class.Source, class.From)
-	holder.loader.Loaded(class)
+func (idx *Index) hasClassLike(fqn string) bool {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.classLikeFoldLocked(fqn)
+}
+
+func (idx *Index) ensureLoaded(holder *classLoaderHolder, fqn string) bool {
+	if idx.hasClassLike(fqn) {
+		return false
+	}
+	done, attempt := holder.begin(fqn)
+	switch attempt {
+	case attemptRefused:
+		return false
+	case attemptJoined:
+		<-done
+		return idx.hasClassLike(fqn)
+	}
+	class, ok := idx.loadAndIndex(holder.loader, fqn, done)
+	if !ok {
+		return false
+	}
+	holder.loader.Loaded(class)
+	return idx.hasClassLike(fqn)
+}
+
+func (idx *Index) loadAndIndex(loader ClassLoader, fqn string, done chan struct{}) (LoadedClass, bool) {
+	defer close(done)
+	class, ok := loader.Load(fqn)
+	if ok {
+		idx.IndexFileWithSource(class.URI, class.Source, class.From)
+	}
+	return class, ok
 }
 
 func classPart(fqn string) string {

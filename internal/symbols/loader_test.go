@@ -3,6 +3,7 @@ package symbols
 import (
 	"strings"
 	"testing"
+	"testing/synctest"
 )
 
 type mapLoader struct {
@@ -81,14 +82,17 @@ func TestClassLoaderStopsWhenTheIndexIsReady(t *testing.T) {
 }
 
 func TestClassLoaderAttemptsAreBounded(t *testing.T) {
-	holder := &classLoaderHolder{attempts: map[string]bool{}}
+	holder := &classLoaderHolder{attempts: map[string]chan struct{}{}}
 	for i := 0; i < loaderAttemptLimit; i++ {
-		if !holder.firstAttempt(strings.Repeat("x", i+1)) {
+		if _, attempt := holder.begin(strings.Repeat("x", i+1)); attempt != attemptOwned {
 			t.Fatalf("attempt %d refused early", i)
 		}
 	}
-	if holder.firstAttempt("one-more") {
+	if _, attempt := holder.begin("one-more"); attempt != attemptRefused {
 		t.Error("past the limit, nothing more is loaded")
+	}
+	if _, attempt := holder.begin("X"); attempt != attemptJoined {
+		t.Error("a name already asked for, whatever its case, joins the first attempt")
 	}
 }
 
@@ -110,4 +114,43 @@ func TestClassLoaderAnswersSubtypeQuestionsBeforeIndexing(t *testing.T) {
 	if !idx.IsSubtypeOf(`Lib\Child`, `Lib\Base`) {
 		t.Error("the child and its parent load to answer whether one extends the other")
 	}
+}
+
+type blockingLoader struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (l *blockingLoader) Load(fqn string) (LoadedClass, bool) {
+	close(l.started)
+	<-l.release
+	return LoadedClass{URI: "file:///slow.php", Source: "<?php class Slow {}", From: SourceVendor}, true
+}
+
+func (l *blockingLoader) Loaded(LoadedClass) {}
+
+func TestClassLoaderConcurrentLookupWaitsForTheLoadInFlight(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		loader := &blockingLoader{started: make(chan struct{}), release: make(chan struct{})}
+		idx := NewIndex()
+		idx.SetClassLoader(loader)
+
+		go idx.Lookup("Slow")
+		<-loader.started
+
+		second := make(chan *Symbol, 1)
+		go func() { second <- idx.LookupFold("slow", nil) }()
+		synctest.Wait()
+		select {
+		case sym := <-second:
+			t.Fatalf("a lookup of a class still loading returned before the load finished: %+v", sym)
+		default:
+		}
+
+		close(loader.release)
+		synctest.Wait()
+		if sym := <-second; sym == nil || sym.FQN != "Slow" {
+			t.Errorf("the waiting lookup finds the class the first one loaded: %+v", sym)
+		}
+	})
 }
