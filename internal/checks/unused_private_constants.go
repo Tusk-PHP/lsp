@@ -8,7 +8,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
-func checkUnusedPrivateConstants(cls parser.ClassNode, tokens []parser.Token, lines, traits []string) []Finding {
+func checkUnusedPrivateConstants(cls parser.ClassNode, fileTokens func() []parser.Token, lines, traits []string) []Finding {
 	var private []parser.ConstantNode
 	for _, c := range cls.Constants {
 		if c.Visibility == "private" {
@@ -18,7 +18,7 @@ func checkUnusedPrivateConstants(cls parser.ClassNode, tokens []parser.Token, li
 	if len(private) == 0 {
 		return nil
 	}
-	used, dynamic := constantsReferenced(tokens, cls.StartLine, endLineOf(cls, lines))
+	used, dynamic := constantsReferenced(fileTokens(), cls.StartLine, endLineOf(cls, lines))
 	if dynamic {
 		return nil
 	}

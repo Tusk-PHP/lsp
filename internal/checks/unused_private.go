@@ -3,6 +3,7 @@ package checks
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/rule"
@@ -25,6 +26,7 @@ func (r *UnusedPrivateRule) Check(file *parser.FileNode, source string, index *s
 		return nil
 	}
 	lines := strings.Split(source, "\n")
+	fileTokens := sync.OnceValue(func() []parser.Token { return r.Shared.parse(source).Tokens })
 	var findings []Finding
 
 	for _, cls := range file.Classes {
@@ -38,7 +40,7 @@ func (r *UnusedPrivateRule) Check(file *parser.FileNode, source string, index *s
 		}
 		findings = append(findings, checkUnusedPrivateMethods(cls, lines, traits)...)
 		findings = append(findings, checkUnusedPrivateProperties(cls, lines, traits)...)
-		findings = append(findings, checkUnusedPrivateConstants(cls, r.Shared.parse(source).Tokens, lines, traits)...)
+		findings = append(findings, checkUnusedPrivateConstants(cls, fileTokens, lines, traits)...)
 	}
 	return findings
 }
