@@ -178,7 +178,7 @@ func (p *parser) ensureProgress(before int) {
 func (p *parser) skipTo(stop func(token.Kind) bool) {
 	depth := 0
 	for k := p.peek(); k != eof; k = p.peek() {
-		if depth == 0 && stop(k) {
+		if depth == 0 && (stop(k) || p.atStatementStart()) {
 			return
 		}
 		switch k {
@@ -192,6 +192,29 @@ func (p *parser) skipTo(stop func(token.Kind) bool) {
 		}
 		p.next()
 	}
+}
+
+func (p *parser) atStatementStart() bool {
+	if p.pos > 0 {
+		switch p.toks[p.pos-1].Kind {
+		case token.DoubleColon, token.New:
+			return false
+		}
+	}
+	switch p.peek() {
+	case token.If, token.ElseIf, token.Else, token.EndIf, token.While, token.EndWhile, token.Do, token.For, token.EndFor,
+		token.Foreach, token.EndForeach, token.Switch, token.Case, token.Default, token.EndSwitch, token.Break, token.Continue,
+		token.Return, token.Global, token.Echo, token.Unset, token.Try, token.Catch, token.Finally, token.Goto,
+		token.Declare, token.EndDeclare, token.HaltCompiler, token.Namespace, token.Use, token.Const, token.Class,
+		token.Interface, token.Trait, token.Enum, token.Abstract, token.Final, token.Public, token.Protected, token.Private,
+		token.Var, token.InlineHTML, token.OpenTag, token.OpenTagWithEcho:
+		return true
+	case token.Function:
+		return p.isFunctionDecl()
+	case token.Readonly:
+		return p.peekAt(1) != token.LeftParen
+	}
+	return false
 }
 
 func (p *parser) identifier() *ast.Identifier {

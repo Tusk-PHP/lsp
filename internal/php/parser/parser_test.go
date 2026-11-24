@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
@@ -285,5 +286,52 @@ func TestAnonymousClassArgsBelongToTheClass(t *testing.T) {
 	n := file.Stmts[0].(*ast.ExprStmt).Expr.(*ast.New)
 	if n.Args != nil || n.Anonymous.Args == nil || n.Anonymous.Args.Text(src) != "(1)" {
 		t.Fatalf("got New.Args %v, class args %v", n.Args, n.Anonymous.Args)
+	}
+}
+
+func stmtTypes(stmts []ast.Stmt) string {
+	names := make([]string, len(stmts))
+	for i, s := range stmts {
+		names[i] = fmt.Sprintf("%T", s)
+	}
+	return strings.Join(names, " ")
+}
+
+func TestMissingSemicolonKeepsTheCodeAfterIt(t *testing.T) {
+	cases := []struct {
+		src  string
+		body func(*ast.File) []ast.Stmt
+		want string
+	}{
+		{
+			src:  "<?php\nuse Foo\\Bar\nclass A { public function f() {} }\nfunction g() {}\n",
+			body: func(f *ast.File) []ast.Stmt { return f.Stmts },
+			want: "*ast.Use *ast.ClassDecl *ast.FunctionDecl",
+		},
+		{
+			src: "<?php\nclass C {\n    public function m() {\n        $this->x\n        if ($a) { b(); }\n        return 1;\n    }\n}\n",
+			body: func(f *ast.File) []ast.Stmt {
+				return f.Stmts[0].(*ast.ClassDecl).Members[0].(*ast.Method).Body.Stmts
+			},
+			want: "*ast.ExprStmt *ast.If *ast.Return",
+		},
+		{
+			src:  "<?php\n$x =\nfunction f() {}\n$y =\nclass B {}\n$z = 1\nfinal class D {}\n",
+			body: func(f *ast.File) []ast.Stmt { return f.Stmts },
+			want: "*ast.ExprStmt *ast.FunctionDecl *ast.ExprStmt *ast.ClassDecl *ast.ExprStmt *ast.ClassDecl",
+		},
+	}
+	for _, c := range cases {
+		file := Parse(c.src, token.Latest)
+		if len(file.Errors) == 0 {
+			t.Errorf("%q: expected an error", c.src)
+		}
+		if got := stmtTypes(c.body(file)); got != c.want {
+			t.Errorf("%q: got %s, want %s (errors %v)", c.src, got, c.want, file.Errors)
+		}
+	}
+	file := Parse("<?php\nuse Foo\\Bar\nclass A { public function f() {} }\nfunction g() {}\n", token.Latest)
+	if class := file.Stmts[1].(*ast.ClassDecl); len(class.Members) != 1 {
+		t.Errorf("the class keeps its method: %v", class.Members)
 	}
 }
