@@ -57,3 +57,18 @@ func TestStringLiteral(t *testing.T) {
 		}
 	}
 }
+
+func TestStringLiteralEscapes(t *testing.T) {
+	for in, want := range map[string]string{
+		`'App\\Foo'`:                         `App\Foo`,
+		`'it\'s \n'`:                         `it's \n`,
+		`"App\\Foo"`:                         `App\Foo`,
+		`"a\tb\$c\"d\e\f\v"`:                 "a\tb$c\"d\x1b\f\v",
+		`"\101\x41\x4\u{1F600}\q\u{zz}\u{1"`: "AA\x04😀\\q\\u{zz}\\u{1",
+		`"end\"`:                             `end\`,
+	} {
+		if got, ok := StringLiteral(in); !ok || got != want {
+			t.Errorf("%s: %q, want %q", in, got, want)
+		}
+	}
+}

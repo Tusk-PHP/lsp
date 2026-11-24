@@ -263,6 +263,7 @@ func (b *fileNodeBuilder) params(params []*ast.Param) []ParamNode {
 		}
 		nodes = append(nodes, ParamNode{
 			Name:         b.text(p.Var),
+			Attributes:   b.attributes(p.Attrs),
 			Type:         TypeNode{Name: b.typeText(p.Type)},
 			DefaultValue: b.compact(p.Default),
 			IsVariadic:   p.Variadic,
