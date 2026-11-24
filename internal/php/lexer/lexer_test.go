@@ -55,6 +55,7 @@ var snippets = []string{
 	"<?php __halt_compiler ( \"a {$b}\" x y",
 	"<?php __halt_compiler ( <<<EOT\na $b\nEOT;\n",
 	"<?php __halt_compiler # c\n( /* x */ ) ?>raw",
+	"<?php $a->/* c */class; $a-> # c\n list; $a?->/** d */ /* e */ // f\n fn; $a->#[x\n y; $a->/* u",
 	"<?php $$a; $ ; ${'a'}; $a = \"{$b[\"c\"]}\";",
 	"<?php \x01 \x7f",
 	"<?php if: endif; while: endwhile; for: endfor; foreach: endforeach; switch: endswitch; declare: enddeclare;",
