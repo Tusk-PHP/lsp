@@ -19,11 +19,11 @@ func (r *UnknownNamedArgumentRule) Codes() []rule.Code {
 }
 
 func (r *UnknownNamedArgumentRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
-	if file == nil || index == nil || !strings.Contains(source, ":") {
+	if file == nil || index == nil {
 		return nil
 	}
 	var findings []Finding
-	eachResolvedCall(file, source, index, r.Shared, r.TypeResolver, func(call resolvedCall) {
+	eachResolvedCall(file, source, index, r.Shared, r.TypeResolver, hasNamedArguments, func(call resolvedCall) {
 		if !shouldCheckArgCount(call.sym, call.owner, index) {
 			return
 		}
@@ -54,6 +54,11 @@ func hasParam(params []symbols.ParamInfo, name string) bool {
 		}
 	}
 	return false
+}
+
+func hasNamedArguments(tokens []parser.Token, open, close int) bool {
+	names, ok := namedArguments(tokens, open, close)
+	return ok && len(names) > 0
 }
 
 func namedArguments(tokens []parser.Token, open, close int) ([]parser.Token, bool) {

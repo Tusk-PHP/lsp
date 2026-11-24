@@ -41,7 +41,7 @@ func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.In
 	var gatedSpans []tokenSpan
 	gatedDone := false
 	skipUntil := -1
-	eachResolvedCall(file, source, index, shared, typeResolver, func(call resolvedCall) {
+	eachResolvedCall(file, source, index, shared, typeResolver, nil, func(call resolvedCall) {
 		if call.kind == callConstructor || call.at <= skipUntil {
 			return
 		}
