@@ -107,7 +107,7 @@ $n?->o(); P::Q; R::s(); $t->{$u}; $v::$w; $x->$y();
 		if m.static {
 			desc += " static"
 		}
-		if m.call {
+		if m.call() {
 			desc += " call"
 		}
 		if m.presence {

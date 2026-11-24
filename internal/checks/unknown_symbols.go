@@ -125,7 +125,7 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 	for _, ref := range syntax.references().members {
 		member := syntax.text(ref.name)
 		// `Foo::class` and `$foo::class` are part of the language, not members.
-		if ref.static && !ref.call && strings.EqualFold(member, "class") {
+		if ref.static && !ref.call() && strings.EqualFold(member, "class") {
 			continue
 		}
 		ownerSpan := ref.owner.Bounds()
@@ -137,7 +137,7 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 		ownerExpr := syntax.text(ref.owner)
 		// method_exists(), property_exists() and is_callable() are how code
 		// asks whether an object has a member before using it.
-		if guards.covers(ownerExpr, member, ref.call, ref.static, lineNum, nameCol) {
+		if guards.covers(ownerExpr, member, ref.call(), ref.static, lineNum, nameCol) {
 			continue
 		}
 		owners := r.resolveOwners(ownerExpr, ownerLine, ownerCol, source, file, index)
@@ -149,11 +149,11 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 			continue
 		}
 		owners = appendNewOwners(owners, narrowed)
-		access := memberAccess{name: member, isStatic: ref.static, isCall: ref.call}
+		access := memberAccess{name: member, isStatic: ref.static, isCall: ref.call()}
 		// isset(), unset(), empty() and ?? are how code asks whether a property
 		// is there; and a class with #[AllowDynamicProperties] (or stdClass)
 		// has whatever properties code gives it.
-		if !ref.call && !ref.static && (ref.presence || anyOwnerAllowsDynamicProperties(owners, index)) {
+		if !ref.call() && !ref.static && (ref.presence || anyOwnerAllowsDynamicProperties(owners, index)) {
 			continue
 		}
 		if anyOwnerMayHaveMember(owners, access, file, index, hierarchies) || r.conventionMethod(owners, access, hierarchies) {
