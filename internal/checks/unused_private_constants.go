@@ -8,6 +8,20 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
+var reflectiveConstantReads = map[string]bool{
+	"getconstants":            true,
+	"getconstant":             true,
+	"hasconstant":             true,
+	"getreflectionconstants":  true,
+	"getreflectionconstant":   true,
+	"reflectionclassconstant": true,
+}
+
+var constantLookupFunctions = map[string]bool{
+	"constant": true,
+	"defined":  true,
+}
+
 func checkUnusedPrivateConstants(cls parser.ClassNode, fileTokens func() []parser.Token, lines, traits []string) []Finding {
 	var private []parser.ConstantNode
 	for _, c := range cls.Constants {
@@ -55,23 +69,78 @@ func constantsReferenced(tokens []parser.Token, startLine, endLine int) (used ma
 		if tok.Line < startLine || tok.Line > endLine {
 			continue
 		}
-		if tok.Kind == parser.TokenIdentifier && strings.EqualFold(tok.Value, "constant") {
-			if next := nextSignificantTokenIdx(tokens, i+1); tokens[next].Kind == parser.TokenOpenParen {
+		switch tok.Kind {
+		case parser.TokenIdentifier:
+			name := strings.ToLower(tok.Value[strings.LastIndexByte(tok.Value, '\\')+1:])
+			if reflectiveConstantReads[name] {
 				return nil, true
 			}
-		}
-		if tok.Kind != parser.TokenDoubleColon {
-			continue
-		}
-		next := tokens[nextSignificantTokenIdx(tokens, i+1)]
-		switch next.Kind {
-		case parser.TokenOpenBrace:
-			return nil, true
-		case parser.TokenIdentifier:
-			used[next.Value] = true
+			if !constantLookupFunctions[name] {
+				continue
+			}
+			constant, lookup := constantLookupArgument(tokens, i+1)
+			switch lookup {
+			case lookupComputed:
+				return nil, true
+			case lookupLiteral:
+				if _, member, ok := strings.Cut(constant, "::"); ok {
+					used[member] = true
+				}
+			}
+		case parser.TokenDoubleColon:
+			next := tokens[nextSignificantTokenIdx(tokens, i+1)]
+			switch next.Kind {
+			case parser.TokenOpenBrace:
+				return nil, true
+			case parser.TokenIdentifier:
+				used[next.Value] = true
+			}
 		}
 	}
 	return used, false
+}
+
+type constantLookup int
+
+const (
+	lookupNotACall constantLookup = iota
+	lookupComputed
+	lookupLiteral
+)
+
+func constantLookupArgument(tokens []parser.Token, from int) (string, constantLookup) {
+	open := nextSignificantTokenIdx(tokens, from)
+	if tokens[open].Kind != parser.TokenOpenParen {
+		return "", lookupNotACall
+	}
+	arg := nextSignificantTokenIdx(tokens, open+1)
+	if tokens[arg].Kind != parser.TokenStringLiteral {
+		return "", lookupComputed
+	}
+	value, ok := plainStringLiteral(tokens[arg].Value)
+	if !ok {
+		return "", lookupComputed
+	}
+	after := nextSignificantTokenIdx(tokens, arg+1)
+	if tokens[after].Kind != parser.TokenCloseParen && tokens[after].Kind != parser.TokenComma {
+		return "", lookupComputed
+	}
+	return value, lookupLiteral
+}
+
+func plainStringLiteral(lit string) (string, bool) {
+	if len(lit) < 2 {
+		return "", false
+	}
+	quote := lit[0]
+	if (quote != '\'' && quote != '"') || lit[len(lit)-1] != quote {
+		return "", false
+	}
+	body := lit[1 : len(lit)-1]
+	if strings.ContainsAny(body, "\\$") {
+		return "", false
+	}
+	return body, true
 }
 
 func sourceUsesConstant(src, name string) bool {
