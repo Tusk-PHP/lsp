@@ -11,6 +11,6 @@ func FuzzParse(f *testing.F) {
 		f.Add(src, uint8(token.Latest))
 	}
 	f.Fuzz(func(t *testing.T, src string, minor uint8) {
-		checkTree(t, src, Parse(src, token.Version(minor%uint8(token.Latest+1))))
+		checkTree(t, src, token.Version(minor%uint8(token.Latest+1)))
 	})
 }

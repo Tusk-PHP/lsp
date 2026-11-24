@@ -669,6 +669,7 @@ type ClassDecl struct {
 	Doc        Span
 	Modifiers  []*Modifier
 	Name       *Identifier
+	Args       *ArgList
 	Extends    *Name
 	Implements []*Name
 	Members    []Member
