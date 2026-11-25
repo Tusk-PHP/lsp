@@ -7,12 +7,12 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net"
 	"strconv"
 	"strings"
 	"time"
 
-	// Database drivers
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 
@@ -41,22 +41,9 @@ func scanLiveSchema(dbCfg *config.DatabaseConfig, timeout time.Duration, cache *
 }
 
 func openDatabase(cfg *config.DatabaseConfig, timeout time.Duration) (*sql.DB, error) {
-	var dsn, driverName string
-
-	switch cfg.Driver {
-	case "mysql":
-		driverName = "mysql"
-		dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?timeout=%s",
-			cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database,
-			timeout.String())
-	case "pgsql":
-		driverName = "postgres"
-		dsn = postgresDSN(cfg, timeout)
-	case "sqlite":
-		driverName = "sqlite"
-		dsn = cfg.Database
-	default:
-		return nil, fmt.Errorf("unsupported driver: %s", cfg.Driver)
+	driverName, dsn, err := dataSource(cfg, timeout)
+	if err != nil {
+		return nil, err
 	}
 
 	db, err := sql.Open(driverName, dsn)
@@ -77,6 +64,26 @@ func openDatabase(cfg *config.DatabaseConfig, timeout time.Duration) (*sql.DB, e
 	db.SetMaxIdleConns(0)
 
 	return db, nil
+}
+
+func dataSource(cfg *config.DatabaseConfig, timeout time.Duration) (driverName, dsn string, err error) {
+	switch cfg.Driver {
+	case "mysql":
+		mysqlCfg := mysql.NewConfig()
+		mysqlCfg.User = cfg.Username
+		mysqlCfg.Passwd = cfg.Password
+		mysqlCfg.Net = "tcp"
+		mysqlCfg.Addr = net.JoinHostPort(cfg.Host, cfg.Port)
+		mysqlCfg.DBName = cfg.Database
+		mysqlCfg.Timeout = timeout
+		return "mysql", mysqlCfg.FormatDSN(), nil
+	case "pgsql":
+		return "postgres", postgresDSN(cfg, timeout), nil
+	case "sqlite":
+		return "sqlite", cfg.Database, nil
+	default:
+		return "", "", fmt.Errorf("unsupported driver: %s", cfg.Driver)
+	}
 }
 
 var libpqEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
