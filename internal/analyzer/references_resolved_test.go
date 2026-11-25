@@ -162,3 +162,49 @@ func TestRenameRefusesAMethodThatImplementsAVendorInterface(t *testing.T) {
 		t.Errorf("rename of Bag::size: %+v", got)
 	}
 }
+
+const referencesPlot = `<?php
+namespace App;
+class Plot {
+    public function __construct(private float $area) {
+        echo $area;
+    }
+    public function size(): float { return $this->area; }
+    public function local(): float {
+        $area = 2.0;
+        return $area + $this->area;
+    }
+}
+`
+
+func TestReferencesOfAPromotedPropertyAreTheProperty(t *testing.T) {
+	a, read := setupRenameAnalyzer(map[string]string{"file:///Plot.php": referencesPlot})
+	var got []string
+	for _, l := range a.FindAllReferences("file:///Plot.php", referencesPlot, positionOf(t, referencesPlot, "$area)"), read) {
+		got = append(got, fmt.Sprintf("%d:%d", l.Range.Start.Line, l.Range.Start.Character))
+	}
+	slices.Sort(got)
+	if want := []string{"3:46", "6:50", "9:30"}; !slices.Equal(got, want) {
+		t.Errorf("the promoted parameter's references are the property's:\n got %v\nwant %v", got, want)
+	}
+}
+
+func TestRenameOfALocalNamedLikeAPropertyIsTheLocal(t *testing.T) {
+	a, read := setupRenameAnalyzer(map[string]string{"file:///Plot.php": referencesPlot})
+	pos := positionOf(t, referencesPlot, "$area = 2.0")
+	if got := a.PrepareRename("file:///Plot.php", referencesPlot, pos); got == nil || got.Placeholder != "$area" {
+		t.Errorf("prepare-rename of the local: %+v", got)
+	}
+	edit := a.Rename("file:///Plot.php", referencesPlot, pos, "$size", read)
+	if edit == nil {
+		t.Fatal("the local can be renamed")
+	}
+	var got []string
+	for _, e := range edit.Changes["file:///Plot.php"] {
+		got = append(got, fmt.Sprintf("%d:%d", e.Range.Start.Line, e.Range.Start.Character))
+	}
+	slices.Sort(got)
+	if want := []string{"8:8", "9:15"}; !slices.Equal(got, want) || len(edit.Changes) != 1 {
+		t.Errorf("only the local and its use are renamed:\n got %v\nwant %v", got, want)
+	}
+}
