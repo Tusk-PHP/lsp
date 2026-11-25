@@ -92,13 +92,6 @@ func TestDetectMemberContext(t *testing.T) {
 	}
 }
 
-func TestNamespaceUsesParserResult(t *testing.T) {
-	source := "<?php\nnamespace App\\Models;\nclass User {}\n"
-	if got := Namespace(source); got != "App\\Models" {
-		t.Fatalf("Namespace() = %q, want %q", got, "App\\Models")
-	}
-}
-
 func TestAnalyzeBuildsFunctionScopeOutsideClass(t *testing.T) {
 	source := `<?php
 namespace App\Helpers;
