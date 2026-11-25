@@ -51,6 +51,8 @@ jobs:
         run: go build ./...
 
       - name: Test
+        env:
+          TUSK_PHP_TOKENIZERS: php;docker run --rm -i -v /tmp:/tmp:ro php:7.4-cli php
         run: go test -v -race -timeout 600s -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Upload coverage to Codecov

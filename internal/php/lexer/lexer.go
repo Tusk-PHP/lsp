@@ -147,7 +147,7 @@ func (l *lexer) scripting(insideBraces bool) {
 			} else {
 				l.word()
 			}
-		case c == '\\' && start+1 < len(src) && isLabelStart(src[start+1]):
+		case c == '\\' && start+1 < len(src) && isLabelStart(src[start+1]) && token.NameFullyQualified.In(l.version):
 			l.emit(token.NameFullyQualified, qualifiedEnd(src, labelEnd(src, start+2)))
 		case isDigit(c) || c == '.' && start+1 < len(src) && isDigit(src[start+1]):
 			l.number()
@@ -161,10 +161,10 @@ func (l *lexer) scripting(insideBraces bool) {
 			if l.pos < len(l.src) {
 				l.emit(token.Backtick, l.pos+1)
 			}
-		case c == '#' && !commentKeepsArrow && strings.HasPrefix(src[start:], "#["):
+		case c == '#' && !commentKeepsArrow && strings.HasPrefix(src[start:], "#[") && token.Attribute.In(l.version):
 			l.emit(token.Attribute, start+2)
 		case c == '#' || strings.HasPrefix(src[start:], "//"):
-			l.emit(token.Comment, lineCommentEnd(src, start))
+			l.emit(token.Comment, l.lineCommentEnd(start))
 			l.afterArrow = commentKeepsArrow
 		case strings.HasPrefix(src[start:], "/*"):
 			l.blockComment()
@@ -216,7 +216,7 @@ func (l *lexer) word() {
 			l.pos = start
 		}
 	}
-	if end < len(src) && src[end] == '\\' && end+1 < len(src) && isLabelStart(src[end+1]) {
+	if end < len(src) && src[end] == '\\' && end+1 < len(src) && isLabelStart(src[end+1]) && token.NameQualified.In(l.version) {
 		kind := token.NameQualified
 		if strings.EqualFold(src[start:end], "namespace") {
 			kind = token.NameRelative
@@ -531,7 +531,7 @@ func (l *lexer) variableInString() {
 	case strings.HasPrefix(src[i:], "->") && i+2 < len(src) && isLabelStart(src[i+2]):
 		l.emit(token.ObjectOperator, i+2)
 		l.emit(token.Identifier, labelEnd(src, i+3))
-	case strings.HasPrefix(src[i:], "?->") && i+3 < len(src) && isLabelStart(src[i+3]):
+	case strings.HasPrefix(src[i:], "?->") && i+3 < len(src) && isLabelStart(src[i+3]) && token.NullsafeObjectOperator.In(l.version):
 		l.emit(token.NullsafeObjectOperator, i+3)
 		l.emit(token.Identifier, labelEnd(src, i+4))
 	}
@@ -687,6 +687,15 @@ func (l *lexer) blockComment() {
 		return
 	}
 	l.emit(kind, start+2+end+2)
+}
+
+func (l *lexer) lineCommentEnd(start int) int {
+	end := lineCommentEnd(l.src, start)
+	if l.version >= token.PHP80 {
+		return end
+	}
+	end, _ = newlineEnd(l.src, end)
+	return end
 }
 
 func lineCommentEnd(src string, i int) int {

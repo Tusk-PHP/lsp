@@ -17,7 +17,7 @@ func TestEveryKindHasAPHPName(t *testing.T) {
 }
 
 func TestParseVersion(t *testing.T) {
-	for in, want := range map[string]Version{"8.0": PHP80, "8.3.12": PHP83, "8.5": PHP85, "8.6": PHP86} {
+	for in, want := range map[string]Version{"7.4": PHP74, "7.4.33": PHP74, "8.0": PHP80, "8.3.12": PHP83, "8.5": PHP85, "8.6": PHP86} {
 		if got, err := ParseVersion(in); err != nil || got != want {
 			t.Errorf("%s: got %v, %v", in, got, err)
 		}
@@ -25,7 +25,7 @@ func TestParseVersion(t *testing.T) {
 			t.Errorf("%v prints as %s", want, want.String())
 		}
 	}
-	for in, want := range map[string]Version{"7.4": PHP80, "5.6.40": PHP80, "8.7": Latest, "8.10": Latest, "9.0": Latest} {
+	for in, want := range map[string]Version{"7.3": PHP74, "5.6.40": PHP74, "8.7": Latest, "8.10": Latest, "9.0": Latest} {
 		if got, err := ParseVersion(in); err != nil || got != want {
 			t.Errorf("%s lexes with the closest grammar %v, got %v, %v", in, want, got, err)
 		}
@@ -35,8 +35,16 @@ func TestParseVersion(t *testing.T) {
 			t.Errorf("%q must not parse", bad)
 		}
 	}
-	if !Enum.In(PHP81) || Enum.In(PHP80) || !Pipe.In(Latest) || Pipe.In(PHP84) || !Variable.In(PHP80) {
+	if !Enum.In(PHP81) || Enum.In(PHP80) || !Pipe.In(Latest) || Pipe.In(PHP84) || !Variable.In(PHP74) {
 		t.Error("kinds exist from the version that introduced them")
+	}
+	for _, k := range []Kind{NameQualified, NameFullyQualified, NameRelative, Match, Attribute, NullsafeObjectOperator} {
+		if k.In(PHP74) || !k.In(PHP80) {
+			t.Errorf("%s arrived in PHP 8.0", k)
+		}
+	}
+	if k, n := Punctuator("?->", PHP74); k != Question || n != 1 {
+		t.Errorf("?-> on PHP 7.4: got %v %d, want ? alone", k, n)
 	}
 }
 
