@@ -16,6 +16,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
 // corpusEntry holds a collected PHP file with its URI and source.
@@ -45,10 +46,10 @@ func testdataRoot() string {
 }
 
 // collectCorpus walks testdata/ and, if present, testdata/corpus/_repos/ for
-// every .php file. Absence of the _repos directory is normal (CI only) and
-// never causes an error. Folders that git ignores and CI's conformance jobs
-// don't have are left out (see skippedTestdataDir), so a local run reads the
-// same files as CI.
+// every .php file that is not a Blade view. Absence of the _repos directory is
+// normal (CI only) and never causes an error. Folders that git ignores and CI's
+// conformance jobs don't have are left out (see skippedTestdataDir), so a local
+// run reads the same files as CI.
 func collectCorpus() ([]corpusEntry, error) {
 	roots := []string{testdataRoot()}
 
@@ -72,7 +73,7 @@ func collectCorpus() ([]corpusEntry, error) {
 				}
 				return nil
 			}
-			if !strings.HasSuffix(path, ".php") {
+			if !strings.HasSuffix(path, ".php") || workspace.IsBlade(path) {
 				return nil
 			}
 			if seen[path] {
