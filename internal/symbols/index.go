@@ -1211,7 +1211,7 @@ func (idx *Index) getClassMembersRecursive(fqn string, visited map[string]bool) 
 }
 
 func (idx *Index) Definitions(fqn string) []*Symbol {
-	idx.ensureGenerated(fqn)
+	idx.ensureClass(fqn)
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	current := idx.symbols[fqn]
