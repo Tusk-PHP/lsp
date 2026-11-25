@@ -552,7 +552,7 @@ func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position)
 		return nil
 	}
 
-	sym := a.resolveSymbolAtCursor(r, uri, source, pos, word, file)
+	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 	if sym == nil {
 		return nil
 	}
@@ -574,8 +574,7 @@ func (a *Analyzer) FindImplementation(uri, source string, pos protocol.Position)
 		return nil
 	}
 
-	file := parser.ParseFile(source)
-	sym := a.resolveSymbolAtCursor(r, uri, source, pos, word, file)
+	sym := a.resolveSymbolAt(r, sourcectx.Analyze(uri, source, pos).Name(), source)
 	if sym == nil {
 		return nil
 	}
@@ -683,7 +682,7 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 	// Try to resolve as a symbol first — this handles properties ($name in declarations)
 	// and member access contexts before falling back to variable scope
 	ctx := sourcectx.Analyze(uri, source, pos)
-	sym := a.resolveSymbolAtCursor(r, uri, source, pos, word, file)
+	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 
 	// Built-in symbols are opaque to navigation: do not scan the workspace for refs.
 	if symbols.IsBuiltin(sym) {
@@ -716,21 +715,24 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 
 // resolveSymbolAtCursor resolves the word at cursor to a Symbol, handling
 // member access chains, use imports, and namespace resolution.
-func (a *Analyzer) resolveSymbolAtCursor(r *resolve.Resolver, uri, source string, pos protocol.Position, word string, file *parser.FileNode) *symbols.Symbol {
-	ctx := sourcectx.Analyze(uri, source, pos)
+func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameContext, source string) *symbols.Symbol {
+	if ctx == nil || ctx.SymbolText == "" {
+		return nil
+	}
+	word, file, pos := ctx.SymbolText, ctx.File, ctx.Position
 
 	// Check for member access context (->method or ::method).
 	// W1 guard: if we're in an access chain but can't resolve the receiver or
 	// the member, return nil — do not fall through to name-based lookups that
 	// would match unrelated symbols across the project.
-	if ctx != nil && ctx.AccessKind != sourcectx.AccessNone {
+	if ctx.AccessKind != sourcectx.AccessNone {
 		owner := r.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
 		if owner.BaseFQN() == "" {
 			return nil
 		}
 		return r.AccessedMemberOn(owner, word, ctx.Called)
 	}
-	if ctx != nil && ctx.FunctionCall {
+	if ctx.FunctionCall {
 		return r.CalledFunction(word, file)
 	}
 
@@ -739,20 +741,17 @@ func (a *Analyzer) resolveSymbolAtCursor(r *resolve.Resolver, uri, source string
 		bare := strings.TrimPrefix(word, "$")
 		classFQN := resolve.FindEnclosingClass(file, pos)
 		if classFQN != "" {
-			propFQN := classFQN + "::" + bare
-			if sym := a.index.Lookup(propFQN); sym != nil {
+			if sym := a.index.Lookup(classFQN + "::" + word); sym != nil {
 				return sym
 			}
-			// Also try with $ prefix (some indexes store it with $)
-			propFQN = classFQN + "::" + word
-			if sym := a.index.Lookup(propFQN); sym != nil {
+			if sym := a.index.Lookup(classFQN + "::" + bare); sym != nil && sym.Kind == symbols.KindProperty {
 				return sym
 			}
 		}
 	}
 
 	// Check if we're on a member declaration inside the enclosing type.
-	if ctx != nil && ctx.EnclosingFQN != "" {
+	if ctx.EnclosingFQN != "" {
 		if sym := a.index.Lookup(ctx.EnclosingFQN + "::" + word); sym != nil {
 			return sym
 		}
@@ -779,11 +778,7 @@ func (a *Analyzer) resolveSymbolAtCursor(r *resolve.Resolver, uri, source string
 		return sym
 	}
 
-	enclosing := ""
-	if ctx != nil {
-		enclosing = ctx.EnclosingFQN
-	}
-	return a.index.LookupStandalone(word, enclosing)
+	return a.index.LookupStandalone(word, ctx.EnclosingFQN)
 }
 
 // findVariableReferences finds all occurrences of a variable within its enclosing function scope.
@@ -908,17 +903,6 @@ func symbolContainerName(sym *symbols.Symbol) string {
 		}
 	}
 	return ""
-}
-
-func highlightKindForRange(rng protocol.Range, declRange protocol.Range, cursorRange protocol.Range) protocol.DocumentHighlightKind {
-	switch {
-	case sameRange(rng, declRange):
-		return protocol.DocumentHighlightKindWrite
-	case sameRange(rng, cursorRange):
-		return protocol.DocumentHighlightKindText
-	default:
-		return protocol.DocumentHighlightKindRead
-	}
 }
 
 func sameRange(a, b protocol.Range) bool {
@@ -1074,58 +1058,6 @@ func (a *Analyzer) GetWorkspaceSymbols(query string) []protocol.SymbolInformatio
 	return results
 }
 
-func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Position) []protocol.DocumentHighlight {
-	r := a.engine.Resolver()
-	word, wordRange := sourcectx.WordAt(source, pos)
-	if word == "" {
-		return nil
-	}
-
-	file := parser.ParseFile(source)
-	sym := a.resolveSymbolAtCursor(r, uri, source, pos, word, file)
-	if sym == nil && strings.HasPrefix(word, "$") && word != "$this" {
-		return highlightVariableOccurrences(source, pos, word)
-	}
-
-	lines := strings.Split(source, "\n")
-	if sym == nil {
-		var highlights []protocol.DocumentHighlight
-		for i, line := range lines {
-			for _, loc := range findWordLocations(uri, line, i, word) {
-				highlights = append(highlights, protocol.DocumentHighlight{Range: loc.Range, Kind: protocol.DocumentHighlightKindText})
-			}
-		}
-		return deduplicateHighlights(highlights)
-	}
-
-	var highlights []protocol.DocumentHighlight
-	for i, line := range lines {
-		switch sym.Kind {
-		case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
-			for _, loc := range findWordLocations(uri, line, i, sym.Name) {
-				highlights = append(highlights, protocol.DocumentHighlight{Range: loc.Range, Kind: highlightKindForRange(loc.Range, sym.Range, wordRange)})
-			}
-			for _, loc := range findAccessLocations(uri, line, i, "\\"+sym.Name, 1, sym.Name) {
-				highlights = append(highlights, protocol.DocumentHighlight{Range: loc.Range, Kind: protocol.DocumentHighlightKindRead})
-			}
-		case symbols.KindMethod, symbols.KindFunction, symbols.KindConstant, symbols.KindEnumCase:
-			for _, loc := range findWordLocations(uri, line, i, sym.Name) {
-				highlights = append(highlights, protocol.DocumentHighlight{Range: loc.Range, Kind: highlightKindForRange(loc.Range, sym.Range, wordRange)})
-			}
-		case symbols.KindProperty:
-			bareName := strings.TrimPrefix(sym.Name, "$")
-			for _, loc := range findWordLocations(uri, line, i, "$"+bareName) {
-				highlights = append(highlights, protocol.DocumentHighlight{Range: loc.Range, Kind: highlightKindForRange(loc.Range, sym.Range, wordRange)})
-			}
-			for _, loc := range findAccessLocations(uri, line, i, "->"+bareName, 2, bareName) {
-				highlights = append(highlights, protocol.DocumentHighlight{Range: loc.Range, Kind: protocol.DocumentHighlightKindRead})
-			}
-		}
-	}
-
-	return deduplicateHighlights(highlights)
-}
-
 func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *protocol.SignatureHelp {
 	callee, activeParam, ok := sourcectx.CallAt(uri, source, pos)
 	if !ok {
@@ -1191,13 +1123,7 @@ type ReferenceVariant struct {
 func (a *Analyzer) CopyReference(uri, source string, pos protocol.Position) []ReferenceVariant {
 	r := a.engine.Resolver()
 	ctx := sourcectx.Analyze(uri, source, pos)
-	if ctx == nil || ctx.SymbolText == "" {
-		return nil
-	}
-	word := ctx.SymbolText
-	file := ctx.File
-
-	sym := a.resolveSymbolAtCursor(r, uri, source, pos, word, file)
+	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 	if sym == nil {
 		return nil
 	}
@@ -1305,7 +1231,7 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 	file := ctx.File
 
 	// Try resolving as a symbol (class, method, property, function, etc.)
-	sym := a.resolveSymbolAtCursor(r, uri, source, pos, word, file)
+	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 
 	// Reject built-ins
 	if sym != nil && symbols.IsBuiltin(sym) {
@@ -1415,7 +1341,7 @@ func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName str
 	file := ctx.File
 
 	// Try resolving as a symbol first (handles properties, methods, classes, etc.)
-	sym := a.resolveSymbolAtCursor(r, uri, source, pos, word, file)
+	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 
 	// If it's a known symbol, rename it across the workspace
 	if sym != nil {

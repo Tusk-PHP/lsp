@@ -43,17 +43,14 @@ type Scope struct {
 	EndLine    int
 }
 
-type CursorContext struct {
+type NameContext struct {
 	URI             string
 	Position        protocol.Position
-	Namespace       string
-	Uses            []parser.UseNode
 	SymbolText      string
 	SymbolKind      ContextSymbolKind
 	AccessKind      AccessKind
 	SubjectExpr     string
 	EnclosingFQN    string
-	Scope           *Scope
 	WordRange       protocol.Range
 	Line            string
 	JoinedLine      string
@@ -63,50 +60,85 @@ type CursorContext struct {
 	FunctionCall    bool
 }
 
+type CursorContext struct {
+	NameContext
+	Namespace string
+	Uses      []parser.UseNode
+	Scope     *Scope
+}
+
+func (c *CursorContext) Name() *NameContext {
+	if c == nil {
+		return nil
+	}
+	return &c.NameContext
+}
+
 type MemberContext struct {
 	Prefix     string
 	Filter     string
 	AccessKind AccessKind
 }
 
-func Analyze(uri, source string, pos protocol.Position) *CursorContext {
-	return analyzeParsed(uri, source, parser.New().Parse(source), pos)
+type Document struct {
+	uri    string
+	lines  []string
+	result *parser.ParseResult
+	file   *parser.FileNode
 }
 
-func analyzeParsed(uri, source string, result *parser.ParseResult, pos protocol.Position) *CursorContext {
-	lines := strings.Split(source, "\n")
-	if pos.Line < 0 || pos.Line >= len(lines) {
+func NewDocument(uri, source string) *Document {
+	return &Document{uri: uri, lines: strings.Split(source, "\n"), result: parser.New().Parse(source), file: parser.ParseFile(source)}
+}
+
+func (d *Document) Tokens() []parser.Token {
+	return d.result.Tokens
+}
+
+func (d *Document) File() *parser.FileNode {
+	return d.file
+}
+
+func Analyze(uri, source string, pos protocol.Position) *CursorContext {
+	return NewDocument(uri, source).At(pos)
+}
+
+func (d *Document) At(pos protocol.Position) *CursorContext {
+	name := d.NameAt(pos)
+	if name == nil {
 		return nil
 	}
+	ctx := &CursorContext{NameContext: *name}
+	ctx.Namespace, ctx.Uses = namespaceUsesAt(d.result, pos)
+	ctx.Scope = scopeAt(d.result, pos, ctx.EnclosingFQN)
+	return ctx
+}
 
-	file := parser.ParseFile(source)
-	word, wordRange := WordAt(source, pos)
-	line := lines[pos.Line]
-	joinedLine, joinedWordStart := resolve.JoinChainLines(lines, pos.Line, wordRange.Start.Character)
+func (d *Document) NameAt(pos protocol.Position) *NameContext {
+	if pos.Line < 0 || pos.Line >= len(d.lines) {
+		return nil
+	}
+	line := d.lines[pos.Line]
+	word, wordRange := wordAtLine(line, pos)
+	joinedLine, joinedWordStart := resolve.JoinChainLines(d.lines, pos.Line, wordRange.Start.Character)
 	accessKind, subjectExpr := detectAccess(joinedLine, joinedWordStart)
-	namespace, uses := namespaceUsesAt(result, pos)
-	enclosingFQN := enclosingClassAt(result, file, pos)
-
-	ctx := &CursorContext{
-		URI:             uri,
+	called := isCalled(d.result.Tokens, wordRange)
+	return &NameContext{
+		URI:             d.uri,
 		Position:        pos,
-		Namespace:       namespace,
-		Uses:            uses,
 		SymbolText:      word,
 		SymbolKind:      classifySymbolKind(word),
 		AccessKind:      accessKind,
 		SubjectExpr:     subjectExpr,
-		EnclosingFQN:    enclosingFQN,
+		EnclosingFQN:    enclosingClassAt(d.result, d.file, pos),
 		WordRange:       wordRange,
 		Line:            line,
 		JoinedLine:      joinedLine,
 		JoinedWordStart: joinedWordStart,
-		File:            file,
+		File:            d.file,
+		Called:          called,
+		FunctionCall:    called && accessKind == AccessNone,
 	}
-	ctx.Called = isCalled(result.Tokens, wordRange)
-	ctx.FunctionCall = ctx.Called && accessKind == AccessNone
-	ctx.Scope = scopeAt(result, pos, ctx.EnclosingFQN)
-	return ctx
 }
 
 func WordAt(source string, pos protocol.Position) (string, protocol.Range) {
@@ -114,7 +146,10 @@ func WordAt(source string, pos protocol.Position) (string, protocol.Range) {
 	if pos.Line < 0 || pos.Line >= len(lines) {
 		return "", protocol.Range{}
 	}
-	line := lines[pos.Line]
+	return wordAtLine(lines[pos.Line], pos)
+}
+
+func wordAtLine(line string, pos protocol.Position) (string, protocol.Range) {
 	if pos.Character > len(line) {
 		return "", protocol.Range{}
 	}
