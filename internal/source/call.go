@@ -74,12 +74,12 @@ func inAttribute(tokens []parser.Token, i int) bool {
 }
 
 func CallAt(uri, source string, pos protocol.Position) (callee *CursorContext, argument int, ok bool) {
-	result := parser.New().Parse(source)
-	calleePos, argument, ok := calleeAt(result.Tokens, pos)
+	doc := NewDocument(uri, source)
+	calleePos, argument, ok := calleeAt(doc.Tokens(), pos)
 	if !ok {
 		return nil, 0, false
 	}
-	callee = analyzeParsed(uri, source, result, calleePos)
+	callee = doc.At(calleePos)
 	return callee, argument, callee != nil
 }
 
