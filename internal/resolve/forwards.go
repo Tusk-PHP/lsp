@@ -94,6 +94,19 @@ func (r *Resolver) FindMemberAnywhere(classFQN, name string) *symbols.Symbol {
 	return r.FindMemberAnywhereOn(ResolvedType{FQN: classFQN}, name)
 }
 
+// AccessedMemberOn finds the member an access names on its receiver: the
+// method for a call and the property otherwise, then the same name through
+// the class's mixins and forwards, with the receiver's type arguments.
+func (r *Resolver) AccessedMemberOn(owner ResolvedType, name string, call bool) *symbols.Symbol {
+	if m := r.FindAccessedMember(owner.BaseFQN(), name, call); m != nil {
+		return m
+	}
+	if m := r.FindMemberAnywhere(owner.BaseFQN(), name); m != nil {
+		return m
+	}
+	return r.FindMemberAnywhereOn(owner, name)
+}
+
 // FindMemberAnywhereOn is FindMemberAnywhere on a type with its type
 // arguments, so a scope called on Builder<Category> finds Category's.
 func (r *Resolver) FindMemberAnywhereOn(rt ResolvedType, name string) *symbols.Symbol {

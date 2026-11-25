@@ -101,16 +101,6 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 	return a.resolveDefinitionSymbol(a.engine.Resolver(), uri, source, pos).loc
 }
 
-func (a *Analyzer) accessedMember(r *resolve.Resolver, owner resolve.ResolvedType, word string, called bool) *symbols.Symbol {
-	if member := r.FindAccessedMember(owner.BaseFQN(), word, called); member != nil {
-		return member
-	}
-	if member := r.FindMemberAnywhere(owner.BaseFQN(), word); member != nil {
-		return member
-	}
-	return r.FindMemberAnywhereOn(owner, word)
-}
-
 // classKeywordFQN returns the class that self, static or parent stands for at
 // the cursor (in any letter case), or "" when word isn't one of them or there
 // is no enclosing class. A word after -> or :: is a member, never the keyword.
@@ -258,7 +248,7 @@ func (a *Analyzer) symbolTarget(r *resolve.Resolver, uri, source string, ctx *so
 		if classFQN == "" {
 			return definitionTarget{}
 		}
-		if member := a.accessedMember(r, owner, word, ctx.Called); member != nil {
+		if member := r.AccessedMemberOn(owner, word, ctx.Called); member != nil {
 			// Owner is the *declaring* class (member.ParentFQN), not the
 			// receiver — that's how php.net documents methods/properties:
 			// ReflectionMethod::getParameters lives at
@@ -738,7 +728,7 @@ func (a *Analyzer) resolveSymbolAtCursor(r *resolve.Resolver, uri, source string
 		if owner.BaseFQN() == "" {
 			return nil
 		}
-		return a.accessedMember(r, owner, word, ctx.Called)
+		return r.AccessedMemberOn(owner, word, ctx.Called)
 	}
 	if ctx != nil && ctx.FunctionCall {
 		return r.CalledFunction(word, file)
