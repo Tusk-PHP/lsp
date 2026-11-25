@@ -20,6 +20,11 @@ func isCalled(tokens []parser.Token, word protocol.Range) bool {
 		first--
 	}
 	if prev := parser.PrevSignificant(tokens, first-1); prev >= 0 {
+		if tokens[prev].Kind == parser.TokenAmpersand {
+			if beforeRef := parser.PrevSignificant(tokens, prev-1); beforeRef >= 0 && tokens[beforeRef].Kind == parser.TokenFunction {
+				return false
+			}
+		}
 		switch tokens[prev].Kind {
 		case parser.TokenNew, parser.TokenFunction:
 			return false
