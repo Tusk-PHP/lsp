@@ -815,6 +815,10 @@ func (a *Analyzer) resolveSymbolAt(ctx *sourcectx.NameContext, source string) *s
 		return a.resolver.CalledFunction(word, file)
 	}
 
+	if member := a.index.MemberDeclaredAt(ctx.URI, pos, word); member != nil {
+		return member
+	}
+
 	// Check if it's a class property declaration ($name on a property line)
 	if strings.HasPrefix(word, "$") && file != nil {
 		bare := strings.TrimPrefix(word, "$")
@@ -1289,14 +1293,7 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 	// Try resolving as a symbol (class, method, property, function, etc.)
 	sym := a.resolveSymbolAt(ctx.Name(), source)
 
-	// Reject built-ins
-	if sym != nil && symbols.IsBuiltin(sym) {
-		return nil
-	}
-
-	// Reject vendor and generated symbols (renaming dependencies is not
-	// useful, and generated classes have no file to edit)
-	if sym != nil && (sym.Source == symbols.SourceVendor || sym.Source == symbols.SourceGenerated) {
+	if sym != nil && !a.referenceTargetOf(sym).renamable() {
 		return nil
 	}
 
@@ -1396,7 +1393,7 @@ func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName str
 
 	// If it's a known symbol, rename it across the workspace
 	if sym != nil {
-		if symbols.IsBuiltin(sym) || sym.Source == symbols.SourceVendor || sym.Source == symbols.SourceGenerated {
+		if !a.referenceTargetOf(sym).renamable() {
 			return nil
 		}
 		return a.renameSymbol(sym, newName, readDocument, uri, source)

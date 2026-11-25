@@ -96,6 +96,10 @@ func (d *Document) Tokens() []parser.Token {
 	return d.result.Tokens
 }
 
+func (d *Document) URI() string {
+	return d.uri
+}
+
 func (d *Document) File() *parser.FileNode {
 	return d.file
 }

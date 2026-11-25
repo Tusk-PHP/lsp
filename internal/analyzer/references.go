@@ -11,8 +11,9 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
-// findSymbolOccurrences finds the references to sym in every indexed file
-// and in the PHP of templates, its declaration included.
+// findSymbolOccurrences finds the references to sym, and to the members of
+// its family (symbols.MemberFamily), in every indexed file and in the PHP of
+// templates, their declarations included.
 //
 // uri and source are the document the request came from. When it's a template,
 // source is its virtual PHP and its locations are positions in that PHP, which
@@ -21,10 +22,8 @@ func (a *Analyzer) findSymbolOccurrences(sym *symbols.Symbol, readDocument func(
 	if symbols.IsBuiltin(sym) {
 		return nil
 	}
-	var locs []protocol.Location
-	if sym.URI != "" {
-		locs = append(locs, protocol.Location{URI: sym.URI, Range: sym.Range})
-	}
+	target := a.referenceTargetOf(sym)
+	locs := target.declarations()
 	for _, fileURI := range a.index.GetAllFileURIs() {
 		if strings.HasPrefix(fileURI, "builtin://") {
 			continue
@@ -33,9 +32,9 @@ func (a *Analyzer) findSymbolOccurrences(sym *symbols.Symbol, readDocument func(
 		if !mayMention(src, sym) {
 			continue
 		}
-		locs = append(locs, locationsIn(fileURI, a.occurrencesIn(sym, fileURI, src))...)
+		locs = append(locs, locationsIn(fileURI, a.occurrencesIn(target, fileURI, src))...)
 	}
-	locs = append(locs, a.templateOccurrences(sym, readDocument, uri, source)...)
+	locs = append(locs, a.templateOccurrences(target, readDocument, uri, source)...)
 	return deduplicateLocations(locs)
 }
 
@@ -75,17 +74,17 @@ func locationsIn(uri string, ranges []protocol.Range) []protocol.Location {
 	return locs
 }
 
-func (a *Analyzer) templateOccurrences(sym *symbols.Symbol, readDocument func(string) string, uri, source string) []protocol.Location {
+func (a *Analyzer) templateOccurrences(target referenceTarget, readDocument func(string) string, uri, source string) []protocol.Location {
 	templates := a.index.TemplateFileURIs()
 	if workspace.IsBlade(uri) {
-		locs := locationsIn(uri, a.occurrencesIn(sym, uri, source))
+		locs := locationsIn(uri, a.occurrencesIn(target, uri, source))
 		templates = slices.DeleteFunc(templates, func(t string) bool { return t == uri })
-		return append(locs, a.otherTemplateOccurrences(sym, readDocument, templates)...)
+		return append(locs, a.otherTemplateOccurrences(target, readDocument, templates)...)
 	}
-	return a.otherTemplateOccurrences(sym, readDocument, templates)
+	return a.otherTemplateOccurrences(target, readDocument, templates)
 }
 
-func (a *Analyzer) otherTemplateOccurrences(sym *symbols.Symbol, readDocument func(string) string, templates []string) []protocol.Location {
+func (a *Analyzer) otherTemplateOccurrences(target referenceTarget, readDocument func(string) string, templates []string) []protocol.Location {
 	var locs []protocol.Location
 	for _, t := range templates {
 		var src string
@@ -95,11 +94,11 @@ func (a *Analyzer) otherTemplateOccurrences(sym *symbols.Symbol, readDocument fu
 		if src == "" {
 			src = a.readFileFromDisk(t)
 		}
-		if !mayMention(src, sym) {
+		if !mayMention(src, target.sym) {
 			continue
 		}
 		doc := blade.Compile(src)
-		for _, r := range a.occurrencesIn(sym, t, doc.PHP) {
+		for _, r := range a.occurrencesIn(target, t, doc.PHP) {
 			sl, sc, el, ec, ok := doc.TemplateRange(r.Start.Line, r.Start.Character, r.End.Line, r.End.Character)
 			if !ok || sl != el || ec-sc != r.End.Character-r.Start.Character {
 				continue
