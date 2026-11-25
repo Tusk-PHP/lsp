@@ -177,3 +177,19 @@ func TestUnknownNamedArgumentWhenOneDeclarationForwardsOrLacksTheMethod(t *testi
 		t.Errorf("a declaration with __call, or without the method, may accept anything: %+v", got)
 	}
 }
+
+func TestUnknownNamedArgumentUsesEachDeclarationsOwnTraits(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	idx.IndexFile("file:///t.php", "<?php\ntrait T { public function m($x) {} }\nclass P { public function m($a) {} }\n")
+	idx.IndexFile("file:///a.php", "<?php\nclass Dup { use T; }\n")
+	idx.IndexFile("file:///b.php", "<?php\nclass Dup extends P {}\n")
+	source := "<?php\n$dup->m(a: 1);\n$dup->m(x: 1);\n$dup->m(z: 1);\n"
+	var got []int
+	for _, f := range (&UnknownNamedArgumentRule{TypeResolver: dupResolver}).Check(parser.ParseFile(source), source, idx) {
+		got = append(got, f.StartLine)
+	}
+	if !slices.Equal(got, []int{3}) {
+		t.Errorf("a parameter of the method one declaration takes from its trait or parent is accepted: lines %v", got)
+	}
+}

@@ -55,6 +55,7 @@ type Symbol struct {
 	ReturnType    string
 	Children      []*Symbol
 	Implements    []string
+	Traits        []string
 	Extends       string
 	BackedType    string
 	Value         string
@@ -305,28 +306,15 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 			}
 		} else {
 			// Class doesn't exist yet — index it normally
-			var resolvedImpls []string
-			for _, impl := range c.Implements {
-				resolvedImpls = append(resolvedImpls, resolve(impl))
-			}
 			sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, file.Uses),
 				IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly, IsConditional: c.Conditional,
-				Implements: resolvedImpls,
-				Range:      symRange(c.StartLine, c.StartCol, len(c.Name))}
+				Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve),
+				Range: symRange(c.StartLine, c.StartCol, len(c.Name))}
 			if c.Extends != "" {
 				sym.Extends = resolve(c.Extends)
 			}
 			idx.addSymbolWithSource(uri, sym, SourceProject)
-			if c.Extends != "" {
-				idx.setParentLocked(fqn, sym.Extends)
-			}
-			for _, impl := range resolvedImpls {
-				idx.implementsMap[fqn] = appendUnique(idx.implementsMap[fqn], impl)
-				idx.reverseImplementsMap[impl] = appendUnique(idx.reverseImplementsMap[impl], fqn)
-			}
-			for _, tr := range c.Traits {
-				idx.traitMap[fqn] = appendUnique(idx.traitMap[fqn], resolve(tr))
-			}
+			idx.linkTypeLocked(sym)
 			for _, prop := range c.Properties {
 				ps := &Symbol{Name: prop.Name, FQN: fqn + "::" + prop.Name, Kind: KindProperty, URI: uri,
 					Visibility: prop.Visibility, SetVisibility: prop.SetVisibility,
@@ -443,29 +431,16 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		if c.Name == parser.AnonymousClassName {
 			fqn = c.FullName
 		}
-		var resolvedImpls []string
-		for _, impl := range c.Implements {
-			resolvedImpls = append(resolvedImpls, resolve(impl))
-		}
 		sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, file.Uses),
 			IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly, IsConditional: c.Conditional,
-			Implements: resolvedImpls, Attributes: indexAttributes(c.Attributes, resolve),
-			Range: symRange(c.StartLine, c.StartCol, len(c.Name))}
+			Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve),
+			Attributes: indexAttributes(c.Attributes, resolve),
+			Range:      symRange(c.StartLine, c.StartCol, len(c.Name))}
 		previous := idx.symbols[fqn]
 		if c.Extends != "" {
 			sym.Extends = resolve(c.Extends)
 		}
 		idx.addSymbolWithSource(uri, sym, src)
-		if c.Extends != "" {
-			idx.setParentLocked(fqn, sym.Extends)
-		}
-		for _, impl := range resolvedImpls {
-			idx.implementsMap[fqn] = appendUnique(idx.implementsMap[fqn], impl)
-			idx.reverseImplementsMap[impl] = appendUnique(idx.reverseImplementsMap[impl], fqn)
-		}
-		for _, tr := range c.Traits {
-			idx.traitMap[fqn] = appendUnique(idx.traitMap[fqn], resolve(tr))
-		}
 		idx.indexProperties(uri, sym, fqn, c.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, c.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, c.Constants, src, resolve)
@@ -474,22 +449,16 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		if src == SourceBuiltin {
 			mergeEarlierLayer(sym, previous)
 		}
+		idx.linkTypeLocked(sym)
 	}
 
 	for _, iface := range file.Interfaces {
 		fqn := buildFQN(ns, iface.Name)
-		var resolvedParents []string
-		for _, parent := range iface.Extends {
-			resolvedParents = append(resolvedParents, resolve(parent))
-		}
 		sym := &Symbol{Name: iface.Name, FQN: fqn, Kind: KindInterface, URI: uri, DocComment: qualifyDocTypes(iface.DocComment, file.Uses),
-			Implements: resolvedParents, Attributes: indexAttributes(iface.Attributes, resolve),
+			Implements: resolveNames(iface.Extends, resolve), Attributes: indexAttributes(iface.Attributes, resolve),
 			Range: symRange(iface.StartLine, iface.StartCol, len(iface.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
-		for _, parent := range resolvedParents {
-			idx.implementsMap[fqn] = appendUnique(idx.implementsMap[fqn], parent)
-			idx.subInterfaceMap[parent] = appendUnique(idx.subInterfaceMap[parent], fqn)
-		}
+		idx.linkTypeLocked(sym)
 		idx.indexProperties(uri, sym, fqn, iface.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, iface.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, iface.Constants, src, resolve)
@@ -499,11 +468,10 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 	for _, tr := range file.Traits {
 		fqn := buildFQN(ns, tr.Name)
 		sym := &Symbol{Name: tr.Name, FQN: fqn, Kind: KindTrait, URI: uri, DocComment: qualifyDocTypes(tr.DocComment, file.Uses),
-			Range: symRange(tr.StartLine, tr.StartCol, len(tr.Name))}
+			Traits: resolveNames(tr.Traits, resolve),
+			Range:  symRange(tr.StartLine, tr.StartCol, len(tr.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
-		for _, usedTrait := range tr.Traits {
-			idx.traitMap[fqn] = appendUnique(idx.traitMap[fqn], resolve(usedTrait))
-		}
+		idx.linkTypeLocked(sym)
 		idx.indexProperties(uri, sym, fqn, tr.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, tr.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, tr.Constants, src, resolve)
@@ -513,27 +481,18 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 
 	for _, en := range file.Enums {
 		fqn := buildFQN(ns, en.Name)
-		var resolvedEnumImpls []string
-		for _, impl := range en.Implements {
-			resolvedEnumImpls = append(resolvedEnumImpls, resolve(impl))
-		}
 		sym := &Symbol{Name: en.Name, FQN: fqn, Kind: KindEnum, URI: uri, DocComment: qualifyDocTypes(en.DocComment, file.Uses),
-			BackedType: en.BackedType, Implements: resolvedEnumImpls, Attributes: indexAttributes(en.Attributes, resolve),
-			Range: symRange(en.StartLine, en.StartCol, len(en.Name))}
+			BackedType: en.BackedType, Implements: resolveNames(en.Implements, resolve), Traits: resolveNames(en.Traits, resolve),
+			Attributes: indexAttributes(en.Attributes, resolve),
+			Range:      symRange(en.StartLine, en.StartCol, len(en.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
-		for _, impl := range resolvedEnumImpls {
-			idx.implementsMap[fqn] = appendUnique(idx.implementsMap[fqn], impl)
-			idx.reverseImplementsMap[impl] = appendUnique(idx.reverseImplementsMap[impl], fqn)
-		}
+		idx.linkTypeLocked(sym)
 		for _, ec := range en.Cases {
 			cs := &Symbol{Name: ec.Name, FQN: fqn + "::" + ec.Name, Kind: KindEnumCase, URI: uri, ParentFQN: fqn, Value: ec.Value,
 				DocComment: ec.DocComment, Attributes: indexAttributes(ec.Attributes, resolve),
 				Range: symRange(ec.StartLine, ec.StartCol, len(ec.Name))}
 			sym.Children = append(sym.Children, cs)
 			idx.addSymbolWithSource(uri, cs, src)
-		}
-		for _, tr := range en.Traits {
-			idx.traitMap[fqn] = appendUnique(idx.traitMap[fqn], resolve(tr))
 		}
 		idx.indexProperties(uri, sym, fqn, en.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, en.Methods, src, resolve, file.Uses)
@@ -645,7 +604,7 @@ func (idx *Index) removeFileSymbols(uri string) {
 			idx.unshadowLocked(sym)
 			continue
 		}
-		if !sym.Kind.IsMember() && idx.promoteShadowedLocked(sym.FQN) {
+		if !sym.Kind.IsMember() && idx.promoteShadowedLocked(sym) {
 			continue
 		}
 		delete(idx.symbols, sym.FQN)
@@ -667,18 +626,7 @@ func (idx *Index) removeFileSymbols(uri string) {
 				delete(idx.foldIndex, key)
 			}
 		}
-		// Clean up reverse implements map
-		if ifaces, ok := idx.implementsMap[sym.FQN]; ok {
-			for _, iface := range ifaces {
-				idx.reverseImplementsMap[iface] = removeFromSlice(idx.reverseImplementsMap[iface], sym.FQN)
-				if sym.Kind == KindInterface {
-					idx.subInterfaceMap[iface] = removeFromSlice(idx.subInterfaceMap[iface], sym.FQN)
-				}
-			}
-		}
-		delete(idx.implementsMap, sym.FQN)
-		idx.clearParentLocked(sym.FQN)
-		delete(idx.traitMap, sym.FQN)
+		idx.unlinkTypeLocked(sym)
 	}
 	delete(idx.fileSymbols, uri)
 	delete(idx.fileSource, uri)
@@ -695,6 +643,7 @@ func (idx *Index) shadowLocked(sym *Symbol) {
 		idx.shadowed = make(map[string][]*Symbol)
 	}
 	idx.shadowed[sym.FQN] = append(idx.shadowed[sym.FQN], prev)
+	idx.unlinkTypeLocked(prev)
 }
 
 func (idx *Index) unshadowLocked(sym *Symbol) {
@@ -709,23 +658,63 @@ func (idx *Index) unshadowLocked(sym *Symbol) {
 	}
 }
 
-func (idx *Index) promoteShadowedLocked(fqn string) bool {
-	defs := idx.shadowed[fqn]
+func (idx *Index) promoteShadowedLocked(removed *Symbol) bool {
+	defs := idx.shadowed[removed.FQN]
 	if len(defs) == 0 {
 		return false
 	}
 	promoted := defs[len(defs)-1]
 	idx.unshadowLocked(promoted)
-	idx.symbols[fqn] = promoted
+	idx.unlinkTypeLocked(removed)
+	idx.symbols[promoted.FQN] = promoted
 	for _, child := range promoted.Children {
 		idx.symbols[child.FQN] = child
 	}
-	if promoted.Extends != "" {
-		idx.setParentLocked(fqn, promoted.Extends)
-	} else {
-		idx.clearParentLocked(fqn)
-	}
+	idx.linkTypeLocked(promoted)
 	return true
+}
+
+func (idx *Index) linkTypeLocked(sym *Symbol) {
+	fqn := sym.FQN
+	if sym.Extends != "" {
+		idx.setParentLocked(fqn, sym.Extends)
+	}
+	for _, parent := range sym.Implements {
+		idx.implementsMap[fqn] = appendUnique(idx.implementsMap[fqn], parent)
+		if sym.Kind == KindInterface {
+			idx.subInterfaceMap[parent] = appendUnique(idx.subInterfaceMap[parent], fqn)
+		} else {
+			idx.reverseImplementsMap[parent] = appendUnique(idx.reverseImplementsMap[parent], fqn)
+		}
+	}
+	for _, tr := range sym.Traits {
+		idx.traitMap[fqn] = appendUnique(idx.traitMap[fqn], tr)
+	}
+}
+
+func (idx *Index) unlinkTypeLocked(sym *Symbol) {
+	fqn := sym.FQN
+	for _, parent := range idx.implementsMap[fqn] {
+		if sym.Kind == KindInterface {
+			idx.subInterfaceMap[parent] = removeFromSlice(idx.subInterfaceMap[parent], fqn)
+		} else {
+			idx.reverseImplementsMap[parent] = removeFromSlice(idx.reverseImplementsMap[parent], fqn)
+		}
+	}
+	delete(idx.implementsMap, fqn)
+	idx.clearParentLocked(fqn)
+	delete(idx.traitMap, fqn)
+}
+
+func resolveNames(names []string, resolve func(string) string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		out = append(out, resolve(name))
+	}
+	return out
 }
 
 func (idx *Index) clearParentLocked(fqn string) {
@@ -858,8 +847,11 @@ func mergeEarlierLayer(sym, previous *Symbol) {
 	if sym.Extends == "" {
 		sym.Extends = previous.Extends
 	}
-	if len(sym.Implements) == 0 {
-		sym.Implements = previous.Implements
+	for _, impl := range previous.Implements {
+		sym.Implements = appendUnique(sym.Implements, impl)
+	}
+	for _, tr := range previous.Traits {
+		sym.Traits = appendUnique(sym.Traits, tr)
 	}
 }
 
@@ -1237,7 +1229,7 @@ func (idx *Index) DefinitionMembers(def *Symbol) []*Symbol {
 	if idx.symbols[def.FQN] == def {
 		return idx.getClassMembersRecursive(def.FQN, make(map[string]bool))
 	}
-	return idx.membersLocked(def.Children, idx.traitMap[def.FQN], def.Extends, def.Implements, map[string]bool{def.FQN: true})
+	return idx.membersLocked(def.Children, def.Traits, def.Extends, def.Implements, map[string]bool{def.FQN: true})
 }
 
 func (idx *Index) membersLocked(own []*Symbol, traits []string, parent string, interfaces []string, visited map[string]bool) []*Symbol {

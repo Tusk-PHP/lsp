@@ -111,3 +111,58 @@ func TestReindexingADuplicateClassDoesNotGrowItsInterfaces(t *testing.T) {
 		t.Fatalf("traits: %v", got)
 	}
 }
+
+func TestEachDeclarationHasItsOwnTraitsAndInterfaces(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///t.php", "<?php\ninterface I {}\ntrait T { public function m($x) {} }\nclass P { public function m($a) {} }\n")
+	idx.IndexFile("file:///a.php", "<?php\nclass Dup implements I { use T; }\n")
+	idx.IndexFile("file:///b.php", "<?php\nclass Dup extends P {}\n")
+	params := map[string]string{}
+	for _, def := range idx.Definitions("Dup") {
+		for _, m := range idx.DefinitionMembers(def) {
+			if m.Name == "m" {
+				params[def.URI] = m.Params[0].Name
+				break
+			}
+		}
+	}
+	if params["file:///a.php"] != "$x" || params["file:///b.php"] != "$a" {
+		t.Fatalf("each declaration takes m from its own trait or parent: %v", params)
+	}
+	if got := idx.TraitsOf("Dup"); len(got) != 0 {
+		t.Fatalf("the current declaration uses no trait: %v", got)
+	}
+	if got := idx.GetImplementedInterfaces("Dup"); len(got) != 0 {
+		t.Fatalf("the current declaration implements no interface: %v", got)
+	}
+	if got := idx.Implementations("I"); slices.Contains(got, "Dup") {
+		t.Fatalf("the current declaration doesn't implement I: %v", got)
+	}
+}
+
+func TestPromotedDeclarationReplacesTheRemovedOnesTraitsAndInterfaces(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///t.php", "<?php\ninterface I {}\ntrait T { public function fromTrait() {} }\nclass P { public function fromParent() {} }\n")
+	idx.IndexFile("file:///b.php", "<?php\nclass Dup extends P {}\n")
+	idx.IndexFile("file:///a.php", "<?php\nclass Dup implements I { use T; }\n")
+	if got := memberNames(idx, "Dup"); got["fromTrait"] == 0 || got["fromParent"] != 0 {
+		t.Fatalf("the current declaration has its trait's members and not the other's parent's: %v", got)
+	}
+
+	idx.IndexFile("file:///a.php", "<?php\n")
+	if got := memberNames(idx, "Dup"); got["fromTrait"] != 0 || got["fromParent"] == 0 {
+		t.Fatalf("the remaining declaration has its parent's members and not the removed one's trait's: %v", got)
+	}
+	if got := idx.TraitsOf("Dup"); len(got) != 0 {
+		t.Fatalf("traits: %v", got)
+	}
+	if got := idx.GetImplementedInterfaces("Dup"); len(got) != 0 {
+		t.Fatalf("interfaces: %v", got)
+	}
+	if got := idx.Implementations("I"); slices.Contains(got, "Dup") {
+		t.Fatalf("Dup no longer implements I: %v", got)
+	}
+	if got := idx.Implementations("P"); !slices.Contains(got, "Dup") {
+		t.Fatalf("Dup extends P: %v", got)
+	}
+}
