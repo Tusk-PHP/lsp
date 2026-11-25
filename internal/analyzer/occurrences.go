@@ -53,26 +53,22 @@ func (t referenceTarget) declarations() []protocol.Location {
 }
 
 func (a *Analyzer) occurrencesIn(r *resolve.Resolver, target referenceTarget, uri, source string) []protocol.Range {
-	if !mentions(parser.Tokenize(source), target.sym) {
+	if !mentions(source, target.sym) {
 		return nil
 	}
 	return a.occurrencesInDocument(r, target, sourcectx.NewDocument(uri, source), source)
 }
 
-func mentions(tokens []parser.Token, target *symbols.Symbol) bool {
-	for i, tok := range tokens {
-		if mayName(tokens, i, target) {
-			return true
-		}
-		if tok.Kind == parser.TokenDocComment && target.Kind.IsClassLike() {
-			found := false
+func mentions(source string, target *symbols.Symbol) bool {
+	found := false
+	parser.ScanTokens(source, func(tok parser.Token) bool {
+		found = spelledLike(tok, target)
+		if !found && tok.Kind == parser.TokenDocComment && target.Kind.IsClassLike() {
 			docNamesSpelledLike(tok, target.Name, func(string, protocol.Range) { found = true })
-			if found {
-				return true
-			}
 		}
-	}
-	return false
+		return !found
+	})
+	return found
 }
 
 func docNamesSpelledLike(tok parser.Token, name string, fn func(written string, last protocol.Range)) {

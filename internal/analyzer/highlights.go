@@ -42,15 +42,15 @@ func (a *Analyzer) mayBeLocalVariable(ctx *sourcectx.NameContext) bool {
 }
 
 func mayName(tokens []parser.Token, i int, target *symbols.Symbol) bool {
-	tok := tokens[i]
+	return spelledLike(tokens[i], target) && (tokens[i].Kind != parser.TokenIdentifier || !namedArgumentLabel(tokens, i))
+}
+
+func spelledLike(tok parser.Token, target *symbols.Symbol) bool {
 	name := strings.TrimPrefix(target.Name, "$")
 	switch tok.Kind {
 	case parser.TokenVariable:
 		return target.Kind == symbols.KindProperty && tok.Value[1:] == name
 	case parser.TokenIdentifier:
-		if namedArgumentLabel(tokens, i) {
-			return false
-		}
 		switch target.Kind {
 		case symbols.KindFunction, symbols.KindMethod, symbols.KindClass, symbols.KindInterface, symbols.KindTrait, symbols.KindEnum:
 			return strings.EqualFold(tok.Value, name)
