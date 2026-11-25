@@ -75,6 +75,9 @@ func (e *editor) apply(r Range, text string) error {
 	}
 	e.buf = splice(e.buf, start, end, text)
 	e.line, e.lineStart = anchorLine, anchorStart
+	if start > 0 && e.buf[start-1] == '\r' {
+		e.line, e.lineStart = 0, 0
+	}
 	return nil
 }
 
@@ -86,11 +89,8 @@ func (e *editor) offset(p Position) (int, error) {
 	if !ok {
 		return len(e.buf), nil
 	}
-	content := e.buf[start:]
-	if nl := bytes.IndexByte(content, '\n'); nl >= 0 {
-		content = content[:nl]
-	}
-	content = bytes.TrimSuffix(content, []byte{'\r'})
+	end, _ := newLineBreaks(e.buf, bytes.IndexByte).lineEnd(start)
+	content := e.buf[start:end]
 	col := p.Character
 	if e.enc != UTF8 {
 		at := newLineCursor(0, unsafe.String(unsafe.SliceData(content), len(content)))
@@ -104,15 +104,16 @@ func (e *editor) seekLine(line int) (int, bool) {
 		e.line, e.lineStart = 0, 0
 	}
 	for e.line > line {
-		e.lineStart = bytes.LastIndexByte(e.buf[:e.lineStart-1], '\n') + 1
+		e.lineStart = previousLineStart(e.buf, e.lineStart)
 		e.line--
 	}
+	breaks := newLineBreaks(e.buf, bytes.IndexByte)
 	for e.line < line {
-		nl := bytes.IndexByte(e.buf[e.lineStart:], '\n')
-		if nl < 0 {
+		_, next := breaks.lineEnd(e.lineStart)
+		if next < 0 {
 			return 0, false
 		}
-		e.lineStart += nl + 1
+		e.lineStart = next
 		e.line++
 	}
 	return e.lineStart, true

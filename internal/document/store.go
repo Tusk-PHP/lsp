@@ -6,14 +6,27 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 type Snapshot struct {
 	URI      string
 	Version  int
 	Text     string
+	exact    string
 	revision uint64
 	diverged bool
+}
+
+func newSnapshot(uri string, version int, exact string) Snapshot {
+	doc := Snapshot{URI: uri, Version: version}
+	doc.setText(exact)
+	return doc
+}
+
+func (d *Snapshot) setText(exact string) {
+	d.exact, d.Text = exact, textpos.CoreText(exact)
 }
 
 func (d Snapshot) Diverged() bool {
@@ -48,7 +61,7 @@ func (s *Store) Open(uri string, version int, text string, unsaved bool) Snapsho
 	defer s.mu.Unlock()
 	s.files[uri] = openFile{path: path, unsaved: unsaved}
 	s.uris[path] = uri
-	return s.putLocked(Snapshot{URI: uri, Version: version, Text: text})
+	return s.putLocked(newSnapshot(uri, version, text))
 }
 
 func (s *Store) Change(uri string, version int, enc Encoding, changes []Change) (Snapshot, error) {
@@ -61,7 +74,7 @@ func (s *Store) Change(uri string, version int, enc Encoding, changes []Change) 
 	if current.diverged && lastFullText(changes) < 0 {
 		return Snapshot{}, fmt.Errorf("change to %s, version %d: %w", uri, version, ErrDiverged)
 	}
-	text, err := Apply(current.Text, enc, changes)
+	text, err := Apply(current.exact, enc, changes)
 	if err != nil {
 		current.diverged = true
 		s.putLocked(current)
@@ -70,7 +83,7 @@ func (s *Store) Change(uri string, version int, enc Encoding, changes []Change) 
 	file := s.files[uri]
 	file.unsaved = true
 	s.files[uri] = file
-	return s.putLocked(Snapshot{URI: uri, Version: version, Text: text}), nil
+	return s.putLocked(newSnapshot(uri, version, text)), nil
 }
 
 func (s *Store) ShowDiverged(uri, text string) (Snapshot, bool) {
@@ -80,7 +93,7 @@ func (s *Store) ShowDiverged(uri, text string) (Snapshot, bool) {
 	if !open || !doc.diverged {
 		return Snapshot{}, false
 	}
-	doc.Text = text
+	doc.setText(text)
 	return s.putLocked(doc), true
 }
 
@@ -97,8 +110,8 @@ func (s *Store) Save(uri, text string) bool {
 		return false
 	}
 	doc := s.docs[uri]
-	if doc.Text != text {
-		doc.Text = text
+	if doc.exact != text {
+		doc.setText(text)
 		s.putLocked(doc)
 	}
 	return true

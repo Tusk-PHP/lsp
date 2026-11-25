@@ -183,3 +183,21 @@ func TestStoreFindsAnOpenDocumentByPathAndKnowsWhetherItIsSaved(t *testing.T) {
 		t.Error("a closed document was marked saved")
 	}
 }
+
+func TestStoreEditsTheEditorsTextAndGivesTheCoreItsLines(t *testing.T) {
+	const uri = "file:///a.php"
+	s := NewStore(symbols.URIToPath)
+	if doc := s.Open(uri, 1, "a\rb", false); doc.Text != "a\nb" {
+		t.Fatalf("opened with lone CRs, the text is %q", doc.Text)
+	}
+	doc, err := s.Change(uri, 2, UTF16, []Change{{Range: at(1, 0, 1, 0), Text: "\n"}, {Range: at(1, 0, 1, 0), Text: "x"}})
+	if err != nil || doc.Text != "a\r\nxb" {
+		t.Errorf("an LF after a lone CR joins it into a CRLF, as the editor sees it: %+v, %v", doc, err)
+	}
+	if !s.Save(uri, "c\rd") {
+		t.Fatal("the save was refused")
+	}
+	if doc, _ := s.Get(uri); doc.Text != "c\nd" {
+		t.Errorf("after a save with lone CRs the text is %q", doc.Text)
+	}
+}

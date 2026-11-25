@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os"
 
+	"github.com/Tusk-PHP/lsp/internal/textpos"
+
 	"github.com/Tusk-PHP/lsp/internal/document"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -16,8 +18,7 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 		return
 	}
 	uri := params.TextDocument.URI
-	text := params.TextDocument.Text
-	doc := s.openDocument(uri, params.TextDocument.Version, text)
+	doc := s.openDocument(uri, params.TextDocument.Version, params.TextDocument.Text)
 	if !isPHPDocument(uri) {
 		// Non-PHP documents (composer.json, tsconfig.json, …) are only
 		// stored so providers that read source — e.g. composer-hover —
@@ -25,7 +26,7 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 		return
 	}
 	s.docIndex.reopened(uri)
-	s.indexDocumentMaybeAsync(uri, text)
+	s.indexDocumentMaybeAsync(uri, doc.Text)
 	if s.cfg.DiagnosticsEnabled {
 		s.publishDiagnostics(doc)
 	}
@@ -130,7 +131,7 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 			s.logger.Printf("didSave: %s is not open, so its saved text is not kept as an open document", uri)
 		}
 		if isPHPDocument(uri) {
-			s.indexDocumentMaybeAsync(uri, text)
+			s.indexDocumentMaybeAsync(uri, textpos.CoreText(text))
 		}
 	} else {
 		s.docs.MarkSaved(uri)
@@ -184,11 +185,11 @@ func (s *Server) getDocumentReader() func(string) string {
 		}
 		// Fall back to reading from disk
 		path := symbols.URIToPath(uri)
-		content, err := os.ReadFile(path)
+		content, err := textpos.ReadText(path)
 		if err != nil {
 			return ""
 		}
-		return string(content)
+		return content
 	}
 }
 

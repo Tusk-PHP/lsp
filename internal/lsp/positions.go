@@ -3,8 +3,9 @@ package lsp
 import (
 	"encoding/json"
 	"maps"
-	"os"
 	"slices"
+
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 
 	"github.com/Tusk-PHP/lsp/internal/document"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -35,11 +36,11 @@ func (s *Server) positionText(uri string) (string, bool) {
 	if source := s.index.GetFileSource(uri); source != "" {
 		return source, true
 	}
-	content, err := os.ReadFile(symbols.URIToPath(uri))
+	content, err := textpos.ReadText(symbols.URIToPath(uri))
 	if err != nil {
 		return "", false
 	}
-	return string(content), true
+	return content, true
 }
 
 func (p *positions) of(uri string) *document.Columns {

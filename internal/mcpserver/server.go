@@ -26,6 +26,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/session"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/symquery"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -867,11 +868,11 @@ func (s *Service) findReferences(fqn string) ([]ReferenceLocation, error) {
 		if src := rt.Workspace.Index.GetFileSource(uri); src != "" {
 			return src, true
 		}
-		data, err := os.ReadFile(symbols.URIToPath(uri))
+		data, err := textpos.ReadText(symbols.URIToPath(uri))
 		if err != nil {
 			return "", false
 		}
-		return string(data), true
+		return data, true
 	}
 
 	locs, ok := symquery.ReferencesByFQN(rt.Workspace.Index, rt.Analyzer, fqn, readSource)
@@ -904,12 +905,12 @@ func (s *Service) projectDiagnostics(path string) (DiagnosticsOutput, error) {
 		if !workspace.IsPHPSource(absPath) {
 			continue
 		}
-		data, err := os.ReadFile(absPath)
+		data, err := textpos.ReadText(absPath)
 		if err != nil {
 			continue
 		}
 		uri := "file://" + absPath
-		diags := rt.Session.AnalyzeAll(uri, string(data))
+		diags := rt.Session.AnalyzeAll(uri, data)
 		out.Files = append(out.Files, FileDiagnostics{
 			Path:        normalizedRelativePath(s.RootPath, absPath),
 			Diagnostics: session.LSPDiagnostics(diags),
@@ -1470,9 +1471,9 @@ func (w *slogWriter) Write(p []byte) (int, error) {
 
 // readFile reads a file by URI, or returns "" when it can't be read.
 func readFile(uri string) string {
-	data, err := os.ReadFile(symbols.URIToPath(uri))
+	data, err := textpos.ReadText(symbols.URIToPath(uri))
 	if err != nil {
 		return ""
 	}
-	return string(data)
+	return data
 }

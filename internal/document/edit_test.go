@@ -129,6 +129,46 @@ func TestApply(t *testing.T) {
 			},
 			want: "<?php // top\n$a = '😀😀\n';\n$c = '';\n",
 		},
+		{
+			name:    "a lone CR ends a line",
+			text:    "<?php\r$a = 'é';\r$b;",
+			enc:     UTF16,
+			changes: []Change{{Range: at(2, 0, 2, 0), Text: "x"}},
+			want:    "<?php\r$a = 'é';\rx$b;",
+		},
+		{
+			name:    "an edit spanning a lone CR",
+			text:    "<?php\r$a = 'é';\r$b;",
+			enc:     UTF16,
+			changes: []Change{{Range: at(1, 7, 2, 1), Text: ""}},
+			want:    "<?php\r$a = 'éb;",
+		},
+		{
+			name:    "a column past a line that ends with a lone CR stops before it",
+			text:    "a\rb",
+			enc:     UTF16,
+			changes: []Change{{Range: at(0, 5, 0, 5), Text: "!"}},
+			want:    "a!\rb",
+		},
+		{
+			name:    "an insert that turns a lone CR into a CRLF",
+			text:    "a\rb",
+			enc:     UTF16,
+			changes: []Change{{Range: at(1, 0, 1, 0), Text: "\n"}, {Range: at(1, 0, 1, 0), Text: "x"}},
+			want:    "a\r\nxb",
+		},
+		{
+			name: "cursors bottom to top over mixed line endings",
+			text: "<?php\r$a;\r\n$b;\n$c;\r\r$d;",
+			enc:  UTF16,
+			changes: []Change{
+				{Range: at(5, 0, 5, 1), Text: "@"},
+				{Range: at(3, 0, 3, 1), Text: "@"},
+				{Range: at(2, 0, 2, 1), Text: "@"},
+				{Range: at(1, 0, 1, 1), Text: "@"},
+			},
+			want: "<?php\r@a;\r\n@b;\n@c;\r\r@d;",
+		},
 	}
 	for _, c := range cases {
 		got, err := Apply(c.text, c.enc, c.changes)
