@@ -180,7 +180,7 @@ func configAliases(source string) map[string]string {
 		if tokens[i].Kind != parser.TokenStringLiteral || trimQuotedLiteral(tokens[i].Value) != "aliases" {
 			continue
 		}
-		arrow := nextSignificantToken(tokens, i+1)
+		arrow := parser.NextSignificant(tokens, i+1)
 		if arrow < 0 || tokens[arrow].Kind != parser.TokenDoubleArrow {
 			continue
 		}
@@ -189,7 +189,7 @@ func configAliases(source string) map[string]string {
 			if tokens[j].Kind != parser.TokenStringLiteral {
 				continue
 			}
-			pairArrow := nextSignificantToken(tokens, j+1)
+			pairArrow := parser.NextSignificant(tokens, j+1)
 			if pairArrow < 0 || pairArrow >= end || tokens[pairArrow].Kind != parser.TokenDoubleArrow {
 				continue
 			}

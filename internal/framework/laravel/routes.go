@@ -205,11 +205,11 @@ func parseRouteDefinitions(uri, source string) []RouteName {
 		if result.Tokens[i].Kind != parser.TokenIdentifier || result.Tokens[i].Value != "Route" {
 			continue
 		}
-		doubleColon := nextSignificantToken(result.Tokens, i+1)
+		doubleColon := parser.NextSignificant(result.Tokens, i+1)
 		if doubleColon < 0 || result.Tokens[doubleColon].Kind != parser.TokenDoubleColon {
 			continue
 		}
-		methodTok := nextSignificantToken(result.Tokens, doubleColon+1)
+		methodTok := parser.NextSignificant(result.Tokens, doubleColon+1)
 		if methodTok < 0 || result.Tokens[methodTok].Kind != parser.TokenIdentifier {
 			continue
 		}
@@ -228,7 +228,7 @@ func parseRouteDefinitions(uri, source string) []RouteName {
 }
 
 func parseRouteDefinition(tokens []parser.Token, uri string, methodTok int, method string, file *parser.FileNode) (RouteName, int, bool) {
-	openTok := nextSignificantToken(tokens, methodTok+1)
+	openTok := parser.NextSignificant(tokens, methodTok+1)
 	if openTok < 0 || tokens[openTok].Kind != parser.TokenOpenParen {
 		return RouteName{}, -1, false
 	}
@@ -253,18 +253,18 @@ func parseRouteDefinition(tokens []parser.Token, uri string, methodTok int, meth
 			end = i
 			return route, end, route.Name != ""
 		case parser.TokenArrow:
-			nameTok := nextSignificantToken(tokens, i+1)
+			nameTok := parser.NextSignificant(tokens, i+1)
 			if nameTok < 0 || tokens[nameTok].Kind != parser.TokenIdentifier {
 				continue
 			}
 			if tokens[nameTok].Value != "name" {
 				continue
 			}
-			nameOpen := nextSignificantToken(tokens, nameTok+1)
+			nameOpen := parser.NextSignificant(tokens, nameTok+1)
 			if nameOpen < 0 || tokens[nameOpen].Kind != parser.TokenOpenParen {
 				continue
 			}
-			valueTok := nextSignificantToken(tokens, nameOpen+1)
+			valueTok := parser.NextSignificant(tokens, nameOpen+1)
 			if valueTok < 0 || tokens[valueTok].Kind != parser.TokenStringLiteral {
 				continue
 			}
@@ -288,18 +288,6 @@ func parseRouteDefinition(tokens []parser.Token, uri string, methodTok int, meth
 	}
 
 	return route, end, route.Name != ""
-}
-
-func nextSignificantToken(tokens []parser.Token, start int) int {
-	for i := start; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
-			continue
-		default:
-			return i
-		}
-	}
-	return -1
 }
 
 func trimQuotedLiteral(raw string) string {
@@ -342,18 +330,14 @@ func splitTopLevelArgs(tokens []parser.Token, start, end int) [][]parser.Token {
 
 func trimInsignificantTokens(tokens []parser.Token) []parser.Token {
 	start := 0
-	for start < len(tokens) && isInsignificant(tokens[start].Kind) {
+	for start < len(tokens) && tokens[start].Kind.IsComment() {
 		start++
 	}
 	end := len(tokens)
-	for end > start && isInsignificant(tokens[end-1].Kind) {
+	for end > start && tokens[end-1].Kind.IsComment() {
 		end--
 	}
 	return tokens[start:end]
-}
-
-func isInsignificant(kind parser.TokenKind) bool {
-	return kind == parser.TokenWhitespace || kind == parser.TokenComment || kind == parser.TokenDocComment
 }
 
 func firstStringLiteral(tokens []parser.Token) (string, bool) {
@@ -463,7 +447,7 @@ func parseClassConstExpr(tokens []parser.Token, file *parser.FileNode) (string, 
 func tokenText(tokens []parser.Token) string {
 	var b strings.Builder
 	for _, tok := range tokens {
-		if isInsignificant(tok.Kind) {
+		if tok.Kind.IsComment() {
 			continue
 		}
 		b.WriteString(tok.Value)

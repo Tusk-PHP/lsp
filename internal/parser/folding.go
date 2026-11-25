@@ -72,7 +72,7 @@ func ExtractFoldingRanges(source string) []FoldingRange {
 				namespaceStarts = append(namespaceStarts, tok.Line)
 			}
 		case TokenClass:
-			if prev := previousSignificantToken(result.Tokens, i); prev != nil && prev.Kind == TokenNew {
+			if prev := PrevSignificant(result.Tokens, i-1); prev >= 0 && result.Tokens[prev].Kind == TokenNew {
 				continue
 			}
 			pending = &pendingFold{startLine: tok.Line}
@@ -100,7 +100,7 @@ func ExtractFoldingRanges(source string) []FoldingRange {
 			appendFoldRange(&ranges, result.Lines, entry.startLine, tok.Line, entry.kind)
 			pending = nil
 		case TokenOpenBracket:
-			if prev := previousSignificantToken(result.Tokens, i); prev != nil && prev.Kind == TokenHash {
+			if prev := PrevSignificant(result.Tokens, i-1); prev >= 0 && result.Tokens[prev].Kind == TokenHash {
 				stack = append(stack, foldEntry{openKind: TokenOpenBracket, startLine: tok.Line, kind: ""})
 				continue
 			}
@@ -201,18 +201,6 @@ func popFoldEntry(stack *[]foldEntry, kind TokenKind) (foldEntry, bool) {
 		return entry, true
 	}
 	return foldEntry{}, false
-}
-
-func previousSignificantToken(tokens []Token, index int) *Token {
-	for i := index - 1; i >= 0; i-- {
-		switch tokens[i].Kind {
-		case TokenComment, TokenDocComment:
-			continue
-		default:
-			return &tokens[i]
-		}
-	}
-	return nil
 }
 
 func tokenSequenceContains(tokens []Token, start int, stopKinds ...TokenKind) TokenKind {

@@ -27,7 +27,7 @@ func migrationTokens(source string) []parser.Token {
 	toks := make([]parser.Token, 0, len(all))
 	for _, t := range all {
 		switch t.Kind {
-		case parser.TokenComment, parser.TokenDocComment, parser.TokenWhitespace, parser.TokenEOF:
+		case parser.TokenComment, parser.TokenDocComment, parser.TokenEOF:
 			continue
 		}
 		toks = append(toks, t)

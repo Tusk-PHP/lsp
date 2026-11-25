@@ -293,7 +293,7 @@ func findTaintedScopes(doc *scope.Document, tokens []parser.Token) map[*scope.Sc
 		lower := strings.ToLower(tok.Value)
 		if skipScopeFunctions[lower] {
 			// These must be followed by '(' to be a real call.
-			next := nextSignificantTokenIdx(tokens, i+1)
+			next := parser.NextSignificant(tokens, i+1)
 			if next < 0 || tokens[next].Kind != parser.TokenOpenParen {
 				continue
 			}
@@ -323,7 +323,7 @@ func isReferenceAssignmentTarget(tokens []parser.Token, tok parser.Token) bool {
 	for i, t := range tokens {
 		if t.Kind == tok.Kind && t.Line == tok.Line && t.Column == tok.Column {
 			// Look backward for '&'
-			prev := prevSignificantTokenIdx(tokens, i-1)
+			prev := parser.PrevSignificant(tokens, i-1)
 			if prev >= 0 && tokens[prev].Kind == parser.TokenAmpersand {
 				return true
 			}
@@ -390,32 +390,6 @@ func isReferenceOrGlobalBinding(source string, b *scope.Binding) bool {
 	return false
 }
 
-// nextSignificantTokenIdx returns the index of the next non-trivia token.
-func nextSignificantTokenIdx(tokens []parser.Token, i int) int {
-	for i < len(tokens) {
-		switch tokens[i].Kind {
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
-			i++
-		default:
-			return i
-		}
-	}
-	return -1
-}
-
-// prevSignificantTokenIdx returns the index of the previous non-trivia token.
-func prevSignificantTokenIdx(tokens []parser.Token, i int) int {
-	for i >= 0 {
-		switch tokens[i].Kind {
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
-			i--
-		default:
-			return i
-		}
-	}
-	return -1
-}
-
 // isExistenceCheck reports whether the variable at tokens[i] is the subject of
 // a construct that accepts an undefined variable: isset(), empty(), unset(),
 // or the left side of ?? and ??=. Only the variable being tested counts, with
@@ -423,11 +397,11 @@ func prevSignificantTokenIdx(tokens []parser.Token, i int) int {
 // $key still warns.
 func isExistenceCheck(tokens []parser.Token, i int) bool {
 	// isset( $x, $y ) / empty( $x ) / unset( $x, $y )
-	if prev := prevSignificantTokenIdx(tokens, i-1); prev >= 0 {
+	if prev := parser.PrevSignificant(tokens, i-1); prev >= 0 {
 		switch tokens[prev].Kind {
 		case parser.TokenOpenParen, parser.TokenComma:
 			if open := enclosingOpenParen(tokens, prev); open > 0 {
-				if callee := prevSignificantTokenIdx(tokens, open-1); callee >= 0 && tokens[callee].Kind == parser.TokenIdentifier {
+				if callee := parser.PrevSignificant(tokens, open-1); callee >= 0 && tokens[callee].Kind == parser.TokenIdentifier {
 					switch strings.ToLower(tokens[callee].Value) {
 					case "isset", "unset":
 						return true

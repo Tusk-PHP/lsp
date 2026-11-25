@@ -64,13 +64,13 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 		if tok.Kind != parser.TokenIdentifier || isSkippedCallKeyword(tok.Value) {
 			continue
 		}
-		next := nextSignificantTokenIdx(tokens, i+1)
+		next := parser.NextSignificant(tokens, i+1)
 		if tokens[next].Kind == parser.TokenDoubleColon {
-			methodIdx := nextSignificantTokenIdx(tokens, next+1)
+			methodIdx := parser.NextSignificant(tokens, next+1)
 			if tokens[methodIdx].Kind != parser.TokenIdentifier {
 				continue
 			}
-			openIdx := nextSignificantTokenIdx(tokens, methodIdx+1)
+			openIdx := parser.NextSignificant(tokens, methodIdx+1)
 			if tokens[openIdx].Kind != parser.TokenOpenParen {
 				continue
 			}
@@ -92,7 +92,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 		if !wanted {
 			continue
 		}
-		prev := prevSignificantTokenIdx(tokens, i-1)
+		prev := parser.PrevSignificant(tokens, i-1)
 		if prev >= 0 && tokens[prev].Kind == parser.TokenArrow {
 			if typeResolver == nil {
 				continue
@@ -128,7 +128,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 			case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenFunction:
 				continue
 			case parser.TokenAmpersand:
-				if pp := prevSignificantTokenIdx(tokens, prev-1); pp >= 0 && tokens[pp].Kind == parser.TokenFunction {
+				if pp := parser.PrevSignificant(tokens, prev-1); pp >= 0 && tokens[pp].Kind == parser.TokenFunction {
 					continue
 				}
 			}

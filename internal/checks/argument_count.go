@@ -93,7 +93,7 @@ func calledMethod(tokens []parser.Token, arrow int, name parser.Token, lines []s
 	var mask maskState
 	line := maskPHPLine(lines[opTok.Line], &mask)
 	opStart := opTok.Column
-	if q := prevSignificantTokenIdx(tokens, arrow-1); q >= 0 && tokens[q].Kind == parser.TokenQuestion && tokens[q].Line == opTok.Line {
+	if q := parser.PrevSignificant(tokens, arrow-1); q >= 0 && tokens[q].Kind == parser.TokenQuestion && tokens[q].Line == opTok.Line {
 		opStart = tokens[q].Column
 	}
 	if opStart > len(line) {
@@ -181,29 +181,21 @@ func countArguments(tokens []parser.Token, openIdx, closeIdx int) (int, bool) {
 			}
 		case parser.TokenComma:
 			// A trailing comma before `)` (PHP 7.3+) doesn't start another argument.
-			if depth == 0 && nextSignificantTokenIdx(tokens, i+1) != closeIdx {
+			if depth == 0 && parser.NextSignificant(tokens, i+1) != closeIdx {
 				count++
 			}
 		case parser.TokenIdentifier:
 			// Named argument: "name:" pattern — identifier followed by ':'
 			// We check if the next significant token is a colon.
 			if depth == 0 {
-				nextIdx := nextSignificantTokenIdx(tokens, i+1)
+				nextIdx := parser.NextSignificant(tokens, i+1)
 				if nextIdx >= 0 && nextIdx < closeIdx && tokens[nextIdx].Kind == parser.TokenColon {
 					return 0, false
 				}
 			}
 		}
 	}
-	// Check for whitespace-only content (no actual args)
-	hasContent := false
-	for i := openIdx + 1; i < closeIdx; i++ {
-		if tokens[i].Kind != parser.TokenWhitespace && tokens[i].Kind != parser.TokenComment && tokens[i].Kind != parser.TokenDocComment {
-			hasContent = true
-			break
-		}
-	}
-	if !hasContent {
+	if parser.NextSignificant(tokens, openIdx+1) == closeIdx {
 		return 0, true
 	}
 	return count, true

@@ -502,10 +502,10 @@ func isWordToken(t parser.Token) bool {
 func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Document, declByToken map[int]*Binding) (*pendingScope, map[int]*Binding) {
 	name := ""
 	kind := ScopeClosure
-	nameIdx := nextSignificant(tokens, start+1)
+	nameIdx := parser.NextSignificant(tokens, start+1)
 	// `function &name(…)`, `function &(…)` and `fn &(…)` return by reference.
 	if nameIdx >= 0 && tokens[nameIdx].Kind == parser.TokenAmpersand {
-		nameIdx = nextSignificant(tokens, nameIdx+1)
+		nameIdx = parser.NextSignificant(tokens, nameIdx+1)
 	}
 	// A method may be named with a reserved word (`function use(…)`,
 	// `function list(…)`), which the tokenizer reads as a keyword.
@@ -515,7 +515,7 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 		if enclosingClassName(tokens, start) != "" {
 			kind = ScopeMethod
 		}
-		nameIdx = nextSignificant(tokens, nameIdx+1)
+		nameIdx = parser.NextSignificant(tokens, nameIdx+1)
 	}
 	if nameIdx < 0 || tokens[nameIdx].Kind != parser.TokenOpenParen {
 		return nil, nil
@@ -537,9 +537,9 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 		decls[i] = binding
 	}
 
-	j := nextSignificant(tokens, closeParen+1)
+	j := parser.NextSignificant(tokens, closeParen+1)
 	if kind == ScopeClosure && j >= 0 && tokens[j].Kind == parser.TokenUse {
-		j = nextSignificant(tokens, j+1)
+		j = parser.NextSignificant(tokens, j+1)
 		if j >= 0 && tokens[j].Kind == parser.TokenOpenParen {
 			useClose := parser.MatchingClose(tokens, j)
 			for i := j + 1; i < useClose; i++ {
@@ -550,19 +550,19 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 				binding := doc.addBinding(scope, tokens[i].Value, BindingClosureUse, tokenRange(tokens[i]), origin)
 				decls[i] = binding
 			}
-			j = nextSignificant(tokens, useClose+1)
+			j = parser.NextSignificant(tokens, useClose+1)
 		}
 	}
 
 	for j >= 0 && j < len(tokens) && tokens[j].Kind != parser.TokenOpenBrace && tokens[j].Kind != parser.TokenDoubleArrow && tokens[j].Kind != parser.TokenSemicolon {
 		j++
-		j = nextSignificant(tokens, j)
+		j = parser.NextSignificant(tokens, j)
 	}
 	if j >= 0 && j < len(tokens) && tokens[j].Kind == parser.TokenOpenBrace {
 		return &pendingScope{scope: scope, bodyOpenIndex: j}, decls
 	}
 	if j >= 0 && j < len(tokens) && tokens[j].Kind == parser.TokenDoubleArrow {
-		bodyStart := nextSignificant(tokens, j+1)
+		bodyStart := parser.NextSignificant(tokens, j+1)
 		bodyEnd := findArrowExpressionEnd(tokens, bodyStart)
 		if bodyStart < 0 || bodyEnd < 0 {
 			scope.Range.End = scope.Range.Start
@@ -584,7 +584,7 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 
 func parseForeachBindings(tokens []parser.Token, start int, scope *Scope, doc *Document) map[int]*Binding {
 	decls := map[int]*Binding{}
-	open := nextSignificant(tokens, start+1)
+	open := parser.NextSignificant(tokens, start+1)
 	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
 		return decls
 	}
@@ -634,7 +634,7 @@ func parseForeachBindings(tokens []parser.Token, start int, scope *Scope, doc *D
 
 func parseCatchBindings(tokens []parser.Token, start int, scope *Scope, doc *Document) map[int]*Binding {
 	decls := map[int]*Binding{}
-	open := nextSignificant(tokens, start+1)
+	open := parser.NextSignificant(tokens, start+1)
 	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
 		return decls
 	}
@@ -653,7 +653,7 @@ func parseCatchBindings(tokens []parser.Token, start int, scope *Scope, doc *Doc
 // catchTypes returns the class names in `catch (A|\B\C $e)`, as written,
 // for the catch at token start whose variable is token v.
 func catchTypes(tokens []parser.Token, start, v int) []string {
-	open := nextSignificant(tokens, start+1)
+	open := parser.NextSignificant(tokens, start+1)
 	var names []string
 	var b strings.Builder
 	flush := func() {
@@ -668,7 +668,7 @@ func catchTypes(tokens []parser.Token, start, v int) []string {
 			b.WriteString(tokens[i].Value)
 		case parser.TokenPipe:
 			flush()
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
+		case parser.TokenComment, parser.TokenDocComment:
 		default:
 			return nil
 		}
@@ -680,7 +680,7 @@ func catchTypes(tokens []parser.Token, start, v int) []string {
 // catchBodyOpen returns the `{` that opens the body of the catch at token
 // start, or -1.
 func catchBodyOpen(tokens []parser.Token, start int) int {
-	open := nextSignificant(tokens, start+1)
+	open := parser.NextSignificant(tokens, start+1)
 	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
 		return -1
 	}
@@ -688,7 +688,7 @@ func catchBodyOpen(tokens []parser.Token, start int) int {
 	if close < 0 {
 		return -1
 	}
-	if body := nextSignificant(tokens, close+1); body >= 0 && tokens[body].Kind == parser.TokenOpenBrace {
+	if body := parser.NextSignificant(tokens, close+1); body >= 0 && tokens[body].Kind == parser.TokenOpenBrace {
 		return body
 	}
 	return -1
@@ -696,7 +696,7 @@ func catchBodyOpen(tokens []parser.Token, start int) int {
 
 func parseDestructureBindings(tokens []parser.Token, start int, scope *Scope, doc *Document) map[int]*Binding {
 	decls := map[int]*Binding{}
-	prev := prevSignificant(tokens, start-1)
+	prev := parser.PrevSignificant(tokens, start-1)
 	if prev >= 0 {
 		switch tokens[prev].Kind {
 		case parser.TokenEquals, parser.TokenDoubleArrow, parser.TokenArrow, parser.TokenDoubleColon:
@@ -710,7 +710,7 @@ func parseDestructureBindings(tokens []parser.Token, start int, scope *Scope, do
 	if close < 0 {
 		return decls
 	}
-	next := nextSignificant(tokens, close+1)
+	next := parser.NextSignificant(tokens, close+1)
 	if next < 0 || tokens[next].Kind != parser.TokenEquals {
 		return decls
 	}
@@ -724,7 +724,7 @@ func parseDestructureBindings(tokens []parser.Token, start int, scope *Scope, do
 
 func parseListDestructureBindings(tokens []parser.Token, start int, scope *Scope, doc *Document) map[int]*Binding {
 	decls := map[int]*Binding{}
-	open := nextSignificant(tokens, start+1)
+	open := parser.NextSignificant(tokens, start+1)
 	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
 		return decls
 	}
@@ -732,7 +732,7 @@ func parseListDestructureBindings(tokens []parser.Token, start int, scope *Scope
 	if close < 0 {
 		return decls
 	}
-	next := nextSignificant(tokens, close+1)
+	next := parser.NextSignificant(tokens, close+1)
 	if next < 0 || tokens[next].Kind != parser.TokenEquals {
 		return decls
 	}
@@ -757,7 +757,7 @@ func isClassKeyword(tokens []parser.Token, i int) bool {
 	default:
 		return false
 	}
-	if prev := prevSignificant(tokens, i-1); prev >= 0 {
+	if prev := parser.PrevSignificant(tokens, i-1); prev >= 0 {
 		switch tokens[prev].Kind {
 		case parser.TokenDoubleColon, parser.TokenArrow, parser.TokenFunction:
 			return false
@@ -770,7 +770,7 @@ func isClassKeyword(tokens []parser.Token, i int) bool {
 // declared at start, or -1 if it's not a declaration. Only an anonymous class can
 // have an argument list.
 func classBodyOpen(tokens []parser.Token, start int) int {
-	for i := nextSignificant(tokens, start+1); i >= 0 && i < len(tokens); i = nextSignificant(tokens, i+1) {
+	for i := parser.NextSignificant(tokens, start+1); i >= 0 && i < len(tokens); i = parser.NextSignificant(tokens, i+1) {
 		switch tokens[i].Kind {
 		case parser.TokenOpenBrace:
 			return i
@@ -793,11 +793,11 @@ func classBodyOpen(tokens []parser.Token, start int) int {
 // instantiate: in `new static::$builder($q)` the parentheses hold the
 // constructor's arguments.
 func isStaticPropertyAccess(tokens []parser.Token, i int) bool {
-	prev := prevSignificant(tokens, i-1)
+	prev := parser.PrevSignificant(tokens, i-1)
 	if prev < 0 || tokens[prev].Kind != parser.TokenDoubleColon {
 		return false
 	}
-	next := nextSignificant(tokens, i+1)
+	next := parser.NextSignificant(tokens, i+1)
 	return next < 0 || tokens[next].Kind != parser.TokenOpenParen || isNewClassReference(tokens, prev)
 }
 
@@ -806,7 +806,7 @@ func isStaticPropertyAccess(tokens []parser.Token, i int) bool {
 // `new $this->map[$k]::$cls()` or `new ($factory)::$cls()`. A call earlier in the
 // chain ends the class reference, so `new Foo()::$m()` isn't one.
 func isNewClassReference(tokens []parser.Token, i int) bool {
-	j := prevSignificant(tokens, i-1)
+	j := parser.PrevSignificant(tokens, i-1)
 	for j >= 0 {
 		switch tokens[j].Kind {
 		case parser.TokenCloseBracket:
@@ -814,17 +814,17 @@ func isNewClassReference(tokens []parser.Token, i int) bool {
 			if open < 0 {
 				return false
 			}
-			j = prevSignificant(tokens, open-1)
+			j = parser.PrevSignificant(tokens, open-1)
 			continue
 		case parser.TokenCloseParen:
 			open := parser.MatchingOpen(tokens, j)
-			before := prevSignificant(tokens, open-1)
+			before := parser.PrevSignificant(tokens, open-1)
 			return open >= 0 && before >= 0 && tokens[before].Kind == parser.TokenNew
 		case parser.TokenVariable, parser.TokenIdentifier, parser.TokenStatic, parser.TokenBackslash:
 		default:
 			return false
 		}
-		prev := prevSignificant(tokens, j-1)
+		prev := parser.PrevSignificant(tokens, j-1)
 		if prev < 0 {
 			return false
 		}
@@ -832,7 +832,7 @@ func isNewClassReference(tokens []parser.Token, i int) bool {
 		case parser.TokenNew:
 			return true
 		case parser.TokenDoubleColon, parser.TokenArrow:
-			j = prevSignificant(tokens, prev-1)
+			j = parser.PrevSignificant(tokens, prev-1)
 		case parser.TokenIdentifier, parser.TokenBackslash: // a qualified name
 			j = prev
 		default:
@@ -850,9 +850,9 @@ func isGlobalOrStaticKeyword(tok parser.Token) bool {
 // `static $a, $b = 1;`. Those with an initializer are left to the assignment path.
 func parseGlobalOrStaticBindings(tokens []parser.Token, start int, scope *Scope, doc *Document) map[int]*Binding {
 	decls := map[int]*Binding{}
-	i := nextSignificant(tokens, start+1)
+	i := parser.NextSignificant(tokens, start+1)
 	for i >= 0 && tokens[i].Kind == parser.TokenVariable {
-		next := nextSignificant(tokens, i+1)
+		next := parser.NextSignificant(tokens, i+1)
 		if next < 0 {
 			break
 		}
@@ -872,7 +872,7 @@ func parseGlobalOrStaticBindings(tokens []parser.Token, start int, scope *Scope,
 		if next >= len(tokens) || tokens[next].Kind == parser.TokenSemicolon {
 			break
 		}
-		i = nextSignificant(tokens, next+1)
+		i = parser.NextSignificant(tokens, next+1)
 	}
 	return decls
 }
@@ -950,7 +950,7 @@ func newRebind(tokens []parser.Token, i int, foreachVars map[int]int) (r Rebind,
 // control structure without braces, `if ($a) $x = 1;` or `else $x = 2;`, or
 // follows a `case`, alternative-syntax or ternary colon, so it may not run.
 func isBracelessBody(tokens []parser.Token, i int) bool {
-	prev := prevSignificant(tokens, i-1)
+	prev := parser.PrevSignificant(tokens, i-1)
 	if prev < 0 {
 		return false
 	}
@@ -966,7 +966,7 @@ func isBracelessBody(tokens []parser.Token, i int) bool {
 // foreachBodyOpen returns the `{` that opens the body of the foreach at token
 // start, or -1 when the body has no braces.
 func foreachBodyOpen(tokens []parser.Token, start int) int {
-	open := nextSignificant(tokens, start+1)
+	open := parser.NextSignificant(tokens, start+1)
 	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
 		return -1
 	}
@@ -974,7 +974,7 @@ func foreachBodyOpen(tokens []parser.Token, start int) int {
 	if close < 0 {
 		return -1
 	}
-	body := nextSignificant(tokens, close+1)
+	body := parser.NextSignificant(tokens, close+1)
 	if body < 0 || tokens[body].Kind != parser.TokenOpenBrace {
 		return -1
 	}
@@ -982,7 +982,7 @@ func foreachBodyOpen(tokens []parser.Token, start int) int {
 }
 
 func assignmentOperator(tokens []parser.Token, i int) int {
-	next := nextSignificant(tokens, i+1)
+	next := parser.NextSignificant(tokens, i+1)
 	if next < 0 {
 		return -1
 	}
@@ -1010,7 +1010,7 @@ func isPropertyHook(tokens []parser.Token, i int) bool {
 	if tok.Kind != parser.TokenIdentifier || (!strings.EqualFold(tok.Value, "get") && !strings.EqualFold(tok.Value, "set")) {
 		return false
 	}
-	next := nextSignificant(tokens, i+1)
+	next := parser.NextSignificant(tokens, i+1)
 	if next < 0 {
 		return false
 	}
@@ -1028,7 +1028,7 @@ func parsePropertyHook(tokens []parser.Token, start int, parent *Scope, doc *Doc
 	doc.Scopes = append(doc.Scopes, scope)
 	decls := map[int]*Binding{}
 
-	j := nextSignificant(tokens, start+1)
+	j := parser.NextSignificant(tokens, start+1)
 	if j >= 0 && tokens[j].Kind == parser.TokenOpenParen {
 		closeParen := parser.MatchingClose(tokens, j)
 		if closeParen < 0 {
@@ -1039,7 +1039,7 @@ func parsePropertyHook(tokens []parser.Token, start int, parent *Scope, doc *Doc
 				decls[i] = doc.addBinding(scope, tokens[i].Value, BindingParameter, tokenRange(tokens[i]), nil)
 			}
 		}
-		j = nextSignificant(tokens, closeParen+1)
+		j = parser.NextSignificant(tokens, closeParen+1)
 	} else if strings.EqualFold(tokens[start].Value, "set") {
 		doc.addBinding(scope, "$value", BindingParameter, tokenRange(tokens[start]), nil)
 	}
@@ -1050,7 +1050,7 @@ func parsePropertyHook(tokens []parser.Token, start int, parent *Scope, doc *Doc
 	case parser.TokenOpenBrace:
 		return &pendingScope{scope: scope, bodyOpenIndex: j}, decls
 	case parser.TokenDoubleArrow:
-		bodyStart := nextSignificant(tokens, j+1)
+		bodyStart := parser.NextSignificant(tokens, j+1)
 		bodyEnd := findArrowExpressionEnd(tokens, bodyStart)
 		if bodyStart < 0 || bodyEnd < 0 {
 			return nil, nil
@@ -1063,7 +1063,7 @@ func parsePropertyHook(tokens []parser.Token, start int, parent *Scope, doc *Doc
 }
 
 func isSubscriptWrite(tokens []parser.Token, i int) bool {
-	next := nextSignificant(tokens, i+1)
+	next := parser.NextSignificant(tokens, i+1)
 	if next < 0 || tokens[next].Kind != parser.TokenOpenBracket {
 		return false
 	}
@@ -1072,7 +1072,7 @@ func isSubscriptWrite(tokens []parser.Token, i int) bool {
 		if end < 0 {
 			return false
 		}
-		next = nextSignificant(tokens, end+1)
+		next = parser.NextSignificant(tokens, end+1)
 	}
 	return next >= 0 && tokens[next].Kind == parser.TokenEquals
 }
@@ -1093,7 +1093,7 @@ func isOutArgument(tokens []parser.Token, i int, outArg func(string, int) bool) 
 	if outArg == nil {
 		return false
 	}
-	prev, next := prevSignificant(tokens, i-1), nextSignificant(tokens, i+1)
+	prev, next := parser.PrevSignificant(tokens, i-1), parser.NextSignificant(tokens, i+1)
 	if prev < 0 || next < 0 {
 		return false
 	}
@@ -1106,7 +1106,7 @@ func isOutArgument(tokens []parser.Token, i int, outArg func(string, int) bool) 
 
 	arg, depth := 0, 0
 	open := prev
-	for ; open >= 0; open = prevSignificant(tokens, open-1) {
+	for ; open >= 0; open = parser.PrevSignificant(tokens, open-1) {
 		kind := tokens[open].Kind
 		if depth == 0 && kind == parser.TokenOpenParen {
 			break
@@ -1133,7 +1133,7 @@ func isOutArgument(tokens []parser.Token, i int, outArg func(string, int) bool) 
 		return false
 	}
 
-	callee := prevSignificant(tokens, open-1)
+	callee := parser.PrevSignificant(tokens, open-1)
 	if callee < 0 {
 		return false
 	}
@@ -1141,7 +1141,7 @@ func isOutArgument(tokens []parser.Token, i int, outArg func(string, int) bool) 
 	case parser.TokenVariable, parser.TokenCloseParen, parser.TokenCloseBracket:
 		return outArg("", arg)
 	case parser.TokenStatic:
-		before := prevSignificant(tokens, callee-1)
+		before := parser.PrevSignificant(tokens, callee-1)
 		return before >= 0 && tokens[before].Kind == parser.TokenNew && outArg("", arg)
 	case parser.TokenIdentifier:
 	default:
@@ -1151,13 +1151,13 @@ func isOutArgument(tokens []parser.Token, i int, outArg func(string, int) bool) 
 	name := tokens[callee].Value
 	first := callee
 	for {
-		sep := prevSignificant(tokens, first-1)
+		sep := parser.PrevSignificant(tokens, first-1)
 		if sep < 0 || tokens[sep].Kind != parser.TokenBackslash {
 			break
 		}
 		first = sep
 		name = "\\" + name
-		part := prevSignificant(tokens, sep-1)
+		part := parser.PrevSignificant(tokens, sep-1)
 		if part < 0 || tokens[part].Kind != parser.TokenIdentifier {
 			break
 		}
@@ -1167,7 +1167,7 @@ func isOutArgument(tokens []parser.Token, i int, outArg func(string, int) bool) 
 	if notCalls[strings.ToLower(name)] {
 		return false
 	}
-	if before := prevSignificant(tokens, first-1); before >= 0 {
+	if before := parser.PrevSignificant(tokens, first-1); before >= 0 {
 		switch tokens[before].Kind {
 		case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenNew:
 			return outArg("", arg)
@@ -1244,7 +1244,7 @@ func useAliasTokenIndex(tokens []parser.Token, start, end int) int {
 		if tokens[i].Kind == parser.TokenIdentifier {
 			lastIdentifierIdx = i
 			if tokens[i].Value == "as" {
-				aliasIdx = nextSignificant(tokens, i+1)
+				aliasIdx = parser.NextSignificant(tokens, i+1)
 				if aliasIdx >= end || tokens[aliasIdx].Kind != parser.TokenIdentifier {
 					return -1
 				}
@@ -1336,46 +1336,22 @@ func findArrowExpressionEnd(tokens []parser.Token, start int) int {
 			}
 		case parser.TokenComma, parser.TokenSemicolon:
 			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
-				return prevSignificant(tokens, i-1)
+				return parser.PrevSignificant(tokens, i-1)
 			}
 		}
 	}
-	return prevSignificant(tokens, len(tokens)-1)
-}
-
-func nextSignificant(tokens []parser.Token, i int) int {
-	for i < len(tokens) {
-		switch tokens[i].Kind {
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
-			i++
-		default:
-			return i
-		}
-	}
-	return -1
-}
-
-func prevSignificant(tokens []parser.Token, i int) int {
-	for i >= 0 {
-		switch tokens[i].Kind {
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
-			i--
-		default:
-			return i
-		}
-	}
-	return -1
+	return parser.PrevSignificant(tokens, len(tokens)-1)
 }
 
 func buildAssignment(tokens []parser.Token, variableIdx, equalsIdx, relativeBraceDepth int) *Assignment {
 	stmtStart := findStatementStart(tokens, variableIdx)
 	stmtEnd := findStatementEnd(tokens, equalsIdx+1)
-	exprStart := nextSignificant(tokens, equalsIdx+1)
+	exprStart := parser.NextSignificant(tokens, equalsIdx+1)
 	if stmtStart < 0 || stmtEnd < 0 || exprStart < 0 {
 		return nil
 	}
 
-	exprEnd := prevSignificant(tokens, stmtEnd-1)
+	exprEnd := parser.PrevSignificant(tokens, stmtEnd-1)
 	if exprEnd < exprStart {
 		return nil
 	}
@@ -1394,7 +1370,7 @@ func findStatementStart(tokens []parser.Token, first int) int {
 	depthBracket := 0
 	for i := first - 1; i >= 0; i-- {
 		tok := tokens[i]
-		if isTriviaToken(tok.Kind) {
+		if tok.Kind.IsComment() {
 			continue
 		}
 		switch tok.Kind {
@@ -1416,11 +1392,11 @@ func findStatementStart(tokens []parser.Token, first int) int {
 		if depthParen == 0 && depthBracket == 0 {
 			switch tok.Kind {
 			case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace:
-				return nextSignificant(tokens, i+1)
+				return parser.NextSignificant(tokens, i+1)
 			}
 		}
 	}
-	return nextSignificant(tokens, 0)
+	return parser.NextSignificant(tokens, 0)
 }
 
 func findStatementEnd(tokens []parser.Token, start int) int {
@@ -1428,7 +1404,7 @@ func findStatementEnd(tokens []parser.Token, start int) int {
 	depthBracket := 0
 	depthBrace := 0
 	for i := start; i < len(tokens); i++ {
-		if isTriviaToken(tokens[i].Kind) {
+		if tokens[i].Kind.IsComment() {
 			continue
 		}
 		switch tokens[i].Kind {
@@ -1466,10 +1442,6 @@ func findStatementEnd(tokens []parser.Token, start int) int {
 		}
 	}
 	return -1
-}
-
-func isTriviaToken(kind parser.TokenKind) bool {
-	return kind == parser.TokenWhitespace || kind == parser.TokenComment || kind == parser.TokenDocComment
 }
 
 func containsPos(r protocol.Range, pos protocol.Position) bool {

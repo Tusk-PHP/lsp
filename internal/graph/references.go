@@ -313,12 +313,8 @@ func scanNewExpressions(
 				continue
 			}
 
-			// Skip whitespace/comment tokens to find next meaningful token.
-			j := i + 1
-			for j < len(tokens) && (tokens[j].Kind == parser.TokenWhitespace || tokens[j].Kind == parser.TokenComment || tokens[j].Kind == parser.TokenDocComment) {
-				j++
-			}
-			if j >= len(tokens) {
+			j := parser.NextSignificant(tokens, i+1)
+			if j < 0 {
 				continue
 			}
 
