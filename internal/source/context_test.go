@@ -325,3 +325,19 @@ $x = 1;
 		t.Errorf("Uses = %#v, want %#v", ctx.Uses, want)
 	}
 }
+
+func BenchmarkNewDocument(b *testing.B) {
+	var src strings.Builder
+	src.WriteString("<?php\nnamespace App;\nclass Big {\n")
+	for range 300 {
+		src.WriteString("    public function m(array $a): int { return count($a) + $this->n(); }\n")
+	}
+	src.WriteString("}\n")
+	source := src.String()
+	b.ReportAllocs()
+	for b.Loop() {
+		if NewDocument("file:///a.php", source).File() == nil {
+			b.Fatal("the file parses")
+		}
+	}
+}
