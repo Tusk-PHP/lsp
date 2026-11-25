@@ -27,6 +27,11 @@ func TestFunctionCallMarksOnlyANameCalledAsAFunction(t *testing.T) {
 		{"$a = [ar|ea(1)];", true},
 		{"f(ar|ea: 1);", false},
 		{"/** ar|ea() */", false},
+		{"$x = [f(1)[0], ar|ea(2)];", true},
+		{"if (true) { ar|ea(1); }", true},
+		{"#[Other([1], f(2)), Ar|ea(1)]\nfunction f() {}", false},
+		{"$ar|ea(1);", false},
+		{"echo ar|ea", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.src, func(t *testing.T) {
@@ -43,5 +48,11 @@ func TestFunctionCallMarksOnlyANameCalledAsAFunction(t *testing.T) {
 				t.Fatalf("FunctionCall = %v, want %v (word %q)", ctx.FunctionCall, tc.want, ctx.SymbolText)
 			}
 		})
+	}
+}
+
+func TestFunctionCallWithoutTokens(t *testing.T) {
+	if isFunctionCall(nil, protocol.Range{End: protocol.Position{Line: 1, Character: 4}}) {
+		t.Error("no tokens, no call")
 	}
 }
