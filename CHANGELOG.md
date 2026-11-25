@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The "stopped indexing at maxIndexFiles" warning no longer appears when the workspace has exactly `maxIndexFiles` PHP files; it shows only when files were actually left out.
 - A function call with no receiver, such as `area()`, is now always read as a function, found the way PHP finds it (a `use function` import, the current namespace, then the global one, with imported names matched ignoring case, so `MONEY()` and `l\scaled()` follow `use function Lib\money` and `use Lib as L`), by go to definition and declaration, hover, find references, rename and signature help. When no such function exists they give no answer, instead of a same-named method of some unrelated class, or of the class you're in. A bare name that isn't called no longer reaches another class's member either. When a method and a property share a name, go to definition, hover, references and rename on `$this->area()` go to the method and on `$this->area` to the property.
+- Document highlights mark only what the name under the cursor refers to: with the cursor on `$room->area()`, the method's declaration and the calls on a `Room`, never `$shape->area()`, a property or local variable named `area`, or the word in a string or comment. A name that refers to nothing highlights nothing.
 
 ## [0.16.0] - 2026-11-25
 
