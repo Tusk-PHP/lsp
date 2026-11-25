@@ -79,3 +79,21 @@ function perimeter(int $w, int $h): float { return 0.0; }
 		t.Errorf("a method's signature through its receiver, got %d parameters", got)
 	}
 }
+
+func TestSignatureHelpInsideAContainerCallIsTheInnerCall(t *testing.T) {
+	caller := `<?php
+namespace App;
+class Service {}
+$s = app(Service::class, ['x' => perimeter(1,
+`
+	helpers := `<?php
+function perimeter(int $w, int $h): float { return 0.0; }
+`
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///caller.php": caller, "file:///helpers.php": helpers})
+	pos := positionOf(t, caller, "perimeter(1,")
+	pos.Character += len("perimeter(1,")
+	help := a.GetSignatureHelp("file:///caller.php", caller, pos)
+	if help == nil || !strings.HasPrefix(help.Signatures[0].Label, "perimeter(int $w, int $h)") || help.ActiveParameter != 1 {
+		t.Errorf("signature help for perimeter( inside app(...): got %+v", help)
+	}
+}

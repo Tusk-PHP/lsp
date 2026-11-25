@@ -73,8 +73,17 @@ func inAttribute(tokens []parser.Token, i int) bool {
 	return false
 }
 
-func CallAt(source string, pos protocol.Position) (callee protocol.Position, argument int, ok bool) {
-	tokens := parser.Tokenize(source)
+func CallAt(uri, source string, pos protocol.Position) (callee *CursorContext, argument int, ok bool) {
+	result := parser.New().Parse(source)
+	calleePos, argument, ok := calleeAt(result.Tokens, pos)
+	if !ok {
+		return nil, 0, false
+	}
+	callee = analyzeParsed(uri, source, result, calleePos)
+	return callee, argument, callee != nil
+}
+
+func calleeAt(tokens []parser.Token, pos protocol.Position) (callee protocol.Position, argument int, ok bool) {
 	cursor := sort.Search(len(tokens), func(i int) bool { return !tokenEndsBeforePos(tokens[i], pos) })
 	depth := 0
 	for k := cursor - 1; k >= 0; k-- {

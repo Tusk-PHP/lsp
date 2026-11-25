@@ -85,16 +85,15 @@ func TestCallAtFindsTheCalleeAndArgumentFromTokens(t *testing.T) {
 			offset := strings.Index(src, "|")
 			src = src[:offset] + src[offset+1:]
 			pos := protocol.Position{Line: strings.Count(src[:offset], "\n"), Character: offset - strings.LastIndex(src[:offset], "\n") - 1}
-			callee, argument, ok := CallAt(src, pos)
+			callee, argument, ok := CallAt("file:///a.php", src, pos)
 			if ok != tc.ok {
 				t.Fatalf("ok = %v, want %v", ok, tc.ok)
 			}
 			if !ok {
 				return
 			}
-			lines := strings.Split(src, "\n")
-			if got := lines[callee.Line][callee.Character:][:len(tc.callee)]; got != tc.callee || argument != tc.argument {
-				t.Errorf("callee %q, argument %d; want %q, %d", got, argument, tc.callee, tc.argument)
+			if callee.SymbolText != tc.callee || argument != tc.argument {
+				t.Errorf("callee %q, argument %d; want %q, %d", callee.SymbolText, argument, tc.callee, tc.argument)
 			}
 		})
 	}
