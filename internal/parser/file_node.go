@@ -111,26 +111,28 @@ func (b *fileNodeBuilder) visit(n ast.Node, scope declScope) {
 		return
 	case *ast.FunctionDecl:
 		if scope.declaresFunctions() {
-			b.file.Functions = append(b.file.Functions, b.function(n))
+			if n.Name != nil {
+				b.file.Functions = append(b.file.Functions, b.function(n))
+			}
 			scope = scopeFunction
 		}
 	case *ast.ClassDecl:
-		if scope.declaresClasses() {
+		if scope.declaresClasses() && n.Name != nil {
 			b.file.Classes = append(b.file.Classes, b.class(n, scope == scopeBlock))
 		}
 		scope = scopeClass
 	case *ast.InterfaceDecl:
-		if scope.declaresClasses() {
+		if scope.declaresClasses() && n.Name != nil {
 			b.file.Interfaces = append(b.file.Interfaces, b.iface(n))
 		}
 		scope = scopeClass
 	case *ast.TraitDecl:
-		if scope.declaresClasses() {
+		if scope.declaresClasses() && n.Name != nil {
 			b.file.Traits = append(b.file.Traits, b.trait(n))
 		}
 		scope = scopeClass
 	case *ast.EnumDecl:
-		if scope.declaresClasses() {
+		if scope.declaresClasses() && n.Name != nil {
 			b.file.Enums = append(b.file.Enums, b.enum(n))
 		}
 		scope = scopeClass
@@ -247,11 +249,9 @@ func (b *fileNodeBuilder) function(fn *ast.FunctionDecl) FunctionNode {
 		DocComment: b.doc(fn.Doc),
 		Params:     b.params(fn.Params),
 	}
-	if fn.Name != nil {
-		node.Name = b.text(fn.Name)
-		node.FullName = b.qualify(node.Name)
-		node.StartLine, node.StartCol = b.position(fn.Name.Start)
-	}
+	node.Name = b.text(fn.Name)
+	node.FullName = b.qualify(node.Name)
+	node.StartLine, node.StartCol = b.position(fn.Name.Start)
 	return node
 }
 
@@ -330,6 +330,9 @@ func (b *fileNodeBuilder) body(members []ast.Member, readonly bool) classBody {
 	for _, member := range members {
 		switch m := member.(type) {
 		case *ast.Method:
+			if m.Name == nil {
+				continue
+			}
 			method := b.method(m)
 			body.methods = append(body.methods, method)
 			if strings.EqualFold(method.Name, "__construct") {
@@ -416,10 +419,8 @@ func (b *fileNodeBuilder) method(m *ast.Method) MethodNode {
 		DocComment: b.doc(m.Doc),
 		EndLine:    b.endLine(m.Span),
 	}
-	if m.Name != nil {
-		node.Name = b.text(m.Name)
-		node.StartLine, node.StartCol = b.position(m.Name.Start)
-	}
+	node.Name = b.text(m.Name)
+	node.StartLine, node.StartCol = b.position(m.Name.Start)
 	return node
 }
 
@@ -517,11 +518,9 @@ func (b *fileNodeBuilder) class(c *ast.ClassDecl, conditional bool) ClassNode {
 		TraitUseDoc: body.traitUseDoc,
 		TraitRules:  body.traitRules,
 	}
-	if c.Name != nil {
-		node.Name = b.text(c.Name)
-		node.FullName = b.qualify(node.Name)
-		node.StartLine, node.StartCol = b.position(c.Name.Start)
-	}
+	node.Name = b.text(c.Name)
+	node.FullName = b.qualify(node.Name)
+	node.StartLine, node.StartCol = b.position(c.Name.Start)
 	return node
 }
 
@@ -597,11 +596,9 @@ func (b *fileNodeBuilder) iface(i *ast.InterfaceDecl) InterfaceNode {
 		EndLine:    b.endLine(i.Span),
 		DocComment: b.doc(i.Doc),
 	}
-	if i.Name != nil {
-		node.Name = b.text(i.Name)
-		node.FullName = b.qualify(node.Name)
-		node.StartLine, node.StartCol = b.position(i.Name.Start)
-	}
+	node.Name = b.text(i.Name)
+	node.FullName = b.qualify(node.Name)
+	node.StartLine, node.StartCol = b.position(i.Name.Start)
 	return node
 }
 
@@ -618,11 +615,9 @@ func (b *fileNodeBuilder) trait(t *ast.TraitDecl) TraitNode {
 		TraitUseDoc: body.traitUseDoc,
 		TraitRules:  body.traitRules,
 	}
-	if t.Name != nil {
-		node.Name = b.text(t.Name)
-		node.FullName = b.qualify(node.Name)
-		node.StartLine, node.StartCol = b.position(t.Name.Start)
-	}
+	node.Name = b.text(t.Name)
+	node.FullName = b.qualify(node.Name)
+	node.StartLine, node.StartCol = b.position(t.Name.Start)
 	return node
 }
 
@@ -641,11 +636,9 @@ func (b *fileNodeBuilder) enum(e *ast.EnumDecl) EnumNode {
 		EndLine:    b.endLine(e.Span),
 		DocComment: b.doc(e.Doc),
 	}
-	if e.Name != nil {
-		node.Name = b.text(e.Name)
-		node.FullName = b.qualify(node.Name)
-		node.StartLine, node.StartCol = b.position(e.Name.Start)
-	}
+	node.Name = b.text(e.Name)
+	node.FullName = b.qualify(node.Name)
+	node.StartLine, node.StartCol = b.position(e.Name.Start)
 	return node
 }
 

@@ -219,6 +219,12 @@ func TestFileNodeSkipsWhatHasNoName(t *testing.T) {
 		"<?php class K { const = 2; }",
 		"<?php enum E { case; }",
 		"<?php class K { public int ; }",
+		"<?php class {}",
+		"<?php final class extends B {}",
+		"<?php interface {}",
+		"<?php trait {}",
+		"<?php class K { public function () {} }",
+		"<?php interface I { function (); }",
 	} {
 		file := ParseFile(src, token.Latest)
 		if len(file.Errors) == 0 {
@@ -228,6 +234,13 @@ func TestFileNodeSkipsWhatHasNoName(t *testing.T) {
 		if strings.Contains(summary, "Name: ") {
 			t.Errorf("%q: a nameless entry was kept: %s", src, summary)
 		}
+	}
+}
+
+func TestFileNodeVisitsInsideANamelessClass(t *testing.T) {
+	file := ParseFile("<?php class { function m() { return new class extends B {}; } }", token.Latest)
+	if len(file.Classes) != 0 || len(file.AnonymousClasses) != 1 || file.AnonymousClasses[0].Extends != "B" {
+		t.Errorf("classes: %+v, anonymous: %+v", file.Classes, file.AnonymousClasses)
 	}
 }
 
