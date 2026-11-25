@@ -7,7 +7,6 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/phparray"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
-	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
@@ -264,14 +263,15 @@ func (p *Provider) resolveArrayKeysFromType(source string, pos protocol.Position
 			}
 		}
 
-		if retType := p.resolveCallReturnType(rhs, source, file); retType != "" {
+		at := protocol.Position{Line: i, Character: len(lines[i])}
+		if retType := p.resolveCallReturnType(rhs, source, at, file); retType != "" {
 			if fields := types.ParseArrayShape(retType); len(fields) > 0 {
 				return fields
 			}
 		}
 
 		if p.arrayResolver != nil {
-			if classFQN, methodName := parseMethodCall(rhs, file); classFQN != "" && methodName != "" {
+			if classFQN, methodName := p.calledMethod(rhs, source, at, file); classFQN != "" && methodName != "" {
 				if fields := p.arrayResolver.ResolveMethodReturnKeys(classFQN, methodName); len(fields) > 0 {
 					return fields
 				}
@@ -283,29 +283,16 @@ func (p *Provider) resolveArrayKeysFromType(source string, pos protocol.Position
 	return nil
 }
 
-func parseMethodCall(expr string, file *parser.FileNode) (classFQN, methodName string) {
+func (p *Provider) calledMethod(expr, source string, pos protocol.Position, file *parser.FileNode) (classFQN, methodName string) {
 	expr = strings.TrimSuffix(strings.TrimSpace(expr), ";")
 	if parenIdx := strings.Index(expr, "("); parenIdx > 0 {
 		expr = expr[:parenIdx]
 	}
-	if !strings.Contains(expr, "->") {
-		return
+	arrow := strings.LastIndex(expr, "->")
+	if arrow < 0 {
+		return "", ""
 	}
-	parts := strings.Split(expr, "->")
-	methodName = parts[len(parts)-1]
-
-	target := strings.TrimSpace(parts[0])
-	if target == "$this" && file != nil && len(file.Classes) > 0 {
-		cls := file.Classes[0]
-		if cls.FullName != "" {
-			classFQN = cls.FullName
-		} else if file.Namespace != "" {
-			classFQN = file.Namespace + "\\" + cls.Name
-		} else {
-			classFQN = cls.Name
-		}
-	}
-	return
+	return p.ResolveExpressionTypeTyped(strings.TrimSpace(expr[:arrow]), source, pos, file).BaseFQN(), strings.TrimSpace(expr[arrow+2:])
 }
 
 func extractShapeFromDocParams(docComment, paramBare string) []types.ShapeField {
@@ -330,52 +317,12 @@ func extractShapeFromDocParams(docComment, paramBare string) []types.ShapeField 
 	return nil
 }
 
-func (p *Provider) resolveCallReturnType(expr, source string, file *parser.FileNode) string {
-	expr = strings.TrimSuffix(strings.TrimSpace(expr), ";")
-	if parenIdx := strings.Index(expr, "("); parenIdx > 0 {
-		expr = expr[:parenIdx]
+func (p *Provider) resolveCallReturnType(expr, source string, pos protocol.Position, file *parser.FileNode) string {
+	rt := p.ResolveExpressionTypeTyped(strings.TrimSuffix(strings.TrimSpace(expr), ";"), source, pos, file)
+	if rt.IsEmpty() {
+		return ""
 	}
-	expr = strings.TrimSpace(expr)
-
-	if strings.Contains(expr, "->") {
-		parts := strings.Split(expr, "->")
-		methodName := parts[len(parts)-1]
-		if file != nil && len(file.Classes) > 0 {
-			cls := file.Classes[0]
-			classFQN := cls.FullName
-			if classFQN == "" && file.Namespace != "" {
-				classFQN = file.Namespace + "\\" + cls.Name
-			} else if classFQN == "" {
-				classFQN = cls.Name
-			}
-			for _, member := range p.index.GetClassMembers(classFQN) {
-				if member.Name == methodName && member.Kind == symbols.KindMethod {
-					if member.DocComment != "" {
-						doc := parser.ParseDocBlock(member.DocComment)
-						if doc != nil && doc.Return.Type != "" {
-							return doc.Return.Type
-						}
-					}
-					return member.ReturnType
-				}
-			}
-		}
-	}
-
-	funcName := expr
-	syms := p.index.LookupByName(funcName)
-	for _, sym := range syms {
-		if sym.Kind == symbols.KindFunction || sym.Kind == symbols.KindMethod {
-			if sym.DocComment != "" {
-				doc := parser.ParseDocBlock(sym.DocComment)
-				if doc != nil && doc.Return.Type != "" {
-					return doc.Return.Type
-				}
-			}
-			return sym.ReturnType
-		}
-	}
-	return ""
+	return rt.FullString()
 }
 
 func scanLiteralArrayKeys(source string, pos protocol.Position, varName string) []types.ShapeField {
