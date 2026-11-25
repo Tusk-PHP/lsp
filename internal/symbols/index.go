@@ -1133,9 +1133,8 @@ func (idx *Index) updateSortedFQNsLocked() {
 	idx.sortedFQNs.update(func(yield func(string)) {
 		for fqn, sym := range idx.symbols {
 			// Only top-level symbols are needed for FQN-prefix search, and
-			// never one with an empty short name (M1 guard) or an anonymous
-			// class, which no one can write.
-			if sym.Kind.IsMember() || sym.Name == "" || sym.Name == parser.AnonymousClassName {
+			// never an anonymous class, which no one can write.
+			if sym.Kind.IsMember() || sym.Name == parser.AnonymousClassName {
 				continue
 			}
 			yield(fqn)
@@ -1244,8 +1243,7 @@ func (idx *Index) SearchByFQNPrefix(prefix string) ([]*Symbol, []string) {
 			break
 		}
 		sym, ok := idx.symbols[fqn]
-		if !ok || sym.Name == "" {
-			// M1: skip empty-name symbols
+		if !ok {
 			continue
 		}
 		// Compute the suffix after the prefix (using original case for slicing)

@@ -13,6 +13,7 @@ func TestSearchByFQNPrefixNoEmptyNames(t *testing.T) {
 namespace App;
 class Service {}
 class Controller {}
+class {}
 `)
 	idx.IndexFile("file:///deep.php", `<?php
 namespace App\Http;
