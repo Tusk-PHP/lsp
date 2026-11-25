@@ -337,6 +337,20 @@ func (idx *Index) registerBuiltinRegistryLocked(profile BuiltinProfile) {
 		}
 		idx.addBuiltinClassLikeLocked(name, "PHP built-in class-like symbol")
 	}
+
+	for _, c := range generatedBuiltinConstants {
+		if idx.symbols[c.Name] != nil || !availableIn(constantAvailability(c), profile) {
+			continue
+		}
+		idx.storeBuiltinLocked(&Symbol{Name: shortName(c.Name), FQN: c.Name, Kind: KindConstant, Source: SourceBuiltin, URI: builtinRegistryURI, Type: c.Type, Value: c.Value})
+	}
+}
+
+func constantAvailability(c builtinConstant) BuiltinAvailability {
+	if a, ok := builtinAvailabilityByName[c.Name]; ok {
+		return a
+	}
+	return c.BuiltinAvailability
 }
 
 // RegisterBuiltinStubs indexes embedded PHP stub declarations as built-in
@@ -376,9 +390,10 @@ func normalizeBuiltinProfile(profile BuiltinProfile) BuiltinProfile {
 
 func builtinAvailable(name string, profile BuiltinProfile) bool {
 	availability, ok := LookupAvailability(name)
-	if !ok {
-		return true
-	}
+	return !ok || availableIn(availability, profile)
+}
+
+func availableIn(availability BuiltinAvailability, profile BuiltinProfile) bool {
 	if availability.Since != "" && compareBuiltinVersions(availability.Since, profile.PHPVersion) > 0 {
 		return false
 	}
