@@ -196,14 +196,14 @@ func (c *Config) SetDiagnosticRulesJSON(raw string) error {
 	return nil
 }
 
-// IsPHPVersionExplicitlySet reports whether PHPVersion was supplied by a
-// .tusk-php.json file or by client initializationOptions. When false the
-// value is the compiled-in default ("8.6") and must not shadow a Composer
-// or local-PHP detection result.
 func (c *Config) Problems() []error {
 	return c.DiagnosticIgnore.Invalid
 }
 
+// IsPHPVersionExplicitlySet reports whether PHPVersion was supplied by a
+// .tusk-php.json file or by client initializationOptions. When false the
+// value is the compiled-in default ("8.6") and must not shadow a Composer
+// or local-PHP detection result.
 func (c *Config) IsPHPVersionExplicitlySet() bool {
 	return c.phpVersionExplicitlySet
 }
