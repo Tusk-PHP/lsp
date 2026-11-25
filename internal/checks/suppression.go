@@ -22,16 +22,19 @@ const (
 )
 
 type marker struct {
-	text string
-	kind markerKind
+	text    string
+	kind    markerKind
+	leading bool
 }
 
 var markers = []marker{
-	{suppressionMarker, tuskIgnore},
-	{phpstanMarker, phpstanIgnore},
-	{phpstanMarker + "-line", phpstanIgnoreLine},
-	{phpstanMarker + "-next-line", phpstanIgnoreNextLine},
+	{suppressionMarker, tuskIgnore, true},
+	{phpstanMarker, phpstanIgnore, false},
+	{phpstanMarker + "-line", phpstanIgnoreLine, false},
+	{phpstanMarker + "-next-line", phpstanIgnoreNextLine, false},
 }
+
+var commentOpeners = []string{"{{--", "/**", "/*", "//", "#", "*"}
 
 type Suppressions map[int]suppressedCodes
 
@@ -68,7 +71,7 @@ func (l Layout) Suppressions() Suppressions {
 			continue
 		}
 		for _, m := range markers {
-			at := markerIndex(text, m.text)
+			at := markerIndex(text, m)
 			if at < 0 {
 				continue
 			}
@@ -210,22 +213,33 @@ func skipReason(rest string) string {
 	return ""
 }
 
-func markerIndex(comment, marker string) int {
+func markerIndex(comment string, m marker) int {
 	from := 0
 	for {
-		i := strings.Index(comment[from:], marker)
+		i := strings.Index(comment[from:], m.text)
 		if i < 0 {
 			return -1
 		}
 		i += from
-		end := i + len(marker)
+		end := i + len(m.text)
 		before := i == 0 || !isCodeByte(comment[i-1])
 		after := end == len(comment) || comment[end] == ':' || !isCodeByte(comment[end])
-		if before && after {
+		if before && after && (!m.leading || startsComment(comment, i)) {
 			return i
 		}
 		from = end
 	}
+}
+
+func startsComment(comment string, at int) bool {
+	lead := strings.TrimLeft(comment[strings.LastIndexByte(comment[:at], '\n')+1:at], " \t")
+	for _, opener := range commentOpeners {
+		if strings.HasPrefix(lead, opener) {
+			lead = lead[len(opener):]
+			break
+		}
+	}
+	return strings.TrimLeft(lead, " \t") == ""
 }
 
 func codeLength(s string) int {

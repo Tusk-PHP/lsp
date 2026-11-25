@@ -43,6 +43,14 @@ $e = '// @tusk-ignore';
 $f = 1; # @tusk-ignore unused-variable because it is read by an include
 $g->missing(); // @tusk-ignore unknwon-member
 $h(); // @tusk-ignore pint
+$i->missing(); // TODO: drop @tusk-ignore
+/** Legacy, see @tusk-ignore */
+$j->missing();
+/**
+ * Read by an include.
+ * @tusk-ignore unknown-member
+ */
+$k->missing();
 `
 	checkSuppressions(t, PHPSuppressions(source), []suppressionCase{
 		{1, tusk, "unknown-member", false},
@@ -61,6 +69,9 @@ $h(); // @tusk-ignore pint
 		{12, tusk, "unknown-member", false},
 		{13, pint, "braces", true},
 		{13, phpstan, "braces", false},
+		{14, tusk, "unknown-member", false},
+		{16, tusk, "unknown-member", false},
+		{21, tusk, "unknown-member", true},
 	})
 }
 
