@@ -830,6 +830,10 @@ func namespaceForFQN(fqn string) string {
 	return ""
 }
 
+func shortName(fqn string) string {
+	return fqn[strings.LastIndex(fqn, "\\")+1:]
+}
+
 func (idx *Index) indexMethods(uri string, parent *Symbol, parentFQN string, methods []parser.MethodNode, src SymbolSource, resolve func(string) string, uses []parser.UseNode) {
 	for _, m := range methods {
 		ms := &Symbol{
