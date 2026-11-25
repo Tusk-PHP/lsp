@@ -154,3 +154,23 @@ func TestClassLoaderConcurrentLookupWaitsForTheLoadInFlight(t *testing.T) {
 		}
 	})
 }
+
+func TestDefinitionsLoadAClassNotIndexedYet(t *testing.T) {
+	loader := &mapLoader{files: map[string]string{
+		`lib\child`: "<?php namespace Lib; class Child extends Base {}",
+		`lib\base`:  "<?php namespace Lib; class Base { public function run($a) {} }",
+	}}
+	idx := NewIndex()
+	idx.SetClassLoader(loader)
+	defs := idx.Definitions(`Lib\Child`)
+	if len(defs) != 1 {
+		t.Fatalf("a class the loader knows is a definition before indexing finishes: %v", defs)
+	}
+	names := map[string]bool{}
+	for _, m := range idx.DefinitionMembers(defs[0]) {
+		names[m.Name] = true
+	}
+	if !names["run"] {
+		t.Errorf("its ancestors are loaded too: %v", names)
+	}
+}
