@@ -44,24 +44,62 @@ func TestReindexKeepsNameNamespaceAndFoldIndexesInOrder(t *testing.T) {
 }
 
 func TestPromotedDeclarationKeepsItsNamesIndexed(t *testing.T) {
-	idx := NewIndex()
-	idx.IndexFile("file:///a.php", "<?php\nnamespace App;\nclass Dup { public function onlyInA() {} public function both() {} }\n")
-	idx.IndexFile("file:///b.php", "<?php\nnamespace App;\nclass Dup { public function both() {} public function onlyInB() {} }\n")
+	for _, tc := range []struct {
+		name      string
+		a, b      string
+		namespace []string
+		byName    map[string][]string
+		byPrefix  map[string][]string
+	}{
+		{
+			name:      "class declared in two files",
+			a:         "<?php\nnamespace App;\nclass Dup { public function onlyInA() {} public function both() {} }\n",
+			b:         "<?php\nnamespace App;\nclass Dup { public function both() {} public function onlyInB() {} }\n",
+			namespace: []string{"App\\Dup"},
+			byName:    map[string][]string{"Dup": {"App\\Dup"}, "onlyInA": {"App\\Dup::onlyInA"}, "both": {"App\\Dup::both"}, "onlyInB": nil},
+			byPrefix:  map[string][]string{"onlyIn": {"App\\Dup::onlyInA"}},
+		},
+		{
+			name:      "member removed and promoted back in the same pass",
+			a:         "<?php namespace App; interface Foo { function a(); }",
+			b:         "<?php namespace App; if (true) { class Foo { function a() {} } } else { class Foo { function c() {} } }",
+			namespace: []string{"App\\Foo"},
+			byName:    map[string][]string{"Foo": {"App\\Foo"}, "a": {"App\\Foo::a"}, "c": nil},
+			byPrefix:  map[string][]string{"a": {"App\\Foo::a"}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			idx := NewIndex()
+			idx.IndexFile("file:///a.php", tc.a)
+			idx.IndexFile("file:///b.php", tc.b)
 
-	idx.IndexFile("file:///b.php", "<?php\n")
+			idx.IndexFile("file:///b.php", "<?php\n")
 
-	if got, want := symbolFQNs(idx.GetNamespaceMembers("App")), []string{"App\\Dup"}; !slices.Equal(got, want) {
-		t.Fatalf("namespace App = %v, want %v", got, want)
-	}
-	for name, want := range map[string][]string{"Dup": {"App\\Dup"}, "onlyInA": {"App\\Dup::onlyInA"}, "both": {"App\\Dup::both"}, "onlyInB": nil} {
-		got := idx.LookupByName(name)
-		if !slices.Equal(symbolFQNs(got), want) && !(want == nil && got == nil) {
-			t.Errorf("LookupByName(%q) = %v, want %v", name, symbolFQNs(got), want)
-		}
-		for _, s := range got {
-			if s.URI != "file:///a.php" {
-				t.Errorf("LookupByName(%q) returns the removed declaration from %s", name, s.URI)
+			if got := symbolFQNs(idx.GetNamespaceMembers("App")); !slices.Equal(got, tc.namespace) {
+				t.Fatalf("namespace App = %v, want %v", got, tc.namespace)
 			}
-		}
+			for name, want := range tc.byName {
+				got := idx.LookupByName(name)
+				if !slices.Equal(symbolFQNs(got), want) && !(want == nil && got == nil) {
+					t.Errorf("LookupByName(%q) = %v, want %v", name, symbolFQNs(got), want)
+				}
+				for _, s := range got {
+					if s.URI != "file:///a.php" {
+						t.Errorf("LookupByName(%q) returns the removed declaration from %s", name, s.URI)
+					}
+				}
+			}
+			for prefix, want := range tc.byPrefix {
+				var got []string
+				for _, s := range idx.SearchByPrefix(prefix) {
+					if s.URI == "file:///a.php" {
+						got = append(got, s.FQN)
+					}
+				}
+				if !slices.Equal(got, want) {
+					t.Errorf("SearchByPrefix(%q) from a.php = %v, want %v", prefix, got, want)
+				}
+			}
+		})
 	}
 }

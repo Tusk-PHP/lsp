@@ -443,7 +443,7 @@ func (idx *Index) addBuiltinClassLikeLocked(name string, doc string) {
 
 func (idx *Index) storeBuiltinLocked(sym *Symbol) {
 	prev := idx.symbols[sym.FQN]
-	idx.storeSymbolLocked(sym)
+	idx.storeSymbolLocked(sym, pendingRemovals{})
 	if prev != nil && prev.URI == sym.URI {
 		idx.fileSymbols[sym.URI] = withSymbolReplaced(idx.fileSymbols[sym.URI], prev, sym)
 		return
