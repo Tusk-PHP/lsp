@@ -212,27 +212,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		}
 	}
 
-	// Fallback: lookup by short name
-	lookupName := word
-	if idx := strings.LastIndex(word, "\\"); idx >= 0 {
-		lookupName = word[idx+1:]
-	}
-	// A bare word can't reach another class's members, so a method declaration
-	// here must never show a same-named method from elsewhere.
-	var syms []*symbols.Symbol
-	for _, s := range p.index.LookupByName(lookupName) {
-		if s.ParentFQN == "" || s.ParentFQN == ctx.EnclosingFQN {
-			syms = append(syms, s)
-		}
-	}
-	if len(syms) == 0 {
-		return nil
-	}
-
-	// We're in standalone context (no -> or :: before the word).
-	// Rank candidates: prefer functions/classes/enums/interfaces over methods/properties,
-	// and prefer exact case matches over case-insensitive ones.
-	best := symbols.PickBestStandalone(syms, word)
+	best := p.index.LookupStandalone(word, ctx.EnclosingFQN)
 	if best == nil {
 		return nil
 	}

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -133,7 +134,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 				}
 			}
 		}
-		fqns, _ := resolveFunctionNames(tok.Value, file)
+		fqns, _ := resolve.FunctionNames(tok.Value, file)
 		emit(callFunction, functionCallees(fqns, index), tok, tok.Value, i, next, closeIdx)
 	}
 }
