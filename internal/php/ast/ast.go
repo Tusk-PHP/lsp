@@ -389,10 +389,11 @@ type ClassConstFetch struct {
 }
 
 type ArrayDimFetch struct {
-	expr
 	Span
-	Array Expr
-	Dim   Expr
+	Array  Expr
+	Dim    Expr
+	Braced bool
+	expr
 }
 
 type IdentifierExpr struct {
