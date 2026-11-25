@@ -24,7 +24,7 @@ func FunctionNames(name string, file *parser.FileNode) ([]string, bool) {
 		return []string{ImportedName(name, file.Namespace, file.Uses, "class")}, true
 	}
 	for _, u := range file.Uses {
-		if u.Kind == "function" && u.Alias == name {
+		if u.Kind == "function" && strings.EqualFold(u.Alias, name) {
 			return []string{u.FullName}, true
 		}
 	}
@@ -48,7 +48,7 @@ func ImportedName(name, currentNs string, uses []parser.UseNode, useKind string)
 		if useKind != "" && u.Kind != useKind {
 			continue
 		}
-		if u.Alias != parts[0] {
+		if !strings.EqualFold(u.Alias, parts[0]) {
 			continue
 		}
 		if len(parts) > 1 {

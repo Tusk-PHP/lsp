@@ -16,14 +16,19 @@ class Room {
 	caller := `<?php
 namespace App;
 use function Lib\scaled as grow;
+use function Lib\scaled;
+use Lib as L;
 $a = area();
 $b = helper();
 $c = grow(2);
 $d = \Lib\scaled(3);
 $e = local();
+$f = SCALED(4);
+$g = l\scaled(5);
 `
 	helpers := `<?php
 function helper() {}
+function scaled($n) {}
 `
 	lib := `<?php
 namespace Lib;
@@ -63,6 +68,8 @@ function local() {}
 		"grow(2)":   "file:///Lib.php",
 		"scaled(3)": "file:///Lib.php",
 		"local()":   "file:///local.php",
+		"SCALED(4)": "file:///Lib.php",
+		"scaled(5)": "file:///Lib.php",
 	} {
 		pos := positionOf(t, caller, needle)
 		if got := a.FindDefinition("file:///caller.php", caller, pos); got == nil || got.URI != wantURI {
