@@ -269,3 +269,130 @@ class Foo {
 		t.Error("expected newMethod after re-index added NewTrait")
 	}
 }
+
+func traitRulesIndex() *Index {
+	idx := NewIndex()
+	idx.IndexFile("file:///traits.php", `<?php
+namespace App;
+interface Speaks { public function bark(): void; }
+trait A { public function talk(): void {} public function shout(): void {} public $volume; }
+trait B { public function talk(): void {} public function shout(): void {} public function whisper(): void {} }
+trait Nested { use B; }
+class Talker implements Speaks {
+    use B, A {
+        A::talk insteadof B;
+        B::shout insteadof A;
+        B::talk as bTalk;
+        A::shout as protected bark;
+        whisper as private;
+    }
+}
+class NestedTalker { use Nested, A { A::talk insteadof Nested; } }
+class NestedAlias { use Nested { Nested::whisper as murmur; talk as chat; } }
+class Overrides { use A { talk as speak; } public function speak(): void {} }
+enum Mood { use A, B { B::talk insteadof A; B::shout insteadof A; } }
+`)
+	return idx
+}
+
+func TestTraitInsteadofPicksTheMethodPHPUses(t *testing.T) {
+	idx := traitRulesIndex()
+	cases := []struct{ class, member, want string }{
+		{`App\Talker`, "talk", `App\A`},
+		{`App\Talker`, "shout", `App\B`},
+		{`App\NestedTalker`, "talk", `App\A`},
+		{`App\Mood`, "talk", `App\B`},
+	}
+	for _, c := range cases {
+		named := idx.ClassMembersNamed(c.class, c.member)
+		if len(named) != 1 || named[0].ParentFQN != c.want {
+			var got []string
+			for _, m := range named {
+				got = append(got, m.ParentFQN)
+			}
+			t.Errorf("%s::%s comes from %v, want only %s", c.class, c.member, got, c.want)
+		}
+	}
+	if named := idx.ClassMembersNamed(`App\Talker`, "volume"); len(named) != 1 {
+		t.Errorf("a property is untouched by method rules: %d", len(named))
+	}
+}
+
+func TestTraitAsAliasesAMethod(t *testing.T) {
+	idx := traitRulesIndex()
+	cases := []struct{ class, member, wantTrait, wantName, wantVisibility string }{
+		{`App\Talker`, "bTalk", `App\B`, "talk", "public"},
+		{`App\Talker`, "bark", `App\A`, "shout", "protected"},
+		{`App\Talker`, "whisper", `App\B`, "whisper", "private"},
+		{`App\NestedAlias`, "murmur", `App\B`, "whisper", "public"},
+		{`App\NestedAlias`, "chat", `App\B`, "talk", "public"},
+	}
+	for _, c := range cases {
+		named := idx.ClassMembersNamed(c.class, c.member)
+		if len(named) == 0 {
+			t.Errorf("%s::%s isn't found", c.class, c.member)
+			continue
+		}
+		m := named[0]
+		original := idx.Lookup(c.wantTrait + "::" + c.wantName)
+		if m.ParentFQN != c.wantTrait || m.Visibility != c.wantVisibility || m.Range != original.Range {
+			t.Errorf("%s::%s = %s (%s, %v), want %s::%s (%s)", c.class, c.member, m.ParentFQN, m.Visibility, m.Range, c.wantTrait, c.wantName, c.wantVisibility)
+		}
+		if original.Visibility != "public" {
+			t.Errorf("aliasing changed %s::%s itself: %s", c.wantTrait, c.wantName, original.Visibility)
+		}
+	}
+	if named := idx.ClassMembersNamed(`App\Overrides`, "speak"); len(named) == 0 || named[0].ParentFQN != `App\Overrides` {
+		t.Errorf("the class's own method wins over an alias: %v", named)
+	}
+}
+
+func TestTraitRulesLeaveWithTheirFile(t *testing.T) {
+	idx := traitRulesIndex()
+	idx.IndexFile("file:///traits.php", `<?php
+namespace App;
+trait A { public function talk(): void {} }
+trait B { public function talk(): void {} }
+class Talker { use B, A; }
+`)
+	if named := idx.ClassMembersNamed(`App\Talker`, "bTalk"); len(named) != 0 {
+		t.Errorf("an alias outlives its rule: %v", named)
+	}
+	if named := idx.ClassMembersNamed(`App\Talker`, "talk"); len(named) != 2 || named[0].ParentFQN != `App\B` {
+		t.Errorf("without insteadof both traits' talk are listed in use order: %v", named)
+	}
+}
+
+func TestEachDeclarationHasItsOwnTraitRules(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///traits.php", "<?php\ntrait A { public function talk() {} }\ntrait B { public function talk() {} }\n")
+	idx.IndexFile("file:///a.php", "<?php\nclass Dup { use A, B { A::talk insteadof B; B::talk as bTalk; } }\n")
+	idx.IndexFile("file:///b.php", "<?php\nclass Dup { use A, B { B::talk insteadof A; A::talk as aTalk; } }\n")
+
+	origin := func(members []*Symbol, name string) string {
+		for _, m := range members {
+			if m.Name == name {
+				return m.ParentFQN
+			}
+		}
+		return ""
+	}
+	for _, def := range idx.Definitions("Dup") {
+		members := idx.DefinitionMembers(def)
+		want := map[string][3]string{"file:///a.php": {"A", "bTalk", "B"}, "file:///b.php": {"B", "aTalk", "A"}}[def.URI]
+		if got := origin(members, "talk"); got != want[0] {
+			t.Errorf("%s: talk comes from %q, want %s", def.URI, got, want[0])
+		}
+		if got := origin(members, want[1]); got != want[2] {
+			t.Errorf("%s: alias %s comes from %q, want %s", def.URI, want[1], got, want[2])
+		}
+	}
+
+	idx.IndexFile("file:///b.php", "<?php\n")
+	if named := idx.ClassMembersNamed("Dup", "bTalk"); len(named) != 1 || named[0].ParentFQN != "B" {
+		t.Errorf("the promoted declaration brings back its own rules: %v", named)
+	}
+	if named := idx.ClassMembersNamed("Dup", "aTalk"); len(named) != 0 {
+		t.Errorf("the removed declaration's alias leaves with it: %v", named)
+	}
+}
