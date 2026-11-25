@@ -10,7 +10,6 @@ Back to the [README](../README.md).
 | `tuskPhpLsp.executablePath` | `""` | Custom path to the binary |
 | `tuskPhpLsp.phpVersion` | `"8.6"` | Target PHP version (`8.0`-`8.6`) |
 | `tuskPhpLsp.framework` | `"auto"` | Framework: `auto`, `laravel`, `symfony`, `magento`, `none` |
-| `tuskPhpLsp.containerAware` | `true` | Enable DI container analysis |
 | `tuskPhpLsp.diagnostics.enable` | `true` | Enable diagnostics |
 | `tuskPhpLsp.diagnostics.phpstan.enable` | `true` | Run PHPStan on save |
 | `tuskPhpLsp.diagnostics.pint.enable` | `true` | Run Laravel Pint on save |
@@ -28,7 +27,6 @@ Create `.tusk-php.json` in your project root for settings everyone who opens the
 {
   "phpVersion": "8.6",
   "framework": "auto",
-  "containerAware": true,
   "diagnosticsEnabled": true,
   "excludePaths": ["vendor", "node_modules", ".git"],
   "maxIndexFiles": 0,
