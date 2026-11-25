@@ -1,6 +1,7 @@
 package sourcectx
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -252,5 +253,21 @@ use App\Later\Thing;
 	}
 	if len(ctx.Uses) != 0 {
 		t.Fatalf("Uses = %#v, want no active imports before declaration", ctx.Uses)
+	}
+}
+
+func BenchmarkNewDocument(b *testing.B) {
+	var src strings.Builder
+	src.WriteString("<?php\nnamespace App;\nclass Big {\n")
+	for range 300 {
+		src.WriteString("    public function m(array $a): int { return count($a) + $this->n(); }\n")
+	}
+	src.WriteString("}\n")
+	source := src.String()
+	b.ReportAllocs()
+	for b.Loop() {
+		if NewDocument("file:///a.php", source).File() == nil {
+			b.Fatal("the file parses")
+		}
 	}
 }

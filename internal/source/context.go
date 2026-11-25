@@ -88,7 +88,8 @@ type Document struct {
 }
 
 func NewDocument(uri, source string) *Document {
-	return &Document{uri: uri, lines: strings.Split(source, "\n"), result: parser.New().Parse(source), file: parser.ParseFile(source)}
+	result := parser.New().Parse(source)
+	return &Document{uri: uri, lines: result.Lines, result: result, file: parser.FileNodeOf(result)}
 }
 
 func (d *Document) Tokens() []parser.Token {
