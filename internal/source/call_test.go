@@ -56,3 +56,43 @@ func TestFunctionCallWithoutTokens(t *testing.T) {
 		t.Error("no tokens, no call")
 	}
 }
+
+func TestCallAtFindsTheCalleeAndArgumentFromTokens(t *testing.T) {
+	cases := []struct {
+		src      string
+		ok       bool
+		callee   string
+		argument int
+	}{
+		{"area(|", true, "area", 0},
+		{"area($a, 'x, y', |", true, "area", 2},
+		{"area(f(1, 2), |", true, "area", 1},
+		{"area([1, 2, |", true, "area", 0},
+		{"area(\n    $a,\n    |", true, "area", 1},
+		{"$r->area($a, /* , */ |", true, "area", 1},
+		{"area(1); |", false, "", 0},
+		{"function () { |", false, "", 0},
+		{"area(function () { $x = [1]; }, |", true, "area", 1},
+		{"$fn(|", false, "", 0},
+		{"|", false, "", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.src, func(t *testing.T) {
+			src := "<?php\n" + tc.src + "\n"
+			offset := strings.Index(src, "|")
+			src = src[:offset] + src[offset+1:]
+			pos := protocol.Position{Line: strings.Count(src[:offset], "\n"), Character: offset - strings.LastIndex(src[:offset], "\n") - 1}
+			callee, argument, ok := CallAt(src, pos)
+			if ok != tc.ok {
+				t.Fatalf("ok = %v, want %v", ok, tc.ok)
+			}
+			if !ok {
+				return
+			}
+			lines := strings.Split(src, "\n")
+			if got := lines[callee.Line][callee.Character:][:len(tc.callee)]; got != tc.callee || argument != tc.argument {
+				t.Errorf("callee %q, argument %d; want %q, %d", got, argument, tc.callee, tc.argument)
+			}
+		})
+	}
+}
