@@ -36,6 +36,8 @@ func TestMySQLDataSourceReachesTheConfiguredHost(t *testing.T) {
 		{"127.0.0.1", "3306", "secret", "127.0.0.1:3306"},
 		{"db.internal", "3307", "secret", "db.internal:3307"},
 		{"::1", "3306", "secret", "[::1]:3306"},
+		{"[::1]", "3306", "secret", "[::1]:3306"},
+		{"fe80::1%en0", "3306", "secret", "[fe80::1%en0]:3306"},
 		{"fd00::5", "3306", "secret", "[fd00::5]:3306"},
 		{"db", "3306", "p@ss/w:rd", "db:3306"},
 	}
