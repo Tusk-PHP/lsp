@@ -451,3 +451,28 @@ class User { use Loop; }
 		t.Errorf("members of a class using a trait cycle: %v", names)
 	}
 }
+
+func TestTraitAsFinal(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///traits.php", `<?php
+trait T { public function foo(): void {} public function baz(): void {} }
+class User { use T { foo as final bar; baz as final; } }
+`)
+	cases := []struct{ name, fqn string }{{"bar", "User::bar"}, {"baz", "T::baz"}, {"foo", "T::foo"}}
+	for _, c := range cases {
+		named := idx.ClassMembersNamed("User", c.name)
+		if len(named) != 1 || named[0].FQN != c.fqn {
+			t.Errorf("User::%s = %v, want %s", c.name, named, c.fqn)
+			continue
+		}
+		if want := c.name != "foo"; named[0].IsFinal != want {
+			t.Errorf("User::%s final = %v, want %v", c.name, named[0].IsFinal, want)
+		}
+	}
+	if named := idx.ClassMembersNamed("User", "final"); len(named) != 0 {
+		t.Errorf("final is a modifier, not a member name: %v", named)
+	}
+	if idx.Lookup("T::baz").IsFinal {
+		t.Error("as final changed the trait's own method")
+	}
+}

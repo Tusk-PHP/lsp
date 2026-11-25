@@ -18,6 +18,7 @@ type TraitAlias struct {
 	Method     string
 	Alias      string
 	Visibility string
+	Final      bool
 }
 
 func (p *structParser) parseTraitAdaptations() {
@@ -90,11 +91,15 @@ func (p *structParser) parseTraitAdaptation() {
 		case TokenPublic, TokenProtected, TokenPrivate:
 			rule.Visibility = strings.ToLower(p.advance().Value)
 			p.skipCommentTokens()
+		case TokenFinal:
+			p.advance()
+			rule.Final = true
+			p.skipCommentTokens()
 		}
 		if p.peek().Kind != TokenSemicolon && isNameToken(p.peek()) {
 			rule.Alias = p.advance().Value
 		}
-		if rule.Alias != "" || rule.Visibility != "" {
+		if rule.Alias != "" || rule.Visibility != "" || rule.Final {
 			p.traitRules.Aliases = append(p.traitRules.Aliases, rule)
 		}
 	}
