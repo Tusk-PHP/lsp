@@ -196,13 +196,9 @@ func (r *Resolver) MemberTypeForCall(member *symbols.Symbol, file *parser.FileNo
 	if member == nil {
 		return ResolvedType{}
 	}
-	// Framework classes whose PHPDoc has no generics use the hard-coded
-	// registry; ones that declare templates are read from their PHPDoc.
-	if len(typeContext) > 0 && member.Kind == symbols.KindMethod && HasTemplateMapping(member.ParentFQN) {
-		if sym := r.Index.Lookup(member.ParentFQN); sym == nil || len(sym.Templates) == 0 {
-			if rt := r.memberTypeFallback(member, file, callerFQN, typeContext); !rt.IsEmpty() {
-				return rt
-			}
+	if len(typeContext) > 0 && member.Kind == symbols.KindMethod {
+		if rt := r.fallbackTemplateReturn(member.ParentFQN, member.Name, typeContext); !rt.IsEmpty() {
+			return r.applyFallback(rt, member, file, callerFQN)
 		}
 	}
 	// A method without a PHPDoc return type inherits the one its parent,
@@ -221,11 +217,11 @@ func (r *Resolver) MemberTypeForCall(member *symbols.Symbol, file *parser.FileNo
 		staticFQN = member.ParentFQN
 	}
 	if raw == "" || raw == "void" {
-		return r.memberTypeFallback(member, file, callerFQN, typeContext)
+		return r.memberTypeFallback(member, file)
 	}
 	pattern := r.parseType(raw)
 	if pattern.IsEmpty() {
-		return r.memberTypeFallback(member, file, callerFQN, typeContext)
+		return r.memberTypeFallback(member, file)
 	}
 
 	classTmpls := r.templatesOf(member.ParentFQN)
@@ -266,25 +262,23 @@ func (r *Resolver) MemberTypeForCall(member *symbols.Symbol, file *parser.FileNo
 	static := ResolvedType{FQN: staticFQN, Params: typeContext}
 	rt := r.applyEnv(pattern, typeEnv{subst: subst, static: static, owner: member.ParentFQN, file: file})
 	if rt.IsEmpty() && !rt.Nullable {
-		if fb := r.memberTypeFallback(member, file, callerFQN, typeContext); !fb.IsEmpty() {
+		if fb := r.memberTypeFallback(member, file); !fb.IsEmpty() {
 			return fb
 		}
 	}
 	return rt
 }
 
-// memberTypeFallback is the type of a member whose PHPDoc and signature say
-// nothing useful: the hard-coded generic registry for the framework classes it
-// covers, else the plain member type.
-func (r *Resolver) memberTypeFallback(member *symbols.Symbol, file *parser.FileNode, callerFQN string, typeContext []ResolvedType) ResolvedType {
-	if len(typeContext) > 0 && member.Kind == symbols.KindMethod {
-		if rt := ResolveTemplateReturn(member.ParentFQN, member.Name, typeContext); !rt.IsEmpty() {
-			if rt.FQN == member.ParentFQN && callerFQN != "" {
-				rt.FQN = callerFQN
-			}
-			return r.applyEnv(rt, typeEnv{owner: member.ParentFQN, file: file})
-		}
+func (r *Resolver) applyFallback(rt ResolvedType, member *symbols.Symbol, file *parser.FileNode, callerFQN string) ResolvedType {
+	if rt.FQN == member.ParentFQN && callerFQN != "" {
+		rt.FQN = callerFQN
 	}
+	return r.applyEnv(rt, typeEnv{owner: member.ParentFQN, file: file})
+}
+
+// memberTypeFallback is the type of a member whose PHPDoc and signature say
+// nothing useful: the plain member type.
+func (r *Resolver) memberTypeFallback(member *symbols.Symbol, file *parser.FileNode) ResolvedType {
 	fqn := r.MemberType(member, file)
 	if fqn == "" {
 		return ResolvedType{}

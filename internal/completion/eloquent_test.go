@@ -1,11 +1,11 @@
 package completion
 
 import (
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -17,6 +17,7 @@ func setupEloquentCompletionTest(t testing.TB) (*Provider, string) {
 	t.Helper()
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
+	idx.SetTemplateFallbacks(laravel.TemplateFallbacks())
 
 	// Minimal Eloquent vendor stubs
 	idx.IndexFile("file:///vendor/Model.php", `<?php

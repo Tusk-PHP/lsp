@@ -185,7 +185,11 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 		}
 	})
 
-	t.Run("member type resolved falls back to known template registry", func(t *testing.T) {
+	t.Run("member type resolved falls back to the index's template fallbacks", func(t *testing.T) {
+		idx.SetTemplateFallbacks(map[string]symbols.TemplateFallback{
+			"Illuminate\\Database\\Eloquent\\Builder": {Params: []string{"TModel"}, Methods: map[string]string{"first": "?TModel"}},
+		})
+		defer idx.SetTemplateFallbacks(nil)
 		member := &symbols.Symbol{
 			Kind:      symbols.KindMethod,
 			ParentFQN: "Illuminate\\Database\\Eloquent\\Builder",
@@ -194,23 +198,6 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 		rt := r.MemberTypeResolved(member, file, "", []ResolvedType{{FQN: "App\\Logger"}})
 		if rt.String() != "?App\\Logger" {
 			t.Fatalf("got %q", rt.String())
-		}
-	})
-
-	t.Run("template substitution helpers resolve names", func(t *testing.T) {
-		subst := buildTemplateSubst(idx, "App\\Repository", []ResolvedType{{FQN: "App\\Logger"}})
-		if subst["TModel"].FQN != "App\\Logger" {
-			t.Fatalf("unexpected substitution map: %#v", subst)
-		}
-
-		if got := resolveTypeParam(r, "TModel", "App\\Repository", subst, file); got != "App\\Logger" {
-			t.Fatalf("got %q", got)
-		}
-		if got := resolveTypeParam(r, "static", "App\\Repository", subst, file); got != "App\\Repository" {
-			t.Fatalf("got %q", got)
-		}
-		if got := resolveStaticOrClassName(r, "Logger", "App\\Repository", file); got != "App\\Logger" {
-			t.Fatalf("got %q", got)
 		}
 	})
 

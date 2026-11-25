@@ -1,9 +1,9 @@
 package completion
 
 import (
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
@@ -102,6 +102,7 @@ $firstCategory->`
 func TestDocblockMethodQueryResolution(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
+	idx.SetTemplateFallbacks(laravel.TemplateFallbacks())
 
 	// Real vendor Model with query() returning Builder<static>
 	idx.IndexFile("file:///vendor/Model.php", `<?php
