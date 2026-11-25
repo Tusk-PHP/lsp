@@ -1,6 +1,8 @@
 package analyzer
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -41,6 +43,55 @@ class UserController {
 	}
 	if got := fqnResults[0].Location.URI; got != "file:///workspace/User.php" {
 		t.Fatalf("expected User.php result first, got %q", got)
+	}
+}
+
+func manyClassSources(names []string) map[string]string {
+	sources := make(map[string]string, len(names))
+	for _, name := range names {
+		sources["file:///workspace/"+name+".php"] = "<?php\nnamespace App;\nclass " + name + " {}\n"
+	}
+	return sources
+}
+
+func TestGetWorkspaceSymbolsKeepsTheBestMatchesUpToTheLimit(t *testing.T) {
+	names := []string{"Item"}
+	for i := range maxWorkspaceSymbols + 100 {
+		names = append(names, fmt.Sprintf("ITEM%03d", i))
+	}
+	a, _ := setupRenameAnalyzer(manyClassSources(names))
+
+	results := a.GetWorkspaceSymbols("item")
+	if len(results) != maxWorkspaceSymbols {
+		t.Fatalf("got %d results, want the limit, %d", len(results), maxWorkspaceSymbols)
+	}
+	if results[0].Name != "Item" {
+		t.Errorf("the exact match sorts after every ITEM… name by name but must come first, got %q", results[0].Name)
+	}
+}
+
+func TestGetWorkspaceSymbolsEmptyQueryReturnsNothing(t *testing.T) {
+	a, _ := setupRenameAnalyzer(manyClassSources([]string{"User", "Order"}))
+	for _, query := range []string{"", "  "} {
+		if results := a.GetWorkspaceSymbols(query); results == nil || len(results) != 0 {
+			t.Errorf("query %q: got %v, want an empty list", query, results)
+		}
+	}
+}
+
+func BenchmarkGetWorkspaceSymbols(b *testing.B) {
+	names := make([]string, 0, 20000)
+	for i := range 20000 {
+		names = append(names, fmt.Sprintf("%c%sService%05d", 'A'+i%26, strings.Repeat("x", i%5), i))
+	}
+	a, _ := setupRenameAnalyzer(manyClassSources(names))
+	for _, query := range []string{"", "A", "Axx"} {
+		b.Run(fmt.Sprintf("query=%q", query), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				a.GetWorkspaceSymbols(query)
+			}
+		})
 	}
 }
 
