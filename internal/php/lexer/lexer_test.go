@@ -165,3 +165,20 @@ func TestDeeplyNestedInterpolationIsBounded(t *testing.T) {
 		t.Errorf("lexed %d nested interpolations before giving up, want %d", opens, maxNesting)
 	}
 }
+
+func TestSpaceInAStringOffsetEndsItWithoutAnEmptyToken(t *testing.T) {
+	src := `<?php "$a[ b]";`
+	want := []token.Kind{token.OpenTag, token.DoubleQuote, token.Variable, token.LeftBracket, token.EncapsedAndWhitespace, token.DoubleQuote, token.Semicolon}
+	toks := Lex(src, token.Latest)
+	if len(toks) != len(want) {
+		t.Fatalf("got %v", toks)
+	}
+	for i, k := range want {
+		if toks[i].Kind != k {
+			t.Errorf("token %d: %v, want %v", i, toks[i].Kind, k)
+		}
+	}
+	if text := toks[4].Text(src); text != " b]" {
+		t.Errorf("the offset's text runs on as string content, got %q", text)
+	}
+}

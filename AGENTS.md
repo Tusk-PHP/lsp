@@ -67,7 +67,8 @@ above it in this list**, never from a later one:
    `rule.Code` constant listed in `rule.All`).
 2. **Language core:** `php/token` and `php/lexer` (lossless lexer that matches
    the tokenizer of PHP 7.4 and 8.0 to 8.6 with `short_open_tag` off, so `<?` is
-   inline HTML; see issue #140), `parser` (own tokenizer and
+   inline HTML; see issue #140; it leaves out the empty `T_ENCAPSED_AND_WHITESPACE`
+   PHP emits for a space in an unquoted string offset like `"$a[ b]"`), `parser` (own tokenizer and
    lightweight AST, fault-tolerant),
    `types`, `phparray`, `stubs` (embedded builtin stubs by PHP version and
    extension), `phpdetect`.
@@ -104,6 +105,7 @@ internal/
 ├── document/         open documents: versions, immutable snapshots, edits, UTF-16 positions
 ├── indexing/         when and what to (re)index: scheduling, invalidation, caches
 ├── workspace/        roots, Composer discovery, project profile
+├── php/              token, lexer: PHP's own grammar, version by version (issue #140)
 ├── parser/ types/ symbols/ scope/ resolve/ source/      language core (no transport types over time)
 ├── completion/ hover/ analyzer/ inlayhint/ checks/ diagnostics/   features
 ├── framework/
