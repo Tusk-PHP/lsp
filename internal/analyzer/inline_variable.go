@@ -184,7 +184,7 @@ func inlineExpressionIsAtomic(tokens []parser.Token, first, last int) bool {
 	if first < 0 || last < first {
 		return false
 	}
-	if tokens[first].Kind == parser.TokenOpenParen && tokens[last].Kind == parser.TokenCloseParen && matchingParenWithin(tokens, first) == last {
+	if tokens[first].Kind == parser.TokenOpenParen && tokens[last].Kind == parser.TokenCloseParen && parser.MatchingClose(tokens, first) == last {
 		return true
 	}
 	return first == last && (tokens[first].Kind == parser.TokenVariable || tokens[first].Kind == parser.TokenStringLiteral || tokens[first].Kind == parser.TokenNumber)
@@ -207,22 +207,6 @@ func prevSignificantToken(tokens []parser.Token, start int) int {
 	for i := start; i >= 0; i-- {
 		if !isTriviaToken(tokens[i].Kind) {
 			return i
-		}
-	}
-	return -1
-}
-
-func matchingParenWithin(tokens []parser.Token, start int) int {
-	depth := 0
-	for i := start; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenOpenParen:
-			depth++
-		case parser.TokenCloseParen:
-			depth--
-			if depth == 0 {
-				return i
-			}
 		}
 	}
 	return -1

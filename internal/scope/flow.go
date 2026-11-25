@@ -79,7 +79,7 @@ func (f *flowState) openBlock(tokens []parser.Token, i int) int {
 	b.head = b.open
 	if b.kind == blockLoop {
 		if c := prevSignificant(tokens, i-1); c >= 0 && tokens[c].Kind == parser.TokenCloseParen {
-			if o := matchingOpenParen(tokens, c); o >= 0 {
+			if o := parser.MatchingOpen(tokens, c); o >= 0 {
 				b.head = tokenRange(tokens[o]).Start
 			}
 		}
@@ -157,7 +157,7 @@ func (f *flowState) blockOpener(tokens []parser.Token, i int) (blockKind, int) {
 	}
 	kw := prev
 	if tokens[prev].Kind == parser.TokenCloseParen {
-		open := matchingOpenParen(tokens, prev)
+		open := parser.MatchingOpen(tokens, prev)
 		if open < 0 {
 			return blockOther, -1
 		}
@@ -197,22 +197,6 @@ func (f *flowState) chainBefore(tokens []parser.Token, kw int) int {
 	}
 	if idx, ok := f.ifs[c]; ok {
 		return idx
-	}
-	return -1
-}
-
-func matchingOpenParen(tokens []parser.Token, close int) int {
-	depth := 0
-	for i := close; i >= 0; i-- {
-		switch tokens[i].Kind {
-		case parser.TokenCloseParen:
-			depth++
-		case parser.TokenOpenParen:
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
 	}
 	return -1
 }

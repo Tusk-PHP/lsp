@@ -316,7 +316,7 @@ func lookupCalledFunction(name string, file *parser.FileNode, index *symbols.Ind
 // isExpressionStatement reports whether the call named at i is a whole statement:
 // `foo();`, `$a->b()->foo();`, but not `return foo();` or `(void) foo();`.
 func isExpressionStatement(tokens []parser.Token, i int) bool {
-	close := matchingParen(tokens, i+1)
+	close := parser.MatchingClose(tokens, i+1)
 	if close < 0 || close+1 >= len(tokens) || tokens[close+1].Kind != parser.TokenSemicolon {
 		return false
 	}
@@ -360,20 +360,4 @@ func isExpressionStatement(tokens []parser.Token, i int) bool {
 		return true
 	}
 	return false
-}
-
-func matchingParen(tokens []parser.Token, open int) int {
-	depth := 0
-	for i := open; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenOpenParen:
-			depth++
-		case parser.TokenCloseParen:
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-	return -1
 }

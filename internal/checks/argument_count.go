@@ -209,23 +209,6 @@ func countArguments(tokens []parser.Token, openIdx, closeIdx int) (int, bool) {
 	return count, true
 }
 
-// findMatchingTokenIdx finds the closing token matching an opening token.
-func findMatchingTokenIdx(tokens []parser.Token, start int, openKind, closeKind parser.TokenKind) int {
-	depth := 0
-	for i := start; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case openKind:
-			depth++
-		case closeKind:
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-	return -1
-}
-
 func buildArgCountFinding(callees []callee, argCount int, tooManyCounts bool, line, col int, callName string) *Finding {
 	minRequired, maxTotal := math.MaxInt, 0
 	for _, c := range callees {
