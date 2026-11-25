@@ -11,6 +11,7 @@ type Code string
 const (
 	SyntaxError           Code = "syntax-error"
 	AbstractInConcrete    Code = "abstract-in-concrete"
+	CompileError          Code = "compile-error"
 	UnknownClass          Code = "unknown-class"
 	UnknownFunction       Code = "unknown-function"
 	UnknownMember         Code = "unknown-member"
@@ -39,6 +40,7 @@ const (
 var All = []Code{
 	SyntaxError,
 	AbstractInConcrete,
+	CompileError,
 	UnknownClass,
 	UnknownFunction,
 	UnknownMember,
