@@ -231,7 +231,7 @@ Choose the version from the changes, following [SemVer](https://semver.org/) whi
 1. Write the release's `CHANGELOG.md` section ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)) from the release notes of the PRs in the issue's **Merged** list, in one commit, under the version and date. Only maintainers edit `CHANGELOG.md`, and only at this step.
 2. Check that CI, conformance and the field baselines are green on `main`.
 3. Push the tag (see [Release Process](#release-process)).
-4. Close the release issue with a link to the GitHub Release, and open the next `Release x.y.z` issue, moving any unticked **Planned** PRs into it.
+4. Close the release issue with a link to the GitHub Release, and open the next `Release x.y.z` issue with the `release` label, moving any unticked **Planned** PRs into it.
 
 ## License
 
