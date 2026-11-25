@@ -535,28 +535,34 @@ func (idx *Index) addSymbol(uri string, sym *Symbol) {
 	if sym.isGlobal() {
 		idx.shadowLocked(sym)
 	}
-	idx.symbols[sym.FQN] = sym
+	idx.storeSymbolLocked(sym)
 	if len(sym.Attributes) > 0 {
 		idx.attributedSymbols.Store(true)
 	}
 	idx.fileSymbols[uri] = append(idx.fileSymbols[uri], sym)
+}
+
+func (idx *Index) storeSymbolLocked(sym *Symbol) {
+	if _, ok := idx.symbols[sym.FQN]; !ok {
+		idx.indexNamesLocked(sym)
+	}
+	idx.symbols[sym.FQN] = sym
+}
+
+func (idx *Index) indexNamesLocked(sym *Symbol) {
 	if sym.Kind == KindClass && sym.Name == parser.AnonymousClassName {
 		// Found by its FQN only: no one can write its name.
 		return
 	}
-	idx.nameIndex[sym.Name] = appendUnique(idx.nameIndex[sym.Name], sym.FQN)
+	idx.nameIndex[sym.Name] = append(idx.nameIndex[sym.Name], sym.FQN)
 	idx.sortedNamesDirty = true
 	idx.sortedFQNsDirty = true
-	// Index top-level symbols by their namespace
 	if !sym.Kind.IsMember() {
-		idx.namespaceIndex[namespaceForFQN(sym.FQN)] = appendUnique(idx.namespaceIndex[namespaceForFQN(sym.FQN)], sym.FQN)
-		idx.addFoldLocked(sym.FQN)
+		ns := namespaceForFQN(sym.FQN)
+		idx.namespaceIndex[ns] = append(idx.namespaceIndex[ns], sym.FQN)
+		key := strings.ToLower(sym.FQN)
+		idx.foldIndex[key] = append(idx.foldIndex[key], sym.FQN)
 	}
-}
-
-func (idx *Index) addFoldLocked(fqn string) {
-	key := strings.ToLower(fqn)
-	idx.foldIndex[key] = appendUnique(idx.foldIndex[key], fqn)
 }
 
 // LookupFold finds a class-like or function the way PHP does, ignoring case:
@@ -585,6 +591,7 @@ func (idx *Index) addSymbolWithSource(uri string, sym *Symbol, src SymbolSource)
 
 func (idx *Index) removeFileSymbols(uri string) {
 	idx.generation.Add(1)
+	var byName, byNamespace, byFold keyedRemovals
 	for _, sym := range idx.fileSymbols[uri] {
 		// A member this file added to a class another file declares (an IDE
 		// helper's @property) leaves that class's members with it.
@@ -613,26 +620,18 @@ func (idx *Index) removeFileSymbols(uri string) {
 			continue
 		}
 		delete(idx.symbols, sym.FQN)
-		if fqns, ok := idx.nameIndex[sym.Name]; ok {
-			idx.nameIndex[sym.Name] = removeFromSlice(fqns, sym.FQN)
-		}
 		idx.sortedNamesDirty = true
 		idx.sortedFQNsDirty = true
-		// Clean up namespace index
+		byName.add(sym.Name, sym.FQN)
 		if !sym.Kind.IsMember() {
-			ns := namespaceForFQN(sym.FQN)
-			if fqns, ok := idx.namespaceIndex[ns]; ok {
-				idx.namespaceIndex[ns] = removeFromSlice(fqns, sym.FQN)
-			}
-			key := strings.ToLower(sym.FQN)
-			if fqns := removeFromSlice(idx.foldIndex[key], sym.FQN); len(fqns) > 0 {
-				idx.foldIndex[key] = fqns
-			} else {
-				delete(idx.foldIndex, key)
-			}
+			byNamespace.add(namespaceForFQN(sym.FQN), sym.FQN)
+			byFold.add(strings.ToLower(sym.FQN), sym.FQN)
 		}
 		idx.unlinkTypeLocked(sym)
 	}
+	byName.applyTo(idx.nameIndex)
+	byNamespace.applyTo(idx.namespaceIndex)
+	byFold.applyTo(idx.foldIndex)
 	delete(idx.fileSymbols, uri)
 	delete(idx.fileSource, uri)
 	delete(idx.generatedURIs, uri)
@@ -671,9 +670,9 @@ func (idx *Index) promoteShadowedLocked(removed *Symbol) bool {
 	promoted := defs[len(defs)-1]
 	idx.unshadowLocked(promoted)
 	idx.unlinkTypeLocked(removed)
-	idx.symbols[promoted.FQN] = promoted
+	idx.storeSymbolLocked(promoted)
 	for _, child := range promoted.Children {
-		idx.symbols[child.FQN] = child
+		idx.storeSymbolLocked(child)
 	}
 	idx.linkTypeLocked(promoted)
 	return true
@@ -1703,6 +1702,48 @@ func appendUnique(slice []string, item string) []string {
 		}
 	}
 	return append(slice, item)
+}
+
+type keyedRemovals map[string][]string
+
+func (r *keyedRemovals) add(key, fqn string) {
+	if *r == nil {
+		*r = make(keyedRemovals)
+	}
+	(*r)[key] = append((*r)[key], fqn)
+}
+
+func (r keyedRemovals) applyTo(index map[string][]string) {
+	for key, fqns := range r {
+		if kept := withoutAll(index[key], fqns); len(kept) > 0 {
+			index[key] = kept
+		} else {
+			delete(index, key)
+		}
+	}
+}
+
+func withoutAll(slice, drop []string) []string {
+	kept := slice[:0]
+	if len(drop) == 1 {
+		for _, s := range slice {
+			if s != drop[0] {
+				kept = append(kept, s)
+			}
+		}
+	} else {
+		dropped := make(map[string]struct{}, len(drop))
+		for _, s := range drop {
+			dropped[s] = struct{}{}
+		}
+		for _, s := range slice {
+			if _, ok := dropped[s]; !ok {
+				kept = append(kept, s)
+			}
+		}
+	}
+	clear(slice[len(kept):])
+	return kept
 }
 
 func removeFromSlice(slice []string, item string) []string {
