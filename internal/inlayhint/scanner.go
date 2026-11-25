@@ -712,6 +712,12 @@ func extractCallee(tokens []parser.Token, openParen int) (callee string, kind ca
 			cls = tokens[j].Value
 		}
 		return callee, calleeStatic, cls
+	case parser.TokenBackslash:
+		start := i
+		for start > 0 && (tokens[start-1].Kind == parser.TokenIdentifier || tokens[start-1].Kind == parser.TokenBackslash) {
+			start--
+		}
+		return collectTypeName(tokens, start), calleeFunction, ""
 	default:
 		return callee, calleeFunction, ""
 	}
@@ -801,15 +807,12 @@ func (p *Provider) resolveCalleeParams(
 			cls = receiverOrClass
 		}
 		return p.membersToParams(cls, callee)
-	default: // calleeFunction
-		// Look up as a global function in the index.
-		syms := p.index.LookupByName(callee)
-		for _, s := range syms {
-			if s.ParentFQN == "" { // global function, not a method
-				return symbolParamsToEntries(s.Params)
-			}
+	default:
+		fn := r.CalledFunction(callee, file)
+		if fn == nil {
+			return nil
 		}
-		return nil
+		return symbolParamsToEntries(fn.Params)
 	}
 
 }
