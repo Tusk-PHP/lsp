@@ -123,8 +123,9 @@ func (s *Server) handleRename(msg *jsonRPCMessage) {
 		s.sendResponse(msg.ID, nil)
 		return
 	}
-	result := s.analyzer.Rename(req.uri, req.source, req.pos, params.NewName, s.getDocumentReader())
-	s.sendResponse(msg.ID, req.workspaceEdit(result))
+	s.answerInBackground(msg, req, func() any {
+		return req.workspaceEdit(s.analyzer.Rename(req.uri, req.source, req.pos, params.NewName, s.getDocumentReader()))
+	})
 }
 
 func (s *Server) handleCodeAction(msg *jsonRPCMessage) {

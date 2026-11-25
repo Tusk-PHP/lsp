@@ -110,7 +110,24 @@ func (s *Server) handleReferences(msg *jsonRPCMessage) {
 		s.sendResponse(msg.ID, []protocol.Location{})
 		return
 	}
-	s.sendResponse(msg.ID, req.locations(s.analyzer.FindAllReferences(req.uri, req.source, req.pos, s.openDocumentReader())))
+	s.answerInBackground(msg, req, func() any {
+		return req.locations(s.analyzer.FindAllReferences(req.uri, req.source, req.pos, s.openDocumentReader()))
+	})
+}
+
+// answerInBackground answers a request whose cost grows with the workspace
+// off the message loop. The answer is sent only if the document it was asked
+// on is still the same text; otherwise its positions may be stale, and the
+// client is told the content changed.
+func (s *Server) answerInBackground(msg *jsonRPCMessage, req bladeRequest, answer func() any) {
+	s.goSafe(msg.Method, func() {
+		result := answer()
+		if s.getDocument(req.uri) != req.text() {
+			s.sendError(msg.ID, codeContentModified, msg.Method+": "+req.uri+" changed while the request ran")
+			return
+		}
+		s.sendResponse(msg.ID, result)
+	})
 }
 
 type documentSymbolParams struct {
