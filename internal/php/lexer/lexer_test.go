@@ -67,6 +67,8 @@ var snippets = []string{
 	"<?php interface I {} trait T {} include 'a'; include_once 'b'; require 'c'; require_once 'd'; eval('1'); exit; die; print 1; echo 1; isset($a); unset($a); empty($a); list($a) = [1]; array(); callable; match(1) { default => 1 }; fn() => 1; if (1) {} elseif (1) {} else {} do {} while (0); continue; break; case; and or xor instanceof as readonly function() {};",
 	"<?php __CLASS__ __DIR__ __FILE__ __FUNCTION__ __LINE__ __METHOD__ __NAMESPACE__ __PROPERTY__ __TRAIT__ __halt_compiler_not",
 	"<?php ÿunicode_label $ÿ \\ÿ\\ÿ",
+	"<?php \"{$a ?> x\";",
+	"<?php \"{$a ?> x<?php } y\"; `{$b ?>\n<?php {}} z`; <<<EOT\n${c ?> h <?= } d\nEOT;\n",
 }
 
 var triviaSnippets = []string{

@@ -138,7 +138,10 @@ func (l *lexer) scripting(insideBraces bool) {
 		switch {
 		case c == '?' && strings.HasPrefix(src[start:], "?>"):
 			l.emit(token.CloseTag, closeTagEnd(src, start+2))
-			return
+			if !insideBraces {
+				return
+			}
+			l.html()
 		case c == '$' && start+1 < len(src) && isLabelStart(src[start+1]):
 			l.emit(token.Variable, labelEnd(src, start+2))
 		case isLabelStart(c):
