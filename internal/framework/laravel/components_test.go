@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func writeFiles(t *testing.T, root string, files map[string]string) {
@@ -31,7 +33,7 @@ func TestAnonymousComponents(t *testing.T) {
 		"resources/views/livewire/counter.blade.php":               "",
 	})
 	read := func(uri string) string {
-		data, _ := os.ReadFile(strings.TrimPrefix(uri, "file://"))
+		data, _ := os.ReadFile(symbols.URIToPath(uri))
 		return string(data)
 	}
 	c := NewComponents(root, nil, nil, read)

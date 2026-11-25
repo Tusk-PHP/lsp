@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // A client that resolves documentation later gets member items without it,
@@ -17,7 +19,7 @@ func TestCompletionResolveFillsDocumentation(t *testing.T) {
 		if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		uri := "file://" + path
+		uri := symbols.PathToURI(path)
 		caps := map[string]interface{}{}
 		if lazy {
 			caps = map[string]interface{}{"textDocument": map[string]interface{}{"completion": map[string]interface{}{
@@ -25,7 +27,7 @@ func TestCompletionResolveFillsDocumentation(t *testing.T) {
 			}}}
 		}
 		h := newHarness(t)
-		h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": "file://" + root, "capabilities": caps}))
+		h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": caps}))
 		h.notify("initialized", map[string]interface{}{})
 		h.notify("textDocument/didOpen", map[string]interface{}{
 			"textDocument": map[string]interface{}{"uri": uri, "languageId": "php", "version": 1, "text": src},

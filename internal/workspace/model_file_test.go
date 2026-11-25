@@ -37,7 +37,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class Post extends Model {}
 `
-	postURI := "file://" + write("app/Models/Post.php", postSrc)
+	postURI := symbols.PathToURI(write("app/Models/Post.php", postSrc))
 
 	cfg := config.DefaultConfig()
 	off := false

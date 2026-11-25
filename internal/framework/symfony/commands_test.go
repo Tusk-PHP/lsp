@@ -147,7 +147,7 @@ func TestDiscoverCommandsFromFixtureFiles(t *testing.T) {
 			return nil
 		}
 		data, _ := os.ReadFile(path)
-		idx.IndexFile("file://"+filepath.ToSlash(path), string(data))
+		idx.IndexFile(symbols.PathToURI(path), string(data))
 		return nil
 	})
 

@@ -3,6 +3,7 @@ package lsp
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -38,12 +39,8 @@ func buildCreateObjectEdit(dirURI, kind, name string, autoload []composer.Autolo
 		return nil
 	}
 
-	// Build the new file URI: join dirURI and name+".php", avoiding double slash.
-	base := strings.TrimRight(dirURI, "/")
-	newFileURI := base + "/" + name + ".php"
-
-	// Derive the filesystem path from the URI to compute the namespace.
-	filePath := symbols.URIToPath(newFileURI)
+	filePath := filepath.Join(symbols.URIToPath(dirURI), name+".php")
+	newFileURI := symbols.PathToURI(filePath)
 	if _, err := os.Stat(filePath); err == nil {
 		return nil
 	}

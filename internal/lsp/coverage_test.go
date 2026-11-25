@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // initHarness creates an initialized harness ready for handler tests.
@@ -12,7 +14,7 @@ func initHarness(t *testing.T) *lspHarness {
 	h := newHarness(t)
 	root := testdataPath()
 	initID := h.send("initialize", map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": map[string]interface{}{},
 		"processId":    nil,
 	})

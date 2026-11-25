@@ -1,11 +1,11 @@
 package cardhover
 
 import (
-	"net/url"
 	"path/filepath"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/composer/manifest"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // ExternalURL returns the canonical external URL for a composer package.
@@ -113,6 +113,5 @@ func resolvePath(repoPath, rootPath string) string {
 	if err == nil {
 		p = abs
 	}
-	u := url.URL{Scheme: "file", Path: filepath.ToSlash(p)}
-	return u.String()
+	return symbols.PathToURI(p)
 }

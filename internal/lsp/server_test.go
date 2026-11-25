@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/stubs"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
@@ -171,7 +172,7 @@ func TestServerInitialize(t *testing.T) {
 
 	root := testdataPath()
 	id := h.send("initialize", map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": map[string]interface{}{},
 		"processId":    nil,
 	})
@@ -251,7 +252,7 @@ func TestServerHoverIntegration(t *testing.T) {
 
 	root := testdataPath()
 	initID := h.send("initialize", map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": map[string]interface{}{},
 		"processId":    nil,
 	})
@@ -267,7 +268,7 @@ func TestServerHoverIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read test file: %v", err)
 	}
-	serviceURI := "file://" + filepath.Join(root, "src", "Service.php")
+	serviceURI := symbols.PathToURI(filepath.Join(root, "src", "Service.php"))
 	h.notify("textDocument/didOpen", map[string]interface{}{
 		"textDocument": map[string]interface{}{
 			"uri":        serviceURI,
@@ -317,7 +318,7 @@ func TestServerShutdown(t *testing.T) {
 
 	root := testdataPath()
 	initID := h.send("initialize", map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": map[string]interface{}{},
 		"processId":    nil,
 	})
@@ -368,7 +369,7 @@ func TestExitLifecycle(t *testing.T) {
 
 	// 1. initialize
 	sendMsg("initialize", 1, map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": map[string]interface{}{},
 		"processId":    nil,
 	})
@@ -483,14 +484,14 @@ func TestComposerJSONHoverIntegration(t *testing.T) {
 	defer h.close()
 
 	initID := h.send("initialize", map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": map[string]interface{}{},
 		"processId":    nil,
 	})
 	h.readResponse(initID)
 	h.notify("initialized", map[string]interface{}{})
 
-	composerURI := "file://" + filepath.Join(root, "composer.json")
+	composerURI := symbols.PathToURI(filepath.Join(root, "composer.json"))
 	h.notify("textDocument/didOpen", map[string]interface{}{
 		"textDocument": map[string]interface{}{
 			"uri":        composerURI,
@@ -549,14 +550,14 @@ func TestComposerJSONHoverOnNameKeyReturnsNil(t *testing.T) {
 	h := newHarness(t)
 	defer h.close()
 	initID := h.send("initialize", map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": map[string]interface{}{},
 		"processId":    nil,
 	})
 	h.readResponse(initID)
 	h.notify("initialized", map[string]interface{}{})
 
-	composerURI := "file://" + filepath.Join(root, "composer.json")
+	composerURI := symbols.PathToURI(filepath.Join(root, "composer.json"))
 	h.notify("textDocument/didOpen", map[string]interface{}{
 		"textDocument": map[string]interface{}{
 			"uri":        composerURI,

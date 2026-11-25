@@ -147,7 +147,7 @@ class ProductController
 	mustWriteFile(t, controllerPath, controllerSource)
 
 	idx := symbols.NewIndex()
-	idx.IndexFileWithSource("file://"+filepath.ToSlash(controllerPath), controllerSource, symbols.SourceProject)
+	idx.IndexFileWithSource(symbols.PathToURI(controllerPath), controllerSource, symbols.SourceProject)
 
 	routes := DiscoverRoutes(idx)
 	if len(routes) != 3 {
@@ -196,7 +196,7 @@ class ProductController
 	mustWriteFile(t, controllerPath, controllerSource)
 
 	idx := symbols.NewIndex()
-	idx.IndexFileWithSource("file://"+filepath.ToSlash(controllerPath), controllerSource, symbols.SourceProject)
+	idx.IndexFileWithSource(symbols.PathToURI(controllerPath), controllerSource, symbols.SourceProject)
 
 	routes := DiscoverRoutes(idx)
 	if len(routes) != 2 {

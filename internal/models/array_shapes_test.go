@@ -138,7 +138,7 @@ class StoreUserRequest {
 }
 `), 0644)
 
-	idx.IndexFileWithSource("file://"+requestPath, string(mustReadFile(t, requestPath)), symbols.SourceProject)
+	idx.IndexFileWithSource(symbols.PathToURI(requestPath), string(mustReadFile(t, requestPath)), symbols.SourceProject)
 
 	r := NewFrameworkArrayResolver(idx, dir, "laravel")
 	fields := r.ResolveMethodReturnKeys("App\\Http\\Requests\\StoreUserRequest", "validated")

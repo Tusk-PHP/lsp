@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func TestHandleInitializeWiresGenericResolvers(t *testing.T) {
@@ -16,7 +17,7 @@ func TestHandleInitializeWiresGenericResolvers(t *testing.T) {
 	s := NewServer(strings.NewReader(""), &out, log.New(io.Discard, "", 0))
 
 	params, err := json.Marshal(map[string]interface{}{
-		"rootUri":      "file://" + testdataPath(),
+		"rootUri":      symbols.PathToURI(testdataPath()),
 		"capabilities": map[string]interface{}{},
 		"processId":    nil,
 	})

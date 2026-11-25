@@ -153,7 +153,7 @@ func (c *Components) classComponent(name, fqn, view string) (blade.Component, bo
 		rel := strings.ReplaceAll(strings.TrimPrefix(fqn, classComponentNamespace), `\`, "/")
 		path := filepath.Join(c.rootPath, "app", "View", "Components", filepath.FromSlash(rel)+".php")
 		if isFile(path) {
-			comp.URI = "file://" + filepath.ToSlash(path)
+			comp.URI = symbols.PathToURI(path)
 			return comp, true
 		}
 	}
@@ -195,7 +195,7 @@ func (c *Components) anonymousView(name string, dirs []string) string {
 		base := filepath.Join(dir, rel)
 		for _, path := range []string{base + ".blade.php", filepath.Join(base, "index.blade.php"), filepath.Join(base, filepath.Base(base)+".blade.php")} {
 			if isFile(path) {
-				return "file://" + filepath.ToSlash(path)
+				return symbols.PathToURI(path)
 			}
 		}
 	}

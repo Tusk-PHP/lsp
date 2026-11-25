@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // initHarnessWithOpts creates an initialized harness using the given capabilities
@@ -13,7 +15,7 @@ func initHarnessWithOpts(t *testing.T, caps map[string]interface{}, opts map[str
 	h := newHarness(t)
 	root := testdataPath()
 	params := map[string]interface{}{
-		"rootUri":   "file://" + root,
+		"rootUri":   symbols.PathToURI(root),
 		"processId": nil,
 	}
 	if caps != nil {

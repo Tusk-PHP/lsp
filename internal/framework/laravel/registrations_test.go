@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 const testProvider = `<?php
@@ -90,7 +92,7 @@ func TestProviderRegistrations(t *testing.T) {
 func TestNamespacedComponentsAndViews(t *testing.T) {
 	root, p := providersFixture(t)
 	read := func(uri string) string {
-		data, _ := os.ReadFile(strings.TrimPrefix(uri, "file://"))
+		data, _ := os.ReadFile(symbols.URIToPath(uri))
 		return string(data)
 	}
 	c := NewComponents(root, nil, p, read)

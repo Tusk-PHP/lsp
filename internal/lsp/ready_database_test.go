@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func TestReadyDoesNotWaitForTheDatabase(t *testing.T) {
@@ -45,7 +47,7 @@ func TestReadyDoesNotWaitForTheDatabase(t *testing.T) {
 
 	h := newHarness(t)
 	defer h.close()
-	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": "file://" + root, "capabilities": map[string]interface{}{}}))
+	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}}))
 	h.notify("initialized", map[string]interface{}{})
 
 	deadline := time.Now().Add(20 * time.Second)

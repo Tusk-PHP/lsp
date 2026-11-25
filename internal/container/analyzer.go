@@ -743,7 +743,7 @@ func (ca *ContainerAnalyzer) resolveSymfonyAliases() {
 func (ca *ContainerAnalyzer) ensureSymfonyBinding(serviceID, sourcePath string, pos textpos.Position) *ServiceBinding {
 	if binding, ok := ca.bindings[serviceID]; ok {
 		if binding.DefinitionURI == "" {
-			binding.DefinitionURI = pathToFileURI(sourcePath)
+			binding.DefinitionURI = symbols.PathToURI(sourcePath)
 			binding.Definition = textpos.Range{
 				Start: pos,
 				End:   textpos.Position{Line: pos.Line, Character: pos.Character + len(serviceID)},
@@ -759,7 +759,7 @@ func (ca *ContainerAnalyzer) ensureSymfonyBinding(serviceID, sourcePath string, 
 		Concrete:      serviceID,
 		Singleton:     true,
 		Source:        sourcePath,
-		DefinitionURI: pathToFileURI(sourcePath),
+		DefinitionURI: symbols.PathToURI(sourcePath),
 		Definition: textpos.Range{
 			Start: pos,
 			End:   textpos.Position{Line: pos.Line, Character: pos.Character + len(serviceID)},
@@ -782,13 +782,13 @@ func (ca *ContainerAnalyzer) parseSymfonyAttributes(path string, content string)
 		fqn := ns + "\\" + cls.Name
 		if strings.Contains(path, "src"+string(filepath.Separator)) {
 			if _, exists := ca.bindings[fqn]; !exists {
-				ca.bindings[fqn] = &ServiceBinding{Abstract: fqn, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: pathToFileURI(path)}
+				ca.bindings[fqn] = &ServiceBinding{Abstract: fqn, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: symbols.PathToURI(path)}
 			}
 		}
 		for _, iface := range cls.Implements {
 			ifaceFQN := resolveType(iface, ns, file.Uses)
 			if _, exists := ca.bindings[ifaceFQN]; !exists {
-				ca.bindings[ifaceFQN] = &ServiceBinding{Abstract: ifaceFQN, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: pathToFileURI(path)}
+				ca.bindings[ifaceFQN] = &ServiceBinding{Abstract: ifaceFQN, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: symbols.PathToURI(path)}
 			}
 		}
 	}
@@ -1097,8 +1097,4 @@ func offsetToPosition(content string, offset int) textpos.Position {
 		Line:      line,
 		Character: offset - lineStart,
 	}
-}
-
-func pathToFileURI(path string) string {
-	return "file://" + filepath.ToSlash(path)
 }

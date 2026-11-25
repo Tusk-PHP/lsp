@@ -11,6 +11,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/rule"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
@@ -85,10 +86,10 @@ func TestReadFileReadsFromDisk(t *testing.T) {
 	if err := os.WriteFile(path, []byte("<?php"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := readFile("file://" + path); got != "<?php" {
+	if got := readFile(symbols.PathToURI(path)); got != "<?php" {
 		t.Errorf("readFile = %q", got)
 	}
-	if got := readFile("file://" + path + ".missing"); got != "" {
+	if got := readFile(symbols.PathToURI(path + ".missing")); got != "" {
 		t.Errorf("readFile of a missing file = %q", got)
 	}
 }

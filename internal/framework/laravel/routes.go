@@ -60,7 +60,7 @@ func (idx *RouteIndex) ScanWorkspace() error {
 		if err != nil {
 			return nil
 		}
-		idx.IndexFile("file://"+path, string(content))
+		idx.IndexFile(symbols.PathToURI(path), string(content))
 		return nil
 	})
 }

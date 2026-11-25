@@ -1,10 +1,7 @@
 package lsp
 
 import (
-	"net/url"
-	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/coverage"
@@ -45,7 +42,7 @@ func (s *Server) coverageReport() *protocol.CoverageReport {
 			continue
 		}
 		summary := protocol.CoverageFileSummary{
-			URI:             pathToFileURI(local),
+			URI:             symbols.PathToURI(local),
 			Stale:           stale,
 			CoveredLines:    file.Covered(),
 			ExecutableLines: len(file.Lines),
@@ -116,12 +113,4 @@ func fileCoverageResult(uri string, file *coverage.File, stale bool) *protocol.F
 		})
 	}
 	return result
-}
-
-func pathToFileURI(path string) string {
-	p := filepath.ToSlash(path)
-	if !strings.HasPrefix(p, "/") {
-		p = "/" + p // Windows drive paths: C:/x → /C:/x
-	}
-	return (&url.URL{Scheme: "file", Path: p}).String()
 }

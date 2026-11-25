@@ -1,12 +1,14 @@
 package blade
 
 import (
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/rule"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // Views finds a project's views by name.
@@ -300,10 +302,11 @@ func baseName(uri string) string {
 }
 
 func relativeViewPath(uri string) string {
-	if k := strings.Index(uri, "/resources/views/"); k >= 0 {
-		return "`" + uri[k+1:] + "`"
+	path := filepath.ToSlash(symbols.URIToPath(uri))
+	if k := strings.Index(path, "/resources/views/"); k >= 0 {
+		return "`" + path[k+1:] + "`"
 	}
-	return "`" + strings.TrimPrefix(uri, "file://") + "`"
+	return "`" + path + "`"
 }
 
 // customInfos describes the directives a project registers, for completion
@@ -341,7 +344,7 @@ func customInfos(c *Custom) []DirectiveInfo {
 // projectPath shortens a file's path to where it sits in the project, from
 // its app/ or vendor/ directory.
 func projectPath(uri string) string {
-	path := strings.TrimPrefix(uri, "file://")
+	path := filepath.ToSlash(symbols.URIToPath(uri))
 	for _, dir := range []string{"/vendor/", "/app/", "/resources/", "/src/"} {
 		if k := strings.LastIndex(path, dir); k >= 0 {
 			return path[k+1:]

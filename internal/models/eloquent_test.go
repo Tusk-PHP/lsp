@@ -62,7 +62,7 @@ class Collection {}
 		t.Fatal(err)
 	}
 
-	idx.IndexFile("file://"+modelPath, modelSource)
+	idx.IndexFile(symbols.PathToURI(modelPath), modelSource)
 
 	return idx
 }

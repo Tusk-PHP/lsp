@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // ViewVar is a variable passed to a view at one place.
@@ -275,7 +277,7 @@ func (d *ViewData) ViewName(uri string) string {
 	if d == nil {
 		return ""
 	}
-	path := strings.TrimPrefix(uri, "file://")
+	path := filepath.ToSlash(symbols.URIToPath(uri))
 	for _, dir := range d.viewDirs {
 		prefix := filepath.ToSlash(dir) + "/"
 		if strings.HasPrefix(path, prefix) {
