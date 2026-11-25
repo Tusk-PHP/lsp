@@ -575,6 +575,11 @@ var programs = []string{
 	"<?php use function namespace\\f;",
 	"<?php use \\A\\{B\\C, function d};",
 	"<?php namespace namespace\\Foo;",
+	"<?php $this->\n    list;\n$a->\nif($x);\n$a->\nreturn;\n$a->\necho('x');\n$a->\nnew;\n$a->\nif($x) ? 1 : 2;\n$a->\nif($x)->b;\nFoo::\nclass;\nFoo::\nRETURN;\n$a->\nfunction();",
+	"<?php $a?->\nforeach($b)[0];",
+	"<?php $this->\nreturn $x;",
+	"<?php $this->\nif ($x) {}",
+	"<?php Foo::\nreturn $x;",
 }
 
 func TestParserAgreesWithPHPOnPrograms(t *testing.T) {
@@ -800,6 +805,69 @@ func TestMissingSemicolonKeepsTheCodeAfterIt(t *testing.T) {
 	file := Parse("<?php\nuse Foo\\Bar\nclass A { public function f() {} }\nfunction g() {}\n", token.Latest)
 	if class := file.Stmts[1].(*ast.ClassDecl); len(class.Members) != 1 {
 		t.Errorf("the class keeps its method: %v", class.Members)
+	}
+}
+
+func TestAKeywordAfterAnArrowOnTheNextLineStartsTheNextStatement(t *testing.T) {
+	method := func(body string) string {
+		return "<?php\nclass C {\n    public function m() {\n        " + body + "\n    }\n}\n"
+	}
+	methodBody := func(f *ast.File) []ast.Stmt {
+		return f.Stmts[0].(*ast.ClassDecl).Members[0].(*ast.Method).Body.Stmts
+	}
+	cases := []struct {
+		src     string
+		version token.Version
+		want    string
+	}{
+		{method("$this->\n        return $x;"), token.Latest, "*ast.ExprStmt *ast.Return"},
+		{method("$this?->\n        echo 'a';"), token.Latest, "*ast.ExprStmt *ast.Echo"},
+		{method("$this->\n        if ($x) { y(); }\n        return 1;"), token.Latest, "*ast.ExprStmt *ast.If *ast.Return"},
+		{method("$this->\n        foreach ($a as $b) {}"), token.PHP80, "*ast.ExprStmt *ast.Foreach"},
+		{method("$this->\n        IF ($x) { y(); }"), token.Latest, "*ast.ExprStmt *ast.If"},
+		{method("$this->\n        try { y(); } finally {}"), token.Latest, "*ast.ExprStmt *ast.Try"},
+		{method("$this-> // note\n        return $x;"), token.Latest, "*ast.ExprStmt *ast.Return"},
+		{method("self::\n        return $x;"), token.Latest, "*ast.ExprStmt *ast.Return"},
+		{method("$this->\n        return $x;"), token.PHP74, "*ast.ExprStmt *ast.Return"},
+	}
+	for _, c := range cases {
+		file := Parse(c.src, c.version)
+		if len(file.Errors) != 1 {
+			t.Errorf("%q on PHP %s: want one error, got %v", c.src, c.version, file.Errors)
+		}
+		if got := stmtTypes(methodBody(file)); got != c.want {
+			t.Errorf("%q on PHP %s: got %s, want %s (errors %v)", c.src, c.version, got, c.want, file.Errors)
+		}
+		checkTree(t, c.src, c.version)
+	}
+}
+
+func TestAKeywordNamedMemberOnTheNextLineStaysAMember(t *testing.T) {
+	cases := []struct {
+		src     string
+		version token.Version
+		want    string
+	}{
+		{"<?php $this->\n    list;", token.Latest, "*ast.PropertyFetch"},
+		{"<?php $this->\n    return;", token.Latest, "*ast.PropertyFetch"},
+		{"<?php $this->\n    list = 1;", token.Latest, "*ast.Assign"},
+		{"<?php $this->\n    if($x);", token.Latest, "*ast.MethodCall"},
+		{"<?php $this->\n    if($x)->y();", token.Latest, "*ast.MethodCall"},
+		{"<?php $this->\n    echo('x') . 'y';", token.Latest, "*ast.Binary"},
+		{"<?php $this->\n    if($x){0};", token.PHP74, "*ast.ArrayDimFetch"},
+		{"<?php Foo::\n    class;", token.Latest, "*ast.ClassConstFetch"},
+		{"<?php Foo::\n    RETURN;", token.Latest, "*ast.ClassConstFetch"},
+		{"<?php $this->return\n    ;", token.Latest, "*ast.PropertyFetch"},
+	}
+	for _, c := range cases {
+		file := Parse(c.src, c.version)
+		if len(file.Errors) != 0 {
+			t.Errorf("%q on PHP %s: errors %v", c.src, c.version, file.Errors)
+			continue
+		}
+		if got := fmt.Sprintf("%T", file.Stmts[0].(*ast.ExprStmt).Expr); got != c.want {
+			t.Errorf("%q on PHP %s: got %s, want %s", c.src, c.version, got, c.want)
+		}
 	}
 }
 
