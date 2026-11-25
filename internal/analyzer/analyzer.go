@@ -306,30 +306,39 @@ func (a *Analyzer) resolveDefinitionSymbol(uri, source string, pos protocol.Posi
 	if ctx == nil {
 		return definitionTarget{}
 	}
-	line := ctx.Line
-	file := ctx.File
+	if l := a.frameworkDefinition(source, ctx); l != nil {
+		return definitionTarget{loc: l}
+	}
+	return a.symbolTarget(uri, source, ctx)
+}
 
+func (a *Analyzer) frameworkDefinition(source string, ctx *sourcectx.CursorContext) *protocol.Location {
+	line, pos := ctx.Line, ctx.Position
 	if a.container != nil {
-		if l := a.definitionForContainerArg(line, pos, source, file, false); l != nil {
-			return definitionTarget{loc: l}
+		if l := a.definitionForContainerArg(line, pos, source, ctx.File, false); l != nil {
+			return l
 		}
 	}
 	if a.framework == "laravel" && a.views != nil {
 		if l := a.definitionForLaravelView(line, pos.Character); l != nil {
-			return definitionTarget{loc: l}
+			return l
 		}
 	}
 	if a.translations != nil {
 		if l := a.definitionForTranslationKey(line, pos.Character); l != nil {
-			return definitionTarget{loc: l}
+			return l
 		}
 	}
 	if a.framework == "laravel" && a.routes != nil {
 		if l := a.definitionForRouteName(line, pos.Character); l != nil {
-			return definitionTarget{loc: l}
+			return l
 		}
 	}
+	return nil
+}
 
+func (a *Analyzer) symbolTarget(uri, source string, ctx *sourcectx.CursorContext) definitionTarget {
+	pos, file := ctx.Position, ctx.File
 	word := ctx.SymbolText
 	if word == "" {
 		return definitionTarget{}
@@ -1214,11 +1223,11 @@ func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Positi
 }
 
 func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *protocol.SignatureHelp {
-	callee, activeParam, ok := sourcectx.CallAt(source, pos)
+	callee, activeParam, ok := sourcectx.CallAt(uri, source, pos)
 	if !ok {
 		return nil
 	}
-	sym := a.resolveDefinitionSymbol(uri, source, callee).sym
+	sym := a.symbolTarget(uri, source, callee).sym
 	if sym == nil {
 		return nil
 	}

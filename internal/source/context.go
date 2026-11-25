@@ -70,12 +70,15 @@ type MemberContext struct {
 }
 
 func Analyze(uri, source string, pos protocol.Position) *CursorContext {
+	return analyzeParsed(uri, source, parser.New().Parse(source), pos)
+}
+
+func analyzeParsed(uri, source string, result *parser.ParseResult, pos protocol.Position) *CursorContext {
 	lines := strings.Split(source, "\n")
 	if pos.Line < 0 || pos.Line >= len(lines) {
 		return nil
 	}
 
-	result := parser.New().Parse(source)
 	file := parser.ParseFile(source)
 	word, wordRange := WordAt(source, pos)
 	line := lines[pos.Line]
