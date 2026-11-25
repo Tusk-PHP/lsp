@@ -28,6 +28,26 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
+const (
+	codeMethodNotFound = -32601
+	codeInvalidParams  = -32602
+)
+
+func (s *Server) decodeParams[P any](msg *jsonRPCMessage) (P, bool) {
+	var params P
+	if err := json.Unmarshal(msg.Params, &params); err != nil {
+		s.rejectParams(msg, err)
+		return params, false
+	}
+	return params, true
+}
+
+func (s *Server) rejectParams(msg *jsonRPCMessage, err error) {
+	message := fmt.Sprintf("Invalid params for %s: %v", msg.Method, err)
+	s.logger.Print(message)
+	s.sendError(msg.ID, codeInvalidParams, message)
+}
+
 func (s *Server) readMessage() (*jsonRPCMessage, error) {
 	var contentLength int
 	for {

@@ -1,15 +1,12 @@
 package lsp
 
 import (
-	"encoding/json"
-
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
 func (s *Server) handlePrepareTypeHierarchy(msg *jsonRPCMessage) {
-	var params protocol.TextDocumentPositionParams
-	if json.Unmarshal(msg.Params, &params) != nil {
-		s.sendError(msg.ID, -32602, "Invalid params")
+	params, ok := s.decodeParams[protocol.TextDocumentPositionParams](msg)
+	if !ok {
 		return
 	}
 	req, ok := s.phpRequest(params.TextDocument.URI, params.Position)
@@ -21,9 +18,8 @@ func (s *Server) handlePrepareTypeHierarchy(msg *jsonRPCMessage) {
 }
 
 func (s *Server) handleTypeHierarchyRelations(msg *jsonRPCMessage, related func(protocol.TypeHierarchyItem) []protocol.TypeHierarchyItem) {
-	var params protocol.TypeHierarchyItemParams
-	if json.Unmarshal(msg.Params, &params) != nil {
-		s.sendError(msg.ID, -32602, "Invalid params")
+	params, ok := s.decodeParams[protocol.TypeHierarchyItemParams](msg)
+	if !ok {
 		return
 	}
 	s.sendResponse(msg.ID, related(params.Item))

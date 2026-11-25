@@ -1,7 +1,6 @@
 package lsp
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -28,9 +27,8 @@ import (
 )
 
 func (s *Server) handleInitialize(msg *jsonRPCMessage) {
-	var params protocol.InitializeParams
-	if err := json.Unmarshal(msg.Params, &params); err != nil {
-		s.sendError(msg.ID, -32602, "Invalid params")
+	params, ok := s.decodeParams[protocol.InitializeParams](msg)
+	if !ok {
 		return
 	}
 	s.rootPath = symbols.URIToPath(params.RootURI)
