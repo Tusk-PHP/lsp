@@ -1,6 +1,7 @@
 package symbols
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -68,4 +69,19 @@ func BenchmarkQualifyDocTypes(b *testing.B) {
 			qualifyDocTypes(plain, uses)
 		}
 	})
+}
+
+func TestForEachDocClassNameGivesEveryNameWithItsPlace(t *testing.T) {
+	doc := "/**\n * Finds a user. User is not a type here.\n * @param User|\\App\\Models\\Team $owner\n * @param array{user: Post, n: int} $shape\n * @return Collection<int, Models\\User>\n * @throws 'User'\n */"
+	var got []string
+	ForEachDocClassName(doc, func(start, end int, name string) {
+		if doc[start:end] != name {
+			t.Errorf("%q is at %d:%d, which holds %q", name, start, end, doc[start:end])
+		}
+		got = append(got, name)
+	})
+	want := []string{"User", `\App\Models\Team`, "array", "Post", "int", "Collection", "int", `Models\User`}
+	if !slices.Equal(got, want) {
+		t.Errorf("names = %q, want %q", got, want)
+	}
 }
