@@ -102,3 +102,31 @@ class Cleanup {
 		}
 	}
 }
+
+func TestFindDeclarationBeforeReindexIgnoresTheMemberThatUsedToBeThere(t *testing.T) {
+	indexed := `<?php
+namespace App;
+interface Shape { public function area(): float; }
+class Square implements Shape {
+    public function area(): float { return 1.0; }
+    public function size(): float { return 1.0; }
+}
+`
+	edited := `<?php
+namespace App;
+interface Shape { public function area(): float; }
+class Square implements Shape {
+    public function size(): float { return 1.0; }
+}
+`
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///Shape.php": indexed})
+	pos := positionOf(t, edited, "size")
+	for name, got := range map[string]*protocol.Location{
+		"declaration": a.FindDeclaration("file:///Shape.php", edited, pos),
+		"definition":  a.FindDefinition("file:///Shape.php", edited, pos),
+	} {
+		if got == nil || got.Range.Start.Line != 5 {
+			t.Errorf("%s of size where area was: got %v, want size on its indexed line 5", name, got)
+		}
+	}
+}

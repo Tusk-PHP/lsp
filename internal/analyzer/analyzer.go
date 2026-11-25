@@ -183,7 +183,7 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 		return nil
 	}
 
-	if member := a.index.MemberDeclaredAt(uri, pos); member != nil {
+	if member := a.index.MemberDeclaredAt(uri, pos, word); member != nil {
 		return symbolLocation(member)
 	}
 
@@ -383,7 +383,7 @@ func (a *Analyzer) resolveDefinitionSymbol(uri, source string, pos protocol.Posi
 		return definitionTarget{}
 	}
 
-	if member := a.index.MemberDeclaredAt(uri, pos); member != nil {
+	if member := a.index.MemberDeclaredAt(uri, pos, word); member != nil {
 		return definitionTarget{sym: member, owner: a.index.Lookup(member.ParentFQN), receiver: member.ParentFQN, loc: symbolLocation(member)}
 	}
 
