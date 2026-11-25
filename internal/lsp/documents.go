@@ -1,7 +1,6 @@
 package lsp
 
 import (
-	"encoding/json"
 	"os"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -10,8 +9,8 @@ import (
 )
 
 func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
-	var params protocol.DidOpenTextDocumentParams
-	if json.Unmarshal(msg.Params, &params) != nil {
+	params, ok := s.decodeParams[protocol.DidOpenTextDocumentParams](msg)
+	if !ok {
 		return
 	}
 	uri := params.TextDocument.URI
@@ -32,8 +31,8 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 }
 
 func (s *Server) handleDidChange(msg *jsonRPCMessage) {
-	var params protocol.DidChangeTextDocumentParams
-	if json.Unmarshal(msg.Params, &params) != nil {
+	params, ok := s.decodeParams[protocol.DidChangeTextDocumentParams](msg)
+	if !ok {
 		return
 	}
 	if len(params.ContentChanges) > 0 {
@@ -61,8 +60,8 @@ func isPHPDocument(uri string) bool {
 }
 
 func (s *Server) handleDidClose(msg *jsonRPCMessage) {
-	var params protocol.DidCloseTextDocumentParams
-	if json.Unmarshal(msg.Params, &params) != nil {
+	params, ok := s.decodeParams[protocol.DidCloseTextDocumentParams](msg)
+	if !ok {
 		return
 	}
 	s.docMu.Lock()
@@ -74,8 +73,8 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 }
 
 func (s *Server) handleDidSave(msg *jsonRPCMessage) {
-	var params protocol.DidSaveTextDocumentParams
-	if json.Unmarshal(msg.Params, &params) != nil {
+	params, ok := s.decodeParams[protocol.DidSaveTextDocumentParams](msg)
+	if !ok {
 		return
 	}
 	uri := params.TextDocument.URI

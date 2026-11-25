@@ -1,7 +1,11 @@
 package lsp
 
 import (
+	"encoding/json"
+	"io"
+	"log"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -127,5 +131,71 @@ func TestDeclarationThroughTheServer(t *testing.T) {
 	loc, _ := resp["result"].(map[string]interface{})
 	if loc == nil || loc["range"].(map[string]interface{})["start"].(map[string]interface{})["line"] != float64(1) {
 		t.Errorf("want the interface's run on line 1, got %v", resp["result"])
+	}
+}
+
+func TestMalformedParamsAreRejectedAsInvalidParams(t *testing.T) {
+	h := newHarness(t)
+	defer h.close()
+	h.readResponse(h.send("initialize", initParams()))
+	h.notify("initialized", map[string]interface{}{})
+
+	resp := h.readResponse(h.send("textDocument/hover", "not an object"))
+	assertInvalidParams(t, resp, "textDocument/hover")
+}
+
+func TestCommandArgumentsAreValidated(t *testing.T) {
+	h := newHarness(t)
+	defer h.close()
+	h.readResponse(h.send("initialize", initParams()))
+	h.notify("initialized", map[string]interface{}{})
+
+	uri := rootURI() + "/missing.php"
+	cases := []struct {
+		command   protocol.CommandName
+		arguments []interface{}
+		want      string
+	}{
+		{protocol.CommandCopyNamespace, nil, "tuskPhpLsp.copyNamespace takes argument 1, got 0 arguments"},
+		{protocol.CommandMoveToNamespace, []interface{}{uri}, "tuskPhpLsp.moveToNamespace takes argument 2, got 1 arguments"},
+		{protocol.CommandCreateObject, []interface{}{uri, "class", 3}, "tuskPhpLsp.createObject argument 3"},
+		{protocol.CommandCopyReference, []interface{}{uri, "line 3"}, "tuskPhpLsp.copyReference argument 2"},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.command), func(t *testing.T) {
+			resp := h.readResponse(h.send("workspace/executeCommand", map[string]interface{}{
+				"command":   tc.command,
+				"arguments": tc.arguments,
+			}))
+			assertInvalidParams(t, resp, tc.want)
+		})
+	}
+}
+
+func assertInvalidParams(t *testing.T, resp map[string]interface{}, want string) {
+	t.Helper()
+	errObj, ok := resp["error"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected an error response, got %v", resp)
+	}
+	if code, _ := errObj["code"].(float64); code != codeInvalidParams {
+		t.Errorf("error code = %v, want %d", errObj["code"], codeInvalidParams)
+	}
+	if message, _ := errObj["message"].(string); !strings.Contains(message, want) {
+		t.Errorf("error message = %q, want it to contain %q", message, want)
+	}
+}
+
+func BenchmarkDecodeParams(b *testing.B) {
+	server := NewServer(strings.NewReader(""), io.Discard, log.New(io.Discard, "", 0))
+	msg := &jsonRPCMessage{
+		Method: "textDocument/completion",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///app/Models/User.php"},"position":{"line":12,"character":8},"context":{"triggerKind":2,"triggerCharacter":">"}}`),
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, ok := server.decodeParams[completionParams](msg); !ok {
+			b.Fatal("decode failed")
+		}
 	}
 }

@@ -1,7 +1,6 @@
 package lsp
 
 import (
-	"encoding/json"
 	"unicode"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -9,9 +8,8 @@ import (
 )
 
 func (s *Server) handleSelectionRange(msg *jsonRPCMessage) {
-	var params protocol.SelectionRangeParams
-	if json.Unmarshal(msg.Params, &params) != nil {
-		s.sendError(msg.ID, -32602, "Invalid params")
+	params, ok := s.decodeParams[protocol.SelectionRangeParams](msg)
+	if !ok {
 		return
 	}
 

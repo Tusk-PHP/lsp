@@ -14,146 +14,135 @@ import (
 )
 
 func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
-	var params protocol.ExecuteCommandParams
-	if json.Unmarshal(msg.Params, &params) != nil {
-		s.sendError(msg.ID, -32602, "Invalid params")
+	params, ok := s.decodeParams[protocol.ExecuteCommandParams](msg)
+	if !ok {
 		return
 	}
 	switch params.Command {
 	case protocol.CommandCopyNamespace:
-		if len(params.Arguments) > 0 {
-			var uri string
-			if json.Unmarshal(params.Arguments[0], &uri) == nil {
-				source := s.getDocument(uri)
-				ns := s.analyzer.GetFileNamespace(uri, source)
-				s.sendResponse(msg.ID, ns)
-				return
-			}
+		uri, ok := s.commandArg[string](msg, params, 0)
+		if !ok {
+			return
 		}
-		s.sendResponse(msg.ID, nil)
+		s.sendResponse(msg.ID, s.analyzer.GetFileNamespace(uri, s.getDocument(uri)))
 	case protocol.CommandNamespaceForPath:
-		// Returns the expected namespace for a file path based on PSR-4 autoload
-		if len(params.Arguments) > 0 {
-			var uri string
-			if json.Unmarshal(params.Arguments[0], &uri) == nil {
-				filePath := symbols.URIToPath(uri)
-				autoload := composer.GetAutoloadPaths(s.rootPath)
-				ns := composer.PathToNamespace(filePath, autoload)
-				s.sendResponse(msg.ID, ns)
-				return
-			}
+		uri, ok := s.commandArg[string](msg, params, 0)
+		if !ok {
+			return
 		}
-		s.sendResponse(msg.ID, nil)
+		autoload := composer.GetAutoloadPaths(s.rootPath)
+		s.sendResponse(msg.ID, composer.PathToNamespace(symbols.URIToPath(uri), autoload))
 	case protocol.CommandMoveToNamespace:
-		// Arguments: [uri, targetNamespace]
-		if len(params.Arguments) >= 2 {
-			var uri, targetNS string
-			if json.Unmarshal(params.Arguments[0], &uri) == nil && json.Unmarshal(params.Arguments[1], &targetNS) == nil {
-				source := s.getDocument(uri)
-				autoload := composer.GetAutoloadPaths(s.rootPath)
-				edit := s.analyzer.MoveToNamespace(uri, source, targetNS, autoload, s.getDocumentReader())
-				s.sendResponse(msg.ID, edit)
-				return
-			}
+		uri, ok := s.commandArg[string](msg, params, 0)
+		if !ok {
+			return
 		}
-		s.sendResponse(msg.ID, nil)
+		targetNS, ok := s.commandArg[string](msg, params, 1)
+		if !ok {
+			return
+		}
+		autoload := composer.GetAutoloadPaths(s.rootPath)
+		s.sendResponse(msg.ID, s.analyzer.MoveToNamespace(uri, s.getDocument(uri), targetNS, autoload, s.getDocumentReader()))
 	case protocol.CommandCreateObject:
-		// Arguments: [dirUri, kind, name]
-		if len(params.Arguments) >= 3 {
-			var dirURI, kind, name string
-			if json.Unmarshal(params.Arguments[0], &dirURI) == nil &&
-				json.Unmarshal(params.Arguments[1], &kind) == nil &&
-				json.Unmarshal(params.Arguments[2], &name) == nil {
-				autoload := composer.GetAutoloadPaths(s.rootPath)
-				edit := buildCreateObjectEdit(dirURI, kind, name, autoload)
-				s.sendResponse(msg.ID, edit)
-				return
-			}
+		dirURI, ok := s.commandArg[string](msg, params, 0)
+		if !ok {
+			return
 		}
-		s.sendResponse(msg.ID, nil)
+		kind, ok := s.commandArg[string](msg, params, 1)
+		if !ok {
+			return
+		}
+		name, ok := s.commandArg[string](msg, params, 2)
+		if !ok {
+			return
+		}
+		autoload := composer.GetAutoloadPaths(s.rootPath)
+		s.sendResponse(msg.ID, buildCreateObjectEdit(dirURI, kind, name, autoload))
 	case protocol.CommandCopyReference:
-		// Arguments: [uri (string), position ({"line":N,"character":N})]
-		if len(params.Arguments) >= 2 {
-			var uri string
-			var position protocol.Position
-			if json.Unmarshal(params.Arguments[0], &uri) == nil &&
-				json.Unmarshal(params.Arguments[1], &position) == nil {
-				source := s.getDocument(uri)
-				variants := s.analyzer.CopyReference(uri, source, position)
-				s.sendResponse(msg.ID, variants)
-				return
-			}
+		uri, ok := s.commandArg[string](msg, params, 0)
+		if !ok {
+			return
 		}
-		s.sendResponse(msg.ID, nil)
+		position, ok := s.commandArg[protocol.Position](msg, params, 1)
+		if !ok {
+			return
+		}
+		s.sendResponse(msg.ID, s.analyzer.CopyReference(uri, s.getDocument(uri), position))
 	case protocol.CommandDebugDocument:
-		if len(params.Arguments) > 0 {
-			var uri string
-			if json.Unmarshal(params.Arguments[0], &uri) == nil {
-				source := s.getDocument(uri)
-
-				// Determine buffer state: "live-buffer" when the document is
-				// open in the editor (present in s.documents), otherwise "disk".
-				s.docMu.RLock()
-				_, inBuffer := s.documents[uri]
-				s.docMu.RUnlock()
-				bufferState := "disk"
-				if inBuffer {
-					bufferState = "live-buffer"
-				}
-
-				// Run native checks synchronously for a self-consistent dump.
-				file := parser.ParseFile(source)
-				var typeRes diagnostics.TypeResolverFunc
-				var builtinRule *checks.BuiltinUnavailableRule
-				if s.diag != nil {
-					typeRes = s.diag.TypeResolver
-					builtinRule = s.diag.BuiltinUnavailableRule
-				}
-				rules := diagnostics.NativeRules(diagnostics.NativeRulesOptions{
-					TypeResolver:           typeRes,
-					BuiltinUnavailableRule: builtinRule,
-				})
-				findings := checks.CheckFile(file, source, s.index, rules)
-
-				v := introspect.ParseVerbosity(s.cfg.Introspection.Verbosity)
-
-				var profile string
-				if s.workspace != nil {
-					bp := s.workspace.BuiltinProfile
-					profile = introspect.FormatProfile(bp.PHPVersion, bp.Extensions)
-				}
-
-				in := introspect.Input{
-					URI:           uri,
-					Source:        source,
-					Index:         s.index,
-					Container:     s.container,
-					Framework:     s.framework,
-					ServerVersion: ServerVersion,
-					Profile:       profile,
-					BufferState:   bufferState,
-					Diagnostics:   findings,
-					Verbosity:     v,
-				}
-				text := introspect.Render(introspect.Document(in), v)
-
-				s.sendResponse(msg.ID, text)
-
-				// Zed display path: emit the dump to the LSP log panel and
-				// show a toast pointing the user there.
-				s.sendNotification("window/logMessage", map[string]interface{}{
-					"type":    protocol.MessageTypeInfo,
-					"message": text,
-				})
-				s.sendNotification("window/showMessage", map[string]interface{}{
-					"type":    protocol.MessageTypeInfo,
-					"message": "Tusk PHP: parsed-state dump written to the language server logs.",
-				})
-				return
-			}
+		uri, ok := s.commandArg[string](msg, params, 0)
+		if !ok {
+			return
 		}
-		s.sendResponse(msg.ID, nil)
+		text := s.debugDocument(uri)
+		s.sendResponse(msg.ID, text)
+		s.sendNotification("window/logMessage", map[string]interface{}{
+			"type":    protocol.MessageTypeInfo,
+			"message": text,
+		})
+		s.sendNotification("window/showMessage", map[string]interface{}{
+			"type":    protocol.MessageTypeInfo,
+			"message": "Tusk PHP: parsed-state dump written to the language server logs.",
+		})
 	default:
-		s.sendError(msg.ID, -32601, fmt.Sprintf("Unknown command: %s", params.Command))
+		s.sendError(msg.ID, codeMethodNotFound, fmt.Sprintf("Unknown command: %s", params.Command))
 	}
+}
+
+func (s *Server) commandArg[T any](msg *jsonRPCMessage, params protocol.ExecuteCommandParams, i int) (T, bool) {
+	var arg T
+	if i >= len(params.Arguments) {
+		s.rejectParams(msg, fmt.Errorf("%s takes argument %d, got %d arguments", params.Command, i+1, len(params.Arguments)))
+		return arg, false
+	}
+	if err := json.Unmarshal(params.Arguments[i], &arg); err != nil {
+		s.rejectParams(msg, fmt.Errorf("%s argument %d: %w", params.Command, i+1, err))
+		return arg, false
+	}
+	return arg, true
+}
+
+func (s *Server) debugDocument(uri string) string {
+	source := s.getDocument(uri)
+	s.docMu.RLock()
+	_, inBuffer := s.documents[uri]
+	s.docMu.RUnlock()
+	bufferState := "disk"
+	if inBuffer {
+		bufferState = "live-buffer"
+	}
+
+	file := parser.ParseFile(source)
+	var typeRes diagnostics.TypeResolverFunc
+	var builtinRule *checks.BuiltinUnavailableRule
+	if s.diag != nil {
+		typeRes = s.diag.TypeResolver
+		builtinRule = s.diag.BuiltinUnavailableRule
+	}
+	rules := diagnostics.NativeRules(diagnostics.NativeRulesOptions{
+		TypeResolver:           typeRes,
+		BuiltinUnavailableRule: builtinRule,
+	})
+	findings := checks.CheckFile(file, source, s.index, rules)
+
+	v := introspect.ParseVerbosity(s.cfg.Introspection.Verbosity)
+
+	var profile string
+	if s.workspace != nil {
+		bp := s.workspace.BuiltinProfile
+		profile = introspect.FormatProfile(bp.PHPVersion, bp.Extensions)
+	}
+
+	in := introspect.Input{
+		URI:           uri,
+		Source:        source,
+		Index:         s.index,
+		Container:     s.container,
+		Framework:     s.framework,
+		ServerVersion: ServerVersion,
+		Profile:       profile,
+		BufferState:   bufferState,
+		Diagnostics:   findings,
+		Verbosity:     v,
+	}
+	return introspect.Render(introspect.Document(in), v)
 }

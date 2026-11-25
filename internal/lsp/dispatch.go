@@ -84,7 +84,7 @@ func (s *Server) handleMessage(msg *jsonRPCMessage) {
 		s.handleFileCoverage(msg)
 	default:
 		if msg.ID != nil {
-			s.sendError(msg.ID, -32601, fmt.Sprintf("Method not found: %s", msg.Method))
+			s.sendError(msg.ID, codeMethodNotFound, fmt.Sprintf("Method not found: %s", msg.Method))
 		}
 	}
 }

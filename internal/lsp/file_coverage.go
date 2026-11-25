@@ -1,7 +1,6 @@
 package lsp
 
 import (
-	"encoding/json"
 	"net/url"
 	"path/filepath"
 	"sort"
@@ -69,9 +68,8 @@ func (s *Server) coverageReport() *protocol.CoverageReport {
 // Like hover, it never reads the report on this path, and answers null when
 // coverage is unknown so a missing file never reads as untested.
 func (s *Server) handleFileCoverage(msg *jsonRPCMessage) {
-	var params protocol.FileCoverageParams
-	if json.Unmarshal(msg.Params, &params) != nil {
-		s.sendError(msg.ID, -32602, "Invalid params")
+	params, ok := s.decodeParams[protocol.FileCoverageParams](msg)
+	if !ok {
 		return
 	}
 	if s.coverage == nil {

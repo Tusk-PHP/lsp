@@ -1,7 +1,6 @@
 package lsp
 
 import (
-	"encoding/json"
 	"os"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -9,9 +8,8 @@ import (
 )
 
 func (s *Server) handleDocumentLink(msg *jsonRPCMessage) {
-	var params protocol.DocumentLinkParams
-	if json.Unmarshal(msg.Params, &params) != nil {
-		s.sendError(msg.ID, -32602, "Invalid params")
+	params, ok := s.decodeParams[protocol.DocumentLinkParams](msg)
+	if !ok {
 		return
 	}
 	uri := params.TextDocument.URI

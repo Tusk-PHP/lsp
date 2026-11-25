@@ -1,7 +1,6 @@
 package lsp
 
 import (
-	"encoding/json"
 	"sort"
 	"strings"
 
@@ -57,9 +56,8 @@ type semToken struct {
 }
 
 func (s *Server) handleSemanticTokensFull(msg *jsonRPCMessage) {
-	var params protocol.SemanticTokensParams
-	if json.Unmarshal(msg.Params, &params) != nil {
-		s.sendError(msg.ID, -32602, "Invalid params")
+	params, ok := s.decodeParams[protocol.SemanticTokensParams](msg)
+	if !ok {
 		return
 	}
 
