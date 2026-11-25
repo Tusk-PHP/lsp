@@ -14,10 +14,11 @@ import (
 
 // violation is a single invariant failure.
 type violation struct {
-	file string
-	line int
-	col  int
-	msg  string
+	file  string
+	line  int
+	col   int
+	msg   string
+	fatal bool
 }
 
 func (v violation) String() string {
@@ -29,6 +30,10 @@ func (v violation) String() string {
 
 func fileViolation(file, msg string) violation {
 	return violation{file: file, line: -1, col: -1, msg: msg}
+}
+
+func fatalViolation(file, msg string) violation {
+	return violation{file: file, line: -1, col: -1, msg: msg, fatal: true}
 }
 
 func posViolation(file string, line, col int, msg string) violation {
@@ -173,11 +178,11 @@ func checkSymbolValidity(entry corpusEntry, idx *symbols.Index, lineCount int) [
 			continue
 		}
 		if sym.Name == "" {
-			vs = append(vs, fileViolation(entry.path,
+			vs = append(vs, fatalViolation(entry.path,
 				fmt.Sprintf("Symbol with FQN %q has empty Name", sym.FQN)))
 		}
 		if sym.FQN == "" {
-			vs = append(vs, fileViolation(entry.path,
+			vs = append(vs, fatalViolation(entry.path,
 				fmt.Sprintf("Symbol %q has empty FQN", sym.Name)))
 		}
 		if sym.URI == "" {
@@ -372,7 +377,7 @@ func checkDocumentSymbolsInvariant(entry corpusEntry, syms []protocol.DocumentSy
 			return // guard against pathological nesting
 		}
 		if s.Name == "" {
-			vs = append(vs, fileViolation(entry.path, "GetDocumentSymbols: symbol with empty name"))
+			vs = append(vs, fatalViolation(entry.path, "GetDocumentSymbols: symbol with empty name"))
 		}
 		r := s.Range
 		sr := s.SelectionRange
