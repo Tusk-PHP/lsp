@@ -67,6 +67,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 	if ctx == nil {
 		return nil
 	}
+	r := p.engine.Resolver()
 	lines := strings.Split(source, "\n")
 	line := ctx.Line
 
@@ -99,7 +100,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 	// Handle $variable hover. After `::` a $name is a static property
 	// (self::$cache, static::$count), handled with the other members below.
 	if strings.HasPrefix(word, "$") && ctx.AccessKind != sourcectx.AccessStatic {
-		return p.hoverVariable(lines, pos, file, word)
+		return p.hoverVariable(r, lines, pos, file, word)
 	}
 
 	// Handle self/static/parent keywords — resolve to enclosing class. They
@@ -135,21 +136,21 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 
 	// Check for -> or :: access context
 	if ctx.AccessKind != sourcectx.AccessNone {
-		owner := p.engine.Resolver().AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		owner := r.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
 		classFQN := owner.BaseFQN()
 		if classFQN == "" {
 			return nil
 		}
-		sym := p.engine.Resolver().FindMemberAnywhere(classFQN, word)
+		sym := r.FindMemberAnywhere(classFQN, word)
 		if sym == nil {
 			// With the receiver's type arguments and every class of a union:
 			// a local scope on Builder<Post> is found on Post.
-			sym = p.engine.Resolver().FindMemberAnywhereOn(owner, word)
+			sym = r.FindMemberAnywhereOn(owner, word)
 		}
 		// For Laravel facades, also look up the member on the concrete class
 		if sym == nil && p.container != nil && p.framework == "laravel" {
 			if concrete := p.container.ResolveFacade(classFQN); concrete != "" {
-				sym = p.engine.Resolver().FindMember(concrete, word)
+				sym = r.FindMember(concrete, word)
 			}
 		}
 		if sym != nil {
@@ -162,7 +163,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 				trimmedPrefix := strings.TrimSpace(hoverPrefix)
 				if strings.HasSuffix(trimmedPrefix, "->") || strings.HasSuffix(trimmedPrefix, "::") {
 					expr := trimmedPrefix + word + "()"
-					rt := p.engine.Resolver().ChainType(expr, source, pos, file)
+					rt := r.ChainType(expr, source, pos, file)
 					if rt.IsGeneric() || (rt.Nullable && rt.FQN != "") {
 						content = replaceReturnType(content, rt.String())
 					}
@@ -191,7 +192,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 			}
 		}
 		// Try resolving as a class name in the current namespace context
-		fqn := p.engine.Resolver().ResolveClassName(word, file)
+		fqn := r.ResolveClassName(word, file)
 		if fqn != word {
 			if sym := p.index.Lookup(fqn); sym != nil {
 				content := p.formatHover(sym)
@@ -281,18 +282,18 @@ func isInStringLiteral(line string, character int) bool {
 	return inQuote != 0 && character == len(line)
 }
 
-func (p *Provider) hoverVariable(lines []string, pos protocol.Position, file *parser.FileNode, varName string) *protocol.Hover {
+func (p *Provider) hoverVariable(r *resolve.Resolver, lines []string, pos protocol.Position, file *parser.FileNode, varName string) *protocol.Hover {
 	if file == nil {
 		return nil
 	}
 
 	// Try typed resolution first (preserves generics: array<int, Category>)
-	resolvedType := p.engine.Resolver().ResolveVariableTypeTyped(varName, lines, pos, file)
+	resolvedType := r.ResolveVariableTypeTyped(varName, lines, pos, file)
 	typeName := resolvedType.BaseFQN()
 	typeDisplay := resolvedType.FullString()
 	if typeDisplay == "" {
 		// Fall back to non-typed resolution
-		typeName = p.engine.Resolver().ResolveVariableType(varName, lines, pos, file)
+		typeName = r.ResolveVariableType(varName, lines, pos, file)
 		typeDisplay = typeName
 	}
 	if typeName != "" {
@@ -313,7 +314,7 @@ func (p *Provider) hoverVariable(lines []string, pos protocol.Position, file *pa
 	}
 
 	// A variable that exists but whose type can't be worked out.
-	if p.engine.Resolver().IsLocalVariable(varName, lines, pos) {
+	if r.IsLocalVariable(varName, lines, pos) {
 		var sb strings.Builder
 		sb.WriteString(fmt.Sprintf("**%s**\n", varName))
 		sb.WriteString("\n" + phpFence("mixed "+varName))

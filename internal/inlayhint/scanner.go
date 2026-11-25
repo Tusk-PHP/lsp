@@ -61,6 +61,7 @@ func shortenFQNs(s string) string {
 // assignments of the form  $var = <expr>  that appear outside if/while/for
 // condition parens where the LHS is a plain variable (not a destructure).
 func (p *Provider) collectVarTypeHints(
+	r *resolve.Resolver,
 	result *parser.ParseResult,
 	lines []string,
 	file *parser.FileNode,
@@ -131,7 +132,7 @@ func (p *Provider) collectVarTypeHints(
 		assignLine := tok.Line
 		lookupPos := protocol.Position{Line: assignLine + 1, Character: 0}
 
-		rt := p.engine.Resolver().ResolveVariableTypeTyped(varName, lines, lookupPos, file)
+		rt := r.ResolveVariableTypeTyped(varName, lines, lookupPos, file)
 		if rt.IsEmpty() {
 			continue
 		}
@@ -178,6 +179,7 @@ func isObviousValue(tokens []parser.Token, i int) bool {
 // collectForeachHints emits ": Type" hints after key/value variable tokens in
 // foreach loops.
 func (p *Provider) collectForeachHints(
+	r *resolve.Resolver,
 	result *parser.ParseResult,
 	lines []string,
 	file *parser.FileNode,
@@ -280,7 +282,7 @@ func (p *Provider) collectForeachHints(
 
 		if keyVarIdx >= 0 {
 			kTok := tokens[keyVarIdx]
-			rt := p.engine.Resolver().ResolveVariableTypeTyped(kTok.Value, lines, lookupPos, file)
+			rt := r.ResolveVariableTypeTyped(kTok.Value, lines, lookupPos, file)
 			if !rt.IsEmpty() && rt.String() != "" && rt.String() != "mixed" {
 				endChar := kTok.Column + len(kTok.Value)
 				hints = append(hints, protocol.InlayHint{
@@ -293,7 +295,7 @@ func (p *Provider) collectForeachHints(
 		}
 		if valVarIdx >= 0 {
 			vTok := tokens[valVarIdx]
-			rt := p.engine.Resolver().ResolveVariableTypeTyped(vTok.Value, lines, lookupPos, file)
+			rt := r.ResolveVariableTypeTyped(vTok.Value, lines, lookupPos, file)
 			if !rt.IsEmpty() && rt.String() != "" && rt.String() != "mixed" {
 				endChar := vTok.Column + len(vTok.Value)
 				hints = append(hints, protocol.InlayHint{
@@ -311,6 +313,7 @@ func (p *Provider) collectForeachHints(
 // collectClosureReturnHints emits ": Type" hints for arrow functions (fn) and
 // anonymous functions that lack an explicit return type annotation.
 func (p *Provider) collectClosureReturnHints(
+	r *resolve.Resolver,
 	result *parser.ParseResult,
 	lines []string,
 	file *parser.FileNode,
@@ -373,7 +376,7 @@ func (p *Provider) collectClosureReturnHints(
 			}
 			exprTok := tokens[exprIdx]
 			lookupPos := protocol.Position{Line: exprTok.Line, Character: exprTok.Column}
-			rt := resolveExprToken(p, tokens, exprIdx, lines, lookupPos, file, source)
+			rt := resolveExprToken(r, tokens, exprIdx, lines, lookupPos, file, source)
 			if rt.IsEmpty() || rt.String() == "" || rt.String() == "mixed" {
 				continue
 			}
@@ -394,7 +397,7 @@ func (p *Provider) collectClosureReturnHints(
 			if bodyEnd < 0 {
 				continue
 			}
-			rt := p.resolveFirstReturn(tokens, bodyStart+1, bodyEnd, lines, file, source)
+			rt := p.resolveFirstReturn(r, tokens, bodyStart+1, bodyEnd, lines, file, source)
 			if rt.IsEmpty() || rt.String() == "" || rt.String() == "mixed" {
 				continue
 			}
@@ -412,7 +415,7 @@ func (p *Provider) collectClosureReturnHints(
 // resolveExprToken resolves the return type represented by the token at index
 // exprIdx.  Handles variable references and new-expressions.
 func resolveExprToken(
-	p *Provider,
+	r *resolve.Resolver,
 	tokens []parser.Token,
 	exprIdx int,
 	lines []string,
@@ -426,7 +429,7 @@ func resolveExprToken(
 	tok := tokens[exprIdx]
 	switch tok.Kind {
 	case parser.TokenVariable:
-		return p.engine.Resolver().ResolveVariableTypeTyped(tok.Value, lines, pos, file)
+		return r.ResolveVariableTypeTyped(tok.Value, lines, pos, file)
 	case parser.TokenNew:
 		// new ClassName(...)
 		j := parser.NextSignificant(tokens, exprIdx+1)
@@ -437,7 +440,7 @@ func resolveExprToken(
 		if className == "" {
 			return resolve.ResolvedType{}
 		}
-		fqn := p.engine.Resolver().ResolveClassName(className, file)
+		fqn := r.ResolveClassName(className, file)
 		if fqn == "" {
 			fqn = className
 		}
@@ -451,7 +454,7 @@ func resolveExprToken(
 			end = len(lineStr)
 		}
 		if expr := strings.TrimSpace(lineStr[:end]); expr != "" {
-			return p.engine.Resolver().ChainType(expr, source, pos, file)
+			return r.ChainType(expr, source, pos, file)
 		}
 	}
 	return resolve.ResolvedType{}
@@ -460,6 +463,7 @@ func resolveExprToken(
 // resolveFirstReturn scans tokens between start and end (exclusive) for the
 // first return statement and resolves the returned expression type.
 func (p *Provider) resolveFirstReturn(
+	r *resolve.Resolver,
 	tokens []parser.Token,
 	start, end int,
 	lines []string,
@@ -484,7 +488,7 @@ func (p *Provider) resolveFirstReturn(
 			}
 			retTok := tokens[j]
 			lookupPos := protocol.Position{Line: retTok.Line, Character: retTok.Column}
-			rt := resolveExprToken(p, tokens, j, lines, lookupPos, file, source)
+			rt := resolveExprToken(r, tokens, j, lines, lookupPos, file, source)
 			if !rt.IsEmpty() {
 				return rt
 			}
@@ -577,6 +581,7 @@ func methodSignatureCloseParen(tokens []parser.Token, startLine int) (parser.Tok
 
 // collectParamNameHints emits "name:" hints before positional call arguments.
 func (p *Provider) collectParamNameHints(
+	r *resolve.Resolver,
 	result *parser.ParseResult,
 	lines []string,
 	file *parser.FileNode,
@@ -602,7 +607,7 @@ func (p *Provider) collectParamNameHints(
 		}
 
 		// Resolve the callee's parameter list from the symbol index.
-		params := p.resolveCalleeParams(callee, calleeKind, receiverExpr, tokens, i, lines, file, source)
+		params := p.resolveCalleeParams(r, callee, calleeKind, receiverExpr, tokens, i, lines, file, source)
 		if len(params) == 0 {
 			continue
 		}
@@ -770,6 +775,7 @@ func collectReceiverExpr(tokens []parser.Token, fromIdx int) string {
 
 // resolveCalleeParams looks up the parameter list for a call-site callee.
 func (p *Provider) resolveCalleeParams(
+	r *resolve.Resolver,
 	callee string,
 	kind calleeKindT,
 	receiverOrClass string,
@@ -783,14 +789,14 @@ func (p *Provider) resolveCalleeParams(
 	case calleeMethod:
 		// Find the position of the call-site so the resolver has context.
 		callPos := protocol.Position{Line: tokens[openParen].Line, Character: tokens[openParen].Column}
-		rt := p.engine.Resolver().ChainType(receiverOrClass, source, callPos, file)
+		rt := r.ChainType(receiverOrClass, source, callPos, file)
 		if rt.IsEmpty() {
 			return nil
 		}
 		fqn := rt.BaseFQN()
 		return p.membersToParams(fqn, callee)
 	case calleeStatic:
-		cls := p.engine.Resolver().ResolveClassName(receiverOrClass, file)
+		cls := r.ResolveClassName(receiverOrClass, file)
 		if cls == "" {
 			cls = receiverOrClass
 		}

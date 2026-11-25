@@ -7,10 +7,12 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func (a *Analyzer) implementMissingMethodsCodeActions(uri, source string, result *parser.ParseResult, only []protocol.CodeActionKind, pos protocol.Position) []protocol.CodeAction {
+	r := a.engine.Resolver()
 	if !protocol.CodeActionRefactor.In(only) {
 		return nil
 	}
@@ -23,7 +25,7 @@ func (a *Analyzer) implementMissingMethodsCodeActions(uri, source string, result
 		return nil
 	}
 
-	methods := a.collectImplementMissingMethods(source, target)
+	methods := a.collectImplementMissingMethods(r, source, target)
 	if len(methods) == 0 {
 		return nil
 	}
@@ -83,7 +85,7 @@ type implementMissingMethodCandidate struct {
 	signatureKey string
 }
 
-func (a *Analyzer) collectImplementMissingMethods(source string, target *implementMissingMethodsTarget) []string {
+func (a *Analyzer) collectImplementMissingMethods(r *resolve.Resolver, source string, target *implementMissingMethodsTarget) []string {
 	if target == nil || target.fqn == "" {
 		return nil
 	}
@@ -136,12 +138,12 @@ func (a *Analyzer) collectImplementMissingMethods(source string, target *impleme
 	}
 
 	for _, ifaceName := range target.implements {
-		a.collectInterfaceMethodRequirements(a.engine.Resolver().ResolveClassName(ifaceName, targetFile), addRequirement, make(map[string]bool))
+		a.collectInterfaceMethodRequirements(r, r.ResolveClassName(ifaceName, targetFile), addRequirement, make(map[string]bool))
 	}
 
 	parentFQN := ""
 	if target.extends != "" {
-		parentFQN = a.engine.Resolver().ResolveClassName(target.extends, targetFile)
+		parentFQN = r.ResolveClassName(target.extends, targetFile)
 	}
 	if parentFQN == "" {
 		if sym := a.index.Lookup(target.fqn); sym != nil {
@@ -181,7 +183,7 @@ func (a *Analyzer) collectImplementMissingMethods(source string, target *impleme
 	return rendered
 }
 
-func (a *Analyzer) collectInterfaceMethodRequirements(ifaceFQN string, add func(*symbols.Symbol), seen map[string]bool) {
+func (a *Analyzer) collectInterfaceMethodRequirements(r *resolve.Resolver, ifaceFQN string, add func(*symbols.Symbol), seen map[string]bool) {
 	if ifaceFQN == "" || seen[ifaceFQN] {
 		return
 	}
@@ -196,12 +198,12 @@ func (a *Analyzer) collectInterfaceMethodRequirements(ifaceFQN string, add func(
 			add(child)
 		}
 	}
-	for _, parentFQN := range a.interfaceExtendedFQNs(iface) {
-		a.collectInterfaceMethodRequirements(parentFQN, add, seen)
+	for _, parentFQN := range a.interfaceExtendedFQNs(r, iface) {
+		a.collectInterfaceMethodRequirements(r, parentFQN, add, seen)
 	}
 }
 
-func (a *Analyzer) interfaceExtendedFQNs(iface *symbols.Symbol) []string {
+func (a *Analyzer) interfaceExtendedFQNs(r *resolve.Resolver, iface *symbols.Symbol) []string {
 	if iface == nil || iface.URI == "" {
 		return nil
 	}
@@ -223,7 +225,7 @@ func (a *Analyzer) interfaceExtendedFQNs(iface *symbols.Symbol) []string {
 		}
 		parents := make([]string, 0, len(node.Extends))
 		for _, parent := range node.Extends {
-			parents = append(parents, a.engine.Resolver().ResolveClassName(parent, file))
+			parents = append(parents, r.ResolveClassName(parent, file))
 		}
 		return parents
 	}

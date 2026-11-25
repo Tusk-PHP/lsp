@@ -14,7 +14,7 @@ import (
 // like app('request'), app(Request::class), resolve('cache'), $container->get('log')
 // and returns the concrete FQN from the container bindings.
 // config() with no args returns Repository; config('key') returns mixed (no resolution).
-func (p *Provider) resolveContainerCallType(expr, source string, file *parser.FileNode) string {
+func (p *Provider) resolveContainerCallType(r *resolve.Resolver, expr, source string, file *parser.FileNode) string {
 	// Special case: config() with no args returns the Repository instance
 	t := strings.TrimSpace(expr)
 	if t == "config()" {
@@ -35,7 +35,7 @@ func (p *Provider) resolveContainerCallType(expr, source string, file *parser.Fi
 	// Resolve ::class references: "Request::class" → FQN
 	if strings.HasSuffix(arg, "::class") {
 		className := strings.TrimSuffix(arg, "::class")
-		arg = p.engine.Resolver().ResolveClassNameLoose(className, file)
+		arg = r.ResolveClassNameLoose(className, file)
 	}
 	if binding := p.container.ResolveDependency(arg); binding != nil {
 		return binding.Concrete

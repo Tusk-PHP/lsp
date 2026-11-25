@@ -6,7 +6,8 @@ import (
 )
 
 func (a *Analyzer) PrepareTypeHierarchy(uri, source string, pos protocol.Position) []protocol.TypeHierarchyItem {
-	if item, ok := typeHierarchyItem(a.resolveDefinitionSymbol(uri, source, pos).sym); ok {
+	r := a.engine.Resolver()
+	if item, ok := typeHierarchyItem(a.resolveDefinitionSymbol(r, uri, source, pos).sym); ok {
 		return []protocol.TypeHierarchyItem{item}
 	}
 	return nil

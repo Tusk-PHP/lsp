@@ -241,8 +241,8 @@ func extractStringAtEnd(inner string) (string, string, bool) {
 }
 
 // completeBuilderArg dispatches to column or relation completion based on the method.
-func (p *Provider) completeBuilderArg(method, partial, quote, prefix, source string, pos protocol.Position, file *parser.FileNode) []protocol.CompletionItem {
-	modelFQN := p.resolveBuilderModel(prefix, method, source, pos, file)
+func (p *Provider) completeBuilderArg(r *resolve.Resolver, method, partial, quote, prefix, source string, pos protocol.Position, file *parser.FileNode) []protocol.CompletionItem {
+	modelFQN := p.resolveBuilderModel(r, prefix, method, source, pos, file)
 	if modelFQN == "" {
 		return nil
 	}
@@ -261,13 +261,13 @@ func (p *Provider) completeBuilderArg(method, partial, quote, prefix, source str
 // the line up to the call, method the called method. It returns "" when the
 // model can't be worked out.
 func (p *Provider) ResolveBuilderModel(prefix, method, source string, line int, file *parser.FileNode) string {
-	return p.resolveBuilderModel(prefix, method, source, protocol.Position{Line: line, Character: len(prefix)}, file)
+	return p.resolveBuilderModel(p.engine.Resolver(), prefix, method, source, protocol.Position{Line: line, Character: len(prefix)}, file)
 }
 
 // resolveBuilderModel finds the Eloquent model FQN from the expression before
 // the Builder method call. Works for both static calls (Category::where) and
 // chained calls (Category::query()->where, $query->where).
-func (p *Provider) resolveBuilderModel(prefix, method, source string, pos protocol.Position, file *parser.FileNode) string {
+func (p *Provider) resolveBuilderModel(r *resolve.Resolver, prefix, method, source string, pos protocol.Position, file *parser.FileNode) string {
 	// Find the method call in the prefix to get everything before it
 	// We need to find ->method( or ::method( and resolve the chain before it
 	trimmed := strings.TrimSpace(prefix)
@@ -308,14 +308,14 @@ func (p *Provider) resolveBuilderModel(prefix, method, source string, pos protoc
 		if className == "" {
 			return ""
 		}
-		typeFQN = p.engine.Resolver().ResolveClassNameLoose(className, file)
+		typeFQN = r.ResolveClassNameLoose(className, file)
 	} else {
 		// Instance/chain call: Category::query()->where( or $query->where(
 		// Use resolveAccessChain to walk the chain
 		// We need to create a dummy line that ends at the -> before our method
 		chainLine := beforeMethod + "->__dummy__"
 		wordStart := len(beforeMethod) + 2
-		typeFQN = p.resolveAccessChain(p.engine.Resolver(), chainLine, wordStart, source, pos, file)
+		typeFQN = p.resolveAccessChain(r, chainLine, wordStart, source, pos, file)
 	}
 
 	if typeFQN == "" {
@@ -333,7 +333,7 @@ func (p *Provider) resolveBuilderModel(prefix, method, source string, pos protoc
 		// Try resolving the full chain to find the originating model
 		// The static call origin (e.g., Category::query()) tells us the model
 		if bestOp == "->" {
-			return p.findModelInChain(beforeMethod, source, pos, file)
+			return p.findModelInChain(r, beforeMethod, source, pos, file)
 		}
 	}
 
@@ -354,7 +354,7 @@ func (p *Provider) isEloquentModel(fqn string) bool {
 // findModelInChain walks backward through a chain expression to find
 // the originating Model class. For "Category::query()" it returns
 // the FQN for Category.
-func (p *Provider) findModelInChain(expr, source string, pos protocol.Position, file *parser.FileNode) string {
+func (p *Provider) findModelInChain(r *resolve.Resolver, expr, source string, pos protocol.Position, file *parser.FileNode) string {
 	trimmed := strings.TrimSpace(expr)
 
 	// Look for ClassName:: pattern at the start of the chain
@@ -368,7 +368,7 @@ func (p *Provider) findModelInChain(expr, source string, pos protocol.Position, 
 			}
 		}
 		if className != "" {
-			fqn := p.engine.Resolver().ResolveClassNameLoose(className, file)
+			fqn := r.ResolveClassNameLoose(className, file)
 			if p.isEloquentModel(fqn) {
 				return fqn
 			}
@@ -378,7 +378,7 @@ func (p *Provider) findModelInChain(expr, source string, pos protocol.Position, 
 	// Try resolving variables: $query = Category::query()
 	// The chain resolver handles this via variable type resolution
 	if strings.HasPrefix(trimmed, "$") || strings.Contains(trimmed, "->") {
-		resolved := p.ResolveExpressionType(trimmed, source, pos, file)
+		resolved := p.resolveExpressionType(r, trimmed, source, pos, file)
 		if resolved != "" && p.isEloquentModel(resolved) {
 			return resolved
 		}

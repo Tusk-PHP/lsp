@@ -123,7 +123,7 @@ func TestChainTypeWithoutFile(t *testing.T) {
 // A container call answers through the ContainerCall hook.
 func TestChainTypeContainerCall(t *testing.T) {
 	r, file, pos := chainFixture(t)
-	r.ContainerCall = func(callExpr, source string, file *parser.FileNode) string {
+	r.ContainerCall = func(_ *Resolver, callExpr, source string, file *parser.FileNode) string {
 		switch callExpr {
 		case "app('log')":
 			return `App\Logger`

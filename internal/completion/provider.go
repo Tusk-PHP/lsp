@@ -147,7 +147,8 @@ func sanitizeCompletions(items []protocol.CompletionItem) []protocol.CompletionI
 }
 
 func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []protocol.CompletionItem {
-	lines := p.engine.Resolver().Lines(source)
+	r := p.engine.Resolver()
+	lines := r.Lines(source)
 	line := resolve.LineAt(lines, pos.Line)
 	prefix := ""
 	if pos.Character <= len(line) {
@@ -189,21 +190,21 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 	rk := newNameRanker(ctx.Namespace, ctx.Uses)
 
 	if strings.HasSuffix(trimmed, "->") || strings.HasSuffix(trimmed, "?->") {
-		return sanitizeCompletions(p.completeMemberAccess(uri, source, pos, prefix, file, parenAfterCursor))
+		return sanitizeCompletions(p.completeMemberAccess(r, uri, source, pos, prefix, file, parenAfterCursor))
 	}
 	// Container argument context takes priority over :: detection
 	// (e.g. app(Request::class) should not trigger static access)
 	if _, _, isContainer := extractContainerArgContext(trimmed); !isContainer {
 		if strings.HasSuffix(trimmed, "::") {
-			return sanitizeCompletions(p.completeStaticAccess(source, prefix, pos, file, parenAfterCursor))
+			return sanitizeCompletions(p.completeStaticAccess(r, source, prefix, pos, file, parenAfterCursor))
 		}
 		// Typing after -> or :: (e.g. "$foo->ba" or "Foo::cr")
 		if memberCtx, ok := sourcectx.DetectMemberContext(trimmed); ok {
 			if memberCtx.AccessKind == sourcectx.AccessStatic {
-				items := p.completeStaticAccess(source, memberCtx.Prefix, pos, file, parenAfterCursor)
+				items := p.completeStaticAccess(r, source, memberCtx.Prefix, pos, file, parenAfterCursor)
 				return sanitizeCompletions(filterByPrefix(items, memberCtx.Filter))
 			}
-			items := p.completeMemberAccess(uri, source, pos, memberCtx.Prefix, file, parenAfterCursor)
+			items := p.completeMemberAccess(r, uri, source, pos, memberCtx.Prefix, file, parenAfterCursor)
 			return sanitizeCompletions(filterByPrefix(items, memberCtx.Filter))
 		}
 	}
@@ -222,7 +223,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 	}
 	// Builder column/relation argument completion: ->where('col, ->with('rel
 	if method, partial, quote, ok := extractBuilderArgContext(trimmed); ok {
-		if items := p.completeBuilderArg(method, partial, quote, prefix, source, pos, file); items != nil {
+		if items := p.completeBuilderArg(r, method, partial, quote, prefix, source, pos, file); items != nil {
 			return sanitizeCompletions(items)
 		}
 	}
@@ -254,7 +255,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 		if p.symfonyCommands != nil {
 			if receiver, partial, quote, ok := frameworksymfony.CommandNameCall(trimmed); ok &&
-				frameworksymfony.IsConsoleApplication(p.index, p.ResolveExpressionType(receiver, source, pos, file)) {
+				frameworksymfony.IsConsoleApplication(p.index, p.resolveExpressionType(r, receiver, source, pos, file)) {
 				return sanitizeCompletions(p.completeSymfonyCommandNames(partial, quote))
 			}
 		}
@@ -269,7 +270,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 	}
 	// Variables in scope: `$` or `$na`
 	if typed, ok := typedVariablePrefix(prefix); ok {
-		return sanitizeCompletions(p.completeVariables(typed, lines, pos, file))
+		return sanitizeCompletions(p.completeVariables(r, typed, lines, pos, file))
 	}
 	// Detect namespace path typing (contains \)
 	search := extractLastWord(prefix)
@@ -384,16 +385,16 @@ func (p *Provider) completeSymfonyCommandNames(partial, quote string) []protocol
 	return items
 }
 
-func (p *Provider) completeMemberAccess(uri, source string, pos protocol.Position, prefix string, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
+func (p *Provider) completeMemberAccess(r *resolve.Resolver, uri, source string, pos protocol.Position, prefix string, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
 	// Use typed resolver first to get generic context
-	resolved := p.ResolveChainTypeTyped(source, prefix, "->", pos, file)
+	resolved := p.resolveChainTypeTyped(r, source, prefix, "->", pos, file)
 	if resolved.FQN == "object" && len(resolved.Fields) > 0 {
 		return objectShapeCompletions(resolved)
 	}
 	typeName := resolved.MemberOwner()
 	if typeName == "" {
 		// Fall back to standard resolver
-		typeName = p.resolveChainType(source, prefix, "->", pos, file)
+		typeName = p.resolveChainType(r, source, prefix, "->", pos, file)
 	}
 	if typeName == "" {
 		return nil
@@ -407,13 +408,13 @@ func (p *Provider) completeMemberAccess(uri, source string, pos protocol.Positio
 	enclosing := resolve.FindEnclosingClass(file, pos)
 	members := p.index.GetClassMembers(typeName)
 	// What @mixin tags bring in, after the class's own members.
-	for _, mixin := range p.engine.Resolver().MixinTypes(resolved) {
+	for _, mixin := range r.MixinTypes(resolved) {
 		members = append(members, p.index.GetClassMembers(mixin.MemberOwner())...)
 	}
 	distance := memberDistances(members)
 	seen := make(map[string]bool, len(members))
 	// Local scopes of the model a query builder is for: $query->active().
-	for _, sc := range p.engine.Resolver().Scopes(resolved) {
+	for _, sc := range r.Scopes(resolved) {
 		seen[sc.Name] = true
 		items = append(items, p.scopeItem(sc, parenAfterCursor))
 	}
@@ -512,11 +513,11 @@ func objectShapeCompletions(rt resolve.ResolvedType) []protocol.CompletionItem {
 	return items
 }
 
-func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Position, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
-	typeName := p.resolveChainType(source, prefix, "::", pos, file)
+func (p *Provider) completeStaticAccess(r *resolve.Resolver, source, prefix string, pos protocol.Position, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
+	typeName := p.resolveChainType(r, source, prefix, "::", pos, file)
 	// $class:: where $class is a class-string<Foo>.
 	if strings.HasPrefix(strings.TrimSpace(extractClassBefore(prefix, "::")), "$") || typeName == "" || typeName == "string" || strings.HasPrefix(typeName, "class-string") {
-		if t := resolve.ClassStringTarget(p.ResolveChainTypeTyped(source, prefix, "::", pos, file)); t.FQN != "" && !resolve.IsBuiltinTypeName(t.FQN) {
+		if t := resolve.ClassStringTarget(p.resolveChainTypeTyped(r, source, prefix, "::", pos, file)); t.FQN != "" && !resolve.IsBuiltinTypeName(t.FQN) {
 			typeName = t.FQN
 		}
 	}
@@ -550,8 +551,8 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 	}
 	// What the class forwards static calls to, as an Eloquent model does to
 	// its query builder, and that type's @mixin (the base query builder).
-	for _, fwd := range p.engine.Resolver().ForwardTypes(resolve.ResolvedType{FQN: typeName}) {
-		for _, t := range append([]resolve.ResolvedType{fwd}, p.engine.Resolver().MixinTypes(fwd)...) {
+	for _, fwd := range r.ForwardTypes(resolve.ResolvedType{FQN: typeName}) {
+		for _, t := range append([]resolve.ResolvedType{fwd}, r.MixinTypes(fwd)...) {
 			if fqn := t.MemberOwner(); fqn != "" && !forwarded[fqn] {
 				memberSets = append(memberSets, fqn)
 				forwarded[fqn] = true
@@ -559,8 +560,8 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 		}
 	}
 	// Local scopes, callable statically through the forward: Category::active().
-	for _, fwd := range p.engine.Resolver().ForwardTypes(resolve.ResolvedType{FQN: typeName}) {
-		for _, sc := range p.engine.Resolver().Scopes(fwd) {
+	for _, fwd := range r.ForwardTypes(resolve.ResolvedType{FQN: typeName}) {
+		for _, sc := range r.Scopes(fwd) {
 			if seen[sc.Name] {
 				continue
 			}
@@ -613,27 +614,27 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 	return items
 }
 
-// ResolveChainTypeTyped resolves the type of the expression before op (-> or ::)
-// preserving generic context. Used by hover and completion for rich type display.
-func (p *Provider) ResolveChainTypeTyped(source, prefix, op string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
+// resolveChainTypeTyped resolves the type of the expression before op (-> or ::)
+// preserving generic context.
+func (p *Provider) resolveChainTypeTyped(r *resolve.Resolver, source, prefix, op string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 	idx := strings.LastIndex(prefix, op)
 	if idx < 0 {
 		return resolve.ResolvedType{}
 	}
-	return p.engine.Resolver().AccessOwnerType(prefix, idx+len(op), source, pos, file)
+	return r.AccessOwnerType(prefix, idx+len(op), source, pos, file)
 }
 
 // resolveChainType resolves the class FQN from the expression before op (-> or ::).
 // Handles: $var->, $this->, self::, static::, parent::, ClassName::,
 // $var::, new ClassName()->, (new ClassName)->, method chains, and
 // container calls: app('request')->, app(Request::class)->, resolve(...)->
-func (p *Provider) resolveChainType(source, prefix, op string, pos protocol.Position, file *parser.FileNode) string {
+func (p *Provider) resolveChainType(r *resolve.Resolver, source, prefix, op string, pos protocol.Position, file *parser.FileNode) string {
 	idx := strings.LastIndex(prefix, op)
 	if idx < 0 {
 		return ""
 	}
 	// wordStart is after the operator (where the member name would be)
-	return p.resolveAccessChain(p.engine.Resolver(), prefix, idx+len(op), source, pos, file)
+	return p.resolveAccessChain(r, prefix, idx+len(op), source, pos, file)
 }
 
 // resolveAccessChain walks left through a chain of -> and :: accesses in the
@@ -689,7 +690,7 @@ func (p *Provider) resolveAccessChain(r *resolve.Resolver, line string, wordStar
 		// Check for container call pattern (only for ->)
 		if op == "->" && p.container != nil {
 			callExpr := strings.TrimSpace(line[:parenEnd])
-			if concrete := p.resolveContainerCallType(callExpr, source, file); concrete != "" {
+			if concrete := p.resolveContainerCallType(r, callExpr, source, file); concrete != "" {
 				if concrete == "-" {
 					return ""
 				}

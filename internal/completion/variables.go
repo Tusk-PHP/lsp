@@ -31,7 +31,7 @@ func typedVariablePrefix(prefix string) (string, bool) {
 // completeVariables lists the variables visible at pos, closest first: the
 // function's own variables, most recently used first, then its parameters in
 // order, then $this, then PHP's superglobals.
-func (p *Provider) completeVariables(typed string, lines []string, pos protocol.Position, file *parser.FileNode) []protocol.CompletionItem {
+func (p *Provider) completeVariables(r *resolve.Resolver, typed string, lines []string, pos protocol.Position, file *parser.FileNode) []protocol.CompletionItem {
 	ltyped := strings.ToLower(typed)
 	matches := func(name string) bool { return strings.HasPrefix(strings.ToLower(name), ltyped) }
 
@@ -50,7 +50,7 @@ func (p *Provider) completeVariables(typed string, lines []string, pos protocol.
 		})
 	}
 
-	doc := p.engine.Resolver().ScopeDocument(lines)
+	doc := r.ScopeDocument(lines)
 	s := doc.ScopeAt(pos)
 	// An arrow function also sees its parent's variables; they rank after its own.
 	for depth := 0; s != nil; depth++ {
