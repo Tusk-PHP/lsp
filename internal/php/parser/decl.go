@@ -129,16 +129,17 @@ func (p *parser) checkModifiers(mods []*ast.Modifier, target modifierTarget) {
 }
 
 func (p *parser) params() []*ast.Param {
-	var params []*ast.Param
 	if !p.expect(token.LeftParen) {
 		return nil
 	}
+	from := p.paramStack.mark()
 	for p.peek() != token.RightParen && p.peek() != eof {
-		params = append(params, p.param())
+		p.paramStack.push(p.param())
 		if !p.trailingComma("a trailing comma in a parameter list") {
 			break
 		}
 	}
+	params := p.paramStack.take(from)
 	p.expect(token.RightParen)
 	return params
 }
@@ -356,12 +357,13 @@ func (p *parser) members() []ast.Member {
 	if !p.expect(token.LeftBrace) {
 		return nil
 	}
-	var members []ast.Member
+	from := p.memberStack.mark()
 	for p.peek() != token.RightBrace && p.peek() != eof {
 		before := p.pos
-		members = append(members, p.member())
+		p.memberStack.push(p.member())
 		p.ensureProgress(before)
 	}
+	members := p.memberStack.take(from)
 	p.expect(token.RightBrace)
 	return members
 }

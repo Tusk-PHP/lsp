@@ -440,7 +440,7 @@ func (p *parser) primary() ast.Expr {
 		}
 	case token.Identifier, token.NameQualified, token.NameFullyQualified, token.NameRelative, token.NamespaceSeparator, token.Namespace:
 		if p.nameTokens() > 0 {
-			return &ast.ConstFetch{Name: p.name(), Span: p.span(start)}
+			return p.constFetch(start)
 		}
 	}
 	p.unexpected("expected an expression")
@@ -506,7 +506,7 @@ func (p *parser) postfix(e ast.Expr, start uint32) ast.Expr {
 			nullsafe := p.next().Kind == token.NullsafeObjectOperator
 			name := p.memberAccessName()
 			if p.peek() == token.LeftParen {
-				e = &ast.MethodCall{Object: e, Name: name, Nullsafe: nullsafe, Args: p.args(), Span: p.span(start)}
+				e = p.methodCall(e, name, nullsafe, start)
 			} else {
 				e = &ast.PropertyFetch{Object: e, Name: name, Nullsafe: nullsafe, Span: p.span(start)}
 			}
@@ -514,7 +514,7 @@ func (p *parser) postfix(e ast.Expr, start uint32) ast.Expr {
 			p.next()
 			e = p.staticMember(e, start)
 		case token.LeftParen:
-			e = &ast.Call{Callee: e, Args: p.args(), Span: p.span(start)}
+			e = p.call(e, start)
 		case token.Increment, token.Decrement:
 			op := p.next().Kind
 			e = &ast.Postfix{Op: op, Operand: e, Span: p.span(start)}
@@ -559,7 +559,7 @@ func (p *parser) staticMember(class ast.Expr, start uint32) ast.Expr {
 	case k == token.Variable || k == token.Dollar:
 		name := p.simpleVariable()
 		if p.peek() == token.LeftParen {
-			return &ast.StaticCall{Class: class, Name: name, Args: p.args(), Span: p.span(start)}
+			return p.staticCall(class, name, start)
 		}
 		return &ast.StaticPropertyFetch{Class: class, Name: name, Span: p.span(start)}
 	case k == token.LeftBrace:
@@ -567,7 +567,7 @@ func (p *parser) staticMember(class ast.Expr, start uint32) ast.Expr {
 		name := p.expr()
 		p.expect(token.RightBrace)
 		if p.peek() == token.LeftParen {
-			return &ast.StaticCall{Class: class, Name: name, Args: p.args(), Span: p.span(start)}
+			return p.staticCall(class, name, start)
 		}
 		p.requires(token.PHP83, nameStart, "dynamic class constant fetch")
 		return &ast.ClassConstFetch{Class: class, Name: name, Span: p.span(start)}
@@ -575,7 +575,7 @@ func (p *parser) staticMember(class ast.Expr, start uint32) ast.Expr {
 		p.next()
 		name := &ast.IdentifierExpr{Span: p.span(nameStart)}
 		if p.peek() == token.LeftParen {
-			return &ast.StaticCall{Class: class, Name: name, Args: p.args(), Span: p.span(start)}
+			return p.staticCall(class, name, start)
 		}
 		return &ast.ClassConstFetch{Class: class, Name: name, Span: p.span(start)}
 	}
@@ -584,14 +584,50 @@ func (p *parser) staticMember(class ast.Expr, start uint32) ast.Expr {
 }
 
 func (p *parser) args() *ast.ArgList {
+	list := &ast.ArgList{}
+	p.argsInto(list)
+	return list
+}
+
+func (p *parser) call(callee ast.Expr, start uint32) ast.Expr {
+	n := &struct {
+		ast.Call
+		args ast.ArgList
+	}{}
+	p.argsInto(&n.args)
+	n.Call = ast.Call{Callee: callee, Args: &n.args, Span: p.span(start)}
+	return &n.Call
+}
+
+func (p *parser) methodCall(object, name ast.Expr, nullsafe bool, start uint32) ast.Expr {
+	n := &struct {
+		ast.MethodCall
+		args ast.ArgList
+	}{}
+	p.argsInto(&n.args)
+	n.MethodCall = ast.MethodCall{Object: object, Name: name, Nullsafe: nullsafe, Args: &n.args, Span: p.span(start)}
+	return &n.MethodCall
+}
+
+func (p *parser) staticCall(class, name ast.Expr, start uint32) ast.Expr {
+	n := &struct {
+		ast.StaticCall
+		args ast.ArgList
+	}{}
+	p.argsInto(&n.args)
+	n.StaticCall = ast.StaticCall{Class: class, Name: name, Args: &n.args, Span: p.span(start)}
+	return &n.StaticCall
+}
+
+func (p *parser) argsInto(list *ast.ArgList) {
 	start := p.start()
 	p.expect(token.LeftParen)
-	list := &ast.ArgList{}
+	from := p.argStack.mark()
 	for p.peek() != token.RightParen && p.peek() != eof {
 		if p.peek() == token.Ellipsis && p.peekAt(1) == token.RightParen {
 			restStart := p.start()
 			p.next()
-			if len(list.Args) == 0 {
+			if p.argStack.mark() == from {
 				p.requires(token.PHP81, restStart, "first-class callable syntax")
 			} else {
 				p.requires(token.PHP86, restStart, "partial function application")
@@ -599,14 +635,14 @@ func (p *parser) args() *ast.ArgList {
 			list.RestPlaceholder = true
 			break
 		}
-		list.Args = append(list.Args, p.arg())
+		p.argStack.push(p.arg())
 		if !p.accept(token.Comma) {
 			break
 		}
 	}
+	list.Args = p.argStack.take(from)
 	p.expect(token.RightParen)
 	list.Span = p.span(start)
-	return list
 }
 
 func (p *parser) arg() *ast.Arg {
@@ -635,14 +671,14 @@ func (p *parser) arg() *ast.Arg {
 }
 
 func (p *parser) exprList(end token.Kind) []ast.Expr {
-	var exprs []ast.Expr
+	from := p.exprStack.mark()
 	for p.peek() != end && p.peek() != eof {
-		exprs = append(exprs, p.expr())
+		p.exprStack.push(p.expr())
 		if !p.accept(token.Comma) {
 			break
 		}
 	}
-	return exprs
+	return p.exprStack.take(from)
 }
 
 func (p *parser) array(short bool) ast.Expr {
@@ -668,19 +704,19 @@ func (p *parser) list() ast.Expr {
 }
 
 func (p *parser) arrayItems(end token.Kind) []*ast.ArrayItem {
-	var items []*ast.ArrayItem
+	from := p.itemStack.mark()
 	for p.peek() != end && p.peek() != eof {
 		if p.peek() == token.Comma {
 			p.next()
-			items = append(items, nil)
+			p.itemStack.push(nil)
 			continue
 		}
-		items = append(items, p.arrayItem())
+		p.itemStack.push(p.arrayItem())
 		if !p.accept(token.Comma) {
 			break
 		}
 	}
-	return items
+	return p.itemStack.take(from)
 }
 
 func (p *parser) arrayItem() *ast.ArrayItem {
@@ -735,7 +771,7 @@ func (p *parser) classReference() ast.Expr {
 	var e ast.Expr
 	switch k := p.peek(); {
 	case p.nameTokens() > 0:
-		e = &ast.ConstFetch{Name: p.name(), Span: p.span(start)}
+		e = p.constFetch(start)
 	case k == token.Static:
 		p.next()
 		e = &ast.ConstFetch{Name: &ast.Name{Span: p.span(start), Kind: token.Static}, Span: p.span(start)}
