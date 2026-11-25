@@ -341,7 +341,7 @@ func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, e
 	if err != nil {
 		return nil, err
 	}
-	ws, err := workspace.Build(ctx, workspace.Options{
+	ws, files, err := buildWorkspace(ctx, workspace.Options{
 		RootPath:       rootPath,
 		Framework:      framework,
 		Config:         cfg,
@@ -368,7 +368,7 @@ func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, e
 	}
 	svc.profileSource.Store(&source)
 	svc.installRuntime(svc.buildRuntime(ws))
-	svc.disk.files = scanDisk(ws)
+	svc.disk.files = files
 
 	svc.Server = mcp.NewServer(&mcp.Implementation{Name: ServerName, Version: ServerVersion}, &mcp.ServerOptions{
 		Logger: logger,
@@ -812,7 +812,7 @@ func (s *Service) rebuildLocked(ctx context.Context) (ReindexOutput, error) {
 	if err != nil {
 		return ReindexOutput{}, err
 	}
-	ws, err := workspace.Build(ctx, workspace.Options{
+	ws, files, err := buildWorkspace(ctx, workspace.Options{
 		RootPath:       s.RootPath,
 		Framework:      s.Framework,
 		Config:         s.Config,
@@ -824,7 +824,7 @@ func (s *Service) rebuildLocked(ctx context.Context) (ReindexOutput, error) {
 	}
 	s.profileSource.Store(&source)
 	s.installRuntime(s.buildRuntime(ws))
-	s.disk.files = scanDisk(ws)
+	s.disk.files = files
 	return ReindexOutput{
 		RootPath:       s.RootPath,
 		Framework:      s.Framework,

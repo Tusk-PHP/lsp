@@ -3,14 +3,19 @@ package mcpserver
 import (
 	"context"
 	"io"
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/Tusk-PHP/lsp/internal/config"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/workspace"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -217,6 +222,37 @@ func TestAnUnreadableFileDoesNotFailToolCalls(t *testing.T) {
 	got := foundFQNs(t, session, `App\`)
 	if !slices.Contains(got, `App\Added`) || !slices.Contains(got, `App\Locked`) {
 		t.Errorf("other changes still apply, and the unreadable file is read once it can be: %v", got)
+	}
+}
+
+type writerFunc func([]byte)
+
+func (f writerFunc) Write(p []byte) (int, error) {
+	f(p)
+	return len(p), nil
+}
+
+func TestBuildRecordsTheFilesAsTheyWereBeforeIndexing(t *testing.T) {
+	root := t.TempDir()
+	writeProject(t, root, map[string]string{"app/Order.php": "<?php\nnamespace App;\nclass Order {}\n"})
+	edited := false
+	logger := log.New(writerFunc(func(p []byte) {
+		if !edited && strings.HasPrefix(string(p), "Indexed ") && strings.Contains(string(p), "PHP files") {
+			edited = true
+			writeProject(t, root, map[string]string{"app/Order.php": "<?php\nnamespace App;\nclass RenamedDuringIndexing {}\n"})
+		}
+	}), "", 0)
+	cfg := config.DefaultConfig()
+	cfg.Framework = "none"
+	ws, files, err := buildWorkspace(context.Background(), workspace.Options{RootPath: root, Framework: "none", Config: cfg, Logger: logger, BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !edited {
+		t.Fatal("the file is edited after indexing read it")
+	}
+	if changed := changedFiles(files, scanDisk(ws)); !slices.Contains(changed, filepath.Join(root, "app/Order.php")) {
+		t.Errorf("a file written while the index was built counts as changed on the next call: %v", changed)
 	}
 }
 

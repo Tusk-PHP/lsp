@@ -123,32 +123,39 @@ func Build(ctx context.Context, opts Options) (*Bootstrapped, error) {
 	}
 
 	ws := New(opts)
-	if err := ctx.Err(); err != nil {
+	if err := ws.Load(ctx); err != nil {
 		return nil, err
+	}
+	return ws, nil
+}
+
+func (ws *Bootstrapped) Load(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	ws.IndexWorkspace()
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return err
 	}
 	ws.IndexComposerDependencies()
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return err
 	}
 	ws.Container.Analyze()
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return err
 	}
 	if err := ws.ScanRoutes(); err != nil {
-		return nil, err
+		return err
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return err
 	}
 	ws.AnalyzeModels()
 	ws.ScanSymfonyCommands()
 	ws.Index.WarmSearchIndexes()
 	ws.Index.MarkReady()
-	return ws, nil
+	return nil
 }
 
 type IndexedFiles struct {

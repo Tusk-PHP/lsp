@@ -24,6 +24,15 @@ type diskState struct {
 	files map[string]fileStamp
 }
 
+func buildWorkspace(ctx context.Context, opts workspace.Options) (*workspace.Bootstrapped, map[string]fileStamp, error) {
+	ws := workspace.New(opts)
+	files := scanDisk(ws)
+	if err := ws.Load(ctx); err != nil {
+		return nil, nil, err
+	}
+	return ws, files, nil
+}
+
 func scanDisk(ws *workspace.Bootstrapped) map[string]fileStamp {
 	files := make(map[string]fileStamp)
 	ws.WalkSources(ws.RootPath, func(path string, info fs.FileInfo) error {
