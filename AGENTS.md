@@ -229,7 +229,7 @@ cross-file answer on a 9,700-file Laravel app. Every change must keep it.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) is the source of truth for how changes get in:
 the pull request checklist (tests, conformance, field baselines, `make wasm`,
-performance numbers, `CHANGELOG.md`, commit style), keeping pull requests small,
+performance numbers, the release note, commit style), keeping pull requests small,
 drafts and stacks, review and releases. Read it and follow its checklist before
 opening a pull request. This file covers the code's principles.
 

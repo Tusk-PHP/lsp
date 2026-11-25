@@ -29,7 +29,7 @@ This Code of Conduct applies within all project spaces — issues, pull requests
 
 ## Enforcement
 
-Instances of unacceptable behavior may be reported by contacting the project maintainers. All complaints will be reviewed and investigated and will result in a response that is deemed necessary and appropriate to the circumstances.
+Instances of unacceptable behavior may be reported by contacting the project maintainers at [info@unikia.es](mailto:info@unikia.es). All complaints will be reviewed and investigated and will result in a response that is deemed necessary and appropriate to the circumstances.
 
 ## Attribution
 
