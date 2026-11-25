@@ -131,7 +131,7 @@ func (p *Provider) collectVarTypeHints(
 		assignLine := tok.Line
 		lookupPos := protocol.Position{Line: assignLine + 1, Character: 0}
 
-		rt := p.resolver.ResolveVariableTypeTyped(varName, lines, lookupPos, file)
+		rt := p.engine.Resolver().ResolveVariableTypeTyped(varName, lines, lookupPos, file)
 		if rt.IsEmpty() {
 			continue
 		}
@@ -280,7 +280,7 @@ func (p *Provider) collectForeachHints(
 
 		if keyVarIdx >= 0 {
 			kTok := tokens[keyVarIdx]
-			rt := p.resolver.ResolveVariableTypeTyped(kTok.Value, lines, lookupPos, file)
+			rt := p.engine.Resolver().ResolveVariableTypeTyped(kTok.Value, lines, lookupPos, file)
 			if !rt.IsEmpty() && rt.String() != "" && rt.String() != "mixed" {
 				endChar := kTok.Column + len(kTok.Value)
 				hints = append(hints, protocol.InlayHint{
@@ -293,7 +293,7 @@ func (p *Provider) collectForeachHints(
 		}
 		if valVarIdx >= 0 {
 			vTok := tokens[valVarIdx]
-			rt := p.resolver.ResolveVariableTypeTyped(vTok.Value, lines, lookupPos, file)
+			rt := p.engine.Resolver().ResolveVariableTypeTyped(vTok.Value, lines, lookupPos, file)
 			if !rt.IsEmpty() && rt.String() != "" && rt.String() != "mixed" {
 				endChar := vTok.Column + len(vTok.Value)
 				hints = append(hints, protocol.InlayHint{
@@ -426,7 +426,7 @@ func resolveExprToken(
 	tok := tokens[exprIdx]
 	switch tok.Kind {
 	case parser.TokenVariable:
-		return p.resolver.ResolveVariableTypeTyped(tok.Value, lines, pos, file)
+		return p.engine.Resolver().ResolveVariableTypeTyped(tok.Value, lines, pos, file)
 	case parser.TokenNew:
 		// new ClassName(...)
 		j := parser.NextSignificant(tokens, exprIdx+1)
@@ -437,7 +437,7 @@ func resolveExprToken(
 		if className == "" {
 			return resolve.ResolvedType{}
 		}
-		fqn := p.resolver.ResolveClassName(className, file)
+		fqn := p.engine.Resolver().ResolveClassName(className, file)
 		if fqn == "" {
 			fqn = className
 		}
@@ -451,7 +451,7 @@ func resolveExprToken(
 			end = len(lineStr)
 		}
 		if expr := strings.TrimSpace(lineStr[:end]); expr != "" {
-			return p.resolver.ChainType(expr, source, pos, file)
+			return p.engine.Resolver().ChainType(expr, source, pos, file)
 		}
 	}
 	return resolve.ResolvedType{}
@@ -783,14 +783,14 @@ func (p *Provider) resolveCalleeParams(
 	case calleeMethod:
 		// Find the position of the call-site so the resolver has context.
 		callPos := protocol.Position{Line: tokens[openParen].Line, Character: tokens[openParen].Column}
-		rt := p.resolver.ChainType(receiverOrClass, source, callPos, file)
+		rt := p.engine.Resolver().ChainType(receiverOrClass, source, callPos, file)
 		if rt.IsEmpty() {
 			return nil
 		}
 		fqn := rt.BaseFQN()
 		return p.membersToParams(fqn, callee)
 	case calleeStatic:
-		cls := p.resolver.ResolveClassName(receiverOrClass, file)
+		cls := p.engine.Resolver().ResolveClassName(receiverOrClass, file)
 		if cls == "" {
 			cls = receiverOrClass
 		}

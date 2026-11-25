@@ -308,14 +308,14 @@ func (p *Provider) resolveBuilderModel(prefix, method, source string, pos protoc
 		if className == "" {
 			return ""
 		}
-		typeFQN = p.resolver.ResolveClassNameLoose(className, file)
+		typeFQN = p.engine.Resolver().ResolveClassNameLoose(className, file)
 	} else {
 		// Instance/chain call: Category::query()->where( or $query->where(
 		// Use resolveAccessChain to walk the chain
 		// We need to create a dummy line that ends at the -> before our method
 		chainLine := beforeMethod + "->__dummy__"
 		wordStart := len(beforeMethod) + 2
-		typeFQN = p.resolveAccessChain(chainLine, wordStart, source, pos, file)
+		typeFQN = p.resolveAccessChain(p.engine.Resolver(), chainLine, wordStart, source, pos, file)
 	}
 
 	if typeFQN == "" {
@@ -368,7 +368,7 @@ func (p *Provider) findModelInChain(expr, source string, pos protocol.Position, 
 			}
 		}
 		if className != "" {
-			fqn := p.resolver.ResolveClassNameLoose(className, file)
+			fqn := p.engine.Resolver().ResolveClassNameLoose(className, file)
 			if p.isEloquentModel(fqn) {
 				return fqn
 			}

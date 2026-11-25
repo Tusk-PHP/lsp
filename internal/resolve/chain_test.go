@@ -148,7 +148,7 @@ func TestChainTypeContainerCall(t *testing.T) {
 func TestChainTypeWired(t *testing.T) {
 	r, file, pos := chainFixture(t)
 	var asked []string
-	r.TypedChainResolver = func(expr, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+	r.TypedChainResolver = func(_ *Resolver, expr, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
 		asked = append(asked, expr)
 		return ResolvedType{FQN: `App\Logger`}
 	}

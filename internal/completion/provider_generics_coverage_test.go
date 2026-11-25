@@ -60,7 +60,7 @@ func TestProviderGenericCoverageHelpers(t *testing.T) {
 	p, idx, source, file := setupTemplateProviderCoverage(t)
 
 	// Completion types chains with its own resolver, never through a callback.
-	if p.resolver.TypedChainResolver != nil {
+	if p.engine.TypedChainResolver != nil {
 		t.Fatal("expected NewProvider to leave TypedChainResolver unset")
 	}
 
@@ -81,7 +81,7 @@ func TestProviderGenericCoverageHelpers(t *testing.T) {
 
 	ctx := resolve.ExprContext{Lines: resolve.SplitLines(source), Pos: pos, File: file}
 	call := func(args string) resolve.ResolvedType {
-		return p.resolver.MemberTypeForCall(member, file, "", nil, p.resolver.CallSiteFor(args, ctx))
+		return p.engine.Resolver().MemberTypeForCall(member, file, "", nil, p.engine.Resolver().CallSiteFor(args, ctx))
 	}
 
 	if rt := call("[1, 2, 3]"); rt.String() != "?int" {

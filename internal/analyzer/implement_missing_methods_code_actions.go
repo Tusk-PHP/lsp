@@ -136,12 +136,12 @@ func (a *Analyzer) collectImplementMissingMethods(source string, target *impleme
 	}
 
 	for _, ifaceName := range target.implements {
-		a.collectInterfaceMethodRequirements(a.resolver.ResolveClassName(ifaceName, targetFile), addRequirement, make(map[string]bool))
+		a.collectInterfaceMethodRequirements(a.engine.Resolver().ResolveClassName(ifaceName, targetFile), addRequirement, make(map[string]bool))
 	}
 
 	parentFQN := ""
 	if target.extends != "" {
-		parentFQN = a.resolver.ResolveClassName(target.extends, targetFile)
+		parentFQN = a.engine.Resolver().ResolveClassName(target.extends, targetFile)
 	}
 	if parentFQN == "" {
 		if sym := a.index.Lookup(target.fqn); sym != nil {
@@ -223,7 +223,7 @@ func (a *Analyzer) interfaceExtendedFQNs(iface *symbols.Symbol) []string {
 		}
 		parents := make([]string, 0, len(node.Extends))
 		for _, parent := range node.Extends {
-			parents = append(parents, a.resolver.ResolveClassName(parent, file))
+			parents = append(parents, a.engine.Resolver().ResolveClassName(parent, file))
 		}
 		return parents
 	}

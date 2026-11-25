@@ -20,7 +20,7 @@ import (
 type Provider struct {
 	index         *symbols.Index
 	container     *container.ContainerAnalyzer
-	resolver      *resolve.Resolver
+	engine        *resolve.Engine
 	framework     string
 	arrayResolver *models.FrameworkArrayResolver
 	cfg           *config.Config
@@ -28,8 +28,8 @@ type Provider struct {
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
-	p := &Provider{index: index, container: ca, resolver: resolve.NewResolver(index), framework: framework}
-	p.resolver.ChainResolver = p.resolveExpressionType
+	p := &Provider{index: index, container: ca, engine: resolve.NewEngine(index), framework: framework}
+	p.engine.ChainResolver = resolveExpressionType
 	return p
 }
 
@@ -41,13 +41,13 @@ func (p *Provider) SetCoverage(store *coverage.Store) {
 // SetTypedChainResolver wires the generic-aware chain resolver for variable
 // type inference (so $categories = Category::get() shows Collection<int, Category>).
 func (p *Provider) SetTypedChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType) {
-	p.resolver.TypedChainResolver = fn
+	p.engine.DelegateTypedChains(fn)
 }
 
 // resolveExpressionType gives the class a chain expression like
 // "Category::first()" ends with.
-func (p *Provider) resolveExpressionType(expr string, source string, pos protocol.Position, file *parser.FileNode) string {
-	return p.resolver.ChainType(expr, source, pos, file).BaseFQN()
+func resolveExpressionType(r *resolve.Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) string {
+	return r.ChainType(expr, source, pos, file).BaseFQN()
 }
 
 // SetArrayResolver sets the framework array resolver for config hover.
@@ -135,21 +135,21 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 
 	// Check for -> or :: access context
 	if ctx.AccessKind != sourcectx.AccessNone {
-		owner := p.resolver.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		owner := p.engine.Resolver().AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
 		classFQN := owner.BaseFQN()
 		if classFQN == "" {
 			return nil
 		}
-		sym := p.resolver.FindMemberAnywhere(classFQN, word)
+		sym := p.engine.Resolver().FindMemberAnywhere(classFQN, word)
 		if sym == nil {
 			// With the receiver's type arguments and every class of a union:
 			// a local scope on Builder<Post> is found on Post.
-			sym = p.resolver.FindMemberAnywhereOn(owner, word)
+			sym = p.engine.Resolver().FindMemberAnywhereOn(owner, word)
 		}
 		// For Laravel facades, also look up the member on the concrete class
 		if sym == nil && p.container != nil && p.framework == "laravel" {
 			if concrete := p.container.ResolveFacade(classFQN); concrete != "" {
-				sym = p.resolver.FindMember(concrete, word)
+				sym = p.engine.Resolver().FindMember(concrete, word)
 			}
 		}
 		if sym != nil {
@@ -162,7 +162,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 				trimmedPrefix := strings.TrimSpace(hoverPrefix)
 				if strings.HasSuffix(trimmedPrefix, "->") || strings.HasSuffix(trimmedPrefix, "::") {
 					expr := trimmedPrefix + word + "()"
-					rt := p.resolver.ChainType(expr, source, pos, file)
+					rt := p.engine.Resolver().ChainType(expr, source, pos, file)
 					if rt.IsGeneric() || (rt.Nullable && rt.FQN != "") {
 						content = replaceReturnType(content, rt.String())
 					}
@@ -191,7 +191,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 			}
 		}
 		// Try resolving as a class name in the current namespace context
-		fqn := p.resolver.ResolveClassName(word, file)
+		fqn := p.engine.Resolver().ResolveClassName(word, file)
 		if fqn != word {
 			if sym := p.index.Lookup(fqn); sym != nil {
 				content := p.formatHover(sym)
@@ -287,12 +287,12 @@ func (p *Provider) hoverVariable(lines []string, pos protocol.Position, file *pa
 	}
 
 	// Try typed resolution first (preserves generics: array<int, Category>)
-	resolvedType := p.resolver.ResolveVariableTypeTyped(varName, lines, pos, file)
+	resolvedType := p.engine.Resolver().ResolveVariableTypeTyped(varName, lines, pos, file)
 	typeName := resolvedType.BaseFQN()
 	typeDisplay := resolvedType.FullString()
 	if typeDisplay == "" {
 		// Fall back to non-typed resolution
-		typeName = p.resolver.ResolveVariableType(varName, lines, pos, file)
+		typeName = p.engine.Resolver().ResolveVariableType(varName, lines, pos, file)
 		typeDisplay = typeName
 	}
 	if typeName != "" {
@@ -313,7 +313,7 @@ func (p *Provider) hoverVariable(lines []string, pos protocol.Position, file *pa
 	}
 
 	// A variable that exists but whose type can't be worked out.
-	if p.resolver.IsLocalVariable(varName, lines, pos) {
+	if p.engine.Resolver().IsLocalVariable(varName, lines, pos) {
 		var sb strings.Builder
 		sb.WriteString(fmt.Sprintf("**%s**\n", varName))
 		sb.WriteString("\n" + phpFence("mixed "+varName))
