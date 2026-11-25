@@ -1,6 +1,7 @@
 package document
 
 import (
+	"math/bits"
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -34,55 +35,67 @@ type Columns struct {
 	enc     Encoding
 	scanned bool
 	starts  []int
+	at      lineCursor
+}
+
+type lineCursor struct {
+	line  int
+	text  string
+	ascii int
+	bytes int
+	units int
+}
+
+func (at *lineCursor) rewind() {
+	at.bytes, at.units = at.ascii, at.ascii
 }
 
 func NewColumns(text string, enc Encoding) *Columns {
-	return &Columns{text: text, enc: enc}
+	return &Columns{text: text, enc: enc, at: lineCursor{line: -1}}
 }
 
 func (c *Columns) ToClient(line, col int) int {
-	text, ok := c.line(line, col)
-	if !ok {
+	at, ok := c.cursor(line, col)
+	if !ok || col <= at.ascii {
 		return col
 	}
-	n := 0
-	i := 0
-	for i < len(text) {
-		r, size := utf8.DecodeRuneInString(text[i:])
-		if i+size > col {
+	if col < at.bytes {
+		at.rewind()
+	}
+	for at.bytes < len(at.text) {
+		r, size := utf8.DecodeRuneInString(at.text[at.bytes:])
+		if at.bytes+size > col {
 			break
 		}
-		n += utf16.RuneLen(r)
-		i += size
+		at.units += utf16.RuneLen(r)
+		at.bytes += size
 	}
-	if col > len(text) {
-		n += col - len(text)
-	}
-	return n
+	return at.units + max(col-len(at.text), 0)
 }
 
 func (c *Columns) FromClient(line, col int) int {
-	text, ok := c.line(line, col)
-	if !ok {
+	at, ok := c.cursor(line, col)
+	if !ok || col <= at.ascii {
 		return col
 	}
-	n := 0
-	i := 0
-	for i < len(text) {
-		r, size := utf8.DecodeRuneInString(text[i:])
-		units := utf16.RuneLen(r)
-		if n+units > col {
-			return i
-		}
-		n += units
-		i += size
+	if col < at.units {
+		at.rewind()
 	}
-	return len(text) + col - n
+	for at.bytes < len(at.text) {
+		r, size := utf8.DecodeRuneInString(at.text[at.bytes:])
+		units := utf16.RuneLen(r)
+		if at.units+units > col {
+			return at.bytes
+		}
+		at.units += units
+		at.bytes += size
+	}
+	return len(at.text) + col - at.units
 }
 
-func (c *Columns) line(line, col int) (string, bool) {
+func (c *Columns) cursor(line, col int) (*lineCursor, bool) {
 	if c.enc == UTF8 || col <= 0 || line < 0 {
-		return "", false
+		return nil, false
 	}
 	if !c.scanned {
 		c.scanned = true
@@ -91,17 +104,18 @@ func (c *Columns) line(line, col int) (string, bool) {
 		}
 	}
 	if line >= len(c.starts) {
-		return "", false
+		return nil, false
 	}
-	end := len(c.text)
-	if line+1 < len(c.starts) {
-		end = c.starts[line+1] - 1
+	if c.at.line != line {
+		end := len(c.text)
+		if line+1 < len(c.starts) {
+			end = c.starts[line+1] - 1
+		}
+		text := c.text[c.starts[line]:end]
+		ascii := asciiPrefix(text)
+		c.at = lineCursor{line: line, text: text, ascii: ascii, bytes: ascii, units: ascii}
 	}
-	text := c.text[c.starts[line]:end]
-	if isASCII(text[:min(col, len(text))]) {
-		return "", false
-	}
-	return text, true
+	return &c.at, true
 }
 
 func lineStarts(text string) []int {
@@ -117,18 +131,23 @@ func lineStarts(text string) []int {
 }
 
 func isASCII(s string) bool {
+	return asciiPrefix(s) == len(s)
+}
+
+func asciiPrefix(s string) int {
+	const high = 0x8080808080808080
 	i := 0
 	for ; i+8 <= len(s); i += 8 {
 		w := uint64(s[i]) | uint64(s[i+1])<<8 | uint64(s[i+2])<<16 | uint64(s[i+3])<<24 |
 			uint64(s[i+4])<<32 | uint64(s[i+5])<<40 | uint64(s[i+6])<<48 | uint64(s[i+7])<<56
-		if w&0x8080808080808080 != 0 {
-			return false
+		if w&high != 0 {
+			return i + bits.TrailingZeros64(w&high)/8
 		}
 	}
 	for ; i < len(s); i++ {
 		if s[i] >= utf8.RuneSelf {
-			return false
+			return i
 		}
 	}
-	return true
+	return i
 }
