@@ -49,11 +49,11 @@ func HasSuppressionMarker(source string) bool {
 	return strings.Contains(source, suppressionMarker) || strings.Contains(source, phpstanMarker)
 }
 
-func PHPSuppressions(source string) Suppressions {
+func PHPSuppressions(source string, shared *Shared) Suppressions {
 	if !HasSuppressionMarker(source) {
 		return nil
 	}
-	return PHPLayout(source).Suppressions()
+	return phpLayout(source, shared.tokens(source)).Suppressions()
 }
 
 func BladeSuppressions(source string) Suppressions {

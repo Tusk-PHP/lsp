@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/rule"
@@ -52,7 +53,7 @@ $j->missing();
  */
 $k->missing();
 `
-	checkSuppressions(t, PHPSuppressions(source), []suppressionCase{
+	checkSuppressions(t, PHPSuppressions(source, nil), []suppressionCase{
 		{1, tusk, "unknown-member", false},
 		{2, tusk, "unknown-member", true},
 		{2, tusk, "undefined-variable", false},
@@ -86,7 +87,7 @@ $d->missing(); // @phpstan-ignore-line
 // @phpstan-ignore
 $e->missing();
 `
-	checkSuppressions(t, PHPSuppressions(source), []suppressionCase{
+	checkSuppressions(t, PHPSuppressions(source, nil), []suppressionCase{
 		{2, phpstan, "method.notFound", true},
 		{2, tusk, "unknown-member", true},
 		{2, tusk, "undefined-variable", false},
@@ -112,11 +113,20 @@ func TestPHPStanIdentifiersMapToDeclaredCodes(t *testing.T) {
 }
 
 func TestPHPSuppressionsWithoutMarker(t *testing.T) {
-	if got := PHPSuppressions("<?php\n// nothing to see\n$a = 1;\n"); got != nil {
+	if got := PHPSuppressions("<?php\n// nothing to see\n$a = 1;\n", nil); got != nil {
 		t.Errorf("got %#v, want nil", got)
 	}
 	if got := BladeSuppressions("<p>{{-- plain --}}</p>"); got != nil {
 		t.Errorf("got %#v, want nil", got)
+	}
+}
+
+func TestPHPSuppressionsFromSharedTokens(t *testing.T) {
+	source := "<?php\n/**\n * @return int\n */\n// @tusk-ignore unknown-member\n#[\\Attr]\nfunction f() { return $a->b(); } // @phpstan-ignore variable.undefined\n"
+	shared := &Shared{}
+	shared.parse(source)
+	if got, want := PHPSuppressions(source, shared), PHPSuppressions(source, nil); !reflect.DeepEqual(got, want) {
+		t.Errorf("from the shared parse: got %#v, want %#v", got, want)
 	}
 }
 
@@ -161,7 +171,7 @@ class Shop
     public function pay() {}
 }
 `
-	checkSuppressions(t, PHPSuppressions(source), []suppressionCase{
+	checkSuppressions(t, PHPSuppressions(source, nil), []suppressionCase{
 		{6, tusk, "unknown-class", true},
 		{8, tusk, "unknown-class", true},
 		{9, tusk, "unknown-member", true},
@@ -189,7 +199,7 @@ $b = 1;
 
 $c = 1;
 `
-	checkSuppressions(t, PHPSuppressions(source), []suppressionCase{
+	checkSuppressions(t, PHPSuppressions(source, nil), []suppressionCase{
 		{3, tusk, "unused-variable", true},
 		{7, tusk, "unused-variable", false},
 		{10, tusk, "unused-variable", false},
@@ -223,7 +233,7 @@ class Fixture
     public function docNextLine(): int { return $this->nope7(); }
 }
 `
-	checkSuppressions(t, PHPSuppressions(source), []suppressionCase{
+	checkSuppressions(t, PHPSuppressions(source, nil), []suppressionCase{
 		{7, phpstan, "method.notFound", false},
 		{7, tusk, "unknown-member", false},
 		{8, phpstan, "method.notFound", true},
@@ -246,7 +256,7 @@ $e->f(); // @phpstan-ignore method.notFound (unclosed
 $g->h(); // @tusk-ignore pint:single_quote
 $i->j(); // @tusk-ignore: legacy
 `
-	checkSuppressions(t, PHPSuppressions(source), []suppressionCase{
+	checkSuppressions(t, PHPSuppressions(source, nil), []suppressionCase{
 		{1, tusk, "unused-variable", true},
 		{2, tusk, "unused-variable", true},
 		{3, tusk, "unknown-member", true},

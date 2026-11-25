@@ -11,12 +11,12 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
-func (p *Provider) dropSuppressed(uri, source string, diags []protocol.Diagnostic) []protocol.Diagnostic {
+func (p *Provider) dropSuppressed(uri, source string, shared *checks.Shared, diags []protocol.Diagnostic) []protocol.Diagnostic {
 	if len(diags) == 0 {
 		return diags
 	}
 	rules := p.ignoreRulesFor(uri)
-	suppressions := sourceSuppressions(uri, source)
+	suppressions := sourceSuppressions(uri, source, shared)
 	if len(rules) == 0 && suppressions == nil {
 		return diags
 	}
@@ -30,11 +30,11 @@ func (p *Provider) dropSuppressed(uri, source string, diags []protocol.Diagnosti
 	return kept
 }
 
-func sourceSuppressions(uri, source string) checks.Suppressions {
+func sourceSuppressions(uri, source string, shared *checks.Shared) checks.Suppressions {
 	if workspace.IsBlade(uri) {
 		return checks.BladeSuppressions(source)
 	}
-	return checks.PHPSuppressions(source)
+	return checks.PHPSuppressions(source, shared)
 }
 
 func (p *Provider) ignoreRulesFor(uri string) []config.IgnoreRule {

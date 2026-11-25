@@ -23,3 +23,10 @@ func (s *Shared) parse(source string) *parser.ParseResult {
 	}
 	return s.result
 }
+
+func (s *Shared) tokens(source string) []parser.Token {
+	if s == nil || !s.parsed || s.source != source {
+		return parser.Tokenize(source)
+	}
+	return s.result.Tokens
+}
