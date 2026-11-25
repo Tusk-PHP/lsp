@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Building from source needs Go 1.27** or later (was 1.25).
 - A request whose parameters can't be read, or a `workspace/executeCommand` call with a missing or wrongly typed argument, now gets an `Invalid params` error naming the method and the argument, and the server log records it. Before, commands answered with an empty result, and a malformed notification was dropped without a trace.
 
+### Fixed
+
+- The "stopped indexing at maxIndexFiles" warning no longer appears when the workspace has exactly `maxIndexFiles` PHP files; it shows only when files were actually left out.
+
 ## [0.16.0] - 2026-11-25
 
 Thanks to [@stubbedev](https://github.com/stubbedev) and [@AJenbo](https://github.com/AJenbo), who contributed to this release.
