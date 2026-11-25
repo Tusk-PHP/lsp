@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
@@ -142,6 +143,31 @@ func TestMalformedParamsAreRejectedAsInvalidParams(t *testing.T) {
 
 	resp := h.readResponse(h.send("textDocument/hover", "not an object"))
 	assertInvalidParams(t, resp, "textDocument/hover")
+}
+
+func TestMalformedNotificationGetsNoReply(t *testing.T) {
+	h := newHarness(t)
+	defer h.close()
+	h.readResponse(h.send("initialize", initParams()))
+	h.notify("initialized", map[string]interface{}{})
+
+	h.notify("textDocument/didOpen", "not an object")
+	id := h.send("shutdown", nil)
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case msg := <-h.responses:
+			respID, ok := msg["id"].(float64)
+			if !ok {
+				t.Fatalf("malformed didOpen got a reply: %v", msg)
+			}
+			if int(respID) == id {
+				return
+			}
+		case <-timeout:
+			t.Fatalf("timeout waiting for response id=%d", id)
+		}
+	}
 }
 
 func TestCommandArgumentsAreValidated(t *testing.T) {
