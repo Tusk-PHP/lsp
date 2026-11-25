@@ -105,13 +105,13 @@ func (l Layout) markerScope(span Span, at int, m marker) []lineRange {
 	switch m.kind {
 	case tuskIgnore:
 		if !l.ownLine(span) {
-			return []lineRange{{line, line}}
+			return []lineRange{{l.statementStart(line), l.statementEnd(line)}}
 		}
 		code, ok := l.reach(span.End)
 		if !ok {
 			return nil
 		}
-		return []lineRange{{endLine + 1, code}}
+		return []lineRange{{endLine + 1, l.statementEnd(code)}}
 	case phpstanIgnore:
 		if l.codeBefore(span.Start) {
 			return []lineRange{{line, line}}

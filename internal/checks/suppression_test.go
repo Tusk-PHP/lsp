@@ -151,6 +151,21 @@ func TestBladeSuppressions(t *testing.T) {
 	})
 }
 
+func TestBladeMarkersCoverMultiLineDirectivesAndEchoes(t *testing.T) {
+	source := "<div>\n{{-- @tusk-ignore unknown-function --}}\n@include('row', [\n    'total' => missing(),\n])\n<p>{{ $a }}</p>\n{{ format(\n    $b,\n) }} {{-- @tusk-ignore undefined-variable --}}\n@include('row', [\n    'total' => missing(),\n])\n</div>\n"
+	checkSuppressions(t, BladeSuppressions(source), []suppressionCase{
+		{2, tusk, "unknown-function", true},
+		{3, tusk, "unknown-function", true},
+		{4, tusk, "unknown-function", true},
+		{5, tusk, "undefined-variable", false},
+		{6, tusk, "undefined-variable", true},
+		{7, tusk, "undefined-variable", true},
+		{8, tusk, "undefined-variable", true},
+		{9, tusk, "unknown-function", false},
+		{10, tusk, "unknown-function", false},
+	})
+}
+
 func TestOwnLineMarkersCoverDocblocksAttributesAndTheCodeLine(t *testing.T) {
 	source := `<?php
 class Shop

@@ -145,7 +145,9 @@ parentheses; anything after the list is ignored, as is punctuation right after a
 code (`unused-variable: read by an include`). A bare `@tusk-ignore` ignores every
 finding on that line, and so does `@tusk-ignore: reason`. In a Blade view, use
 a Blade comment: `{{-- @tusk-ignore unknown-view --}}`; inside
-`@php … @endphp`, use a PHP comment.
+`@php … @endphp`, use a PHP comment. A directive or `{{ … }}` echo that spans
+several lines counts as one line: a marker above it, or after its end, covers
+all of it, and the quick fix puts the marker above the line it starts on.
 
 Findings from external tools are named with the tool in front of their code:
 `@tusk-ignore phpstan:argument.type` ignores one PHPStan identifier, and

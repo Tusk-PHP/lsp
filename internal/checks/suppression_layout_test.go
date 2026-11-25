@@ -82,6 +82,15 @@ func TestBladeLayoutMarkerLineSkipsAttributesInPHPBlocks(t *testing.T) {
 	}
 }
 
+func TestBladeLayoutMarkerLineGoesAboveAMultiLineDirective(t *testing.T) {
+	l := BladeLayout("<div>\n    <p>@include('row', [\n        'total' => missing(),\n        'tax' => {{ 1 }},\n    ])</p>\n{{ $a }}\n</div>\n")
+	for line, want := range map[int]int{1: 1, 2: 1, 3: 1, 4: 1, 5: 5} {
+		if got := l.MarkerLine(line); got != want {
+			t.Errorf("marker for line %d goes on line %d, want %d", line, got, want)
+		}
+	}
+}
+
 func TestLayoutTrailingCommentAt(t *testing.T) {
 	source := "<?php\n$a = 'é'; // note\n$b = 1;\n$c = \"x\ny\";\n?>\n<p><?php $d ?></p>\n/* a */ // b\n"
 	l := PHPLayout(source)
