@@ -76,12 +76,12 @@ func phpLayout(source string, tokens []parser.Token) Layout {
 	return l
 }
 
-func BladeLayout(source string) Layout {
+func BladeLayout(source string, custom *blade.Custom) Layout {
 	l := newLayout(source, true)
 	for _, c := range blade.Comments(source) {
 		l.addComment(Span{c.Start, c.End})
 	}
-	for _, n := range blade.Parse(source) {
+	for _, n := range blade.ParseCustom(source, custom) {
 		if (n.Kind == blade.KindDirective || n.Kind == blade.KindEcho) && strings.Contains(source[n.Span.Start:n.Span.End], "\n") {
 			l.constructs = append(l.constructs, Span{n.Span.Start, n.Span.End})
 		}

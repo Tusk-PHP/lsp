@@ -4,9 +4,9 @@ import (
 	"sort"
 
 	"github.com/Tusk-PHP/lsp/internal/checks"
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
-	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
 type ignoreComment struct {
@@ -15,16 +15,19 @@ type ignoreComment struct {
 }
 
 func IgnoreDiagnosticActions(uri, source string, params protocol.CodeActionParams) []protocol.CodeAction {
+	return ignoreDiagnosticActions(uri, params, false, func() checks.Layout { return checks.PHPLayout(source) })
+}
+
+func BladeIgnoreDiagnosticActions(uri, source string, params protocol.CodeActionParams, custom *blade.Custom) []protocol.CodeAction {
+	return ignoreDiagnosticActions(uri, params, true, func() checks.Layout { return checks.BladeLayout(source, custom) })
+}
+
+func ignoreDiagnosticActions(uri string, params protocol.CodeActionParams, inBlade bool, layoutOf func() checks.Layout) []protocol.CodeAction {
 	actions := make([]protocol.CodeAction, 0)
 	if len(params.Context.Diagnostics) == 0 || !protocol.CodeActionQuickFix.In(params.Context.Only) {
 		return actions
 	}
-	blade := workspace.IsBlade(uri)
-	l := checks.PHPLayout
-	if blade {
-		l = checks.BladeLayout
-	}
-	layout := l(source)
+	layout := layoutOf()
 	suppressed := layout.Suppressions()
 	type placedTitle struct {
 		at    protocol.Position
@@ -35,7 +38,7 @@ func IgnoreDiagnosticActions(uri, source string, params protocol.CodeActionParam
 		if _, ok := layout.LineStart(d.Range.Start.Line); !ok || d.Code == "" || suppressed.Suppresses(d.Range.Start.Line, d.Source, d.Code) {
 			continue
 		}
-		for _, c := range ignoreComments(layout, d, blade) {
+		for _, c := range ignoreComments(layout, d, inBlade) {
 			key := placedTitle{c.at, c.title}
 			if seen[key] {
 				continue
@@ -56,12 +59,12 @@ func IgnoreDiagnosticActions(uri, source string, params protocol.CodeActionParam
 	return actions
 }
 
-func ignoreComments(layout checks.Layout, d protocol.Diagnostic, blade bool) []ignoreComment {
+func ignoreComments(layout checks.Layout, d protocol.Diagnostic, inBlade bool) []ignoreComment {
 	targets, err := rule.TargetsOf(d.Source, d.Code)
 	if err != nil {
 		return nil
 	}
-	if d.Source == string(rule.SourcePHPStan) && !blade {
+	if d.Source == string(rule.SourcePHPStan) && !inBlade {
 		return phpstanIgnoreComment(layout, d)
 	}
 	line := layout.MarkerLine(d.Range.Start.Line)

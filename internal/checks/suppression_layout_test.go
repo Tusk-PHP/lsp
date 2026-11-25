@@ -1,6 +1,10 @@
 package checks
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
+)
 
 func TestCommentStyleWrap(t *testing.T) {
 	if got := PHPComment.Wrap("@tusk-ignore x"); got != "// @tusk-ignore x" {
@@ -34,7 +38,7 @@ func TestLayoutStyleAt(t *testing.T) {
 			t.Errorf("line %d: %v %v, want %v", c.line, style, ok, c.ok)
 		}
 	}
-	view := BladeLayout("<div>\n@php\n    $s = 'a\nb';\n@endphp\n</div>\n")
+	view := BladeLayout("<div>\n@php\n    $s = 'a\nb';\n@endphp\n</div>\n", nil)
 	for line, want := range map[int]struct {
 		style CommentStyle
 		ok    bool
@@ -76,15 +80,26 @@ func TestLayoutMarkerLineStopsBeyondOneBlankLine(t *testing.T) {
 }
 
 func TestBladeLayoutMarkerLineSkipsAttributesInPHPBlocks(t *testing.T) {
-	l := BladeLayout("<div>\n@php\n    #[A]\n    function f() {}\n@endphp\n</div>\n")
+	l := BladeLayout("<div>\n@php\n    #[A]\n    function f() {}\n@endphp\n</div>\n", nil)
 	if got := l.MarkerLine(3); got != 2 {
 		t.Errorf("marker goes above the attribute on line 2, got %d", got)
 	}
 }
 
 func TestBladeLayoutMarkerLineGoesAboveAMultiLineDirective(t *testing.T) {
-	l := BladeLayout("<div>\n    <p>@include('row', [\n        'total' => missing(),\n        'tax' => {{ 1 }},\n    ])</p>\n{{ $a }}\n</div>\n")
+	l := BladeLayout("<div>\n    <p>@include('row', [\n        'total' => missing(),\n        'tax' => {{ 1 }},\n    ])</p>\n{{ $a }}\n</div>\n", nil)
 	for line, want := range map[int]int{1: 1, 2: 1, 3: 1, 4: 1, 5: 5} {
+		if got := l.MarkerLine(line); got != want {
+			t.Errorf("marker for line %d goes on line %d, want %d", line, got, want)
+		}
+	}
+}
+
+func TestBladeLayoutMarkerLineGoesAboveAMultiLineCustomDirective(t *testing.T) {
+	source := "<div>\n    @admin([\n        'role' => missing(),\n    ])\n    x\n    @endadmin\n</div>\n"
+	custom := &blade.Custom{Conditionals: map[string]bool{"admin": true}}
+	l := BladeLayout(source, custom)
+	for line, want := range map[int]int{1: 1, 2: 1, 3: 1, 4: 4} {
 		if got := l.MarkerLine(line); got != want {
 			t.Errorf("marker for line %d goes on line %d, want %d", line, got, want)
 		}

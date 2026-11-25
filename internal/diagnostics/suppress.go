@@ -16,7 +16,7 @@ func (p *Provider) dropSuppressed(uri, source string, shared *checks.Shared, dia
 		return diags
 	}
 	rules := p.ignoreRulesFor(uri)
-	suppressions := sourceSuppressions(uri, source, shared)
+	suppressions := p.sourceSuppressions(uri, source, shared)
 	if len(rules) == 0 && suppressions == nil {
 		return diags
 	}
@@ -30,9 +30,9 @@ func (p *Provider) dropSuppressed(uri, source string, shared *checks.Shared, dia
 	return kept
 }
 
-func sourceSuppressions(uri, source string, shared *checks.Shared) checks.Suppressions {
+func (p *Provider) sourceSuppressions(uri, source string, shared *checks.Shared) checks.Suppressions {
 	if workspace.IsBlade(uri) {
-		return checks.BladeSuppressions(source)
+		return checks.BladeSuppressions(source, p.bladeCustom())
 	}
 	return checks.PHPSuppressions(source, shared)
 }

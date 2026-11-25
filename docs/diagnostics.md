@@ -147,7 +147,9 @@ finding on that line, and so does `@tusk-ignore: reason`. In a Blade view, use
 a Blade comment: `{{-- @tusk-ignore unknown-view --}}`; inside
 `@php … @endphp`, use a PHP comment. A directive or `{{ … }}` echo that spans
 several lines counts as one line: a marker above it, or after its end, covers
-all of it, and the quick fix puts the marker above the line it starts on.
+all of it, and the quick fix puts the marker above the line it starts on. This
+holds for the directives and conditionals your service providers register
+(`Blade::directive`, `Blade::if`) as well as Blade's own.
 
 Findings from external tools are named with the tool in front of their code:
 `@tusk-ignore phpstan:argument.type` ignores one PHPStan identifier, and

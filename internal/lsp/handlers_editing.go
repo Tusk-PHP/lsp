@@ -134,7 +134,7 @@ func (s *Server) handleCodeAction(msg *jsonRPCMessage) {
 	}
 	source := s.getDocument(params.TextDocument.URI)
 	if workspace.IsBlade(params.TextDocument.URI) {
-		s.sendResponse(msg.ID, analyzer.IgnoreDiagnosticActions(params.TextDocument.URI, source, params))
+		s.sendResponse(msg.ID, analyzer.BladeIgnoreDiagnosticActions(params.TextDocument.URI, source, params, s.providers.Custom()))
 		return
 	}
 	result := s.analyzer.GetCodeActions(params.TextDocument.URI, source, params)
