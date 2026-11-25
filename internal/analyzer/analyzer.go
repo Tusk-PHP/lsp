@@ -101,6 +101,20 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 	return a.resolveDefinitionSymbol(a.engine.Resolver(), uri, source, pos).loc
 }
 
+func (a *Analyzer) calledFunction(name string, file *parser.FileNode) *symbols.Symbol {
+	fqns, _ := resolve.FunctionNames(name, file)
+	for _, fqn := range fqns {
+		if fn := a.index.LookupFold(fqn, isFunction); fn != nil {
+			return fn
+		}
+	}
+	return nil
+}
+
+func isFunction(sym *symbols.Symbol) bool {
+	return sym.Kind == symbols.KindFunction
+}
+
 // classKeywordFQN returns the class that self, static or parent stands for at
 // the cursor (in any letter case), or "" when word isn't one of them or there
 // is no enclosing class. A word after -> or :: is a member, never the keyword.
@@ -263,6 +277,10 @@ func (a *Analyzer) resolveDefinitionSymbol(r *resolve.Resolver, uri, source stri
 	if member := a.index.MemberDeclaredAt(uri, pos, word); member != nil {
 		return definitionTarget{sym: member, owner: a.index.Lookup(member.ParentFQN), receiver: member.ParentFQN, loc: symbolLocation(member)}
 	}
+	if ctx.FunctionCall {
+		fn := a.calledFunction(word, file)
+		return definitionTarget{sym: fn, loc: symbolLocation(fn)}
+	}
 
 	// Resolve via use statements
 	if file != nil {
@@ -289,18 +307,8 @@ func (a *Analyzer) resolveDefinitionSymbol(r *resolve.Resolver, uri, source stri
 		}
 	}
 
-	// Fallback: lookup by short name — prefer standalone-appropriate symbols
-	// (functions/classes over methods/properties) since we have no access chain.
-	lookupName := word
-	if idx := strings.LastIndex(word, "\\"); idx >= 0 {
-		lookupName = word[idx+1:]
-	}
-	syms := a.index.LookupByName(lookupName)
-	if best := symbols.PickBestStandalone(syms, word); best != nil {
-		return definitionTarget{sym: best, loc: symbolLocation(best)}
-	}
-
-	return definitionTarget{}
+	best := a.index.LookupStandalone(word, ctx.EnclosingFQN)
+	return definitionTarget{sym: best, loc: symbolLocation(best)}
 }
 
 func (a *Analyzer) definitionForTranslationKey(line string, character int) *protocol.Location {
