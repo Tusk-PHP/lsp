@@ -32,8 +32,9 @@ type Options struct {
 type Bootstrapped struct {
 	RootPath  string
 	Framework string
-	Config    *config.Config
 	Logger    *log.Logger
+
+	current atomic.Pointer[settings]
 
 	Index      *symbols.Index
 	Container  *container.ContainerAnalyzer
@@ -50,8 +51,6 @@ type Bootstrapped struct {
 	SymfonyCommands *frameworksymfony.CommandIndex
 	SchemaCache     *models.SchemaCache
 	Schema          *models.Schema
-
-	exclude excludeRules
 
 	profileMu sync.Mutex
 	profile   atomic.Pointer[symbols.BuiltinProfile]
@@ -100,7 +99,6 @@ func New(opts Options) *Bootstrapped {
 	ws := &Bootstrapped{
 		RootPath:        opts.RootPath,
 		Framework:       opts.Framework,
-		Config:          cfg,
 		Logger:          opts.Logger,
 		Index:           index,
 		Container:       container.NewContainerAnalyzer(index, opts.RootPath, opts.Framework),
@@ -109,12 +107,25 @@ func New(opts Options) *Bootstrapped {
 		Aliases:         aliases,
 		SymfonyCommands: commands,
 		SchemaCache:     models.NewSchemaCache(),
-		exclude:         newExcludeRules(cfg.ExcludePaths),
 		projectFiles:    newProjectFiles(cfg.MaxIndexFiles),
 	}
+	ws.current.Store(newSettings(cfg))
 	profile := opts.BuiltinProfile
 	ws.profile.Store(&profile)
 	return ws
+}
+
+type settings struct {
+	config  *config.Config
+	exclude excludeRules
+}
+
+func newSettings(cfg *config.Config) *settings {
+	return &settings{config: cfg, exclude: newExcludeRules(cfg.ExcludePaths)}
+}
+
+func (ws *Bootstrapped) Config() *config.Config {
+	return ws.current.Load().config
 }
 
 func Build(ctx context.Context, opts Options) (*Bootstrapped, error) {
@@ -174,10 +185,10 @@ func (ws *Bootstrapped) IndexWorkspace() IndexedFiles {
 
 	ws.logf("Indexing workspace: %s", ws.RootPath)
 
+	current := ws.current.Load()
 	ws.projectFiles.begin()
-	truncated := false
 	var ideHelperFiles []string
-	ws.WalkSources(ws.RootPath, func(path string, _ fs.FileInfo) error {
+	complete := walkScope(ws.RootPath, current.exclude, ws.projectFiles.admit, func(path string) {
 		// Blade views declare no symbols; only their place is kept, for
 		// references and rename, and their PHP is read when it's needed.
 		if IsBlade(path) {
@@ -187,23 +198,20 @@ func (ws *Bootstrapped) IndexWorkspace() IndexedFiles {
 					ws.ViewData.IndexFile(symbols.PathToURI(path), string(content))
 				}
 			}
-			return nil
-		}
-		if !ws.projectFiles.admit(path) {
-			truncated = true
-			ws.logf("%s", MaxIndexFilesWarning(ws.Config.MaxIndexFiles))
-			return filepath.SkipAll
+			return
 		}
 		if IsIDEHelperFile(path) {
 			ideHelperFiles = append(ideHelperFiles, path)
-			return nil
+			return
 		}
 		if content, err := os.ReadFile(path); err == nil {
 			ws.Index.IndexFileWithSource(symbols.PathToURI(path), string(content), symbols.SourceProject)
 			ws.ViewData.IndexFile(symbols.PathToURI(path), string(content))
 		}
-		return nil
 	})
+	if !complete {
+		ws.logf("%s", MaxIndexFilesWarning(current.config.MaxIndexFiles))
+	}
 
 	for _, path := range ideHelperFiles {
 		if content, err := os.ReadFile(path); err == nil {
@@ -214,16 +222,20 @@ func (ws *Bootstrapped) IndexWorkspace() IndexedFiles {
 
 	count := ws.projectFiles.finish()
 	ws.logf("Indexed %d PHP files", count)
-	return IndexedFiles{Count: count, Truncated: truncated}
+	return IndexedFiles{Count: count, Truncated: !complete}
 }
 
 func (ws *Bootstrapped) WalkSources(dir string, visit func(path string, info fs.FileInfo) error) {
+	walkSources(ws.RootPath, dir, ws.current.Load().exclude, visit)
+}
+
+func walkSources(root, dir string, exclude excludeRules, visit func(path string, info fs.FileInfo) error) {
 	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
 		if info.IsDir() {
-			if ws.excludedDir(path) {
+			if exclude.excludesDir(root, path) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -236,11 +248,7 @@ func (ws *Bootstrapped) WalkSources(dir string, visit func(path string, info fs.
 }
 
 func (ws *Bootstrapped) excludedDir(path string) bool {
-	rel, err := filepath.Rel(ws.RootPath, path)
-	if err != nil || rel == "." {
-		return false
-	}
-	return ws.exclude.excludes(filepath.ToSlash(rel))
+	return ws.current.Load().exclude.excludesDir(ws.RootPath, path)
 }
 
 func (ws *Bootstrapped) IndexComposerDependencies() int {
@@ -336,7 +344,7 @@ func (ws *Bootstrapped) AnalyzeModelSchema() {
 	if ws == nil {
 		return
 	}
-	schema, _ := models.ScanSchema(ws.RootPath, ws.Framework, ws.Config, ws.Logger, ws.SchemaCache)
+	schema, _ := models.ScanSchema(ws.RootPath, ws.Framework, ws.Config(), ws.Logger, ws.SchemaCache)
 	models.InjectDatabaseSchema(ws.Index, ws.RootPath, ws.Framework, schema)
 	var migrationColumns map[string]map[string]*models.MigrationColumn
 	if ws.Framework == "laravel" && (schema == nil || schema.Source != models.SchemaSourceMigrations) {

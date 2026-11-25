@@ -85,17 +85,25 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 	manifest := filepath.Join(ws.RootPath, composerManifest)
 	configPath := ws.ConfigPath()
 	composerState := ws.ComposerStatePaths()
-	seen := make(map[string]struct{}, len(r.Paths))
-	var sources []string
+	paths := make([]string, len(r.Paths))
 	profile := r.Profile
-	for _, path := range r.Paths {
-		path = filepath.Clean(path)
+	for i, path := range r.Paths {
+		paths[i] = filepath.Clean(path)
+		profile = profile || paths[i] == configPath || paths[i] == manifest
+	}
+	if profile {
+		if err := ws.reloadConfig(r, &out); err != nil {
+			errs = append(errs, err)
+			profile = false
+		}
+	}
+	seen := make(map[string]struct{}, len(paths))
+	var sources []string
+	for _, path := range paths {
 		switch {
 		case path == configPath:
-			profile = true
 		case slices.Contains(composerState, path):
 			out.Composer = true
-			profile = profile || path == manifest
 		default:
 			found, err := ws.sourcesAt(path)
 			if err != nil {
@@ -132,7 +140,7 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 		ws.rereadAutoload()
 	}
 	if profile {
-		if err := ws.refreshProfile(r.Config, &out); err != nil {
+		if err := ws.refreshProfile(&out); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -142,14 +150,24 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 	return out, errors.Join(errs...)
 }
 
-func (ws *Bootstrapped) refreshProfile(load func() (*config.Config, error), out *Refreshed) error {
-	cfg, err := load()
+func (ws *Bootstrapped) reloadConfig(r Refresh, out *Refreshed) error {
+	cfg, err := r.Config()
 	if err != nil {
 		return &ConfigError{Err: err}
 	}
+	next := newSettings(cfg)
+	if old := ws.current.Swap(next); scopeChanged(old.config, next.config) {
+		return ws.rescope(old, next, r.editorOwns, out)
+	}
+	return nil
+}
+
+func (ws *Bootstrapped) refreshProfile(out *Refreshed) error {
+	cfg := ws.Config()
 	timeout := time.Duration(cfg.PHPDetectTimeoutMs) * time.Millisecond
 	out.Profile, out.ProfileSource = ResolveBuiltinProfileWithConfig(ws.RootPath, cfg.PHPBinary, timeout, cfg, nil)
-	out.ProfileChanged, err = ws.SetProfile(out.Profile)
+	changed, err := ws.SetProfile(out.Profile)
+	out.ProfileChanged = changed
 	return err
 }
 

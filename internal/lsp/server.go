@@ -39,7 +39,7 @@ var ServerVersion = "0.5.0"
 const largeDocThreshold = 5000
 
 type Server struct {
-	cfg           *config.Config
+	cfg           atomic.Pointer[config.Config]
 	workspace     *workspace.Bootstrapped
 	index         *symbols.Index
 	container     *container.ContainerAnalyzer
@@ -106,7 +106,13 @@ type Server struct {
 }
 
 func NewServer(reader io.Reader, writer io.Writer, logger *log.Logger) *Server {
-	return &Server{cfg: config.DefaultConfig(), index: symbols.NewIndex(), schemaCache: models.NewSchemaCache(), documents: make(map[string]string), openPaths: make(map[string]string), unsaved: make(map[string]bool), indexed: make(chan struct{}), reader: bufio.NewReader(reader), writer: writer, logger: logger, exitFunc: os.Exit}
+	s := &Server{index: symbols.NewIndex(), schemaCache: models.NewSchemaCache(), documents: make(map[string]string), openPaths: make(map[string]string), unsaved: make(map[string]bool), indexed: make(chan struct{}), reader: bufio.NewReader(reader), writer: writer, logger: logger, exitFunc: os.Exit}
+	s.cfg.Store(config.DefaultConfig())
+	return s
+}
+
+func (s *Server) config() *config.Config {
+	return s.cfg.Load()
 }
 
 // SetStrict enables or disables strict panic mode.

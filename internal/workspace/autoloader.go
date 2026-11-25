@@ -71,7 +71,7 @@ func (ws *Bootstrapped) walkerReaches(path string) bool {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return false
 	}
-	return ws.exclude.reaches(filepath.ToSlash(rel))
+	return ws.current.Load().exclude.reaches(filepath.ToSlash(rel))
 }
 
 func onDiskPath(root string, parts []string) (string, bool) {

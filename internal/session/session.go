@@ -74,9 +74,10 @@ func New(ws *workspace.Bootstrapped, opts Options) *Session {
 	logger := opts.logger()
 
 	s := &Session{ws: ws}
+	cfg := ws.Config()
 	engine := diagnostics.TypeEngine(ws.Index, ws.Container)
 
-	s.diag = diagnostics.NewProvider(ws.Index, ws.Framework, ws.RootPath, logger, ws.Config)
+	s.diag = diagnostics.NewProvider(ws.Index, ws.Framework, ws.RootPath, logger, cfg)
 	s.diag.ResolveTypes(ws.Container)
 	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(ws.Index, ws.SchemaIsLive)
 	s.diag.Profile = ws.Profile
@@ -104,7 +105,7 @@ func New(ws *workspace.Bootstrapped, opts Options) *Session {
 	arrays := models.NewFrameworkArrayResolver(ws.Index, ws.RootPath, ws.Framework)
 
 	s.completion = completion.NewProvider(ws.Index, ws.Container, ws.Framework)
-	s.completion.SetAutoImportAliasStyle(ws.Config.AutoImport.AliasStyle)
+	s.completion.SetAutoImportAliasStyle(cfg.AutoImport.AliasStyle)
 	s.completion.SetArrayResolver(arrays)
 	if ws.RouteIndex != nil {
 		s.completion.SetLaravelRouteIndex(ws.RouteIndex)
@@ -116,7 +117,7 @@ func New(ws *workspace.Bootstrapped, opts Options) *Session {
 
 	s.hover = hover.NewProvider(ws.Index, ws.Container, ws.Framework)
 	s.hover.SetArrayResolver(arrays)
-	s.hover.SetConfig(ws.Config)
+	s.hover.SetConfig(cfg)
 	s.hover.SetTypedChainResolver(s.typedExpression)
 
 	s.inlayHint = inlayhint.NewProvider(ws.Index, ws.Container)
@@ -157,8 +158,24 @@ func Open(ctx context.Context, root string, opts Options) (*Session, error) {
 	return New(ws, opts), nil
 }
 
-// Config is the project's configuration.
-func (s *Session) Config() *config.Config { return s.ws.Config }
+// Config is the project's current configuration.
+func (s *Session) Config() *config.Config { return s.ws.Config() }
+
+// SetConfig hands a newly loaded configuration to every provider that reads
+// settings: diagnostics, completion's auto-import alias style and hover.
+// The workspace takes it separately, in Refresh.
+func (s *Session) SetConfig(cfg *config.Config) {
+	s.diag.SetConfig(cfg)
+	s.completion.SetAutoImportAliasStyle(cfg.AutoImport.AliasStyle)
+	s.hover.SetConfig(cfg)
+}
+
+// ReanalyzeSaved runs the on-save rules again, under the current settings,
+// for the files that have on-save findings and are still open, reading
+// their text through open.
+func (s *Session) ReanalyzeSaved(open func(uri string) (string, bool)) {
+	s.diag.ReanalyzeSaved(open)
+}
 
 // Analyze returns a file's diagnostics while it is being edited: the fast
 // rules, plus the latest on-save and external-tool results for it.

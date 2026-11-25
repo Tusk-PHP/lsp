@@ -30,13 +30,22 @@ func newRefreshWorkspace(t *testing.T, cfg *config.Config, files map[string]stri
 
 func refreshPaths(t *testing.T, ws *Bootstrapped, root string, names ...string) Refreshed {
 	t.Helper()
+	return refreshWith(t, ws, nil, root, names...)
+}
+
+func refreshWith(t *testing.T, ws *Bootstrapped, cfg *config.Config, root string, names ...string) Refreshed {
+	t.Helper()
 	paths := make([]string, len(names))
 	for i, name := range names {
 		paths[i] = filepath.Join(root, name)
 	}
-	out, err := ws.Refresh(Refresh{Paths: paths, Config: func() (*config.Config, error) {
+	refresh := Refresh{Paths: paths, Config: func() (*config.Config, error) {
 		return config.LoadFromFile(ws.ConfigPath())
-	}})
+	}}
+	if cfg != nil {
+		refresh.Profile, refresh.Config = true, settingsOf(cfg)
+	}
+	out, err := ws.Refresh(refresh)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,6 +204,94 @@ func TestRefreshSeparatesConfigErrorsFromFilesItCouldNotRead(t *testing.T) {
 	if ws.Index.Lookup("Added") == nil {
 		t.Error("the other files are re-indexed")
 	}
+}
+
+func TestRefreshWithNewExcludePathsAndLimitRescopesTheIndex(t *testing.T) {
+	ws, root := newRefreshWorkspace(t, nil, map[string]string{
+		"app/Kept.php":                   "<?php\nnamespace App;\nclass Kept {}\n",
+		"legacy/Old.php":                 "<?php\nclass OldLegacy {}\n",
+		"legacy/Open.php":                "<?php\nclass OpenLegacy {}\n",
+		"vendor/acme/Lib.php":            "<?php\nnamespace Acme;\nclass Lib {}\n",
+		"vendor/composer/installed.json": `{"packages": [{"name": "acme/lib", "install-path": "../acme", "autoload": {"classmap": ["Lib.php"]}}]}`,
+	})
+	open := filepath.Join(root, "legacy/Open.php")
+	owns := func(path string) bool { return path == open }
+
+	excludeLegacy := config.DefaultConfig()
+	excludeLegacy.ExcludePaths = append(slices.Clone(excludeLegacy.ExcludePaths), "legacy")
+	out, err := ws.Refresh(Refresh{Profile: true, Config: settingsOf(excludeLegacy), EditorOwns: owns})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(out.Files, []string{"file://" + filepath.Join(root, "legacy/Old.php")}) {
+		t.Errorf("only the newly excluded file that isn't open changed: %v", out.Files)
+	}
+	if ws.Index.Lookup("OldLegacy") != nil || ws.Index.Lookup("OpenLegacy") == nil || ws.Index.Lookup(`App\Kept`) == nil {
+		t.Error("a newly excluded directory leaves the index, except a file the editor has open")
+	}
+	if ws.Config() != excludeLegacy {
+		t.Error("the new configuration is the workspace's")
+	}
+
+	writeFiles(t, root, map[string]string{"vendor/acme/Lib.php": "<?php\nnamespace Acme;\nclass Lib {}\n"})
+	includeVendor := config.DefaultConfig()
+	includeVendor.ExcludePaths = []string{"legacy"}
+	if _, err := ws.Refresh(Refresh{Profile: true, Config: settingsOf(includeVendor), EditorOwns: owns}); err != nil {
+		t.Fatal(err)
+	}
+	vendorLib := "file://" + filepath.Join(root, "vendor/acme/Lib.php")
+	if !ws.Index.HasFile(vendorLib) {
+		t.Fatal("a directory no longer excluded is indexed")
+	}
+	if _, err := ws.Refresh(Refresh{Profile: true, Config: settingsOf(excludeLegacy), EditorOwns: owns}); err != nil {
+		t.Fatal(err)
+	}
+	if !ws.Index.HasFile(vendorLib) {
+		t.Error("a file Composer loads stays indexed when its directory is excluded again")
+	}
+
+	limited := config.DefaultConfig()
+	limited.MaxIndexFiles = 1
+	if _, err := ws.Refresh(Refresh{Profile: true, Config: settingsOf(limited), EditorOwns: owns}); err != nil {
+		t.Fatal(err)
+	}
+	if ws.Index.Lookup(`App\Kept`) == nil || ws.Index.Lookup("OldLegacy") != nil {
+		t.Error("a lower maxIndexFiles keeps the files the walk reaches first")
+	}
+	writeFiles(t, root, map[string]string{"app/Later.php": "<?php\nclass Later {}\n"})
+	refreshPaths(t, ws, root, "app/Later.php")
+	if ws.Index.Lookup("Later") != nil {
+		t.Error("a file created past the new maxIndexFiles isn't indexed")
+	}
+
+	if _, err := ws.Refresh(Refresh{Profile: true, Config: settingsOf(config.DefaultConfig()), EditorOwns: owns}); err != nil {
+		t.Fatal(err)
+	}
+	if ws.Index.Lookup("OldLegacy") == nil || ws.Index.Lookup("Later") == nil {
+		t.Error("lifting the limit and the exclusion indexes the rest again")
+	}
+}
+
+func TestRescopeReportsDocumentsTheEditorOpensWhileTheyAreReadFromDisk(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.ExcludePaths = []string{"vendor", "legacy"}
+	ws, root := newRefreshWorkspace(t, cfg, map[string]string{"legacy/OldOrder.php": "<?php\nclass OldOrder {}\n"})
+	opened := filepath.Join(root, "legacy/OldOrder.php")
+	asked := 0
+	out, err := ws.Refresh(Refresh{Profile: true, Config: settingsOf(config.DefaultConfig()), EditorOwns: func(path string) bool {
+		if path != opened {
+			return false
+		}
+		asked++
+		return asked > 1
+	}})
+	if err != nil || len(out.EditorOpened) != 1 || out.EditorOpened[0] != symbols.PathToURI(opened) {
+		t.Errorf("a document opened while the rescope indexed its disk text is handed back to the editor: %+v %v", out, err)
+	}
+}
+
+func settingsOf(cfg *config.Config) func() (*config.Config, error) {
+	return func() (*config.Config, error) { return cfg, nil }
 }
 
 func TestWatchGlobsCoverWhatARefreshReads(t *testing.T) {

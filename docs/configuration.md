@@ -69,7 +69,18 @@ All diagnostic rules are enabled by default. Set a rule to `false` (or `"off"`) 
 
 ### What applies without a restart
 
-The PHP version and extensions follow `composer.json` and `.tusk-php.json` while the server runs: save either file and builtins, completion, hover and `builtin-unavailable` use the new profile, and open files are checked again. The same happens when the client sends `workspace/didChangeConfiguration` with settings shaped like `initializationOptions` (Zed and Neovim send their `settings` this way). Those settings apply over `initializationOptions` instead of replacing them, and settings with no Tusk PHP option in them, such as the empty object Zed sends when its `settings` are unset, change nothing; a client that sends no settings still makes the server read both files again. A `.tusk-php.json` that can't be read, such as a half-edited save with a syntax error, is reported and the last version that could be read stays in use. Every other option is read once, at startup, and needs a restart.
+Save `.tusk-php.json`, or have the client send `workspace/didChangeConfiguration` with settings shaped like `initializationOptions` (Zed and Neovim send their `settings` this way), and the server reads its configuration again. Those settings apply over `initializationOptions` instead of replacing them, and settings with no Tusk PHP option in them, such as the empty object Zed sends when its `settings` are unset, change nothing; a client that sends no settings still makes the server read the file again. A `.tusk-php.json` that can't be read, such as a half-edited save with a syntax error, is reported and the last version that could be read stays in use. Open files are checked again with the new settings. These apply straight away:
+
+| Setting | What follows it |
+|---|---|
+| `phpVersion`, `extensions`, `phpBinary`, `phpDetectTimeoutMs` | The PHP profile: builtins, completion, hover and `builtin-unavailable`. Changes to `"php"` or `ext-*` in `composer.json` apply the same way. |
+| `diagnosticsEnabled` | Turning it off clears the open files' diagnostics; turning it on checks them again. |
+| `diagnosticRules`, `diagnosticIgnore` | Which findings are reported, and with which severity. Findings of the on-save rules are worked out again for files you have saved. |
+| `phpstanEnabled`, `phpstanPath`, `phpstanLevel`, `phpstanConfig`, `pintEnabled`, `pintPath`, `pintConfig` | The next save runs the tools with the new settings. Findings from the old settings are dropped. |
+| `excludePaths`, `maxIndexFiles` | The index, in the background: files in a newly excluded directory or past the new limit leave it, and files now included are indexed. A file open in the editor stays, and so do files that Composer's autoloader loads, such as `vendor` packages. |
+| `inlayHints`, `autoImport.aliasStyle`, `php_manual_locale`, `php_manual_open_on_definition`, `composer.hover.enable`, `composer.openOnDefinition`, `introspection.verbosity` | The next request. |
+
+Every other option needs a restart: `framework`, `coverageReportPath`, and the database settings (`databaseEnabled`, `databaseSource`, `db`).
 
 PHP files created, changed or deleted outside the editor (a branch switch, a code generator, `rm`) reach the index too, except in directories under `excludePaths`. The server asks the client to watch them when the client lets servers register file watchers, as VS Code, Zed and Neovim do. Deleting or renaming a directory counts too: its files leave the index, or are indexed at the new place. A file open in the editor keeps the editor's text until it is closed; closing it without saving brings back the text on disk.
 

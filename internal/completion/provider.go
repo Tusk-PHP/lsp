@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/container"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
@@ -33,7 +34,7 @@ type Provider struct {
 	lazyDocumentation, lazyDetail bool
 	// aliasStyle is how a class is imported when its short name is already
 	// in use in the file (`autoImport.aliasStyle`).
-	aliasStyle string
+	aliasStyle atomic.Pointer[string]
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
@@ -426,7 +427,15 @@ func (p *Provider) completeMemberAccess(r *resolve.Resolver, uri, source string,
 // is already in use in the file: "suffix" (the default), "prefix" or
 // "fullyQualified".
 func (p *Provider) SetAutoImportAliasStyle(style string) {
-	p.aliasStyle = normalizeAliasStyle(style)
+	style = normalizeAliasStyle(style)
+	p.aliasStyle.Store(&style)
+}
+
+func (p *Provider) autoImportAliasStyle() string {
+	if style := p.aliasStyle.Load(); style != nil {
+		return *style
+	}
+	return normalizeAliasStyle("")
 }
 
 // SetLazyResolve leaves the documentation and/or the detail of member items

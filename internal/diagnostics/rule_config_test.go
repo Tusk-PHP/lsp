@@ -13,9 +13,11 @@ import (
 func providerWithRules(t *testing.T, rules string) *Provider {
 	t.Helper()
 	p := newTestProvider()
-	if err := p.cfg.SetDiagnosticRulesJSON(rules); err != nil {
+	cfg := *p.settings.Load().cfg
+	if err := cfg.SetDiagnosticRulesJSON(rules); err != nil {
 		t.Fatal(err)
 	}
+	p.SetConfig(&cfg)
 	return p
 }
 
@@ -160,5 +162,42 @@ func TestUnknownNamedArgumentIsReported(t *testing.T) {
 	off.index.MarkReady()
 	if got := filterByCode(off.Analyze("file:///t.php", "<?php\ngreet(nmae: 'x');\n"), "unknown-named-argument"); len(got) != 0 {
 		t.Errorf("turned off: %#v", got)
+	}
+}
+
+func TestSetConfigAppliesToTheNextAnalysis(t *testing.T) {
+	p := newTestProvider()
+	if got := filterByCode(p.Analyze("file:///t.php", redundantUnionSource), "redundant-union-member"); len(got) != 1 {
+		t.Fatalf("the rule reports by default, got %v", got)
+	}
+	cfg := *p.settings.Load().cfg
+	if err := cfg.SetDiagnosticRulesJSON(`{"redundant-union-member": "off"}`); err != nil {
+		t.Fatal(err)
+	}
+	p.SetConfig(&cfg)
+	if got := filterByCode(p.Analyze("file:///t.php", redundantUnionSource), "redundant-union-member"); len(got) != 0 {
+		t.Errorf("a rule the new configuration turns off stops reporting, got %v", got)
+	}
+}
+
+func TestSetConfigDropsToolResultsWhenTheToolsChange(t *testing.T) {
+	p := newTestProvider()
+	tool := Diagnostic{Source: "phpstan", Message: "cached"}
+	p.toolResults["file:///t.php"] = []Diagnostic{tool}
+
+	same := *p.settings.Load().cfg
+	if err := same.SetDiagnosticRulesJSON(`{"redundant-union-member": "off"}`); err != nil {
+		t.Fatal(err)
+	}
+	p.SetConfig(&same)
+	if len(p.toolResults) != 1 {
+		t.Fatal("tool results stay while the tools' settings don't change")
+	}
+
+	other := same
+	other.PHPStanLevel = "max"
+	p.SetConfig(&other)
+	if len(p.toolResults) != 0 {
+		t.Error("tool results from other tool settings are dropped")
 	}
 }

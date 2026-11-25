@@ -168,7 +168,7 @@ func (s *Server) handleInlayHint(msg *jsonRPCMessage) {
 	}
 	uri := params.TextDocument.URI
 	req := s.phpDocument(uri)
-	hints := s.positionsOf(uri, s.getDocument(uri)).inlayHintsOut(uri, req.inlayHints(s.inlayHint.GetInlayHints(req.uri, req.source, &s.cfg.InlayHints)))
+	hints := s.positionsOf(uri, s.getDocument(uri)).inlayHintsOut(uri, req.inlayHints(s.inlayHint.GetInlayHints(req.uri, req.source, &s.config().InlayHints)))
 	// Filter to the requested line range.
 	filtered := hints[:0]
 	for _, h := range hints {
