@@ -14,10 +14,12 @@ type excludeRules struct {
 func newExcludeRules(entries []string) excludeRules {
 	rules := excludeRules{names: map[string]struct{}{}, paths: map[string]struct{}{}}
 	for _, entry := range entries {
-		cleaned := strings.TrimPrefix(path.Clean(filepath.ToSlash(entry)), "/")
+		slashed := filepath.ToSlash(entry)
+		anchored := strings.HasPrefix(slashed, "/") || strings.HasPrefix(slashed, "./")
+		cleaned := strings.TrimPrefix(path.Clean(slashed), "/")
 		switch {
 		case cleaned == "" || cleaned == ".":
-		case strings.Contains(cleaned, "/"):
+		case anchored || strings.Contains(cleaned, "/"):
 			rules.paths[cleaned] = struct{}{}
 		default:
 			rules.names[cleaned] = struct{}{}
