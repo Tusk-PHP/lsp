@@ -210,14 +210,15 @@ func (r *Resolver) accessOwnerType(line string, wordStart int, source string, po
 
 	// Try as class name — this is the chain origin (e.g., Category::). A word
 	// after -> or :: is a member (UserRole::Client, $x->Client), never a class.
-	if fqn := r.ChainOriginClassName(line, i, target, file); fqn != "" {
-		if sym := r.Index.Lookup(fqn); sym != nil {
-			switch sym.Kind {
-			case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
+	if parenEnd == 0 {
+		if fqn := r.ChainOriginClassName(line, i, target, file); fqn != "" {
+			if sym := r.Index.Lookup(fqn); sym != nil {
+				if sym.IsClassLike() {
+					return ResolvedType{FQN: fqn}
+				}
+			} else if fqn != target && !strings.Contains(fqn, "::") {
 				return ResolvedType{FQN: fqn}
 			}
-		} else if fqn != target && !strings.Contains(fqn, "::") {
-			return ResolvedType{FQN: fqn}
 		}
 	}
 
@@ -387,10 +388,8 @@ func (r *Resolver) ResolveClassNameLoose(name string, file *parser.FileNode) str
 	}
 
 	if file == nil {
-		// Try direct lookup by name
-		syms := r.Index.LookupByName(name)
-		if best := symbols.PickBestStandalone(syms, name); best != nil {
-			return best.FQN
+		if cls := r.classNamed(name); cls != nil {
+			return cls.FQN
 		}
 		return name
 	}
@@ -416,12 +415,20 @@ func (r *Resolver) ResolveClassNameLoose(name string, file *parser.FileNode) str
 	if r.Index.Lookup(name) != nil {
 		return name
 	}
-	// Fallback: search by short name
-	syms := r.Index.LookupByName(name)
-	if best := symbols.PickBestStandalone(syms, name); best != nil {
-		return best.FQN
+	if cls := r.classNamed(name); cls != nil {
+		return cls.FQN
 	}
 	return name
+}
+
+func (r *Resolver) classNamed(name string) *symbols.Symbol {
+	var classes []*symbols.Symbol
+	for _, sym := range r.Index.LookupByName(name) {
+		if sym.IsClassLike() {
+			classes = append(classes, sym)
+		}
+	}
+	return symbols.PickBestStandalone(classes, name)
 }
 
 // ExtractNewClass extracts the class name from patterns like:
