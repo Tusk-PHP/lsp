@@ -1,5 +1,3 @@
-src/Illuminate/Cache/RedisStore.php	unknown-member	Unknown member 'manyAlias' on 'RedisStore'
-src/Illuminate/Cache/RedisStore.php	unknown-member	Unknown member 'putManyAlias' on 'RedisStore'
 src/Illuminate/Cache/RedisTaggedCache.php	unknown-member	Unknown member 'addEntry' on 'TagSet'
 src/Illuminate/Cache/RedisTaggedCache.php	unknown-member	Unknown member 'addEntry' on 'TagSet'
 src/Illuminate/Cache/RedisTaggedCache.php	unknown-member	Unknown member 'addEntry' on 'TagSet'

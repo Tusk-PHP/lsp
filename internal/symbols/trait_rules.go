@@ -46,6 +46,13 @@ func newTraitRules(adaptations parser.TraitAdaptations, resolve func(string) str
 	return rules
 }
 
+func (idx *Index) traitRulesLocked(fqn string) *traitRules {
+	if sym := idx.symbols[fqn]; sym != nil {
+		return sym.traitRules
+	}
+	return nil
+}
+
 func (r *traitRules) excludes(trait, method string) bool {
 	return r != nil && r.excluded[traitMethodKey(trait, method)]
 }

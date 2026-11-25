@@ -1195,6 +1195,13 @@ func (idx *Index) GetClassMembers(classFQN string) []*Symbol {
 	return idx.getClassMembersRecursive(classFQN, make(map[string]bool))
 }
 
+func (idx *Index) TraitMembers(fqn string) []*Symbol {
+	idx.ensureClass(fqn)
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.appendTraitMembersLocked(nil, idx.traitMap[fqn], idx.traitRulesLocked(fqn), map[string]bool{fqn: true})
+}
+
 func (idx *Index) appendTraitMembersLocked(members []*Symbol, traits []string, rules *traitRules, visited map[string]bool) []*Symbol {
 	var aliases []*Symbol
 	for _, tr := range traits {
