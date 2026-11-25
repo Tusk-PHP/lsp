@@ -227,19 +227,11 @@ cross-file answer on a 9,700-file Laravel app. Every change must keep it.
 
 ## Before opening a pull request
 
-1. `make test` passes (with `-race`).
-2. `make conformance-pr` passes for changes to the parser, index or providers,
-   and `make field-baseline` for changes to diagnostics or typing.
-3. `make wasm` still builds.
-4. New behaviour has a test that fails without it. Tests use the mock project in
-   `testdata/project/`; corpus tests fetch real projects with
-   `scripts/fetch-corpus.sh`.
-5. Performance numbers are in the PR when the rules above ask for them.
-6. `CHANGELOG.md` has an entry under `[Unreleased]` for anything a user would
-   notice, written for users ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)):
-   what changed for them, not which functions moved.
-7. Commit messages follow the existing style: `fix: …`, `feat: …`, `docs: …`,
-   `chore: …`, `refactor: …`.
+[CONTRIBUTING.md](CONTRIBUTING.md) is the source of truth for how changes get in:
+the pull request checklist (tests, conformance, field baselines, `make wasm`,
+performance numbers, `CHANGELOG.md`, commit style), keeping pull requests small,
+drafts and stacks, review and releases. Read it and follow its checklist before
+opening a pull request. This file covers the code's principles.
 
 ## Direction
 
