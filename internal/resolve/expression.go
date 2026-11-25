@@ -458,7 +458,7 @@ func (r *Resolver) FunctionCallType(name, args string, ctx ExprContext) Resolved
 	if r.Index == nil {
 		return ResolvedType{}
 	}
-	fn := r.lookupFunction(name, ctx.File)
+	fn := r.CalledFunction(name, ctx.File)
 	if IsCallableArgs(args) {
 		// strlen(...) is a Closure of strlen, known or not, and so is a
 		// partial application such as str_replace('a', 'b', ?).
@@ -468,36 +468,6 @@ func (r *Resolver) FunctionCallType(name, args string, ctx ExprContext) Resolved
 		return ResolvedType{}
 	}
 	return r.FunctionTypeForCall(fn, ctx.File, r.CallSiteFor(args, ctx))
-}
-
-// lookupFunction finds the function a call names, in the file's namespace
-// first and then globally, as PHP does.
-func (r *Resolver) lookupFunction(name string, file *parser.FileNode) *symbols.Symbol {
-	name = strings.TrimSpace(name)
-	if strings.HasPrefix(name, "\\") {
-		if sym := r.Index.Lookup(name[1:]); sym != nil && sym.Kind == symbols.KindFunction {
-			return sym
-		}
-		return nil
-	}
-	if file != nil && file.Namespace != "" {
-		if sym := r.Index.Lookup(file.Namespace + "\\" + name); sym != nil && sym.Kind == symbols.KindFunction {
-			return sym
-		}
-	}
-	if sym := r.Index.Lookup(name); sym != nil && sym.Kind == symbols.KindFunction {
-		return sym
-	}
-	short := name
-	if i := strings.LastIndexByte(short, '\\'); i >= 0 {
-		short = short[i+1:]
-	}
-	for _, sym := range r.Index.LookupByName(short) {
-		if sym.Kind == symbols.KindFunction {
-			return sym
-		}
-	}
-	return nil
 }
 
 // NewExpressionType types `new Foo(args)`. The class's templates are bound

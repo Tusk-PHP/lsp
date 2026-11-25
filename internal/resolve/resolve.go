@@ -520,9 +520,10 @@ func extractLeadingVariable(expr string) string {
 	return expr[:end]
 }
 
-// extractFunctionCallName returns the short function name if expr starts with
-// a (optionally namespace-qualified) identifier followed by `(`, otherwise "".
-// e.g. "get_class($x)" → "get_class", "\Some\ns\fn($x)" → "fn".
+// extractFunctionCallName returns the function name as written, qualification
+// included, if expr starts with a (optionally namespace-qualified) identifier
+// followed by `(`, otherwise "".
+// e.g. "get_class($x)" → "get_class", "\Some\ns\fn($x)" → "\Some\ns\fn".
 func extractFunctionCallName(expr string) string {
 	if expr == "" {
 		return ""
@@ -550,11 +551,7 @@ func extractFunctionCallName(expr string) string {
 	if end >= len(expr) || expr[end] != '(' {
 		return ""
 	}
-	name := expr[start:end]
-	if idx := strings.LastIndexByte(name, '\\'); idx >= 0 {
-		name = name[idx+1:]
-	}
-	return name
+	return expr[:end]
 }
 
 func (r *Resolver) resolveMethodParamTypeTyped(method *parser.MethodNode, varName string, file *parser.FileNode) ResolvedType {
@@ -964,18 +961,10 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 		// A call followed by ->member, ::member or [offset] is a chain: what the
 		// function returns is only its start, so the chain resolvers below
 		// decide it.
-		if funcName := extractFunctionCallName(rhs); funcName != "" && r.Index != nil {
-			steps, origin, ok := parseChain(strings.TrimSuffix(rhs, ";"))
-			if !ok || len(steps) == 0 {
-				if ok && origin.kind == 'f' {
-					if rt := r.FunctionCallType(origin.text, origin.args, exprCtx); !rt.IsEmpty() {
-						return rt
-					}
-				}
-				for _, sym := range r.Index.LookupByName(funcName) {
-					if sym.Kind == symbols.KindFunction && sym.ReturnType != "" {
-						return ResolvedType{FQN: sym.ReturnType}
-					}
+		if extractFunctionCallName(rhs) != "" && r.Index != nil {
+			if steps, origin, ok := parseChain(strings.TrimSuffix(rhs, ";")); ok && len(steps) == 0 && origin.kind == 'f' {
+				if rt := r.FunctionCallType(origin.text, origin.args, exprCtx); !rt.IsEmpty() {
+					return rt
 				}
 			}
 		}
@@ -1009,50 +998,6 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 	// Fall back to standard resolution
 	fqn := r.resolveVariableTypePlain(varName, lines, pos, file, vs)
 	return ResolvedType{FQN: fqn}
-}
-
-// resolveFunctionCallReturnType resolves the return type of a named function,
-// preferring PHPDoc @return over the bare native type hint.
-func (r *Resolver) resolveFunctionCallReturnType(funcName string, file *parser.FileNode) ResolvedType {
-	if r.Index == nil {
-		return ResolvedType{}
-	}
-	// Check file-local functions first for PHPDoc annotations
-	if file != nil {
-		for i := range file.Functions {
-			fn := &file.Functions[i]
-			if fn.Name != funcName {
-				continue
-			}
-			doc := parser.ParseDocBlock(fn.DocComment)
-			if doc != nil && doc.Return.Type != "" {
-				if rt := r.resolveDocType(doc.Return.Type, file); !rt.IsEmpty() {
-					return rt
-				}
-			}
-			if fn.ReturnType.Name != "" && fn.ReturnType.Name != "array" && fn.ReturnType.Name != "mixed" {
-				return ResolvedType{FQN: r.ResolveClassName(fn.ReturnType.Name, file)}
-			}
-			break
-		}
-	}
-	// Fall back to symbol index
-	for _, sym := range r.Index.LookupByName(funcName) {
-		if sym.Kind != symbols.KindFunction {
-			continue
-		}
-		if sym.DocComment != "" {
-			if doc := parser.ParseDocBlock(sym.DocComment); doc != nil && doc.Return.Type != "" {
-				if rt := r.resolveDocType(doc.Return.Type, file); !rt.IsEmpty() {
-					return rt
-				}
-			}
-		}
-		if sym.ReturnType != "" {
-			return ResolvedType{FQN: sym.ReturnType}
-		}
-	}
-	return ResolvedType{}
 }
 
 // arrayElementType extracts the value element type from an array ResolvedType.
@@ -1181,10 +1126,8 @@ func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos 
 			if IsFirstClassCallable(rhs) || isPartialApplicationCall(rhs) {
 				return "Closure" // strlen(...) and f(?, 1) make a Closure, they don't call
 			}
-			for _, sym := range r.Index.LookupByName(funcName) {
-				if sym.Kind == symbols.KindFunction && sym.ReturnType != "" {
-					return sym.ReturnType
-				}
+			if fn := r.CalledFunction(funcName, file); fn != nil && fn.ReturnType != "" {
+				return fn.ReturnType
 			}
 		}
 		// $var = ClassName::method() or $var = $foo->bar()->baz()
@@ -1515,4 +1458,35 @@ func ParamDocSummary(file *parser.FileNode, pos protocol.Position, varName strin
 		}
 	}
 	return ""
+}
+
+func (r *Resolver) resolveFunctionCallReturnType(funcName string, file *parser.FileNode) ResolvedType {
+	fqns, _ := FunctionNames(funcName, file)
+	for _, fqn := range fqns {
+		if fn := declaredFunction(file, fqn); fn != nil {
+			return r.declaredReturnType(fn.DocComment, r.ResolveClassName(fn.ReturnType.Name, file), file)
+		}
+		if fn := r.Index.LookupFold(fqn, isFunction); fn != nil {
+			return r.declaredReturnType(fn.DocComment, fn.ReturnType, file)
+		}
+	}
+	return ResolvedType{}
+}
+
+func declaredFunction(file *parser.FileNode, fqn string) *parser.FunctionNode {
+	for i := range file.Functions {
+		if strings.EqualFold(file.Functions[i].FullName, fqn) {
+			return &file.Functions[i]
+		}
+	}
+	return nil
+}
+
+func (r *Resolver) declaredReturnType(docComment, returnType string, file *parser.FileNode) ResolvedType {
+	if doc := parser.ParseDocBlock(docComment); doc != nil && doc.Return.Type != "" {
+		if rt := r.resolveDocType(doc.Return.Type, file); !rt.IsEmpty() {
+			return rt
+		}
+	}
+	return ResolvedType{FQN: returnType}
 }

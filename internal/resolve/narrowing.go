@@ -321,7 +321,7 @@ func (r *Resolver) statementCalleeWith(stmt string, lines []string, pos protocol
 		if origin.kind != 'f' {
 			return callee, "", nil, false
 		}
-		fn := r.lookupFunction(origin.text, file)
+		fn := r.CalledFunction(origin.text, file)
 		if fn == nil {
 			return callee, "", nil, false
 		}
