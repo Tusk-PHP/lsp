@@ -148,17 +148,7 @@ func (s *Server) handleCodeAction(msg *jsonRPCMessage) {
 		s.sendResponse(msg.ID, p.codeActionsOut(uri, analyzer.BladeIgnoreDiagnosticActions(uri, source, params, s.providers.Custom())))
 		return
 	}
-	result := s.analyzer.GetCodeActions(uri, source, params)
-	if len(params.Context.Only) > 0 {
-		filtered := result[:0]
-		for _, action := range result {
-			if action.Kind.In(params.Context.Only) {
-				filtered = append(filtered, action)
-			}
-		}
-		result = filtered
-	}
-	s.sendResponse(msg.ID, p.codeActionsOut(uri, result))
+	s.sendResponse(msg.ID, p.codeActionsOut(uri, s.analyzer.GetCodeActions(uri, source, params)))
 }
 
 func (s *Server) handleInlayHint(msg *jsonRPCMessage) {
