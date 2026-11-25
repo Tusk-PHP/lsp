@@ -21,6 +21,17 @@ func PathToURI(path string) string {
 	return slashPathToURI(slashPath(path, hostWindows))
 }
 
+func CanonicalURI(uri string) string {
+	return canonicalURI(uri, hostWindows)
+}
+
+func canonicalURI(uri string, windows bool) string {
+	if !strings.HasPrefix(uri, "file:") {
+		return uri
+	}
+	return slashPathToURI(uriSlashPath(uri, windows))
+}
+
 func uriSlashPath(uri string, windows bool) string {
 	if rest, ok := strings.CutPrefix(uri, fileScheme); ok && windows && startsWithDrive(rest) {
 		return slashPath(rest, windows)

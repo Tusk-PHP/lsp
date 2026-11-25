@@ -80,6 +80,7 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 	unsaved := s.unsaved[uri]
 	delete(s.unsaved, uri)
 	s.docMu.Unlock()
+	s.clientURIs.forget(uri)
 	s.blade.forget(uri)
 	s.cancelDiagnostics(uri)
 	if s.analysis != nil {

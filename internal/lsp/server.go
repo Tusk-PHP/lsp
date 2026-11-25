@@ -68,7 +68,8 @@ type Server struct {
 	// publishMu orders diagnostics publishes (see publishDiagnostics).
 	publishMu sync.Mutex
 	// docIndex orders background indexing of open documents.
-	docIndex docIndexQueue
+	docIndex   docIndexQueue
+	clientURIs clientURIs
 	// diagDebounce delays diagnostics after edits (see scheduleDiagnostics).
 	diagDebounce diagDebouncer
 	encoding     document.Encoding

@@ -68,3 +68,26 @@ func trimSlash(s string) string {
 	}
 	return s
 }
+
+func TestCanonicalURISpellsEveryClientsURIForAFileTheSameWay(t *testing.T) {
+	for uri, want := range map[string]string{
+		"file:///c%3A/proj/app/Order.php":    "file:///C:/proj/app/Order.php",
+		"file:///c:/proj/app/Order.php":      "file:///C:/proj/app/Order.php",
+		"file:///C:/proj/my%20app/a%40b.php": "file:///C:/proj/my%20app/a@b.php",
+		"file:///C:/proj/caf%c3%a9.php":      "file:///C:/proj/caf%C3%A9.php",
+		"untitled:Untitled-1":                "untitled:Untitled-1",
+	} {
+		if got := canonicalURI(uri, true); got != want {
+			t.Errorf("%s: got %s, want %s", uri, got, want)
+		}
+	}
+	for uri, want := range map[string]string{
+		"file:///srv/my%20app/a%40b.php":   "file:///srv/my%20app/a@b.php",
+		"file:///srv/app/./x/../Order.php": "file:///srv/app/Order.php",
+		"builtin://php/strlen":             "builtin://php/strlen",
+	} {
+		if got := canonicalURI(uri, false); got != want {
+			t.Errorf("%s: got %s, want %s", uri, got, want)
+		}
+	}
+}

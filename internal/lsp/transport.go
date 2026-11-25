@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -38,6 +39,10 @@ func (s *Server) decodeParams[P any](msg *jsonRPCMessage) (P, bool) {
 	if err := json.Unmarshal(msg.Params, &params); err != nil {
 		s.rejectParams(msg, err)
 		return params, false
+	}
+	respelled := canonicalizeURIs(reflect.ValueOf(&params), nil)
+	if msg.Method == "textDocument/didOpen" {
+		s.clientURIs.remember(respelled)
 	}
 	return params, true
 }
