@@ -2,7 +2,6 @@ package lsp
 
 import (
 	"fmt"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -36,7 +35,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		s.rootPath = params.RootPath
 	}
 	s.logger.Printf("Initializing for workspace: %s", s.rootPath)
-	s.clientOptions.Store(params.InitializationOptions)
+	s.initOptions = params.InitializationOptions
 	s.cfg = s.loadConfig()
 	s.encoding = document.Negotiate(params.Capabilities.General.PositionEncodings)
 	s.clientSupportsShowDocument = params.Capabilities.Window.ShowDocument.Support
@@ -196,29 +195,6 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		},
 		ServerInfo: protocol.ServerInfo{Name: ServerName, Version: ServerVersion},
 	})
-}
-
-func (s *Server) loadConfig() *config.Config {
-	cfg, err := config.LoadFromFile(filepath.Join(s.rootPath, config.FileName))
-	if err != nil {
-		s.logger.Printf("Config error: %v", err)
-		s.sendNotification("window/showMessage", map[string]interface{}{
-			"type":    protocol.MessageTypeError,
-			"message": "Tusk PHP ignored its configuration: " + err.Error(),
-		})
-		cfg = config.DefaultConfig()
-	}
-	for _, problem := range cfg.Problems() {
-		s.logger.Printf("Config problem: %v", problem)
-		s.sendNotification("window/showMessage", map[string]interface{}{
-			"type":    protocol.MessageTypeWarning,
-			"message": "Tusk PHP skipped part of its configuration: " + problem.Error(),
-		})
-	}
-	if opts := s.clientOptions.Load(); opts != nil {
-		cfg.MergeClientOptions(opts)
-	}
-	return cfg
 }
 
 func (s *Server) resolveBuiltinProfile(cfg *config.Config) symbols.BuiltinProfile {

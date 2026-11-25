@@ -89,7 +89,9 @@ type Server struct {
 
 	clientSupportsShowDocument bool
 	clientWatchesFiles         bool
-	clientOptions              atomic.Pointer[protocol.InitializationOptions]
+	initOptions                *protocol.InitializationOptions
+	clientSettings             atomic.Pointer[protocol.InitializationOptions]
+	fileConfig                 atomic.Pointer[config.Config]
 	indexed                    chan struct{}
 	watch                      watchedFiles
 	coverageNotifications      bool

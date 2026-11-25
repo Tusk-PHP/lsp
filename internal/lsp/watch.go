@@ -1,8 +1,6 @@
 package lsp
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -60,17 +58,17 @@ func (s *Server) handleDidChangeConfiguration(msg *jsonRPCMessage) {
 	if !ok || s.workspace == nil {
 		return
 	}
-	if settings := bytes.TrimSpace(params.Settings); len(settings) > 0 && settings[0] == '{' {
-		var opts protocol.InitializationOptions
-		if err := json.Unmarshal(settings, &opts); err != nil {
-			s.logger.Printf("workspace/didChangeConfiguration: settings are not Tusk PHP options: %v", err)
-			s.sendNotification("window/showMessage", map[string]interface{}{
-				"type":    protocol.MessageTypeError,
-				"message": "Tusk PHP ignored the new settings: " + err.Error(),
-			})
-			return
-		}
-		s.clientOptions.Store(&opts)
+	settings, err := tuskSettings(params.Settings)
+	if err != nil {
+		s.logger.Printf("workspace/didChangeConfiguration: %v", err)
+		s.sendNotification("window/showMessage", map[string]interface{}{
+			"type":    protocol.MessageTypeError,
+			"message": "Tusk PHP ignored the new settings: " + err.Error(),
+		})
+		return
+	}
+	if settings != nil {
+		s.clientSettings.Store(settings)
 	}
 	s.queueRefresh(nil, true)
 }

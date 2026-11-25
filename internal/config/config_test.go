@@ -72,7 +72,7 @@ func TestLoadFromFile(t *testing.T) {
 	})
 }
 
-func TestMergeClientOptions(t *testing.T) {
+func TestWithClientOptions(t *testing.T) {
 	cfg := DefaultConfig()
 
 	boolTrue := true
@@ -95,7 +95,11 @@ func TestMergeClientOptions(t *testing.T) {
 		MaxIndexFiles:      &maxFiles,
 		ExcludePaths:       []string{"vendor"},
 	}
-	cfg.MergeClientOptions(opts)
+	file := cfg
+	cfg = cfg.WithClientOptions(opts)
+	if file.PHPVersion != "8.6" || file.Framework != "auto" || file.IsPHPVersionExplicitlySet() || len(file.ExcludePaths) != len(DefaultConfig().ExcludePaths) {
+		t.Errorf("the config the options are applied over stays as it was: %+v", file)
+	}
 
 	if cfg.PHPVersion != "8.2" {
 		t.Errorf("PHPVersion = %q", cfg.PHPVersion)
@@ -112,7 +116,7 @@ func TestMergeClientOptions(t *testing.T) {
 
 	t.Run("zero values don't override", func(t *testing.T) {
 		cfg2 := DefaultConfig()
-		cfg2.MergeClientOptions(&protocol.InitializationOptions{})
+		cfg2 = cfg2.WithClientOptions(&protocol.InitializationOptions{})
 		if cfg2.PHPVersion != "8.6" {
 			t.Error("empty string shouldn't override PHPVersion")
 		}
@@ -363,12 +367,12 @@ func TestLoadFromFilePHPManualLocale(t *testing.T) {
 	}
 }
 
-func TestMergeClientOptionsPHPManual(t *testing.T) {
+func TestWithClientOptionsPHPManual(t *testing.T) {
 	t.Run("locale overrides file value", func(t *testing.T) {
 		cfg := DefaultConfig()
 		cfg.PHPManualLocale = "de"
 		opts := &protocol.InitializationOptions{PHPManualLocale: "fr"}
-		cfg.MergeClientOptions(opts)
+		cfg = cfg.WithClientOptions(opts)
 		if cfg.PHPManualLocale != "fr" {
 			t.Errorf("PHPManualLocale = %q, want %q", cfg.PHPManualLocale, "fr")
 		}
@@ -378,7 +382,7 @@ func TestMergeClientOptionsPHPManual(t *testing.T) {
 		cfg := DefaultConfig()
 		cfg.PHPManualLocale = "ja"
 		opts := &protocol.InitializationOptions{}
-		cfg.MergeClientOptions(opts)
+		cfg = cfg.WithClientOptions(opts)
 		if cfg.PHPManualLocale != "ja" {
 			t.Errorf("PHPManualLocale = %q, want %q", cfg.PHPManualLocale, "ja")
 		}
@@ -388,7 +392,7 @@ func TestMergeClientOptionsPHPManual(t *testing.T) {
 		cfg := DefaultConfig()
 		trueVal := true
 		opts := &protocol.InitializationOptions{PHPManualOpenOnDefinition: &trueVal}
-		cfg.MergeClientOptions(opts)
+		cfg = cfg.WithClientOptions(opts)
 		if !cfg.PHPManualOpenOnDefinition {
 			t.Error("PHPManualOpenOnDefinition should be true after merge")
 		}
@@ -398,7 +402,7 @@ func TestMergeClientOptionsPHPManual(t *testing.T) {
 		cfg := DefaultConfig()
 		cfg.PHPManualOpenOnDefinition = true
 		opts := &protocol.InitializationOptions{}
-		cfg.MergeClientOptions(opts)
+		cfg = cfg.WithClientOptions(opts)
 		if !cfg.PHPManualOpenOnDefinition {
 			t.Error("PHPManualOpenOnDefinition should remain true when opts is nil")
 		}
@@ -442,19 +446,19 @@ func TestIsPHPVersionExplicitlySet(t *testing.T) {
 		}
 	})
 
-	t.Run("MergeClientOptions with PHPVersion marks explicitly set", func(t *testing.T) {
+	t.Run("WithClientOptions with PHPVersion marks explicitly set", func(t *testing.T) {
 		cfg := DefaultConfig()
-		cfg.MergeClientOptions(&protocol.InitializationOptions{PHPVersion: "8.3"})
+		cfg = cfg.WithClientOptions(&protocol.InitializationOptions{PHPVersion: "8.3"})
 		if !cfg.IsPHPVersionExplicitlySet() {
-			t.Error("expected IsPHPVersionExplicitlySet()=true after MergeClientOptions with PHPVersion")
+			t.Error("expected IsPHPVersionExplicitlySet()=true after WithClientOptions with PHPVersion")
 		}
 	})
 
-	t.Run("MergeClientOptions without PHPVersion does not mark explicitly set", func(t *testing.T) {
+	t.Run("WithClientOptions without PHPVersion does not mark explicitly set", func(t *testing.T) {
 		cfg := DefaultConfig()
-		cfg.MergeClientOptions(&protocol.InitializationOptions{})
+		cfg = cfg.WithClientOptions(&protocol.InitializationOptions{})
 		if cfg.IsPHPVersionExplicitlySet() {
-			t.Error("expected IsPHPVersionExplicitlySet()=false after MergeClientOptions with empty options")
+			t.Error("expected IsPHPVersionExplicitlySet()=false after WithClientOptions with empty options")
 		}
 	})
 }
@@ -473,9 +477,9 @@ func TestConfigExtensionsField(t *testing.T) {
 		}
 	})
 
-	t.Run("MergeClientOptions with extensions", func(t *testing.T) {
+	t.Run("WithClientOptions with extensions", func(t *testing.T) {
 		cfg := DefaultConfig()
-		cfg.MergeClientOptions(&protocol.InitializationOptions{Extensions: []string{"pdo"}})
+		cfg = cfg.WithClientOptions(&protocol.InitializationOptions{Extensions: []string{"pdo"}})
 		if len(cfg.Extensions) != 1 || cfg.Extensions[0] != "pdo" {
 			t.Errorf("expected [pdo], got %v", cfg.Extensions)
 		}
@@ -524,14 +528,14 @@ func TestLoadFromFileIntrospection(t *testing.T) {
 	})
 }
 
-func TestMergeClientOptionsIntrospection(t *testing.T) {
+func TestWithClientOptionsIntrospection(t *testing.T) {
 	t.Run("verbosity full overrides default", func(t *testing.T) {
 		cfg := DefaultConfig()
 		v := "full"
 		opts := &protocol.InitializationOptions{
 			Introspection: &protocol.IntrospectionClientOptions{Verbosity: &v},
 		}
-		cfg.MergeClientOptions(opts)
+		cfg = cfg.WithClientOptions(opts)
 		if cfg.Introspection.Verbosity != "full" {
 			t.Errorf("Introspection.Verbosity = %q, want %q", cfg.Introspection.Verbosity, "full")
 		}
@@ -540,7 +544,7 @@ func TestMergeClientOptionsIntrospection(t *testing.T) {
 	t.Run("nil introspection does not override file value", func(t *testing.T) {
 		cfg := DefaultConfig()
 		cfg.Introspection.Verbosity = "full"
-		cfg.MergeClientOptions(&protocol.InitializationOptions{})
+		cfg = cfg.WithClientOptions(&protocol.InitializationOptions{})
 		if cfg.Introspection.Verbosity != "full" {
 			t.Errorf("Introspection.Verbosity = %q, want %q", cfg.Introspection.Verbosity, "full")
 		}
@@ -552,7 +556,7 @@ func TestMergeClientOptionsIntrospection(t *testing.T) {
 		opts := &protocol.InitializationOptions{
 			Introspection: &protocol.IntrospectionClientOptions{},
 		}
-		cfg.MergeClientOptions(opts)
+		cfg = cfg.WithClientOptions(opts)
 		if cfg.Introspection.Verbosity != "full" {
 			t.Errorf("Introspection.Verbosity = %q, want %q (nil pointer should not override)", cfg.Introspection.Verbosity, "full")
 		}
@@ -565,7 +569,7 @@ func TestMergeClientOptionsIntrospection(t *testing.T) {
 		opts := &protocol.InitializationOptions{
 			Introspection: &protocol.IntrospectionClientOptions{Verbosity: &v},
 		}
-		cfg.MergeClientOptions(opts)
+		cfg = cfg.WithClientOptions(opts)
 		if cfg.Introspection.Verbosity != "compact" {
 			t.Errorf("Introspection.Verbosity = %q, want %q", cfg.Introspection.Verbosity, "compact")
 		}
@@ -655,11 +659,11 @@ func TestAutoImportAliasStyle(t *testing.T) {
 		t.Errorf("file aliasStyle = %q, want prefix", cfg.AutoImport.AliasStyle)
 	}
 
-	cfg.MergeClientOptions(&protocol.InitializationOptions{AutoImport: &protocol.AutoImportClientOptions{AliasStyle: "fullyQualified"}})
+	cfg = cfg.WithClientOptions(&protocol.InitializationOptions{AutoImport: &protocol.AutoImportClientOptions{AliasStyle: "fullyQualified"}})
 	if cfg.AutoImport.AliasStyle != "fullyQualified" {
 		t.Errorf("client aliasStyle = %q, want fullyQualified", cfg.AutoImport.AliasStyle)
 	}
-	cfg.MergeClientOptions(&protocol.InitializationOptions{AutoImport: &protocol.AutoImportClientOptions{}})
+	cfg = cfg.WithClientOptions(&protocol.InitializationOptions{AutoImport: &protocol.AutoImportClientOptions{}})
 	if cfg.AutoImport.AliasStyle != "fullyQualified" {
 		t.Errorf("empty client option overrode aliasStyle: %q", cfg.AutoImport.AliasStyle)
 	}
