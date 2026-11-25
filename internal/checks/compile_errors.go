@@ -15,6 +15,7 @@ import (
 
 type CompileErrorRule struct {
 	Shared *Shared
+	View   bool
 }
 
 func (r *CompileErrorRule) Codes() []rule.Code { return []rule.Code{rule.CompileError} }
@@ -27,7 +28,7 @@ func (r *CompileErrorRule) Check(file *parser.FileNode, source string, _ *symbol
 	if len(syntax.tree.Errors) > 0 {
 		return nil
 	}
-	c := &compileChecker{syntax: syntax, version: syntax.tree.Version}
+	c := &compileChecker{syntax: syntax, version: syntax.tree.Version, view: r.View}
 	c.visitChild = c.visit
 	c.file(syntax.tree)
 	return c.findings
@@ -36,6 +37,7 @@ func (r *CompileErrorRule) Check(file *parser.FileNode, source string, _ *symbol
 type compileChecker struct {
 	syntax     *fileSyntax
 	version    token.Version
+	view       bool
 	namespace  string
 	leading    []*ast.Declare
 	class      *classContext
@@ -322,6 +324,7 @@ func (c *compileChecker) declare(d *ast.Declare) {
 			continue
 		}
 		switch {
+		case c.view:
 		case !slices.Contains(c.leading, d):
 			c.report(dir, "strict_types declaration must be the very first statement in the script")
 		case d.Body != nil:

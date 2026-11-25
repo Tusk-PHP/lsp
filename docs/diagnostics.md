@@ -33,7 +33,7 @@ disappear a moment later.
 |---|---|---|
 | `syntax-error` | Code that doesn't parse | Error |
 | `abstract-in-concrete` | An abstract method in a class that isn't declared abstract, which PHP refuses to compile | Error |
-| `compile-error` | Code that parses but that PHP refuses to compile on your project's PHP version, with PHP's own message: `1 ? 2 : 3 ? 4 : 5`, `$a{0}`, `(unset)`, `break` outside a loop, assigning to `$this`, duplicate parameters or members, a method body where none is allowed, `return;` in a typed function and the like. Not checked in Blade views | Error |
+| `compile-error` | Code that parses but that PHP refuses to compile on your project's PHP version, with PHP's own message: `1 ? 2 : 3 ? 4 : 5`, `$a{0}`, `(unset)`, `break` outside a loop, assigning to `$this`, duplicate parameters or members, a method body where none is allowed, `return;` in a typed function and the like. In a Blade view, `@break(2)` and `@continue` are checked as Laravel compiles them, except in a view that uses a directive the project registers | Error |
 | `unknown-class` | A class, interface, trait or enum that isn't defined in the project, its Composer dependencies or PHP | Warning |
 | `unknown-function` | A function that isn't defined anywhere | Warning |
 | `unknown-member` | A method, property or constant that the receiver's class doesn't have | Warning |

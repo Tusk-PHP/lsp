@@ -12,6 +12,7 @@ type NativeRulesOptions struct {
 	BuilderModelResolver   checks.ModelResolverFunc
 	BuilderMemberChecker   checks.MemberChecker
 	BladePHP               bool
+	BladeControlFlow       bool
 	IncludedFile           bool
 }
 
@@ -44,7 +45,10 @@ func EditRules(opts NativeRulesOptions, shared *checks.Shared) []checks.Rule {
 		&checks.UndefinedVariableRule{IncludedFile: opts.IncludedFile, Shared: shared},
 	)
 	if !opts.BladePHP {
-		rules = append(rules, &checks.UnusedVariableRule{Shared: shared}, &checks.CompileErrorRule{Shared: shared})
+		rules = append(rules, &checks.UnusedVariableRule{Shared: shared})
+	}
+	if !opts.BladePHP || opts.BladeControlFlow {
+		rules = append(rules, &checks.CompileErrorRule{Shared: shared, View: opts.BladePHP})
 	}
 	return append(rules,
 		&checks.DeprecatedUsageRule{TypeResolver: typeResolver, Uses: uses},

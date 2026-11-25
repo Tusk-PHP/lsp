@@ -100,11 +100,24 @@ func TestNativeRulesDeterministicOrder(t *testing.T) {
 	}
 }
 
-func TestBladeViewsSkipTheCompileErrorRule(t *testing.T) {
-	for _, r := range EditRules(NativeRulesOptions{BladePHP: true}, &checks.Shared{}) {
-		if r.Codes()[0] == rule.CompileError {
-			t.Error("compile-error runs on the PHP compiled from a Blade view")
+func TestCompileErrorRunsOnViewsWithLaravelsControlFlow(t *testing.T) {
+	compileErrors := func(opts NativeRulesOptions) []*checks.CompileErrorRule {
+		var found []*checks.CompileErrorRule
+		for _, r := range EditRules(opts, &checks.Shared{}) {
+			if c, ok := r.(*checks.CompileErrorRule); ok {
+				found = append(found, c)
+			}
 		}
+		return found
+	}
+	if got := compileErrors(NativeRulesOptions{BladePHP: true}); len(got) != 0 {
+		t.Error("compile-error runs on a view whose control flow isn't Laravel's")
+	}
+	if got := compileErrors(NativeRulesOptions{BladePHP: true, BladeControlFlow: true}); len(got) != 1 || !got[0].View {
+		t.Errorf("got %+v, want one compile-error rule for a view", got)
+	}
+	if got := compileErrors(NativeRulesOptions{}); len(got) != 1 || got[0].View {
+		t.Errorf("got %+v, want one compile-error rule for a PHP file", got)
 	}
 }
 
