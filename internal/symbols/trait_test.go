@@ -406,3 +406,48 @@ func traitMethodOf(member *Symbol) *Symbol {
 	}
 	return member
 }
+
+func TestTraitAliasSurvivesATraitWalkedEarlier(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///traits.php", `<?php
+namespace App;
+trait Inner { public function foo(): void {} }
+trait A { use Inner { Inner::foo as bar; } }
+trait B { use Inner; }
+trait T { public function foo(): void {} }
+class SharedInner { use B, A; }
+class Base { use T { foo as bar; } }
+class Child extends Base { use T; }
+`)
+	for _, class := range []string{`App\SharedInner`, `App\Child`} {
+		if named := idx.ClassMembersNamed(class, "bar"); len(named) == 0 {
+			t.Errorf("%s loses the alias bar", class)
+		}
+		if named := idx.ClassMembersNamed(class, "foo"); len(named) == 0 {
+			t.Errorf("%s loses foo", class)
+		}
+	}
+	found := false
+	for _, m := range idx.TraitMembers(`App\SharedInner`) {
+		found = found || m.Name == "bar"
+	}
+	if !found {
+		t.Error("TraitMembers of SharedInner loses the alias bar")
+	}
+}
+
+func TestTraitWalkStopsAtACycle(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///traits.php", `<?php
+trait Loop { use Back; public function a(): void {} }
+trait Back { use Loop; public function b(): void {} }
+class User { use Loop; }
+`)
+	names := map[string]int{}
+	for _, m := range idx.GetClassMembers("User") {
+		names[m.Name]++
+	}
+	if names["a"] != 1 || names["b"] != 1 {
+		t.Errorf("members of a class using a trait cycle: %v", names)
+	}
+}
