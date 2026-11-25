@@ -135,7 +135,7 @@ func (p *parser) params() []*ast.Param {
 	}
 	for p.peek() != token.RightParen && p.peek() != eof {
 		params = append(params, p.param())
-		if !p.accept(token.Comma) {
+		if !p.trailingComma("a trailing comma in a parameter list") {
 			break
 		}
 	}
@@ -147,7 +147,10 @@ func (p *parser) param() *ast.Param {
 	start, from := p.start(), p.pos
 	param := &ast.Param{Attrs: p.attributes(), Modifiers: p.modifiers()}
 	p.checkModifiers(param.Modifiers, onParam)
-	if startsType(p.peek()) {
+	if len(param.Modifiers) > 0 {
+		p.requires(token.PHP80, start, "constructor property promotion")
+	}
+	if p.startsType() {
 		param.Type = p.typeDecl()
 	}
 	if isAmpersand(p.peek()) {
@@ -173,13 +176,12 @@ func (p *parser) param() *ast.Param {
 	return param
 }
 
-func startsType(k token.Kind) bool {
-	switch k {
-	case token.Question, token.LeftParen, token.Identifier, token.NameQualified, token.NameFullyQualified, token.NameRelative,
-		token.Array, token.Callable, token.Static:
+func (p *parser) startsType() bool {
+	switch p.peek() {
+	case token.Question, token.LeftParen, token.Array, token.Callable, token.Static:
 		return true
 	}
-	return false
+	return p.nameTokens() > 0
 }
 
 func (p *parser) returnType() ast.Type {
@@ -202,6 +204,7 @@ func (p *parser) typeDecl() ast.Type {
 			union.Types = append(union.Types, p.typeAtom())
 		}
 		union.Span = p.span(start)
+		p.requires(token.PHP80, start, "union types")
 		return union
 	case grouped:
 		p.unexpected("expected '|'")
@@ -236,6 +239,9 @@ func (p *parser) namedType() ast.Type {
 	switch k := p.peek(); k {
 	case token.Array, token.Callable, token.Static:
 		p.next()
+		if k == token.Static {
+			p.requires(token.PHP80, start, "the static return type")
+		}
 		return &ast.NamedType{Name: &ast.Name{Span: p.span(start), Kind: k}, Span: p.span(start)}
 	}
 	return &ast.NamedType{Name: p.name(), Span: p.span(start)}
@@ -385,7 +391,7 @@ func (p *parser) member() ast.Member {
 	case token.Function:
 		return p.method(start, doc, attrs, mods)
 	}
-	if startsType(p.peek()) || p.peek() == token.Variable {
+	if p.startsType() || p.peek() == token.Variable {
 		return p.property(start, doc, attrs, mods)
 	}
 	p.unexpected("expected a class member")
@@ -536,7 +542,7 @@ func (p *parser) traitUse(start uint32, doc ast.Span) ast.Member {
 func (p *parser) adaptation() *ast.TraitAdaptation {
 	start := p.start()
 	a := &ast.TraitAdaptation{}
-	if p.peekAt(1) == token.DoubleColon {
+	if n := p.nameTokens(); n > 0 && p.peekAt(n) == token.DoubleColon {
 		a.Trait = p.name()
 		p.next()
 	}

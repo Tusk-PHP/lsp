@@ -135,7 +135,7 @@ func TestOperatorTreesMatchPHPParser(t *testing.T) {
 	for i, src := range programs {
 		sources["program "+strconv.Itoa(i)] = src
 	}
-	for _, version := range []token.Version{token.PHP84, token.PHP85} {
+	for _, version := range []token.Version{token.PHP74, token.PHP84, token.PHP85} {
 		t.Run(version.String(), func(t *testing.T) { compareShapes(t, *php, version, sources, autoload) })
 	}
 }
@@ -146,7 +146,7 @@ func compareShapes(t *testing.T, php phpref.PHP, version token.Version, sources 
 	for path, src := range sources {
 		encoded := want[path]
 		file := Parse(src, version)
-		if encoded == "skip" || len(file.Errors) > 0 {
+		if encoded == "skip" || len(file.Errors) > 0 || !token.Attribute.In(version) && strings.Contains(src, "#[") {
 			continue
 		}
 		compared++

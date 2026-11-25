@@ -67,12 +67,12 @@ above it in this list**, never from a later one:
    `rule.Code` constant listed in `rule.All`), `strict` (whether a recovered
    panic is raised again: `-strict` or `TUSK_STRICT`).
 2. **Language core:** `php/token`, `php/lexer`, `php/ast` and `php/parser` (a
-   lossless lexer that matches the tokenizer of PHP 7.4 and 8.0 to 8.6, and a full
-   fault-tolerant parser that matches PHP 8.0 to 8.5's own parser and reads PHP
-   8.6, with `short_open_tag` off, so `<?` is inline HTML; see issue #140; the
-   lexer leaves out the empty `T_ENCAPSED_AND_WHITESPACE` PHP emits for a space
-   in an unquoted string offset like `"$a[ b]"`), `parser` (the older tokenizer
-   and lightweight AST the features still use),
+   lossless lexer and a full fault-tolerant parser that match the tokenizer and
+   parser of PHP 7.4 and 8.0 to 8.6, with `short_open_tag` off, so `<?` is
+   inline HTML; see issue #140; the lexer leaves out the empty
+   `T_ENCAPSED_AND_WHITESPACE` PHP emits for a space in an unquoted string offset
+   like `"$a[ b]"`), `parser` (the older tokenizer and lightweight AST the
+   features still use),
    `types`, `phparray`, `stubs` (embedded builtin stubs by PHP version and
    extension), `phpdetect`.
 3. **Index and resolution:** `symbols` (the central index), `scope` (variables,

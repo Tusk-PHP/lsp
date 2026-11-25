@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"strings"
+
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
@@ -42,7 +44,7 @@ const (
 	bpClone      = 26
 )
 
-func infix(k token.Kind) (int, assoc, bool) {
+func infix(k token.Kind, v token.Version) (int, assoc, bool) {
 	switch k {
 	case token.Or:
 		return bpLogicalOr, left, true
@@ -71,6 +73,9 @@ func infix(k token.Kind) (int, assoc, bool) {
 	case token.Pipe:
 		return bpPipe, left, true
 	case token.Dot:
+		if v < token.PHP80 {
+			return bpAdd, left, true
+		}
 		return bpConcat, left, true
 	case token.ShiftLeft, token.ShiftRight:
 		return bpShift, left, true
@@ -123,8 +128,13 @@ func (p *parser) assignable(target ast.Expr, op token.Kind) bool {
 }
 
 func (p *parser) canFollow(e ast.Expr, k token.Kind) bool {
-	if k == token.Increment || k == token.Decrement {
+	switch {
+	case k == token.Increment || k == token.Decrement:
 		return p.writable(e)
+	case k == token.LeftBrace && !p.braceOffsets():
+		return false
+	case k == token.LeftBrace && p.version >= token.PHP80:
+		k = token.LeftBracket
 	}
 	if e == p.parenthesized || isVariable(e) {
 		return true
@@ -132,12 +142,16 @@ func (p *parser) canFollow(e ast.Expr, k token.Kind) bool {
 	switch e := e.(type) {
 	case *ast.Literal:
 		return e.Kind == token.ConstantString
-	case *ast.InterpolatedString:
-		return e.Kind == token.DoubleQuote
-	case *ast.Array, *ast.ConstFetch, *ast.ClassConstFetch:
+	case *ast.Array:
 		return true
+	case *ast.ConstFetch:
+		return p.version >= token.PHP80 || k == token.LeftBracket || k == token.LeftParen || k == token.DoubleColon
+	case *ast.ClassConstFetch:
+		return p.version >= token.PHP80 || k == token.LeftBracket
+	case *ast.InterpolatedString:
+		return e.Kind == token.DoubleQuote && p.version >= token.PHP80
 	case *ast.MagicConst:
-		return k == token.LeftBracket || k == token.ObjectOperator || k == token.NullsafeObjectOperator
+		return p.version >= token.PHP80 && (k == token.LeftBracket || k == token.ObjectOperator || k == token.NullsafeObjectOperator)
 	case *ast.New:
 		return p.version >= token.PHP84 && (e.Args != nil || e.Anonymous != nil)
 	}
@@ -186,7 +200,7 @@ func (p *parser) operators(lhs ast.Expr, min int, start uint32) ast.Expr {
 			lhs = p.assignment(lhs, start)
 			continue
 		}
-		bp, as, ok := infix(k)
+		bp, as, ok := infix(k, p.version)
 		if !ok || bp < min {
 			return lhs
 		}
@@ -205,7 +219,7 @@ func (p *parser) operators(lhs ast.Expr, min int, start uint32) ast.Expr {
 			rhs := p.exprBP(next)
 			lhs = &ast.Binary{Span: p.span(start), Op: k, Left: lhs, Right: rhs}
 			if as == nonassoc {
-				if nbp, _, ok := infix(p.peek()); ok && nbp == bp {
+				if nbp, _, ok := infix(p.peek(), p.version); ok && nbp == bp {
 					p.unexpected("this operator is non-associative")
 				}
 			}
@@ -265,7 +279,10 @@ func (p *parser) unary() ast.Expr {
 		p.next()
 		return &ast.Unary{Op: k, Operand: p.variable(), Span: p.span(start)}
 	case token.IntCast, token.FloatCast, token.StringCast, token.ArrayCast, token.ObjectCast, token.BoolCast, token.UnsetCast:
-		p.next()
+		cast := p.next()
+		if p.version >= token.PHP80 && k == token.FloatCast && strings.Contains(strings.ToLower(cast.Text(p.src)), "real") {
+			p.errorAt(ast.Span{Start: cast.Start, End: cast.End}, "the (real) cast has been removed, use (float) instead")
+		}
 		return &ast.Cast{Kind: k, Operand: p.exprBP(bpUnary), Span: p.span(start)}
 	case token.Clone:
 		return p.clone()
@@ -279,7 +296,9 @@ func (p *parser) unary() ast.Expr {
 		return &ast.YieldFrom{Operand: p.exprBP(bpYield + 1), Span: p.span(start)}
 	case token.Throw:
 		p.next()
-		return &ast.Throw{Operand: p.expr(), Span: p.span(start)}
+		e := &ast.Throw{Operand: p.expr(), Span: p.span(start)}
+		p.requires(token.PHP80, start, "throw expressions")
+		return e
 	case token.Include, token.IncludeOnce, token.Require, token.RequireOnce:
 		p.next()
 		return &ast.Include{Kind: k, Operand: p.expr(), Span: p.span(start)}
@@ -323,7 +342,7 @@ func startsExpr(k token.Kind) bool {
 	case eof, token.Semicolon, token.RightParen, token.RightBracket, token.RightBrace, token.Comma, token.DoubleArrow, token.CloseTag, token.Colon, token.As:
 		return false
 	}
-	_, _, isInfix := infix(k)
+	_, _, isInfix := infix(k, token.Latest)
 	return !isInfix || k == token.Minus || k == token.Plus || isAmpersand(k)
 }
 
@@ -419,9 +438,10 @@ func (p *parser) primary() ast.Expr {
 			t := p.next()
 			return &ast.ConstFetch{Name: &ast.Name{Span: ast.Span{Start: t.Start, End: t.End}, Kind: token.Identifier}, Span: p.span(start)}
 		}
-	case token.Identifier, token.NameQualified, token.NameFullyQualified, token.NameRelative:
-		name := p.name()
-		return &ast.ConstFetch{Name: name, Span: p.span(start)}
+	case token.Identifier, token.NameQualified, token.NameFullyQualified, token.NameRelative, token.NamespaceSeparator, token.Namespace:
+		if p.nameTokens() > 0 {
+			return &ast.ConstFetch{Name: p.name(), Span: p.span(start)}
+		}
 	}
 	p.unexpected("expected an expression")
 	if k != eof && k != token.Semicolon && k != token.RightBrace && k != token.RightParen && k != token.CloseTag {
@@ -480,6 +500,8 @@ func (p *parser) postfix(e ast.Expr, start uint32) ast.Expr {
 			}
 			p.expect(token.RightBracket)
 			e = &ast.ArrayDimFetch{Array: e, Dim: dim, Span: p.span(start)}
+		case token.LeftBrace:
+			e = p.braceOffset(e, start)
 		case token.ObjectOperator, token.NullsafeObjectOperator:
 			nullsafe := p.next().Kind == token.NullsafeObjectOperator
 			name := p.memberAccessName()
@@ -500,6 +522,17 @@ func (p *parser) postfix(e ast.Expr, start uint32) ast.Expr {
 			return e
 		}
 	}
+}
+
+func (p *parser) braceOffsets() bool {
+	return p.version < token.PHP84
+}
+
+func (p *parser) braceOffset(e ast.Expr, start uint32) ast.Expr {
+	p.next()
+	dim := p.expr()
+	p.expect(token.RightBrace)
+	return &ast.ArrayDimFetch{Array: e, Dim: dim, Span: p.span(start)}
 }
 
 func (p *parser) memberAccessName() ast.Expr {
@@ -585,6 +618,7 @@ func (p *parser) arg() *ast.Arg {
 	case isSemiReserved(p.peek()) && p.peekAt(1) == token.Colon:
 		arg.Name = p.memberName()
 		p.next()
+		p.requires(token.PHP80, start, "named arguments")
 	}
 	if !arg.Unpack && p.peek() == token.Question {
 		if next := p.peekAt(1); next == token.Comma || next == token.RightParen {
@@ -699,16 +733,17 @@ func (p *parser) newExpr() ast.Expr {
 func (p *parser) classReference() ast.Expr {
 	start := p.start()
 	var e ast.Expr
-	switch k := p.peek(); k {
-	case token.Identifier, token.NameQualified, token.NameFullyQualified, token.NameRelative:
+	switch k := p.peek(); {
+	case p.nameTokens() > 0:
 		e = &ast.ConstFetch{Name: p.name(), Span: p.span(start)}
-	case token.Static:
+	case k == token.Static:
 		p.next()
 		e = &ast.ConstFetch{Name: &ast.Name{Span: p.span(start), Kind: token.Static}, Span: p.span(start)}
-	case token.LeftParen:
+	case k == token.LeftParen:
 		p.next()
 		inner := p.expr()
 		p.expect(token.RightParen)
+		p.requires(token.PHP80, start, "an expression as the class name")
 		return inner
 	default:
 		e = p.simpleVariable()
@@ -726,6 +761,11 @@ func (p *parser) classReference() ast.Expr {
 			dim := p.expr()
 			p.expect(token.RightBracket)
 			e = &ast.ArrayDimFetch{Array: e, Dim: dim, Span: p.span(start)}
+		case token.LeftBrace:
+			if !p.braceOffsets() {
+				return e
+			}
+			e = p.braceOffset(e, start)
 		case token.ObjectOperator, token.NullsafeObjectOperator:
 			nullsafe := p.next().Kind == token.NullsafeObjectOperator
 			e = &ast.PropertyFetch{Object: e, Name: p.memberAccessName(), Nullsafe: nullsafe, Span: p.span(start)}
@@ -768,7 +808,7 @@ func (p *parser) closure(start uint32, attrs []*ast.AttributeGroup, static bool)
 			}
 			use.Span = p.span(useStart)
 			uses = append(uses, use)
-			if !p.accept(token.Comma) {
+			if !p.trailingComma("a trailing comma in a closure's use list") {
 				break
 			}
 		}

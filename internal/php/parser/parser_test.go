@@ -537,6 +537,44 @@ var programs = []string{
 	"<?php class C { public $a ?>\n<?php }",
 	"<?php $b = (void) f();",
 	"<?php (void) f(); (void) $a->b;",
+	"<?php function f(int|string $a) {}",
+	"<?php function f(): static {}",
+	"<?php f(a: 1);",
+	"<?php class A { function __construct(public $a) {} }",
+	"<?php $a ?? throw new E;",
+	"<?php fn() => throw new E;",
+	"<?php throw new E; if ($a) throw $b;",
+	"<?php function f($a,) {}",
+	"<?php function () use ($a,) {};",
+	"<?php try {} catch (E) {}",
+	"<?php new (foo());",
+	"<?php $a instanceof (foo());",
+	"<?php \"a$b\"[0];",
+	"<?php __LINE__[0];",
+	"<?php FOO->x;",
+	"<?php Foo::BAR::$x;",
+	"<?php Foo::BAR->x;",
+	"<?php Foo::BAR[0]; FOO[0]; 'abc'->x; [1]->x; 'f'();",
+	"<?php #[A] function f() {}",
+	"<?php use \\A\\B, C\\D; use \\E\\{F, G\\H}; try {} catch (\\A\\B | C\\D $e) {} class X extends \\A\\B implements C\\D { use \\T\\U { \\T\\U::m insteadof V; } public function f(\\A $a, ?\\B\\C $b): \\D { return new \\A\\B instanceof namespace\\C; } }",
+	"<?php $a{0}; 'abc'{0}; foo(){0}; ($a){0}; $a->b{0}; Foo::$a{0}; new $a{0};",
+	"<?php #[\nfunction g() {}",
+	"<?php use C \\ D;",
+	"<?php $a = (real) $b;",
+	"<?php function match() {} match(1);",
+	"<?php namespace\\foo(); Foo \\ Bar::x(); \\ /* c */ Foo::x();",
+	"<?php namespace Foo \\ Bar;",
+	"<?php $a = 1 . 2 + 3 << 4 . 5 - 6;",
+	"<?php FOO{0};",
+	"<?php __LINE__{0};",
+	"<?php namespace \\Foo;",
+	"<?php use namespace\\Foo;",
+	"<?php clone(?); clone($a, ?);",
+	"<?php FOO{0}; Foo::BAR{0}; __LINE__{0}; \"a$b\"{0};",
+	"<?php use A\\{\\B};",
+	"<?php use function namespace\\f;",
+	"<?php use \\A\\{B\\C, function d};",
+	"<?php namespace namespace\\Foo;",
 }
 
 func TestParserAgreesWithPHPOnPrograms(t *testing.T) {
@@ -544,7 +582,7 @@ func TestParserAgreesWithPHPOnPrograms(t *testing.T) {
 	for i, src := range programs {
 		sources["p"+strconv.Itoa(i)] = src
 	}
-	for v := token.PHP80; v <= token.Latest; v++ {
+	for v := token.PHP74; v <= token.Latest; v++ {
 		for _, src := range programs {
 			checkTree(t, src, v)
 		}
@@ -693,8 +731,10 @@ func TestUnterminatedStringPointsAtItsOpening(t *testing.T) {
 
 func TestTreesAreWellFormedOnTheCorpus(t *testing.T) {
 	for path, src := range phpref.ReadAll(t, phpref.Corpus(t)) {
-		if problem := treeProblem(src, token.Latest); problem != "" {
-			t.Errorf("%s: %s", path, problem)
+		for _, v := range []token.Version{token.PHP74, token.Latest} {
+			if problem := treeProblem(src, v); problem != "" {
+				t.Errorf("%s on PHP %s: %s", path, v, problem)
+			}
 		}
 	}
 }
@@ -903,9 +943,30 @@ func TestVersionedSyntaxMatchesPHP(t *testing.T) {
 		{"<?php new class(1) {}->foo;", token.PHP84},
 		{"<?php for ((void) $a, $b; (void) $c, $d; (void) $e);", token.PHP85},
 		{"<?php for (; $b, (void) $a;);", never},
-		{"<?php switch ($a): ?>\n<?php case 1: endswitch;", token.PHP80},
-		{"<?php switch ($a) { case 1 ?>\n<?php }", token.PHP80},
-		{"<?php class C { use T { foo as final bar; foo as static; } }", token.PHP80},
+		{"<?php switch ($a): ?>\n<?php case 1: endswitch;", token.PHP74},
+		{"<?php switch ($a) { case 1 ?>\n<?php }", token.PHP74},
+		{"<?php class C { use T { foo as final bar; foo as static; } }", token.PHP74},
+		{"<?php function f(int|string $a) {}", token.PHP80},
+		{"<?php function f(): static {}", token.PHP80},
+		{"<?php f(a: 1);", token.PHP80},
+		{"<?php class A { function __construct(public $a) {} }", token.PHP80},
+		{"<?php $a ?? throw new E;", token.PHP80},
+		{"<?php fn() => throw new E;", token.PHP80},
+		{"<?php throw new E; if ($a) throw $b;", token.PHP74},
+		{"<?php function f($a,) {}", token.PHP80},
+		{"<?php function () use ($a,) {};", token.PHP80},
+		{"<?php try {} catch (E) {}", token.PHP80},
+		{"<?php new (foo());", token.PHP80},
+		{"<?php $a instanceof (foo());", token.PHP80},
+		{"<?php \"a$b\"[0];", token.PHP80},
+		{"<?php __LINE__[0];", token.PHP80},
+		{"<?php FOO->x;", token.PHP80},
+		{"<?php Foo::BAR::$x;", token.PHP80},
+		{"<?php Foo::BAR->x;", token.PHP80},
+		{"<?php $o?->p;", token.PHP80},
+		{"<?php Foo::BAR[0]; FOO[0]; 'abc'->x; [1]->x; 'f'();", token.PHP74},
+		{"<?php #[A] function f() {}", token.PHP74},
+		{"<?php use \\A\\B, C\\D; use \\E\\{F, G\\H}; try {} catch (\\A\\B | C\\D $e) {} class X extends \\A\\B implements C\\D { use \\T\\U { \\T\\U::m insteadof V; } public function f(\\A $a, ?\\B\\C $b): \\D { return new \\A\\B instanceof namespace\\C; } }", token.PHP74},
 		{"<?php class C { $a; }", never},
 		{"<?php 1[0];", never},
 		{"<?php $a++ ++;", never},
@@ -919,13 +980,83 @@ func TestVersionedSyntaxMatchesPHP(t *testing.T) {
 		{"<?php class C { var static $a; }", never},
 	}
 	for _, c := range cases {
-		for v := token.PHP80; v <= token.Latest; v++ {
+		for v := token.PHP74; v <= token.Latest; v++ {
 			errs := Parse(c.src, v).Errors
 			if ok := len(errs) == 0; ok != (v >= c.okFrom) {
 				t.Errorf("%q on PHP %s: errors %v", c.src, v, errs)
 			}
 		}
 	}
+}
+
+func TestRemovedSyntaxParsesUntilItsRemoval(t *testing.T) {
+	cases := []struct {
+		src             string
+		firstOK, lastOK token.Version
+	}{
+		{"<?php $a{0}; 'abc'{0}; foo(){0}; ($a){0}; $a->b{0}; Foo::$a{0}; new $a{0};", token.PHP74, token.PHP83},
+		{"<?php FOO{0}; Foo::BAR{0}; __LINE__{0}; \"a$b\"{0};", token.PHP80, token.PHP83},
+		{"<?php $a = (real) $b;", token.PHP74, token.PHP74},
+		{"<?php #[\nfunction g() {}", token.PHP74, token.PHP74},
+		{"<?php use C \\ D;", token.PHP74, token.PHP74},
+		{"<?php function match() {} match(1);", token.PHP74, token.PHP74},
+		{"<?php namespace\\foo(); Foo \\ Bar::x(); \\ /* c */ Foo::x();", token.PHP74, token.PHP74},
+		{"<?php namespace Foo \\ Bar;", token.PHP74, token.PHP74},
+		{"<?php /* never closed", token.PHP74, token.PHP74},
+	}
+	for _, c := range cases {
+		for v := token.PHP74; v <= token.Latest; v++ {
+			if errs := Parse(c.src, v).Errors; (len(errs) == 0) != (c.firstOK <= v && v <= c.lastOK) {
+				t.Errorf("%q on PHP %s: errors %v", c.src, v, errs)
+			}
+		}
+	}
+}
+
+func TestNamesSpanTheirTokensOn74(t *testing.T) {
+	src := "<?php new \\ A \\ B; new namespace\\C; D\\E::f();"
+	var got []string
+	ast.Walk(Parse(src, token.PHP74), func(n ast.Node) bool {
+		if name, ok := n.(*ast.Name); ok {
+			got = append(got, name.Kind.String()+" "+name.Text(src))
+		}
+		return true
+	})
+	want := []string{"T_NAME_FULLY_QUALIFIED \\ A \\ B", "T_NAME_RELATIVE namespace\\C", "T_NAME_QUALIFIED D\\E"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestConcatenationBindsLikeAdditionOn74(t *testing.T) {
+	src := "<?php $a = 1 . 2 + 3 << 4;"
+	for v, want := range map[token.Version]string{token.PHP74: "((1 . 2) + 3) << 4", token.PHP80: "1 . ((2 + 3) << 4)"} {
+		var root *ast.Binary
+		ast.Walk(Parse(src, v), func(n ast.Node) bool {
+			if b, ok := n.(*ast.Binary); ok && root == nil {
+				root = b
+			}
+			return true
+		})
+		if got := grouping(src, root); got != want {
+			t.Errorf("PHP %s: got %s, want %s", v, got, want)
+		}
+	}
+}
+
+func grouping(src string, e ast.Expr) string {
+	b, ok := e.(*ast.Binary)
+	if !ok {
+		return e.Bounds().Text(src)
+	}
+	left, right := grouping(src, b.Left), grouping(src, b.Right)
+	if _, nested := b.Left.(*ast.Binary); nested {
+		left = "(" + left + ")"
+	}
+	if _, nested := b.Right.(*ast.Binary); nested {
+		right = "(" + right + ")"
+	}
+	return left + " " + b.Op.Text() + " " + right
 }
 
 func TestNestedDestructuringIsAList(t *testing.T) {
