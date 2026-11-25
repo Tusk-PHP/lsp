@@ -59,6 +59,7 @@ type CursorContext struct {
 	JoinedLine      string
 	JoinedWordStart int
 	File            *parser.FileNode
+	FunctionCall    bool
 }
 
 type MemberContext struct {
@@ -97,6 +98,7 @@ func Analyze(uri, source string, pos protocol.Position) *CursorContext {
 		JoinedLine:      joinedLine,
 		JoinedWordStart: joinedWordStart,
 		File:            file,
+		FunctionCall:    accessKind == AccessNone && isFunctionCall(result.Tokens, wordRange),
 	}
 	ctx.Scope = scopeAt(result, pos, ctx.EnclosingFQN)
 	return ctx

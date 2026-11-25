@@ -48,7 +48,7 @@ function viaTrait(ViaTrait $v): float { return $v->area(); }
 	}
 }
 
-func positionOf(t *testing.T, src, needle string) protocol.Position {
+func positionOf(t testing.TB, src, needle string) protocol.Position {
 	t.Helper()
 	i := strings.Index(src, needle)
 	if i < 0 {
