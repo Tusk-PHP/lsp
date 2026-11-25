@@ -92,7 +92,7 @@ func (r *InvalidBuilderArgRule) Check(file *parser.FileNode, source string, _ *s
 	if r.ModelResolver == nil || r.Members == nil || file == nil {
 		return nil
 	}
-	syntax := r.Shared.tree(source, file.Grammar)
+	syntax := r.Shared.tree(source, file)
 	var findings []Finding
 	joins := &builderJoins{source: source}
 	for _, m := range syntax.references().members {
