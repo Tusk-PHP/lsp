@@ -172,7 +172,7 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 		if classFQN == "" {
 			return nil
 		}
-		return symbolLocation(a.accessedMember(owner, word, ctx.Called))
+		return symbolLocation(a.resolver.AccessedMemberOn(owner, word, ctx.Called))
 	}
 
 	if member := a.index.MemberDeclaredAt(uri, pos, word); member != nil {
@@ -208,16 +208,6 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 	}
 
 	return symbolLocation(a.index.LookupStandalone(word, ctx.EnclosingFQN))
-}
-
-func (a *Analyzer) accessedMember(owner resolve.ResolvedType, word string, called bool) *symbols.Symbol {
-	if member := a.resolver.FindAccessedMember(owner.BaseFQN(), word, called); member != nil {
-		return member
-	}
-	if member := a.resolver.FindMemberAnywhere(owner.BaseFQN(), word); member != nil {
-		return member
-	}
-	return a.resolver.FindMemberAnywhereOn(owner, word)
 }
 
 // classKeywordFQN returns the class that self, static or parent stands for at
@@ -365,7 +355,7 @@ func (a *Analyzer) symbolTarget(uri, source string, ctx *sourcectx.CursorContext
 		if classFQN == "" {
 			return definitionTarget{}
 		}
-		if member := a.accessedMember(owner, word, ctx.Called); member != nil {
+		if member := a.resolver.AccessedMemberOn(owner, word, ctx.Called); member != nil {
 			// Owner is the *declaring* class (member.ParentFQN), not the
 			// receiver — that's how php.net documents methods/properties:
 			// ReflectionMethod::getParameters lives at
@@ -842,7 +832,7 @@ func (a *Analyzer) resolveSymbolAtCursor(uri, source string, pos protocol.Positi
 		if owner.BaseFQN() == "" {
 			return nil
 		}
-		return a.accessedMember(owner, word, ctx.Called)
+		return a.resolver.AccessedMemberOn(owner, word, ctx.Called)
 	}
 	if ctx != nil && ctx.FunctionCall {
 		return a.resolver.CalledFunction(word, file)

@@ -140,12 +140,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		if classFQN == "" {
 			return nil
 		}
-		sym := p.resolver.FindMemberAnywhere(classFQN, word)
-		if sym == nil {
-			// With the receiver's type arguments and every class of a union:
-			// a local scope on Builder<Post> is found on Post.
-			sym = p.resolver.FindMemberAnywhereOn(owner, word)
-		}
+		sym := p.resolver.AccessedMemberOn(owner, word, ctx.Called)
 		// For Laravel facades, also look up the member on the concrete class
 		if sym == nil && p.container != nil && p.framework == "laravel" {
 			if concrete := p.container.ResolveFacade(classFQN); concrete != "" {
