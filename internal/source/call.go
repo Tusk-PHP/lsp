@@ -7,7 +7,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
-func isFunctionCall(tokens []parser.Token, word protocol.Range) bool {
+func isCalled(tokens []parser.Token, word protocol.Range) bool {
 	last := identifierEndingAt(tokens, word.End)
 	if last < 0 {
 		return false
@@ -21,7 +21,7 @@ func isFunctionCall(tokens []parser.Token, word protocol.Range) bool {
 	}
 	if prev := prevSignificantToken(tokens, first-1); prev >= 0 {
 		switch tokens[prev].Kind {
-		case parser.TokenNew, parser.TokenFunction, parser.TokenArrow, parser.TokenDoubleColon:
+		case parser.TokenNew, parser.TokenFunction:
 			return false
 		}
 	}

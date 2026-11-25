@@ -172,15 +172,7 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 		if classFQN == "" {
 			return nil
 		}
-		if sym := a.resolver.FindMemberAnywhere(classFQN, word); sym != nil {
-			return symbolLocation(sym)
-		}
-		// With the receiver's type arguments and every class of a union: a
-		// local scope on Builder<Post> is found on Post.
-		if sym := a.resolver.FindMemberAnywhereOn(owner, word); sym != nil {
-			return symbolLocation(sym)
-		}
-		return nil
+		return symbolLocation(a.accessedMember(owner, word, ctx.Called))
 	}
 
 	if member := a.index.MemberDeclaredAt(uri, pos, word); member != nil {
@@ -216,6 +208,16 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 	}
 
 	return symbolLocation(a.index.LookupStandalone(word, ctx.EnclosingFQN))
+}
+
+func (a *Analyzer) accessedMember(owner resolve.ResolvedType, word string, called bool) *symbols.Symbol {
+	if member := a.resolver.FindAccessedMember(owner.BaseFQN(), word, called); member != nil {
+		return member
+	}
+	if member := a.resolver.FindMemberAnywhere(owner.BaseFQN(), word); member != nil {
+		return member
+	}
+	return a.resolver.FindMemberAnywhereOn(owner, word)
 }
 
 // classKeywordFQN returns the class that self, static or parent stands for at
@@ -354,13 +356,7 @@ func (a *Analyzer) resolveDefinitionSymbol(uri, source string, pos protocol.Posi
 		if classFQN == "" {
 			return definitionTarget{}
 		}
-		member := a.resolver.FindMemberAnywhere(classFQN, word)
-		if member == nil {
-			// With the receiver's type arguments and every class of a union:
-			// a local scope on Builder<Post> is found on Post.
-			member = a.resolver.FindMemberAnywhereOn(owner, word)
-		}
-		if member != nil {
+		if member := a.accessedMember(owner, word, ctx.Called); member != nil {
 			// Owner is the *declaring* class (member.ParentFQN), not the
 			// receiver — that's how php.net documents methods/properties:
 			// ReflectionMethod::getParameters lives at
@@ -833,13 +829,11 @@ func (a *Analyzer) resolveSymbolAtCursor(uri, source string, pos protocol.Positi
 	// the member, return nil — do not fall through to name-based lookups that
 	// would match unrelated symbols across the project.
 	if ctx != nil && ctx.AccessKind != sourcectx.AccessNone {
-		classFQN := a.resolver.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file).BaseFQN()
-		if classFQN != "" {
-			if member := a.resolver.FindMemberAnywhere(classFQN, word); member != nil {
-				return member
-			}
+		owner := a.resolver.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		if owner.BaseFQN() == "" {
+			return nil
 		}
-		return nil
+		return a.accessedMember(owner, word, ctx.Called)
 	}
 	if ctx != nil && ctx.FunctionCall {
 		return a.resolver.CalledFunction(word, file)
