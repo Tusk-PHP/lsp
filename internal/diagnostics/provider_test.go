@@ -315,7 +315,7 @@ $name = "unterminated;
 `
 
 	p.mu.Lock()
-	p.saveResults[uri] = []Diagnostic{
+	p.saveResults[uri] = savedFindings{source: source, diags: []Diagnostic{
 		{
 			Range:    textpos.Range{Start: textpos.Position{Line: 2, Character: 4}, End: textpos.Position{Line: 2, Character: 15}},
 			Severity: rule.SeverityError,
@@ -337,7 +337,7 @@ $name = "unterminated;
 			Message:  "Access to property $name on MissingClass",
 			Code:     "unknown-member",
 		},
-	}
+	}}
 	p.mu.Unlock()
 
 	diags := p.Analyze(uri, source)

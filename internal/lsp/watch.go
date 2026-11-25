@@ -151,7 +151,7 @@ func (s *Server) refreshWorkspace() {
 		}
 	}
 	if configChanged {
-		s.session.ReanalyzeSaved(s.openDocument)
+		s.session.ReanalyzeSaved()
 	}
 	if len(result.Files) > 0 || result.Composer || result.ProfileChanged || configChanged {
 		s.republishOpenDocuments()

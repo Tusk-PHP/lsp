@@ -47,7 +47,14 @@ type Provider struct {
 
 	mu          sync.RWMutex
 	toolResults map[string][]Diagnostic
-	saveResults map[string][]Diagnostic
+	saveResults map[string]savedFindings
+	saveGen     uint64
+}
+
+type savedFindings struct {
+	source string
+	diags  []Diagnostic
+	gen    uint64
 }
 
 func NewProvider(index *symbols.Index, framework, rootPath string, logger *log.Logger, cfg *config.Config) *Provider {
@@ -57,7 +64,7 @@ func NewProvider(index *symbols.Index, framework, rootPath string, logger *log.L
 		rootPath:    rootPath,
 		logger:      logger,
 		toolResults: make(map[string][]Diagnostic),
-		saveResults: make(map[string][]Diagnostic),
+		saveResults: make(map[string]savedFindings),
 	}
 	p.SetConfig(cfg)
 	return p
@@ -113,7 +120,7 @@ func (p *Provider) analyze(uri, source string, withSaveRules bool) []Diagnostic 
 		diags = append(diags, cached...)
 	}
 	if cached, ok := p.saveResults[uri]; ok && !withSaveRules {
-		diags = append(diags, cached...)
+		diags = append(diags, cached.diags...)
 	}
 	p.mu.RUnlock()
 	if withSaveRules {
@@ -229,8 +236,13 @@ func toTemplate(doc *blade.Document, diags []Diagnostic) []Diagnostic {
 func (p *Provider) AnalyzeOnSave(uri, source string) {
 	diags := p.saveDiagnostics(p.settings.Load().cfg, uri, source)
 	p.mu.Lock()
-	p.saveResults[uri] = diags
-	p.mu.Unlock()
+	defer p.mu.Unlock()
+	p.storeSavedLocked(uri, source, diags)
+}
+
+func (p *Provider) storeSavedLocked(uri, source string, diags []Diagnostic) {
+	p.saveGen++
+	p.saveResults[uri] = savedFindings{source: source, diags: diags, gen: p.saveGen}
 }
 
 // saveDiagnostics runs the rules that wait for a save.
@@ -263,17 +275,28 @@ func (p *Provider) RunTools(uri, filePath string) {
 	p.mu.Unlock()
 }
 
-func (p *Provider) ReanalyzeSaved(open func(uri string) (string, bool)) {
+// ReanalyzeSaved works out the on-save rules' findings again, with the
+// current settings, for every saved source it holds results for. A result
+// is replaced only if no newer save stored one meanwhile.
+func (p *Provider) ReanalyzeSaved() {
+	type saved struct {
+		uri, source string
+		gen         uint64
+	}
 	p.mu.RLock()
-	uris := make([]string, 0, len(p.saveResults))
-	for uri := range p.saveResults {
-		uris = append(uris, uri)
+	pending := make([]saved, 0, len(p.saveResults))
+	for uri, found := range p.saveResults {
+		pending = append(pending, saved{uri: uri, source: found.source, gen: found.gen})
 	}
 	p.mu.RUnlock()
-	for _, uri := range uris {
-		if source, ok := open(uri); ok {
-			p.AnalyzeOnSave(uri, source)
+	cfg := p.settings.Load().cfg
+	for _, s := range pending {
+		diags := p.saveDiagnostics(cfg, s.uri, s.source)
+		p.mu.Lock()
+		if current, ok := p.saveResults[s.uri]; ok && current.gen == s.gen {
+			p.storeSavedLocked(s.uri, s.source, diags)
 		}
+		p.mu.Unlock()
 	}
 }
 

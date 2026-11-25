@@ -201,3 +201,42 @@ func TestSetConfigDropsToolResultsWhenTheToolsChange(t *testing.T) {
 		t.Error("tool results from other tool settings are dropped")
 	}
 }
+
+func TestReanalyzeSavedAppliesNewRulesToTheSavedSource(t *testing.T) {
+	const uri = "file:///t.php"
+	p := builderProvider(t, `{}`)
+	p.AnalyzeOnSave(uri, builderSource)
+	cfg := *p.settings.Load().cfg
+	if err := cfg.SetDiagnosticRulesJSON(`{"unknown-relation": "error"}`); err != nil {
+		t.Fatal(err)
+	}
+	p.SetConfig(&cfg)
+	p.ReanalyzeSaved()
+	rels := filterByCode(p.Analyze(uri, builderSource), "unknown-relation")
+	if len(rels) != 1 || rels[0].Severity != rule.SeverityError {
+		t.Errorf("the saved source's on-save findings follow the new rules: %#v", rels)
+	}
+}
+
+func TestReanalyzeSavedKeepsASaveStoredMeanwhile(t *testing.T) {
+	const uri = "file:///t.php"
+	const resaved = "<?php\n"
+	p := builderProvider(t, `{}`)
+	p.AnalyzeOnSave(uri, builderSource)
+	resolve := p.BuilderModelResolver
+	saved := false
+	p.BuilderModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
+		if !saved {
+			saved = true
+			p.AnalyzeOnSave(uri, resaved)
+		}
+		return resolve(prefix, method, source, line, file)
+	}
+	p.ReanalyzeSaved()
+	if !saved {
+		t.Fatal("the reanalysis resolves the builder's model")
+	}
+	if cols := filterByCode(p.Analyze(uri, resaved), "unknown-column"); len(cols) != 0 {
+		t.Errorf("findings of the older source don't replace those of a save stored during the reanalysis: %#v", cols)
+	}
+}

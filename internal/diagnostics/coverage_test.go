@@ -261,7 +261,7 @@ func TestClearCache(t *testing.T) {
 
 	p.mu.Lock()
 	p.toolResults["file:///a.php"] = nil
-	p.saveResults["file:///a.php"] = nil
+	p.saveResults["file:///a.php"] = savedFindings{}
 	p.mu.Unlock()
 
 	p.ClearCache("file:///a.php")

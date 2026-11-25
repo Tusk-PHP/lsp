@@ -170,11 +170,11 @@ func (s *Session) SetConfig(cfg *config.Config) {
 	s.hover.SetConfig(cfg)
 }
 
-// ReanalyzeSaved runs the on-save rules again, under the current settings,
-// for the files that have on-save findings and are still open, reading
-// their text through open.
-func (s *Session) ReanalyzeSaved(open func(uri string) (string, bool)) {
-	s.diag.ReanalyzeSaved(open)
+// ReanalyzeSaved works out the on-save rules' findings again, under the
+// current settings, for every saved file it holds findings for; a newer
+// save meanwhile keeps its own.
+func (s *Session) ReanalyzeSaved() {
+	s.diag.ReanalyzeSaved()
 }
 
 // Analyze returns a file's diagnostics while it is being edited: the fast
