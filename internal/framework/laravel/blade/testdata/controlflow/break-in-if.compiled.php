@@ -1,0 +1,3 @@
+<?php if($a): ?>
+  <?php break; ?>
+<?php endif; ?>

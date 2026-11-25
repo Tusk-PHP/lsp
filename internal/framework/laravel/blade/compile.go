@@ -16,7 +16,8 @@ type Document struct {
 	// Structured is false when the template's blocks don't balance, such as an
 	// `@if` without its `@endif`. Directives then become standalone statements,
 	// so a broken template can't make the rest of the PHP misread.
-	Structured bool
+	Structured         bool
+	LaravelControlFlow bool
 
 	template string
 	segments []segment // copied text, by position in PHP
@@ -130,6 +131,7 @@ type compiler struct {
 	last     int // template offset up to which newlines have been carried over
 	stack    []block
 	ok       bool
+	opaque   bool
 	custom   *Custom
 }
 
@@ -140,6 +142,10 @@ func (c *compiler) lookup(name string) directive {
 		return d
 	}
 	return lookupDirective(name)
+}
+
+func (c *compiler) registered(name string) bool {
+	return c.custom != nil && c.custom.Directives[strings.ToLower(name)] && !isDirective(name)
 }
 
 func compile(template string, nodes []Node, structured bool, header string, custom *Custom) *Document {
@@ -167,6 +173,9 @@ func compile(template string, nodes []Node, structured bool, header string, cust
 			c.copy(n.Expr)
 			c.emit("];")
 		case KindDirective:
+			if c.registered(n.Name) {
+				c.opaque = true
+			}
 			if structured {
 				c.directive(n)
 			} else {
@@ -179,7 +188,8 @@ func compile(template string, nodes []Node, structured bool, header string, cust
 	if len(c.stack) > 0 {
 		c.ok = false
 	}
-	return &Document{PHP: c.out.String(), Structured: structured && c.ok, template: template, segments: c.segments}
+	ok := structured && c.ok
+	return &Document{PHP: c.out.String(), Structured: ok, LaravelControlFlow: ok && !c.opaque, template: template, segments: c.segments}
 }
 
 // lines carries the template's line breaks up to offset into the PHP, so its
@@ -351,21 +361,41 @@ func (c *compiler) directive(n Node) {
 		c.pop(blockSwitch)
 		c.emit("endswitch;")
 	case dirBreak, dirContinue:
-		word := "break;"
-		if d.kind == dirContinue {
-			word = "continue;"
-		}
-		if n.HasArgs {
-			c.emit("if (")
-			c.copy(n.Args)
-			c.emit(") ")
-		}
-		c.emit(word)
+		c.jump(n)
 	case dirUse:
 		c.use(n)
 	case dirArgs:
 		c.args(n)
 	}
+}
+
+func (c *compiler) jump(n Node) {
+	keyword := Span{Start: n.Span.Start + 1, End: n.Span.Start + 1 + len(n.Name)}
+	if !n.HasArgs {
+		c.copy(keyword)
+		c.emit(";")
+		return
+	}
+	if level, ok := literalLevel(c.tpl[n.Args.Start:n.Args.End]); ok {
+		c.copy(keyword)
+		c.emit(" " + level + ";")
+		return
+	}
+	c.emit("if (")
+	c.copy(n.Args)
+	c.emit(") " + strings.ToLower(n.Name) + ";")
+}
+
+func literalLevel(arg string) (string, bool) {
+	arg = strings.Trim(arg, " \t\n\r\v\f")
+	digits := strings.TrimPrefix(arg, "-")
+	if digits == "" || strings.Trim(digits, "0123456789") != "" {
+		return "", false
+	}
+	if digits != arg || strings.Trim(digits, "0") == "" {
+		return "1", true
+	}
+	return digits, true
 }
 
 // flatDirective writes a directive as a statement of its own, for templates
