@@ -22,18 +22,20 @@ func BenchmarkFindReferencesLaravel(b *testing.B) {
 	ws.IndexWorkspace()
 	ws.IndexComposerDependencies()
 	a := NewAnalyzer(ws.Index, nil)
-	path := filepath.Join(root, "app", "Models", "User.php")
-	content, err := os.ReadFile(path)
-	if err != nil {
-		b.Fatal(err)
-	}
-	source := string(content)
-	uri := "file://" + path
-	for _, c := range []struct{ name, needle string }{
-		{"class", "class User"},
-		{"method", "function initials"},
+	for _, c := range []struct{ name, file, needle string }{
+		{"class", "app/Models/User.php", "class User"},
+		{"method", "app/Models/User.php", "function initials"},
+		{"common static method", "vendor/laravel/framework/src/Illuminate/Support/Str.php", "function of"},
+		{"common method", "vendor/laravel/framework/src/Illuminate/Collections/Collection.php", "public function map"},
 	} {
-		i := strings.Index(source, c.needle) + len(c.needle) - 2
+		path := filepath.Join(root, filepath.FromSlash(c.file))
+		content, err := os.ReadFile(path)
+		if err != nil {
+			b.Fatal(err)
+		}
+		source := string(content)
+		uri := "file://" + path
+		i := strings.Index(source, c.needle) + len(c.needle) - 1
 		pos := protocol.Position{Line: strings.Count(source[:i], "\n"), Character: i - strings.LastIndex(source[:i], "\n") - 1}
 		b.Run(c.name, func(b *testing.B) {
 			b.ReportAllocs()
