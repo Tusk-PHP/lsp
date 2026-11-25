@@ -5,9 +5,16 @@ import "strings"
 // IsPHPSource reports whether a path or URI is PHP source the server reads:
 // `.php` files and `.phtml` templates (Magento, Zend Framework and others keep
 // their views in .phtml). Matching ignores case.
+var phpSourceExtensions = []string{".php", ".phtml"}
+
 func IsPHPSource(path string) bool {
 	lower := strings.ToLower(path)
-	return strings.HasSuffix(lower, ".php") || strings.HasSuffix(lower, ".phtml")
+	for _, ext := range phpSourceExtensions {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsTemplate reports whether a path or URI is a template: a .phtml file or a

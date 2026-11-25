@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/config"
@@ -28,11 +29,10 @@ type Options struct {
 }
 
 type Bootstrapped struct {
-	RootPath       string
-	Framework      string
-	Config         *config.Config
-	Logger         *log.Logger
-	BuiltinProfile symbols.BuiltinProfile
+	RootPath  string
+	Framework string
+	Config    *config.Config
+	Logger    *log.Logger
 
 	Index      *symbols.Index
 	Container  *container.ContainerAnalyzer
@@ -50,8 +50,13 @@ type Bootstrapped struct {
 	SchemaCache     *models.SchemaCache
 	Schema          *models.Schema
 
-	exclude         excludeRules
-	autoloadOnce    sync.Once
+	exclude excludeRules
+
+	profileMu sync.Mutex
+	profile   atomic.Pointer[symbols.BuiltinProfile]
+
+	autoloadMu      sync.Mutex
+	autoloadRead    bool
 	autoloadEntries []composer.AutoloadEntry
 	projectFiles    *projectFiles
 
@@ -91,12 +96,11 @@ func New(opts Options) *Bootstrapped {
 		index.SetClassGenerator(aliases)
 	}
 
-	return &Bootstrapped{
+	ws := &Bootstrapped{
 		RootPath:        opts.RootPath,
 		Framework:       opts.Framework,
 		Config:          cfg,
 		Logger:          opts.Logger,
-		BuiltinProfile:  opts.BuiltinProfile,
 		Index:           index,
 		Container:       container.NewContainerAnalyzer(index, opts.RootPath, opts.Framework),
 		RouteIndex:      routeIndex,
@@ -107,6 +111,9 @@ func New(opts Options) *Bootstrapped {
 		exclude:         newExcludeRules(cfg.ExcludePaths),
 		projectFiles:    newProjectFiles(cfg.MaxIndexFiles),
 	}
+	profile := opts.BuiltinProfile
+	ws.profile.Store(&profile)
+	return ws
 }
 
 func Build(ctx context.Context, opts Options) (*Bootstrapped, error) {

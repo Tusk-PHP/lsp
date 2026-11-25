@@ -117,7 +117,7 @@ func (s *Server) debugDocument(uri string) string {
 	var builtinRule *checks.BuiltinUnavailableRule
 	if s.diag != nil {
 		typeRes = s.diag.TypeResolver
-		builtinRule = s.diag.BuiltinUnavailableRule
+		builtinRule = s.diag.BuiltinUnavailableRule()
 	}
 	rules := diagnostics.NativeRules(diagnostics.NativeRulesOptions{
 		TypeResolver:           typeRes,
@@ -129,7 +129,7 @@ func (s *Server) debugDocument(uri string) string {
 
 	var profile string
 	if s.workspace != nil {
-		bp := s.workspace.BuiltinProfile
+		bp := s.workspace.Profile()
 		profile = introspect.FormatProfile(bp.PHPVersion, bp.Extensions)
 	}
 

@@ -7,6 +7,7 @@ type projectFiles struct {
 	limit    int
 	walked   bool
 	admitted map[string]struct{}
+	indexed  int
 }
 
 func newProjectFiles(limit int) *projectFiles {
@@ -51,5 +52,29 @@ func (p *projectFiles) finish() int {
 	count := len(p.admitted)
 	p.walked = true
 	p.admitted = nil
+	p.indexed = count
 	return count
+}
+
+func (p *projectFiles) admitCreated(path string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.walked {
+		return p.admitLocked(path)
+	}
+	if p.limit > 0 && p.indexed >= p.limit {
+		return false
+	}
+	p.indexed++
+	return true
+}
+
+func (p *projectFiles) release(path string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.walked {
+		delete(p.admitted, path)
+		return
+	}
+	p.indexed--
 }

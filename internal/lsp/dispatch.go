@@ -30,6 +30,10 @@ func (s *Server) handleMessage(msg *jsonRPCMessage) {
 		s.handleDidClose(msg)
 	case "textDocument/didSave":
 		s.handleDidSave(msg)
+	case "workspace/didChangeWatchedFiles":
+		s.handleDidChangeWatchedFiles(msg)
+	case "workspace/didChangeConfiguration":
+		s.handleDidChangeConfiguration(msg)
 	case "textDocument/completion":
 		s.handleCompletion(msg)
 	case "completionItem/resolve":

@@ -105,3 +105,20 @@ func toLower(s string) string {
 	}
 	return string(b)
 }
+
+func (ws *Bootstrapped) Profile() symbols.BuiltinProfile {
+	return *ws.profile.Load()
+}
+
+func (ws *Bootstrapped) SetProfile(profile symbols.BuiltinProfile) (bool, error) {
+	ws.profileMu.Lock()
+	defer ws.profileMu.Unlock()
+	if ws.Profile().Equal(profile) {
+		return false, nil
+	}
+	if err := ws.Index.ReplaceBuiltins(profile); err != nil {
+		return false, fmt.Errorf("replace the builtins for PHP %s %v: %w", profile.PHPVersion, profile.Extensions, err)
+	}
+	ws.profile.Store(&profile)
+	return true, nil
+}

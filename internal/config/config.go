@@ -274,6 +274,8 @@ func DefaultConfig() *Config {
 	}
 }
 
+const FileName = ".tusk-php.json"
+
 func LoadFromFile(path string) (*Config, error) {
 	cfg := DefaultConfig()
 	data, err := os.ReadFile(path)

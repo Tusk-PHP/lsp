@@ -20,7 +20,7 @@ import (
 // invalidation.
 type Provider struct {
 	rootPath         string
-	projectPHPVer    string                                        // "MAJOR.MINOR" of the workspace platform
+	projectPHPVer    func() string
 	loadLockfile     func(root string) (*lockfile.Lockfile, error) // injectable for tests
 	enabled          bool
 	openOnDefinition bool
@@ -29,7 +29,7 @@ type Provider struct {
 // NewProvider constructs a Provider bound to a workspace root. projectPHPVer
 // is the resolved platform PHP version used to render the compatibility
 // glyph in the hover card; empty disables the glyph.
-func NewProvider(rootPath, projectPHPVer string) *Provider {
+func NewProvider(rootPath string, projectPHPVer func() string) *Provider {
 	return &Provider{
 		rootPath:      rootPath,
 		projectPHPVer: projectPHPVer,
@@ -126,7 +126,7 @@ func (p *Provider) buildCard(entry manifest.RequireEntry, repos []manifest.Repos
 		Name:          entry.Name,
 		Constraint:    entry.Value,
 		ExternalURL:   ExternalURL(entry.Name, repos, p.rootPath),
-		ProjectPHPVer: p.projectPHPVer,
+		ProjectPHPVer: p.projectPHPVer(),
 	}
 	// Locked data, if available.
 	if lock, err := p.loadLockfile(p.rootPath); err == nil && lock != nil {

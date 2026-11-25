@@ -32,7 +32,7 @@ func (s *Server) indexDocumentMaybeAsync(uri, source string) {
 	q.mu.Lock()
 	if !q.running[uri] && strings.Count(source, "\n") <= largeDocThreshold {
 		q.mu.Unlock()
-		s.indexFileByURI(uri, source)
+		s.workspace.IndexFile(uri, source)
 		return
 	}
 	if q.pending == nil {
@@ -79,7 +79,7 @@ func (s *Server) drainDocIndex(uri string) {
 		}
 		delete(q.pending, uri)
 		q.mu.Unlock()
-		s.indexFileByURI(uri, source)
+		s.workspace.IndexFile(uri, source)
 	}
 }
 
