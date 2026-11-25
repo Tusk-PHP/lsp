@@ -70,12 +70,35 @@ func TestGetWorkspaceSymbolsKeepsTheBestMatchesUpToTheLimit(t *testing.T) {
 	}
 }
 
-func TestGetWorkspaceSymbolsEmptyQueryReturnsNothing(t *testing.T) {
-	a, _ := setupRenameAnalyzer(manyClassSources([]string{"User", "Order"}))
+func TestGetWorkspaceSymbolsEmptyQueryReturnsClassesFirstUpToTheLimit(t *testing.T) {
+	sources := map[string]string{
+		"file:///workspace/helpers.php": "<?php\nnamespace App;\nfunction aaaHelper() {}\n",
+		"file:///workspace/Zebra.php":   "<?php\nnamespace App;\nclass Zebra { public function aaa() {} }\n",
+		"file:///workspace/Order.php":   "<?php\nnamespace App;\ninterface Order {}\n",
+	}
+	a, _ := setupRenameAnalyzer(sources)
 	for _, query := range []string{"", "  "} {
-		if results := a.GetWorkspaceSymbols(query); results == nil || len(results) != 0 {
-			t.Errorf("query %q: got %v, want an empty list", query, results)
+		var got []string
+		for _, sym := range a.GetWorkspaceSymbols(query) {
+			got = append(got, sym.Name)
 		}
+		want := []string{"Order", "Zebra", "aaa", "aaaHelper"}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("query %q: got %v, want %v", query, got, want)
+		}
+	}
+
+	names := make([]string, 0, maxWorkspaceSymbols+100)
+	for i := range maxWorkspaceSymbols + 100 {
+		names = append(names, fmt.Sprintf("Class%03d", i))
+	}
+	a, _ = setupRenameAnalyzer(manyClassSources(names))
+	results := a.GetWorkspaceSymbols("")
+	if len(results) != maxWorkspaceSymbols {
+		t.Fatalf("got %d results, want the limit, %d", len(results), maxWorkspaceSymbols)
+	}
+	if results[0].Name != "Class000" || results[maxWorkspaceSymbols-1].Name != fmt.Sprintf("Class%03d", maxWorkspaceSymbols-1) {
+		t.Errorf("want the first %d classes by name, got %q … %q", maxWorkspaceSymbols, results[0].Name, results[maxWorkspaceSymbols-1].Name)
 	}
 }
 

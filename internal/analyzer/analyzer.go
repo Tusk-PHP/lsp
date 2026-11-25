@@ -987,17 +987,28 @@ func (a *Analyzer) GetFoldingRanges(uri, source string) []protocol.FoldingRange 
 
 const maxWorkspaceSymbols = 500
 
+func emptyQueryScore(sym *symbols.Symbol) int {
+	if sym.IsClassLike() {
+		return 0
+	}
+	return 1
+}
+
 func (a *Analyzer) GetWorkspaceSymbols(query string) []protocol.SymbolInformation {
 	query = strings.TrimSpace(query)
-	if query == "" {
-		return []protocol.SymbolInformation{}
-	}
 
-	candidates := a.index.SearchByPrefix(query)
-	if strings.Contains(query, "\\") {
+	var candidates []*symbols.Symbol
+	switch {
+	case query == "":
+		candidates = a.index.FirstDeclaredByName(maxWorkspaceSymbols, symbols.SymbolKind.IsClassLike)
+		candidates = append(candidates, a.index.FirstDeclaredByName(maxWorkspaceSymbols-len(candidates), func(k symbols.SymbolKind) bool { return !k.IsClassLike() })...)
+	case strings.Contains(query, "\\"):
+		candidates = a.index.SearchByPrefix(query)
 		if fqns, _ := a.index.SearchByFQNPrefix(strings.TrimPrefix(query, "\\")); len(fqns) > 0 {
 			candidates = append(candidates, fqns...)
 		}
+	default:
+		candidates = a.index.SearchByPrefix(query)
 	}
 
 	type scoredSymbol struct {
@@ -1020,6 +1031,8 @@ func (a *Analyzer) GetWorkspaceSymbols(query string) []protocol.SymbolInformatio
 
 		score := 3
 		switch {
+		case query == "":
+			score = emptyQueryScore(sym)
 		case strings.EqualFold(sym.Name, query):
 			score = 0
 		case strings.EqualFold(sym.FQN, strings.TrimPrefix(query, "\\")):

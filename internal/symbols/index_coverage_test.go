@@ -1,6 +1,7 @@
 package symbols
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -330,4 +331,33 @@ func namesOf(syms []*Symbol) map[string]bool {
 		m[s.Name] = true
 	}
 	return m
+}
+
+func TestFirstDeclaredByName(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///a.php", `<?php
+namespace A;
+class Shared {}
+class Alpha {}
+`)
+	idx.IndexFile("file:///b.php", `<?php
+namespace B;
+class Shared {}
+function beta() {}
+`)
+	idx.addBuiltinClassLikeLocked("Aardvark", "")
+
+	var got []string
+	for _, sym := range idx.FirstDeclaredByName(2, SymbolKind.IsClassLike) {
+		got = append(got, sym.FQN)
+	}
+	slices.Sort(got)
+	want := []string{"A\\Alpha", "A\\Shared", "B\\Shared"}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v: builtins are left out, functions don't match the kind, and the limit finishes the last name", got, want)
+	}
+
+	if got := idx.FirstDeclaredByName(0, SymbolKind.IsClassLike); len(got) != 0 {
+		t.Errorf("limit 0: got %v, want nothing", got)
+	}
 }

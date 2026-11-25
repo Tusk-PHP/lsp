@@ -1007,6 +1007,57 @@ func (idx *Index) LookupByName(name string) []*Symbol {
 	return results
 }
 
+func (idx *Index) ensureSortedNames() {
+	idx.mu.RLock()
+	needRebuild := idx.sortedNamesDirty || len(idx.sortedNames) == 0
+	idx.mu.RUnlock()
+	if !needRebuild {
+		return
+	}
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	if !idx.sortedNamesDirty && len(idx.sortedNames) > 0 {
+		return
+	}
+	idx.sortedNames = make([]string, 0, len(idx.nameIndex))
+	for name := range idx.nameIndex {
+		idx.sortedNames = append(idx.sortedNames, name)
+	}
+	sort.Slice(idx.sortedNames, func(i, j int) bool {
+		return strings.ToLower(idx.sortedNames[i]) < strings.ToLower(idx.sortedNames[j])
+	})
+	idx.sortedNamesDirty = false
+}
+
+// FirstDeclaredByName returns the declared symbols (not builtins, and with a
+// file) whose kind keep accepts, in case-insensitive name order, stopping at
+// the first name that brings the count to limit or beyond. Every symbol of
+// that last name is included, so which ones are returned doesn't depend on
+// the order they were indexed in.
+func (idx *Index) FirstDeclaredByName(limit int, keep func(SymbolKind) bool) []*Symbol {
+	if limit <= 0 {
+		return nil
+	}
+	idx.ensureSortedNames()
+
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	results := make([]*Symbol, 0, limit)
+	for _, name := range idx.sortedNames {
+		for _, fqn := range idx.nameIndex[name] {
+			sym, ok := idx.symbols[fqn]
+			if !ok || IsBuiltin(sym) || sym.URI == "" || !keep(sym.Kind) {
+				continue
+			}
+			results = append(results, sym)
+		}
+		if len(results) >= limit {
+			break
+		}
+	}
+	return results
+}
+
 func (idx *Index) SearchByPrefix(prefix string) []*Symbol {
 	// Empty prefix: return all symbols without touching the sorted slice.
 	if prefix == "" {
@@ -1023,28 +1074,7 @@ func (idx *Index) SearchByPrefix(prefix string) []*Symbol {
 		return results
 	}
 
-	// Ensure the sorted names slice is up-to-date under a write lock if needed,
-	// then perform the binary search under a read lock.
-	idx.mu.RLock()
-	needRebuild := idx.sortedNamesDirty || len(idx.sortedNames) == 0
-	idx.mu.RUnlock()
-
-	if needRebuild {
-		idx.mu.Lock()
-		// Re-check under write lock to avoid duplicate work when two goroutines
-		// both observed dirty and one completes the rebuild before the other.
-		if idx.sortedNamesDirty || len(idx.sortedNames) == 0 {
-			idx.sortedNames = make([]string, 0, len(idx.nameIndex))
-			for name := range idx.nameIndex {
-				idx.sortedNames = append(idx.sortedNames, name)
-			}
-			sort.Slice(idx.sortedNames, func(i, j int) bool {
-				return strings.ToLower(idx.sortedNames[i]) < strings.ToLower(idx.sortedNames[j])
-			})
-			idx.sortedNamesDirty = false
-		}
-		idx.mu.Unlock()
-	}
+	idx.ensureSortedNames()
 
 	// Binary search for the first matching prefix under a read lock.
 	idx.mu.RLock()
