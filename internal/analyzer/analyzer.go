@@ -710,7 +710,7 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 	if ctx == nil || ctx.SymbolText == "" {
 		return nil
 	}
-	if ctx.SymbolKind == sourcectx.ContextSymbolVariable && ctx.SymbolText != "$this" && ctx.AccessKind != sourcectx.AccessStatic {
+	if a.mayBeLocalVariable(ctx) {
 		if locs := a.findVariableReferences(uri, source, pos, ctx.SymbolText); locs != nil {
 			return locs
 		}
@@ -1284,7 +1284,10 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 
 	file := ctx.File
 
-	// Try resolving as a symbol (class, method, property, function, etc.)
+	if a.mayBeLocalVariable(ctx.Name()) && isPrepareRenameVariableBindingSupported(scope.Collect(source).BindingAt(pos), word) {
+		return &protocol.PrepareRenameResult{Range: wordRange, Placeholder: word}
+	}
+
 	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 
 	if sym != nil && !a.referenceTargetOf(sym).renamable() {
@@ -1302,13 +1305,8 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 		return &protocol.PrepareRenameResult{Range: wordRange, Placeholder: placeholder}
 	}
 
-	// Variables are always renameable (local scope)
 	if strings.HasPrefix(word, "$") {
-		binding := scope.Collect(source).BindingAt(pos)
-		if !isPrepareRenameVariableBindingSupported(binding, word) {
-			return nil
-		}
-		return &protocol.PrepareRenameResult{Range: wordRange, Placeholder: word}
+		return nil
 	}
 
 	// Check for member access context (method/property on -> or ::).
@@ -1381,12 +1379,13 @@ func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName str
 		return nil
 	}
 
-	file := ctx.File
+	if a.mayBeLocalVariable(ctx.Name()) {
+		if edit := a.renameVariable(uri, source, pos, word, newName); edit != nil {
+			return edit
+		}
+	}
 
-	// Try resolving as a symbol first (handles properties, methods, classes, etc.)
 	sym := a.resolveSymbolAt(r, ctx.Name(), source)
-
-	// If it's a known symbol, rename it across the workspace
 	if sym != nil {
 		if !a.referenceTargetOf(sym).renamable() {
 			return nil
@@ -1394,20 +1393,14 @@ func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName str
 		return a.renameSymbol(r, sym, newName, readDocument, uri, source)
 	}
 
-	// Fall back to variable rename (local scope)
-	if strings.HasPrefix(word, "$") {
-		return a.renameVariable(uri, source, pos, word, newName, file)
-	}
-
 	return nil
 }
 
 // renameVariable renames a variable within its enclosing function scope.
-func (a *Analyzer) renameVariable(uri, source string, pos protocol.Position, oldName, newName string, file *parser.FileNode) *protocol.WorkspaceEdit {
+func (a *Analyzer) renameVariable(uri, source string, pos protocol.Position, oldName, newName string) *protocol.WorkspaceEdit {
 	if !strings.HasPrefix(newName, "$") {
 		newName = "$" + newName
 	}
-	_ = file
 	doc := scope.Collect(source)
 	binding := doc.BindingAt(pos)
 	if binding == nil || binding.Name != oldName {
