@@ -531,6 +531,10 @@ func (p *parser) braceOffset(e ast.Expr, start uint32) ast.Expr {
 
 func (p *parser) memberAccessName() ast.Expr {
 	start := p.start()
+	if p.keywordStartsNextStatement() {
+		p.unexpected("expected a property or method name")
+		return &ast.BadExpr{Span: p.span(start)}
+	}
 	switch p.peek() {
 	case token.Identifier:
 		p.next()
@@ -549,6 +553,10 @@ func (p *parser) memberAccessName() ast.Expr {
 
 func (p *parser) staticMember(class ast.Expr, start uint32) ast.Expr {
 	nameStart := p.start()
+	if p.keywordStartsNextStatement() {
+		p.unexpected("expected a class member")
+		return &ast.BadExpr{Span: p.span(start)}
+	}
 	switch k := p.peek(); {
 	case k == token.Variable || k == token.Dollar:
 		name := p.simpleVariable()
@@ -575,6 +583,43 @@ func (p *parser) staticMember(class ast.Expr, start uint32) ast.Expr {
 	}
 	p.unexpected("expected a class member")
 	return &ast.BadExpr{Span: p.span(start)}
+}
+
+func (p *parser) keywordStartsNextStatement() bool {
+	if !p.onLaterLine() {
+		return false
+	}
+	t := p.tok()
+	k := t.Kind
+	if k == token.Identifier {
+		k, _ = token.Keyword(strings.ToLower(t.Text(p.src)))
+	}
+	if !p.startsStatement(k) {
+		return false
+	}
+	after := p.pos + 1
+	if p.peekAt(1) == token.LeftParen {
+		after = p.closingParen(after) + 1
+		if after == 0 {
+			return false
+		}
+	}
+	if after < len(p.toks) && p.continuesMember(p.toks[after].Kind) {
+		return false
+	}
+	p.toks[p.pos].Kind = k
+	return true
+}
+
+func (p *parser) continuesMember(k token.Kind) bool {
+	switch k {
+	case token.LeftParen, token.LeftBracket, token.ObjectOperator, token.NullsafeObjectOperator, token.DoubleColon,
+		token.Increment, token.Decrement, token.Minus, token.Plus:
+		return true
+	case token.LeftBrace:
+		return p.version < token.PHP80
+	}
+	return !startsExpr(k) || isAmpersand(k) || isAssignOp(k)
 }
 
 func (p *parser) args() *ast.ArgList {

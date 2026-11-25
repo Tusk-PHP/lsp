@@ -27,6 +27,7 @@ type parser struct {
 
 	parenthesized ast.Expr
 	depth         int
+	closers       []int32
 
 	stmtStack   scratch[ast.Stmt]
 	exprStack   scratch[ast.Expr]
@@ -291,11 +292,48 @@ func (p *parser) skipTo(stop func(token.Kind) bool) {
 func (p *parser) atStatementStart() bool {
 	if p.pos > 0 {
 		switch p.toks[p.pos-1].Kind {
-		case token.DoubleColon, token.New:
+		case token.New:
 			return false
+		case token.DoubleColon:
+			if !p.onLaterLine() {
+				return false
+			}
 		}
 	}
-	switch p.peek() {
+	return p.startsStatement(p.peek())
+}
+
+func (p *parser) onLaterLine() bool {
+	return p.pos > 0 && p.pos < len(p.toks) && strings.IndexByte(p.src[p.toks[p.pos-1].End:p.toks[p.pos].Start], '\n') >= 0
+}
+
+func (p *parser) closingParen(open int) int {
+	if p.closers == nil {
+		p.closers = matchingParens(p.toks)
+	}
+	return int(p.closers[open])
+}
+
+func matchingParens(toks []lexer.Token) []int32 {
+	closers := make([]int32, len(toks))
+	var open []int32
+	for i, t := range toks {
+		closers[i] = -1
+		switch t.Kind {
+		case token.LeftParen:
+			open = append(open, int32(i))
+		case token.RightParen:
+			if n := len(open); n > 0 {
+				closers[open[n-1]] = int32(i)
+				open = open[:n-1]
+			}
+		}
+	}
+	return closers
+}
+
+func (p *parser) startsStatement(k token.Kind) bool {
+	switch k {
 	case token.If, token.ElseIf, token.Else, token.EndIf, token.While, token.EndWhile, token.Do, token.For, token.EndFor,
 		token.Foreach, token.EndForeach, token.Switch, token.Case, token.Default, token.EndSwitch, token.Break, token.Continue,
 		token.Return, token.Global, token.Echo, token.Unset, token.Try, token.Catch, token.Finally, token.Goto,
