@@ -20,6 +20,9 @@ func TestFunctionCallMarksOnlyANameCalledAsAFunction(t *testing.T) {
 		{"new Ar|ea(1);", false},
 		{"new \\App\\Ar|ea(1);", false},
 		{"function ar|ea() {}", false},
+		{"function &ar|ea() {}", false},
+		{"public function &ar|ea() {}", false},
+		{"$x = $a & ar|ea(1);", true},
 		{"$this->ar|ea();", false},
 		{"Room::ar|ea();", false},
 		{"#[Ar|ea(1)]\nfunction f() {}", false},
@@ -99,12 +102,15 @@ func TestCallAtFindsTheCalleeAndArgumentFromTokens(t *testing.T) {
 
 func TestCalledMarksAnyNameFollowedByItsArguments(t *testing.T) {
 	for src, want := range map[string]bool{
-		"$this->ar|ea();":     true,
-		"$this->ar|ea;":       false,
-		"Room::ar|ea(1);":     true,
-		"ar|ea(1);":           true,
-		"new Ar|ea(1);":       false,
-		"function ar|ea() {}": false,
+		"$this->ar|ea();":             true,
+		"$this->ar|ea;":               false,
+		"Room::ar|ea(1);":             true,
+		"ar|ea(1);":                   true,
+		"new Ar|ea(1);":               false,
+		"function ar|ea() {}":         false,
+		"function &ar|ea() {}":        false,
+		"public function &ar|ea() {}": false,
+		"$a & ar|ea(1);":              true,
 	} {
 		full := "<?php\n" + src + "\n"
 		offset := strings.Index(full, "|")
