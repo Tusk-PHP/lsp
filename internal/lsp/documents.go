@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"errors"
 	"os"
 
 	"github.com/Tusk-PHP/lsp/internal/document"
@@ -45,24 +46,43 @@ func (s *Server) handleDidChange(msg *jsonRPCMessage) {
 		return
 	}
 	uri := params.TextDocument.URI
-	source, err := s.docs.Change(uri, params.TextDocument.Version, s.encoding, documentChanges(params.ContentChanges))
-	if err != nil {
+	doc, err := s.docs.Change(uri, params.TextDocument.Version, s.encoding, documentChanges(params.ContentChanges))
+	switch {
+	case errors.Is(err, document.ErrDiverged):
+		return
+	case err != nil:
 		s.logger.Printf("didChange: %v", err)
 		s.sendNotification("window/showMessage", map[string]interface{}{
 			"type":    protocol.MessageTypeError,
-			"message": "Tusk PHP lost track of a document's text; close and reopen it: " + err.Error(),
+			"message": "Tusk PHP lost track of a document's text and reads it from disk until you close and reopen it: " + err.Error(),
 		})
+		s.showDivergedFromDisk(uri)
 		return
 	}
 	s.docMu.Lock()
 	s.unsaved[uri] = true
 	s.docMu.Unlock()
-	if !isPHPDocument(uri) {
+	s.documentChanged(doc)
+}
+
+func (s *Server) showDivergedFromDisk(uri string) {
+	content, err := os.ReadFile(symbols.URIToPath(uri))
+	if err != nil {
+		s.logger.Printf("didChange: reading %s from disk while its text is unknown: %v; keeping the last text that applied", uri, err)
 		return
 	}
-	s.indexDocumentMaybeAsync(uri, source)
+	if doc, ok := s.docs.ShowDiverged(uri, string(content)); ok {
+		s.documentChanged(doc)
+	}
+}
+
+func (s *Server) documentChanged(doc document.Snapshot) {
+	if !isPHPDocument(doc.URI) {
+		return
+	}
+	s.indexDocumentMaybeAsync(doc.URI, doc.Text)
 	if s.cfg.DiagnosticsEnabled {
-		s.scheduleDiagnostics(uri)
+		s.scheduleDiagnostics(doc.URI)
 	}
 }
 
@@ -118,12 +138,12 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 		s.unsaved[uri] = false
 		s.docMu.Unlock()
 	}
-	if params.Text != nil {
-		if !s.docs.Save(uri, *params.Text) {
+	if text, ok := s.savedText(uri, params.Text); ok {
+		if !s.docs.Save(uri, text) {
 			s.logger.Printf("didSave: %s is not open, so its saved text is not kept as an open document", uri)
 		}
 		if isPHPDocument(uri) {
-			s.indexDocumentMaybeAsync(uri, *params.Text)
+			s.indexDocumentMaybeAsync(uri, text)
 		}
 	}
 	if !isPHPDocument(uri) {
@@ -149,6 +169,21 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 			s.publishDiagnostics(doc)
 		})
 	}
+}
+
+func (s *Server) savedText(uri string, sent *string) (string, bool) {
+	if sent != nil {
+		return *sent, true
+	}
+	if doc, open := s.docs.Get(uri); !open || !doc.Diverged() {
+		return "", false
+	}
+	content, err := os.ReadFile(symbols.URIToPath(uri))
+	if err != nil {
+		s.logger.Printf("didSave: reading %s, whose text diverged from the editor's, from disk: %v", uri, err)
+		return "", false
+	}
+	return string(content), true
 }
 
 // getDocumentReader returns a function that reads document content by URI,

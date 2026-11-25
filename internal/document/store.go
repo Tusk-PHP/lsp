@@ -1,6 +1,7 @@
 package document
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -12,7 +13,14 @@ type Snapshot struct {
 	Version  int
 	Text     string
 	revision uint64
+	diverged bool
 }
+
+func (d Snapshot) Diverged() bool {
+	return d.diverged
+}
+
+var ErrDiverged = errors.New("the document's text diverged from the editor's; waiting for its full text")
 
 type Store struct {
 	mu       sync.RWMutex
@@ -30,22 +38,41 @@ func (s *Store) Open(uri string, version int, text string) Snapshot {
 	return s.putLocked(Snapshot{URI: uri, Version: version, Text: text})
 }
 
-func (s *Store) Change(uri string, version int, enc Encoding, changes []Change) (string, error) {
+func (s *Store) Change(uri string, version int, enc Encoding, changes []Change) (Snapshot, error) {
 	current, ok := s.Get(uri)
 	if !ok {
-		return "", fmt.Errorf("change to %s, which is not open", uri)
+		return Snapshot{}, fmt.Errorf("change to %s, which is not open", uri)
+	}
+	if current.diverged && lastFullText(changes) < 0 {
+		return Snapshot{}, fmt.Errorf("change to %s, version %d: %w", uri, version, ErrDiverged)
 	}
 	text, err := Apply(current.Text, enc, changes)
-	if err != nil {
-		return "", fmt.Errorf("change to %s, version %d: %w", uri, version, err)
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if latest, ok := s.docs[uri]; !ok || latest.revision != current.revision {
-		return "", fmt.Errorf("change to %s, version %d: the document changed while the edit was applied", uri, version)
+	latest, open := s.docs[uri]
+	if !open {
+		return Snapshot{}, fmt.Errorf("change to %s, version %d: the document was closed while the edit was applied", uri, version)
 	}
-	s.putLocked(Snapshot{URI: uri, Version: version, Text: text})
-	return text, nil
+	if err == nil && latest.revision != current.revision {
+		err = errors.New("the document changed while the edit was applied")
+	}
+	if err != nil {
+		latest.diverged = true
+		s.putLocked(latest)
+		return Snapshot{}, fmt.Errorf("change to %s, version %d: %w", uri, version, err)
+	}
+	return s.putLocked(Snapshot{URI: uri, Version: version, Text: text}), nil
+}
+
+func (s *Store) ShowDiverged(uri, text string) (Snapshot, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	doc, open := s.docs[uri]
+	if !open || !doc.diverged {
+		return Snapshot{}, false
+	}
+	doc.Text = text
+	return s.putLocked(doc), true
 }
 
 func (s *Store) Save(uri, text string) bool {
@@ -55,8 +82,9 @@ func (s *Store) Save(uri, text string) bool {
 	if !open {
 		return false
 	}
-	if doc.Text != text {
+	if doc.Text != text || doc.diverged {
 		doc.Text = text
+		doc.diverged = false
 		s.putLocked(doc)
 	}
 	return true

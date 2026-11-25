@@ -1,6 +1,7 @@
 package document
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -9,11 +10,11 @@ func TestStoreKeepsTextAndVersion(t *testing.T) {
 	s := NewStore()
 	s.Open("file:///b.php", 1, "<?php\n$a;\n")
 	s.Open("file:///a.php", 3, "<?php\n")
-	text, err := s.Change("file:///b.php", 2, UTF16, []Change{{Range: at(1, 1, 1, 2), Text: "b"}})
-	if err != nil || text != "<?php\n$b;\n" {
-		t.Fatalf("Change = %q, %v", text, err)
+	changed, err := s.Change("file:///b.php", 2, UTF16, []Change{{Range: at(1, 1, 1, 2), Text: "b"}})
+	if err != nil || changed.Text != "<?php\n$b;\n" || changed.Version != 2 {
+		t.Fatalf("Change = %+v, %v", changed, err)
 	}
-	if doc, _ := s.Get("file:///b.php"); doc.Version != 2 || doc.Text != text {
+	if doc, _ := s.Get("file:///b.php"); doc != changed {
 		t.Errorf("after the change: %+v", doc)
 	}
 	if !s.Save("file:///b.php", "<?php\n$c;\n") {
@@ -71,10 +72,69 @@ func TestStoreRejectsChangesItCannotApply(t *testing.T) {
 		t.Errorf("change to a closed document: %v", err)
 	}
 	s.Open("file:///x.php", 1, "<?php\n")
-	if _, err := s.Change("file:///x.php", 2, UTF16, []Change{{Range: at(-1, 0, 0, 0), Text: "x"}}); err == nil || !strings.Contains(err.Error(), "file:///x.php, version 2") {
+	if _, err := s.Change("file:///x.php", 2, UTF16, []Change{{Range: at(-1, 0, 0, 0), Text: "x"}}); err == nil || !strings.Contains(err.Error(), "file:///x.php, version 2") || errors.Is(err, ErrDiverged) {
 		t.Errorf("a negative position: %v", err)
 	}
-	if doc, _ := s.Get("file:///x.php"); doc.Version != 1 || doc.Text != "<?php\n" {
-		t.Errorf("a rejected change left %+v", doc)
+	if doc, _ := s.Get("file:///x.php"); doc.Version != 1 || doc.Text != "<?php\n" || !doc.Diverged() {
+		t.Errorf("a rejected change left %+v, want the last text that applied, marked diverged", doc)
+	}
+}
+
+func TestStoreRefusesRangeEditsAfterARejectedChange(t *testing.T) {
+	const uri = "file:///a.php"
+	s := NewStore()
+	s.Open(uri, 1, "<?php\nfoo();\n")
+	if _, err := s.Change(uri, 2, UTF16, []Change{{Range: at(1, 3, 1, 1), Text: "x"}}); err == nil || errors.Is(err, ErrDiverged) {
+		t.Fatalf("the first rejected change: %v, want the reason it can't apply", err)
+	}
+	if _, err := s.Change(uri, 3, UTF16, []Change{{Range: at(1, 0, 1, 0), Text: "bar();"}}); !errors.Is(err, ErrDiverged) {
+		t.Fatalf("a range edit to the diverged text: %v, want ErrDiverged", err)
+	}
+	disk, ok := s.ShowDiverged(uri, "<?php\nfrom_disk();\n")
+	if !ok || disk.Text != "<?php\nfrom_disk();\n" || !disk.Diverged() || !s.Current(disk) {
+		t.Fatalf("ShowDiverged = %+v, %v", disk, ok)
+	}
+	if _, err := s.Change(uri, 4, UTF16, []Change{{Range: at(1, 0, 1, 0), Text: "x"}}); !errors.Is(err, ErrDiverged) {
+		t.Fatalf("a range edit to the text read from disk: %v, want ErrDiverged", err)
+	}
+
+	doc, err := s.Change(uri, 5, UTF16, []Change{
+		{Range: at(7, 0, 7, 0), Text: "lost"},
+		{Text: "<?php\nfoo();\n"},
+		{Range: at(1, 0, 1, 0), Text: "bar();"},
+	})
+	if err != nil || doc.Text != "<?php\nbar();foo();\n" || doc.Version != 5 || doc.Diverged() {
+		t.Fatalf("a full text, then a range edit: %+v, %v", doc, err)
+	}
+	if doc, err := s.Change(uri, 6, UTF16, []Change{{Range: at(1, 0, 1, 6), Text: ""}}); err != nil || doc.Text != "<?php\nfoo();\n" {
+		t.Errorf("a range edit after the full text: %+v, %v", doc, err)
+	}
+	if _, ok := s.ShowDiverged(uri, "disk"); ok {
+		t.Error("ShowDiverged replaced the text of a document that is in sync")
+	}
+}
+
+func TestStoreReopenAndSaveEndADivergence(t *testing.T) {
+	const uri = "file:///a.php"
+	diverge := func(s *Store) {
+		t.Helper()
+		if _, err := s.Change(uri, 2, UTF16, []Change{{Range: at(-1, 0, 0, 0)}}); err == nil {
+			t.Fatal("the negative position applied")
+		}
+	}
+	s := NewStore()
+	s.Open(uri, 1, "<?php\n")
+	diverge(s)
+	s.Open(uri, 1, "<?php\n")
+	if doc, err := s.Change(uri, 2, UTF16, []Change{{Range: at(1, 0, 1, 0), Text: "a();"}}); err != nil || doc.Text != "<?php\na();" {
+		t.Errorf("a range edit after a reopen: %+v, %v", doc, err)
+	}
+
+	diverge(s)
+	if !s.Save(uri, "<?php\nsaved();\n") {
+		t.Fatal("the save was refused")
+	}
+	if doc, err := s.Change(uri, 3, UTF16, []Change{{Range: at(1, 0, 1, 0), Text: "b();"}}); err != nil || doc.Text != "<?php\nb();saved();\n" {
+		t.Errorf("a range edit after a save with the full text: %+v, %v", doc, err)
 	}
 }
