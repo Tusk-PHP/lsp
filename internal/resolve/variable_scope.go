@@ -78,7 +78,7 @@ func (r *Resolver) ScopeDocument(lines []string) *scope.Document {
 func (r *Resolver) variableScopeAt(varName string, lines []string, pos protocol.Position) variableScope {
 	doc := r.scopeDocument(lines)
 	s := doc.ScopeAt(pos)
-	if s == nil || s.Kind == scope.ScopeFile {
+	if s == nil {
 		return variableScope{}
 	}
 
