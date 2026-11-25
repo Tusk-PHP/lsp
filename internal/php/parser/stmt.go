@@ -88,6 +88,14 @@ func (p *parser) statementBody() ast.Stmt {
 			return &ast.Break{Levels: levels, Span: p.span(start)}
 		}
 		return &ast.Continue{Levels: levels, Span: p.span(start)}
+	case token.Throw:
+		if p.version < token.PHP80 {
+			p.next()
+			e := &ast.Throw{Operand: p.expr()}
+			e.Span = p.span(start)
+			p.endStatement()
+			return &ast.ExprStmt{Expr: e, Span: p.span(start)}
+		}
 	case token.Return:
 		p.next()
 		var value ast.Expr
@@ -140,7 +148,9 @@ func (p *parser) statementBody() ast.Stmt {
 		p.pos = len(p.toks)
 		return &ast.HaltCompiler{Span: p.span(start)}
 	case token.Namespace:
-		return p.namespace()
+		if p.nameTokens() == 0 {
+			return p.namespace()
+		}
 	case token.Use:
 		return p.use()
 	case token.Const:
@@ -470,6 +480,8 @@ func (p *parser) tryStmt() ast.Stmt {
 			varStart := p.start()
 			p.next()
 			c.Var = &ast.Variable{Span: p.span(varStart)}
+		} else {
+			p.requires(token.PHP80, catchStart, "catching an exception without a variable")
 		}
 		p.expect(token.RightParen)
 		c.Body = p.block()
@@ -518,7 +530,7 @@ func (p *parser) namespace() ast.Stmt {
 	p.next()
 	n := &ast.Namespace{}
 	if p.peek() != token.LeftBrace {
-		n.Name = p.name()
+		n.Name = p.nameOf(isDeclarableName)
 	}
 	if p.peek() == token.LeftBrace {
 		n.Braced = true
@@ -539,7 +551,7 @@ func (p *parser) use() ast.Stmt {
 		p.next()
 	}
 	firstStart := p.start()
-	first := p.name()
+	first := p.nameOf(isImportableName)
 	if p.accept(token.NamespaceSeparator) {
 		u.Prefix = first
 		p.expect(token.LeftBrace)
@@ -550,7 +562,7 @@ func (p *parser) use() ast.Stmt {
 				kind = k
 				p.next()
 			}
-			u.Items = append(u.Items, p.useItem(itemStart, kind, p.name()))
+			u.Items = append(u.Items, p.useItem(itemStart, kind, p.nameOf(isDeclarableName)))
 			if !p.accept(token.Comma) {
 				break
 			}
@@ -560,7 +572,7 @@ func (p *parser) use() ast.Stmt {
 		u.Items = append(u.Items, p.useItem(firstStart, u.Kind, first))
 		for p.accept(token.Comma) {
 			itemStart := p.start()
-			u.Items = append(u.Items, p.useItem(itemStart, u.Kind, p.name()))
+			u.Items = append(u.Items, p.useItem(itemStart, u.Kind, p.nameOf(isImportableName)))
 		}
 	}
 	p.endStatement()

@@ -109,6 +109,9 @@ func (p *parser) enter() bool {
 func noStop(token.Kind) bool { return false }
 
 func (p *parser) unterminated(comment lexer.Token) {
+	if p.version < token.PHP80 {
+		return
+	}
 	text := comment.Text(p.src)
 	if strings.HasPrefix(text, "/*") && (len(text) < 4 || !strings.HasSuffix(text, "*/")) {
 		p.unterminatedAt(ast.Span{Start: comment.Start, End: comment.Start + 2}, "unterminated comment")
@@ -248,6 +251,17 @@ func (p *parser) requires(v token.Version, start uint32, feature string) {
 	}
 }
 
+func (p *parser) trailingComma(feature string) bool {
+	commaStart := p.start()
+	if !p.accept(token.Comma) {
+		return false
+	}
+	if p.peek() == token.RightParen {
+		p.requires(token.PHP80, commaStart, feature)
+	}
+	return true
+}
+
 func (p *parser) ensureProgress(before int) {
 	if p.pos == before {
 		p.unexpected("")
@@ -285,12 +299,14 @@ func (p *parser) atStatementStart() bool {
 	case token.If, token.ElseIf, token.Else, token.EndIf, token.While, token.EndWhile, token.Do, token.For, token.EndFor,
 		token.Foreach, token.EndForeach, token.Switch, token.Case, token.Default, token.EndSwitch, token.Break, token.Continue,
 		token.Return, token.Global, token.Echo, token.Unset, token.Try, token.Catch, token.Finally, token.Goto,
-		token.Declare, token.EndDeclare, token.HaltCompiler, token.Namespace, token.Use, token.Const, token.Class,
+		token.Declare, token.EndDeclare, token.HaltCompiler, token.Use, token.Const, token.Class,
 		token.Interface, token.Trait, token.Enum, token.Abstract, token.Final, token.Public, token.Protected, token.Private,
 		token.Var, token.InlineHTML, token.OpenTagWithEcho:
 		return true
 	case token.Function:
 		return p.isFunctionDecl()
+	case token.Namespace:
+		return p.nameTokens() == 0
 	case token.Readonly:
 		return p.peekAt(1) != token.LeftParen
 	}
@@ -316,13 +332,75 @@ func (p *parser) memberName() *ast.Identifier {
 }
 
 func (p *parser) name() *ast.Name {
-	k := p.peek()
-	if !isName(k) {
+	n := p.nameTokens()
+	if n == 0 {
 		p.unexpected("expected a name")
 		return nil
 	}
-	t := p.next()
-	return &ast.Name{Span: ast.Span{Start: t.Start, End: t.End}, Kind: k}
+	start, kind := p.start(), p.nameKind(n)
+	for range n {
+		p.next()
+	}
+	return &ast.Name{Span: p.span(start), Kind: kind}
+}
+
+func (p *parser) nameOf(allowed func(token.Kind) bool) *ast.Name {
+	if n := p.nameTokens(); n > 0 && !allowed(p.nameKind(n)) {
+		p.unexpected("expected a name")
+	}
+	return p.name()
+}
+
+func isDeclarableName(k token.Kind) bool {
+	return k == token.Identifier || k == token.NameQualified
+}
+
+func isImportableName(k token.Kind) bool {
+	return k != token.NameRelative
+}
+
+func (p *parser) nameKind(n int) token.Kind {
+	if p.version < token.PHP80 {
+		return separateNameKind(p.peek(), n)
+	}
+	return p.peek()
+}
+
+func (p *parser) nameTokens() int {
+	k := p.peek()
+	if p.version >= token.PHP80 {
+		if isName(k) {
+			return 1
+		}
+		return 0
+	}
+	n := 0
+	switch {
+	case k == token.Identifier:
+		n = 1
+	case k == token.NamespaceSeparator && p.peekAt(1) == token.Identifier:
+		n = 2
+	case k == token.Namespace && p.peekAt(1) == token.NamespaceSeparator && p.peekAt(2) == token.Identifier:
+		n = 3
+	default:
+		return 0
+	}
+	for p.peekAt(n) == token.NamespaceSeparator && p.peekAt(n+1) == token.Identifier {
+		n += 2
+	}
+	return n
+}
+
+func separateNameKind(first token.Kind, n int) token.Kind {
+	switch {
+	case first == token.NamespaceSeparator:
+		return token.NameFullyQualified
+	case first == token.Namespace:
+		return token.NameRelative
+	case n > 1:
+		return token.NameQualified
+	}
+	return token.Identifier
 }
 
 func isIdentifier(k token.Kind) bool {
