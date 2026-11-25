@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/document"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -52,11 +54,15 @@ func benchmarkServer(b *testing.B, source string) (*Server, string) {
 
 func BenchmarkSemanticTokensFull(b *testing.B) {
 	for _, bc := range []struct {
-		name     string
-		nonASCII bool
-	}{{"ascii", false}, {"non-ascii", true}} {
+		name   string
+		source string
+	}{
+		{"ascii", benchmarkSource(false)},
+		{"non-ascii", benchmarkSource(true)},
+		{"non-ascii-100KB-line", "<?php $é = 1; " + strings.Repeat("$a = foo('x'); ", 7000) + "\n"},
+	} {
 		b.Run(bc.name, func(b *testing.B) {
-			s, uri := benchmarkServer(b, benchmarkSource(bc.nonASCII))
+			s, uri := benchmarkServer(b, bc.source)
 			raw, _ := json.Marshal(map[string]interface{}{"textDocument": map[string]interface{}{"uri": uri}})
 			id := json.RawMessage("2")
 			msg := &jsonRPCMessage{JSONRPC: "2.0", ID: &id, Method: "textDocument/semanticTokens/full", Params: raw}
@@ -79,6 +85,36 @@ func BenchmarkPublishDiagnostics(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				s.publishDiagnostics(uri, source)
+			}
+		})
+	}
+}
+
+func BenchmarkCompletionsOut(b *testing.B) {
+	for _, bc := range []struct {
+		name string
+		line string
+	}{{"ascii", "<?php $x = 1; $shop->to"}, {"non-ascii", "<?php $é = 'Größe'; $shop->to"}} {
+		b.Run(bc.name, func(b *testing.B) {
+			col := len(bc.line)
+			fresh := func() []protocol.CompletionItem {
+				items := make([]protocol.CompletionItem, 2000)
+				for i := range items {
+					items[i] = protocol.CompletionItem{
+						Label:    "total",
+						TextEdit: &protocol.TextEdit{Range: protocol.Range{Start: protocol.Position{Character: col - 2}, End: protocol.Position{Character: col}}, NewText: "total"},
+					}
+				}
+				return items
+			}
+			p := &positions{enc: document.UTF16, text: func(string) (string, bool) { return bc.line + "\n", true }, logf: func(string, ...any) {}}
+			b.ReportAllocs()
+			for b.Loop() {
+				b.StopTimer()
+				items := fresh()
+				p.columns = nil
+				b.StartTimer()
+				p.completionsOut("file:///a.php", items)
 			}
 		})
 	}
