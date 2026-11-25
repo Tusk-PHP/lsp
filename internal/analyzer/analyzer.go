@@ -101,6 +101,16 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 	return a.resolveDefinitionSymbol(a.engine.Resolver(), uri, source, pos).loc
 }
 
+func (a *Analyzer) accessedMember(r *resolve.Resolver, owner resolve.ResolvedType, word string, called bool) *symbols.Symbol {
+	if member := r.FindAccessedMember(owner.BaseFQN(), word, called); member != nil {
+		return member
+	}
+	if member := r.FindMemberAnywhere(owner.BaseFQN(), word); member != nil {
+		return member
+	}
+	return r.FindMemberAnywhereOn(owner, word)
+}
+
 // classKeywordFQN returns the class that self, static or parent stands for at
 // the cursor (in any letter case), or "" when word isn't one of them or there
 // is no enclosing class. A word after -> or :: is a member, never the keyword.
@@ -239,13 +249,7 @@ func (a *Analyzer) resolveDefinitionSymbol(r *resolve.Resolver, uri, source stri
 		if classFQN == "" {
 			return definitionTarget{}
 		}
-		member := r.FindMemberAnywhere(classFQN, word)
-		if member == nil {
-			// With the receiver's type arguments and every class of a union:
-			// a local scope on Builder<Post> is found on Post.
-			member = r.FindMemberAnywhereOn(owner, word)
-		}
-		if member != nil {
+		if member := a.accessedMember(r, owner, word, ctx.Called); member != nil {
 			// Owner is the *declaring* class (member.ParentFQN), not the
 			// receiver — that's how php.net documents methods/properties:
 			// ReflectionMethod::getParameters lives at
@@ -721,13 +725,11 @@ func (a *Analyzer) resolveSymbolAtCursor(r *resolve.Resolver, uri, source string
 	// the member, return nil — do not fall through to name-based lookups that
 	// would match unrelated symbols across the project.
 	if ctx != nil && ctx.AccessKind != sourcectx.AccessNone {
-		classFQN := r.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file).BaseFQN()
-		if classFQN != "" {
-			if member := r.FindMemberAnywhere(classFQN, word); member != nil {
-				return member
-			}
+		owner := r.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		if owner.BaseFQN() == "" {
+			return nil
 		}
-		return nil
+		return a.accessedMember(r, owner, word, ctx.Called)
 	}
 	if ctx != nil && ctx.FunctionCall {
 		return r.CalledFunction(word, file)
