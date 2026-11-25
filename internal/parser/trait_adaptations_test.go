@@ -14,6 +14,8 @@ class Talker {
         B::bigTalk as talk;
         sayHello as protected;
         /* why */ A::list as private aliased;
+        B::seal as final sealed;
+        lock as final;
     }
     public function own() {}
 }`)
@@ -30,6 +32,8 @@ class Talker {
 			{Trait: "B", Method: "bigTalk", Alias: "talk"},
 			{Method: "sayHello", Visibility: "protected"},
 			{Trait: "A", Method: "list", Alias: "aliased", Visibility: "private"},
+			{Trait: "B", Method: "seal", Alias: "sealed", Final: true},
+			{Method: "lock", Final: true},
 		},
 	}
 	if !reflect.DeepEqual(cls.TraitRules, want) {

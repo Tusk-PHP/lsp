@@ -17,6 +17,7 @@ type traitAlias struct {
 	method     string
 	alias      string
 	visibility string
+	final      bool
 }
 
 func traitMethodKey(trait, method string) string {
@@ -38,7 +39,7 @@ func newTraitRules(owner string, adaptations parser.TraitAdaptations, resolve fu
 	}
 	rules.aliases = make([]traitAlias, 0, len(adaptations.Aliases))
 	for _, a := range adaptations.Aliases {
-		alias := traitAlias{method: a.Method, alias: a.Alias, visibility: a.Visibility}
+		alias := traitAlias{method: a.Method, alias: a.Alias, visibility: a.Visibility, final: a.Final}
 		if a.Trait != "" {
 			alias.trait = resolve(a.Trait)
 		}
@@ -94,11 +95,12 @@ func (a traitAlias) modified(method *Symbol) *Symbol {
 	if a.visibility != "" {
 		visibility = a.visibility
 	}
-	if visibility == method.Visibility {
+	final := method.IsFinal || a.final
+	if visibility == method.Visibility && final == method.IsFinal {
 		return method
 	}
 	copied := *method
-	copied.Visibility = visibility
+	copied.Visibility, copied.IsFinal = visibility, final
 	return &copied
 }
 
