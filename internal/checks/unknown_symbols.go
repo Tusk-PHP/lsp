@@ -23,7 +23,7 @@ func (r *UnknownClassRule) Check(file *parser.FileNode, source string, index *sy
 	if file == nil {
 		return nil
 	}
-	syntax := r.Shared.tree(source, file.Grammar)
+	syntax := r.Shared.tree(source, file)
 	var findings []Finding
 	for _, ref := range syntax.references().classes {
 		name := syntax.text(ref.name)
@@ -69,7 +69,7 @@ func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index 
 	if file == nil {
 		return nil
 	}
-	syntax := r.Shared.tree(source, file.Grammar)
+	syntax := r.Shared.tree(source, file)
 	var findings []Finding
 	for _, call := range syntax.references().calls {
 		name := syntax.text(call.name)
@@ -109,7 +109,7 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 	if file == nil || r.TypeResolver == nil {
 		return nil
 	}
-	syntax := r.Shared.tree(source, file.Grammar)
+	syntax := r.Shared.tree(source, file)
 	lines := strings.Split(source, "\n")
 	var findings []Finding
 	hierarchies := map[string]*memberHierarchy{}

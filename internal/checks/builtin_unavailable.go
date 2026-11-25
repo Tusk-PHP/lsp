@@ -47,7 +47,7 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 	copied := *r
 	copied.versionChecked = checksPHPVersion(source)
 	r = &copied
-	syntax := r.Shared.tree(source, file.Grammar)
+	syntax := r.Shared.tree(source, file)
 	refs := syntax.references()
 	var findings []Finding
 	for _, call := range refs.calls {

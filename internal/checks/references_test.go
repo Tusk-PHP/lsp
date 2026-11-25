@@ -83,15 +83,22 @@ func TestBuiltinUnavailableConstants(t *testing.T) {
 
 func TestSharedTreeIsParsedOncePerSource(t *testing.T) {
 	shared := &Shared{}
-	first := shared.tree("<?php f();", token.Latest)
-	if shared.tree("<?php f();", token.Latest) != first || first.references() != first.references() {
+	file := parser.ParseFile("<?php f();", token.Latest)
+	first := shared.tree("<?php f();", file)
+	if first.tree != file.Tree {
+		t.Error("the file's own tree is used, not parsed again")
+	}
+	if shared.tree("<?php f();", file) != first || first.references() != first.references() {
 		t.Error("the same source reuses its tree and references")
 	}
-	if shared.tree("<?php g();", token.Latest) == first {
+	if shared.tree("<?php g();", parser.ParseFile("<?php g();", token.Latest)) == first {
 		t.Error("a new source gets a new tree")
 	}
-	if shared.tree("<?php f();", token.PHP74) == first {
+	if shared.tree("<?php f();", parser.ParseFile("<?php f();", token.PHP74)) == first {
 		t.Error("another PHP version gets a new tree")
+	}
+	if got := shared.tree("<?php h();", file); got.src != "<?php h();" || got.tree == file.Tree {
+		t.Error("a file node of another source is not taken for this one")
 	}
 }
 
