@@ -27,6 +27,10 @@ import (
 // are 2–8 hops) but safely below the goroutine stack limit.
 const maxResolveDepth = 32
 
+// Engine holds what resolution keeps between requests: the index, the hooks
+// that wire it to other providers, and the caches. A provider builds one
+// Engine and starts each request with Engine.Resolver. It is safe for
+// concurrent use.
 type Engine struct {
 	Index *symbols.Index
 	// ChainResolver is an optional callback to resolve method chain expressions
@@ -60,6 +64,10 @@ type Engine struct {
 	parsed parseCache
 }
 
+// Resolver resolves types for one request. It carries that request's
+// recursion guard (depth, the keys in progress and the count of cuts) without
+// locks, so it belongs to the goroutine that runs the request and is never
+// shared or kept after it.
 type Resolver struct {
 	*Engine
 	depth  int
@@ -67,24 +75,33 @@ type Resolver struct {
 	cuts   int
 }
 
+// NewEngine returns an Engine over index with no hooks set.
 func NewEngine(index *symbols.Index) *Engine {
 	return &Engine{Index: index}
 }
 
+// Resolver starts a request: a Resolver sharing e's index, hooks and caches,
+// with a guard of its own.
 func (e *Engine) Resolver() *Resolver {
 	return &Resolver{Engine: e}
 }
 
+// NewResolver returns a Resolver for one request over a new Engine on index,
+// for callers that resolve once and keep no caches.
 func NewResolver(index *symbols.Index) *Resolver {
 	return NewEngine(index).Resolver()
 }
 
+// DelegateChains sets e's ChainResolver to fn, another provider's chain
+// resolution, which starts its own request: the calling Resolver is not
+// passed on, so fn must not call back into e.
 func (e *Engine) DelegateChains(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) string) {
 	e.ChainResolver = func(_ *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) string {
 		return fn(expr, source, pos, file)
 	}
 }
 
+// DelegateTypedChains is DelegateChains for TypedChainResolver.
 func (e *Engine) DelegateTypedChains(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType) {
 	e.TypedChainResolver = func(_ *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
 		return fn(expr, source, pos, file)
