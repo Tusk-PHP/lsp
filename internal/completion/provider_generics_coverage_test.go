@@ -68,7 +68,7 @@ func TestProviderGenericCoverageHelpers(t *testing.T) {
 		t.Fatalf("expected empty expression type, got %#v", got)
 	}
 
-	if got := p.ResolveChainTypeTyped(source, "$rows", "->", protocol.Position{}, file); !got.IsEmpty() {
+	if got := p.resolveChainTypeTyped(p.engine.Resolver(), source, "$rows", "->", protocol.Position{}, file); !got.IsEmpty() {
 		t.Fatalf("expected empty chain type, got %#v", got)
 	}
 

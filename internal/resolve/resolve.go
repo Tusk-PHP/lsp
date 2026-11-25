@@ -44,7 +44,7 @@ type Engine struct {
 	// ContainerCall, when set, gives the class a container call such as
 	// app('request') or $container->get(Foo::class) resolves to, "-" for one
 	// that gives a value rather than an object, or "" when it isn't one.
-	ContainerCall func(callExpr, source string, file *parser.FileNode) string
+	ContainerCall func(r *Resolver, callExpr, source string, file *parser.FileNode) string
 
 	// The last source's scopes, since one request asks about many variables.
 	scopeMu     sync.Mutex

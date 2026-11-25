@@ -106,7 +106,7 @@ func (r *Resolver) accessOwnerType(line string, wordStart int, source string, po
 
 		if op == "->" && r.ContainerCall != nil {
 			callExpr := strings.TrimSpace(line[:parenEnd])
-			if concrete := r.ContainerCall(callExpr, source, file); concrete != "" {
+			if concrete := r.ContainerCall(r, callExpr, source, file); concrete != "" {
 				if concrete == "-" {
 					return ResolvedType{}
 				}

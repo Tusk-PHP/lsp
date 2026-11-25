@@ -59,23 +59,24 @@ func (p *Provider) GetInlayHints(uri, source string, cfg *config.InlayHintsConfi
 	file := parser.ParseFile(source)
 	result := parser.New().Parse(source)
 	lines := resolve.SplitLines(source)
+	r := p.engine.Resolver()
 
 	var hints []protocol.InlayHint
 
 	if cfg.VariableTypes {
-		hints = append(hints, p.collectVarTypeHints(result, lines, file, source)...)
+		hints = append(hints, p.collectVarTypeHints(r, result, lines, file, source)...)
 	}
 	if cfg.ForeachTypes {
-		hints = append(hints, p.collectForeachHints(result, lines, file, source)...)
+		hints = append(hints, p.collectForeachHints(r, result, lines, file, source)...)
 	}
 	if cfg.ClosureReturnTypes {
-		hints = append(hints, p.collectClosureReturnHints(result, lines, file, source)...)
+		hints = append(hints, p.collectClosureReturnHints(r, result, lines, file, source)...)
 	}
 	if cfg.ReturnTypes {
 		hints = append(hints, p.collectMethodReturnHints(result, file)...)
 	}
 	if cfg.ParameterNames {
-		hints = append(hints, p.collectParamNameHints(result, lines, file, source, cfg)...)
+		hints = append(hints, p.collectParamNameHints(r, result, lines, file, source, cfg)...)
 	}
 
 	sort.SliceStable(hints, func(i, j int) bool {
