@@ -1,12 +1,16 @@
 package analyzer
 
 import (
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
@@ -24,18 +28,34 @@ func (a *Analyzer) findSymbolOccurrences(r *resolve.Resolver, sym *symbols.Symbo
 	}
 	target := a.referenceTargetOf(sym)
 	locs := target.declarations()
-	for _, fileURI := range a.index.GetAllFileURIs() {
-		if strings.HasPrefix(fileURI, "builtin://") {
-			continue
+	uris := slices.DeleteFunc(a.index.GetAllFileURIs(), func(u string) bool { return strings.HasPrefix(u, "builtin://") })
+	for i, src := range a.mentioningSources(uris, sym, readDocument) {
+		if src != "" {
+			locs = append(locs, locationsIn(uris[i], a.occurrencesInDocument(r, target, sourcectx.NewDocument(uris[i], src), src))...)
 		}
-		src := a.sourceOf(fileURI, readDocument)
-		if !mayMention(src, sym) {
-			continue
-		}
-		locs = append(locs, locationsIn(fileURI, a.occurrencesIn(r, target, fileURI, src))...)
 	}
 	locs = append(locs, a.templateOccurrences(r, target, readDocument, uri, source)...)
 	return deduplicateLocations(locs)
+}
+
+// mentioningSources reads each file of uris and keeps its source when a token
+// in it may name sym, "" otherwise. Reading and lexing are independent per
+// file, so they run on one worker per CPU.
+func (a *Analyzer) mentioningSources(uris []string, sym *symbols.Symbol, readDocument func(string) string) []string {
+	sources := make([]string, len(uris))
+	next := atomic.Int64{}
+	var wg sync.WaitGroup
+	for range min(runtime.GOMAXPROCS(0), len(uris)) {
+		wg.Go(func() {
+			for i := int(next.Add(1) - 1); i < len(uris); i = int(next.Add(1) - 1) {
+				if src := a.sourceOf(uris[i], readDocument); mayMention(src, sym) && mentions(src, sym) {
+					sources[i] = src
+				}
+			}
+		})
+	}
+	wg.Wait()
+	return sources
 }
 
 func (a *Analyzer) sourceOf(uri string, readDocument func(string) string) string {
