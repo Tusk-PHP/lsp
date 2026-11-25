@@ -196,7 +196,7 @@ Start a [discussion](https://github.com/Tusk-PHP/lsp/discussions) for an idea yo
 
 ## Release Process
 
-Releases are automated via GitHub Actions. Pushing a semver tag without a `v` prefix (e.g., `0.16.0`) triggers:
+Releases are automated via GitHub Actions. Pushing a semver tag `x.y.z`, without a `v` prefix, triggers:
 
 1. Full test suite
 2. Cross-platform binary builds
@@ -210,14 +210,14 @@ This section is for internals, the team behind Tusk PHP who review, merge and re
 
 **Who the internals are.** Anyone can become one. The core maintainer (@d8vjork) decides, weighing the work a contributor has done on the project, community demand (issues, discussions) and the project's own workload (internal tasks, milestones and their scope).
 
-**One tracking issue per release.** The next release always has an open issue titled `Release x.y.z` (for example [Release 0.16.0](https://github.com/Tusk-PHP/lsp/issues/152)). It lists:
+**One tracking issue per release.** The next release always has an open issue titled `Release x.y.z` and the [`release`](https://github.com/Tusk-PHP/lsp/issues?q=is%3Aissue+label%3Arelease) label. It lists:
 
 - **Merged:** every PR merged into `main` since the last release, ticked.
 - **Planned:** PRs in review that should ship with it, unticked. One that isn't ready by release time moves to the next release's issue. A stack of PRs is one item and ships together.
 - **Not in this release:** open PRs deliberately left out, with the reason.
 - **Before tagging:** the release checklist.
 
-Choose the version from the changes, following [SemVer](https://semver.org/) while we're on `0.x`: a minor bump (`0.16.0`) when anything is added or changes behaviour, a patch bump (`0.15.1`) for fixes only.
+Choose the version from the changes, following [SemVer](https://semver.org/) while we're on `0.x`: a minor bump (`x.y.z` → `x.(y+1).0`) when anything is added or changes behaviour, a patch bump (`x.y.z` → `x.y.(z+1)`) for fixes only.
 
 **When you merge a PR:**
 
