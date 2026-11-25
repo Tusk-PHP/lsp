@@ -9,15 +9,12 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
-func (a *Analyzer) generateGetterSetterCodeActions(uri, source string, result *parser.ParseResult, only []protocol.CodeActionKind, pos protocol.Position) []protocol.CodeAction {
+func (a *Analyzer) generateGetterSetterCodeActions(uri, source string, file *parser.FileNode, only []protocol.CodeActionKind, pos protocol.Position) []protocol.CodeAction {
 	if !protocol.CodeActionRefactor.In(only) {
 		return nil
 	}
-	if result == nil {
-		return nil
-	}
 
-	target := findGetterSetterTarget(result, pos.Line)
+	target := findGetterSetterTarget(file, pos.Line)
 	if target == nil {
 		return nil
 	}
@@ -71,19 +68,19 @@ func (a *Analyzer) generateGetterSetterCodeActions(uri, source string, result *p
 }
 
 type getterSetterTarget struct {
-	property parser.PropertyDef
-	methods  []parser.MethodDef
+	property parser.PropertyNode
+	methods  []parser.MethodNode
 	endLine  int
 }
 
-func findGetterSetterTarget(result *parser.ParseResult, cursorLine int) *getterSetterTarget {
-	for _, cls := range result.Classes {
+func findGetterSetterTarget(file *parser.FileNode, cursorLine int) *getterSetterTarget {
+	for _, cls := range file.Classes {
 		target := getterSetterTargetForProperties(cls.Properties, cls.Methods, cls.EndLine, cursorLine)
 		if target != nil {
 			return target
 		}
 	}
-	for _, tr := range result.Traits {
+	for _, tr := range file.Traits {
 		target := getterSetterTargetForProperties(tr.Properties, tr.Methods, tr.EndLine, cursorLine)
 		if target != nil {
 			return target
@@ -92,11 +89,11 @@ func findGetterSetterTarget(result *parser.ParseResult, cursorLine int) *getterS
 	return nil
 }
 
-func getterSetterTargetForProperties(properties []parser.PropertyDef, methods []parser.MethodDef, endLine, cursorLine int) *getterSetterTarget {
-	var match *parser.PropertyDef
+func getterSetterTargetForProperties(properties []parser.PropertyNode, methods []parser.MethodNode, endLine, cursorLine int) *getterSetterTarget {
+	var match *parser.PropertyNode
 	for i := range properties {
 		prop := &properties[i]
-		if prop.Line != cursorLine {
+		if prop.StartLine != cursorLine {
 			continue
 		}
 		if match != nil {
@@ -117,7 +114,7 @@ func getterSetterTargetForProperties(properties []parser.PropertyDef, methods []
 	}
 }
 
-func getterSetterHasMethod(methods []parser.MethodDef, name string) bool {
+func getterSetterHasMethod(methods []parser.MethodNode, name string) bool {
 	for _, method := range methods {
 		if strings.EqualFold(method.Name, name) {
 			return true
@@ -126,7 +123,7 @@ func getterSetterHasMethod(methods []parser.MethodDef, name string) bool {
 	return false
 }
 
-func getterSetterCanGenerateSetter(prop parser.PropertyDef) bool {
+func getterSetterCanGenerateSetter(prop parser.PropertyNode) bool {
 	return !prop.IsReadonly && prop.SetVisibility == ""
 }
 
@@ -148,13 +145,13 @@ func getterSetterMethodBase(name string) string {
 	return b.String()
 }
 
-func getterSetterInsertionEdit(source, uri string, endLine int, prop parser.PropertyDef, getterName, setterName string, getterMissing, setterMissing bool) func(bool, bool) *protocol.WorkspaceEdit {
+func getterSetterInsertionEdit(source, uri string, endLine int, prop parser.PropertyNode, getterName, setterName string, getterMissing, setterMissing bool) func(bool, bool) *protocol.WorkspaceEdit {
 	lines := strings.Split(source, "\n")
 	if endLine < 0 || endLine >= len(lines) {
 		return nil
 	}
 
-	methodIndent := getterSetterIndent(lines, prop.Line)
+	methodIndent := getterSetterIndent(lines, prop.StartLine)
 	insertPrefix := "\n"
 	if endLine > 0 && strings.TrimSpace(lines[endLine-1]) == "" {
 		insertPrefix = ""
@@ -197,9 +194,9 @@ func getterSetterIndent(lines []string, line int) string {
 	return indent
 }
 
-func renderGetterMethod(indent string, prop parser.PropertyDef, getterName string) string {
+func renderGetterMethod(indent string, prop parser.PropertyNode, getterName string) string {
 	var b strings.Builder
-	returnType := getterSetterTypeSuffix(prop.Type)
+	returnType := getterSetterTypeSuffix(prop.Type.Name)
 	field := strings.TrimPrefix(prop.Name, "$")
 
 	fmt.Fprintf(&b, "%spublic function %s()%s {", indent, getterName, returnType)
@@ -208,10 +205,10 @@ func renderGetterMethod(indent string, prop parser.PropertyDef, getterName strin
 	return b.String()
 }
 
-func renderSetterMethod(indent string, prop parser.PropertyDef, setterName string) string {
+func renderSetterMethod(indent string, prop parser.PropertyNode, setterName string) string {
 	var b strings.Builder
 	field := strings.TrimPrefix(prop.Name, "$")
-	paramType := getterSetterParamTypePrefix(prop.Type)
+	paramType := getterSetterParamTypePrefix(prop.Type.Name)
 
 	fmt.Fprintf(&b, "%spublic function %s(%s$%s): void {", indent, setterName, paramType, field)
 	fmt.Fprintf(&b, "\n%s    $this->%s = $%s;", indent, field, field)
