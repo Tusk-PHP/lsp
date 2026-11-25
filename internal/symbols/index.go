@@ -1240,6 +1240,9 @@ func (idx *Index) getClassMembersRecursive(fqn string, visited map[string]bool) 
 	var rules *traitRules
 	if sym, ok := idx.symbols[fqn]; ok {
 		own, rules = sym.Children, sym.traitRules
+		if sym.Kind == KindTrait {
+			defer delete(visited, fqn)
+		}
 	}
 	return idx.membersLocked(own, idx.traitMap[fqn], rules, idx.inheritanceMap[fqn], idx.implementsMap[fqn], visited)
 }
