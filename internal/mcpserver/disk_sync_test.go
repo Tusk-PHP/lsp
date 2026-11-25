@@ -192,6 +192,34 @@ func TestTheConfigFilesPHPVersionApplies(t *testing.T) {
 	}
 }
 
+func TestAnUnreadableFileDoesNotFailToolCalls(t *testing.T) {
+	session, root := connectedService(t, map[string]string{
+		".tusk-php.json": plainProjectConfig,
+		"composer.json":  `{"require": {"php": "^8.2"}}`,
+		"app/Order.php":  "<?php\nnamespace App;\nclass Order {}\n",
+	})
+	writeProject(t, root, map[string]string{"app/Locked.php": "<?php\nnamespace App;\nclass Locked {}\n"})
+	locked := filepath.Join(root, "app/Locked.php")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o644) })
+	for range 2 {
+		if got := foundFQNs(t, session, `App\`); !slices.Contains(got, `App\Order`) {
+			t.Errorf("tool calls keep answering while a file can't be read: %v", got)
+		}
+	}
+
+	writeProject(t, root, map[string]string{"app/Added.php": "<?php\nnamespace App;\nclass Added {}\n"})
+	if err := os.Chmod(locked, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := foundFQNs(t, session, `App\`)
+	if !slices.Contains(got, `App\Added`) || !slices.Contains(got, `App\Locked`) {
+		t.Errorf("other changes still apply, and the unreadable file is read once it can be: %v", got)
+	}
+}
+
 func BenchmarkSyncWithDiskUnchanged(b *testing.B) {
 	for _, files := range []int{1000, 10000} {
 		b.Run(strconv.Itoa(files), func(b *testing.B) {

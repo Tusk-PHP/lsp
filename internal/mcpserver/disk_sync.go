@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -88,7 +89,8 @@ func (s *Service) syncWithDisk(ctx context.Context) error {
 	if len(changed) == 0 {
 		return nil
 	}
-	if slices.ContainsFunc(changed, func(path string) bool { return slices.Contains(ws.VendorStatePaths(), path) }) {
+	vendorState := ws.VendorStatePaths()
+	if slices.ContainsFunc(changed, func(path string) bool { return slices.Contains(vendorState, path) }) {
 		if _, err := s.rebuildLocked(ctx); err != nil {
 			return fmt.Errorf("rebuild the index after a Composer change: %w", err)
 		}
@@ -98,11 +100,25 @@ func (s *Service) syncWithDisk(ctx context.Context) error {
 	if result.ProfileChanged {
 		s.profileSource.Store(&result.ProfileSource)
 	}
-	if err != nil {
-		return fmt.Errorf("re-index the files changed on disk: %w", err)
+	if configErr := (*workspace.ConfigError)(nil); errors.As(err, &configErr) {
+		return fmt.Errorf("re-read the project configuration: %w", configErr)
 	}
-	s.disk.files = now
+	if err != nil {
+		s.logger.Warn("some files changed on disk could not be re-indexed; they are tried again on the next call", "error", err)
+	}
+	s.disk.files = retryFailed(now, s.disk.files, result.Failed)
 	return nil
+}
+
+func retryFailed(now, before map[string]fileStamp, failed []string) map[string]fileStamp {
+	for _, path := range failed {
+		if stamp, ok := before[path]; ok {
+			now[path] = stamp
+		} else {
+			delete(now, path)
+		}
+	}
+	return now
 }
 
 func (s *Service) loadConfig() (*config.Config, error) {

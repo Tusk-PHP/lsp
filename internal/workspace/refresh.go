@@ -23,10 +23,23 @@ type Refresh struct {
 type Refreshed struct {
 	Files          []string
 	EditorOpened   []string
+	Failed         []string
 	Composer       bool
 	ProfileChanged bool
 	Profile        symbols.BuiltinProfile
 	ProfileSource  string
+}
+
+type ConfigError struct {
+	Err error
+}
+
+func (e *ConfigError) Error() string {
+	return "load the configuration to resolve the PHP version: " + e.Err.Error()
+}
+
+func (e *ConfigError) Unwrap() error {
+	return e.Err
 }
 
 const composerManifest = "composer.json"
@@ -87,6 +100,7 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 			found, err := ws.sourcesAt(path)
 			if err != nil {
 				errs = append(errs, err)
+				out.Failed = append(out.Failed, path)
 			}
 			for _, source := range found {
 				if _, dup := seen[source]; !dup {
@@ -104,6 +118,7 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 		changed, err := ws.refreshFile(path, uri)
 		if err != nil {
 			errs = append(errs, err)
+			out.Failed = append(out.Failed, path)
 		}
 		if !changed {
 			continue
@@ -117,22 +132,25 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 		ws.rereadAutoload()
 	}
 	if profile {
-		cfg, err := r.Config()
-		if err != nil {
-			return out, errors.Join(append(errs, fmt.Errorf("load the configuration to resolve the PHP version: %w", err))...)
-		}
-		timeout := time.Duration(cfg.PHPDetectTimeoutMs) * time.Millisecond
-		out.Profile, out.ProfileSource = ResolveBuiltinProfileWithConfig(ws.RootPath, cfg.PHPBinary, timeout, cfg, nil)
-		changed, err := ws.SetProfile(out.Profile)
-		if err != nil {
+		if err := ws.refreshProfile(r.Config, &out); err != nil {
 			errs = append(errs, err)
 		}
-		out.ProfileChanged = changed
 	}
 	if len(out.Files) > 0 || out.Composer {
 		ws.Container.Analyze()
 	}
 	return out, errors.Join(errs...)
+}
+
+func (ws *Bootstrapped) refreshProfile(load func() (*config.Config, error), out *Refreshed) error {
+	cfg, err := load()
+	if err != nil {
+		return &ConfigError{Err: err}
+	}
+	timeout := time.Duration(cfg.PHPDetectTimeoutMs) * time.Millisecond
+	out.Profile, out.ProfileSource = ResolveBuiltinProfileWithConfig(ws.RootPath, cfg.PHPBinary, timeout, cfg, nil)
+	out.ProfileChanged, err = ws.SetProfile(out.Profile)
+	return err
 }
 
 func (r Refresh) editorOwns(path string) bool {
