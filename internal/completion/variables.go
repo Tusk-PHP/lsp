@@ -50,7 +50,7 @@ func (p *Provider) completeVariables(typed string, lines []string, pos protocol.
 		})
 	}
 
-	doc := p.resolver.ScopeDocument(lines)
+	doc := p.engine.Resolver().ScopeDocument(lines)
 	s := doc.ScopeAt(pos)
 	// An arrow function also sees its parent's variables; they rank after its own.
 	for depth := 0; s != nil; depth++ {

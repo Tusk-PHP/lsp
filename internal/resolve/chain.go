@@ -16,7 +16,7 @@ import (
 // another one through TypedChainResolver asks that one.
 func (r *Resolver) ChainType(expr, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
 	if r.TypedChainResolver != nil {
-		return r.TypedChainResolver(expr, source, pos, file)
+		return r.TypedChainResolver(r, expr, source, pos, file)
 	}
 	return r.chainType(expr, source, pos, file)
 }
@@ -52,7 +52,7 @@ func (r *Resolver) AccessOwnerType(line string, wordStart int, source string, po
 	default:
 		return ResolvedType{}
 	}
-	return r.TypedChainResolver(line[:i], source, pos, file)
+	return r.TypedChainResolver(r, line[:i], source, pos, file)
 }
 
 // resolveChainWithContext is the generic-aware chain resolver. It walks backward

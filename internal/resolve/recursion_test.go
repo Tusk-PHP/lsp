@@ -36,7 +36,7 @@ func buildRecursionResolver(t *testing.T, idx *symbols.Index, lines []string, fi
 	t.Helper()
 	r := NewResolver(idx)
 
-	r.ChainResolver = func(expr, source string, pos protocol.Position, f *parser.FileNode) string {
+	r.ChainResolver = func(req *Resolver, expr, source string, pos protocol.Position, f *parser.FileNode) string {
 		if chainHook != nil {
 			chainHook()
 		}
@@ -57,12 +57,12 @@ func buildRecursionResolver(t *testing.T, idx *symbols.Index, lines []string, fi
 					break
 				}
 			}
-			return r.ResolveVariableType(varName, lines, pos, f)
+			return req.ResolveVariableType(varName, lines, pos, f)
 		}
 		return ""
 	}
 
-	r.TypedChainResolver = func(expr, source string, pos protocol.Position, f *parser.FileNode) ResolvedType {
+	r.TypedChainResolver = func(req *Resolver, expr, source string, pos protocol.Position, f *parser.FileNode) ResolvedType {
 		if chainHook != nil {
 			chainHook()
 		}
@@ -79,7 +79,7 @@ func buildRecursionResolver(t *testing.T, idx *symbols.Index, lines []string, fi
 					break
 				}
 			}
-			rt := r.ResolveVariableTypeTyped(varName, lines, pos, f)
+			rt := req.ResolveVariableTypeTyped(varName, lines, pos, f)
 			return rt
 		}
 		return ResolvedType{}
@@ -268,11 +268,8 @@ class Logger {}
 	// First call: self-referential, guard should fire and return ""
 	_ = r.ResolveVariableType("$x", lines, pos, file)
 
-	r.stateMu.Lock()
-	gotStates := len(r.states)
-	r.stateMu.Unlock()
-	if gotStates != 0 {
-		t.Fatalf("resolver state count after guarded call = %d, want 0", gotStates)
+	if r.depth != 0 || len(r.active) != 0 {
+		t.Fatalf("guard after the guarded call: depth %d, active %v; want none", r.depth, r.active)
 	}
 
 	// Second call: normal resolution must still work.
@@ -293,8 +290,8 @@ $result = Factory::make();
 		t.Fatal("expected parsed file")
 	}
 
-	r := NewResolver(symbols.NewIndex())
-	r.TypedChainResolver = func(expr, source string, pos protocol.Position, f *parser.FileNode) ResolvedType {
+	e := NewEngine(symbols.NewIndex())
+	e.TypedChainResolver = func(_ *Resolver, expr, source string, pos protocol.Position, f *parser.FileNode) ResolvedType {
 		if expr == "Factory::make()" {
 			time.Sleep(20 * time.Millisecond)
 			return ResolvedType{FQN: "App\\Logger"}
@@ -311,7 +308,7 @@ $result = Factory::make();
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results <- r.ResolveVariableTypeTyped("$result", lines, pos, file).FQN
+			results <- e.Resolver().ResolveVariableTypeTyped("$result", lines, pos, file).FQN
 		}()
 	}
 

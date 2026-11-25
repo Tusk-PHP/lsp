@@ -132,8 +132,8 @@ class Usage {
 func setupGenericsClosuresResolver(t *testing.T) (*Resolver, *parser.FileNode, []string) {
 	t.Helper()
 	r, file, lines := setupBoxResolver(t, genericsClosuresSource)
-	r.TypedChainResolver = func(expr, _ string, _ protocol.Position, f *parser.FileNode) ResolvedType {
-		return r.ExpressionType(expr, ExprContext{File: f})
+	r.TypedChainResolver = func(req *Resolver, expr, _ string, _ protocol.Position, f *parser.FileNode) ResolvedType {
+		return req.ExpressionType(expr, ExprContext{File: f})
 	}
 	return r, file, lines
 }

@@ -6,13 +6,11 @@ package resolve
 
 import (
 	"regexp"
-	"runtime"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/phparray"
@@ -29,33 +27,20 @@ import (
 // are 2–8 hops) but safely below the goroutine stack limit.
 const maxResolveDepth = 32
 
-type resolutionState struct {
-	depth  int
-	active map[string]int
-}
-
-// Resolver provides shared resolution methods that depend on the symbol index.
-type Resolver struct {
+type Engine struct {
 	Index *symbols.Index
 	// ChainResolver is an optional callback to resolve method chain expressions
 	// like "Category::first()" or "$foo->bar()->baz()". Set by the completion/hover
 	// provider that has access to the full chain resolution logic.
-	ChainResolver func(expr string, source string, pos protocol.Position, file *parser.FileNode) string
+	ChainResolver func(r *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) string
 	// TypedChainResolver is like ChainResolver but returns a ResolvedType
 	// preserving generic parameters. Used for variable type inference that
 	// needs to carry generic context through assignments.
-	TypedChainResolver func(expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType
+	TypedChainResolver func(r *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType
 	// ContainerCall, when set, gives the class a container call such as
 	// app('request') or $container->get(Foo::class) resolves to, "-" for one
 	// that gives a value rather than an object, or "" when it isn't one.
 	ContainerCall func(callExpr, source string, file *parser.FileNode) string
-	// Resolution state is tracked per goroutine so recursive chains are guarded
-	// without unrelated concurrent requests sharing the same depth budget.
-	stateMu sync.Mutex
-	states  map[uint64]*resolutionState
-	// guardCuts counts the times a guard stopped a resolution, so a cached
-	// answer is never one that was cut short.
-	guardCuts atomic.Uint64
 
 	// The last source's scopes, since one request asks about many variables.
 	scopeMu     sync.Mutex
@@ -75,69 +60,62 @@ type Resolver struct {
 	parsed parseCache
 }
 
-// NewResolver creates a resolver with the given symbol index.
-func NewResolver(index *symbols.Index) *Resolver {
-	return &Resolver{Index: index, states: make(map[uint64]*resolutionState)}
+type Resolver struct {
+	*Engine
+	depth  int
+	active map[string]int
+	cuts   int
 }
 
-func currentGID() uint64 {
-	var buf [64]byte
-	n := runtime.Stack(buf[:], false)
-	parts := strings.Fields(string(buf[:n]))
-	if len(parts) < 2 {
-		return 0
+func NewEngine(index *symbols.Index) *Engine {
+	return &Engine{Index: index}
+}
+
+func (e *Engine) Resolver() *Resolver {
+	return &Resolver{Engine: e}
+}
+
+func NewResolver(index *symbols.Index) *Resolver {
+	return NewEngine(index).Resolver()
+}
+
+func (e *Engine) DelegateChains(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) string) {
+	e.ChainResolver = func(_ *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) string {
+		return fn(expr, source, pos, file)
 	}
-	gid, err := strconv.ParseUint(parts[1], 10, 64)
-	if err != nil {
-		return 0
+}
+
+func (e *Engine) DelegateTypedChains(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType) {
+	e.TypedChainResolver = func(_ *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+		return fn(expr, source, pos, file)
 	}
-	return gid
 }
 
 func (r *Resolver) enterResolution(key string) (func(), bool) {
 	return r.enterGuard(key, true)
 }
 
-// enterGuard is enterResolution; a cut counts as one (guardCuts) only when
+// enterGuard is enterResolution; a cut counts as one (cuts) only when
 // counted is set, for a caller that expects the cycle and handles it.
 func (r *Resolver) enterGuard(key string, counted bool) (func(), bool) {
-	gid := currentGID()
-
-	r.stateMu.Lock()
-	st := r.states[gid]
-	if st == nil {
-		st = &resolutionState{active: make(map[string]int)}
-		r.states[gid] = st
-	}
-	if st.depth >= maxResolveDepth || st.active[key] > 0 {
-		// Running out of depth always counts: the answer was cut short.
-		depthCut := st.active[key] == 0
-		r.stateMu.Unlock()
-		if counted || depthCut {
-			r.guardCuts.Add(1)
+	if r.depth >= maxResolveDepth || r.active[key] > 0 {
+		if counted || r.active[key] == 0 {
+			r.cuts++
 		}
 		return nil, false
 	}
-	st.depth++
-	st.active[key]++
-	r.stateMu.Unlock()
-
+	if r.active == nil {
+		r.active = make(map[string]int)
+	}
+	r.depth++
+	r.active[key]++
 	return func() {
-		r.stateMu.Lock()
-		defer r.stateMu.Unlock()
-		st := r.states[gid]
-		if st == nil {
-			return
-		}
-		if st.active[key] > 1 {
-			st.active[key]--
+		if r.active[key] > 1 {
+			r.active[key]--
 		} else {
-			delete(st.active, key)
+			delete(r.active, key)
 		}
-		st.depth--
-		if st.depth <= 0 {
-			delete(r.states, gid)
-		}
+		r.depth--
 	}, true
 }
 
@@ -745,7 +723,7 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	key, memo := r.varMemoKeyAt(vs, varName, lines, pos)
 	// An answer a guard against cycles cut short isn't kept. Guards tripped
 	// by other requests at the same time only cost a missed cache entry.
-	cutsBefore := r.guardCuts.Load()
+	cutsBefore := r.cuts
 	if memo {
 		if rt, ok := r.varMemoGet(key); ok {
 			return rt
@@ -755,7 +733,7 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	// What asserting calls, @param-out and self-out since its last
 	// assignment say about it.
 	rt = r.narrowVariable(varName, rt, lines, pos, file)
-	if memo && r.guardCuts.Load() == cutsBefore {
+	if memo && r.cuts == cutsBefore {
 		r.varMemoPut(key, rt)
 	}
 	return rt
@@ -1007,7 +985,7 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 
 		// Fall back to standard chain resolver
 		if r.ChainResolver != nil && (strings.Contains(rhs, "->") || strings.Contains(rhs, "::")) {
-			if t := r.ChainResolver(rhs, r.JoinLines(lines), pos, file); t != "" {
+			if t := r.ChainResolver(r, rhs, r.JoinLines(lines), pos, file); t != "" {
 				return ResolvedType{FQN: t}
 			}
 		}
@@ -1198,7 +1176,7 @@ func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos 
 		}
 		// $var = ClassName::method() or $var = $foo->bar()->baz()
 		if r.ChainResolver != nil && (strings.Contains(rhs, "->") || strings.Contains(rhs, "::")) {
-			if t := r.ChainResolver(rhs, r.JoinLines(lines), pos, file); t != "" {
+			if t := r.ChainResolver(r, rhs, r.JoinLines(lines), pos, file); t != "" {
 				return t
 			}
 			break

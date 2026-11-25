@@ -136,7 +136,7 @@ func (r *Resolver) writeValue(varName string, lines []string, file *parser.FileN
 		return ResolvedType{}, true
 	}
 	defer exit()
-	cutsBefore := r.guardCuts.Load()
+	cutsBefore := r.cuts
 
 	if caught := b.Caught(w); len(caught) > 0 {
 		rt := r.caughtType(caught, file)
@@ -153,7 +153,7 @@ func (r *Resolver) writeValue(varName string, lines []string, file *parser.FileN
 	if !rt.IsEmpty() && b.ReadsItself(w) {
 		rt = r.feedsItself(varName, lines, file, b, w, pos, rt)
 	}
-	if r.guardCuts.Load() == cutsBefore {
+	if r.cuts == cutsBefore {
 		r.varMemoPut(key, rt)
 	}
 	return rt, false

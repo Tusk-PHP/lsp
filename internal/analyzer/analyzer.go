@@ -21,7 +21,7 @@ import (
 type Analyzer struct {
 	index               *symbols.Index
 	container           *container.ContainerAnalyzer
-	resolver            *resolve.Resolver
+	engine              *resolve.Engine
 	framework           string
 	routes              *frameworklaravel.RouteIndex
 	views               *frameworklaravel.Views
@@ -52,19 +52,19 @@ func NewAnalyzer(index *symbols.Index, ca *container.ContainerAnalyzer) *Analyze
 	if ca != nil {
 		framework = ca.Framework()
 	}
-	a := &Analyzer{index: index, container: ca, resolver: resolve.NewResolver(index), framework: framework}
+	a := &Analyzer{index: index, container: ca, engine: resolve.NewEngine(index), framework: framework}
 	if ca != nil {
-		a.resolver.ContainerCall = a.resolveContainerCallType
+		a.engine.ContainerCall = a.resolveContainerCallType
 	}
 	return a
 }
 
 func (a *Analyzer) SetChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) string) {
-	a.resolver.ChainResolver = fn
+	a.engine.DelegateChains(fn)
 }
 
 func (a *Analyzer) SetTypedChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType) {
-	a.resolver.TypedChainResolver = fn
+	a.engine.DelegateTypedChains(fn)
 }
 
 func (a *Analyzer) SetTranslationResolver(resolver *frameworklaravel.TranslationResolver) {
@@ -233,16 +233,16 @@ func (a *Analyzer) resolveDefinitionSymbol(uri, source string, pos protocol.Posi
 
 	// Check for -> or :: access (method/property on a class)
 	if ctx.AccessKind != sourcectx.AccessNone {
-		owner := a.resolver.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		owner := a.engine.Resolver().AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
 		classFQN := owner.BaseFQN()
 		if classFQN == "" {
 			return definitionTarget{}
 		}
-		member := a.resolver.FindMemberAnywhere(classFQN, word)
+		member := a.engine.Resolver().FindMemberAnywhere(classFQN, word)
 		if member == nil {
 			// With the receiver's type arguments and every class of a union:
 			// a local scope on Builder<Post> is found on Post.
-			member = a.resolver.FindMemberAnywhereOn(owner, word)
+			member = a.engine.Resolver().FindMemberAnywhereOn(owner, word)
 		}
 		if member != nil {
 			// Owner is the *declaring* class (member.ParentFQN), not the
@@ -273,7 +273,7 @@ func (a *Analyzer) resolveDefinitionSymbol(uri, source string, pos protocol.Posi
 			}
 		}
 		// Try as class name in current namespace
-		fqn := a.resolver.ResolveClassName(word, file)
+		fqn := a.engine.Resolver().ResolveClassName(word, file)
 		if fqn != word {
 			if s := a.index.Lookup(fqn); s != nil {
 				return definitionTarget{sym: s, loc: symbolLocation(s)}
@@ -346,7 +346,7 @@ func (a *Analyzer) definitionForLaravelView(line string, character int) *protoco
 // find(), get() or has() names at pos.
 func (a *Analyzer) definitionForSymfonyCommand(uri, source string, pos protocol.Position) *protocol.Location {
 	line, ok := sourceLine(source, pos.Line)
-	if !ok || a.resolver.ChainResolver == nil {
+	if !ok || a.engine.ChainResolver == nil {
 		return nil
 	}
 	receiver, name, ok := frameworksymfony.CommandNameAt(line, pos.Character)
@@ -358,7 +358,7 @@ func (a *Analyzer) definitionForSymfonyCommand(uri, source string, pos protocol.
 		return nil
 	}
 	file := parser.ParseFile(source)
-	if !frameworksymfony.IsConsoleApplication(a.index, a.resolver.ChainResolver(receiver, source, pos, file)) {
+	if !frameworksymfony.IsConsoleApplication(a.index, a.engine.ChainResolver(a.engine.Resolver(), receiver, source, pos, file)) {
 		return nil
 	}
 	return &protocol.Location{URI: cmd.URI, Range: cmd.Range}
@@ -403,7 +403,7 @@ func (a *Analyzer) definitionForVariable(varName string, source string, pos prot
 	if file == nil {
 		return nil
 	}
-	typeName := a.resolver.ResolveVariableType(varName, a.resolver.Lines(source), pos, file)
+	typeName := a.engine.Resolver().ResolveVariableType(varName, a.engine.Resolver().Lines(source), pos, file)
 	if typeName == "" {
 		return nil
 	}
@@ -464,7 +464,7 @@ func (a *Analyzer) definitionForContainerArg(line string, pos protocol.Position,
 	if strings.HasSuffix(arg, "::class") {
 		wasClassConst = true
 		className := strings.TrimSuffix(arg, "::class")
-		arg = a.resolver.ResolveClassName(className, file)
+		arg = a.engine.Resolver().ResolveClassName(className, file)
 	}
 
 	if !preferType && !wasClassConst {
@@ -495,7 +495,7 @@ func (a *Analyzer) resolveContainerCallType(expr string, source string, file *pa
 	}
 	if strings.HasSuffix(arg, "::class") {
 		className := strings.TrimSuffix(arg, "::class")
-		arg = a.resolver.ResolveClassName(className, file)
+		arg = a.engine.Resolver().ResolveClassName(className, file)
 	}
 	if binding := a.container.ResolveDependency(arg); binding != nil {
 		return binding.Concrete
@@ -539,15 +539,15 @@ func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position)
 	}
 
 	if strings.HasPrefix(word, "$") {
-		return a.locationsForTypeName(a.resolver.ResolveVariableType(word, a.resolver.Lines(source), pos, file), file)
+		return a.locationsForTypeName(a.engine.Resolver().ResolveVariableType(word, a.engine.Resolver().Lines(source), pos, file), file)
 	}
 
 	if ctx.AccessKind != sourcectx.AccessNone {
-		classFQN := a.resolver.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file).BaseFQN()
+		classFQN := a.engine.Resolver().AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file).BaseFQN()
 		if classFQN == "" {
 			return nil
 		}
-		if member := a.resolver.FindMemberAnywhere(classFQN, word); member != nil {
+		if member := a.engine.Resolver().FindMemberAnywhere(classFQN, word); member != nil {
 			return a.locationsForMemberType(member, file)
 		}
 		return nil
@@ -604,7 +604,7 @@ func (a *Analyzer) FindImplementation(uri, source string, pos protocol.Position)
 }
 
 func (a *Analyzer) locationsForMemberType(member *symbols.Symbol, file *parser.FileNode) []protocol.Location {
-	return a.locationsForTypeName(a.resolver.MemberType(member, file), file)
+	return a.locationsForTypeName(a.engine.Resolver().MemberType(member, file), file)
 }
 
 func (a *Analyzer) locationsForTypeName(typeName string, file *parser.FileNode) []protocol.Location {
@@ -619,7 +619,7 @@ func (a *Analyzer) locationsForTypeName(typeName string, file *parser.FileNode) 
 	if idx := strings.IndexByte(typeName, '<'); idx > 0 {
 		typeName = typeName[:idx]
 	}
-	typeName = a.resolver.ResolveClassName(typeName, file)
+	typeName = a.engine.Resolver().ResolveClassName(typeName, file)
 	return singleLocation(symbolLocation(a.index.Lookup(typeName)))
 }
 
@@ -637,7 +637,7 @@ func (a *Analyzer) findMemberImplementations(sym *symbols.Symbol, owners []*symb
 		if owner == nil || (owner.Kind != symbols.KindClass && owner.Kind != symbols.KindEnum) || owner.IsAbstract {
 			continue
 		}
-		member := a.resolver.FindMember(owner.FQN, sym.Name)
+		member := a.engine.Resolver().FindMember(owner.FQN, sym.Name)
 		if member == nil || member.IsAbstract {
 			continue
 		}
@@ -723,9 +723,9 @@ func (a *Analyzer) resolveSymbolAtCursor(uri, source string, pos protocol.Positi
 	// the member, return nil — do not fall through to name-based lookups that
 	// would match unrelated symbols across the project.
 	if ctx != nil && ctx.AccessKind != sourcectx.AccessNone {
-		classFQN := a.resolver.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file).BaseFQN()
+		classFQN := a.engine.Resolver().AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file).BaseFQN()
 		if classFQN != "" {
-			if member := a.resolver.FindMemberAnywhere(classFQN, word); member != nil {
+			if member := a.engine.Resolver().FindMemberAnywhere(classFQN, word); member != nil {
 				return member
 			}
 		}
@@ -764,7 +764,7 @@ func (a *Analyzer) resolveSymbolAtCursor(uri, source string, pos protocol.Positi
 	// Try resolving as a class/interface/enum/trait name
 	fqn := ""
 	if file != nil {
-		fqn = a.resolver.ResolveClassName(word, file)
+		fqn = a.engine.Resolver().ResolveClassName(word, file)
 	}
 	if fqn != "" {
 		if sym := a.index.Lookup(fqn); sym != nil {

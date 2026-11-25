@@ -260,7 +260,7 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 func TestResolveVariableTypeTypedCoverage(t *testing.T) {
 	r, _, _, file, lines := setupGenericResolverCoverage(t)
 
-	r.TypedChainResolver = func(expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+	r.TypedChainResolver = func(_ *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
 		if expr == "Factory::make()" {
 			return ResolvedType{
 				FQN:    "App\\Collection",
@@ -269,7 +269,7 @@ func TestResolveVariableTypeTypedCoverage(t *testing.T) {
 		}
 		return ResolvedType{}
 	}
-	r.ChainResolver = func(expr string, source string, pos protocol.Position, file *parser.FileNode) string {
+	r.ChainResolver = func(_ *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) string {
 		if expr == "Factory::fallback()" {
 			return "App\\Logger"
 		}

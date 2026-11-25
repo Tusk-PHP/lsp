@@ -35,7 +35,7 @@ func (p *Provider) resolveContainerCallType(expr, source string, file *parser.Fi
 	// Resolve ::class references: "Request::class" → FQN
 	if strings.HasSuffix(arg, "::class") {
 		className := strings.TrimSuffix(arg, "::class")
-		arg = p.resolver.ResolveClassNameLoose(className, file)
+		arg = p.engine.Resolver().ResolveClassNameLoose(className, file)
 	}
 	if binding := p.container.ResolveDependency(arg); binding != nil {
 		return binding.Concrete

@@ -143,12 +143,12 @@ func TestResolveExpressionTypeCoverage(t *testing.T) {
 		t.Fatal("expected parsed file")
 	}
 
-	if got := p.resolveExpressionType("", src, protocol.Position{}, file); got != "" {
+	if got := resolveExpressionType(p.engine.Resolver(), "", src, protocol.Position{}, file); got != "" {
 		t.Fatalf("expected empty type for empty expression, got %q", got)
 	}
 
 	pos := charPosOf(t, src, "info", "getLogger()->info")
-	if got := p.resolveExpressionType("$handler->getLogger()", src, pos, file); got != "Monolog\\Logger" {
+	if got := resolveExpressionType(p.engine.Resolver(), "$handler->getLogger()", src, pos, file); got != "Monolog\\Logger" {
 		t.Fatalf("got %q", got)
 	}
 }

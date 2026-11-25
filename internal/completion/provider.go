@@ -20,7 +20,7 @@ import (
 type Provider struct {
 	index               *symbols.Index
 	container           *container.ContainerAnalyzer
-	resolver            *resolve.Resolver
+	engine              *resolve.Engine
 	framework           string
 	arrayResolver       *models.FrameworkArrayResolver
 	routes              *frameworklaravel.RouteIndex
@@ -37,11 +37,11 @@ type Provider struct {
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
-	p := &Provider{index: index, container: ca, resolver: resolve.NewResolver(index), framework: framework}
+	p := &Provider{index: index, container: ca, engine: resolve.NewEngine(index), framework: framework}
 	// Wire up chain resolution so ResolveVariableType can handle $var = Class::method()->chain()
-	p.resolver.ChainResolver = p.ResolveExpressionType
+	p.engine.ChainResolver = p.resolveExpressionType
 	if ca != nil {
-		p.resolver.ContainerCall = p.resolveContainerCallType
+		p.engine.ContainerCall = p.resolveContainerCallType
 	}
 	return p
 }
@@ -50,6 +50,10 @@ func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framewor
 // or "$foo->bar()->baz()". Used as the ChainResolver callback and exposed for
 // diagnostics type resolution.
 func (p *Provider) ResolveExpressionType(expr string, source string, pos protocol.Position, file *parser.FileNode) string {
+	return p.resolveExpressionType(p.engine.Resolver(), expr, source, pos, file)
+}
+
+func (p *Provider) resolveExpressionType(r *resolve.Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) string {
 	expr = strings.TrimSpace(expr)
 	if expr == "" {
 		return ""
@@ -59,7 +63,7 @@ func (p *Provider) ResolveExpressionType(expr string, source string, pos protoco
 	dummyLine := expr + "->__dummy__"
 	// wordStart points to "__dummy__" which is after "->"
 	wordStart := len(expr) + 2
-	return p.resolveAccessChain(dummyLine, wordStart, source, pos, file)
+	return p.resolveAccessChain(r, dummyLine, wordStart, source, pos, file)
 }
 
 // ResolveDiagnosticType returns the type diagnostics check an expression
@@ -76,7 +80,7 @@ func (p *Provider) ResolveDiagnosticType(expr string, source string, pos protoco
 // ResolveExpressionTypeTyped resolves the type of an expression preserving
 // generic parameters (e.g., returns Collection<int, Category> instead of bare Collection).
 func (p *Provider) ResolveExpressionTypeTyped(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-	return p.resolver.ChainType(expr, source, pos, file)
+	return p.engine.Resolver().ChainType(expr, source, pos, file)
 }
 
 // SetArrayResolver sets the framework array resolver for config/request/model key completion.
@@ -143,7 +147,7 @@ func sanitizeCompletions(items []protocol.CompletionItem) []protocol.CompletionI
 }
 
 func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []protocol.CompletionItem {
-	lines := p.resolver.Lines(source)
+	lines := p.engine.Resolver().Lines(source)
 	line := resolve.LineAt(lines, pos.Line)
 	prefix := ""
 	if pos.Character <= len(line) {
@@ -403,13 +407,13 @@ func (p *Provider) completeMemberAccess(uri, source string, pos protocol.Positio
 	enclosing := resolve.FindEnclosingClass(file, pos)
 	members := p.index.GetClassMembers(typeName)
 	// What @mixin tags bring in, after the class's own members.
-	for _, mixin := range p.resolver.MixinTypes(resolved) {
+	for _, mixin := range p.engine.Resolver().MixinTypes(resolved) {
 		members = append(members, p.index.GetClassMembers(mixin.MemberOwner())...)
 	}
 	distance := memberDistances(members)
 	seen := make(map[string]bool, len(members))
 	// Local scopes of the model a query builder is for: $query->active().
-	for _, sc := range p.resolver.Scopes(resolved) {
+	for _, sc := range p.engine.Resolver().Scopes(resolved) {
 		seen[sc.Name] = true
 		items = append(items, p.scopeItem(sc, parenAfterCursor))
 	}
@@ -546,8 +550,8 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 	}
 	// What the class forwards static calls to, as an Eloquent model does to
 	// its query builder, and that type's @mixin (the base query builder).
-	for _, fwd := range p.resolver.ForwardTypes(resolve.ResolvedType{FQN: typeName}) {
-		for _, t := range append([]resolve.ResolvedType{fwd}, p.resolver.MixinTypes(fwd)...) {
+	for _, fwd := range p.engine.Resolver().ForwardTypes(resolve.ResolvedType{FQN: typeName}) {
+		for _, t := range append([]resolve.ResolvedType{fwd}, p.engine.Resolver().MixinTypes(fwd)...) {
 			if fqn := t.MemberOwner(); fqn != "" && !forwarded[fqn] {
 				memberSets = append(memberSets, fqn)
 				forwarded[fqn] = true
@@ -555,8 +559,8 @@ func (p *Provider) completeStaticAccess(source, prefix string, pos protocol.Posi
 		}
 	}
 	// Local scopes, callable statically through the forward: Category::active().
-	for _, fwd := range p.resolver.ForwardTypes(resolve.ResolvedType{FQN: typeName}) {
-		for _, sc := range p.resolver.Scopes(fwd) {
+	for _, fwd := range p.engine.Resolver().ForwardTypes(resolve.ResolvedType{FQN: typeName}) {
+		for _, sc := range p.engine.Resolver().Scopes(fwd) {
 			if seen[sc.Name] {
 				continue
 			}
@@ -616,7 +620,7 @@ func (p *Provider) ResolveChainTypeTyped(source, prefix, op string, pos protocol
 	if idx < 0 {
 		return resolve.ResolvedType{}
 	}
-	return p.resolver.AccessOwnerType(prefix, idx+len(op), source, pos, file)
+	return p.engine.Resolver().AccessOwnerType(prefix, idx+len(op), source, pos, file)
 }
 
 // resolveChainType resolves the class FQN from the expression before op (-> or ::).
@@ -629,14 +633,14 @@ func (p *Provider) resolveChainType(source, prefix, op string, pos protocol.Posi
 		return ""
 	}
 	// wordStart is after the operator (where the member name would be)
-	return p.resolveAccessChain(prefix, idx+len(op), source, pos, file)
+	return p.resolveAccessChain(p.engine.Resolver(), prefix, idx+len(op), source, pos, file)
 }
 
 // resolveAccessChain walks left through a chain of -> and :: accesses in the
 // line text and returns the FQN of the class at that point. wordStart is the
 // position immediately before the operator (-> or ::) to resolve.
 // Handles recursive chains like Category::query()->with('form')->.
-func (p *Provider) resolveAccessChain(line string, wordStart int, source string, pos protocol.Position, file *parser.FileNode) string {
+func (p *Provider) resolveAccessChain(r *resolve.Resolver, line string, wordStart int, source string, pos protocol.Position, file *parser.FileNode) string {
 	i := wordStart
 
 	// Skip whitespace before the operator
@@ -697,7 +701,7 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 		if op == "->" {
 			callExpr := strings.TrimSpace(line[:parenEnd])
 			if newClass := resolve.ExtractNewClass(callExpr); newClass != "" {
-				return p.resolver.ResolveClassNameLoose(newClass, file)
+				return r.ResolveClassNameLoose(newClass, file)
 			}
 		}
 		if line[i] == '(' && resolve.IsCallableArgs(line[i+1:parenEnd-1]) {
@@ -752,15 +756,15 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 			if file == nil {
 				return ""
 			}
-			rt := p.resolver.ResolveVariableTypeTyped(target, p.resolver.Lines(source), pos, file)
-			return resolve.PlainTypeName(p.resolver.InvokeType(rt))
+			rt := r.ResolveVariableTypeTyped(target, r.Lines(source), pos, file)
+			return resolve.PlainTypeName(r.InvokeType(rt))
 		}
-		return p.resolver.ResolveVariableType(target, p.resolver.Lines(source), pos, file)
+		return r.ResolveVariableType(target, r.Lines(source), pos, file)
 	}
 
 	// Try as a class name (for static access or direct use). A word after
 	// -> or :: is a member (UserRole::Client, $x->Client), never a class.
-	if fqn := p.resolver.ChainOriginClassName(line, i, target, file); fqn != "" {
+	if fqn := r.ChainOriginClassName(line, i, target, file); fqn != "" {
 		if sym := p.index.Lookup(fqn); sym != nil {
 			switch sym.Kind {
 			case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
@@ -779,43 +783,43 @@ func (p *Provider) resolveAccessChain(line string, wordStart int, source string,
 	if file == nil {
 		return ""
 	}
-	ownerFQN := p.resolveAccessChain(line, i, source, pos, file)
+	ownerFQN := p.resolveAccessChain(r, line, i, source, pos, file)
 	if ownerFQN == "" {
 		return ""
 	}
-	member := p.resolver.FindAccessedMember(ownerFQN, target, parenEnd > 0)
+	member := r.FindAccessedMember(ownerFQN, target, parenEnd > 0)
 	if member == nil {
 		// Category::where() runs on Builder<Category>, and a fluent builder
 		// method gives back the builder.
-		fwd, ok := p.resolver.ForwardedReceiver(resolve.ResolvedType{FQN: ownerFQN}, target, parenEnd > 0)
+		fwd, ok := r.ForwardedReceiver(resolve.ResolvedType{FQN: ownerFQN}, target, parenEnd > 0)
 		if !ok {
 			return ""
 		}
-		member, _ = p.resolver.FindMemberOn(fwd, target, parenEnd > 0)
+		member, _ = r.FindMemberOn(fwd, target, parenEnd > 0)
 		if member == nil {
-			if parenEnd > 0 && p.resolver.ScopeMethod(fwd, target) != nil {
+			if parenEnd > 0 && r.ScopeMethod(fwd, target) != nil {
 				return fwd.BaseFQN() // Category::active() is the builder
 			}
 			return ""
 		}
-		if p.resolver.ReturnsCallingClass(member) {
+		if r.ReturnsCallingClass(member) {
 			return fwd.BaseFQN()
 		}
-		return resolve.PlainTypeName(p.resolver.MemberTypeResolved(member, file, fwd.BaseFQN(), fwd.Params))
+		return resolve.PlainTypeName(r.MemberTypeResolved(member, file, fwd.BaseFQN(), fwd.Params))
 	}
 	// A method returning static/$this/self gives back the class it was called
 	// on, not the one that declares it: Child::create() is a Child. Calls through
 	// self::, parent:: and static:: pass the calling class along, which here is
 	// the class being edited.
-	if p.resolver.ReturnsCallingClass(member) {
+	if r.ReturnsCallingClass(member) {
 		if resolve.ForwardsCallingClass(line[:i]) {
-			if enclosing := p.resolveAccessChain("static->__dummy__", len("static->"), source, pos, file); enclosing != "" {
+			if enclosing := p.resolveAccessChain(r, "static->__dummy__", len("static->"), source, pos, file); enclosing != "" {
 				return enclosing
 			}
 		}
 		return ownerFQN
 	}
-	return p.resolver.MemberType(member, file)
+	return r.MemberType(member, file)
 }
 
 func (p *Provider) completeNew(prefix, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {

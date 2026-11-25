@@ -41,8 +41,8 @@ class Service {
 // what the function alone returns.
 func TestFunctionCallChainBindsMethodTemplate(t *testing.T) {
 	r, file, lines := setupBoxResolver(t, mapperChainSource)
-	r.TypedChainResolver = func(expr, _ string, _ protocol.Position, f *parser.FileNode) ResolvedType {
-		return r.ExpressionType(expr, ExprContext{File: f})
+	r.TypedChainResolver = func(req *Resolver, expr, _ string, _ protocol.Position, f *parser.FileNode) ResolvedType {
+		return req.ExpressionType(expr, ExprContext{File: f})
 	}
 
 	pos := protocol.Position{Line: lineContaining(t, lines, "$data =")}
