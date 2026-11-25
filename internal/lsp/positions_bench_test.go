@@ -80,9 +80,10 @@ func BenchmarkPublishDiagnostics(b *testing.B) {
 		b.Run(bc.name, func(b *testing.B) {
 			source := benchmarkSource(bc.nonASCII)
 			s, uri := benchmarkServer(b, source)
+			doc, _ := s.docs.Get(uri)
 			b.ReportAllocs()
 			for b.Loop() {
-				s.publishDiagnostics(uri, source)
+				s.publishDiagnostics(doc)
 			}
 		})
 	}

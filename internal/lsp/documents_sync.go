@@ -4,6 +4,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Tusk-PHP/lsp/internal/document"
 	"github.com/Tusk-PHP/lsp/internal/session"
 )
 
@@ -127,24 +128,18 @@ func (s *Server) docIndexIdle(uri string) bool {
 	return !q.running[uri]
 }
 
-// publishDiagnostics analyzes source and sends its diagnostics, unless the
-// document has changed or closed meanwhile. Analysis can run in the
-// background (after indexing settles, after PHPStan and Pint on save), and
-// the message loop publishes for every edit; publishMu makes the check and
-// the send one step, so an older version's diagnostics never arrive after a
-// newer version's.
-func (s *Server) publishDiagnostics(uri, source string) {
-	diagnostics := s.positionsOf(uri, source).diagnosticsOut(uri, session.LSPDiagnostics(s.analysis.Analyze(uri, source)))
+// publishDiagnostics analyzes a snapshot of a document and sends its
+// diagnostics, unless the document has changed or closed since the snapshot
+// was taken. Analysis can run in the background (after indexing settles,
+// after PHPStan and Pint on save), and the message loop publishes for every
+// edit; publishMu makes the check and the send one step, so an older
+// version's diagnostics never arrive after a newer version's.
+func (s *Server) publishDiagnostics(doc document.Snapshot) {
+	diagnostics := s.positionsOf(doc.URI, doc.Text).diagnosticsOut(doc.URI, session.LSPDiagnostics(s.analysis.Analyze(doc.URI, doc.Text)))
 	s.publishMu.Lock()
 	defer s.publishMu.Unlock()
-	if !s.isCurrentDocument(uri, source) {
+	if !s.docs.Current(doc) {
 		return
 	}
-	s.sendNotification("textDocument/publishDiagnostics", map[string]interface{}{"uri": uri, "diagnostics": diagnostics})
-}
-
-// isCurrentDocument reports whether uri is open with exactly this source.
-func (s *Server) isCurrentDocument(uri, source string) bool {
-	current, open := s.docs.Text(uri)
-	return open && current == source
+	s.sendNotification("textDocument/publishDiagnostics", map[string]interface{}{"uri": doc.URI, "diagnostics": diagnostics})
 }

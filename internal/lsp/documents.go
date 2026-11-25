@@ -18,7 +18,7 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 	text := params.TextDocument.Text
 	path := symbols.URIToPath(uri)
 	unsaved := s.index.GetFileSource(symbols.PathToURI(path)) != text
-	s.docs.Open(uri, params.TextDocument.Version, text)
+	doc := s.docs.Open(uri, params.TextDocument.Version, text)
 	s.docMu.Lock()
 	s.openPaths[path] = uri
 	s.unsaved[uri] = unsaved
@@ -32,7 +32,7 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 	s.docIndex.reopened(uri)
 	s.indexDocumentMaybeAsync(uri, text)
 	if s.cfg.DiagnosticsEnabled {
-		s.publishDiagnostics(uri, text)
+		s.publishDiagnostics(doc)
 	}
 }
 
@@ -119,7 +119,9 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 		s.docMu.Unlock()
 	}
 	if params.Text != nil {
-		s.docs.Save(uri, *params.Text)
+		if !s.docs.Save(uri, *params.Text) {
+			s.logger.Printf("didSave: %s is not open, so its saved text is not kept as an open document", uri)
+		}
 		if isPHPDocument(uri) {
 			s.indexDocumentMaybeAsync(uri, *params.Text)
 		}
@@ -139,9 +141,12 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 			if !workspace.IsTemplate(uri) {
 				s.analysis.RunTools(uri, filePath)
 			}
-			source := s.getDocument(uri)
-			s.analysis.Saved(uri, source)
-			s.publishDiagnostics(uri, source)
+			doc, open := s.docs.Get(uri)
+			if !open {
+				return
+			}
+			s.analysis.Saved(uri, doc.Text)
+			s.publishDiagnostics(doc)
 		})
 	}
 }
@@ -180,7 +185,7 @@ func (s *Server) getDocument(uri string) string {
 // produce their authoritative result.
 func (s *Server) republishOpenDocuments() {
 	for _, doc := range s.docs.All() {
-		s.publishDiagnostics(doc.URI, doc.Text)
+		s.publishDiagnostics(doc)
 	}
 }
 

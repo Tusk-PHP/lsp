@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Tusk-PHP/lsp/internal/document"
 	"github.com/Tusk-PHP/lsp/internal/session"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
@@ -100,23 +101,73 @@ func TestDiagnosticsArePublishedOnlyForTheCurrentVersion(t *testing.T) {
 	s := newServerWithWorkspace(t, &out)
 	s.analysis = session.New(s.workspace, session.Options{})
 	uri := "file:///a.php"
-	old, current := "<?php\necho $a;\n", "<?php\necho 1;\n"
-	s.docs.Open(uri, 1, current)
-
-	s.publishDiagnostics(uri, old)
-	if out.Len() != 0 {
-		t.Fatalf("published diagnostics for an old version: %s", out.String())
+	text := "<?php\necho $a;\n"
+	stale := s.docs.Open(uri, 1, text)
+	change := func(version int, to string) {
+		t.Helper()
+		if _, err := s.docs.Change(uri, version, document.UTF16, []document.Change{{Text: to}}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	s.publishDiagnostics(uri, current)
+	change(2, "<?php\necho 1;\n")
+	change(3, text)
+
+	s.publishDiagnostics(stale)
+	if out.Len() != 0 {
+		t.Fatalf("published diagnostics for version 1 after version 3, whose text is the same: %s", out.String())
+	}
+	current, _ := s.docs.Get(uri)
+	s.publishDiagnostics(current)
 	if !strings.Contains(out.String(), "publishDiagnostics") {
 		t.Fatal("didn't publish diagnostics for the current version")
 	}
 	out.Reset()
 	s.docs.Close(uri)
-	s.publishDiagnostics(uri, current)
+	s.publishDiagnostics(current)
 	if out.Len() != 0 {
 		t.Fatalf("published diagnostics for a closed document: %s", out.String())
 	}
+	reopened := s.docs.Open(uri, 3, text)
+	s.publishDiagnostics(current)
+	if out.Len() != 0 {
+		t.Fatalf("published diagnostics from before the document was closed and reopened with the same version and text: %s", out.String())
+	}
+	s.publishDiagnostics(reopened)
+	if !strings.Contains(out.String(), "publishDiagnostics") {
+		t.Fatal("didn't publish diagnostics for the reopened document")
+	}
+}
+
+func TestSavedTextOfADocumentThatIsNotOpenIsNotKept(t *testing.T) {
+	var logs bytes.Buffer
+	s := NewServer(strings.NewReader(""), io.Discard, log.New(&logs, "", 0))
+	s.handleMessage(saveMessage(t, "file:///closed.json", "{}"))
+	if _, open := s.docs.Get("file:///closed.json"); open {
+		t.Error("a save of a document that is not open opened it")
+	}
+	if !strings.Contains(logs.String(), "file:///closed.json is not open") {
+		t.Errorf("the ignored save was not logged: %q", logs.String())
+	}
+
+	s.docs.Open("file:///open.json", 4, "{}")
+	before, _ := s.docs.Get("file:///open.json")
+	s.handleMessage(saveMessage(t, "file:///open.json", "{}"))
+	if after, _ := s.docs.Get("file:///open.json"); !s.docs.Current(before) || after.Version != 4 {
+		t.Errorf("saving the text a document already has changed it: %+v", after)
+	}
+	s.handleMessage(saveMessage(t, "file:///open.json", `{"a": 1}`))
+	if after, _ := s.docs.Get("file:///open.json"); s.docs.Current(before) || after.Text != `{"a": 1}` || after.Version != 4 {
+		t.Errorf("a save with new text: %+v", after)
+	}
+}
+
+func saveMessage(t *testing.T, uri, text string) *jsonRPCMessage {
+	t.Helper()
+	params, err := json.Marshal(map[string]any{"textDocument": map[string]any{"uri": uri}, "text": text})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &jsonRPCMessage{JSONRPC: "2.0", Method: "textDocument/didSave", Params: params}
 }
 
 func newServerWithWorkspace(t *testing.T, out io.Writer) *Server {
