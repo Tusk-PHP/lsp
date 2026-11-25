@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -413,7 +414,7 @@ func (r *BuiltinUnavailableRule) attributeMessage(name string, avail symbols.Bui
 // when it isn't a builtin. Builtin function names are matched in lowercase,
 // as the registry lists them.
 func builtinFunctionAvailability(name string, file *parser.FileNode) (string, symbols.BuiltinAvailability, bool) {
-	fqns, ok := resolveFunctionNames(name, file)
+	fqns, ok := resolve.FunctionNames(name, file)
 	if !ok {
 		return "", symbols.BuiltinAvailability{}, false
 	}
