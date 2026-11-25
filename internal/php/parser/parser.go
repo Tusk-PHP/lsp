@@ -9,6 +9,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/lexer"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
+	"github.com/Tusk-PHP/lsp/internal/strict"
 )
 
 const eof = token.Invalid
@@ -28,7 +29,10 @@ type parser struct {
 	depth         int
 }
 
-const maxDepth = 4096
+const (
+	maxDepth            = 4096
+	internalErrorPrefix = "internal parser error: "
+)
 
 func Parse(src string, version token.Version) *ast.File {
 	return parse(src, version, lexer.Lex(src, version))
@@ -81,8 +85,11 @@ func (p *parser) file(file *ast.File) {
 func (p *parser) guard(run func()) {
 	defer func() {
 		if r := recover(); r != nil {
+			if strict.Enabled() {
+				panic(r)
+			}
 			at := p.start()
-			p.errors = append(p.errors, ast.Error{Span: ast.Span{Start: at, End: at}, Message: fmt.Sprintf("internal parser error: %v", r)})
+			p.errors = append(p.errors, ast.Error{Span: ast.Span{Start: at, End: at}, Message: fmt.Sprintf("%s%v", internalErrorPrefix, r)})
 		}
 	}()
 	run()
@@ -99,7 +106,7 @@ func (p *parser) enter() bool {
 	return false
 }
 
-func isEOF(token.Kind) bool { return false }
+func noStop(token.Kind) bool { return false }
 
 func (p *parser) unterminated(comment lexer.Token) {
 	text := comment.Text(p.src)
