@@ -126,6 +126,53 @@ func TestPrototypeOfAMemberNothingAboveDeclares(t *testing.T) {
 	}
 }
 
+func TestPrototypeFollowsTraitInsteadofAndAs(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///Talk.php", `<?php
+namespace App;
+interface Speaks { public function bark(): void; }
+trait A { public function talk(): void {} public function shout(): void {} }
+trait B { public function talk(): void {} public function whisper(): void {} }
+trait Nested { use B; }
+trait Polite { use Nested { whisper as hush; } }
+class Talker implements Speaks { use B, A { A::talk insteadof B; B::talk as bTalk; A::shout as bark; } }
+class NestedTalker { use Nested, A { A::talk insteadof Nested; } }
+class NestedAlias { use Nested { Nested::whisper as murmur; } }
+class Hider { use B { whisper as private secretly; } }
+class TalkerChild extends Talker { public function talk(): void {} public function bTalk(): void {} }
+class NestedAliasChild extends NestedAlias { public function murmur(): void {} }
+class PoliteHost { use Polite; }
+class PoliteChild extends PoliteHost { public function hush(): void {} }
+class HiderChild extends Hider { public function secretly(): void {} }
+`)
+	declared := []struct{ receiver, member, want string }{
+		{"", `App\TalkerChild::talk`, `App\A::talk`},
+		{"", `App\TalkerChild::bTalk`, `App\B::talk`},
+		{"", `App\NestedAliasChild::murmur`, `App\B::whisper`},
+		{"", `App\PoliteChild::hush`, `App\B::whisper`},
+	}
+	for _, c := range declared {
+		if got := idx.Prototype(c.receiver, idx.Lookup(c.member)); got == nil || got.FQN != c.want {
+			t.Errorf("%s: got %v, want %s", c.member, got, c.want)
+		}
+	}
+	if bark := idx.ClassMembersNamed(`App\Talker`, "bark"); len(bark) != 1 {
+		t.Errorf("Talker has the alias bark once: %v", bark)
+	} else if got := idx.Prototype(`App\Talker`, bark[0]); got == nil || got.FQN != `App\Speaks::bark` {
+		t.Errorf("an alias implementing an interface method: got %v, want App\\Speaks::bark", got)
+	}
+	undeclared := []struct{ receiver, member string }{
+		{`App\Talker`, `App\A::talk`},
+		{`App\NestedTalker`, `App\A::talk`},
+		{"", `App\HiderChild::secretly`},
+	}
+	for _, c := range undeclared {
+		if got := idx.Prototype(c.receiver, idx.Lookup(c.member)); got != nil {
+			t.Errorf("%s through %q: got %s, want none", c.member, c.receiver, got.FQN)
+		}
+	}
+}
+
 func BenchmarkPrototype(b *testing.B) {
 	for _, classes := range []int{100, 10000} {
 		idx := NewIndex()
