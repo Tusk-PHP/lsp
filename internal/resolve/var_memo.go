@@ -56,26 +56,30 @@ func (r *Resolver) varMemoKeyAt(vs variableScope, varName string, lines []string
 	return key, true
 }
 
-func (r *Resolver) varMemoGet(key varMemoKey) (ResolvedType, bool) {
-	r.scopeMu.Lock()
-	defer r.scopeMu.Unlock()
-	if r.varMemoDoc != r.scopeDoc || r.Index == nil || r.varMemoGen != r.Index.Generation() {
+func (r *Resolver) varMemoGet(lines []string, key varMemoKey) (ResolvedType, bool) {
+	if r.Index == nil {
 		return ResolvedType{}, false
 	}
-	t, ok := r.varMemos[key]
+	f := r.fileOfLines(lines)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.varMemoGen != r.Index.Generation() {
+		return ResolvedType{}, false
+	}
+	t, ok := f.varMemos[key]
 	return t, ok
 }
 
-func (r *Resolver) varMemoPut(key varMemoKey, t ResolvedType) {
-	r.scopeMu.Lock()
-	defer r.scopeMu.Unlock()
-	if r.scopeDoc == nil || key.binding == nil || r.Index == nil {
+func (r *Resolver) varMemoPut(lines []string, key varMemoKey, t ResolvedType) {
+	if key.binding == nil || r.Index == nil {
 		return
 	}
-	gen := r.Index.Generation()
-	if r.varMemoDoc != r.scopeDoc || r.varMemoGen != gen || len(r.varMemos) >= 8192 {
-		r.varMemos = make(map[varMemoKey]ResolvedType)
-		r.varMemoDoc, r.varMemoGen = r.scopeDoc, gen
+	f := r.fileOfLines(lines)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if gen := r.Index.Generation(); f.varMemos == nil || f.varMemoGen != gen || len(f.varMemos) >= maxVarMemos {
+		f.varMemos = make(map[varMemoKey]ResolvedType)
+		f.varMemoGen = gen
 	}
-	r.varMemos[key] = t
+	f.varMemos[key] = t
 }

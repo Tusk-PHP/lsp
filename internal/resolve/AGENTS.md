@@ -4,7 +4,7 @@ Shared type and symbol resolution. Hover, completion, diagnostics, and the analy
 
 ## Entry points
 
-- `Engine` and `Resolver` (`resolve.go`) — an `Engine` per provider owns the `*symbols.Index`, the hooks and the caches; `Engine.Resolver()` starts one `Resolver` per request, which resolves expressions/types in context and carries that request's recursion guard. Take one `Resolver` at the top of a request and pass it down; never keep one in a field or share it between goroutines. A hook (`ChainResolver`, `TypedChainResolver`, `ContainerCall`) must resolve through the `Resolver` it's handed, or a cycle through it escapes the guard and overflows the stack.
+- `Engine` and `Resolver` (`resolve.go`) — an `Engine` per provider owns the `*symbols.Index`, the hooks and the caches; `Engine.Resolver()` starts one `Resolver` per request, which resolves expressions/types in context and carries that request's recursion guard. Take one `Resolver` at the top of a request and pass it down; never keep one in a field or share it between goroutines. To resolve in many files at once, use `Engine.Parallel(n, func(r *Resolver, i int))`: a bounded worker pool, one `Resolver` per worker. A hook (`ChainResolver`, `TypedChainResolver`, `ContainerCall`) must resolve through the `Resolver` it's handed, or a cycle through it escapes the guard and overflows the stack.
 - `ResolvedType` (`types.go`) — `{FQN, Params[]}` plus the structured parts: `Union`, `Intersection`, `Callable`, shape `Fields`, `Literal` and `Conditional`. For a union, `FQN`/`Params` mirror its most useful part, so single-class readers keep working; `FullString()` shows all of it, `MemberOwner()` gives every class to look members up on. The canonical type representation everywhere downstream.
 - `ParseGenericType(raw)` / `InferArrayLiteralType(literal)` — produce `ResolvedType` from raw strings.
 - `ResolveTemplateReturn(classFQN, methodName, typeArgs)` (`templates.go`) — applies `@template` substitution for known generic methods (e.g. `Collection<T>::first(): T`).
@@ -22,7 +22,7 @@ Shared type and symbol resolution. Hover, completion, diagnostics, and the analy
 - `expression.go` — `ExpressionType`: the type of an argument or right-hand side (variables, literals, `new`, `::class`, arrays, closures, function calls, chains, offsets).
 - `closure_type.go`, `closure_context.go` — closures as `Closure(…): T`, and the call a closure is passed to (its parameter types, `@param-closure-this`).
 - `mixins.go` — generic `@mixin T`; `narrowing.go` — `@phpstan-assert*`, `@param-out`, `@phpstan-self-out`.
-- `parse_cache.go`, `source_cache.go` — resolver-owned caches: parsed docblocks and PHPDoc types by text, and the last file's source, lines and scopes. Cached results are read-only.
+- `parse_cache.go`, `source_cache.go` — engine-owned caches: parsed docblocks and PHPDoc types by text, and per file (keyed by its text, so a new version is a new entry) its source, lines, scopes and the variable and closure answers worked out for it, for the most recently used files (`maxCachedFiles`). Each `Resolver` remembers the file it is on, so workers resolving different files don't evict each other. Cached results are read-only.
 
 Templates are stored at index time (`symbols.Symbol.Templates` on classes, methods and functions; `Supertypes` for `@extends` and friends). PHPDoc types read from another class must go through `applyEnv` with that class as `owner`, so names relative to its namespace resolve there. `internal/lsp/generics_test.go` checks every generics feature through the running server.
 

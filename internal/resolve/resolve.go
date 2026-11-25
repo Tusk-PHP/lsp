@@ -10,11 +10,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/phparray"
-	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 	"github.com/Tusk-PHP/lsp/internal/types"
@@ -46,19 +44,9 @@ type Engine struct {
 	// that gives a value rather than an object, or "" when it isn't one.
 	ContainerCall func(r *Resolver, callExpr, source string, file *parser.FileNode) string
 
-	// The last source's scopes, since one request asks about many variables.
-	scopeMu     sync.Mutex
-	scopeSource string
-	cachedLines []string
-	scopeDoc    *scope.Document
-	// closureMemos remembers what each closure of scopeDoc is passed to.
-	closureMemos   map[*scope.Scope]closureMemo
-	closureMemoDoc *scope.Document
-	// varMemos remembers variable types per write while scopeDoc and the
-	// index generation stay the same.
-	varMemos   map[varMemoKey]ResolvedType
-	varMemoDoc *scope.Document
-	varMemoGen uint64
+	// files holds the recently used files' lines, scopes and remembered
+	// answers, since one request asks about many variables of a file.
+	files fileCache
 
 	// parsed caches docblocks and PHPDoc types by their text.
 	parsed parseCache
@@ -73,6 +61,7 @@ type Resolver struct {
 	depth  int
 	active map[string]bool
 	cuts   int
+	file   *fileState
 }
 
 // NewEngine returns an Engine over index with no hooks set.
@@ -764,7 +753,7 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	// by other requests at the same time only cost a missed cache entry.
 	cutsBefore := r.cuts
 	if memo {
-		if rt, ok := r.varMemoGet(key); ok {
+		if rt, ok := r.varMemoGet(lines, key); ok {
 			return rt
 		}
 	}
@@ -773,7 +762,7 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	// assignment say about it.
 	rt = r.narrowVariable(varName, rt, lines, pos, file)
 	if memo && r.cuts == cutsBefore {
-		r.varMemoPut(key, rt)
+		r.varMemoPut(lines, key, rt)
 	}
 	return rt
 }
