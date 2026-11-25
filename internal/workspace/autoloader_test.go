@@ -125,7 +125,7 @@ func TestClassLoaderCountsAgainstMaxIndexFiles(t *testing.T) {
 	if ws.Index.Lookup(`App\Models\Comment`) != nil {
 		t.Error("a second project file would go past maxIndexFiles")
 	}
-	if got := ws.IndexWorkspace(); got != 1 {
+	if got := ws.IndexWorkspace().Count; got != 1 {
 		t.Errorf("the walk shares the limit with the loader: %d workspace files", got)
 	}
 	project := 0

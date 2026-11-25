@@ -20,16 +20,24 @@ func TestIndexWorkspaceMaxIndexFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	index := func(limit int) int {
+	index := func(limit int) IndexedFiles {
 		cfg := config.DefaultConfig()
 		cfg.MaxIndexFiles = limit
 		ws := New(Options{RootPath: root, Framework: "none", Config: cfg, Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
 		return ws.IndexWorkspace()
 	}
-	if got := index(0); got != 5 {
-		t.Errorf("maxIndexFiles 0 should index every file, indexed %d of 5", got)
+	cases := []struct {
+		limit int
+		want  IndexedFiles
+	}{
+		{0, IndexedFiles{Count: 5}},
+		{2, IndexedFiles{Count: 2, Truncated: true}},
+		{5, IndexedFiles{Count: 5}},
+		{6, IndexedFiles{Count: 5}},
 	}
-	if got := index(2); got != 2 {
-		t.Errorf("maxIndexFiles 2 should stop at 2, indexed %d", got)
+	for _, c := range cases {
+		if got := index(c.limit); got != c.want {
+			t.Errorf("maxIndexFiles %d over 5 files: got %+v, want %+v", c.limit, got, c.want)
+		}
 	}
 }
