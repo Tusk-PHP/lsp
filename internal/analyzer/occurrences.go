@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -58,12 +59,38 @@ func (a *Analyzer) occurrencesIn(target referenceTarget, uri, source string) []p
 }
 
 func mentions(tokens []parser.Token, target *symbols.Symbol) bool {
-	for i := range tokens {
+	for i, tok := range tokens {
 		if mayName(tokens, i, target) {
 			return true
 		}
+		if tok.Kind == parser.TokenDocComment && target.Kind.IsClassLike() {
+			found := false
+			docNamesSpelledLike(tok, target.Name, func(string, protocol.Range) { found = true })
+			if found {
+				return true
+			}
+		}
 	}
 	return false
+}
+
+func docNamesSpelledLike(tok parser.Token, name string, fn func(written string, last protocol.Range)) {
+	symbols.ForEachDocClassName(tok.Value, func(start, end int, written string) {
+		lastStart := start + strings.LastIndexByte(written, '\\') + 1
+		if !strings.EqualFold(tok.Value[lastStart:end], name) {
+			return
+		}
+		fn(written, protocol.Range{Start: offsetIn(tok, lastStart), End: offsetIn(tok, end)})
+	})
+}
+
+func offsetIn(tok parser.Token, offset int) protocol.Position {
+	before := tok.Value[:offset]
+	nl := strings.LastIndexByte(before, '\n')
+	if nl < 0 {
+		return protocol.Position{Line: tok.Line, Character: tok.Column + offset}
+	}
+	return protocol.Position{Line: tok.Line + strings.Count(before, "\n"), Character: offset - nl - 1}
 }
 
 func (a *Analyzer) occurrencesInDocument(target referenceTarget, doc *sourcectx.Document, source string) []protocol.Range {
@@ -71,6 +98,14 @@ func (a *Analyzer) occurrencesInDocument(target referenceTarget, doc *sourcectx.
 	tokens := doc.Tokens()
 	var ranges []protocol.Range
 	for i, tok := range tokens {
+		if tok.Kind == parser.TokenDocComment && target.sym.Kind.IsClassLike() {
+			docNamesSpelledLike(tok, target.sym.Name, func(written string, last protocol.Range) {
+				if strings.EqualFold(a.resolver.ResolveClassName(written, doc.File()), target.sym.FQN) {
+					ranges = append(ranges, last)
+				}
+			})
+			continue
+		}
 		if !mayName(tokens, i, target.sym) {
 			continue
 		}

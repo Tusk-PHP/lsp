@@ -208,3 +208,38 @@ func TestRenameOfALocalNamedLikeAPropertyIsTheLocal(t *testing.T) {
 		t.Errorf("only the local and its use are renamed:\n got %v\nwant %v", got, want)
 	}
 }
+
+func TestReferencesOfAClassIncludeItsPHPDocTypes(t *testing.T) {
+	sources := map[string]string{
+		"file:///User.php":  "<?php\nnamespace App\\Models;\nclass User {}\n",
+		"file:///Other.php": "<?php\nnamespace Other;\nclass User {}\n",
+		"file:///use.php": `<?php
+namespace App\Http;
+use App\Models\User;
+use Other\User as Stranger;
+class Show {
+    /**
+     * Shows a User.
+     * @param User $user
+     * @param Stranger $other
+     * @return array<int, \App\Models\User>|\Other\User
+     */
+    public function __invoke($user, $other) { return []; }
+}
+`,
+	}
+	a, read := setupRenameAnalyzer(sources)
+	var got []string
+	for _, l := range a.FindAllReferences("file:///User.php", sources["file:///User.php"], positionOf(t, sources["file:///User.php"], "User {}"), read) {
+		got = append(got, fmt.Sprintf("%s:%d:%d", strings.TrimPrefix(l.URI, "file:///"), l.Range.Start.Line, l.Range.Start.Character))
+	}
+	slices.Sort(got)
+	want := []string{"User.php:2:6", "use.php:2:15", "use.php:7:14", "use.php:9:38"}
+	if !slices.Equal(got, want) {
+		t.Errorf("the class's references include the PHPDoc types that resolve to it, not the description or another User:\n got %v\nwant %v", got, want)
+	}
+	edit := a.Rename("file:///User.php", sources["file:///User.php"], positionOf(t, sources["file:///User.php"], "User {}"), "Member", read)
+	if edit == nil || len(edit.Changes["file:///use.php"]) != 3 {
+		t.Errorf("rename edits the import and both PHPDoc types: %+v", edit)
+	}
+}
