@@ -22,3 +22,21 @@ class Room {
 		}
 	}
 }
+
+func TestReferencesFromAByReferenceMethodDeclaration(t *testing.T) {
+	src := `<?php
+namespace App;
+class Room {
+    public function &area(): array { static $a = []; return $a; }
+    public function twice(): array { return $this->area(); }
+}
+`
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///Room.php": src})
+	pos := positionOf(t, src, "area(): array")
+	if got := a.FindReferences("file:///Room.php", src, pos); len(got) != 2 {
+		t.Errorf("references from the declaration of &area: got %+v, want the declaration and the call", got)
+	}
+	if got := a.Rename("file:///Room.php", src, pos, "size", nil); got == nil || len(got.Changes["file:///Room.php"]) != 2 {
+		t.Errorf("rename from the declaration of &area: got %+v, want both names edited", got)
+	}
+}
