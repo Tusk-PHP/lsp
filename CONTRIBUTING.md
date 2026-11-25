@@ -1,6 +1,8 @@
-# Contributing to PHP LSP
+# Contributing to Tusk PHP
 
-Thank you for your interest in contributing! This document covers everything you need to get started.
+Thank you for your interest in contributing! This document is the source of truth for how changes get into Tusk PHP: setup, the pull request checklist, review and releases. [AGENTS.md](AGENTS.md) holds the code's principles (structure, performance, correctness) and points AI agents back here for the process.
+
+Questions and ideas go to [Discussions](https://github.com/Tusk-PHP/lsp/discussions); bugs and agreed work go to [issues](https://github.com/Tusk-PHP/lsp/issues).
 
 ## Code of Conduct
 
@@ -39,11 +41,11 @@ make dev
 
 ```
 cmd/tusk-php/      Entry point
-internal/          All server packages (parser, symbols, hover, completion, etc.)
-testdata/          Test fixtures (mock PHP project)
+internal/          All server packages, in layers (protocol, parser, symbols, resolve, features, transports)
+testdata/          Test fixtures (mock PHP project, field baselines)
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed documentation of internals, and [AGENTS.md](AGENTS.md) for the project's structure, performance and correctness rules. Every change, with or without AI tools, is reviewed against them.
+The packages are layered: a package may import only from its own layer or the ones above it. [AGENTS.md](AGENTS.md) lists the layers and the project's structure, performance and correctness rules, and every change, with or without AI tools, is reviewed against them. [ARCHITECTURE.md](ARCHITECTURE.md) documents the internals in detail.
 
 ## Development Workflow
 
@@ -72,7 +74,7 @@ those extensions download.
 
 1. Build the binary: `make build`
 2. Point your editor to `build/tusk-php`
-3. For VS Code: set `phpLsp.executablePath` to the absolute path of `build/tusk-php`
+3. For VS Code: set `tuskPhpLsp.executablePath` to the absolute path of `build/tusk-php`
 4. Use `make dev` to run with logging to `/tmp/tusk-php.log`
 
 ### Testing with Zed
@@ -108,21 +110,6 @@ Then add this to your Zed settings, using the absolute path to this checkout:
 }
 ```
 
-For this repository on a typical local checkout, that path may look like:
-
-```json
-{
-  "lsp": {
-    "tusk-php": {
-      "binary": {
-        "path": "/Users/d8vjork/Projects/OpenSoutheners/php-lsp/build/tusk-php",
-        "arguments": ["--transport", "stdio"]
-      }
-    }
-  }
-}
-```
-
 After changing the binary path or rebuilding the server, run Zed's
 `lsp: restart language servers` action. If the configured `binary.path` exists,
 the Zed extension uses it and skips the online release download path.
@@ -148,21 +135,45 @@ fairness rules the harness enforces.
 
 ### Before You Start
 
-- Check [existing issues](https://github.com/Tusk-PHP/lsp/issues) to avoid duplicate work
-- For larger changes, open an issue first to discuss the approach
+- Look through [open issues](https://github.com/Tusk-PHP/lsp/issues) and [pull requests](https://github.com/Tusk-PHP/lsp/pulls) so you don't duplicate someone's work.
+- **Recommended: work from an issue and get it assigned to you.** Comment on the issue you want to take (or open one), and once it's assigned to you, others know it's taken. If an issue is already assigned, ask the assignee before starting on it. It isn't mandatory, but it saves two people writing the same change. The maintainers work the same way and assign themselves before they start.
+- **Talk first about anything that changes the architecture:** a new package, a new dependency, a change to [ARCHITECTURE.md](ARCHITECTURE.md) or core packages, or something AGENTS.md lists as a non-goal. The maintainers keep maintaining a feature long after its pull request is merged, so the core maintainer decides whether a feature is worth maintaining and how it fits the architecture. An issue or discussion first avoids work that can't be merged.
 
-### Pull Request Process
+### Keep Pull Requests Small
 
-1. Fork the repository and create a feature branch from `main`
-2. Write tests for new functionality
-3. Ensure `make test` passes with no failures
-4. Keep commits focused — one logical change per commit
-5. Open a pull request against `main`
+- **One task per pull request.** Small, focused pull requests conflict less with each other, are faster to review and can be scheduled into releases separately. Open as many as you like.
+- **Drafts are work in progress.** They aren't reviewed until you mark them ready.
+- **Stacked pull requests:** when one builds on another, say so at the top of its description (`Stacked on #141`). A stack is treated as one task: it is reviewed in order and ships in one release.
+
+### AI-Assisted Contributions
+
+Contributions written with AI tools are welcome, and so are those written by hand. The maintainers use AI tools too, both to write changes and to help review them, and the same rules apply to everyone:
+
+- You're responsible for what you submit: you've run it, read it, and can answer questions about it in review.
+- AI agents follow [AGENTS.md](AGENTS.md) (`CLAUDE.md` points there), which sends them to this file for the process.
+- Maintainers may use AI to help review a pull request, then test it by hand before approving it.
+
+### Pull Request Checklist
+
+1. Fork the repository and create a branch from `main`. Keep **Allow edits by maintainers** ticked so a maintainer can rebase it if another merge makes it conflict.
+2. `make test` passes (with `-race`).
+3. `make conformance-pr` passes for changes to the parser, index or providers, and `make field-baseline` for changes to diagnostics or typing. When a change adds or removes findings in the field baselines, look at each one, then run `make field-baseline-update` and commit the result.
+4. `make wasm` still builds.
+5. New behaviour has a test that fails without it.
+6. Performance numbers are in the pull request when AGENTS.md's performance rules ask for them (`make bench-self` before and after, or a `go test -bench` with `-benchmem`).
+7. `CHANGELOG.md` has an entry under `[Unreleased]` for anything a user would notice, written for users ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)): what changed for them, not which functions moved.
+8. Commits are focused, one logical change each, with messages in the existing style: `fix: …`, `feat: …`, `docs: …`, `chore: …`, `refactor: …`, `test: …`.
+9. Open the pull request against `main`, linking the issue it closes.
+
+### Review
+
+- Pull requests are merged with **Rebase and merge**, so each commit lands on `main` as written.
+- Changes to the paths in [`.github/CODEOWNERS`](.github/CODEOWNERS) need the core maintainer's review: the project principles and ARCHITECTURE.md, CI and release workflows, dependencies, build scripts and the field baselines.
+- Architecture decisions are the core maintainer's. Expect questions on a pull request that adds packages or changes core code without an issue that agreed the approach.
 
 ### Code Style
 
 - Go: standard `gofmt` formatting (enforced by CI)
-- TypeScript: project `tsconfig.json` settings
 - Go dependencies stay few: add one only when it is mature and maintained, and say why in the pull request
 
 ### Test Fixtures
@@ -177,10 +188,11 @@ Tests use `testdata/project/` which contains a mock PHP project with `composer.j
 - Use the [GitHub issue tracker](https://github.com/Tusk-PHP/lsp/issues)
 - Include your editor, OS, PHP version, and steps to reproduce
 - Attach the server log (`--log /tmp/tusk-php.log`) if relevant
+- Security vulnerabilities don't go in public issues: see [SECURITY.md](SECURITY.md)
 
 ## Feature Requests
 
-Open an issue with the **feature request** label. Describe the use case and expected behavior.
+Start a [discussion](https://github.com/Tusk-PHP/lsp/discussions) for an idea you want to talk through, or open an issue with the `enhancement` label for a concrete request. Describe the use case and the behaviour you expect.
 
 ## Release Process
 
@@ -196,10 +208,12 @@ The editor extensions release independently from their own repos ([`Tusk-PHP/vsc
 
 This section is for internals, the team behind Tusk PHP who review, merge and release. Contributors don't need to do any of this.
 
+**Who the internals are.** Anyone can become one. The core maintainer (@d8vjork) decides, weighing the work a contributor has done on the project, community demand (issues, discussions) and the project's own workload (internal tasks, milestones and their scope).
+
 **One tracking issue per release.** The next release always has an open issue titled `Release x.y.z` (for example [Release 0.16.0](https://github.com/Tusk-PHP/lsp/issues/152)). It lists:
 
 - **Merged:** every PR merged into `main` since the last release, ticked.
-- **Planned:** PRs in review that should ship with it, unticked. One that isn't ready by release time moves to the next release's issue.
+- **Planned:** PRs in review that should ship with it, unticked. One that isn't ready by release time moves to the next release's issue. A stack of PRs is one item and ships together.
 - **Not in this release:** open PRs deliberately left out, with the reason.
 - **Before tagging:** the release checklist.
 
