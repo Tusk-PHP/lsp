@@ -13,6 +13,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/coverage"
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
+	"github.com/Tusk-PHP/lsp/internal/document"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
@@ -58,6 +59,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if opts := params.InitializationOptions; opts != nil {
 		s.cfg.MergeClientOptions(opts)
 	}
+	s.encoding = document.Negotiate(params.Capabilities.General.PositionEncodings)
 	s.clientSupportsShowDocument = params.Capabilities.Window.ShowDocument.Support
 	if !s.clientSupportsShowDocument {
 		s.logger.Printf("PHP LSP: client does not advertise window/showDocument support; builtin Cmd+Click → manual will be disabled if enabled in config")
@@ -184,6 +186,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.analyzer.SetSymfonyCommands(s.workspace.SymfonyCommands)
 	s.sendResponse(msg.ID, protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
+			PositionEncoding: s.encoding.String(),
 			TextDocumentSync: protocol.TextDocumentSyncOptions{
 				OpenClose: true,
 				Change:    1, // Full

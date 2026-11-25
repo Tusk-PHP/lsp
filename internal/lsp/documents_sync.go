@@ -103,6 +103,7 @@ func (s *Server) publishDiagnostics(uri, source string) {
 	if diagnostics == nil {
 		diagnostics = []protocol.Diagnostic{}
 	}
+	diagnostics = s.positionsOf(uri, source).diagnosticsOut(uri, diagnostics)
 	s.publishMu.Lock()
 	defer s.publishMu.Unlock()
 	if !s.isCurrentDocument(uri, source) {

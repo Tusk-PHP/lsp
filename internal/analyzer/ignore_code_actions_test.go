@@ -67,7 +67,7 @@ func TestIgnoreDiagnosticActionsForPHPStanEndTheLine(t *testing.T) {
 	}{
 		{6, []protocol.TextEdit{{Range: pointRange(6, len("    #[NoSuchAttr]")), NewText: " // @phpstan-ignore method.notFound"}}},
 		{7, []protocol.TextEdit{{Range: pointRange(7, len("    public function total(): int { return $this->sum(); }")), NewText: " // @phpstan-ignore method.notFound"}}},
-		{8, []protocol.TextEdit{{Range: pointRange(8, len("    public function tax(): int { return $this->rate('e'); } ")), NewText: "/* @phpstan-ignore method.notFound */ "}}},
+		{8, []protocol.TextEdit{{Range: pointRange(8, len("    public function tax(): int { return $this->rate('é'); } ")), NewText: "/* @phpstan-ignore method.notFound */ "}}},
 		{9, nil},
 		{12, nil},
 	}

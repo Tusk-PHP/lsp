@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode/utf16"
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -125,15 +124,7 @@ func fileLink(source string, first, last parser.Token, path string) protocol.Doc
 func position(source string, tok parser.Token, offset int) protocol.Position {
 	at := tok.Offset + offset
 	lineStart := strings.LastIndexByte(source[:at], '\n') + 1
-	return protocol.Position{Line: tok.Line + strings.Count(tok.Value[:offset], "\n"), Character: utf16Length(source[lineStart:at])}
-}
-
-func utf16Length(s string) int {
-	n := 0
-	for _, r := range s {
-		n += utf16.RuneLen(r)
-	}
-	return n
+	return protocol.Position{Line: tok.Line + strings.Count(tok.Value[:offset], "\n"), Character: at - lineStart}
 }
 
 type pathExpr struct {

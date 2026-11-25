@@ -3,7 +3,6 @@ package checks
 import (
 	"sort"
 	"strings"
-	"unicode/utf16"
 
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -266,11 +265,7 @@ func (l Layout) nextNonComment(offset int) int {
 }
 
 func (l Layout) Character(offset int) int {
-	n := 0
-	for _, r := range l.source[l.lineStarts[l.Line(offset)]:offset] {
-		n += utf16.RuneLen(r)
-	}
-	return n
+	return offset - l.lineStarts[l.Line(offset)]
 }
 
 func leadingSpace(s, cutset string) string {

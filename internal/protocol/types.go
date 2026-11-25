@@ -277,6 +277,9 @@ type InitializeParams struct {
 				} `json:"completionItem"`
 			} `json:"completion"`
 		} `json:"textDocument"`
+		General struct {
+			PositionEncodings []string `json:"positionEncodings"`
+		} `json:"general"`
 		Window struct {
 			ShowDocument struct {
 				Support bool `json:"support"`
@@ -458,6 +461,7 @@ type SemanticTokensParams struct {
 
 // ServerCapabilities declares server capabilities.
 type ServerCapabilities struct {
+	PositionEncoding          string                    `json:"positionEncoding"`
 	TextDocumentSync          TextDocumentSyncOptions   `json:"textDocumentSync"`
 	CompletionProvider        *CompletionOptions        `json:"completionProvider,omitempty"`
 	HoverProvider             bool                      `json:"hoverProvider"`

@@ -11,10 +11,11 @@ func (s *Server) handleDefinition(msg *jsonRPCMessage) {
 		return
 	}
 	uri := params.TextDocument.URI
-	source := s.getDocument(uri)
+	p := s.positions()
+	pos := p.posIn(uri, params.Position)
 
 	if cardhover.IsComposerJSON(uri) {
-		result := s.composerHover.Definition(uri, source, params.Position)
+		result := s.composerHover.Definition(uri, s.getDocument(uri), pos)
 		if result.ExternalURL != "" && s.clientSupportsShowDocument {
 			s.sendServerRequest("window/showDocument", protocol.ShowDocumentParams{
 				URI:       result.ExternalURL,
@@ -26,18 +27,18 @@ func (s *Server) handleDefinition(msg *jsonRPCMessage) {
 		return
 	}
 
-	if locs, ok := s.bladeDefinition(uri, params.Position); ok {
-		s.sendResponse(msg.ID, locs)
+	if locs, ok := s.bladeDefinition(uri, pos); ok {
+		s.sendResponse(msg.ID, p.locationsOut(locs))
 		return
 	}
-	req, ok := s.phpRequest(uri, params.Position)
+	req, ok := s.phpRequest(uri, pos)
 	if !ok {
 		s.sendResponse(msg.ID, nil)
 		return
 	}
 	if req.doc != nil {
 		if locs, ok := viewVarDefinition(req.vars, req.template, req.offset); ok {
-			s.sendResponse(msg.ID, locs)
+			s.sendResponse(msg.ID, p.locationsOut(locs))
 			return
 		}
 	}
@@ -54,7 +55,7 @@ func (s *Server) handleDefinition(msg *jsonRPCMessage) {
 		return
 	}
 
-	s.sendResponse(msg.ID, req.location(result.Location))
+	s.sendResponse(msg.ID, p.locationOut(req.location(result.Location)))
 }
 
 func (s *Server) handleDeclaration(msg *jsonRPCMessage) {
@@ -62,16 +63,19 @@ func (s *Server) handleDeclaration(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	if locs, ok := s.bladeDefinition(params.TextDocument.URI, params.Position); ok {
-		s.sendResponse(msg.ID, locs)
+	uri := params.TextDocument.URI
+	p := s.positions()
+	pos := p.posIn(uri, params.Position)
+	if locs, ok := s.bladeDefinition(uri, pos); ok {
+		s.sendResponse(msg.ID, p.locationsOut(locs))
 		return
 	}
-	req, ok := s.phpRequest(params.TextDocument.URI, params.Position)
+	req, ok := s.phpRequest(uri, pos)
 	if !ok {
 		s.sendResponse(msg.ID, nil)
 		return
 	}
-	s.sendResponse(msg.ID, req.location(s.analyzer.FindDeclaration(req.uri, req.source, req.pos)))
+	s.sendResponse(msg.ID, p.locationOut(req.location(s.analyzer.FindDeclaration(req.uri, req.source, req.pos))))
 }
 
 func (s *Server) handleTypeDefinition(msg *jsonRPCMessage) {
@@ -79,12 +83,13 @@ func (s *Server) handleTypeDefinition(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	req, ok := s.phpRequest(params.TextDocument.URI, params.Position)
+	p := s.positions()
+	req, ok := s.phpRequest(params.TextDocument.URI, p.posIn(params.TextDocument.URI, params.Position))
 	if !ok {
 		s.sendResponse(msg.ID, []protocol.Location{})
 		return
 	}
-	s.sendResponse(msg.ID, req.locations(s.analyzer.FindTypeDefinition(req.uri, req.source, req.pos)))
+	s.sendResponse(msg.ID, p.locationsOut(req.locations(s.analyzer.FindTypeDefinition(req.uri, req.source, req.pos))))
 }
 
 func (s *Server) handleImplementation(msg *jsonRPCMessage) {
@@ -92,12 +97,13 @@ func (s *Server) handleImplementation(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	req, ok := s.phpRequest(params.TextDocument.URI, params.Position)
+	p := s.positions()
+	req, ok := s.phpRequest(params.TextDocument.URI, p.posIn(params.TextDocument.URI, params.Position))
 	if !ok {
 		s.sendResponse(msg.ID, []protocol.Location{})
 		return
 	}
-	s.sendResponse(msg.ID, req.locations(s.analyzer.FindImplementation(req.uri, req.source, req.pos)))
+	s.sendResponse(msg.ID, p.locationsOut(req.locations(s.analyzer.FindImplementation(req.uri, req.source, req.pos))))
 }
 
 func (s *Server) handleReferences(msg *jsonRPCMessage) {
@@ -105,12 +111,13 @@ func (s *Server) handleReferences(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	req, ok := s.phpRequest(params.TextDocument.URI, params.Position)
+	p := s.positions()
+	req, ok := s.phpRequest(params.TextDocument.URI, p.posIn(params.TextDocument.URI, params.Position))
 	if !ok {
 		s.sendResponse(msg.ID, []protocol.Location{})
 		return
 	}
-	s.sendResponse(msg.ID, req.locations(s.analyzer.FindAllReferences(req.uri, req.source, req.pos, s.openDocumentReader())))
+	s.sendResponse(msg.ID, p.locationsOut(req.locations(s.analyzer.FindAllReferences(req.uri, req.source, req.pos, s.openDocumentReader()))))
 }
 
 type documentSymbolParams struct {
@@ -122,8 +129,9 @@ func (s *Server) handleDocumentSymbol(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	source := s.getDocument(params.TextDocument.URI)
-	s.sendResponse(msg.ID, s.analyzer.GetDocumentSymbols(params.TextDocument.URI, source))
+	uri := params.TextDocument.URI
+	source := s.getDocument(uri)
+	s.sendResponse(msg.ID, s.positionsOf(uri, source).documentSymbolsOut(uri, s.analyzer.GetDocumentSymbols(uri, source)))
 }
 
 func (s *Server) handleFoldingRange(msg *jsonRPCMessage) {
@@ -140,12 +148,14 @@ func (s *Server) handleDocumentHighlight(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	req, ok := s.phpRequest(params.TextDocument.URI, params.Position)
+	uri := params.TextDocument.URI
+	p := s.positions()
+	req, ok := s.phpRequest(uri, p.posIn(uri, params.Position))
 	if !ok {
 		s.sendResponse(msg.ID, []protocol.DocumentHighlight{})
 		return
 	}
-	s.sendResponse(msg.ID, req.highlights(s.analyzer.GetDocumentHighlights(req.uri, req.source, req.pos)))
+	s.sendResponse(msg.ID, p.highlightsOut(uri, req.highlights(s.analyzer.GetDocumentHighlights(req.uri, req.source, req.pos))))
 }
 
 func (s *Server) handleWorkspaceSymbol(msg *jsonRPCMessage) {
@@ -153,5 +163,5 @@ func (s *Server) handleWorkspaceSymbol(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	s.sendResponse(msg.ID, s.analyzer.GetWorkspaceSymbols(params.Query))
+	s.sendResponse(msg.ID, s.positions().symbolInformationOut(s.analyzer.GetWorkspaceSymbols(params.Query)))
 }

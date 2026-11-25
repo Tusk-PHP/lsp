@@ -164,13 +164,13 @@ func TestDocumentLinkCommentURLEnds(t *testing.T) {
 	})
 }
 
-func TestDocumentLinkColumnsAreUTF16(t *testing.T) {
+func TestDocumentLinkColumnsAreBytes(t *testing.T) {
 	a, _ := setupRenameAnalyzer(nil)
 	source := "<?php\n// Véase 😀 https://a.example/x\n/* é\n ü https://b.example */\n"
 	links := a.DocumentLinks("file:///app/x.php", source, "", func(string) bool { return false })
 	want := []protocol.Range{
-		{Start: protocol.Position{Line: 1, Character: 12}, End: protocol.Position{Line: 1, Character: 31}},
-		{Start: protocol.Position{Line: 3, Character: 3}, End: protocol.Position{Line: 3, Character: 20}},
+		{Start: protocol.Position{Line: 1, Character: 15}, End: protocol.Position{Line: 1, Character: 34}},
+		{Start: protocol.Position{Line: 3, Character: 4}, End: protocol.Position{Line: 3, Character: 21}},
 	}
 	if len(links) != len(want) {
 		t.Fatalf("got %+v", links)

@@ -36,6 +36,7 @@ var capabilityRequests = map[string][]string{
 }
 
 var capabilitiesWithoutRequests = map[string]bool{
+	"positionEncoding": true,
 	"textDocumentSync": true,
 	"experimental":     true,
 }
