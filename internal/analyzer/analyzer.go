@@ -1362,6 +1362,9 @@ func (a *Analyzer) CopyReference(uri, source string, pos protocol.Position) []Re
 	} else {
 		classFQN = sym.ParentFQN
 	}
+	if parser.IsAnonymousClass(classFQN) {
+		return nil
+	}
 
 	// Fall back to treating the symbol itself as the class when ParentFQN is
 	// absent (e.g. standalone functions have no parent).
