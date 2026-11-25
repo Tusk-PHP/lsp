@@ -211,3 +211,13 @@ class K {
 		}
 	}
 }
+
+func TestHoverConstantDeclaredWithDefine(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///app/bootstrap.php", "<?php\ndefine('APP_VERSION', '1.2');\n")
+	source := "<?php\nnamespace App;\n\necho APP_VERSION;\n"
+	val := hoverAt(t, NewProvider(idx, nil, "none"), source, "echo APP_VERSION", "APP_VERSION")
+	if !strings.Contains(val, "APP_VERSION") || !strings.Contains(val, "'1.2'") {
+		t.Fatalf("hover shows the constant define() declared, got:\n%s", val)
+	}
+}

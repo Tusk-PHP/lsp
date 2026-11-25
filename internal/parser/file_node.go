@@ -151,6 +151,10 @@ func (b *fileNodeBuilder) visit(n ast.Node, scope declScope) {
 		if scope != scopeClass {
 			scope = scopeFunction
 		}
+	case *ast.Call:
+		if define, ok := b.define(n); ok {
+			b.file.Defines = append(b.file.Defines, define)
+		}
 	}
 	if scope == scopeFile {
 		scope = scopeBlock
@@ -191,8 +195,72 @@ func (b *fileNodeBuilder) globalConstants(c *ast.Const) {
 		if item.Name == nil {
 			continue
 		}
-		b.file.Constants = append(b.file.Constants, b.constant(item, c.Doc, nil, "", nil))
+		constant := b.constant(item, c.Doc, nil, "", nil)
+		constant.FullName = b.qualify(constant.Name)
+		b.file.Constants = append(b.file.Constants, constant)
 	}
+}
+
+func (b *fileNodeBuilder) define(call *ast.Call) (ConstantNode, bool) {
+	callee, ok := call.Callee.(*ast.ConstFetch)
+	if !ok || call.Args == nil || !b.callsGlobalDefine(b.nameText(callee.Name)) {
+		return ConstantNode{}, false
+	}
+	nameArg, valueArg := b.argument(call.Args, 0, "constant_name"), b.argument(call.Args, 1, "value")
+	lit, ok := nameArg.(*ast.Literal)
+	if !ok || lit.Kind != token.ConstantString || valueArg == nil {
+		return ConstantNode{}, false
+	}
+	fullName, ok := unquote(b.text(lit))
+	if !ok || !isQualifiedName(fullName) {
+		return ConstantNode{}, false
+	}
+	name := fullName[strings.LastIndexByte(fullName, '\\')+1:]
+	line, col := b.position(lit.End - 1 - uint32(len(name)))
+	return ConstantNode{Name: name, FullName: fullName, Value: b.compact(valueArg), StartLine: line, StartCol: col}, true
+}
+
+func (b *fileNodeBuilder) callsGlobalDefine(callee string) bool {
+	if fullyQualified, ok := strings.CutPrefix(callee, "\\"); ok {
+		return strings.EqualFold(fullyQualified, "define")
+	}
+	for _, u := range b.file.Uses {
+		if u.Kind == "function" && strings.EqualFold(u.Alias, callee) {
+			return strings.EqualFold(u.FullName, "define")
+		}
+	}
+	return strings.EqualFold(callee, "define")
+}
+
+func (b *fileNodeBuilder) argument(args *ast.ArgList, position int, name string) ast.Expr {
+	for i, arg := range args.Args {
+		switch {
+		case arg.Unpack || arg.Placeholder:
+			return nil
+		case arg.Name == nil && i == position, arg.Name != nil && b.text(arg.Name) == name:
+			return arg.Value
+		}
+	}
+	return nil
+}
+
+func isQualifiedName(s string) bool {
+	segmentStart := true
+	for i := range len(s) {
+		c := s[i]
+		switch {
+		case c == '\\':
+			if segmentStart {
+				return false
+			}
+			segmentStart = true
+		case !IsIdentByte(c), segmentStart && c >= '0' && c <= '9':
+			return false
+		default:
+			segmentStart = false
+		}
+	}
+	return !segmentStart
 }
 
 func (b *fileNodeBuilder) constant(item *ast.ConstItem, doc ast.Span, typ ast.Type, visibility string, attrs []*ast.AttributeGroup) ConstantNode {
