@@ -60,7 +60,7 @@ func mayName(tokens []parser.Token, i int, target *symbols.Symbol) bool {
 	case parser.TokenVariable:
 		return target.Kind == symbols.KindProperty && tok.Value[1:] == name
 	case parser.TokenIdentifier:
-		if namedArgumentLabel(tokens, i) {
+		if namedArgumentLabel(tokens, i) || !syntaxAllows(tokens, i, target.Kind) {
 			return false
 		}
 		switch target.Kind {
@@ -70,6 +70,25 @@ func mayName(tokens []parser.Token, i int, target *symbols.Symbol) bool {
 		return tok.Value == name
 	}
 	return false
+}
+
+func syntaxAllows(tokens []parser.Token, i int, kind symbols.SymbolKind) bool {
+	prev := parser.PrevSignificant(tokens, i-1)
+	if prev >= 0 && tokens[prev].Kind == parser.TokenAmpersand {
+		if before := parser.PrevSignificant(tokens, prev-1); before >= 0 && tokens[before].Kind == parser.TokenFunction {
+			prev = before
+		}
+	}
+	if prev < 0 {
+		return true
+	}
+	switch tokens[prev].Kind {
+	case parser.TokenFunction:
+		return kind == symbols.KindFunction || kind == symbols.KindMethod
+	case parser.TokenArrow:
+		return kind == symbols.KindMethod || kind == symbols.KindProperty
+	}
+	return true
 }
 
 func namedArgumentLabel(tokens []parser.Token, i int) bool {

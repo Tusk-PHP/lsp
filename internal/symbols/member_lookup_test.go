@@ -128,9 +128,12 @@ func TestClassMembersIncludeInterfaceMethods(t *testing.T) {
 			t.Errorf("ClassMembersNamed(%s, %s) owners = %v, want %v", c.class, c.name, got, c.want)
 		}
 	}
-	// The class's own declaration comes first.
-	if got := idx.ClassMembersNamed("App\\PersonRepository", "FIND"); len(got) != 1 || got[0].ParentFQN != "App\\PersonRepository" {
-		t.Errorf("PersonRepository::FIND = %v, want only its own", got)
+	// The class's own declaration comes first, then the interface signature it
+	// implements in another case: PHP matches method names ignoring case.
+	for _, name := range []string{"FIND", "find"} {
+		if got := owner("App\\PersonRepository", name); len(got) != 2 || got[0] != "App\\PersonRepository" || got[1] != "App\\Repository" {
+			t.Errorf("PersonRepository::%s owners = %v, want its own, then Repository's", name, got)
+		}
 	}
 	names := map[string]int{}
 	for _, m := range idx.GetClassMembers("App\\EmptyRepository") {

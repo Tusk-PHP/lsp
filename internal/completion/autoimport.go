@@ -156,7 +156,7 @@ func (pl *importPlanner) plan(kind importKind, fqn string) (string, []protocol.T
 	}
 	var buf [64]byte
 	// Already imported, maybe under an alias: use the name it has here.
-	if pl.importedShort[kind][string(foldKey(&buf, short))] {
+	if pl.importedShort[kind][string(symbols.FoldKey(&buf, short))] {
 		if name, ok := pl.importedAs[kind][strings.ToLower(fqn)]; ok {
 			return name, nil
 		}
@@ -164,7 +164,7 @@ func (pl *importPlanner) plan(kind importKind, fqn string) (string, []protocol.T
 	// In the file's own namespace, the short name already resolves to it
 	// unless an import took that name.
 	if pl.file.Namespace != "" && strings.EqualFold(namespaceOf(fqn), pl.file.Namespace) {
-		if _, taken := pl.imported[kind][string(foldKey(&buf, short))]; !taken {
+		if _, taken := pl.imported[kind][string(symbols.FoldKey(&buf, short))]; !taken {
 			return short, nil
 		}
 	} else if !pl.taken(kind, short, fqn) {
@@ -185,7 +185,7 @@ func (pl *importPlanner) plan(kind importKind, fqn string) (string, []protocol.T
 // PHP compares these names without regard to case.
 func (pl *importPlanner) taken(kind importKind, name, fqn string) bool {
 	var buf [64]byte
-	key := foldKey(&buf, name)
+	key := symbols.FoldKey(&buf, name)
 	if other, ok := pl.imported[kind][string(key)]; ok && !strings.EqualFold(other, fqn) {
 		return true
 	}
@@ -310,26 +310,6 @@ func (pl *importPlanner) useInsertLine() int {
 	}
 	pl.insertLine = line
 	return line
-}
-
-// foldKey lower-cases an ASCII s into buf, so that a lookup such as
-// m[string(foldKey(&buf, s))] doesn't allocate. Longer or non-ASCII names
-// fall back to strings.ToLower.
-func foldKey(buf *[64]byte, s string) []byte {
-	if len(s) > len(buf) {
-		return []byte(strings.ToLower(s))
-	}
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 0x80 {
-			return []byte(strings.ToLower(s))
-		}
-		if 'A' <= c && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		buf[i] = c
-	}
-	return buf[:len(s)]
 }
 
 func shortName(fqn string) string {
