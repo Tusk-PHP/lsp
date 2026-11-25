@@ -6,6 +6,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/analyzer"
 	"github.com/Tusk-PHP/lsp/internal/config"
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -74,7 +75,7 @@ func TestIgnoreQuickFixSilencesMultiLineBladeDirectives(t *testing.T) {
 		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
 		Context:      protocol.CodeActionContext{Diagnostics: diags},
 	}
-	actions := analyzer.IgnoreDiagnosticActions(uri, source, params)
+	actions := analyzer.BladeIgnoreDiagnosticActions(uri, source, params, nil)
 	if len(actions) != 1 {
 		t.Fatalf("one quick fix, got %+v", actions)
 	}
@@ -87,7 +88,38 @@ func TestIgnoreQuickFixSilencesMultiLineBladeDirectives(t *testing.T) {
 	if len(after) != 0 {
 		t.Fatalf("the finding is gone after the fix, got %+v", after)
 	}
-	if again := analyzer.IgnoreDiagnosticActions(uri, fixed, params); len(again) != 0 {
+	if again := analyzer.BladeIgnoreDiagnosticActions(uri, fixed, params, nil); len(again) != 0 {
 		t.Errorf("asked again with the finding it already silences, the fix adds nothing, got %+v", again)
+	}
+}
+
+func TestIgnoreQuickFixSilencesMultiLineCustomBladeConditionals(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	idx.MarkReady()
+	p := NewProvider(idx, "laravel", "/tmp", nil, config.DefaultConfig())
+	custom := &blade.Custom{Conditionals: map[string]bool{"admin": true}}
+	p.Blade = &blade.Features{Custom: func() *blade.Custom { return custom }}
+	uri := "file:///tmp/resources/views/panel.blade.php"
+	source := "<div>\n    @admin([\n        'role' => missing(),\n    ])\n        x\n    @endadmin\n</div>\n"
+	diags := p.Analyze(uri, source)
+	if len(diags) != 1 || diags[0].Range.Start.Line != 2 {
+		t.Fatalf("missing() is reported on the conditional's second line, got %+v", diags)
+	}
+	params := protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+		Context:      protocol.CodeActionContext{Diagnostics: diags},
+	}
+	actions := analyzer.BladeIgnoreDiagnosticActions(uri, source, params, custom)
+	if len(actions) != 1 {
+		t.Fatalf("one quick fix, got %+v", actions)
+	}
+	fixed := applyInsertion(t, source, actions[0].Edit.Changes[uri][0])
+	want := "<div>\n    {{-- @tusk-ignore unknown-function --}}\n    @admin([\n        'role' => missing(),\n    ])\n        x\n    @endadmin\n</div>\n"
+	if fixed != want {
+		t.Fatalf("the marker goes above the conditional:\n%s", fixed)
+	}
+	if after := p.Analyze(uri, fixed); len(after) != 0 {
+		t.Fatalf("the finding is gone after the fix, got %+v", after)
 	}
 }

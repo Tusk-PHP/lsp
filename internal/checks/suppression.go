@@ -3,6 +3,7 @@ package checks
 import (
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
@@ -56,11 +57,11 @@ func PHPSuppressions(source string, shared *Shared) Suppressions {
 	return phpLayout(source, shared.tokens(source)).Suppressions()
 }
 
-func BladeSuppressions(source string) Suppressions {
+func BladeSuppressions(source string, custom *blade.Custom) Suppressions {
 	if !HasSuppressionMarker(source) {
 		return nil
 	}
-	return BladeLayout(source).Suppressions()
+	return BladeLayout(source, custom).Suppressions()
 }
 
 func (l Layout) Suppressions() Suppressions {

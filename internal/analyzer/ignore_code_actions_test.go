@@ -100,7 +100,7 @@ func TestIgnoreDiagnosticActionsOnlyWherePHPCodeStarts(t *testing.T) {
 func TestIgnoreDiagnosticActionsInBladeUseBladeComments(t *testing.T) {
 	uri := "file:///resources/views/a.blade.php"
 	source := "<div>\n  {{ missing() }}\n</div>\n"
-	actions := IgnoreDiagnosticActions(uri, source, ignoreParams(uri, nil, diagAt(1, "tusk-php", "unknown-function")))
+	actions := BladeIgnoreDiagnosticActions(uri, source, ignoreParams(uri, nil, diagAt(1, "tusk-php", "unknown-function")), nil)
 	if len(actions) != 1 || singleEdit(t, actions[0], uri).NewText != "  {{-- @tusk-ignore unknown-function --}}\n" {
 		t.Errorf("got %+v", actions)
 	}
@@ -165,7 +165,7 @@ func TestIgnoreDiagnosticActionsOfferEachPintFixer(t *testing.T) {
 func TestIgnoreDiagnosticActionsInBladePHPBlocksUsePHPComments(t *testing.T) {
 	uri := "file:///resources/views/a.blade.php"
 	source := "@php\r\n    nope();\r\n@endphp\r\n"
-	actions := IgnoreDiagnosticActions(uri, source, ignoreParams(uri, nil, diagAt(1, "tusk-php", "unknown-function")))
+	actions := BladeIgnoreDiagnosticActions(uri, source, ignoreParams(uri, nil, diagAt(1, "tusk-php", "unknown-function")), nil)
 	if len(actions) != 1 || singleEdit(t, actions[0], uri).NewText != "    // @tusk-ignore unknown-function\r\n" {
 		t.Errorf("a PHP comment in the file's own line ending: %+v", actions)
 	}
