@@ -434,23 +434,19 @@ func parseBuiltinMajorMinor(version string) (int, int) {
 }
 
 func (idx *Index) addBuiltinFunctionLocked(name string, params []ParamInfo, ret string, doc string) {
-	sym := &Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: "builtin", ReturnType: ret, DocComment: doc, Params: params}
-	idx.storeSymbolLocked(sym)
-	idx.fileSymbols[sym.URI] = appendUniqueSymbol(idx.fileSymbols[sym.URI], sym)
+	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: "builtin", ReturnType: ret, DocComment: doc, Params: params})
 }
 
 func (idx *Index) addBuiltinClassLikeLocked(name string, doc string) {
-	sym := &Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: "builtin", DocComment: doc}
-	idx.storeSymbolLocked(sym)
-	idx.fileSymbols[sym.URI] = appendUniqueSymbol(idx.fileSymbols[sym.URI], sym)
+	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: "builtin", DocComment: doc})
 }
 
-func appendUniqueSymbol(symbols []*Symbol, sym *Symbol) []*Symbol {
-	for i, existing := range symbols {
-		if existing.FQN == sym.FQN {
-			symbols[i] = sym
-			return symbols
-		}
+func (idx *Index) storeBuiltinLocked(sym *Symbol) {
+	prev := idx.symbols[sym.FQN]
+	idx.storeSymbolLocked(sym)
+	if prev != nil && prev.URI == sym.URI {
+		idx.fileSymbols[sym.URI] = withSymbolReplaced(idx.fileSymbols[sym.URI], prev, sym)
+		return
 	}
-	return append(symbols, sym)
+	idx.fileSymbols[sym.URI] = append(idx.fileSymbols[sym.URI], sym)
 }
