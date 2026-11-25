@@ -3,6 +3,7 @@
 package models
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -58,5 +59,52 @@ func TestMySQLDataSourceReachesTheConfiguredHost(t *testing.T) {
 func TestDataSourceRejectsAnUnknownDriver(t *testing.T) {
 	if _, _, err := dataSource(&config.DatabaseConfig{Driver: "oracle"}, time.Second); err == nil {
 		t.Error("an unsupported driver is an error")
+	}
+}
+
+func TestPostgresDataSourceReachesTheConfiguredServer(t *testing.T) {
+	cases := []struct {
+		host, wantHost       string
+		timeout, wantTimeout time.Duration
+	}{
+		{"db", "db", 3 * time.Second, 3 * time.Second},
+		{"db", "db", 200 * time.Millisecond, time.Second},
+	}
+	for _, c := range cases {
+		cfg := &config.DatabaseConfig{Driver: "pgsql", Host: c.host, Port: "5432", Username: "app", Password: "secret", Database: "shop"}
+		driver, dsn, err := dataSource(cfg, c.timeout)
+		if err != nil || driver != "postgres" {
+			t.Fatalf("dataSource(pgsql %s, %v) = %q, %v", c.host, c.timeout, driver, err)
+		}
+		parsed, err := pq.NewConfig(dsn)
+		if err != nil {
+			t.Errorf("pq can't read the DSN for host %s: %v", c.host, err)
+			continue
+		}
+		if parsed.Host != c.wantHost || parsed.Port != 5432 || parsed.User != "app" || parsed.Password != "secret" || parsed.Database != "shop" || parsed.ConnectTimeout != c.wantTimeout {
+			t.Errorf("host %s, timeout %v: got host %q port %d user %q password %q dbname %q connect_timeout %v", c.host, c.timeout, parsed.Host, parsed.Port, parsed.User, parsed.Password, parsed.Database, parsed.ConnectTimeout)
+		}
+	}
+}
+
+func TestSQLiteDataSourceIsTheDatabasePath(t *testing.T) {
+	cfg := &config.DatabaseConfig{Driver: "sqlite", Database: "/app/database/database.sqlite"}
+	driver, dsn, err := dataSource(cfg, time.Second)
+	if err != nil || driver != "sqlite" || dsn != cfg.Database {
+		t.Errorf("dataSource(sqlite) = %q, %q, %v; want %q, %q", driver, dsn, err, "sqlite", cfg.Database)
+	}
+}
+
+func TestOpenDatabaseConnectsThroughTheDataSource(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.sqlite")
+	db, err := openDatabase(&config.DatabaseConfig{Driver: "sqlite", Database: path}, time.Second)
+	if err != nil {
+		t.Fatalf("openDatabase(sqlite %s) = %v", path, err)
+	}
+	if err := db.Close(); err != nil {
+		t.Errorf("closing %s: %v", path, err)
+	}
+	if _, err := openDatabase(&config.DatabaseConfig{Driver: "oracle"}, time.Second); err == nil {
+		t.Error("openDatabase with an unsupported driver is an error")
 	}
 }
