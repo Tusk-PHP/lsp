@@ -27,10 +27,11 @@ func (s *Server) watchFiles() {
 		return
 	}
 	globs := workspace.WatchGlobs()
-	watchers := make([]protocol.FileSystemWatcher, len(globs))
+	watchers := make([]protocol.FileSystemWatcher, len(globs), len(globs)+1)
 	for i, glob := range globs {
 		watchers[i] = protocol.FileSystemWatcher{GlobPattern: glob}
 	}
+	watchers = append(watchers, protocol.FileSystemWatcher{GlobPattern: "**/*", Kind: protocol.WatchCreate | protocol.WatchDelete})
 	s.sendServerRequest("client/registerCapability", protocol.RegistrationParams{
 		Registrations: []protocol.Registration{{
 			ID:              "tusk-php/watched-files",

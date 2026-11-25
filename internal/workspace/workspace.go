@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -169,19 +170,7 @@ func (ws *Bootstrapped) IndexWorkspace() IndexedFiles {
 	ws.projectFiles.begin()
 	truncated := false
 	var ideHelperFiles []string
-	_ = filepath.Walk(ws.RootPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if info.IsDir() {
-			if ws.excludedDir(path) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !IsPHPSource(path) {
-			return nil
-		}
+	ws.WalkSources(ws.RootPath, func(path string, _ fs.FileInfo) error {
 		// Blade views declare no symbols; only their place is kept, for
 		// references and rename, and their PHP is read when it's needed.
 		if IsBlade(path) {
@@ -219,6 +208,24 @@ func (ws *Bootstrapped) IndexWorkspace() IndexedFiles {
 	count := ws.projectFiles.finish()
 	ws.logf("Indexed %d PHP files", count)
 	return IndexedFiles{Count: count, Truncated: truncated}
+}
+
+func (ws *Bootstrapped) WalkSources(dir string, visit func(path string, info fs.FileInfo) error) {
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			if ws.excludedDir(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !IsPHPSource(path) {
+			return nil
+		}
+		return visit(path, info)
+	})
 }
 
 func (ws *Bootstrapped) excludedDir(path string) bool {

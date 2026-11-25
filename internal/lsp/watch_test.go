@@ -131,8 +131,14 @@ func TestWatchedFilesAreRegisteredWithClientsThatCanRegisterWatchers(t *testing.
 	}
 	registration := req["params"].(map[string]interface{})["registrations"].([]interface{})[0].(map[string]interface{})
 	var globs []string
+	directories := false
 	for _, w := range registration["registerOptions"].(map[string]interface{})["watchers"].([]interface{}) {
-		globs = append(globs, w.(map[string]interface{})["globPattern"].(string))
+		watcher := w.(map[string]interface{})
+		globs = append(globs, watcher["globPattern"].(string))
+		directories = directories || watcher["globPattern"] == "**/*" && watcher["kind"] == float64(5)
+	}
+	if !directories {
+		t.Errorf("a create/delete watcher on **/* reports directories: %v", registration)
 	}
 	for _, want := range []string{"**/*.php", "**/*.phtml", "**/composer.json", "**/composer.lock", "**/vendor/composer/installed.json", "**/.tusk-php.json"} {
 		if !slices.Contains(globs, want) {
@@ -238,4 +244,79 @@ func TestConfigFileAndClientSettingsChangeThePHPVersion(t *testing.T) {
 
 	h.notify("workspace/didChangeConfiguration", map[string]interface{}{"settings": map[string]interface{}{"phpVersion": "8.4"}})
 	waitForDiagnostic(t, h, uri, "builtin-unavailable", false)
+}
+
+func symbolURIs(t *testing.T, h *lspHarness, query string) []string {
+	t.Helper()
+	var found []struct {
+		Name     string
+		Location struct{ URI string }
+	}
+	resp := h.readResponse(h.send("workspace/symbol", map[string]interface{}{"query": query}))
+	raw, _ := json.Marshal(resp["result"])
+	if err := json.Unmarshal(raw, &found); err != nil {
+		t.Fatal(err)
+	}
+	uris := make([]string, 0, len(found))
+	for _, f := range found {
+		if f.Name == query {
+			uris = append(uris, f.Location.URI)
+		}
+	}
+	return uris
+}
+
+func notifyChanges(h *lspHarness, root string, changes map[string]int) {
+	events := make([]map[string]interface{}, 0, len(changes))
+	for name, kind := range changes {
+		events = append(events, map[string]interface{}{"uri": "file://" + filepath.Join(root, name), "type": kind})
+	}
+	h.notify("workspace/didChangeWatchedFiles", map[string]interface{}{"changes": events})
+}
+
+func TestDeletedDirectoryLeavesTheIndex(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json":               `{"require": {"php": "^8.1"}}`,
+		"app/Billing/Invoice.php":     "<?php\nnamespace App\\Billing;\nclass Invoice {}\n",
+		"app/Billing/Tax/Rate.php":    "<?php\nnamespace App\\Billing\\Tax;\nclass Rate {}\n",
+		"app/BillingKept/Receipt.php": "<?php\nnamespace App\\BillingKept;\nclass Receipt {}\n",
+	}, watchingClient(), nil)
+	waitForSymbols(t, h, "Rate", func(names []string) bool { return slices.Contains(names, "Rate") })
+
+	if err := os.RemoveAll(filepath.Join(root, "app/Billing")); err != nil {
+		t.Fatal(err)
+	}
+	notifyChanges(h, root, map[string]int{"app/Billing": 3})
+	waitForSymbols(t, h, "Invoice", func(names []string) bool { return len(names) == 0 })
+	if names := symbolNames(t, h, "Rate"); len(names) != 0 {
+		t.Errorf("classes in a deleted directory's subdirectories leave too: %v", names)
+	}
+	if names := symbolNames(t, h, "Receipt"); !slices.Contains(names, "Receipt") {
+		t.Errorf("a sibling directory sharing the name's prefix stays: %v", names)
+	}
+}
+
+func TestRenamedDirectoryResolvesAtTheNewPlace(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json":         `{"require": {"php": "^8.1"}}`,
+		"app/Old/Shipment.php":  "<?php\nnamespace App\\Ship;\nclass Shipment {}\n",
+		"app/Old/Track/Leg.php": "<?php\nnamespace App\\Ship;\nclass Leg {}\n",
+	}, watchingClient(), nil)
+	waitForSymbols(t, h, "Leg", func(names []string) bool { return slices.Contains(names, "Leg") })
+
+	if err := os.Rename(filepath.Join(root, "app/Old"), filepath.Join(root, "app/New")); err != nil {
+		t.Fatal(err)
+	}
+	notifyChanges(h, root, map[string]int{"app/Old": 3, "app/New": 1})
+	want := "file://" + filepath.Join(root, "app/New/Track/Leg.php")
+	deadline := time.Now().Add(10 * time.Second)
+	for !slices.Equal(symbolURIs(t, h, "Leg"), []string{want}) {
+		if time.Now().After(deadline) {
+			t.Fatalf("Leg is declared at the new place only: %v", symbolURIs(t, h, "Leg"))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := symbolURIs(t, h, "Shipment"); !slices.Equal(got, []string{"file://" + filepath.Join(root, "app/New/Shipment.php")}) {
+		t.Errorf("Shipment is declared at the new place only: %v", got)
+	}
 }

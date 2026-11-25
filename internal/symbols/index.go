@@ -177,6 +177,7 @@ type Index struct {
 	// workspace. They declare no symbols, but references and rename read the
 	// PHP in them.
 	templateFiles map[string]struct{}
+	files         fileTree
 }
 
 // Generation changes whenever symbols are added to or removed from the index.
@@ -245,6 +246,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 	idx.fileSource[uri] = indexedText{text: source, ideHelper: true}
 	if _, ok := idx.fileSymbols[uri]; !ok {
 		idx.fileSymbols[uri] = nil
+		idx.files.add(uri)
 	}
 
 	ns := file.Namespace
@@ -417,6 +419,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 	// Ensure the file is tracked even if it has no symbol declarations
 	if _, ok := idx.fileSymbols[uri]; !ok {
 		idx.fileSymbols[uri] = nil
+		idx.files.add(uri)
 	}
 	ns := file.Namespace
 
@@ -649,6 +652,9 @@ func (idx *Index) removeFileSymbols(uri string) {
 	pending.byName.applyTo(idx.nameIndex)
 	pending.byNamespace.applyTo(idx.namespaceIndex)
 	pending.byFold.applyTo(idx.foldIndex)
+	if _, ok := idx.fileSymbols[uri]; ok {
+		idx.files.remove(uri)
+	}
 	delete(idx.fileSymbols, uri)
 	delete(idx.fileSource, uri)
 	delete(idx.generatedURIs, uri)
@@ -1813,6 +1819,7 @@ func (idx *Index) AddTemplateFile(uri string) {
 		idx.templateFiles = make(map[string]struct{})
 	}
 	idx.templateFiles[uri] = struct{}{}
+	idx.files.add(uri)
 	idx.mu.Unlock()
 }
 

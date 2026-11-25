@@ -307,8 +307,17 @@ type DidChangeWatchedFilesRegistrationOptions struct {
 	Watchers []FileSystemWatcher `json:"watchers"`
 }
 
+type WatchKind int
+
+const (
+	WatchCreate WatchKind = 1
+	WatchChange WatchKind = 2
+	WatchDelete WatchKind = 4
+)
+
 type FileSystemWatcher struct {
-	GlobPattern string `json:"globPattern"`
+	GlobPattern string    `json:"globPattern"`
+	Kind        WatchKind `json:"kind,omitempty"`
 }
 
 type DidChangeWatchedFilesParams struct {
