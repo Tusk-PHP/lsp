@@ -57,10 +57,13 @@ type Symbol struct {
 	Implements    []string
 	Traits        []string
 	traitRules    *traitRules
-	Extends       string
-	BackedType    string
-	Value         string
-	IsVirtual     bool
+	// AliasOf is the trait method a member is an `as` alias of, under the
+	// alias's own name in the class or trait whose use block makes it.
+	AliasOf    *Symbol
+	Extends    string
+	BackedType string
+	Value      string
+	IsVirtual  bool
 	// IsConditional marks a class declared inside a block, such as a
 	// placeholder under `if (false)` or a polyfill under `if (!class_exists())`:
 	// its members may not be those of the class code runs with.
@@ -309,7 +312,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 			// Class doesn't exist yet — index it normally
 			sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, file.Uses),
 				IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly, IsConditional: c.Conditional,
-				Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve), traitRules: newTraitRules(c.TraitRules, resolve),
+				Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve), traitRules: newTraitRules(fqn, c.TraitRules, resolve),
 				Range: symRange(c.StartLine, c.StartCol, len(c.Name))}
 			if c.Extends != "" {
 				sym.Extends = resolve(c.Extends)
@@ -434,7 +437,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		}
 		sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, file.Uses),
 			IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly, IsConditional: c.Conditional,
-			Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve), traitRules: newTraitRules(c.TraitRules, resolve),
+			Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve), traitRules: newTraitRules(fqn, c.TraitRules, resolve),
 			Attributes: indexAttributes(c.Attributes, resolve),
 			Range:      symRange(c.StartLine, c.StartCol, len(c.Name))}
 		previous := idx.symbols[fqn]
@@ -469,7 +472,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 	for _, tr := range file.Traits {
 		fqn := buildFQN(ns, tr.Name)
 		sym := &Symbol{Name: tr.Name, FQN: fqn, Kind: KindTrait, URI: uri, DocComment: qualifyDocTypes(tr.DocComment, file.Uses),
-			Traits: resolveNames(tr.Traits, resolve), traitRules: newTraitRules(tr.TraitRules, resolve),
+			Traits: resolveNames(tr.Traits, resolve), traitRules: newTraitRules(fqn, tr.TraitRules, resolve),
 			Range: symRange(tr.StartLine, tr.StartCol, len(tr.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
 		idx.linkTypeLocked(sym)
@@ -484,7 +487,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		fqn := buildFQN(ns, en.Name)
 		sym := &Symbol{Name: en.Name, FQN: fqn, Kind: KindEnum, URI: uri, DocComment: qualifyDocTypes(en.DocComment, file.Uses),
 			BackedType: en.BackedType, Implements: resolveNames(en.Implements, resolve), Traits: resolveNames(en.Traits, resolve),
-			traitRules: newTraitRules(en.TraitRules, resolve),
+			traitRules: newTraitRules(fqn, en.TraitRules, resolve),
 			Attributes: indexAttributes(en.Attributes, resolve),
 			Range:      symRange(en.StartLine, en.StartCol, len(en.Name))}
 		idx.addSymbolWithSource(uri, sym, src)

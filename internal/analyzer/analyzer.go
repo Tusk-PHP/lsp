@@ -1357,6 +1357,10 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 		return nil
 	}
 
+	if sym != nil && sym.AliasOf != nil {
+		return nil
+	}
+
 	// If resolved as a known symbol, allow rename
 	if sym != nil {
 		// For properties, show the placeholder with the appropriate form
@@ -1453,7 +1457,7 @@ func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName str
 
 	// If it's a known symbol, rename it across the workspace
 	if sym != nil {
-		if symbols.IsBuiltin(sym) || sym.Source == symbols.SourceVendor || sym.Source == symbols.SourceGenerated {
+		if symbols.IsBuiltin(sym) || sym.Source == symbols.SourceVendor || sym.Source == symbols.SourceGenerated || sym.AliasOf != nil {
 			return nil
 		}
 		return a.renameSymbol(sym, newName, readDocument, uri, source)

@@ -7,6 +7,7 @@ import (
 )
 
 type traitRules struct {
+	owner    string
 	excluded map[string]bool
 	aliases  []traitAlias
 }
@@ -22,11 +23,11 @@ func traitMethodKey(trait, method string) string {
 	return strings.ToLower(trait) + "::" + strings.ToLower(method)
 }
 
-func newTraitRules(adaptations parser.TraitAdaptations, resolve func(string) string) *traitRules {
+func newTraitRules(owner string, adaptations parser.TraitAdaptations, resolve func(string) string) *traitRules {
 	if len(adaptations.Precedences) == 0 && len(adaptations.Aliases) == 0 {
 		return nil
 	}
-	rules := &traitRules{}
+	rules := &traitRules{owner: owner}
 	for _, p := range adaptations.Precedences {
 		if rules.excluded == nil {
 			rules.excluded = make(map[string]bool, len(p.InsteadOf))
@@ -72,14 +73,14 @@ func (r *traitRules) adapt(trait string, method *Symbol) (kept *Symbol, aliases 
 			continue
 		}
 		if a.alias == "" {
-			kept = withVisibility(kept, a.visibility)
+			kept = a.modified(kept)
 			continue
 		}
-		renamed := *method
+		renamed := *a.modified(method)
 		renamed.Name = a.alias
-		if a.visibility != "" {
-			renamed.Visibility = a.visibility
-		}
+		renamed.FQN = r.owner + "::" + a.alias
+		renamed.ParentFQN = r.owner
+		renamed.AliasOf = method
 		aliases = append(aliases, &renamed)
 	}
 	if r.excludes(trait, method.Name) {
@@ -88,8 +89,12 @@ func (r *traitRules) adapt(trait string, method *Symbol) (kept *Symbol, aliases 
 	return kept, aliases
 }
 
-func withVisibility(method *Symbol, visibility string) *Symbol {
-	if visibility == "" || visibility == method.Visibility {
+func (a traitAlias) modified(method *Symbol) *Symbol {
+	visibility := method.Visibility
+	if a.visibility != "" {
+		visibility = a.visibility
+	}
+	if visibility == method.Visibility {
 		return method
 	}
 	copied := *method
@@ -110,7 +115,7 @@ func (idx *Index) aliasedMethodLocked(owner *Symbol, name string) *Symbol {
 				continue
 			}
 			if m := methodNamed(idx.getClassMembersRecursive(trait, map[string]bool{owner.FQN: true}), a.method); m != nil {
-				return withVisibility(m, a.visibility)
+				return a.modified(m)
 			}
 		}
 	}

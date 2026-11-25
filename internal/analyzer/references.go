@@ -27,7 +27,7 @@ func (a *Analyzer) findSymbolOccurrences(sym *symbols.Symbol, readDocument func(
 	var locs []protocol.Location
 
 	// Include the definition itself
-	if sym.URI != "" {
+	if sym.URI != "" && sym.AliasOf == nil {
 		locs = append(locs, protocol.Location{URI: sym.URI, Range: sym.Range})
 	}
 
