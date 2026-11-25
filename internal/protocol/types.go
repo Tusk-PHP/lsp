@@ -458,29 +458,28 @@ type SemanticTokensParams struct {
 
 // ServerCapabilities declares server capabilities.
 type ServerCapabilities struct {
-	TextDocumentSync           TextDocumentSyncOptions   `json:"textDocumentSync"`
-	CompletionProvider         *CompletionOptions        `json:"completionProvider,omitempty"`
-	HoverProvider              bool                      `json:"hoverProvider"`
-	DefinitionProvider         bool                      `json:"definitionProvider"`
-	TypeHierarchyProvider      bool                      `json:"typeHierarchyProvider"`
-	DocumentLinkProvider       *DocumentLinkOptions      `json:"documentLinkProvider,omitempty"`
-	DeclarationProvider        bool                      `json:"declarationProvider"`
-	TypeDefinitionProvider     bool                      `json:"typeDefinitionProvider"`
-	ImplementationProvider     bool                      `json:"implementationProvider"`
-	ReferencesProvider         bool                      `json:"referencesProvider"`
-	DocumentSymbolProvider     bool                      `json:"documentSymbolProvider"`
-	DocumentHighlightProvider  bool                      `json:"documentHighlightProvider"`
-	FoldingRangeProvider       bool                      `json:"foldingRangeProvider"`
-	WorkspaceSymbolProvider    bool                      `json:"workspaceSymbolProvider"`
-	SignatureHelpProvider      *SignatureHelpOptions     `json:"signatureHelpProvider,omitempty"`
-	DocumentFormattingProvider bool                      `json:"documentFormattingProvider"`
-	RenameProvider             *RenameOptions            `json:"renameProvider,omitempty"`
-	CodeActionProvider         *CodeActionOptions        `json:"codeActionProvider,omitempty"`
-	ExecuteCommandProvider     *ExecuteCommandOptions    `json:"executeCommandProvider,omitempty"`
-	InlayHintProvider          *InlayHintOptions         `json:"inlayHintProvider,omitempty"`
-	SelectionRangeProvider     bool                      `json:"selectionRangeProvider,omitempty"`
-	SemanticTokensProvider     *SemanticTokensOptions    `json:"semanticTokensProvider,omitempty"`
-	Experimental               *ExperimentalCapabilities `json:"experimental,omitempty"`
+	TextDocumentSync          TextDocumentSyncOptions   `json:"textDocumentSync"`
+	CompletionProvider        *CompletionOptions        `json:"completionProvider,omitempty"`
+	HoverProvider             bool                      `json:"hoverProvider"`
+	DefinitionProvider        bool                      `json:"definitionProvider"`
+	TypeHierarchyProvider     bool                      `json:"typeHierarchyProvider"`
+	DocumentLinkProvider      *DocumentLinkOptions      `json:"documentLinkProvider,omitempty"`
+	DeclarationProvider       bool                      `json:"declarationProvider"`
+	TypeDefinitionProvider    bool                      `json:"typeDefinitionProvider"`
+	ImplementationProvider    bool                      `json:"implementationProvider"`
+	ReferencesProvider        bool                      `json:"referencesProvider"`
+	DocumentSymbolProvider    bool                      `json:"documentSymbolProvider"`
+	DocumentHighlightProvider bool                      `json:"documentHighlightProvider"`
+	FoldingRangeProvider      bool                      `json:"foldingRangeProvider"`
+	WorkspaceSymbolProvider   bool                      `json:"workspaceSymbolProvider"`
+	SignatureHelpProvider     *SignatureHelpOptions     `json:"signatureHelpProvider,omitempty"`
+	RenameProvider            *RenameOptions            `json:"renameProvider,omitempty"`
+	CodeActionProvider        *CodeActionOptions        `json:"codeActionProvider,omitempty"`
+	ExecuteCommandProvider    *ExecuteCommandOptions    `json:"executeCommandProvider,omitempty"`
+	InlayHintProvider         *InlayHintOptions         `json:"inlayHintProvider,omitempty"`
+	SelectionRangeProvider    bool                      `json:"selectionRangeProvider,omitempty"`
+	SemanticTokensProvider    *SemanticTokensOptions    `json:"semanticTokensProvider,omitempty"`
+	Experimental              *ExperimentalCapabilities `json:"experimental,omitempty"`
 }
 
 // ExperimentalCapabilities advertises the server's requests outside the LSP spec.
