@@ -57,6 +57,16 @@ class Holder {
         $event = $repo;
         $kept = $event = $repo->find('x');
         echo $event; // chained assignment
+        $elvis = $repo->find('x') ?: $user;
+        echo $elvis; // elvis
+        $coalesced = $repo->find('x') ?? $user;
+        echo $coalesced; // coalesce
+        $fromNull = null ?? $repo->find('x');
+        echo $fromNull; // coalesce from null
+        $ternary = $user ? $user : null;
+        echo $ternary; // ternary with null
+        $unknown = $missing ?? $user;
+        echo $unknown; // coalesce with an unknown side
     }
 }
 `
@@ -82,6 +92,11 @@ class Holder {
 		{"$nested", "nested closures", `App\User`},
 		{"$piped", "closure with use in a pipe", `App\Query`},
 		{"$event", "chained assignment", `App\Query`},
+		{"$elvis", "elvis", `App\Query|App\User`},
+		{"$coalesced", "coalesce", `App\Query|App\User`},
+		{"$fromNull", "coalesce from null", `App\Query`},
+		{"$ternary", "ternary with null", `?App\User`},
+		{"$unknown", "coalesce with an unknown side", ``},
 	} {
 		if got := at(c.v, c.marker); got != c.want {
 			t.Errorf("%s (%s) = %q, want %q", c.v, c.marker, got, c.want)

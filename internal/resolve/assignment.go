@@ -48,9 +48,16 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 			return gen.Params[2], true
 		}
 	case *ast.Binary:
-		if n.Op == token.Dot {
+		switch n.Op {
+		case token.Dot:
 			return ResolvedType{FQN: "string"}, true
+		case token.Coalesce:
+			rt := r.eitherType(t, n.Left, n.Right, ctx)
+			return rt, !rt.IsEmpty()
 		}
+	case *ast.Ternary:
+		rt := r.ternaryType(t, n, ctx)
+		return rt, !rt.IsEmpty()
 	case *ast.ClassConstFetch:
 		if strings.EqualFold(t.text(n.Name), "class") {
 			if rt := r.ExpressionType(text, ctx); !rt.IsEmpty() {
@@ -169,6 +176,12 @@ func (r *Resolver) assignedPlainType(varName string, t *syntaxTree, v assignedVa
 		return PlainTypeName(r.InvokeType(r.ExpressionType(text, ExprContext{Lines: lines, Pos: pos, File: file}))), true
 	}
 	switch n := v.expr.(type) {
+	case *ast.Binary:
+		if n.Op == token.Coalesce {
+			return PlainTypeName(r.eitherType(t, n.Left, n.Right, ExprContext{Lines: lines, Pos: pos, File: file})), true
+		}
+	case *ast.Ternary:
+		return PlainTypeName(r.ternaryType(t, n, ExprContext{Lines: lines, Pos: pos, File: file})), true
 	case *ast.New:
 		if name, ok := n.Class.(*ast.ConstFetch); ok && n.Anonymous == nil {
 			className := t.text(name)
@@ -239,4 +252,38 @@ func invokedVariable(t *syntaxTree, e ast.Expr) (string, bool) {
 			return "", false
 		}
 	}
+}
+
+func (r *Resolver) ternaryType(t *syntaxTree, n *ast.Ternary, ctx ExprContext) ResolvedType {
+	if n.Then == nil {
+		return r.eitherType(t, n.Cond, n.Else, ctx)
+	}
+	then, els := r.valueType(t, n.Then, ctx), r.valueType(t, n.Else, ctx)
+	if then.IsEmpty() && !then.Nullable || els.IsEmpty() && !els.Nullable {
+		return ResolvedType{}
+	}
+	return MakeUnion([]ResolvedType{then, els}, false)
+}
+
+func (r *Resolver) eitherType(t *syntaxTree, left, right ast.Expr, ctx ExprContext) ResolvedType {
+	l, rt := r.valueType(t, left, ctx), r.valueType(t, right, ctx)
+	if l.IsEmpty() && !l.Nullable || rt.IsEmpty() && !rt.Nullable {
+		return ResolvedType{}
+	}
+	return MakeUnion([]ResolvedType{withoutNull(l), rt}, false)
+}
+
+func withoutNull(rt ResolvedType) ResolvedType {
+	out := MakeUnion([]ResolvedType{rt}, false)
+	out.Nullable = false
+	return out
+}
+
+func (r *Resolver) valueType(t *syntaxTree, e ast.Expr, ctx ExprContext) ResolvedType {
+	if isMemberChain(e) && ctx.File != nil {
+		if rt := r.ChainType(t.text(e), r.JoinLines(ctx.Lines), ctx.Pos, ctx.File); !rt.IsEmpty() {
+			return rt
+		}
+	}
+	return r.syntaxType(t, e, ctx)
 }

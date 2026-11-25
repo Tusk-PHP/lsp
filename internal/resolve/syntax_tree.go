@@ -310,6 +310,9 @@ func (r *Resolver) syntaxType(t *syntaxTree, e ast.Expr, ctx ExprContext) Resolv
 		}
 		return r.OffsetType(cur, t.text(n.Dim))
 	case *ast.ConstFetch:
+		if lit := literalExprType(t.text(n)); !lit.IsEmpty() {
+			return lit
+		}
 		return r.chainOriginType(chainOrigin{kind: 'c', text: t.text(n)}, ctx)
 	}
 	return r.ExpressionType(t.text(e), ctx)
