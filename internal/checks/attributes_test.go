@@ -134,3 +134,17 @@ func TestAttributeMessage(t *testing.T) {
 		}
 	}
 }
+
+func TestDeprecatedFunctionCalledInAnotherCase(t *testing.T) {
+	src := `<?php
+namespace App;
+use function Lib\stale;
+
+STALE();
+\LIB\Stale();
+`
+	want := "deprecated: 'stale' is deprecated: use fresh() instead"
+	if got := attributeFindings(t, src); len(got) != 2 || got[0] != want || got[1] != want {
+		t.Errorf("PHP calls a function whatever the case it is written in, got %q", got)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -289,17 +290,9 @@ func resolveMemberOwner(ownerExpr string, line, col int, source string, file *pa
 }
 
 func lookupCalledFunction(name string, file *parser.FileNode, index *symbols.Index) *symbols.Symbol {
-	candidates := []string{strings.TrimPrefix(name, "\\")}
-	if !strings.HasPrefix(name, "\\") && file.Namespace != "" {
-		candidates = append([]string{file.Namespace + "\\" + name}, candidates...)
-	}
-	for _, use := range file.Uses {
-		if use.Kind == "function" && strings.EqualFold(use.Alias, name) {
-			candidates = append([]string{use.FullName}, candidates...)
-		}
-	}
-	for _, fqn := range candidates {
-		if sym := index.Lookup(fqn); sym != nil && sym.Kind == symbols.KindFunction {
+	fqns, _ := resolve.FunctionNames(name, file)
+	for _, fqn := range fqns {
+		if sym := index.LookupFold(fqn, isFunctionSymbol); sym != nil {
 			return sym
 		}
 	}
