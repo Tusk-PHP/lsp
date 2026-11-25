@@ -156,6 +156,7 @@ Open documents are a map guarded by an `RWMutex`. On `didChange` the server stor
 | `textDocument/completion`, `completionItem/resolve` | `completion` |
 | `textDocument/hover` | `hover` (`composer/cardhover` for `composer.json`) |
 | `textDocument/definition`, `declaration`, `typeDefinition`, `implementation`, `references` | `analyzer` |
+| `textDocument/prepareTypeHierarchy`, `typeHierarchy/supertypes`, `typeHierarchy/subtypes` | `analyzer` |
 | `textDocument/documentSymbol`, `workspace/symbol` | `analyzer` |
 | `textDocument/documentHighlight`, `foldingRange` | `analyzer` |
 | `textDocument/documentLink` | `analyzer` (`framework/laravel` for the path helpers) |
@@ -166,8 +167,9 @@ Open documents are a map guarded by an `RWMutex`. On `didChange` the server stor
 | `textDocument/inlayHint` | `inlayhint` |
 | `textDocument/semanticTokens/full` | `lsp` |
 | `workspace/executeCommand` | `lsp`: `tuskPhpLsp.namespaceForPath`, `copyNamespace`, `moveToNamespace`, `createObject`, `copyReference`, `debugDocument` |
+| `tusk/coverageReport`, `tusk/fileCoverage` | `coverage` |
 
-The server also advertises an experimental `tuskCoverage` capability for editors that show coverage.
+The last row is behind the experimental `tuskCoverage` capability, for editors that show coverage.
 
 Blade views (`.blade.php`) are compiled to virtual PHP (`framework/laravel/blade`) with a map back to the template. Hover, completion, definition, references and diagnostics run on that PHP and are mapped back; Blade's own directives, components and view names are answered by `lsp/blade_features.go`. Blade files are not added to the symbol index.
 
