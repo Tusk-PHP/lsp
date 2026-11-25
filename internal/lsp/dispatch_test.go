@@ -33,7 +33,6 @@ var capabilityRequests = map[string][]string{
 	"inlayHintProvider":          {"textDocument/inlayHint"},
 	"selectionRangeProvider":     {"textDocument/selectionRange"},
 	"semanticTokensProvider":     {"textDocument/semanticTokens/full"},
-	"diagnosticProvider":         {"textDocument/diagnostic"},
 	"documentFormattingProvider": {"textDocument/formatting"},
 }
 
