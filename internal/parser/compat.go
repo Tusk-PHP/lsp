@@ -290,24 +290,24 @@ type DocAssert struct {
 }
 
 func ParseFile(source string) (file *FileNode) {
-	var result *ParseResult
 	defer func() {
-		if r := recover(); r != nil {
-			// Return partial results if available rather than nil.
-			if result != nil {
-				func() {
-					defer func() { recover() }()
-					file = toFileNode(result)
-				}()
-			}
+		if recover() != nil {
+			file = nil
 		}
 	}()
-	result = New().Parse(source)
-	if result == nil {
-		return nil
-	}
-	file = toFileNode(result)
-	return
+	return FileNodeOf(New().Parse(source))
+}
+
+// FileNodeOf builds the declarations of a parsed file, so a caller that
+// already holds the parse result doesn't parse the source again. It is nil
+// when building them panics.
+func FileNodeOf(result *ParseResult) (file *FileNode) {
+	defer func() {
+		if recover() != nil {
+			file = nil
+		}
+	}()
+	return toFileNode(result)
 }
 
 func ParseDocBlock(raw string) *DocBlock {
