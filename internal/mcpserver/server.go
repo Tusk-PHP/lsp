@@ -718,9 +718,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 
 	rt.Completion = completion.NewProvider(ws.Index, ws.Container, s.Framework)
 	rt.Completion.SetArrayResolver(arrayResolver)
-	if s.Config != nil {
-		rt.Completion.SetAutoImportAliasStyle(s.Config.AutoImport.AliasStyle)
-	}
+	rt.Completion.SetAutoImportAliasStyle(ws.Config.AutoImport.AliasStyle)
 	if ws.RouteIndex != nil {
 		rt.Completion.SetLaravelRouteIndex(ws.RouteIndex)
 	}
@@ -736,7 +734,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 
 	rt.Hover = hover.NewProvider(ws.Index, ws.Container, s.Framework)
 	rt.Hover.SetArrayResolver(arrayResolver)
-	rt.Hover.SetConfig(s.Config)
+	rt.Hover.SetConfig(ws.Config)
 	rt.Hover.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 		return rt.Completion.ResolveExpressionTypeTyped(expr, source, pos, file)
 	})
@@ -752,7 +750,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.Analyzer.SetSymfonyTranslationResolver(symfonyTranslations)
 	rt.Analyzer.SetSymfonyCommands(ws.SymfonyCommands)
 
-	rt.Diagnostics = diagnostics.NewProvider(ws.Index, s.Framework, s.RootPath, newStdLogger(nil), s.Config)
+	rt.Diagnostics = diagnostics.NewProvider(ws.Index, s.Framework, s.RootPath, newStdLogger(nil), ws.Config)
 	rt.Diagnostics.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
 		return rt.Completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
 	}
@@ -808,14 +806,14 @@ func (s *Service) rebuildLocked(ctx context.Context) (ReindexOutput, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	_, _, profile, source, err := loadProjectMetadata(s.RootPath, s.logger)
+	cfg, _, profile, source, err := loadProjectMetadata(s.RootPath, s.logger)
 	if err != nil {
 		return ReindexOutput{}, err
 	}
 	ws, files, err := buildWorkspace(ctx, workspace.Options{
 		RootPath:       s.RootPath,
 		Framework:      s.Framework,
-		Config:         s.Config,
+		Config:         cfg,
 		Logger:         newStdLogger(nil),
 		BuiltinProfile: profile,
 	})

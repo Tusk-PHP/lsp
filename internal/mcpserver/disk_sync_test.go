@@ -256,6 +256,24 @@ func TestBuildRecordsTheFilesAsTheyWereBeforeIndexing(t *testing.T) {
 	}
 }
 
+func TestReindexUsesTheConfigFileAsItIsNow(t *testing.T) {
+	session, root := connectedService(t, map[string]string{
+		".tusk-php.json":      plainProjectConfig,
+		"composer.json":       `{"require": {"php": "^8.2"}}`,
+		"legacy/OldOrder.php": "<?php\nnamespace Legacy;\nclass OldOrder {}\n",
+	})
+	if got := foundFQNs(t, session, "OldOrder"); !slices.Contains(got, `Legacy\OldOrder`) {
+		t.Fatalf("the legacy class starts indexed: %v", got)
+	}
+	writeProject(t, root, map[string]string{".tusk-php.json": `{"framework": "none", "databaseEnabled": false, "excludePaths": ["vendor", "legacy"]}`})
+	if _, err := callTool(t, session, reindexTool, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := foundFQNs(t, session, "OldOrder"); len(got) != 0 {
+		t.Errorf("a rebuild indexes with the configuration it read: %v", got)
+	}
+}
+
 func BenchmarkSyncWithDiskUnchanged(b *testing.B) {
 	for _, files := range []int{1000, 10000} {
 		b.Run(strconv.Itoa(files), func(b *testing.B) {
