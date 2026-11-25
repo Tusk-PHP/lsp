@@ -102,10 +102,6 @@ func Analyze(uri, source string, pos protocol.Position) *CursorContext {
 	return ctx
 }
 
-func Namespace(source string) string {
-	return namespaceFromFile(parser.ParseFile(source))
-}
-
 func WordAt(source string, pos protocol.Position) (string, protocol.Range) {
 	lines := strings.Split(source, "\n")
 	if pos.Line < 0 || pos.Line >= len(lines) {
@@ -191,13 +187,6 @@ func detectAccess(line string, wordStart int) (AccessKind, string) {
 		return AccessStatic, strings.TrimSpace(line[:i-2])
 	}
 	return AccessNone, ""
-}
-
-func namespaceFromFile(file *parser.FileNode) string {
-	if file == nil {
-		return ""
-	}
-	return file.Namespace
 }
 
 func classifySymbolKind(word string) ContextSymbolKind {

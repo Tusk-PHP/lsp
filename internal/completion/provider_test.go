@@ -22,23 +22,6 @@ func TestKeywordSortLast(t *testing.T) {
 	}
 }
 
-func TestExtractNamespace(t *testing.T) {
-	tests := []struct {
-		source string
-		want   string
-	}{
-		{"<?php\nnamespace App\\Models;\n", "App\\Models"},
-		{"<?php\nnamespace App\\Services;\nclass Foo {}", "App\\Services"},
-		{"<?php\n// no namespace\n", ""},
-	}
-	for _, tt := range tests {
-		got := extractNamespace(tt.source)
-		if got != tt.want {
-			t.Errorf("extractNamespace() = %q, want %q", got, tt.want)
-		}
-	}
-}
-
 func TestCompletionSourceSorting(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()

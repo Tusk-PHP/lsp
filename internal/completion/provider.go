@@ -1101,10 +1101,6 @@ func (p *Provider) completeGlobal(prefix, source string, rk nameRanker, file *pa
 	return items
 }
 
-func extractNamespace(source string) string {
-	return sourcectx.Namespace(source)
-}
-
 func extractVariableBefore(prefix, op string) string {
 	idx := strings.LastIndex(prefix, op)
 	if idx < 0 {
