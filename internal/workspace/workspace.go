@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 
@@ -51,6 +50,7 @@ type Bootstrapped struct {
 	SchemaCache     *models.SchemaCache
 	Schema          *models.Schema
 
+	exclude         excludeRules
 	autoloadOnce    sync.Once
 	autoloadEntries []composer.AutoloadEntry
 	projectFiles    *projectFiles
@@ -104,6 +104,7 @@ func New(opts Options) *Bootstrapped {
 		Aliases:         aliases,
 		SymfonyCommands: commands,
 		SchemaCache:     models.NewSchemaCache(),
+		exclude:         newExcludeRules(cfg.ExcludePaths),
 		projectFiles:    newProjectFiles(cfg.MaxIndexFiles),
 	}
 }
@@ -166,7 +167,7 @@ func (ws *Bootstrapped) IndexWorkspace() IndexedFiles {
 			return nil
 		}
 		if info.IsDir() {
-			if ws.excludedDir(filepath.Base(path)) {
+			if ws.excludedDir(path) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -213,8 +214,12 @@ func (ws *Bootstrapped) IndexWorkspace() IndexedFiles {
 	return IndexedFiles{Count: count, Truncated: truncated}
 }
 
-func (ws *Bootstrapped) excludedDir(name string) bool {
-	return slices.Contains(ws.Config.ExcludePaths, name)
+func (ws *Bootstrapped) excludedDir(path string) bool {
+	rel, err := filepath.Rel(ws.RootPath, path)
+	if err != nil || rel == "." {
+		return false
+	}
+	return ws.exclude.excludes(filepath.ToSlash(rel))
 }
 
 func (ws *Bootstrapped) IndexComposerDependencies() int {

@@ -62,13 +62,7 @@ func (ws *Bootstrapped) walkerReaches(path string) bool {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return false
 	}
-	dirs := strings.Split(filepath.Dir(rel), string(filepath.Separator))
-	for _, dir := range dirs {
-		if ws.excludedDir(dir) {
-			return false
-		}
-	}
-	return true
+	return ws.exclude.reaches(filepath.ToSlash(rel))
 }
 
 func onDiskPath(root string, parts []string) (string, bool) {
