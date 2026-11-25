@@ -1220,16 +1220,11 @@ func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Positi
 }
 
 func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *protocol.SignatureHelp {
-	line := resolve.GetLineAt(source, pos.Line)
-	if line == "" {
+	callee, activeParam, ok := sourcectx.CallAt(source, pos)
+	if !ok {
 		return nil
 	}
-	prefix := line[:min(pos.Character, len(line))]
-	callee, activeParam := extractCallInfo(prefix)
-	if callee < 0 {
-		return nil
-	}
-	sym := a.resolveDefinitionSymbol(uri, source, protocol.Position{Line: pos.Line, Character: callee}).sym
+	sym := a.resolveDefinitionSymbol(uri, source, callee).sym
 	if sym == nil {
 		return nil
 	}
@@ -1250,43 +1245,6 @@ func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *
 		activeParam = maxParam
 	}
 	return &protocol.SignatureHelp{Signatures: []protocol.SignatureInformation{sig}, ActiveParameter: activeParam}
-}
-
-func extractCallInfo(prefix string) (int, int) {
-	activeParam := 0
-	depth := 0
-	parenPos := -1
-	for i := len(prefix) - 1; i >= 0; i-- {
-		switch prefix[i] {
-		case ')':
-			depth++
-		case '(':
-			if depth == 0 {
-				parenPos = i
-				goto found
-			}
-			depth--
-		case ',':
-			if depth == 0 {
-				activeParam++
-			}
-		}
-	}
-	return -1, 0
-found:
-	if parenPos <= 0 {
-		return -1, 0
-	}
-	end := parenPos
-	start := end - 1
-	for start >= 0 && resolve.IsWordChar(prefix[start]) {
-		start--
-	}
-	start++
-	if start >= end {
-		return -1, 0
-	}
-	return start, activeParam
 }
 
 // formatParams returns the parenthesized parameter list for a symbol, e.g.
