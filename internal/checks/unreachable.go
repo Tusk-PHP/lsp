@@ -25,14 +25,7 @@ func (r *UnreachableCodeRule) Check(file *parser.FileNode, source string, _ *sym
 	if result == nil {
 		return nil
 	}
-	tokens := make([]parser.Token, 0, len(result.Tokens))
-	for _, tok := range result.Tokens {
-		switch tok.Kind {
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
-		default:
-			tokens = append(tokens, tok)
-		}
-	}
+	tokens := parser.SignificantTokens(result.Tokens)
 
 	var findings []Finding
 	check := func(methods []parser.MethodNode) {

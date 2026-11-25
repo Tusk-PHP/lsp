@@ -282,7 +282,7 @@ func closureScopeAt(result *parser.ParseResult, pos protocol.Position, classFQN 
 		if result.Tokens[i].Kind != parser.TokenFunction {
 			continue
 		}
-		next := nextSignificantToken(result.Tokens, i+1)
+		next := parser.NextSignificant(result.Tokens, i+1)
 		if next < 0 || result.Tokens[next].Kind == parser.TokenIdentifier {
 			continue
 		}
@@ -295,25 +295,25 @@ func closureScopeAt(result *parser.ParseResult, pos protocol.Position, classFQN 
 			continue
 		}
 
-		body := nextSignificantToken(result.Tokens, closeParen+1)
+		body := parser.NextSignificant(result.Tokens, closeParen+1)
 		if body >= 0 && result.Tokens[body].Kind == parser.TokenUse {
-			useOpen := nextSignificantToken(result.Tokens, body+1)
+			useOpen := parser.NextSignificant(result.Tokens, body+1)
 			if useOpen >= 0 && result.Tokens[useOpen].Kind == parser.TokenOpenParen {
 				useClose := parser.MatchingClose(result.Tokens, useOpen)
 				if useClose < 0 {
 					continue
 				}
-				body = nextSignificantToken(result.Tokens, useClose+1)
+				body = parser.NextSignificant(result.Tokens, useClose+1)
 			}
 		}
 		for body >= 0 && body < len(result.Tokens) &&
 			result.Tokens[body].Kind != parser.TokenOpenBrace &&
 			result.Tokens[body].Kind != parser.TokenDoubleArrow &&
 			result.Tokens[body].Kind != parser.TokenSemicolon {
-			body = nextSignificantToken(result.Tokens, body+1)
+			body = parser.NextSignificant(result.Tokens, body+1)
 		}
 		if body >= 0 && result.Tokens[body].Kind == parser.TokenDoubleArrow {
-			bodyStart := nextSignificantToken(result.Tokens, body+1)
+			bodyStart := parser.NextSignificant(result.Tokens, body+1)
 			bodyEnd := arrowExpressionEnd(result.Tokens, bodyStart)
 			if bodyStart < 0 || bodyEnd < 0 {
 				continue
@@ -458,7 +458,7 @@ func parseNamespaceState(tokens []parser.Token, start int) (string, bool, bool) 
 			parts = append(parts, tokens[i].Value)
 		case parser.TokenBackslash:
 			parts = append(parts, "\\")
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
+		case parser.TokenComment, parser.TokenDocComment:
 			continue
 		case parser.TokenOpenBrace:
 			return strings.Join(parts, ""), true, true
@@ -473,16 +473,16 @@ func parseNamespaceState(tokens []parser.Token, start int) (string, bool, bool) 
 
 func parseUseNode(tokens []parser.Token, start int) (parser.UseNode, bool) {
 	kind := "class"
-	i := nextSignificantToken(tokens, start+1)
+	i := parser.NextSignificant(tokens, start+1)
 	if i < 0 {
 		return parser.UseNode{}, false
 	}
 	if tokens[i].Kind == parser.TokenFunction {
 		kind = "function"
-		i = nextSignificantToken(tokens, i+1)
+		i = parser.NextSignificant(tokens, i+1)
 	} else if tokens[i].Kind == parser.TokenConst {
 		kind = "const"
-		i = nextSignificantToken(tokens, i+1)
+		i = parser.NextSignificant(tokens, i+1)
 	}
 
 	if i < 0 {
@@ -496,7 +496,7 @@ func parseUseNode(tokens []parser.Token, start int) (parser.UseNode, bool) {
 		switch tokens[i].Kind {
 		case parser.TokenIdentifier:
 			if tokens[i].Value == "as" {
-				aliasIdx := nextSignificantToken(tokens, i+1)
+				aliasIdx := parser.NextSignificant(tokens, i+1)
 				if aliasIdx >= 0 && tokens[aliasIdx].Kind == parser.TokenIdentifier {
 					alias = tokens[aliasIdx].Value
 				}
@@ -506,7 +506,7 @@ func parseUseNode(tokens []parser.Token, start int) (parser.UseNode, bool) {
 			parts = append(parts, tokens[i].Value)
 		case parser.TokenBackslash:
 			parts = append(parts, "\\")
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
+		case parser.TokenComment, parser.TokenDocComment:
 			continue
 		case parser.TokenSemicolon:
 			fullName := strings.Join(parts, "")
@@ -530,7 +530,7 @@ func isTopLevelImportUse(tokens []parser.Token, idx, braceDepth, namespaceDepth 
 	if braceDepth != namespaceDepth {
 		return false
 	}
-	prev := prevSignificantToken(tokens, idx-1)
+	prev := parser.PrevSignificant(tokens, idx-1)
 	if prev < 0 {
 		return true
 	}
@@ -540,30 +540,6 @@ func isTopLevelImportUse(tokens []parser.Token, idx, braceDepth, namespaceDepth 
 	default:
 		return false
 	}
-}
-
-func nextSignificantToken(tokens []parser.Token, i int) int {
-	for i < len(tokens) {
-		switch tokens[i].Kind {
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
-			i++
-		default:
-			return i
-		}
-	}
-	return -1
-}
-
-func prevSignificantToken(tokens []parser.Token, i int) int {
-	for i >= 0 {
-		switch tokens[i].Kind {
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
-			i--
-		default:
-			return i
-		}
-	}
-	return -1
 }
 
 func arrowExpressionEnd(tokens []parser.Token, start int) int {
@@ -579,7 +555,7 @@ func arrowExpressionEnd(tokens []parser.Token, start int) int {
 			parenDepth++
 		case parser.TokenCloseParen:
 			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
-				return prevSignificantToken(tokens, i-1)
+				return parser.PrevSignificant(tokens, i-1)
 			}
 			if parenDepth > 0 {
 				parenDepth--
@@ -588,7 +564,7 @@ func arrowExpressionEnd(tokens []parser.Token, start int) int {
 			bracketDepth++
 		case parser.TokenCloseBracket:
 			if bracketDepth == 0 && parenDepth == 0 && braceDepth == 0 {
-				return prevSignificantToken(tokens, i-1)
+				return parser.PrevSignificant(tokens, i-1)
 			}
 			if bracketDepth > 0 {
 				bracketDepth--
@@ -597,18 +573,18 @@ func arrowExpressionEnd(tokens []parser.Token, start int) int {
 			braceDepth++
 		case parser.TokenCloseBrace:
 			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
-				return prevSignificantToken(tokens, i-1)
+				return parser.PrevSignificant(tokens, i-1)
 			}
 			if braceDepth > 0 {
 				braceDepth--
 			}
 		case parser.TokenComma, parser.TokenSemicolon:
 			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
-				return prevSignificantToken(tokens, i-1)
+				return parser.PrevSignificant(tokens, i-1)
 			}
 		}
 	}
-	return prevSignificantToken(tokens, len(tokens)-1)
+	return parser.PrevSignificant(tokens, len(tokens)-1)
 }
 
 func posInTokenRange(pos protocol.Position, start, end parser.Token) bool {

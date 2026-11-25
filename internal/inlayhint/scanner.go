@@ -57,20 +57,6 @@ func shortenFQNs(s string) string {
 	return sb.String()
 }
 
-// skipNonSig skips whitespace and comment tokens forward, returning the index
-// of the next meaningful token.
-func skipNonSig(tokens []parser.Token, i int) int {
-	for i < len(tokens) {
-		switch tokens[i].Kind {
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
-			i++
-		default:
-			return i
-		}
-	}
-	return i
-}
-
 // collectVarTypeHints emits ": Type" hints after variable names in simple
 // assignments of the form  $var = <expr>  that appear outside if/while/for
 // condition parens where the LHS is a plain variable (not a destructure).
@@ -110,8 +96,8 @@ func (p *Provider) collectVarTypeHints(
 		}
 
 		// Next non-whitespace must be `=` (not `==` or `=>`)
-		j := skipNonSig(tokens, i+1)
-		if j >= len(tokens) {
+		j := parser.NextSignificant(tokens, i+1)
+		if j < 0 {
 			continue
 		}
 		if tokens[j].Kind != parser.TokenEquals {
@@ -130,7 +116,7 @@ func (p *Provider) collectVarTypeHints(
 		// token immediately before the variable (skipping whitespace backwards) is
 		// `[` or `,` inside `[`, we are in a destructure — skip.
 		if i > 0 {
-			prev := skipBackNonSig(tokens, i-1)
+			prev := parser.PrevSignificant(tokens, i-1)
 			if prev >= 0 {
 				kind := tokens[prev].Kind
 				if kind == parser.TokenOpenBracket || kind == parser.TokenComma {
@@ -173,8 +159,8 @@ func (p *Provider) collectVarTypeHints(
 // isObviousValue reports whether the expression at i starts with a literal or a
 // cast, whose type needs no hint.
 func isObviousValue(tokens []parser.Token, i int) bool {
-	i = skipNonSig(tokens, i)
-	if i >= len(tokens) {
+	i = parser.NextSignificant(tokens, i)
+	if i < 0 {
 		return false
 	}
 	switch tokens[i].Kind {
@@ -187,20 +173,6 @@ func isObviousValue(tokens []parser.Token, i int) bool {
 		}
 	}
 	return false
-}
-
-// skipBackNonSig scans backwards from i skipping whitespace/comments and
-// returns the index of the first non-skippable token, or -1 if none.
-func skipBackNonSig(tokens []parser.Token, i int) int {
-	for i >= 0 {
-		switch tokens[i].Kind {
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
-			i--
-		default:
-			return i
-		}
-	}
-	return -1
 }
 
 // collectForeachHints emits ": Type" hints after key/value variable tokens in
@@ -222,8 +194,8 @@ func (p *Provider) collectForeachHints(
 		}
 
 		// Scan forward to find the opening paren of the foreach expression.
-		j := skipNonSig(tokens, i+1)
-		if j >= len(tokens) || tokens[j].Kind != parser.TokenOpenParen {
+		j := parser.NextSignificant(tokens, i+1)
+		if j < 0 || tokens[j].Kind != parser.TokenOpenParen {
 			continue
 		}
 		j++ // consume `(`
@@ -254,8 +226,8 @@ func (p *Provider) collectForeachHints(
 		// After `as`: optional key variable + `=>` + value variable, or just
 		// value variable.
 		k := asIdx + 1
-		k = skipNonSig(tokens, k)
-		if k >= len(tokens) {
+		k = parser.NextSignificant(tokens, k)
+		if k < 0 {
 			continue
 		}
 
@@ -280,8 +252,8 @@ func (p *Provider) collectForeachHints(
 		var bodyOpenLine int
 		if closeParen >= 0 {
 			// Look for the `{` after the closing paren.
-			n := skipNonSig(tokens, closeParen+1)
-			if n < len(tokens) && tokens[n].Kind == parser.TokenOpenBrace {
+			n := parser.NextSignificant(tokens, closeParen+1)
+			if n >= 0 && tokens[n].Kind == parser.TokenOpenBrace {
 				bodyOpenLine = tokens[n].Line
 			} else if closeParen >= 0 {
 				bodyOpenLine = tokens[closeParen].Line
@@ -294,11 +266,11 @@ func (p *Provider) collectForeachHints(
 		firstVar := k
 		if firstVar < len(tokens) && tokens[firstVar].Kind == parser.TokenVariable {
 			// Check if next non-whitespace is `=>`
-			n := skipNonSig(tokens, firstVar+1)
-			if n < len(tokens) && tokens[n].Kind == parser.TokenDoubleArrow {
+			n := parser.NextSignificant(tokens, firstVar+1)
+			if n >= 0 && tokens[n].Kind == parser.TokenDoubleArrow {
 				keyVarIdx = firstVar
-				n = skipNonSig(tokens, n+1)
-				if n < len(tokens) && tokens[n].Kind == parser.TokenVariable {
+				n = parser.NextSignificant(tokens, n+1)
+				if n >= 0 && tokens[n].Kind == parser.TokenVariable {
 					valVarIdx = n
 				}
 			} else {
@@ -358,16 +330,16 @@ func (p *Provider) collectClosureReturnHints(
 		isArrow := tok.Value == "fn"
 		if !isArrow {
 			// Regular `function`: anonymous if next non-whitespace is `(`
-			j := skipNonSig(tokens, i+1)
-			if j >= len(tokens) || tokens[j].Kind != parser.TokenOpenParen {
+			j := parser.NextSignificant(tokens, i+1)
+			if j < 0 || tokens[j].Kind != parser.TokenOpenParen {
 				// Named function — not a closure
 				continue
 			}
 		}
 
 		// Find the closing `)` of the parameter list.
-		j := skipNonSig(tokens, i+1)
-		if j >= len(tokens) || tokens[j].Kind != parser.TokenOpenParen {
+		j := parser.NextSignificant(tokens, i+1)
+		if j < 0 || tokens[j].Kind != parser.TokenOpenParen {
 			continue
 		}
 		closeParenIdx := parser.MatchingClose(tokens, j)
@@ -376,8 +348,8 @@ func (p *Provider) collectClosureReturnHints(
 		}
 
 		// Check if there is already a `: Type` between `)` and the `=>` / `{`.
-		k := skipNonSig(tokens, closeParenIdx+1)
-		if k >= len(tokens) {
+		k := parser.NextSignificant(tokens, closeParenIdx+1)
+		if k < 0 {
 			continue
 		}
 		if tokens[k].Kind == parser.TokenColon {
@@ -395,8 +367,8 @@ func (p *Provider) collectClosureReturnHints(
 				continue
 			}
 			// Resolve the type of the first expression token after `=>`
-			exprIdx := skipNonSig(tokens, k+1)
-			if exprIdx >= len(tokens) {
+			exprIdx := parser.NextSignificant(tokens, k+1)
+			if exprIdx < 0 {
 				continue
 			}
 			exprTok := tokens[exprIdx]
@@ -448,7 +420,7 @@ func resolveExprToken(
 	file *parser.FileNode,
 	source string,
 ) resolve.ResolvedType {
-	if exprIdx >= len(tokens) {
+	if exprIdx < 0 {
 		return resolve.ResolvedType{}
 	}
 	tok := tokens[exprIdx]
@@ -457,8 +429,8 @@ func resolveExprToken(
 		return p.resolver.ResolveVariableTypeTyped(tok.Value, lines, pos, file)
 	case parser.TokenNew:
 		// new ClassName(...)
-		j := skipNonSig(tokens, exprIdx+1)
-		if j >= len(tokens) {
+		j := parser.NextSignificant(tokens, exprIdx+1)
+		if j < 0 {
 			return resolve.ResolvedType{}
 		}
 		className := collectTypeName(tokens, j)
@@ -506,8 +478,8 @@ func (p *Provider) resolveFirstReturn(
 				continue
 			}
 			// The expression immediately follows `return`
-			j := skipNonSig(tokens, i+1)
-			if j >= end || j >= len(tokens) {
+			j := parser.NextSignificant(tokens, i+1)
+			if j < 0 || j >= end {
 				continue
 			}
 			retTok := tokens[j]
@@ -664,26 +636,18 @@ func (p *Provider) collectParamNameHints(
 				continue
 			}
 
-			// SuppressNameMatch: skip if the argument is a $variable whose name
-			// (without $) matches the parameter name (without $).
-			if cfg.SuppressNameMatch {
-				firstTok := firstMeaningfulToken(arg)
-				if firstTok != nil && firstTok.Kind == parser.TokenVariable {
-					argVarName := strings.TrimPrefix(firstTok.Value, "$")
-					paramName := strings.TrimPrefix(param.Name, "$")
-					if argVarName == paramName {
-						continue
-					}
-				}
+			first := parser.NextSignificant(arg, 0)
+			if first < 0 {
+				continue
 			}
-
+			firstTok := arg[first]
 			paramLabel := strings.TrimPrefix(param.Name, "$")
 			if paramLabel == "" {
 				continue
 			}
-
-			firstTok := firstMeaningfulToken(arg)
-			if firstTok == nil {
+			// SuppressNameMatch: skip if the argument is a $variable whose name
+			// (without $) matches the parameter name (without $).
+			if cfg.SuppressNameMatch && firstTok.Kind == parser.TokenVariable && strings.TrimPrefix(firstTok.Value, "$") == paramLabel {
 				continue
 			}
 			hints = append(hints, protocol.InlayHint{
@@ -710,7 +674,7 @@ const (
 // the callee name, kind, and (for method calls) the receiver expression string.
 func extractCallee(tokens []parser.Token, openParen int) (callee string, kind calleeKindT, receiver string) {
 	i := openParen - 1
-	i = skipBackNonSig(tokens, i)
+	i = parser.PrevSignificant(tokens, i)
 	if i < 0 {
 		return "", calleeFunction, ""
 	}
@@ -722,7 +686,7 @@ func extractCallee(tokens []parser.Token, openParen int) (callee string, kind ca
 	}
 	callee = nameTok.Value
 	i--
-	i = skipBackNonSig(tokens, i)
+	i = parser.PrevSignificant(tokens, i)
 	if i < 0 {
 		return callee, calleeFunction, ""
 	}
@@ -734,7 +698,7 @@ func extractCallee(tokens []parser.Token, openParen int) (callee string, kind ca
 		return callee, calleeMethod, receiver
 	case parser.TokenDoubleColon: // ::
 		// Static method call: the token to the left is the class name.
-		j := skipBackNonSig(tokens, i-1)
+		j := parser.PrevSignificant(tokens, i-1)
 		if j < 0 {
 			return callee, calleeStatic, ""
 		}
@@ -752,7 +716,7 @@ func extractCallee(tokens []parser.Token, openParen int) (callee string, kind ca
 // method call by scanning backwards from the token before `->`.  Returns
 // something like `$foo`, `$foo->bar()`, or a class name.
 func collectReceiverExpr(tokens []parser.Token, fromIdx int) string {
-	i := skipBackNonSig(tokens, fromIdx)
+	i := parser.PrevSignificant(tokens, fromIdx)
 	if i < 0 {
 		return ""
 	}
@@ -771,7 +735,7 @@ func collectReceiverExpr(tokens []parser.Token, fromIdx int) string {
 			return ""
 		}
 		// Grab the method name before `(`.
-		j := skipBackNonSig(tokens, openIdx-1)
+		j := parser.PrevSignificant(tokens, openIdx-1)
 		if j < 0 {
 			return ""
 		}
@@ -779,7 +743,7 @@ func collectReceiverExpr(tokens []parser.Token, fromIdx int) string {
 		if tokens[j].Kind == parser.TokenIdentifier {
 			methodName = tokens[j].Value
 			j--
-			j = skipBackNonSig(tokens, j)
+			j = parser.PrevSignificant(tokens, j)
 		}
 		if j < 0 {
 			return ""
@@ -898,44 +862,10 @@ func splitCallArgs(tokens []parser.Token, start, end int) [][]parser.Token {
 // isNamedArg returns true if the argument token sequence starts with  ident `:`
 // (but not `::`), indicating a PHP 8.0+ named argument.
 func isNamedArg(arg []parser.Token) bool {
-	first := firstMeaningfulToken(arg)
-	if first == nil || first.Kind != parser.TokenIdentifier {
+	first := parser.NextSignificant(arg, 0)
+	if first < 0 || arg[first].Kind != parser.TokenIdentifier {
 		return false
 	}
-	// Find the second meaningful token.
-	var second *parser.Token
-	found := false
-	for i := range arg {
-		if &arg[i] == first {
-			found = true
-			continue
-		}
-		if !found {
-			continue
-		}
-		switch arg[i].Kind {
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
-			continue
-		}
-		second = &arg[i]
-		break
-	}
-	if second == nil {
-		return false
-	}
-	// Named arg: second token is `:` (not `::`)
-	return second.Kind == parser.TokenColon
-}
-
-// firstMeaningfulToken returns a pointer to the first non-whitespace,
-// non-comment token in the slice, or nil.
-func firstMeaningfulToken(tokens []parser.Token) *parser.Token {
-	for i := range tokens {
-		switch tokens[i].Kind {
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
-			continue
-		}
-		return &tokens[i]
-	}
-	return nil
+	second := parser.NextSignificant(arg, first+1)
+	return second >= 0 && arg[second].Kind == parser.TokenColon
 }

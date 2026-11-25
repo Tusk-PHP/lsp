@@ -58,13 +58,13 @@ func (g *memberGuards) collect(tokens []parser.Token) {
 		if !memberGuardFuncs[fn] || !isGlobalFunctionCall(tokens, i) {
 			continue
 		}
-		open := nextSignificantTokenIdx(tokens, i+1)
+		open := parser.NextSignificant(tokens, i+1)
 		if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
 			continue
 		}
 		start, closer := open+1, parser.TokenCloseParen
 		if fn == "is_callable" {
-			bracket := nextSignificantTokenIdx(tokens, start)
+			bracket := parser.NextSignificant(tokens, start)
 			if bracket < 0 || tokens[bracket].Kind != parser.TokenOpenBracket {
 				continue
 			}
@@ -90,7 +90,7 @@ func (g *memberGuards) collect(tokens []parser.Token) {
 // function: not a method or static method of that name, a declaration, or a
 // function in another namespace (`Foo\method_exists()`).
 func isGlobalFunctionCall(tokens []parser.Token, i int) bool {
-	prev := prevSignificantTokenIdx(tokens, i-1)
+	prev := parser.PrevSignificant(tokens, i-1)
 	if prev < 0 {
 		return true
 	}
@@ -98,7 +98,7 @@ func isGlobalFunctionCall(tokens []parser.Token, i int) bool {
 	case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenFunction, parser.TokenNew:
 		return false
 	case parser.TokenBackslash:
-		before := prevSignificantTokenIdx(tokens, prev-1)
+		before := parser.PrevSignificant(tokens, prev-1)
 		return before < 0 || tokens[before].Kind != parser.TokenIdentifier
 	}
 	return true
@@ -163,7 +163,7 @@ func guardArguments(tokens []parser.Token, start int, closer parser.TokenKind) (
 			}
 		case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace, parser.TokenEOF:
 			return "", "", false
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
+		case parser.TokenComment, parser.TokenDocComment:
 			continue
 		}
 		b.WriteString(tokens[i].Value)
@@ -175,7 +175,7 @@ func guardArguments(tokens []parser.Token, start int, closer parser.TokenKind) (
 	if !isGuardReceiver(receiver) {
 		return "", "", false
 	}
-	lit := nextSignificantTokenIdx(tokens, comma+1)
+	lit := parser.NextSignificant(tokens, comma+1)
 	if lit < 0 || tokens[lit].Kind != parser.TokenStringLiteral {
 		return "", "", false
 	}
@@ -183,10 +183,10 @@ func guardArguments(tokens []parser.Token, start int, closer parser.TokenKind) (
 	if !ok {
 		return "", "", false
 	}
-	end := nextSignificantTokenIdx(tokens, lit+1)
+	end := parser.NextSignificant(tokens, lit+1)
 	// A trailing comma, as in `[$x, 'name',]` written over several lines.
 	if end >= 0 && tokens[end].Kind == parser.TokenComma {
-		end = nextSignificantTokenIdx(tokens, end+1)
+		end = parser.NextSignificant(tokens, end+1)
 	}
 	if end < 0 || tokens[end].Kind != closer {
 		return "", "", false

@@ -78,7 +78,7 @@ func (f *flowState) openBlock(tokens []parser.Token, i int) int {
 	b.kind, b.prev = f.blockOpener(tokens, i)
 	b.head = b.open
 	if b.kind == blockLoop {
-		if c := prevSignificant(tokens, i-1); c >= 0 && tokens[c].Kind == parser.TokenCloseParen {
+		if c := parser.PrevSignificant(tokens, i-1); c >= 0 && tokens[c].Kind == parser.TokenCloseParen {
 			if o := parser.MatchingOpen(tokens, c); o >= 0 {
 				b.head = tokenRange(tokens[o]).Start
 			}
@@ -121,7 +121,7 @@ func (f *flowState) keyword(tokens []parser.Token, i int) {
 	case "break", "continue":
 		target := -1
 		// `break 2` leaves more than the innermost loop or switch.
-		if n := nextSignificant(tokens, i+1); n < 0 || tokens[n].Kind != parser.TokenNumber {
+		if n := parser.NextSignificant(tokens, i+1); n < 0 || tokens[n].Kind != parser.TokenNumber {
 			target = f.innermost(blockLoop, blockSwitch)
 		}
 		f.doc.jumps = append(f.doc.jumps, flowMark{at: tokenRange(tokens[i]).Start, block: target})
@@ -151,7 +151,7 @@ func (f *flowState) innermost(kinds ...blockKind) int {
 // blockOpener tells what opens the `{` at token i and, for an elseif or else,
 // the block before it in its chain.
 func (f *flowState) blockOpener(tokens []parser.Token, i int) (blockKind, int) {
-	prev := prevSignificant(tokens, i-1)
+	prev := parser.PrevSignificant(tokens, i-1)
 	if prev < 0 {
 		return blockOther, -1
 	}
@@ -161,7 +161,7 @@ func (f *flowState) blockOpener(tokens []parser.Token, i int) (blockKind, int) {
 		if open < 0 {
 			return blockOther, -1
 		}
-		kw = prevSignificant(tokens, open-1)
+		kw = parser.PrevSignificant(tokens, open-1)
 	}
 	if kw < 0 || tokens[kw].Kind != parser.TokenIdentifier {
 		return blockOther, -1
@@ -170,7 +170,7 @@ func (f *flowState) blockOpener(tokens []parser.Token, i int) (blockKind, int) {
 	switch {
 	case word == "if" && kw != prev:
 		// `else if (…) {` continues a chain like `elseif`.
-		if e := prevSignificant(tokens, kw-1); e >= 0 && tokens[e].Kind == parser.TokenIdentifier && strings.EqualFold(tokens[e].Value, "else") {
+		if e := parser.PrevSignificant(tokens, kw-1); e >= 0 && tokens[e].Kind == parser.TokenIdentifier && strings.EqualFold(tokens[e].Value, "else") {
 			return blockElseIf, f.chainBefore(tokens, e)
 		}
 		return blockIf, -1
@@ -191,7 +191,7 @@ func (f *flowState) blockOpener(tokens []parser.Token, i int) (blockKind, int) {
 // chainBefore returns the if or elseif block whose `}` comes right before the
 // keyword at token kw, or -1.
 func (f *flowState) chainBefore(tokens []parser.Token, kw int) int {
-	c := prevSignificant(tokens, kw-1)
+	c := parser.PrevSignificant(tokens, kw-1)
 	if c < 0 || tokens[c].Kind != parser.TokenCloseBrace {
 		return -1
 	}
@@ -298,7 +298,7 @@ func writeEffect(tokens []parser.Token, i int, foreach bool) effect {
 	if foreach || op < 0 {
 		return e
 	}
-	if start := nextSignificant(tokens, op+1); start >= 0 {
+	if start := parser.NextSignificant(tokens, op+1); start >= 0 {
 		e.rhs = tokenRange(tokens[start]).Start
 	}
 	startsStatement := startsStatement(tokens, i)
@@ -338,7 +338,7 @@ func writeEffect(tokens []parser.Token, i int, foreach bool) effect {
 // it follows the end of another, a brace, an open tag, a `case …:` or the
 // condition of a braceless control structure.
 func startsStatement(tokens []parser.Token, i int) bool {
-	p := prevSignificant(tokens, i-1)
+	p := parser.PrevSignificant(tokens, i-1)
 	if p < 0 {
 		return true
 	}
@@ -354,7 +354,7 @@ func startsStatement(tokens []parser.Token, i int) bool {
 // isDynamicMemberName reports whether the variable at token i names a member,
 // as in `$this->$key = …`, which assigns to the property, not to $key.
 func isDynamicMemberName(tokens []parser.Token, i int) bool {
-	p := prevSignificant(tokens, i-1)
+	p := parser.PrevSignificant(tokens, i-1)
 	return p >= 0 && tokens[p].Kind == parser.TokenArrow
 }
 
@@ -362,9 +362,9 @@ func isDynamicMemberName(tokens []parser.Token, i int) bool {
 // of `&&`, `||`, `and`, `or`, `??` or a ternary `?`, possibly in parentheses,
 // so it may not run.
 func isShortCircuitOperand(tokens []parser.Token, i int) bool {
-	p := prevSignificant(tokens, i-1)
+	p := parser.PrevSignificant(tokens, i-1)
 	for p >= 0 && tokens[p].Kind == parser.TokenOpenParen {
-		p = prevSignificant(tokens, p-1)
+		p = parser.PrevSignificant(tokens, p-1)
 	}
 	if p < 0 {
 		return false

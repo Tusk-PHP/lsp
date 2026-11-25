@@ -26,7 +26,7 @@ func versionGatedSpans(tokens []parser.Token) []tokenSpan {
 			continue
 		}
 		// `else if` is part of the chain that its first `if` starts.
-		if p := prevSignificantTokenIdx(tokens, i-1); p >= 0 && isKeywordToken(tokens[p], "else") {
+		if p := parser.PrevSignificant(tokens, i-1); p >= 0 && isKeywordToken(tokens[p], "else") {
 			continue
 		}
 		end, gated := ifChainEnd(tokens, i)
@@ -60,7 +60,7 @@ func ifChainEnd(tokens []parser.Token, start int) (int, bool) {
 			return -1, gated
 		}
 		gated = gated || versioned
-		body := nextSignificantTokenIdx(tokens, closeIdx+1)
+		body := parser.NextSignificant(tokens, closeIdx+1)
 		if body < 0 {
 			return -1, gated
 		}
@@ -72,12 +72,12 @@ func ifChainEnd(tokens []parser.Token, start int) (int, bool) {
 		if end < 0 {
 			return -1, gated
 		}
-		next := nextSignificantTokenIdx(tokens, end+1)
+		next := parser.NextSignificant(tokens, end+1)
 		switch {
 		case next >= 0 && isKeywordToken(tokens[next], "elseif"):
 			j = next
 		case next >= 0 && isKeywordToken(tokens[next], "else"):
-			after := nextSignificantTokenIdx(tokens, next+1)
+			after := parser.NextSignificant(tokens, next+1)
 			if after < 0 {
 				return end, gated
 			}
@@ -99,7 +99,7 @@ func ifChainEnd(tokens []parser.Token, start int) (int, bool) {
 // of its condition's closing parenthesis, and whether the condition checks a
 // version.
 func conditionEnd(tokens []parser.Token, kw int) (int, bool) {
-	open := nextSignificantTokenIdx(tokens, kw+1)
+	open := parser.NextSignificant(tokens, kw+1)
 	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
 		return -1, false
 	}
@@ -133,7 +133,7 @@ func altSyntaxEnd(tokens []parser.Token, start int) (int, bool) {
 			if closeIdx < 0 {
 				continue
 			}
-			colon := nextSignificantTokenIdx(tokens, closeIdx+1)
+			colon := parser.NextSignificant(tokens, closeIdx+1)
 			if colon < 0 || tokens[colon].Kind != parser.TokenColon {
 				continue
 			}
@@ -176,7 +176,7 @@ func isVersionCheck(cond []parser.Token) bool {
 			return true
 		}
 		// A class constant such as Kernel::VERSION_ID or Foo::MAJOR_VERSION.
-		if p := prevSignificantTokenIdx(cond, k-1); p >= 0 && cond[p].Kind == parser.TokenDoubleColon {
+		if p := parser.PrevSignificant(cond, k-1); p >= 0 && cond[p].Kind == parser.TokenDoubleColon {
 			if name == "VERSION" || name == "VERSION_ID" || strings.HasSuffix(name, "_VERSION") || strings.HasSuffix(name, "_VERSION_ID") {
 				return true
 			}

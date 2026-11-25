@@ -69,9 +69,10 @@ func namedArguments(tokens []parser.Token, open, close int) ([]parser.Token, boo
 	argStart := true
 	for i := open + 1; i < close; i++ {
 		tok := tokens[i]
-		switch tok.Kind {
-		case parser.TokenWhitespace, parser.TokenComment, parser.TokenDocComment:
+		if tok.Kind.IsComment() {
 			continue
+		}
+		switch tok.Kind {
 		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
 			depth++
 		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
@@ -87,7 +88,7 @@ func namedArguments(tokens []parser.Token, open, close int) ([]parser.Token, boo
 			}
 		case parser.TokenIdentifier:
 			if depth == 0 && argStart {
-				if next := nextSignificantTokenIdx(tokens, i+1); next > 0 && next < close && tokens[next].Kind == parser.TokenColon {
+				if next := parser.NextSignificant(tokens, i+1); next > 0 && next < close && tokens[next].Kind == parser.TokenColon {
 					names = append(names, tok)
 				}
 			}

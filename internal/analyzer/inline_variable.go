@@ -123,7 +123,7 @@ func newInlineVariablePlan(source string, result *parser.ParseResult, doc *scope
 func inlineExpressionIsSafe(tokens []parser.Token, first, last int) bool {
 	for i := first; i <= last; i++ {
 		tok := tokens[i]
-		if isTriviaToken(tok.Kind) {
+		if tok.Kind.IsComment() {
 			continue
 		}
 		switch tok.Kind {
@@ -138,11 +138,11 @@ func inlineExpressionIsSafe(tokens []parser.Token, first, last int) bool {
 			if inlineIdentifierHasSideEffects(tok.Value) {
 				return false
 			}
-			if next := nextSignificantToken(tokens, i+1); next >= 0 && tokens[next].Kind == parser.TokenOpenParen {
+			if next := parser.NextSignificant(tokens, i+1); next >= 0 && tokens[next].Kind == parser.TokenOpenParen {
 				return false
 			}
 		case parser.TokenVariable:
-			if next := nextSignificantToken(tokens, i+1); next >= 0 && tokens[next].Kind == parser.TokenOpenParen {
+			if next := parser.NextSignificant(tokens, i+1); next >= 0 && tokens[next].Kind == parser.TokenOpenParen {
 				return false
 			}
 		}
@@ -155,12 +155,12 @@ func inlineReferenceIsMutation(tokens []parser.Token, ref protocol.Range) bool {
 		if tok.Kind != parser.TokenVariable || tokenRange(tok) != ref {
 			continue
 		}
-		if prev := prevSignificantToken(tokens, i-1); prev >= 0 &&
+		if prev := parser.PrevSignificant(tokens, i-1); prev >= 0 &&
 			tokens[prev].Kind == parser.TokenUnknown &&
 			(strings.Contains(tokens[prev].Value, "++") || strings.Contains(tokens[prev].Value, "--")) {
 			return true
 		}
-		next := nextSignificantToken(tokens, i+1)
+		next := parser.NextSignificant(tokens, i+1)
 		if next < 0 {
 			return false
 		}
@@ -170,8 +170,8 @@ func inlineReferenceIsMutation(tokens []parser.Token, ref protocol.Range) bool {
 		case parser.TokenUnknown:
 			return strings.Contains(tokens[next].Value, "++") ||
 				strings.Contains(tokens[next].Value, "--") ||
-				(nextSignificantToken(tokens, next+1) >= 0 &&
-					tokens[nextSignificantToken(tokens, next+1)].Kind == parser.TokenEquals)
+				(parser.NextSignificant(tokens, next+1) >= 0 &&
+					tokens[parser.NextSignificant(tokens, next+1)].Kind == parser.TokenEquals)
 		}
 		return false
 	}
@@ -179,8 +179,8 @@ func inlineReferenceIsMutation(tokens []parser.Token, ref protocol.Range) bool {
 }
 
 func inlineExpressionIsAtomic(tokens []parser.Token, first, last int) bool {
-	first = nextSignificantToken(tokens, first)
-	last = prevSignificantToken(tokens, last)
+	first = parser.NextSignificant(tokens, first)
+	last = parser.PrevSignificant(tokens, last)
 	if first < 0 || last < first {
 		return false
 	}
@@ -201,15 +201,6 @@ func inlineIdentifierHasSideEffects(value string) bool {
 	default:
 		return false
 	}
-}
-
-func prevSignificantToken(tokens []parser.Token, start int) int {
-	for i := start; i >= 0; i-- {
-		if !isTriviaToken(tokens[i].Kind) {
-			return i
-		}
-	}
-	return -1
 }
 
 func expandInlineDeleteRange(source string, stmt protocol.Range) protocol.Range {

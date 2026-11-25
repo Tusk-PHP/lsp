@@ -270,7 +270,6 @@ const (
 	TokenHash
 	TokenDocComment
 	TokenComment
-	TokenWhitespace
 	TokenStringLiteral
 	TokenEOF
 	TokenUnknown

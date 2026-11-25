@@ -127,7 +127,7 @@ func selectionTokenBounds(tokens []parser.Token, rng protocol.Range) (int, int) 
 	first := -1
 	last := -1
 	for i, tok := range tokens {
-		if isTriviaToken(tok.Kind) {
+		if tok.Kind.IsComment() {
 			continue
 		}
 		tokRange := tokenRange(tok)
@@ -181,7 +181,7 @@ func findStatementStart(tokens []parser.Token, first int) int {
 	depthBracket := 0
 	for i := first - 1; i >= 0; i-- {
 		tok := tokens[i]
-		if isTriviaToken(tok.Kind) {
+		if tok.Kind.IsComment() {
 			continue
 		}
 		switch tok.Kind {
@@ -203,11 +203,11 @@ func findStatementStart(tokens []parser.Token, first int) int {
 		if depthParen == 0 && depthBracket == 0 {
 			switch tok.Kind {
 			case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace:
-				return nextSignificantToken(tokens, i+1)
+				return parser.NextSignificant(tokens, i+1)
 			}
 		}
 	}
-	return nextSignificantToken(tokens, 0)
+	return parser.NextSignificant(tokens, 0)
 }
 
 func nextExtractVariableName(targetScope *scope.Scope) string {
@@ -233,19 +233,6 @@ func scopeHasVisibleBinding(targetScope *scope.Scope, name string) bool {
 		}
 	}
 	return false
-}
-
-func nextSignificantToken(tokens []parser.Token, start int) int {
-	for i := start; i < len(tokens); i++ {
-		if !isTriviaToken(tokens[i].Kind) {
-			return i
-		}
-	}
-	return -1
-}
-
-func isTriviaToken(kind parser.TokenKind) bool {
-	return kind == parser.TokenWhitespace || kind == parser.TokenComment || kind == parser.TokenDocComment
 }
 
 func positionToOffset(source string, pos protocol.Position) (int, bool) {
