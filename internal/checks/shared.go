@@ -38,14 +38,22 @@ func (s *Shared) tokens(source string) []parser.Token {
 	return s.result.Tokens
 }
 
-func (s *Shared) tree(source string, grammar token.Version) *fileSyntax {
-	if s == nil {
-		return newFileSyntax(source, grammar)
+func (s *Shared) tree(source string, file *parser.FileNode) *fileSyntax {
+	if s != nil && s.syntax != nil && s.syntax.src == source && s.syntax.tree.Version == file.Grammar {
+		return s.syntax
 	}
-	if s.syntax == nil || s.syntax.src != source || s.syntax.tree.Version != grammar {
-		s.syntax = newFileSyntax(source, grammar)
+	syntax := syntaxOf(source, file)
+	if s != nil {
+		s.syntax = syntax
 	}
-	return s.syntax
+	return syntax
+}
+
+func syntaxOf(source string, file *parser.FileNode) *fileSyntax {
+	if file.Tree == nil || file.Source != source {
+		return newFileSyntax(source, file.Grammar)
+	}
+	return &fileSyntax{src: source, tree: file.Tree, lines: ast.NewLines(source)}
 }
 
 type fileSyntax struct {

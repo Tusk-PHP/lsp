@@ -69,7 +69,7 @@ func (r *DeprecatedFunctionRule) Check(file *parser.FileNode, source string, ind
 	if file == nil {
 		return nil
 	}
-	syntax := r.Shared.tree(source, file.Grammar)
+	syntax := r.Shared.tree(source, file)
 	var findings []Finding
 	for _, call := range syntax.references().calls {
 		name := strings.TrimPrefix(syntax.text(call.name), "\\")
