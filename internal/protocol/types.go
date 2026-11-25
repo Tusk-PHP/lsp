@@ -472,7 +472,6 @@ type ServerCapabilities struct {
 	DocumentHighlightProvider  bool                      `json:"documentHighlightProvider"`
 	FoldingRangeProvider       bool                      `json:"foldingRangeProvider"`
 	WorkspaceSymbolProvider    bool                      `json:"workspaceSymbolProvider"`
-	DiagnosticProvider         *DiagnosticOptions        `json:"diagnosticProvider,omitempty"`
 	SignatureHelpProvider      *SignatureHelpOptions     `json:"signatureHelpProvider,omitempty"`
 	DocumentFormattingProvider bool                      `json:"documentFormattingProvider"`
 	RenameProvider             *RenameOptions            `json:"renameProvider,omitempty"`
@@ -551,12 +550,6 @@ type CompletionOptions struct {
 // SignatureHelpOptions for signature help requests.
 type SignatureHelpOptions struct {
 	TriggerCharacters []string `json:"triggerCharacters,omitempty"`
-}
-
-// DiagnosticOptions for diagnostics.
-type DiagnosticOptions struct {
-	InterFileDependencies bool `json:"interFileDependencies"`
-	WorkspaceDiagnostics  bool `json:"workspaceDiagnostics"`
 }
 
 // SignatureHelp represents the signature of a callable.
