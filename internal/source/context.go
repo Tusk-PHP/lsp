@@ -106,6 +106,10 @@ func (d *Document) Lines() []string {
 	return d.lines
 }
 
+func (d *Document) URI() string {
+	return d.uri
+}
+
 func (d *Document) File() *parser.FileNode {
 	return d.file
 }

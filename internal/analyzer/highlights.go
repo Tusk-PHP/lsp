@@ -1,11 +1,11 @@
 package analyzer
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -26,57 +26,14 @@ func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Positi
 	if target == nil {
 		return nil
 	}
-	decl := declarationIn(target, uri)
-	ranges := a.occurrencesInDocument(r, target, uri, doc, source)
+	ref := a.referenceTargetOf(target)
+	decls := ref.declarationsIn(uri)
+	ranges := a.occurrencesInDocument(r, ref, doc, source)
 	highlights := make([]protocol.DocumentHighlight, 0, len(ranges))
 	for _, rng := range ranges {
-		highlights = append(highlights, protocol.DocumentHighlight{Range: rng, Kind: highlightKind(rng, decl, pos)})
+		highlights = append(highlights, protocol.DocumentHighlight{Range: rng, Kind: highlightKind(rng, decls, pos)})
 	}
 	return highlights
-}
-
-func declarationIn(target *symbols.Symbol, uri string) protocol.Range {
-	if target.URI != uri {
-		return protocol.Range{}
-	}
-	return target.Range
-}
-
-func (a *Analyzer) occurrencesIn(r *resolve.Resolver, target *symbols.Symbol, uri, source string) []protocol.Range {
-	if !mentions(parser.Tokenize(source), target) {
-		return nil
-	}
-	return a.occurrencesInDocument(r, target, uri, sourcectx.NewDocument(uri, source), source)
-}
-
-func mentions(tokens []parser.Token, target *symbols.Symbol) bool {
-	for i := range tokens {
-		if mayName(tokens, i, target) {
-			return true
-		}
-	}
-	return false
-}
-
-func (a *Analyzer) occurrencesInDocument(r *resolve.Resolver, target *symbols.Symbol, uri string, doc *sourcectx.Document, source string) []protocol.Range {
-	decl := declarationIn(target, uri)
-	tokens := doc.Tokens()
-	var ranges []protocol.Range
-	for i, tok := range tokens {
-		if !mayName(tokens, i, target) {
-			continue
-		}
-		rng := tokenRange(tok)
-		if tok.Kind == parser.TokenVariable && !follows(tokens, i, parser.TokenDoubleColon) {
-			if !sameRange(rng, decl) {
-				continue
-			}
-		} else if !sameSymbol(a.resolveSymbolAt(r, doc.NameAt(rng.Start), source), target) {
-			continue
-		}
-		ranges = append(ranges, rng)
-	}
-	return ranges
 }
 
 func (a *Analyzer) mayBeLocalVariable(ctx *sourcectx.NameContext) bool {
@@ -117,13 +74,9 @@ func follows(tokens []parser.Token, i int, kind parser.TokenKind) bool {
 	return prev >= 0 && tokens[prev].Kind == kind
 }
 
-func sameSymbol(sym, target *symbols.Symbol) bool {
-	return sym != nil && sym.Kind == target.Kind && sym.FQN == target.FQN
-}
-
-func highlightKind(rng, decl protocol.Range, cursor protocol.Position) protocol.DocumentHighlightKind {
+func highlightKind(rng protocol.Range, decls []protocol.Range, cursor protocol.Position) protocol.DocumentHighlightKind {
 	switch {
-	case sameRange(rng, decl):
+	case slices.Contains(decls, rng):
 		return protocol.DocumentHighlightKindWrite
 	case rng.Start.Line == cursor.Line && rng.Start.Character <= cursor.Character && cursor.Character <= rng.End.Character:
 		return protocol.DocumentHighlightKindText

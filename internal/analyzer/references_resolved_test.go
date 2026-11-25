@@ -119,3 +119,46 @@ func TestMayMentionNeedsTheNameAsAWord(t *testing.T) {
 		}
 	}
 }
+
+func TestReferencesAndRenameFollowTheMethodsHierarchy(t *testing.T) {
+	sources := map[string]string{
+		"file:///Shape.php": "<?php\nnamespace App;\ninterface Shape { public function area(): float; }\n",
+		"file:///Room.php":  "<?php\nnamespace App;\nclass Room implements Shape { public function area(): float { return 1.0; } }\nclass Big extends Room { public function area(): float { return 2.0; } }\nclass Circle implements Shape { public function area(): float { return 3.0; } }\nclass Plain { public function area(): float { return 4.0; } }\n",
+		"file:///use.php":   "<?php\nnamespace App;\nfunction f(Shape $s, Room $r, Big $b, Plain $p): float {\n    return $s->area() + $r->area() + $b->area() + $p->area();\n}\n",
+	}
+	a, read := setupRenameAnalyzer(sources)
+	pos := positionOf(t, sources["file:///Room.php"], "area(): float { return 1.0")
+	var got []string
+	for _, l := range a.FindAllReferences("file:///Room.php", sources["file:///Room.php"], pos, read) {
+		got = append(got, fmt.Sprintf("%s:%d:%d", strings.TrimPrefix(l.URI, "file:///"), l.Range.Start.Line, l.Range.Start.Character))
+	}
+	slices.Sort(got)
+	want := []string{"Room.php:2:46", "Room.php:3:41", "Room.php:4:48", "Shape.php:2:34", "use.php:3:15", "use.php:3:28", "use.php:3:41"}
+	if !slices.Equal(got, want) {
+		t.Errorf("references of Room::area are Shape::area, its overrides and implementations and their calls, never Plain::area:\n got %v\nwant %v", got, want)
+	}
+	edit := a.Rename("file:///Room.php", sources["file:///Room.php"], pos, "size", read)
+	if edit == nil {
+		t.Fatal("Room::area can be renamed")
+	}
+	count := 0
+	for _, edits := range edit.Changes {
+		count += len(edits)
+	}
+	if count != len(want) {
+		t.Errorf("rename edits the whole family and its calls, got %d edits: %+v", count, edit.Changes)
+	}
+}
+
+func TestRenameRefusesAMethodThatImplementsAVendorInterface(t *testing.T) {
+	src := "<?php\nnamespace App;\nclass Bag implements \\Vendor\\Sized { public function size(): int { return 0; } }\n"
+	a, read := setupRenameAnalyzer(map[string]string{"file:///Bag.php": src})
+	a.index.IndexFileWithSource("file:///vendor/Sized.php", "<?php\nnamespace Vendor;\ninterface Sized { public function size(): int; }\n", symbols.SourceVendor)
+	pos := positionOf(t, src, "size(): int")
+	if got := a.PrepareRename("file:///Bag.php", src, pos); got != nil {
+		t.Errorf("Vendor\\Sized::size can't be renamed, so neither can Bag::size: %+v", got)
+	}
+	if got := a.Rename("file:///Bag.php", src, pos, "count", read); got != nil {
+		t.Errorf("rename of Bag::size: %+v", got)
+	}
+}
