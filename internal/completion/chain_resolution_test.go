@@ -110,7 +110,8 @@ func TestChainReturnTypeResolution(t *testing.T) {
 	})
 
 	t.Run("full chain: query->with->get->map", func(t *testing.T) {
-		// Eloquent's Collection::map() gives a base collection, as Laravel declares it.
+		// These stubs declare no generics, as Laravel before 9 didn't, so the
+		// Laravel template fallbacks type map() as a base collection.
 		typ := resolve("Category::query()->with(['products'])->get(['id'])->map(fn($x) => $x)", preamble)
 		if typ != "Illuminate\\Support\\Collection" {
 			t.Errorf("expected Collection, got %q", typ)
@@ -124,6 +125,7 @@ func setupRealisticEloquentTest(t *testing.T) *Provider {
 	t.Helper()
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
+	idx.SetTemplateFallbacks(laravel.TemplateFallbacks())
 
 	idx.IndexFile("file:///vendor/Model.php", `<?php
 namespace Illuminate\Database\Eloquent;

@@ -386,65 +386,6 @@ func HasNullInUnion(union string) bool {
 	return strings.TrimSpace(union[start:]) == "null"
 }
 
-// buildTemplateSubst builds a map from template parameter names to concrete types
-// using the class's @template declarations and the provided type context.
-// E.g., Builder has @template TModel, typeContext is [{FQN: "Category"}]
-// → returns {"TModel": {FQN: "Category"}}.
-func buildTemplateSubst(index *symbols.Index, classFQN string, typeContext []ResolvedType) map[string]ResolvedType {
-	if len(typeContext) == 0 {
-		return nil
-	}
-
-	// First check the class's own @template tags from Symbol.Templates
-	sym := index.Lookup(classFQN)
-	if sym != nil && len(sym.Templates) > 0 {
-		subst := make(map[string]ResolvedType)
-		for i, tmpl := range sym.Templates {
-			if i < len(typeContext) {
-				subst[tmpl.Name] = typeContext[i]
-			}
-		}
-		return subst
-	}
-
-	// Fall back to the hardcoded knownTemplates registry
-	if tmpl, ok := knownTemplates[classFQN]; ok {
-		subst := make(map[string]ResolvedType)
-		for i, paramName := range tmpl.Params {
-			if i < len(typeContext) {
-				subst[paramName] = typeContext[i]
-			}
-		}
-		return subst
-	}
-
-	return nil
-}
-
-// resolveTypeParam resolves a type name that could be static/self/$this,
-// a template parameter name (TModel), or a regular class name.
-func resolveTypeParam(r *Resolver, name, staticFQN string, templateSubst map[string]ResolvedType, file *parser.FileNode) string {
-	switch name {
-	case "static", "self", "$this":
-		return staticFQN
-	}
-	if sub, ok := templateSubst[name]; ok {
-		return sub.FQN
-	}
-	return r.ResolveClassName(name, file)
-}
-
-// resolveStaticOrClassName resolves "static"/"self"/"$this" to the caller FQN,
-// or resolves a regular class name through use statements.
-func resolveStaticOrClassName(r *Resolver, name, staticFQN string, file *parser.FileNode) string {
-	switch name {
-	case "static", "self", "$this":
-		return staticFQN
-	default:
-		return r.ResolveClassName(name, file)
-	}
-}
-
 func (r *Resolver) resolveDocType(raw string, file *parser.FileNode) ResolvedType {
 	return r.applyEnv(ParseGenericType(raw), typeEnv{file: file, fileFirst: true})
 }

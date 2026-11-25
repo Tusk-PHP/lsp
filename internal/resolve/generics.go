@@ -335,7 +335,7 @@ func (r *Resolver) templatesOf(classFQN string) []symbols.TemplateParam {
 			return sym.Templates
 		}
 	}
-	if tmpl, ok := knownTemplates[classFQN]; ok {
+	if tmpl, ok := r.fallbackTemplates(classFQN); ok {
 		out := make([]symbols.TemplateParam, len(tmpl.Params))
 		for i, name := range tmpl.Params {
 			out[i] = symbols.TemplateParam{Name: name}
