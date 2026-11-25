@@ -15,7 +15,7 @@ func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Positi
 	if ctx == nil || ctx.SymbolText == "" {
 		return nil
 	}
-	if ctx.SymbolKind == sourcectx.ContextSymbolVariable && ctx.SymbolText != "$this" && ctx.AccessKind != sourcectx.AccessStatic {
+	if a.mayBeLocalVariable(ctx) {
 		if highlights := highlightVariableOccurrences(source, pos, ctx.SymbolText); highlights != nil {
 			return highlights
 		}
@@ -45,6 +45,11 @@ func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Positi
 		highlights = append(highlights, protocol.DocumentHighlight{Range: rng, Kind: highlightKind(rng, decl, pos)})
 	}
 	return highlights
+}
+
+func (a *Analyzer) mayBeLocalVariable(ctx *sourcectx.NameContext) bool {
+	return ctx.SymbolKind == sourcectx.ContextSymbolVariable && ctx.SymbolText != "$this" && ctx.AccessKind != sourcectx.AccessStatic &&
+		a.index.MemberDeclaredAt(ctx.URI, ctx.Position, ctx.SymbolText) == nil
 }
 
 func mayName(tokens []parser.Token, i int, target *symbols.Symbol) bool {
