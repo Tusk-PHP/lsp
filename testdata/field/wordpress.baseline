@@ -235,6 +235,3 @@ src/wp-includes/version.php	unused-variable	Variable $required_php_version is as
 src/wp-includes/version.php	unused-variable	Variable $tinymce_version is assigned but never read
 src/wp-includes/version.php	unused-variable	Variable $wp_db_version is assigned but never read
 src/wp-includes/version.php	unused-variable	Variable $wp_version is assigned but never read
-src/wp-login.php	unknown-member	Unknown member 'has_cap' on 'WP_Error'
-src/wp-login.php	unknown-member	Unknown member 'has_cap' on 'WP_Error'
-src/wp-login.php	unknown-member	Unknown member 'has_cap' on 'WP_Error'
