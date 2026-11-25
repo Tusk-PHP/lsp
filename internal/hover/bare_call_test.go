@@ -28,3 +28,20 @@ func TestHoverOnABareCallShowsOnlyAFunction(t *testing.T) {
 		t.Errorf("a bare call shows the function PHP calls, got %+v", h)
 	}
 }
+
+func TestHoverOnAMemberSharedByAMethodAndAPropertyFollowsTheCall(t *testing.T) {
+	room := "<?php\nnamespace App;\nclass Room {\n    /** The stored area. */\n    private float $area = 0.0;\n    /** Computes the area. */\n    public function area(): float { return $this->area; }\n    public function twice(): float { return $this->area() * 2; }\n}\n"
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	idx.IndexFile("file:///Room.php", room)
+	p := NewProvider(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"), "none")
+	at := func(needle string) protocol.Position {
+		i := strings.Index(room, needle)
+		return protocol.Position{Line: strings.Count(room[:i], "\n"), Character: i - strings.LastIndex(room[:i], "\n") - 1}
+	}
+	for needle, want := range map[string]string{"area() * 2": "Computes the area.", "area; }": "The stored area."} {
+		if h := p.GetHover("file:///Room.php", room, at(needle)); h == nil || !strings.Contains(h.Contents.Value, want) {
+			t.Errorf("hover on %q: got %+v, want %q", needle, h, want)
+		}
+	}
+}
