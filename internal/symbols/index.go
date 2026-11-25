@@ -441,7 +441,10 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 			Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve), traitRules: newTraitRules(fqn, c.TraitRules, resolve),
 			Attributes: indexAttributes(c.Attributes, resolve),
 			Range:      symRange(c.StartLine, c.StartCol, len(c.Name))}
-		previous := idx.symbols[fqn]
+		var previous *Symbol
+		if src == SourceBuiltin {
+			previous = idx.builtinLocked(fqn)
+		}
 		if c.Extends != "" {
 			sym.Extends = resolve(c.Extends)
 		}
@@ -528,6 +531,14 @@ func (idx *Index) addSymbol(uri string, sym *Symbol) {
 			idx.narrowingNames = make(map[string]int)
 		}
 		idx.narrowingNames[strings.ToLower(sym.Name)]++
+	}
+	if idx.declaredOverBuiltinLocked(sym) {
+		if sym.Kind.IsMember() {
+			idx.fileSymbols[uri] = append(idx.fileSymbols[uri], sym)
+		} else {
+			idx.shadowBuiltinLocked(sym)
+		}
+		return
 	}
 	if sym.Source != SourceGenerated && !sym.Kind.IsMember() {
 		// A real declaration replaces a class generated under the same name.

@@ -298,7 +298,10 @@ func (idx *Index) RegisterBuiltinsForProfile(profile BuiltinProfile) {
 func (idx *Index) registerBuiltinRegistry(profile BuiltinProfile) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
+	idx.registerBuiltinRegistryLocked(profile)
+}
 
+func (idx *Index) registerBuiltinRegistryLocked(profile BuiltinProfile) {
 	for _, fn := range builtinFunctions {
 		if !builtinAvailable(fn.Name, profile) {
 			continue
@@ -307,7 +310,7 @@ func (idx *Index) registerBuiltinRegistry(profile BuiltinProfile) {
 	}
 
 	for _, name := range generatedBuiltinFunctionNames {
-		if idx.symbols[name] != nil {
+		if idx.builtinLocked(name) != nil {
 			continue
 		}
 		if !builtinAvailable(name, profile) {
@@ -324,7 +327,7 @@ func (idx *Index) registerBuiltinRegistry(profile BuiltinProfile) {
 	}
 
 	for _, name := range generatedBuiltinClassLikeNames {
-		if idx.symbols[name] != nil {
+		if idx.builtinLocked(name) != nil {
 			continue
 		}
 		if !builtinAvailable(name, profile) {
@@ -458,8 +461,12 @@ func (idx *Index) storeBuiltinLocked(sym *Symbol) {
 
 func (idx *Index) shadowBuiltinLocked(sym *Symbol) {
 	defs := idx.shadowed[sym.FQN]
-	if i := slices.IndexFunc(defs, func(def *Symbol) bool { return def.URI == sym.URI }); i >= 0 {
-		idx.fileSymbols[sym.URI] = withSymbolReplaced(idx.fileSymbols[sym.URI], defs[i], sym)
+	if i := slices.IndexFunc(defs, func(def *Symbol) bool { return def.Source == SourceBuiltin }); i >= 0 {
+		if defs[i].URI == sym.URI {
+			idx.fileSymbols[sym.URI] = withSymbolReplaced(idx.fileSymbols[sym.URI], defs[i], sym)
+		} else {
+			idx.fileSymbols[sym.URI] = append(idx.fileSymbols[sym.URI], sym)
+		}
 		defs[i] = sym
 		return
 	}
