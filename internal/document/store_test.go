@@ -71,8 +71,8 @@ func TestStoreRejectsChangesItCannotApply(t *testing.T) {
 		t.Errorf("change to a closed document: %v", err)
 	}
 	s.Open("file:///x.php", 1, "<?php\n")
-	if _, err := s.Change("file:///x.php", 2, UTF16, []Change{{Range: at(9, 0, 9, 0), Text: "x"}}); err == nil || !strings.Contains(err.Error(), "file:///x.php, version 2") {
-		t.Errorf("change past the end: %v", err)
+	if _, err := s.Change("file:///x.php", 2, UTF16, []Change{{Range: at(-1, 0, 0, 0), Text: "x"}}); err == nil || !strings.Contains(err.Error(), "file:///x.php, version 2") {
+		t.Errorf("a negative position: %v", err)
 	}
 	if doc, _ := s.Get("file:///x.php"); doc.Version != 1 || doc.Text != "<?php\n" {
 		t.Errorf("a rejected change left %+v", doc)

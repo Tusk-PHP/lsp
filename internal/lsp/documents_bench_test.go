@@ -13,12 +13,21 @@ func BenchmarkDidChangeLargeFile(b *testing.B) {
 	text := "{\n" + strings.Repeat(line, 20000) + "}\n"
 	edited := text[:len(text)/2] + "x" + text[len(text)/2:]
 	uri := "file:///big.json"
+	insertAt := func(line int) map[string]any {
+		pos := map[string]any{"line": line, "character": 20}
+		return map[string]any{"range": map[string]any{"start": pos, "end": pos}, "text": "x"}
+	}
+	cursors := make([]any, 0, 100)
+	for line := 20000 - 100; line > 0; line -= 200 {
+		cursors = append(cursors, insertAt(line))
+	}
 	for _, bc := range []struct {
-		name   string
-		change map[string]any
+		name    string
+		changes []any
 	}{
-		{"incremental edit", map[string]any{"range": map[string]any{"start": map[string]any{"line": 10000, "character": 20}, "end": map[string]any{"line": 10000, "character": 20}}, "text": "x"}},
-		{"full text", map[string]any{"text": edited}},
+		{"incremental edit", []any{insertAt(10000)}},
+		{"100 cursors", cursors},
+		{"full text", []any{map[string]any{"text": edited}}},
 	} {
 		b.Run(bc.name, func(b *testing.B) {
 			body, err := json.Marshal(map[string]any{
@@ -26,7 +35,7 @@ func BenchmarkDidChangeLargeFile(b *testing.B) {
 				"method":  "textDocument/didChange",
 				"params": map[string]any{
 					"textDocument":   map[string]any{"uri": uri, "version": 2},
-					"contentChanges": []any{bc.change},
+					"contentChanges": bc.changes,
 				},
 			})
 			if err != nil {

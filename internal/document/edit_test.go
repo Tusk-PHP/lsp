@@ -92,6 +92,43 @@ func TestApply(t *testing.T) {
 			changes: []Change{{Range: at(1, 8, 1, 8), Text: ";\n"}},
 			want:    "<?php\necho 'é';\n",
 		},
+		{
+			name:    "an end at the start of the line after the last clamps to the end of the text",
+			text:    "a\nb",
+			enc:     UTF16,
+			changes: []Change{{Range: at(0, 1, 2, 0), Text: ""}},
+			want:    "a",
+		},
+		{
+			name:    "a range past the last line inserts at the end",
+			text:    "<?php\né\n",
+			enc:     UTF16,
+			changes: []Change{{Range: at(9, 4, 12, 0), Text: "end();"}},
+			want:    "<?php\né\nend();",
+		},
+		{
+			name: "one change per cursor, bottom to top, as VS Code sends them",
+			text: "<?php\n$a = 'é';\n$b = 'é';\n$c = 'é';\n",
+			enc:  UTF16,
+			changes: []Change{
+				{Range: at(3, 0, 3, 2), Text: "$zz"},
+				{Range: at(2, 0, 2, 2), Text: ""},
+				{Range: at(1, 0, 1, 2), Text: "$yy"},
+			},
+			want: "<?php\n$yy = 'é';\n = 'é';\n$zz = 'é';\n",
+		},
+		{
+			name: "one change per cursor, top to bottom, growing and shrinking the text",
+			text: "<?php\n$a = 'é';\n$b = 'é';\n$c = 'é';\n",
+			enc:  UTF16,
+			changes: []Change{
+				{Range: at(1, 6, 1, 7), Text: "😀😀\n"},
+				{Range: at(3, 0, 4, 0), Text: ""},
+				{Range: at(3, 6, 3, 7), Text: ""},
+				{Range: at(0, 5, 0, 5), Text: " // top"},
+			},
+			want: "<?php // top\n$a = '😀😀\n';\n$c = '';\n",
+		},
 	}
 	for _, c := range cases {
 		got, err := Apply(c.text, c.enc, c.changes)
@@ -111,7 +148,6 @@ func TestApplyRejectsChangesThatDoNotFit(t *testing.T) {
 		change Change
 		want   string
 	}{
-		{"line past the end", Change{Range: at(5, 0, 5, 0)}, "line 5 is past the last line"},
 		{"end before start", Change{Range: at(1, 3, 1, 1)}, "before its start"},
 		{"negative", Change{Range: at(-1, 0, 0, 0)}, "negative"},
 	}
