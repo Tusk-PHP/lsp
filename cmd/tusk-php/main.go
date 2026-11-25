@@ -21,6 +21,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/introspect"
 	"github.com/Tusk-PHP/lsp/internal/lsp"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/strict"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/unuseddeps"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -85,8 +86,12 @@ func main() {
 		}
 		os.Exit(0)
 	}
-	// Strict mode is enabled via flag OR the TUSK_STRICT environment variable.
-	strict := *strictMode || isTruthy(os.Getenv("TUSK_STRICT"))
+	if *strictMode {
+		if err := os.Setenv(strict.EnvVar, "1"); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to enable strict mode: %v\n", err)
+			os.Exit(1)
+		}
+	}
 	var logger *log.Logger
 	if *logFile != "" {
 		f, err := os.OpenFile(*logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
@@ -102,20 +107,10 @@ func main() {
 	logger.Printf("Starting tusk-php %s", version)
 	lsp.ServerVersion = version
 	server := lsp.NewServer(serverStdin(), os.Stdout, logger)
-	server.SetStrict(strict)
+	server.SetStrict(strict.Enabled())
 	if err := server.Run(); err != nil {
 		logger.Fatalf("Server error: %v", err)
 	}
-}
-
-// isTruthy returns true when s is one of the common truthy env-var values
-// ("1", "true", "yes", "on"), case-insensitively.
-func isTruthy(s string) bool {
-	switch s {
-	case "1", "true", "True", "TRUE", "yes", "Yes", "YES", "on", "On", "ON":
-		return true
-	}
-	return false
 }
 
 // loadProjectMetadata loads config and detects the PHP builtin profile for a

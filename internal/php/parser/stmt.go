@@ -22,7 +22,7 @@ func (p *parser) block() *ast.Block {
 	if !p.expect(token.LeftBrace) {
 		return nil
 	}
-	stmts := p.statements(isEOF)
+	stmts := p.statements(noStop)
 	p.expect(token.RightBrace)
 	return &ast.Block{Stmts: stmts, Span: p.span(start)}
 }

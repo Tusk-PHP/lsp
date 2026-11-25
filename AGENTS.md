@@ -64,7 +64,8 @@ above it in this list**, never from a later one:
 
 1. **Wire types and identifiers:** `protocol` (LSP types, no logic), `rule`
    (diagnostic codes, severities and sources: every code a finding carries is a
-   `rule.Code` constant listed in `rule.All`).
+   `rule.Code` constant listed in `rule.All`), `strict` (whether a recovered
+   panic is raised again: `-strict` or `TUSK_STRICT`).
 2. **Language core:** `php/token`, `php/lexer`, `php/ast` and `php/parser` (a
    lossless lexer that matches the tokenizer of PHP 7.4 and 8.0 to 8.6, and a full
    fault-tolerant parser that matches PHP 8.0 to 8.5's own parser and reads PHP
@@ -231,7 +232,8 @@ cross-file answer on a 9,700-file Laravel app. Every change must keep it.
   each one, then run `make field-baseline-update` and commit the result.
 - The parser must stay fault-tolerant: bail-out conditions, progress guards,
   partial results on panic. Message handlers and goroutines recover panics
-  (`recoverPanic`, `goSafe`); `-strict` / `TUSK_STRICT` re-panics in development.
+  (`recoverPanic`, `goSafe`, and the parser's own guard); `-strict` / `TUSK_STRICT`
+  re-panics in development, read through `strict.Enabled()`.
 
 ## Before opening a pull request
 

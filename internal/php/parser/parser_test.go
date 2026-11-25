@@ -15,6 +15,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/php/lexer"
 	"github.com/Tusk-PHP/lsp/internal/php/phpref"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
+	"github.com/Tusk-PHP/lsp/internal/strict"
 )
 
 var programs = []string{
@@ -561,11 +562,19 @@ func checkTree(t *testing.T, src string, version token.Version) {
 }
 
 func treeProblem(src string, version token.Version) string {
-	file := Parse(src, version)
 	var toks []lexer.Token
 	for _, tok := range lexer.Lex(src, version) {
 		if tok.Kind != token.Whitespace && tok.Kind != token.Comment && tok.Kind != token.DocComment {
 			toks = append(toks, tok)
+		}
+	}
+	return fileProblem(src, Parse(src, version), toks)
+}
+
+func fileProblem(src string, file *ast.File, toks []lexer.Token) string {
+	for _, e := range file.Errors {
+		if strings.HasPrefix(e.Message, internalErrorPrefix) {
+			return e.Message
 		}
 	}
 	clean := len(file.Errors) == 0
@@ -812,6 +821,25 @@ func TestAPanicKeepsThePartialFileAndReportsIt(t *testing.T) {
 	})
 	if len(file.Stmts) != 1 || len(p.errors) != 1 || p.errors[0].Message != "internal parser error: boom" {
 		t.Fatalf("got %v %v", file.Stmts, p.errors)
+	}
+}
+
+func TestAPanicIsRaisedAgainInStrictMode(t *testing.T) {
+	t.Setenv(strict.EnvVar, "1")
+	defer func() {
+		if r := recover(); r != "boom" {
+			t.Fatalf("got %v, want the panic raised again", r)
+		}
+	}()
+	p := &parser{src: "<?php"}
+	p.guard(func() { panic("boom") })
+	t.Fatal("guard swallowed the panic")
+}
+
+func TestTreeProblemReportsAPanic(t *testing.T) {
+	file := &ast.File{Errors: []ast.Error{{Message: internalErrorPrefix + "boom"}}}
+	if problem := fileProblem("<?php", file, nil); problem != internalErrorPrefix+"boom" {
+		t.Fatalf("got %q", problem)
 	}
 }
 
