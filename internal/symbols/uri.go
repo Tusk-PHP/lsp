@@ -17,6 +17,10 @@ func URIToPath(uri string) string {
 	return filepath.FromSlash(uriSlashPath(uri, hostWindows))
 }
 
+func PathToURI(path string) string {
+	return slashPathToURI(slashPath(path, hostWindows))
+}
+
 func uriSlashPath(uri string, windows bool) string {
 	if rest, ok := strings.CutPrefix(uri, fileScheme); ok && windows && startsWithDrive(rest) {
 		return slashPath(rest, windows)
@@ -29,14 +33,25 @@ func uriSlashPath(uri string, windows bool) string {
 	if windows && strings.HasPrefix(p, "/") && startsWithDrive(p[1:]) {
 		p = p[1:]
 	}
-	return path.Clean(p)
+	return slashPath(p, windows)
 }
 
 func slashPath(p string, windows bool) string {
-	if windows {
-		p = strings.ReplaceAll(p, `\`, "/")
+	if !windows {
+		return path.Clean(p)
 	}
-	return path.Clean(p)
+	p = path.Clean(strings.ReplaceAll(p, `\`, "/"))
+	if startsWithDrive(p) {
+		p = strings.ToUpper(p[:1]) + p[1:]
+	}
+	return p
+}
+
+func slashPathToURI(p string) string {
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return (&url.URL{Scheme: "file", Path: p}).String()
 }
 
 func startsWithDrive(p string) bool {
@@ -45,12 +60,4 @@ func startsWithDrive(p string) bool {
 	}
 	letter := p[0] | 0x20
 	return 'a' <= letter && letter <= 'z'
-}
-
-func PathToURI(path string) string {
-	slashed := filepath.ToSlash(path)
-	if !strings.HasPrefix(slashed, "/") {
-		slashed = "/" + slashed
-	}
-	return (&url.URL{Scheme: "file", Path: slashed}).String()
 }
