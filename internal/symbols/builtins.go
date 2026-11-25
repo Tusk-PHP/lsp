@@ -435,24 +435,14 @@ func parseBuiltinMajorMinor(version string) (int, int) {
 
 func (idx *Index) addBuiltinFunctionLocked(name string, params []ParamInfo, ret string, doc string) {
 	sym := &Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: "builtin", ReturnType: ret, DocComment: doc, Params: params}
-	idx.symbols[sym.FQN] = sym
-	idx.nameIndex[sym.Name] = appendUnique(idx.nameIndex[sym.Name], sym.FQN)
+	idx.storeSymbolLocked(sym)
 	idx.fileSymbols[sym.URI] = appendUniqueSymbol(idx.fileSymbols[sym.URI], sym)
-	idx.sortedNamesDirty = true
-	idx.sortedFQNsDirty = true
-	idx.namespaceIndex[namespaceForFQN(sym.FQN)] = appendUnique(idx.namespaceIndex[namespaceForFQN(sym.FQN)], sym.FQN)
-	idx.addFoldLocked(sym.FQN)
 }
 
 func (idx *Index) addBuiltinClassLikeLocked(name string, doc string) {
 	sym := &Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: "builtin", DocComment: doc}
-	idx.symbols[sym.FQN] = sym
-	idx.nameIndex[sym.Name] = appendUnique(idx.nameIndex[sym.Name], sym.FQN)
+	idx.storeSymbolLocked(sym)
 	idx.fileSymbols[sym.URI] = appendUniqueSymbol(idx.fileSymbols[sym.URI], sym)
-	idx.sortedNamesDirty = true
-	idx.sortedFQNsDirty = true
-	idx.namespaceIndex[namespaceForFQN(sym.FQN)] = appendUnique(idx.namespaceIndex[namespaceForFQN(sym.FQN)], sym.FQN)
-	idx.addFoldLocked(sym.FQN)
 }
 
 func appendUniqueSymbol(symbols []*Symbol, sym *Symbol) []*Symbol {
