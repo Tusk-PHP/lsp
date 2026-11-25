@@ -21,6 +21,8 @@ use function Other\helper;
 		`Lib\run`:                        `Vendor\Lib\run`,
 		`Sub\run`:                        `App\Sub\run`,
 		`helper`:                         `Other\helper`,
+		`HELPER`:                         `Other\helper`,
+		`lib\run`:                        `Vendor\Lib\run`,
 		`strlen`:                         `App\strlen Global fallback`,
 	}
 	for name, want := range cases {
@@ -55,6 +57,8 @@ func TestImportedName(t *testing.T) {
 		{"", "class", ""},
 		{`\Full\Name`, "class", `Full\Name`},
 		{`Helpers\go`, "class", `Lib\Helpers\go`},
+		{`helpers\go`, "class", `Lib\Helpers\go`},
+		{"HELPERS", "class", `Lib\Helpers`},
 		{"run", "class", `App\run`},
 		{"run", "", `Lib\run`},
 	} {
