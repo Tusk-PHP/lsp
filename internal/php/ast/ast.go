@@ -20,6 +20,8 @@ type Node interface {
 type Expr interface {
 	Node
 	exprNode()
+	Parenthesized() bool
+	markParenthesized()
 }
 
 type Stmt interface {
@@ -37,9 +39,19 @@ type Type interface {
 	typeNode()
 }
 
-type expr struct{}
+type expr struct {
+	parenthesized bool
+}
 
 func (expr) exprNode() {}
+
+func (e expr) Parenthesized() bool { return e.parenthesized }
+
+func (e *expr) markParenthesized() { e.parenthesized = true }
+
+func Parenthesize(e Expr) {
+	e.markParenthesized()
+}
 
 type stmt struct{}
 
@@ -55,8 +67,9 @@ func (typ) typeNode() {}
 
 type File struct {
 	Span
-	Stmts  []Stmt
-	Errors []Error
+	Shebang Span
+	Stmts   []Stmt
+	Errors  []Error
 }
 
 type Error struct {
@@ -152,15 +165,15 @@ type VariableVariable struct {
 }
 
 type Literal struct {
-	expr
 	Span
 	Kind token.Kind
+	expr
 }
 
 type InterpolatedString struct {
-	expr
 	Span
-	Kind  token.Kind
+	Kind token.Kind
+	expr
 	Parts []Expr
 }
 
@@ -170,9 +183,9 @@ type StringPart struct {
 }
 
 type MagicConst struct {
-	expr
 	Span
 	Kind token.Kind
+	expr
 }
 
 type ConstFetch struct {
@@ -190,46 +203,46 @@ type ArrayItem struct {
 }
 
 type Array struct {
-	expr
 	Span
 	Short bool
+	expr
 	Items []*ArrayItem
 }
 
 type List struct {
-	expr
 	Span
 	Short bool
+	expr
 	Items []*ArrayItem
 }
 
 type Binary struct {
-	expr
 	Span
-	Op    token.Kind
+	Op token.Kind
+	expr
 	Left  Expr
 	Right Expr
 }
 
 type Unary struct {
-	expr
 	Span
-	Op      token.Kind
+	Op token.Kind
+	expr
 	Operand Expr
 }
 
 type Postfix struct {
-	expr
 	Span
-	Op      token.Kind
+	Op token.Kind
+	expr
 	Operand Expr
 }
 
 type Assign struct {
-	expr
 	Span
-	Op     token.Kind
-	ByRef  bool
+	Op    token.Kind
+	ByRef bool
+	expr
 	Target Expr
 	Value  Expr
 }
@@ -243,9 +256,9 @@ type Ternary struct {
 }
 
 type Cast struct {
-	expr
 	Span
-	Kind    token.Kind
+	Kind token.Kind
+	expr
 	Operand Expr
 }
 
@@ -269,9 +282,9 @@ type Empty struct {
 }
 
 type Include struct {
-	expr
 	Span
-	Kind    token.Kind
+	Kind token.Kind
+	expr
 	Operand Expr
 }
 
@@ -335,12 +348,12 @@ type New struct {
 }
 
 type MethodCall struct {
-	expr
 	Span
 	Object   Expr
 	Name     Expr
 	Nullsafe bool
-	Args     *ArgList
+	expr
+	Args *ArgList
 }
 
 type StaticCall struct {
@@ -352,11 +365,11 @@ type StaticCall struct {
 }
 
 type PropertyFetch struct {
-	expr
 	Span
 	Object   Expr
 	Name     Expr
 	Nullsafe bool
+	expr
 }
 
 type StaticPropertyFetch struct {
@@ -392,11 +405,11 @@ type ClosureUse struct {
 }
 
 type Closure struct {
-	expr
 	Span
-	Attrs      []*AttributeGroup
-	Static     bool
-	ByRef      bool
+	Attrs  []*AttributeGroup
+	Static bool
+	ByRef  bool
+	expr
 	Params     []*Param
 	Uses       []*ClosureUse
 	ReturnType Type
@@ -404,11 +417,11 @@ type Closure struct {
 }
 
 type ArrowFunction struct {
-	expr
 	Span
-	Attrs      []*AttributeGroup
-	Static     bool
-	ByRef      bool
+	Attrs  []*AttributeGroup
+	Static bool
+	ByRef  bool
+	expr
 	Params     []*Param
 	ReturnType Type
 	Body       Expr

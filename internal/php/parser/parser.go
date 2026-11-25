@@ -25,9 +25,8 @@ type parser struct {
 	errors    []ast.Error
 	truncated bool
 
-	parenthesized ast.Expr
-	depth         int
-	closers       []int32
+	depth   int
+	closers []int32
 
 	stmtStack   scratch[ast.Stmt]
 	exprStack   scratch[ast.Expr]
@@ -51,6 +50,8 @@ func ParseCode(src string, version token.Version) *ast.File {
 }
 
 func parse(src string, version token.Version, all []lexer.Token) *ast.File {
+	file := &ast.File{Span: ast.Span{End: uint32(len(src))}}
+	all, file.Shebang = skipShebang(src, all)
 	p := &parser{src: src, version: version, toks: all[:0]}
 	var doc ast.Span
 	for _, tok := range all {
@@ -69,11 +70,26 @@ func parse(src string, version token.Version, all []lexer.Token) *ast.File {
 			p.toks = append(p.toks, tok)
 		}
 	}
-	file := &ast.File{Span: ast.Span{End: uint32(len(src))}}
 	p.guard(func() { p.file(file) })
 	slices.SortStableFunc(p.errors, func(a, b ast.Error) int { return cmp.Compare(a.Start, b.Start) })
 	file.Errors = p.errors
 	return file
+}
+
+func skipShebang(src string, toks []lexer.Token) ([]lexer.Token, ast.Span) {
+	if len(toks) == 0 || toks[0].Kind != token.InlineHTML || !strings.HasPrefix(src, "#!") {
+		return toks, ast.Span{}
+	}
+	html := &toks[0]
+	end := html.End
+	if newline := strings.IndexByte(src[:end], '\n'); newline >= 0 {
+		end = uint32(newline + 1)
+	}
+	if end == html.End {
+		return toks[1:], ast.Span{End: end}
+	}
+	html.Start = end
+	return toks, ast.Span{End: end}
 }
 
 func (p *parser) file(file *ast.File) {

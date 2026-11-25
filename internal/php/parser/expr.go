@@ -111,7 +111,7 @@ func isVariable(e ast.Expr) bool {
 }
 
 func (p *parser) writable(e ast.Expr) bool {
-	return isVariable(e) && e != p.parenthesized
+	return isVariable(e) && !e.Parenthesized()
 }
 
 func (p *parser) assignable(target ast.Expr, op token.Kind) bool {
@@ -122,7 +122,7 @@ func (p *parser) assignable(target ast.Expr, op token.Kind) bool {
 	case *ast.List:
 		return true
 	case *ast.Array:
-		return t.Short && target != p.parenthesized
+		return t.Short && !target.Parenthesized()
 	}
 	return p.writable(target)
 }
@@ -136,7 +136,7 @@ func (p *parser) canFollow(e ast.Expr, k token.Kind) bool {
 	case k == token.LeftBrace && p.version >= token.PHP80:
 		k = token.LeftBracket
 	}
-	if e == p.parenthesized || isVariable(e) {
+	if e.Parenthesized() || isVariable(e) {
 		return true
 	}
 	switch e := e.(type) {
@@ -319,7 +319,7 @@ func (p *parser) clone() ast.Expr {
 		return &ast.Clone{Args: args, Span: p.span(start)}
 	}
 	inner := args.Args[0].Value
-	p.parenthesized = inner
+	ast.Parenthesize(inner)
 	operand := p.operators(p.postfix(inner, parenStart), bpClone, parenStart)
 	return &ast.Clone{Operand: operand, Span: p.span(start)}
 }
@@ -374,7 +374,7 @@ func (p *parser) primary() ast.Expr {
 		p.next()
 		inner := p.expr()
 		p.expect(token.RightParen)
-		p.parenthesized = inner
+		ast.Parenthesize(inner)
 		return p.postfix(inner, start)
 	case token.LeftBracket:
 		return p.array(true)
