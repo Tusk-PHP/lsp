@@ -1,22 +1,15 @@
 package symbols
 
-import (
-	"path"
-	"strings"
-)
-
-const fileScheme = "file://"
+import "path"
 
 type fileTree struct {
+	windows  bool
 	files    map[string]map[string]struct{}
 	children map[string]map[string]struct{}
 }
 
 func (t *fileTree) add(uri string) {
-	dir, ok := uriDir(uri)
-	if !ok {
-		return
-	}
+	dir := t.dirOf(uri)
 	if t.files == nil {
 		t.files = make(map[string]map[string]struct{})
 		t.children = make(map[string]map[string]struct{})
@@ -25,8 +18,7 @@ func (t *fileTree) add(uri string) {
 		t.files[dir] = make(map[string]struct{})
 	}
 	t.files[dir][uri] = struct{}{}
-	for dir != "/" {
-		parent := path.Dir(dir)
+	for parent := path.Dir(dir); parent != dir; dir, parent = parent, path.Dir(parent) {
 		if t.children[parent] == nil {
 			t.children[parent] = make(map[string]struct{})
 		}
@@ -34,28 +26,25 @@ func (t *fileTree) add(uri string) {
 			return
 		}
 		t.children[parent][dir] = struct{}{}
-		dir = parent
 	}
 }
 
 func (t *fileTree) remove(uri string) {
-	dir, ok := uriDir(uri)
-	if !ok || t.files[dir] == nil {
+	dir := t.dirOf(uri)
+	if t.files[dir] == nil {
 		return
 	}
 	delete(t.files[dir], uri)
-	for dir != "/" && len(t.files[dir]) == 0 && len(t.children[dir]) == 0 {
+	for parent := path.Dir(dir); parent != dir && len(t.files[dir]) == 0 && len(t.children[dir]) == 0; dir, parent = parent, path.Dir(parent) {
 		delete(t.files, dir)
 		delete(t.children, dir)
-		parent := path.Dir(dir)
 		delete(t.children[parent], dir)
-		dir = parent
 	}
 }
 
 func (t *fileTree) under(dir string) []string {
 	var out []string
-	pending := []string{path.Clean(dir)}
+	pending := []string{slashPath(dir, t.windows)}
 	for len(pending) > 0 {
 		dir := pending[len(pending)-1]
 		pending = pending[:len(pending)-1]
@@ -69,10 +58,6 @@ func (t *fileTree) under(dir string) []string {
 	return out
 }
 
-func uriDir(uri string) (string, bool) {
-	p, ok := strings.CutPrefix(uri, fileScheme)
-	if !ok || !strings.HasPrefix(p, "/") {
-		return "", false
-	}
-	return path.Dir(p), true
+func (t *fileTree) dirOf(uri string) string {
+	return path.Dir(uriSlashPath(uri, t.windows))
 }
