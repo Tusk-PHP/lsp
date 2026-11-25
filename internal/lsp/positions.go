@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"slices"
 
@@ -72,10 +73,9 @@ func (p *positions) rangeIn(uri string, r protocol.Range) protocol.Range {
 	return protocol.Range{Start: p.posIn(uri, r.Start), End: p.posIn(uri, r.End)}
 }
 
-func (p *positions) diagnosticsIn(uri string, ds []protocol.Diagnostic) {
-	for i := range ds {
-		ds[i].Range = p.rangeIn(uri, ds[i].Range)
-	}
+func (p *positions) diagnosticsIn(uri string, ds []protocol.Diagnostic) []protocol.Diagnostic {
+	out, _ := convertEach(ds, func(d *protocol.Diagnostic) bool { return convertTo(&d.Range, p.rangeIn(uri, d.Range)) })
+	return out
 }
 
 func (p *positions) identity(pos protocol.Position) bool {
@@ -119,10 +119,16 @@ func (p *positions) locationOut(loc *protocol.Location) *protocol.Location {
 }
 
 func (p *positions) hoverOut(uri string, h *protocol.Hover) *protocol.Hover {
-	if h != nil {
-		h.Range = p.rangePtrOut(uri, h.Range)
+	if h == nil {
+		return nil
 	}
-	return h
+	r := p.rangePtrOut(uri, h.Range)
+	if r == h.Range {
+		return h
+	}
+	out := *h
+	out.Range = r
+	return &out
 }
 
 func (p *positions) textEditsOut(uri string, edits []protocol.TextEdit) []protocol.TextEdit {
@@ -135,134 +141,188 @@ func (p *positions) convertTextEdits(uri string, edits []protocol.TextEdit) ([]p
 }
 
 func (p *positions) completionsOut(uri string, items []protocol.CompletionItem) []protocol.CompletionItem {
-	for i := range items {
-		if e := items[i].TextEdit; e != nil {
+	out, _ := convertEach(items, func(item *protocol.CompletionItem) bool {
+		changed := false
+		if e := item.TextEdit; e != nil {
 			if r := p.rangeOut(uri, e.Range); r != e.Range {
-				items[i].TextEdit = &protocol.TextEdit{Range: r, NewText: e.NewText}
+				item.TextEdit = &protocol.TextEdit{Range: r, NewText: e.NewText}
+				changed = true
 			}
 		}
-		items[i].AdditionalTextEdits = p.textEditsOut(uri, items[i].AdditionalTextEdits)
-	}
-	return items
+		if edits, ok := p.convertTextEdits(uri, item.AdditionalTextEdits); ok {
+			item.AdditionalTextEdits = edits
+			changed = true
+		}
+		return changed
+	})
+	return out
 }
 
 func (p *positions) workspaceEditOut(edit *protocol.WorkspaceEdit) *protocol.WorkspaceEdit {
+	out, _ := p.convertWorkspaceEdit(edit)
+	return out
+}
+
+func (p *positions) convertWorkspaceEdit(edit *protocol.WorkspaceEdit) (*protocol.WorkspaceEdit, bool) {
 	if edit == nil {
-		return nil
+		return nil, false
 	}
-	out := &protocol.WorkspaceEdit{DocumentChanges: slices.Clone(edit.DocumentChanges)}
-	if edit.Changes != nil {
-		out.Changes = make(map[string][]protocol.TextEdit, len(edit.Changes))
-		for uri, edits := range edit.Changes {
-			out.Changes[uri] = p.textEditsOut(uri, edits)
-		}
-	}
-	for i, change := range out.DocumentChanges {
+	changes, changesConverted := p.convertChanges(edit.Changes)
+	documentChanges, documentChangesConverted := convertEach(edit.DocumentChanges, func(change *protocol.DocumentChange) bool {
 		e := change.TextDocumentEdit
 		if e == nil {
+			return false
+		}
+		edits, converted := p.convertTextEdits(e.TextDocument.URI, e.Edits)
+		if converted {
+			change.TextDocumentEdit = &protocol.TextDocumentEdit{TextDocument: e.TextDocument, Edits: edits}
+		}
+		return converted
+	})
+	if !changesConverted && !documentChangesConverted {
+		return edit, false
+	}
+	out := *edit
+	out.Changes = changes
+	out.DocumentChanges = documentChanges
+	return &out, true
+}
+
+func (p *positions) convertChanges(changes map[string][]protocol.TextEdit) (map[string][]protocol.TextEdit, bool) {
+	var out map[string][]protocol.TextEdit
+	for uri, edits := range changes {
+		converted, ok := p.convertTextEdits(uri, edits)
+		if !ok {
 			continue
 		}
-		if edits, changed := p.convertTextEdits(e.TextDocument.URI, e.Edits); changed {
-			out.DocumentChanges[i].TextDocumentEdit = &protocol.TextDocumentEdit{TextDocument: e.TextDocument, Edits: edits}
+		if out == nil {
+			out = maps.Clone(changes)
 		}
+		out[uri] = converted
 	}
-	return out
+	if out == nil {
+		return changes, false
+	}
+	return out, true
 }
 
 func (p *positions) diagnosticsOut(uri string, ds []protocol.Diagnostic) []protocol.Diagnostic {
-	out, _ := convertEach(ds, func(d *protocol.Diagnostic) bool { return p.convertRange(uri, &d.Range) })
+	out, _ := p.convertDiagnostics(uri, ds)
 	return out
+}
+
+func (p *positions) convertDiagnostics(uri string, ds []protocol.Diagnostic) ([]protocol.Diagnostic, bool) {
+	return convertEach(ds, func(d *protocol.Diagnostic) bool { return p.convertRange(uri, &d.Range) })
 }
 
 func (p *positions) codeActionsOut(uri string, actions []protocol.CodeAction) []protocol.CodeAction {
-	for i := range actions {
-		a := &actions[i]
-		a.Diagnostics = p.diagnosticsOut(uri, a.Diagnostics)
-		a.Edit = p.workspaceEditOut(a.Edit)
-		if a.Command != nil && a.Command.Command == protocol.CommandCopyReference && len(a.Command.Arguments) == 2 {
-			a.Command.Arguments[1] = p.copyReferencePositionOut(uri, a.Command.Arguments[1])
-		}
-	}
-	return actions
-}
-
-func (p *positions) copyReferencePositionOut(uri string, arg json.RawMessage) json.RawMessage {
-	var pos protocol.Position
-	if err := json.Unmarshal(arg, &pos); err != nil {
-		panic("copyReference argument is not a position: " + err.Error())
-	}
-	out, err := json.Marshal(p.posOut(uri, pos))
-	if err != nil {
-		panic("encoding a position: " + err.Error())
-	}
+	out, _ := convertEach(actions, func(a *protocol.CodeAction) bool {
+		diagnostics, diagnosticsConverted := p.convertDiagnostics(uri, a.Diagnostics)
+		edit, editConverted := p.convertWorkspaceEdit(a.Edit)
+		command, commandConverted := p.convertCommand(uri, a.Command)
+		a.Diagnostics, a.Edit, a.Command = diagnostics, edit, command
+		return diagnosticsConverted || editConverted || commandConverted
+	})
 	return out
 }
 
-func (p *positions) documentSymbolsOut(uri string, syms []protocol.DocumentSymbol) []protocol.DocumentSymbol {
-	for i := range syms {
-		syms[i].Range = p.rangeOut(uri, syms[i].Range)
-		syms[i].SelectionRange = p.rangeOut(uri, syms[i].SelectionRange)
-		p.documentSymbolsOut(uri, syms[i].Children)
+func (p *positions) convertCommand(uri string, c *protocol.Command) (*protocol.Command, bool) {
+	if c == nil || c.Command != protocol.CommandCopyReference || len(c.Arguments) != 2 {
+		return c, false
 	}
-	return syms
+	var pos protocol.Position
+	if err := json.Unmarshal(c.Arguments[1], &pos); err != nil {
+		panic("copyReference argument is not a position: " + err.Error())
+	}
+	converted := p.posOut(uri, pos)
+	if converted == pos {
+		return c, false
+	}
+	arg, err := json.Marshal(converted)
+	if err != nil {
+		panic("encoding a position: " + err.Error())
+	}
+	out := *c
+	out.Arguments = []json.RawMessage{c.Arguments[0], arg}
+	return &out, true
+}
+
+func (p *positions) documentSymbolsOut(uri string, syms []protocol.DocumentSymbol) []protocol.DocumentSymbol {
+	out, _ := p.convertDocumentSymbols(uri, syms)
+	return out
+}
+
+func (p *positions) convertDocumentSymbols(uri string, syms []protocol.DocumentSymbol) ([]protocol.DocumentSymbol, bool) {
+	return convertEach(syms, func(sym *protocol.DocumentSymbol) bool {
+		rangeConverted := p.convertRange(uri, &sym.Range)
+		selectionConverted := p.convertRange(uri, &sym.SelectionRange)
+		children, childrenConverted := p.convertDocumentSymbols(uri, sym.Children)
+		sym.Children = children
+		return rangeConverted || selectionConverted || childrenConverted
+	})
 }
 
 func (p *positions) symbolInformationOut(syms []protocol.SymbolInformation) []protocol.SymbolInformation {
-	for i := range syms {
-		syms[i].Location.Range = p.rangeOut(syms[i].Location.URI, syms[i].Location.Range)
-	}
-	return syms
+	out, _ := convertEach(syms, func(sym *protocol.SymbolInformation) bool {
+		return p.convertRange(sym.Location.URI, &sym.Location.Range)
+	})
+	return out
 }
 
 func (p *positions) highlightsOut(uri string, hs []protocol.DocumentHighlight) []protocol.DocumentHighlight {
-	for i := range hs {
-		hs[i].Range = p.rangeOut(uri, hs[i].Range)
-	}
-	return hs
+	out, _ := convertEach(hs, func(h *protocol.DocumentHighlight) bool { return p.convertRange(uri, &h.Range) })
+	return out
 }
 
 func (p *positions) inlayHintsOut(uri string, hints []protocol.InlayHint) []protocol.InlayHint {
-	for i := range hints {
-		hints[i].Position = p.posOut(uri, hints[i].Position)
-	}
-	return hints
+	out, _ := convertEach(hints, func(h *protocol.InlayHint) bool { return convertTo(&h.Position, p.posOut(uri, h.Position)) })
+	return out
 }
 
 func (p *positions) selectionRangeOut(uri string, r protocol.SelectionRange) protocol.SelectionRange {
-	for node := &r; node != nil; node = node.Parent {
-		node.Range = p.rangeOut(uri, node.Range)
+	if r.Parent != nil {
+		if parent := p.selectionRangeOut(uri, *r.Parent); parent != *r.Parent {
+			r.Parent = &parent
+		}
 	}
+	r.Range = p.rangeOut(uri, r.Range)
 	return r
 }
 
 func (p *positions) documentLinksOut(uri string, links []protocol.DocumentLink) []protocol.DocumentLink {
-	for i := range links {
-		links[i].Range = p.rangeOut(uri, links[i].Range)
-	}
-	return links
+	out, _ := convertEach(links, func(l *protocol.DocumentLink) bool { return p.convertRange(uri, &l.Range) })
+	return out
 }
 
 func (p *positions) typeHierarchyOut(items []protocol.TypeHierarchyItem) []protocol.TypeHierarchyItem {
-	for i := range items {
-		items[i].Range = p.rangeOut(items[i].URI, items[i].Range)
-		items[i].SelectionRange = p.rangeOut(items[i].URI, items[i].SelectionRange)
-	}
-	return items
+	out, _ := convertEach(items, func(item *protocol.TypeHierarchyItem) bool {
+		rangeConverted := p.convertRange(item.URI, &item.Range)
+		selectionConverted := p.convertRange(item.URI, &item.SelectionRange)
+		return rangeConverted || selectionConverted
+	})
+	return out
 }
 
 func (p *positions) prepareRenameOut(uri string, r *protocol.PrepareRenameResult) *protocol.PrepareRenameResult {
-	if r != nil {
-		r.Range = p.rangeOut(uri, r.Range)
+	if r == nil {
+		return nil
 	}
-	return r
+	out := *r
+	if !p.convertRange(uri, &out.Range) {
+		return r
+	}
+	return &out
 }
 
 func (p *positions) convertRange(uri string, r *protocol.Range) bool {
-	out := p.rangeOut(uri, *r)
-	if out == *r {
+	return convertTo(r, p.rangeOut(uri, *r))
+}
+
+func convertTo[T comparable](target *T, converted T) bool {
+	if converted == *target {
 		return false
 	}
-	*r = out
+	*target = converted
 	return true
 }
 

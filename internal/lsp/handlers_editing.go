@@ -143,7 +143,7 @@ func (s *Server) handleCodeAction(msg *jsonRPCMessage) {
 	source := s.getDocument(uri)
 	p := s.positionsOf(uri, source)
 	params.Range = p.rangeIn(uri, params.Range)
-	p.diagnosticsIn(uri, params.Context.Diagnostics)
+	params.Context.Diagnostics = p.diagnosticsIn(uri, params.Context.Diagnostics)
 	if workspace.IsBlade(uri) {
 		s.sendResponse(msg.ID, p.codeActionsOut(uri, analyzer.BladeIgnoreDiagnosticActions(uri, source, params, s.providers.Custom())))
 		return
