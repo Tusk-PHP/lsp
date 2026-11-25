@@ -115,7 +115,7 @@ func TestLayoutTrailingCommentAt(t *testing.T) {
 		character int
 		style     CommentStyle
 	}{
-		{1, true, 10, PHPBlockComment},
+		{1, true, len("$a = 'é'; "), PHPBlockComment},
 		{2, true, 7, PHPComment},
 		{3, false, 0, 0},
 		{4, true, 3, PHPComment},

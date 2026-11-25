@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/document"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
@@ -61,15 +62,16 @@ func (s *Server) handleSemanticTokensFull(msg *jsonRPCMessage) {
 		return
 	}
 
-	source := s.getDocument(params.TextDocument.URI)
+	uri := params.TextDocument.URI
+	source := s.getDocument(uri)
 	pr := parser.New().Parse(source)
 
-	data := buildSemanticTokens(pr)
+	data := buildSemanticTokens(pr, document.NewColumns(source, s.encoding))
 	s.sendResponse(msg.ID, protocol.SemanticTokens{Data: data})
 }
 
 // buildSemanticTokens builds the LSP relative-encoded semantic token data from a ParseResult.
-func buildSemanticTokens(pr *parser.ParseResult) []uint32 {
+func buildSemanticTokens(pr *parser.ParseResult, cols *document.Columns) []uint32 {
 	var tokens []semToken
 
 	// Track ranges already covered by declaration tokens to avoid duplicates.
@@ -420,20 +422,22 @@ func buildSemanticTokens(pr *parser.ParseResult) []uint32 {
 	prevEncLine := 0
 	prevEncStart := 0
 	for _, tok := range deduped {
+		start := cols.ToClient(tok.line, tok.startChar)
+		length := cols.ToClient(tok.line, tok.startChar+tok.length) - start
 		deltaLine := tok.line - prevEncLine
-		deltaStart := tok.startChar
+		deltaStart := start
 		if deltaLine == 0 {
-			deltaStart = tok.startChar - prevEncStart
+			deltaStart = start - prevEncStart
 		}
 		result = append(result,
 			uint32(deltaLine),
 			uint32(deltaStart),
-			uint32(tok.length),
+			uint32(length),
 			tok.tokenType,
 			tok.modifiers,
 		)
 		prevEncLine = tok.line
-		prevEncStart = tok.startChar
+		prevEncStart = start
 	}
 
 	return result

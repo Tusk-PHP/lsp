@@ -9,12 +9,13 @@ func (s *Server) handlePrepareTypeHierarchy(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	req, ok := s.phpRequest(params.TextDocument.URI, params.Position)
+	p := s.positions()
+	req, ok := s.phpRequest(params.TextDocument.URI, p.posIn(params.TextDocument.URI, params.Position))
 	if !ok {
 		s.sendResponse(msg.ID, nil)
 		return
 	}
-	s.sendResponse(msg.ID, s.analyzer.PrepareTypeHierarchy(req.uri, req.source, req.pos))
+	s.sendResponse(msg.ID, p.typeHierarchyOut(s.analyzer.PrepareTypeHierarchy(req.uri, req.source, req.pos)))
 }
 
 func (s *Server) handleTypeHierarchyRelations(msg *jsonRPCMessage, related func(protocol.TypeHierarchyItem) []protocol.TypeHierarchyItem) {
@@ -22,5 +23,5 @@ func (s *Server) handleTypeHierarchyRelations(msg *jsonRPCMessage, related func(
 	if !ok {
 		return
 	}
-	s.sendResponse(msg.ID, related(params.Item))
+	s.sendResponse(msg.ID, s.positions().typeHierarchyOut(related(params.Item)))
 }

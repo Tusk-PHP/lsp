@@ -317,6 +317,8 @@ type SymfonyRouteInput struct {
 	Name string `json:"name" jsonschema:"Symfony route name"`
 }
 
+const rangeUnits = " Ranges are zero-based; a character counts UTF-8 bytes from the start of the line."
+
 func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, error) {
 	if rootPath == "" {
 		cwd, err := os.Getwd()
@@ -446,7 +448,7 @@ func (s *Service) registerTools() {
 
 	mcp.AddTool(s.Server, &mcp.Tool{
 		Name:        "php_find_references",
-		Description: "Find references for a PHP symbol by FQN.",
+		Description: "Find references for a PHP symbol by FQN." + rangeUnits,
 	}, func(_ context.Context, _ *mcp.CallToolRequest, in FindReferencesInput) (*mcp.CallToolResult, FindReferencesOutput, error) {
 		refs, err := s.findReferences(in.FQN)
 		if err != nil {
@@ -457,7 +459,7 @@ func (s *Service) registerTools() {
 
 	mcp.AddTool(s.Server, &mcp.Tool{
 		Name:        "php_diagnostics",
-		Description: "Run native in-process diagnostics for one PHP file or the indexed project. Excludes external tools like PHPStan and Pint.",
+		Description: "Run native in-process diagnostics for one PHP file or the indexed project. Excludes external tools like PHPStan and Pint." + rangeUnits,
 	}, func(_ context.Context, _ *mcp.CallToolRequest, in DiagnosticsInput) (*mcp.CallToolResult, DiagnosticsOutput, error) {
 		out, err := s.projectDiagnostics(in.Path)
 		if err != nil {
@@ -528,14 +530,14 @@ func (s *Service) registerTools() {
 	if s.Framework == "laravel" {
 		mcp.AddTool(s.Server, &mcp.Tool{
 			Name:        "laravel_routes",
-			Description: "List known Laravel route names and their definition locations.",
+			Description: "List known Laravel route names and their definition locations." + rangeUnits,
 		}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, LaravelRoutesOutput, error) {
 			return nil, LaravelRoutesOutput{Routes: s.laravelRoutes()}, nil
 		})
 
 		mcp.AddTool(s.Server, &mcp.Tool{
 			Name:        "laravel_route_to_controller",
-			Description: "Best-effort Laravel route definition lookup by route name. Returns the route definition location; controller extraction is not available in the current index.",
+			Description: "Best-effort Laravel route definition lookup by route name. Returns the route definition location; controller extraction is not available in the current index." + rangeUnits,
 		}, func(_ context.Context, _ *mcp.CallToolRequest, in LaravelRouteInput) (*mcp.CallToolResult, *LaravelRouteRecord, error) {
 			record := s.findLaravelRoute(in.Name)
 			if record == nil {
@@ -575,14 +577,14 @@ func (s *Service) registerTools() {
 	if s.Framework == "symfony" {
 		mcp.AddTool(s.Server, &mcp.Tool{
 			Name:        "symfony_routes",
-			Description: "List known Symfony route names, paths, and declaration file locations.",
+			Description: "List known Symfony route names, paths, and declaration file locations." + rangeUnits,
 		}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, SymfonyRoutesOutput, error) {
 			return nil, SymfonyRoutesOutput{Routes: s.symfonyRoutes()}, nil
 		})
 
 		mcp.AddTool(s.Server, &mcp.Tool{
 			Name:        "symfony_route_to_controller",
-			Description: "Look up a Symfony route by name and return its declaration location.",
+			Description: "Look up a Symfony route by name and return its declaration location." + rangeUnits,
 		}, func(_ context.Context, _ *mcp.CallToolRequest, in SymfonyRouteInput) (*mcp.CallToolResult, *SymfonyRouteRecord, error) {
 			record := s.findSymfonyRoute(in.Name)
 			if record == nil {

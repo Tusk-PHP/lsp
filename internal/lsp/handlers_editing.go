@@ -20,9 +20,11 @@ func (s *Server) handleCompletion(msg *jsonRPCMessage) {
 		return
 	}
 	uri := params.TextDocument.URI
+	p := s.positions()
+	pos := p.posIn(uri, params.Position)
 	if workspace.IsBlade(uri) {
-		if items, ok := s.bladeCompletion(uri, params.Position); ok {
-			s.sendResponse(msg.ID, items)
+		if items, ok := s.bladeCompletion(uri, pos); ok {
+			s.sendResponse(msg.ID, p.completionsOut(uri, items))
 			return
 		}
 	} else if params.Context != nil && params.Context.TriggerCharacter == "@" {
@@ -30,7 +32,7 @@ func (s *Server) handleCompletion(msg *jsonRPCMessage) {
 		s.sendResponse(msg.ID, []protocol.CompletionItem{})
 		return
 	}
-	req, ok := s.phpRequest(uri, params.Position)
+	req, ok := s.phpRequest(uri, pos)
 	if !ok {
 		s.sendResponse(msg.ID, []protocol.CompletionItem{})
 		return
@@ -39,7 +41,7 @@ func (s *Server) handleCompletion(msg *jsonRPCMessage) {
 	if req.doc != nil {
 		items = withViewVarCompletions(items, req.vars, req.template, req.offset)
 	}
-	s.sendResponse(msg.ID, items)
+	s.sendResponse(msg.ID, p.completionsOut(uri, items))
 }
 
 // handleCompletionResolve fills in the documentation and detail of a member
@@ -58,15 +60,17 @@ func (s *Server) handleHover(msg *jsonRPCMessage) {
 		return
 	}
 	uri := params.TextDocument.URI
+	p := s.positions()
+	pos := p.posIn(uri, params.Position)
 	if cardhover.IsComposerJSON(uri) {
-		s.sendResponse(msg.ID, s.composerHover.Hover(uri, s.getDocument(uri), params.Position))
+		s.sendResponse(msg.ID, p.hoverOut(uri, s.composerHover.Hover(uri, s.getDocument(uri), pos)))
 		return
 	}
-	if h, ok := s.bladeHover(uri, params.Position); ok {
-		s.sendResponse(msg.ID, h)
+	if h, ok := s.bladeHover(uri, pos); ok {
+		s.sendResponse(msg.ID, p.hoverOut(uri, h))
 		return
 	}
-	req, ok := s.phpRequest(uri, params.Position)
+	req, ok := s.phpRequest(uri, pos)
 	if !ok {
 		s.sendResponse(msg.ID, nil)
 		return
@@ -75,7 +79,7 @@ func (s *Server) handleHover(msg *jsonRPCMessage) {
 	if req.doc != nil {
 		h = s.viewVarHover(h, req.vars, req.template, req.offset)
 	}
-	s.sendResponse(msg.ID, h)
+	s.sendResponse(msg.ID, p.hoverOut(uri, h))
 }
 
 func (s *Server) handleSignatureHelp(msg *jsonRPCMessage) {
@@ -83,7 +87,7 @@ func (s *Server) handleSignatureHelp(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	req, ok := s.phpRequest(params.TextDocument.URI, params.Position)
+	req, ok := s.phpRequest(params.TextDocument.URI, s.positions().posIn(params.TextDocument.URI, params.Position))
 	if !ok {
 		s.sendResponse(msg.ID, nil)
 		return
@@ -96,7 +100,9 @@ func (s *Server) handlePrepareRename(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	req, ok := s.phpRequest(params.TextDocument.URI, params.Position)
+	uri := params.TextDocument.URI
+	p := s.positions()
+	req, ok := s.phpRequest(uri, p.posIn(uri, params.Position))
 	if !ok {
 		s.sendResponse(msg.ID, nil)
 		return
@@ -110,7 +116,7 @@ func (s *Server) handlePrepareRename(msg *jsonRPCMessage) {
 		}
 		result.Range = rng
 	}
-	s.sendResponse(msg.ID, result)
+	s.sendResponse(msg.ID, p.prepareRenameOut(uri, result))
 }
 
 func (s *Server) handleRename(msg *jsonRPCMessage) {
@@ -118,13 +124,14 @@ func (s *Server) handleRename(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	req, ok := s.phpRequest(params.TextDocument.URI, params.Position)
+	p := s.positions()
+	req, ok := s.phpRequest(params.TextDocument.URI, p.posIn(params.TextDocument.URI, params.Position))
 	if !ok {
 		s.sendResponse(msg.ID, nil)
 		return
 	}
 	result := s.analyzer.Rename(req.uri, req.source, req.pos, params.NewName, s.getDocumentReader())
-	s.sendResponse(msg.ID, req.workspaceEdit(result))
+	s.sendResponse(msg.ID, p.workspaceEditOut(req.workspaceEdit(result)))
 }
 
 func (s *Server) handleCodeAction(msg *jsonRPCMessage) {
@@ -132,12 +139,16 @@ func (s *Server) handleCodeAction(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	source := s.getDocument(params.TextDocument.URI)
-	if workspace.IsBlade(params.TextDocument.URI) {
-		s.sendResponse(msg.ID, analyzer.BladeIgnoreDiagnosticActions(params.TextDocument.URI, source, params, s.providers.Custom()))
+	uri := params.TextDocument.URI
+	source := s.getDocument(uri)
+	p := s.positionsOf(uri, source)
+	params.Range = p.rangeIn(uri, params.Range)
+	p.diagnosticsIn(uri, params.Context.Diagnostics)
+	if workspace.IsBlade(uri) {
+		s.sendResponse(msg.ID, p.codeActionsOut(uri, analyzer.BladeIgnoreDiagnosticActions(uri, source, params, s.providers.Custom())))
 		return
 	}
-	result := s.analyzer.GetCodeActions(params.TextDocument.URI, source, params)
+	result := s.analyzer.GetCodeActions(uri, source, params)
 	if len(params.Context.Only) > 0 {
 		filtered := result[:0]
 		for _, action := range result {
@@ -147,7 +158,7 @@ func (s *Server) handleCodeAction(msg *jsonRPCMessage) {
 		}
 		result = filtered
 	}
-	s.sendResponse(msg.ID, result)
+	s.sendResponse(msg.ID, p.codeActionsOut(uri, result))
 }
 
 func (s *Server) handleInlayHint(msg *jsonRPCMessage) {
@@ -155,8 +166,9 @@ func (s *Server) handleInlayHint(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	req := s.phpDocument(params.TextDocument.URI)
-	hints := req.inlayHints(s.inlayHint.GetInlayHints(req.uri, req.source, &s.cfg.InlayHints))
+	uri := params.TextDocument.URI
+	req := s.phpDocument(uri)
+	hints := s.positionsOf(uri, s.getDocument(uri)).inlayHintsOut(uri, req.inlayHints(s.inlayHint.GetInlayHints(req.uri, req.source, &s.cfg.InlayHints)))
 	// Filter to the requested line range.
 	filtered := hints[:0]
 	for _, h := range hints {

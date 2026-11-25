@@ -74,4 +74,6 @@ Framework-specific tools appear only when that framework is detected:
 | `symfony_routes`, `symfony_route_to_controller` | Symfony route intelligence |
 | `tusk_reindex` | Rebuild the workspace snapshot on demand |
 
+Every `range` in a tool result (references, diagnostics, routes, symbols) is zero-based, and its `character` counts bytes (UTF-8) from the start of the line, not characters, so a column after `é` or an emoji is larger than the number of characters before it.
+
 The server also exposes the same data as readable JSON resources: `project-summary`, `php-symbols`, and `db-schema-compact`, plus `laravel-routes` / `laravel-models` or `symfony-routes` depending on the detected framework.

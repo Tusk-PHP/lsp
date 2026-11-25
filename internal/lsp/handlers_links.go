@@ -17,7 +17,8 @@ func (s *Server) handleDocumentLink(msg *jsonRPCMessage) {
 		s.sendResponse(msg.ID, []protocol.DocumentLink{})
 		return
 	}
-	s.sendResponse(msg.ID, s.analyzer.DocumentLinks(uri, s.getDocument(uri), s.rootPath, fileExists))
+	source := s.getDocument(uri)
+	s.sendResponse(msg.ID, s.positionsOf(uri, source).documentLinksOut(uri, s.analyzer.DocumentLinks(uri, source, s.rootPath, fileExists)))
 }
 
 func fileExists(path string) bool {

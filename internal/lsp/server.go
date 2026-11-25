@@ -16,6 +16,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/coverage"
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
+	"github.com/Tusk-PHP/lsp/internal/document"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/hover"
@@ -74,6 +75,7 @@ type Server struct {
 	docIndex docIndexQueue
 	// diagDebounce delays diagnostics after edits (see scheduleDiagnostics).
 	diagDebounce diagDebouncer
+	encoding     document.Encoding
 	rootPath     string
 	framework    string
 	reader       *bufio.Reader

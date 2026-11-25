@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -13,12 +14,14 @@ func (s *Server) handleSelectionRange(msg *jsonRPCMessage) {
 		return
 	}
 
-	source := s.getDocument(params.TextDocument.URI)
+	uri := params.TextDocument.URI
+	source := s.getDocument(uri)
 	pr := parser.New().Parse(source)
+	p := s.positionsOf(uri, source)
 
 	result := make([]protocol.SelectionRange, 0, len(params.Positions))
 	for _, pos := range params.Positions {
-		result = append(result, buildSelectionChain(pr, pos, source))
+		result = append(result, p.selectionRangeOut(uri, buildSelectionChain(pr, p.posIn(uri, pos), source)))
 	}
 	s.sendResponse(msg.ID, result)
 }
@@ -113,25 +116,27 @@ func findWordRange(pr *parser.ParseResult, pos protocol.Position) *protocol.Rang
 		return nil
 	}
 	line := pr.Lines[pos.Line]
-	runes := []rune(line)
-	ch := pos.Character
-	if ch > len(runes) {
-		ch = len(runes)
-	}
+	ch := min(pos.Character, len(line))
 
 	isWordChar := func(r rune) bool {
 		return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '$'
 	}
 
-	// Find start of word
 	start := ch
-	for start > 0 && isWordChar(runes[start-1]) {
-		start--
+	for start > 0 {
+		r, size := utf8.DecodeLastRuneInString(line[:start])
+		if !isWordChar(r) {
+			break
+		}
+		start -= size
 	}
-	// Find end of word
 	end := ch
-	for end < len(runes) && isWordChar(runes[end]) {
-		end++
+	for end < len(line) {
+		r, size := utf8.DecodeRuneInString(line[end:])
+		if !isWordChar(r) {
+			break
+		}
+		end += size
 	}
 
 	if start == end {

@@ -42,7 +42,7 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 			return
 		}
 		autoload := composer.GetAutoloadPaths(s.rootPath)
-		s.sendResponse(msg.ID, s.analyzer.MoveToNamespace(uri, s.getDocument(uri), targetNS, autoload, s.getDocumentReader()))
+		s.sendResponse(msg.ID, s.positions().workspaceEditOut(s.analyzer.MoveToNamespace(uri, s.getDocument(uri), targetNS, autoload, s.getDocumentReader())))
 	case protocol.CommandCreateObject:
 		dirURI, ok := s.commandArg[string](msg, params, 0)
 		if !ok {
@@ -67,7 +67,8 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 		if !ok {
 			return
 		}
-		s.sendResponse(msg.ID, s.analyzer.CopyReference(uri, s.getDocument(uri), position))
+		source := s.getDocument(uri)
+		s.sendResponse(msg.ID, s.analyzer.CopyReference(uri, source, s.positionsOf(uri, source).posIn(uri, position)))
 	case protocol.CommandDebugDocument:
 		uri, ok := s.commandArg[string](msg, params, 0)
 		if !ok {

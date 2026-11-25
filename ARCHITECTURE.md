@@ -32,7 +32,8 @@ cmd/tusk-php/                 Entry point: flags, subcommands, stdio
 internal/
 ├── protocol/                 1. LSP wire types, no logic
 │
-├── parser/                   2. Tokenizer and lightweight AST (fault-tolerant)
+├── document/                 2. Columns between byte offsets and the client's position encoding
+├── parser/                      Tokenizer and lightweight AST (fault-tolerant)
 ├── types/                       Type model primitives (named, union, intersection, generic, …)
 ├── phparray/                    PHP array literal helpers
 ├── stubs/                       Embedded builtin stubs, per PHP version and extension
@@ -144,6 +145,8 @@ Composer: project files are indexed as `SourceProject`; the PSR-0, PSR-4, classm
 Requests are handled on the loop, so the loop does no work that grows with the workspace. Indexing, workspace-wide work, PHPStan and Pint run in the background. All output goes through one writer (`output.go`), so frames from the loop and from background goroutines never interleave.
 
 ### Documents
+
+Positions inside the server count columns in bytes. `initialize` picks the client's column unit: UTF-8 when the client offers it in `general.positionEncodings`, otherwise UTF-16, the LSP default, and advertises it as `positionEncoding`. Every handler converts request positions to bytes and every position it sends back to the client's unit, in `lsp/positions.go`, against the text of the file each position belongs to (the open document, else the source the index keeps, else the file on disk, read at most once per request). `document.Columns` does the conversion; a line that is ASCII up to the column needs none.
 
 Open documents are a map guarded by an `RWMutex`. On `didChange` the server stores the new text and re-indexes the file: synchronously for files up to 5,000 lines, otherwise through a background queue that only ever indexes the latest version. Diagnostics run in the background after a 200 ms pause in typing, one pending run per file; a result for text that has changed since is dropped.
 
