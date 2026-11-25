@@ -133,7 +133,7 @@ func loadProjectMetadata(rootPath string, stderr io.Writer) (*config.Config, str
 	}
 
 	timeout := time.Duration(cfg.PHPDetectTimeoutMs) * time.Millisecond
-	profile, _ := workspace.ResolveBuiltinProfile(rootPath, cfg.PHPBinary, timeout, nil)
+	profile, _ := workspace.ResolveBuiltinProfileWithConfig(rootPath, cfg.PHPBinary, timeout, cfg, nil)
 	return cfg, framework, profile, nil
 }
 

@@ -76,4 +76,6 @@ Framework-specific tools appear only when that framework is detected:
 
 Every `range` in a tool result (references, diagnostics, routes, symbols) is zero-based, and its `character` counts bytes (UTF-8) from the start of the line, not characters, so a column after `é` or an emoji is larger than the number of characters before it.
 
+Answers follow the files on disk without a restart or `tusk_reindex`. Before each tool call and resource read, the server compares the size and modification time of the project's PHP files (outside `excludePaths`), `composer.json`, `composer.lock`, `vendor/composer/installed.json` and `.tusk-php.json` with what it last indexed. Changed, new and deleted PHP files are re-indexed, a changed PHP version or extension list in `composer.json` or `.tusk-php.json` swaps the builtins, and after `composer install`, `update`, `require` or `remove` the whole snapshot is rebuilt. A `.tusk-php.json` that can't be read fails the call with the reason.
+
 The server also exposes the same data as readable JSON resources: `project-summary`, `php-symbols`, and `db-schema-compact`, plus `laravel-routes` / `laravel-models` or `symfony-routes` depending on the detected framework.

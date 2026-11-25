@@ -16,7 +16,7 @@ import (
 type Refresh struct {
 	Paths      []string
 	Profile    bool
-	Config     func() *config.Config
+	Config     func() (*config.Config, error)
 	EditorOwns func(path string) bool
 }
 
@@ -31,11 +31,21 @@ type Refreshed struct {
 
 const composerManifest = "composer.json"
 
-var composerStateFiles = []string{composerManifest, "composer.lock", "vendor/composer/installed.json"}
+var vendorStateFiles = []string{"composer.lock", "vendor/composer/installed.json"}
+
+var composerStateFiles = append([]string{composerManifest}, vendorStateFiles...)
 
 func (ws *Bootstrapped) ComposerStatePaths() []string {
-	paths := make([]string, len(composerStateFiles))
-	for i, name := range composerStateFiles {
+	return ws.rootPaths(composerStateFiles)
+}
+
+func (ws *Bootstrapped) VendorStatePaths() []string {
+	return ws.rootPaths(vendorStateFiles)
+}
+
+func (ws *Bootstrapped) rootPaths(names []string) []string {
+	paths := make([]string, len(names))
+	for i, name := range names {
 		paths[i] = filepath.Join(ws.RootPath, filepath.FromSlash(name))
 	}
 	return paths
@@ -107,7 +117,10 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 		ws.rereadAutoload()
 	}
 	if profile {
-		cfg := r.Config()
+		cfg, err := r.Config()
+		if err != nil {
+			return out, errors.Join(append(errs, fmt.Errorf("load the configuration to resolve the PHP version: %w", err))...)
+		}
 		timeout := time.Duration(cfg.PHPDetectTimeoutMs) * time.Millisecond
 		out.Profile, out.ProfileSource = ResolveBuiltinProfileWithConfig(ws.RootPath, cfg.PHPBinary, timeout, cfg, nil)
 		changed, err := ws.SetProfile(out.Profile)

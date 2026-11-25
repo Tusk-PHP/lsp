@@ -173,3 +173,12 @@ func TestBuildWorkspaceIndexesTheRoot(t *testing.T) {
 		t.Errorf("a configuration that doesn't load stops the build: %v", err)
 	}
 }
+
+func TestCheckUsesTheConfigFilesPHPVersion(t *testing.T) {
+	root := writeProject(t, map[string]string{"composer.json": `{"name": "app/app"}`, ".tusk-php.json": `{"phpVersion": "7.4"}`})
+	var errOut bytes.Buffer
+	_, _, profile, err := loadProjectMetadata(root, &errOut)
+	if err != nil || profile.PHPVersion != "7.4" {
+		t.Errorf(".tusk-php.json's phpVersion applies when composer.json names none: %+v %v", profile, err)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -116,7 +117,7 @@ func (s *Server) refreshWorkspace() {
 	result, err := s.workspace.Refresh(workspace.Refresh{
 		Paths:      paths,
 		Profile:    profile,
-		Config:     s.loadConfig,
+		Config:     func() (*config.Config, error) { return s.loadConfig(), nil },
 		EditorOwns: s.isOpenAt,
 	})
 	if err != nil {

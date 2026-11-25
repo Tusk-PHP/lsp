@@ -44,12 +44,15 @@ var ServerVersion = "0.5.0"
 // Increment when tool schemas or output shapes change incompatibly.
 const ContractVersion = 1
 
+const reindexTool = "tusk_reindex"
+
 type Service struct {
-	RootPath         string
-	Framework        string
-	Config           *config.Config
-	BuiltinProfile   symbols.BuiltinProfile
-	BuiltinPHPSource string
+	RootPath      string
+	Framework     string
+	Config        *config.Config
+	logger        *slog.Logger
+	profileSource atomic.Pointer[string]
+	disk          diskState
 
 	// Workspace is kept for tests and compatibility, but serving reads go
 	// through runtime() so reindex can atomically swap the full immutable state.
@@ -319,6 +322,9 @@ type SymfonyRouteInput struct {
 const rangeUnits = " Ranges are zero-based; a character counts UTF-8 bytes from the start of the line."
 
 func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, error) {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	if rootPath == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -350,8 +356,7 @@ func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, e
 		RootPath:          rootPath,
 		Framework:         framework,
 		Config:            cfg,
-		BuiltinProfile:    profile,
-		BuiltinPHPSource:  source,
+		logger:            logger,
 		Workspace:         ws,
 		projectSummaryURI: "tusk://project/summary",
 		dbSchemaURI:       "tusk://db/schema/compact",
@@ -361,11 +366,14 @@ func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, e
 		symfonyRoutesURI:  "tusk://symfony/routes",
 		coverage:          coverage.NewStore(rootPath, cfg.CoverageReportPath, newStdLogger(logger)),
 	}
+	svc.profileSource.Store(&source)
 	svc.installRuntime(svc.buildRuntime(ws))
+	svc.disk.files = scanDisk(ws)
 
 	svc.Server = mcp.NewServer(&mcp.Implementation{Name: ServerName, Version: ServerVersion}, &mcp.ServerOptions{
 		Logger: logger,
 	})
+	svc.Server.AddReceivingMiddleware(svc.syncBeforeReads)
 	svc.registerTools()
 	svc.registerResources()
 
@@ -468,7 +476,7 @@ func (s *Service) registerTools() {
 	})
 
 	mcp.AddTool(s.Server, &mcp.Tool{
-		Name:        "tusk_reindex",
+		Name:        reindexTool,
 		Description: "Rebuild the MCP workspace snapshot and atomically swap it into service.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, ReindexOutput, error) {
 		out, err := s.Reindex(ctx)
@@ -672,8 +680,8 @@ func (s *Service) projectSummary() ProjectSummary {
 	return ProjectSummary{
 		RootPath:         s.RootPath,
 		Framework:        s.Framework,
-		PHPVersion:       s.BuiltinProfile.PHPVersion,
-		PHPVersionSource: s.BuiltinPHPSource,
+		PHPVersion:       ws.Profile().PHPVersion,
+		PHPVersionSource: *s.profileSource.Load(),
 		IndexedFiles:     len(ws.Index.GetAllFileURIs()),
 		RouteCount:       rc,
 		SchemaSource:     schemaSource(ws.Schema),
@@ -791,20 +799,32 @@ func (s *Service) runtime() *serviceRuntime {
 }
 
 func (s *Service) Reindex(ctx context.Context) (ReindexOutput, error) {
+	s.disk.mu.Lock()
+	defer s.disk.mu.Unlock()
+	return s.rebuildLocked(ctx)
+}
+
+func (s *Service) rebuildLocked(ctx context.Context) (ReindexOutput, error) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	_, _, profile, source, err := loadProjectMetadata(s.RootPath, s.logger)
+	if err != nil {
+		return ReindexOutput{}, err
 	}
 	ws, err := workspace.Build(ctx, workspace.Options{
 		RootPath:       s.RootPath,
 		Framework:      s.Framework,
 		Config:         s.Config,
 		Logger:         newStdLogger(nil),
-		BuiltinProfile: s.BuiltinProfile,
+		BuiltinProfile: profile,
 	})
 	if err != nil {
 		return ReindexOutput{}, err
 	}
+	s.profileSource.Store(&source)
 	s.installRuntime(s.buildRuntime(ws))
+	s.disk.files = scanDisk(ws)
 	return ReindexOutput{
 		RootPath:       s.RootPath,
 		Framework:      s.Framework,
@@ -812,8 +832,8 @@ func (s *Service) Reindex(ctx context.Context) (ReindexOutput, error) {
 		RouteCount:     routeCount(ws.RouteIndex),
 		SchemaSource:   schemaSource(ws.Schema),
 		SchemaTables:   sortedStrings(compactSchemaTableNames(ws.Schema)),
-		PHPVersion:     s.BuiltinProfile.PHPVersion,
-		PHPVersionFrom: s.BuiltinPHPSource,
+		PHPVersion:     profile.PHPVersion,
+		PHPVersionFrom: source,
 	}, nil
 }
 
@@ -1210,16 +1230,21 @@ func (s *Service) laravelModels() []map[string]any {
 	return out
 }
 
-func loadProjectMetadata(rootPath string, logger *slog.Logger) (*config.Config, string, symbols.BuiltinProfile, string, error) {
-	cfg := config.DefaultConfig()
-	cfgPath := filepath.Join(rootPath, config.FileName)
-	loaded, err := config.LoadFromFile(cfgPath)
+func loadConfig(rootPath string, logger *slog.Logger) (*config.Config, error) {
+	cfg, err := config.LoadFromFile(filepath.Join(rootPath, config.FileName))
 	if err != nil {
-		return nil, "", symbols.BuiltinProfile{}, "", err
+		return nil, err
 	}
-	cfg = loaded
 	for _, problem := range cfg.Problems() {
 		logger.Warn("skipped part of the configuration", "problem", problem)
+	}
+	return cfg, nil
+}
+
+func loadProjectMetadata(rootPath string, logger *slog.Logger) (*config.Config, string, symbols.BuiltinProfile, string, error) {
+	cfg, err := loadConfig(rootPath, logger)
+	if err != nil {
+		return nil, "", symbols.BuiltinProfile{}, "", err
 	}
 
 	framework := cfg.Framework
@@ -1228,10 +1253,8 @@ func loadProjectMetadata(rootPath string, logger *slog.Logger) (*config.Config, 
 	}
 
 	timeout := time.Duration(cfg.PHPDetectTimeoutMs) * time.Millisecond
-	profile, source := workspace.ResolveBuiltinProfile(rootPath, cfg.PHPBinary, timeout, func(msg string) {
-		if logger != nil {
-			logger.Info(msg)
-		}
+	profile, source := workspace.ResolveBuiltinProfileWithConfig(rootPath, cfg.PHPBinary, timeout, cfg, func(msg string) {
+		logger.Info(msg)
 	})
 
 	return cfg, framework, profile, source, nil
