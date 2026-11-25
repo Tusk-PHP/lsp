@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func FunctionNames(name string, file *parser.FileNode) ([]string, bool) {
@@ -59,4 +60,18 @@ func ImportedName(name, currentNs string, uses []parser.UseNode, useKind string)
 		return currentNs + "\\" + name
 	}
 	return name
+}
+
+func (r *Resolver) CalledFunction(name string, file *parser.FileNode) *symbols.Symbol {
+	fqns, _ := FunctionNames(name, file)
+	for _, fqn := range fqns {
+		if fn := r.Index.LookupFold(fqn, isFunction); fn != nil {
+			return fn
+		}
+	}
+	return nil
+}
+
+func isFunction(sym *symbols.Symbol) bool {
+	return sym.Kind == symbols.KindFunction
 }

@@ -187,7 +187,7 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 		return symbolLocation(member)
 	}
 	if ctx.FunctionCall {
-		return symbolLocation(a.calledFunction(word, file))
+		return symbolLocation(a.resolver.CalledFunction(word, file))
 	}
 
 	// Resolve via use statements
@@ -216,20 +216,6 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 	}
 
 	return symbolLocation(a.index.LookupStandalone(word, ctx.EnclosingFQN))
-}
-
-func (a *Analyzer) calledFunction(name string, file *parser.FileNode) *symbols.Symbol {
-	fqns, _ := resolve.FunctionNames(name, file)
-	for _, fqn := range fqns {
-		if fn := a.index.LookupFold(fqn, isFunction); fn != nil {
-			return fn
-		}
-	}
-	return nil
-}
-
-func isFunction(sym *symbols.Symbol) bool {
-	return sym.Kind == symbols.KindFunction
 }
 
 // classKeywordFQN returns the class that self, static or parent stands for at
@@ -393,7 +379,7 @@ func (a *Analyzer) resolveDefinitionSymbol(uri, source string, pos protocol.Posi
 		return definitionTarget{sym: member, owner: a.index.Lookup(member.ParentFQN), receiver: member.ParentFQN, loc: symbolLocation(member)}
 	}
 	if ctx.FunctionCall {
-		fn := a.calledFunction(word, file)
+		fn := a.resolver.CalledFunction(word, file)
 		return definitionTarget{sym: fn, loc: symbolLocation(fn)}
 	}
 
@@ -815,7 +801,7 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 
 	// W1 guard: if we were in a member access chain and the receiver/member couldn't
 	// be resolved, do not fall through to name-based lookups.
-	if sym == nil && ctx != nil && ctx.AccessKind != sourcectx.AccessNone {
+	if sym == nil && ctx != nil && (ctx.AccessKind != sourcectx.AccessNone || ctx.FunctionCall) {
 		return nil
 	}
 
@@ -854,6 +840,9 @@ func (a *Analyzer) resolveSymbolAtCursor(uri, source string, pos protocol.Positi
 			}
 		}
 		return nil
+	}
+	if ctx != nil && ctx.FunctionCall {
+		return a.resolver.CalledFunction(word, file)
 	}
 
 	// Check if it's a class property declaration ($name on a property line)
@@ -901,9 +890,11 @@ func (a *Analyzer) resolveSymbolAtCursor(uri, source string, pos protocol.Positi
 		return sym
 	}
 
-	// Fallback by short name
-	syms := a.index.LookupByName(word)
-	return symbols.PickBestStandalone(syms, word)
+	enclosing := ""
+	if ctx != nil {
+		enclosing = ctx.EnclosingFQN
+	}
+	return a.index.LookupStandalone(word, enclosing)
 }
 
 // findVariableReferences finds all occurrences of a variable within its enclosing function scope.
@@ -1234,15 +1225,11 @@ func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *
 		return nil
 	}
 	prefix := line[:min(pos.Character, len(line))]
-	funcName, activeParam := extractCallInfo(prefix)
-	if funcName == "" {
+	callee, activeParam := extractCallInfo(prefix)
+	if callee < 0 {
 		return nil
 	}
-	syms := a.index.LookupByName(funcName)
-	if len(syms) == 0 {
-		return nil
-	}
-	sym := symbols.PickBestStandalone(syms, funcName)
+	sym := a.resolveDefinitionSymbol(uri, source, protocol.Position{Line: pos.Line, Character: callee}).sym
 	if sym == nil {
 		return nil
 	}
@@ -1265,7 +1252,7 @@ func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *
 	return &protocol.SignatureHelp{Signatures: []protocol.SignatureInformation{sig}, ActiveParameter: activeParam}
 }
 
-func extractCallInfo(prefix string) (string, int) {
+func extractCallInfo(prefix string) (int, int) {
 	activeParam := 0
 	depth := 0
 	parenPos := -1
@@ -1285,10 +1272,10 @@ func extractCallInfo(prefix string) (string, int) {
 			}
 		}
 	}
-	return "", 0
+	return -1, 0
 found:
 	if parenPos <= 0 {
-		return "", 0
+		return -1, 0
 	}
 	end := parenPos
 	start := end - 1
@@ -1297,9 +1284,9 @@ found:
 	}
 	start++
 	if start >= end {
-		return "", 0
+		return -1, 0
 	}
-	return prefix[start:end], activeParam
+	return start, activeParam
 }
 
 // formatParams returns the parenthesized parameter list for a symbol, e.g.
@@ -1484,7 +1471,7 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 	// Check for member access context (method/property on -> or ::).
 	// If we reach here with an access kind set, the receiver was unresolvable;
 	// return nil rather than allowing a rename that could affect wrong symbols.
-	if ctx.AccessKind != sourcectx.AccessNone {
+	if ctx.AccessKind != sourcectx.AccessNone || ctx.FunctionCall {
 		return nil
 	}
 

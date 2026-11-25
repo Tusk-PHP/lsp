@@ -178,6 +178,18 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		return nil
 	}
 
+	if ctx.FunctionCall {
+		fn := p.resolver.CalledFunction(word, file)
+		if fn == nil {
+			return nil
+		}
+		content := p.formatHover(fn)
+		if content == "" {
+			return nil
+		}
+		return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: content}}
+	}
+
 	// Resolve the word via use statements
 	if file != nil {
 		for _, u := range ctx.Uses {

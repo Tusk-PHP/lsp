@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The "stopped indexing at maxIndexFiles" warning no longer appears when the workspace has exactly `maxIndexFiles` PHP files; it shows only when files were actually left out.
-- Go to definition on a function call with no receiver, such as `area()`, opens only a function, found the way PHP finds it (a `use function` import, the current namespace, then the global one). When no such function exists it gives no answer, instead of opening a same-named method of some unrelated class. A bare name that isn't called no longer opens another class's member either.
+- A function call with no receiver, such as `area()`, is now always read as a function, found the way PHP finds it (a `use function` import, the current namespace, then the global one), by go to definition and declaration, hover, find references, rename and signature help. When no such function exists they give no answer, instead of a same-named method of some unrelated class, or of the class you're in. A bare name that isn't called no longer reaches another class's member either.
 
 ## [0.16.0] - 2026-11-25
 
