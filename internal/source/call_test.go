@@ -52,7 +52,7 @@ func TestFunctionCallMarksOnlyANameCalledAsAFunction(t *testing.T) {
 }
 
 func TestFunctionCallWithoutTokens(t *testing.T) {
-	if isFunctionCall(nil, protocol.Range{End: protocol.Position{Line: 1, Character: 4}}) {
+	if isCalled(nil, protocol.Range{End: protocol.Position{Line: 1, Character: 4}}) {
 		t.Error("no tokens, no call")
 	}
 }
@@ -94,5 +94,24 @@ func TestCallAtFindsTheCalleeAndArgumentFromTokens(t *testing.T) {
 				t.Errorf("callee %q, argument %d; want %q, %d", got, argument, tc.callee, tc.argument)
 			}
 		})
+	}
+}
+
+func TestCalledMarksAnyNameFollowedByItsArguments(t *testing.T) {
+	for src, want := range map[string]bool{
+		"$this->ar|ea();":     true,
+		"$this->ar|ea;":       false,
+		"Room::ar|ea(1);":     true,
+		"ar|ea(1);":           true,
+		"new Ar|ea(1);":       false,
+		"function ar|ea() {}": false,
+	} {
+		full := "<?php\n" + src + "\n"
+		offset := strings.Index(full, "|")
+		full = full[:offset] + full[offset+1:]
+		pos := protocol.Position{Line: strings.Count(full[:offset], "\n"), Character: offset - strings.LastIndex(full[:offset], "\n") - 1}
+		if got := Analyze("file:///a.php", full, pos).Called; got != want {
+			t.Errorf("%s: Called = %v, want %v", src, got, want)
+		}
 	}
 }
