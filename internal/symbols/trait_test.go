@@ -335,8 +335,11 @@ func TestTraitAsAliasesAMethod(t *testing.T) {
 		}
 		m := named[0]
 		original := idx.Lookup(c.wantTrait + "::" + c.wantName)
-		if m.ParentFQN != c.wantTrait || m.Visibility != c.wantVisibility || m.Range != original.Range {
-			t.Errorf("%s::%s = %s (%s, %v), want %s::%s (%s)", c.class, c.member, m.ParentFQN, m.Visibility, m.Range, c.wantTrait, c.wantName, c.wantVisibility)
+		if traitMethodOf(m).FQN != original.FQN || m.Visibility != c.wantVisibility || m.Range != original.Range {
+			t.Errorf("%s::%s = %s (%s, %v), want %s::%s (%s)", c.class, c.member, traitMethodOf(m).FQN, m.Visibility, m.Range, c.wantTrait, c.wantName, c.wantVisibility)
+		}
+		if c.member != c.wantName && (m.FQN != c.class+"::"+c.member || m.ParentFQN != c.class) {
+			t.Errorf("%s::%s has the identity %s in %s, want its own", c.class, c.member, m.FQN, m.ParentFQN)
 		}
 		if original.Visibility != "public" {
 			t.Errorf("aliasing changed %s::%s itself: %s", c.wantTrait, c.wantName, original.Visibility)
@@ -372,7 +375,7 @@ func TestEachDeclarationHasItsOwnTraitRules(t *testing.T) {
 	origin := func(members []*Symbol, name string) string {
 		for _, m := range members {
 			if m.Name == name {
-				return m.ParentFQN
+				return traitMethodOf(m).ParentFQN
 			}
 		}
 		return ""
@@ -389,10 +392,17 @@ func TestEachDeclarationHasItsOwnTraitRules(t *testing.T) {
 	}
 
 	idx.IndexFile("file:///b.php", "<?php\n")
-	if named := idx.ClassMembersNamed("Dup", "bTalk"); len(named) != 1 || named[0].ParentFQN != "B" {
+	if named := idx.ClassMembersNamed("Dup", "bTalk"); len(named) != 1 || traitMethodOf(named[0]).ParentFQN != "B" {
 		t.Errorf("the promoted declaration brings back its own rules: %v", named)
 	}
 	if named := idx.ClassMembersNamed("Dup", "aTalk"); len(named) != 0 {
 		t.Errorf("the removed declaration's alias leaves with it: %v", named)
 	}
+}
+
+func traitMethodOf(member *Symbol) *Symbol {
+	if member.AliasOf != nil {
+		return member.AliasOf
+	}
+	return member
 }

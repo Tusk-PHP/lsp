@@ -53,3 +53,29 @@ class Child extends NestedAlias { public function murmur(): void {} }
 		}
 	}
 }
+
+func TestTraitAliasIsNotRenamedAndItsReferencesAreItsOwn(t *testing.T) {
+	traits := "<?php\nnamespace App;\ntrait B {\n    public function talk(): void {}\n}\n"
+	talker := "<?php\nnamespace App;\nclass Talker { use B { talk as bTalk; } }\n"
+	use := "<?php\nnamespace App;\n$t = new Talker();\n$t->bTalk();\n$t->talk();\n"
+	a, read := setupRenameAnalyzer(map[string]string{"file:///B.php": traits, "file:///Talker.php": talker, "file:///use.php": use})
+	pos := positionOf(t, use, "bTalk")
+
+	if got := a.PrepareRename("file:///use.php", use, pos); got != nil {
+		t.Errorf("prepare rename on an alias: got %+v, want refused", got)
+	}
+	if got := a.Rename("file:///use.php", use, pos, "shout", read); got != nil {
+		t.Errorf("rename on an alias: got %+v, want refused", got.Changes)
+	}
+
+	want := map[string]int{"file:///Talker.php": 2, "file:///use.php": 3}
+	refs := a.FindAllReferences("file:///use.php", use, pos, read)
+	if len(refs) != len(want) {
+		t.Fatalf("references of bTalk = %v, want the alias rule and the call", refs)
+	}
+	for _, ref := range refs {
+		if line, ok := want[ref.URI]; !ok || ref.Range.Start.Line != line {
+			t.Errorf("reference of bTalk at %s:%d, want only the alias rule and the call", ref.URI, ref.Range.Start.Line)
+		}
+	}
+}
