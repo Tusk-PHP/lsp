@@ -54,13 +54,13 @@ func references(t *testing.T) []reference {
 			t.Fatalf("%s: %v", command, err)
 		}
 		if version.String() != string(out) {
-			t.Logf("skipping %s: PHP %s is outside the lexer's 8.0 to %s", command, out, token.Latest)
+			t.Logf("skipping %s: PHP %s is outside the lexer's %s to %s", command, out, token.PHP74, token.Latest)
 			continue
 		}
 		refs = append(refs, reference{argv, version})
 	}
 	if len(refs) == 0 {
-		skipOutsideCI(t, "no PHP 8.0 to "+token.Latest.String()+" with the tokenizer extension (set TUSK_PHP_TOKENIZERS to commands separated by ';')")
+		skipOutsideCI(t, "no PHP "+token.PHP74.String()+" to "+token.Latest.String()+" with the tokenizer extension (set TUSK_PHP_TOKENIZERS to commands separated by ';')")
 	}
 	return refs
 }

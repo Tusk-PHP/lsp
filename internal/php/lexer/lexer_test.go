@@ -87,11 +87,13 @@ var versionSnippets = []string{
 	"<?php $a |> strlen(...); (void) f(); ( VOID )g(); $b | > $c;",
 	"<?php enum E {} readonly class R { public function f(&$a) { return &$b & $c; } } $x = 0o17; \"$a[0o7]\";",
 	"<?php class P { private(set) $a; } __PROPERTY__;",
+	"<?php #[Attr] a comment in 7.4\n#[\nfunction match() {} match(1) {}; $a?->b; \"$a?->b $a->c\"; \\Foo\\Bar::x(); Foo\\List\\a; namespace\\Baz; \\list; Foo \\ Bar;",
+	"<?php // c\r\n# d\r// e\n# f ?>\n<?php // g",
 }
 
 func TestLexIsLosslessAndMatchesPHP(t *testing.T) {
 	all := append(append(append(append([]string{}, snippets...), versionSnippets...), triviaSnippets...), malformedSnippets...)
-	for v := token.PHP80; v <= token.Latest; v++ {
+	for v := token.PHP74; v <= token.Latest; v++ {
 		for _, src := range all {
 			var b strings.Builder
 			end := uint32(0)

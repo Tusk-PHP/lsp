@@ -10,7 +10,8 @@ import (
 type Version uint8
 
 const (
-	PHP80 Version = iota
+	PHP74 Version = iota
+	PHP80
 	PHP81
 	PHP82
 	PHP83
@@ -32,15 +33,18 @@ func ParseVersion(s string) (Version, error) {
 	}
 	switch {
 	case major < 8:
-		return PHP80, nil
-	case major > 8 || minor > uint64(Latest):
+		return PHP74, nil
+	case major > 8 || minor > uint64(Latest-PHP80):
 		return Latest, nil
 	}
-	return Version(minor), nil
+	return PHP80 + Version(minor), nil
 }
 
 func (v Version) String() string {
-	return "8." + strconv.Itoa(int(v))
+	if v == PHP74 {
+		return "7.4"
+	}
+	return "8." + strconv.Itoa(int(v-PHP80))
 }
 
 type Kind uint16
@@ -437,6 +441,12 @@ func (k Kind) String() string {
 }
 
 var introduced = [kindCount]Version{
+	NameQualified:                     PHP80,
+	NameFullyQualified:                PHP80,
+	NameRelative:                      PHP80,
+	Match:                             PHP80,
+	Attribute:                         PHP80,
+	NullsafeObjectOperator:            PHP80,
 	Enum:                              PHP81,
 	PrivateSet:                        PHP84,
 	ProtectedSet:                      PHP84,
