@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/analyzer"
-	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/coverage"
@@ -751,10 +750,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	}
 	rt.Diagnostics.BuilderModelResolver = rt.Completion.ResolveBuilderModel
 	rt.Diagnostics.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(ws.Index, ws.SchemaIsLive)
-	rt.Diagnostics.BuiltinUnavailableRule = &checks.BuiltinUnavailableRule{
-		PHPVersion: s.BuiltinProfile.PHPVersion,
-		Extensions: s.BuiltinProfile.Extensions,
-	}
+	rt.Diagnostics.Profile = ws.Profile
 	if ws.ViewData != nil {
 		rt.Diagnostics.ViewTypes = &frameworklaravel.ViewTypes{
 			Data:  ws.ViewData,
@@ -1216,7 +1212,7 @@ func (s *Service) laravelModels() []map[string]any {
 
 func loadProjectMetadata(rootPath string, logger *slog.Logger) (*config.Config, string, symbols.BuiltinProfile, string, error) {
 	cfg := config.DefaultConfig()
-	cfgPath := filepath.Join(rootPath, ".tusk-php.json")
+	cfgPath := filepath.Join(rootPath, config.FileName)
 	loaded, err := config.LoadFromFile(cfgPath)
 	if err != nil {
 		return nil, "", symbols.BuiltinProfile{}, "", err

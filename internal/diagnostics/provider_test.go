@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -200,7 +199,7 @@ func TestUnknownFunctionRespectsPHPBuiltinProfile(t *testing.T) {
 	cfg.PHPStanEnabled = &f
 	cfg.PintEnabled = &f
 	p := NewProvider(idx, "none", "/tmp", logger, cfg)
-	p.BuiltinUnavailableRule = &checks.BuiltinUnavailableRule{PHPVersion: "7.4"}
+	p.Profile = func() symbols.BuiltinProfile { return symbols.BuiltinProfile{PHPVersion: "7.4"} }
 
 	source := `<?php
 array_reverse([]);
@@ -726,10 +725,7 @@ func TestBuiltinUnavailableRuleEmitsEvenWhenIndexNotReady(t *testing.T) {
 	cfg.PintEnabled = &f
 	p := NewProvider(idx, "none", "/tmp", logger, cfg)
 	// DO NOT call MarkReady — we're proving the rule is not soft-moded.
-	p.BuiltinUnavailableRule = &checks.BuiltinUnavailableRule{
-		PHPVersion: "7.4",
-		Extensions: nil,
-	}
+	p.Profile = func() symbols.BuiltinProfile { return symbols.BuiltinProfile{PHPVersion: "7.4"} }
 
 	source := `<?php
 $x = str_contains("hay", "needle");

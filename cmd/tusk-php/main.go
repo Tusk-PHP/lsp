@@ -118,7 +118,7 @@ func main() {
 // config.LoadFromFile returns a default-merged config on missing file, so no
 // special not-exist handling is needed here.
 func loadProjectMetadata(rootPath string, stderr io.Writer) (*config.Config, string, symbols.BuiltinProfile, error) {
-	cfgPath := filepath.Join(rootPath, ".tusk-php.json")
+	cfgPath := filepath.Join(rootPath, config.FileName)
 	cfg, err := config.LoadFromFile(cfgPath)
 	if err != nil {
 		return nil, "", symbols.BuiltinProfile{}, err
@@ -247,7 +247,7 @@ func runIntrospect(args []string) error {
 		Container:     ws.Container,
 		Framework:     framework,
 		ServerVersion: version,
-		Profile:       introspect.FormatProfile(ws.BuiltinProfile.PHPVersion, ws.BuiltinProfile.Extensions),
+		Profile:       introspect.FormatProfile(ws.Profile().PHPVersion, ws.Profile().Extensions),
 		BufferState:   "disk",
 		Diagnostics:   findings,
 		Verbosity:     v,

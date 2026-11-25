@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/analyzer"
 	"github.com/Tusk-PHP/lsp/internal/completion"
@@ -22,6 +23,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/models"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
@@ -85,10 +87,11 @@ type Server struct {
 	strict       bool      // when true, recovered panics are re-raised after logging
 	exitFunc     func(int) // called by the "exit" notification handler; defaults to os.Exit
 
-	builtinPHPVersion string
-	builtinPHPSource  string // "composer" | "local" | "fallback"
-
 	clientSupportsShowDocument bool
+	clientWatchesFiles         bool
+	clientOptions              atomic.Pointer[protocol.InitializationOptions]
+	indexed                    chan struct{}
+	watch                      watchedFiles
 	coverageNotifications      bool
 
 	// requestIDCounter generates unique IDs for server-to-client requests.
@@ -106,7 +109,7 @@ type Server struct {
 }
 
 func NewServer(reader io.Reader, writer io.Writer, logger *log.Logger) *Server {
-	return &Server{cfg: config.DefaultConfig(), index: symbols.NewIndex(), schemaCache: models.NewSchemaCache(), documents: make(map[string]string), reader: bufio.NewReader(reader), writer: writer, logger: logger, exitFunc: os.Exit}
+	return &Server{cfg: config.DefaultConfig(), index: symbols.NewIndex(), schemaCache: models.NewSchemaCache(), documents: make(map[string]string), indexed: make(chan struct{}), reader: bufio.NewReader(reader), writer: writer, logger: logger, exitFunc: os.Exit}
 }
 
 // SetStrict enables or disables strict panic mode.

@@ -37,9 +37,7 @@ type Provider struct {
 	// Set by the LSP server after initialization.
 	BuilderMemberChecker checks.MemberChecker
 
-	// BuiltinUnavailableRule reports PHP builtin usages not available in the
-	// resolved PHP profile. Set by the LSP server after initialization.
-	BuiltinUnavailableRule *checks.BuiltinUnavailableRule
+	Profile func() symbols.BuiltinProfile
 
 	// Blade checks a Blade view's own structure and the views it names. Set
 	// by the server after initialization.
@@ -126,12 +124,20 @@ func (p *Provider) analyzeNative(source string, shared *checks.Shared, bladePHP,
 func (p *Provider) ruleOptions(bladePHP, includedFile bool) NativeRulesOptions {
 	return NativeRulesOptions{
 		TypeResolver:           p.TypeResolver,
-		BuiltinUnavailableRule: p.BuiltinUnavailableRule,
+		BuiltinUnavailableRule: p.BuiltinUnavailableRule(),
 		BuilderModelResolver:   p.BuilderModelResolver,
 		BuilderMemberChecker:   p.BuilderMemberChecker,
 		BladePHP:               bladePHP,
 		IncludedFile:           includedFile,
 	}
+}
+
+func (p *Provider) BuiltinUnavailableRule() *checks.BuiltinUnavailableRule {
+	if p.Profile == nil {
+		return nil
+	}
+	profile := p.Profile()
+	return &checks.BuiltinUnavailableRule{PHPVersion: profile.PHPVersion, Extensions: profile.Extensions}
 }
 
 func (p *Provider) runRules(rules []checks.Rule, file *parser.FileNode, source string) []checks.Finding {

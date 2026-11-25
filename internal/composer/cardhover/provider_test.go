@@ -15,7 +15,7 @@ func TestHoverRendersLinkedTitleAndConstraint(t *testing.T) {
     "laravel/framework": "^10.0"
   }
 }`, "")
-	p := NewProvider(root, "8.2")
+	p := NewProvider(root, func() string { return "8.2" })
 
 	source := readComposer(t, root)
 	pos := findPos(source, "laravel/framework", 3)
@@ -46,7 +46,7 @@ func TestHoverWithLockfileShowsDescription(t *testing.T) {
     }
   ]
 }`)
-	p := NewProvider(root, "8.2")
+	p := NewProvider(root, func() string { return "8.2" })
 	source := readComposer(t, root)
 	pos := findPos(source, "laravel/framework", 3)
 
@@ -78,7 +78,7 @@ func TestHoverWithIncompatiblePHPShowsCross(t *testing.T) {
     {"name": "modern/lib", "version": "1.0.0", "require": {"php": ">=8.2"}}
   ]
 }`)
-	p := NewProvider(root, "7.4")
+	p := NewProvider(root, func() string { return "7.4" })
 	source := readComposer(t, root)
 	pos := findPos(source, "modern/lib", 3)
 
@@ -98,7 +98,7 @@ func TestHoverPlatformConstraintReturnsNil(t *testing.T) {
     "php": "^8.1"
   }
 }`, "")
-	p := NewProvider(root, "8.2")
+	p := NewProvider(root, func() string { return "8.2" })
 	source := readComposer(t, root)
 	pos := findPos(source, `"php"`, 1)
 
@@ -114,7 +114,7 @@ func TestHoverOutsideRequireReturnsNil(t *testing.T) {
     "laravel/framework": "^10.0"
   }
 }`, "")
-	p := NewProvider(root, "8.2")
+	p := NewProvider(root, func() string { return "8.2" })
 	source := readComposer(t, root)
 	pos := findPos(source, "acme/widgets", 1)
 	if h := p.Hover("composer.json", source, pos); h != nil {
@@ -131,7 +131,7 @@ func TestHoverRespectsRepositoriesOverride(t *testing.T) {
     "acme/fork": "dev-main"
   }
 }`, "")
-	p := NewProvider(root, "8.2")
+	p := NewProvider(root, func() string { return "8.2" })
 	source := readComposer(t, root)
 	pos := findPos(source, `"acme/fork":`, 2)
 	h := p.Hover("composer.json", source, pos)
@@ -145,7 +145,7 @@ func TestHoverRespectsRepositoriesOverride(t *testing.T) {
 
 func TestHoverDisabledReturnsNil(t *testing.T) {
 	root := writeFixture(t, `{"require":{"laravel/framework":"^10.0"}}`, "")
-	p := NewProvider(root, "8.2")
+	p := NewProvider(root, func() string { return "8.2" })
 	p.SetEnabled(false)
 	source := readComposer(t, root)
 	pos := findPos(source, "laravel/framework", 3)
@@ -156,7 +156,7 @@ func TestHoverDisabledReturnsNil(t *testing.T) {
 
 func TestDefinitionOffByDefault(t *testing.T) {
 	root := writeFixture(t, `{"require":{"laravel/framework":"^10.0"}}`, "")
-	p := NewProvider(root, "8.2")
+	p := NewProvider(root, func() string { return "8.2" })
 	source := readComposer(t, root)
 	pos := findPos(source, "laravel/framework", 3)
 	if got := p.Definition("composer.json", source, pos); got.ExternalURL != "" {
@@ -166,7 +166,7 @@ func TestDefinitionOffByDefault(t *testing.T) {
 
 func TestDefinitionOnWhenEnabled(t *testing.T) {
 	root := writeFixture(t, `{"require":{"laravel/framework":"^10.0"}}`, "")
-	p := NewProvider(root, "8.2")
+	p := NewProvider(root, func() string { return "8.2" })
 	p.SetOpenOnDefinition(true)
 	source := readComposer(t, root)
 	pos := findPos(source, "laravel/framework", 3)

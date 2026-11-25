@@ -11,10 +11,19 @@ import (
 )
 
 func (ws *Bootstrapped) autoload() []composer.AutoloadEntry {
-	ws.autoloadOnce.Do(func() {
+	ws.autoloadMu.Lock()
+	defer ws.autoloadMu.Unlock()
+	if !ws.autoloadRead {
 		ws.autoloadEntries = composer.GetAutoloadPaths(ws.RootPath)
-	})
+		ws.autoloadRead = true
+	}
 	return ws.autoloadEntries
+}
+
+func (ws *Bootstrapped) rereadAutoload() {
+	ws.autoloadMu.Lock()
+	defer ws.autoloadMu.Unlock()
+	ws.autoloadRead = false
 }
 
 func (ws *Bootstrapped) ClassLoader() symbols.ClassLoader {

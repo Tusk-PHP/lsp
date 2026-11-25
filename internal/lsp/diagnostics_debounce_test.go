@@ -38,7 +38,7 @@ func (w *lockedBuffer) String() string {
 func slowDiagnosticsServer(t *testing.T) (s *Server, out *lockedBuffer, release chan struct{}, analyzed func() []string) {
 	t.Helper()
 	out = &lockedBuffer{}
-	s = NewServer(strings.NewReader(""), out, log.New(io.Discard, "", 0))
+	s = newServerWithWorkspace(t, out)
 	s.diag = diagnostics.NewProvider(s.index, "", "", log.New(io.Discard, "", 0), config.DefaultConfig())
 	s.diagDebounce.delay = 20 * time.Millisecond
 	release = make(chan struct{})

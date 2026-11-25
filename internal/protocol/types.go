@@ -285,7 +285,42 @@ type InitializeParams struct {
 				Support bool `json:"support"`
 			} `json:"showDocument"`
 		} `json:"window"`
+		Workspace struct {
+			DidChangeWatchedFiles struct {
+				DynamicRegistration bool `json:"dynamicRegistration"`
+			} `json:"didChangeWatchedFiles"`
+		} `json:"workspace"`
 	} `json:"capabilities"`
+}
+
+type RegistrationParams struct {
+	Registrations []Registration `json:"registrations"`
+}
+
+type Registration struct {
+	ID              string `json:"id"`
+	Method          string `json:"method"`
+	RegisterOptions any    `json:"registerOptions,omitempty"`
+}
+
+type DidChangeWatchedFilesRegistrationOptions struct {
+	Watchers []FileSystemWatcher `json:"watchers"`
+}
+
+type FileSystemWatcher struct {
+	GlobPattern string `json:"globPattern"`
+}
+
+type DidChangeWatchedFilesParams struct {
+	Changes []FileEvent `json:"changes"`
+}
+
+type FileEvent struct {
+	URI string `json:"uri"`
+}
+
+type DidChangeConfigurationParams struct {
+	Settings json.RawMessage `json:"settings"`
 }
 
 // InitializationOptions sent by the client during initialization.

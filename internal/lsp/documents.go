@@ -157,29 +157,3 @@ func (s *Server) republishOpenDocuments() {
 		s.publishDiagnostics(p[0], p[1])
 	}
 }
-
-// indexFileByURI indexes a file, using the IDE helper merge strategy for known IDE helper files.
-func (s *Server) indexFileByURI(uri string, source string) {
-	// What the file passes to views, or the views a Blade view includes.
-	if s.workspace != nil {
-		s.workspace.ViewData.IndexFile(uri, source)
-	}
-	// Blade views declare no symbols, and reading one as PHP would index the
-	// HTML around its PHP.
-	if workspace.IsBlade(uri) {
-		s.index.AddTemplateFile(uri)
-		return
-	}
-	path := symbols.URIToPath(uri)
-	if workspace.IsIDEHelperFile(path) {
-		s.index.IndexIDEHelperFile(uri, source)
-	} else {
-		s.index.IndexFile(uri, source)
-		// Re-indexing replaced the file's classes, and with them the
-		// relations and columns model analysis gave its models.
-		s.workspace.UpdateFile(uri, source)
-	}
-	if s.routeIndex != nil {
-		s.routeIndex.IndexFile(uri, source)
-	}
-}

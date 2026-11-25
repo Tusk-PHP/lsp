@@ -14,6 +14,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
+	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
 // choppyWriter writes each frame in small pieces, yielding in between, the
@@ -73,7 +74,7 @@ func TestConcurrentMessagesArriveWhole(t *testing.T) {
 // A large document indexed in the background never overwrites a newer
 // version of it that was indexed meanwhile.
 func TestBackgroundIndexingKeepsTheNewestVersion(t *testing.T) {
-	s := NewServer(strings.NewReader(""), io.Discard, log.New(io.Discard, "", 0))
+	s := newServerWithWorkspace(t, io.Discard)
 	uri := "file:///big.php"
 	large := "<?php\nclass OldName {}\n" + strings.Repeat("// filler\n", largeDocThreshold+10)
 	small := "<?php\nclass NewName {}\n"
@@ -117,4 +118,12 @@ func TestDiagnosticsArePublishedOnlyForTheCurrentVersion(t *testing.T) {
 	if out.Len() != 0 {
 		t.Fatalf("published diagnostics for a closed document: %s", out.String())
 	}
+}
+
+func newServerWithWorkspace(t *testing.T, out io.Writer) *Server {
+	t.Helper()
+	s := NewServer(strings.NewReader(""), out, log.New(io.Discard, "", 0))
+	s.workspace = workspace.New(workspace.Options{RootPath: t.TempDir(), Framework: "none", Logger: log.New(io.Discard, "", 0)})
+	s.index = s.workspace.Index
+	return s
 }

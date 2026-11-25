@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/analyzer"
-	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/composer/cardhover"
 	"github.com/Tusk-PHP/lsp/internal/config"
@@ -37,30 +36,11 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		s.rootPath = params.RootPath
 	}
 	s.logger.Printf("Initializing for workspace: %s", s.rootPath)
-	cfgPath := filepath.Join(s.rootPath, ".tusk-php.json")
-	cfg, err := config.LoadFromFile(cfgPath)
-	if err != nil {
-		s.logger.Printf("Config error: %v", err)
-		s.sendNotification("window/showMessage", map[string]interface{}{
-			"type":    protocol.MessageTypeError,
-			"message": "Tusk PHP ignored its configuration: " + err.Error(),
-		})
-	} else {
-		s.cfg = cfg
-	}
-	for _, problem := range s.cfg.Problems() {
-		s.logger.Printf("Config problem: %v", problem)
-		s.sendNotification("window/showMessage", map[string]interface{}{
-			"type":    protocol.MessageTypeWarning,
-			"message": "Tusk PHP skipped part of its configuration: " + problem.Error(),
-		})
-	}
-	// Merge client initializationOptions over file-based config
-	if opts := params.InitializationOptions; opts != nil {
-		s.cfg.MergeClientOptions(opts)
-	}
+	s.clientOptions.Store(params.InitializationOptions)
+	s.cfg = s.loadConfig()
 	s.encoding = document.Negotiate(params.Capabilities.General.PositionEncodings)
 	s.clientSupportsShowDocument = params.Capabilities.Window.ShowDocument.Support
+	s.clientWatchesFiles = params.Capabilities.Workspace.DidChangeWatchedFiles.DynamicRegistration
 	if !s.clientSupportsShowDocument {
 		s.logger.Printf("PHP LSP: client does not advertise window/showDocument support; builtin Cmd+Click → manual will be disabled if enabled in config")
 	}
@@ -78,7 +58,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		s.framework = s.cfg.Framework
 	}
 	s.logger.Printf("Detected framework: %s", s.framework)
-	profile := s.resolveBuiltinProfile()
+	profile := s.resolveBuiltinProfile(s.cfg)
 	s.workspace = workspace.New(workspace.Options{
 		RootPath:       s.rootPath,
 		Framework:      s.framework,
@@ -134,7 +114,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.hover.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
 	})
-	s.composerHover = cardhover.NewProvider(s.rootPath, profile.PHPVersion)
+	s.composerHover = cardhover.NewProvider(s.rootPath, func() string { return s.workspace.Profile().PHPVersion })
 	s.composerHover.SetEnabled(s.cfg.Composer.Hover.Enable)
 	s.composerHover.SetOpenOnDefinition(s.cfg.Composer.OpenOnDefinition)
 	if s.cfg.Composer.OpenOnDefinition && !s.clientSupportsShowDocument {
@@ -151,10 +131,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	}
 	s.diag.BuilderModelResolver = s.completion.ResolveBuilderModel
 	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(s.index, s.workspace.SchemaIsLive)
-	s.diag.BuiltinUnavailableRule = &checks.BuiltinUnavailableRule{
-		PHPVersion: profile.PHPVersion,
-		Extensions: profile.Extensions,
-	}
+	s.diag.Profile = s.workspace.Profile
 	s.providers = frameworklaravel.NewProviders(s.rootPath, s.index)
 	viewResolver.SetProviders(s.providers)
 	s.components = frameworklaravel.NewComponents(s.rootPath, s.index, s.providers, s.getDocumentReader())
@@ -221,24 +198,40 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	})
 }
 
-// resolveBuiltinProfile applies the PHP profile fallback chain:
-//  1. composer.json (config.platform.php or require.php)
-//  2. .tusk-php.json / initializationOptions phpVersion (when explicitly set)
-//  3. locally installed php binary (via phpdetect)
-//  4. bundled default
-//
-// The resolved profile is cached on the Server and surfaced via window/logMessage.
-func (s *Server) resolveBuiltinProfile() symbols.BuiltinProfile {
-	timeout := time.Duration(s.cfg.PHPDetectTimeoutMs) * time.Millisecond
-	profile, source := workspace.ResolveBuiltinProfileWithConfig(s.rootPath, s.cfg.PHPBinary, timeout, s.cfg, func(msg string) {
-		s.sendNotification("window/logMessage", map[string]interface{}{
-			"type":    protocol.MessageTypeInfo,
-			"message": msg,
+func (s *Server) loadConfig() *config.Config {
+	cfg, err := config.LoadFromFile(filepath.Join(s.rootPath, config.FileName))
+	if err != nil {
+		s.logger.Printf("Config error: %v", err)
+		s.sendNotification("window/showMessage", map[string]interface{}{
+			"type":    protocol.MessageTypeError,
+			"message": "Tusk PHP ignored its configuration: " + err.Error(),
 		})
-	})
-	s.builtinPHPVersion = profile.PHPVersion
-	s.builtinPHPSource = source
+		cfg = config.DefaultConfig()
+	}
+	for _, problem := range cfg.Problems() {
+		s.logger.Printf("Config problem: %v", problem)
+		s.sendNotification("window/showMessage", map[string]interface{}{
+			"type":    protocol.MessageTypeWarning,
+			"message": "Tusk PHP skipped part of its configuration: " + problem.Error(),
+		})
+	}
+	if opts := s.clientOptions.Load(); opts != nil {
+		cfg.MergeClientOptions(opts)
+	}
+	return cfg
+}
+
+func (s *Server) resolveBuiltinProfile(cfg *config.Config) symbols.BuiltinProfile {
+	timeout := time.Duration(cfg.PHPDetectTimeoutMs) * time.Millisecond
+	profile, _ := workspace.ResolveBuiltinProfileWithConfig(s.rootPath, cfg.PHPBinary, timeout, cfg, s.logInfo)
 	return profile
+}
+
+func (s *Server) logInfo(msg string) {
+	s.sendNotification("window/logMessage", map[string]interface{}{
+		"type":    protocol.MessageTypeInfo,
+		"message": msg,
+	})
 }
 
 func (s *Server) handleInitialized(msg *jsonRPCMessage) {
@@ -264,8 +257,10 @@ func (s *Server) handleInitialized(msg *jsonRPCMessage) {
 	s.goSafe("postIndexSettle", func() {
 		indexWg.Wait()
 		s.index.MarkReady()
+		close(s.indexed)
 		s.republishOpenDocuments()
 	})
+	s.watchFiles()
 	s.goSafe("container.Analyze", s.workspace.Container.Analyze)
 	s.goSafe("coverage.Refresh", s.coverage.Refresh)
 	if s.coverageNotifications {
