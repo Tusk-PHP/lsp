@@ -776,44 +776,19 @@ func (a *Analyzer) FindReferences(uri, source string, pos protocol.Position) []p
 // the workspace. readDocument is used to read file contents; if nil, falls back
 // to reading from the index's stored file URIs via disk.
 func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, readDocument func(string) string) []protocol.Location {
-	word, _ := sourcectx.WordAt(source, pos)
-	if word == "" {
+	ctx := sourcectx.NewDocument(uri, source).NameAt(pos)
+	if ctx == nil || ctx.SymbolText == "" {
 		return nil
 	}
-
-	file := parser.ParseFile(source)
-
-	// Try to resolve as a symbol first — this handles properties ($name in declarations)
-	// and member access contexts before falling back to variable scope
-	ctx := sourcectx.Analyze(uri, source, pos)
-	sym := a.resolveSymbolAt(ctx.Name(), source)
-
-	// Built-in symbols are opaque to navigation: do not scan the workspace for refs.
-	if symbols.IsBuiltin(sym) {
-		return nil
-	}
-
-	// W1 guard: if we were in a member access chain and the receiver/member couldn't
-	// be resolved, do not fall through to name-based lookups.
-	if sym == nil && ctx != nil && (ctx.AccessKind != sourcectx.AccessNone || ctx.FunctionCall) {
-		return nil
-	}
-
-	// Variable references — local scope only (if not resolved as a property/symbol)
-	if sym == nil && strings.HasPrefix(word, "$") && word != "$this" {
-		return a.findVariableReferences(uri, source, pos, word, file)
-	}
-	if sym == nil {
-		// Fallback: definition-only lookup by name (original behavior)
-		var locs []protocol.Location
-		for _, s := range a.index.LookupByName(word) {
-			if !symbols.IsBuiltin(s) && s.URI != "" {
-				locs = append(locs, protocol.Location{URI: s.URI, Range: s.Range})
-			}
+	if ctx.SymbolKind == sourcectx.ContextSymbolVariable && ctx.SymbolText != "$this" && ctx.AccessKind != sourcectx.AccessStatic {
+		if locs := a.findVariableReferences(uri, source, pos, ctx.SymbolText); locs != nil {
+			return locs
 		}
-		return locs
 	}
-
+	sym := a.resolveSymbolAt(ctx, source)
+	if sym == nil || symbols.IsBuiltin(sym) {
+		return nil
+	}
 	return a.findSymbolOccurrences(sym, readDocument, uri, source)
 }
 
@@ -886,8 +861,7 @@ func (a *Analyzer) resolveSymbolAt(ctx *sourcectx.NameContext, source string) *s
 }
 
 // findVariableReferences finds all occurrences of a variable within its enclosing function scope.
-func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Position, varName string, file *parser.FileNode) []protocol.Location {
-	_ = file
+func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Position, varName string) []protocol.Location {
 	doc := scope.Collect(source)
 	binding := doc.BindingAt(pos)
 	if binding == nil || binding.Name != varName {

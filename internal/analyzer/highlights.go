@@ -24,12 +24,42 @@ func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Positi
 	if target == nil {
 		return nil
 	}
-	var decl protocol.Range
-	if target.URI == uri {
-		decl = target.Range
+	decl := declarationIn(target, uri)
+	ranges := a.occurrencesInDocument(target, uri, doc, source)
+	highlights := make([]protocol.DocumentHighlight, 0, len(ranges))
+	for _, rng := range ranges {
+		highlights = append(highlights, protocol.DocumentHighlight{Range: rng, Kind: highlightKind(rng, decl, pos)})
 	}
+	return highlights
+}
+
+func declarationIn(target *symbols.Symbol, uri string) protocol.Range {
+	if target.URI != uri {
+		return protocol.Range{}
+	}
+	return target.Range
+}
+
+func (a *Analyzer) occurrencesIn(target *symbols.Symbol, uri, source string) []protocol.Range {
+	if !mentions(parser.Tokenize(source), target) {
+		return nil
+	}
+	return a.occurrencesInDocument(target, uri, sourcectx.NewDocument(uri, source), source)
+}
+
+func mentions(tokens []parser.Token, target *symbols.Symbol) bool {
+	for i := range tokens {
+		if mayName(tokens, i, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Analyzer) occurrencesInDocument(target *symbols.Symbol, uri string, doc *sourcectx.Document, source string) []protocol.Range {
+	decl := declarationIn(target, uri)
 	tokens := doc.Tokens()
-	var highlights []protocol.DocumentHighlight
+	var ranges []protocol.Range
 	for i, tok := range tokens {
 		if !mayName(tokens, i, target) {
 			continue
@@ -42,9 +72,9 @@ func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Positi
 		} else if !sameSymbol(a.resolveSymbolAt(doc.NameAt(rng.Start), source), target) {
 			continue
 		}
-		highlights = append(highlights, protocol.DocumentHighlight{Range: rng, Kind: highlightKind(rng, decl, pos)})
+		ranges = append(ranges, rng)
 	}
-	return highlights
+	return ranges
 }
 
 func (a *Analyzer) mayBeLocalVariable(ctx *sourcectx.NameContext) bool {
