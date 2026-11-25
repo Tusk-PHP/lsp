@@ -1,6 +1,7 @@
 package document
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -88,6 +89,67 @@ func TestColumnsInvalidUTF8CountsOneUnitPerByte(t *testing.T) {
 	}
 	if got := cols.ToClient(0, 6); got != 5 {
 		t.Errorf("ToClient after é = %d, want 5", got)
+	}
+}
+
+func TestColumnsAnswerTheSameInAnyOrder(t *testing.T) {
+	text := "<?php\n$a = 'Größe'; $b = '😀'; $c;\nplain ascii line;\n\xff$é = '漢字'; $d;\r\n$z = 'ü';"
+	type query struct{ line, col int }
+	var queries []query
+	for line := range 6 {
+		for col := range 40 {
+			queries = append(queries, query{line, col})
+		}
+	}
+	decreasing := slices.Clone(queries)
+	slices.Reverse(decreasing)
+	interleaved := make([]query, 0, len(queries))
+	for i := range len(queries) / 2 {
+		interleaved = append(interleaved, queries[i], queries[len(queries)-1-i])
+	}
+	orders := []struct {
+		name  string
+		order []query
+	}{{"increasing", queries}, {"decreasing", decreasing}, {"interleaved", interleaved}}
+
+	for _, o := range orders {
+		name, order := o.name, o.order
+		cols := NewColumns(text, UTF16)
+		for _, q := range order {
+			fresh := NewColumns(text, UTF16)
+			if got, want := cols.ToClient(q.line, q.col), fresh.ToClient(q.line, q.col); got != want {
+				t.Errorf("%s: ToClient(%d, %d) = %d after earlier queries, %d on its own", name, q.line, q.col, got, want)
+			}
+			fresh = NewColumns(text, UTF16)
+			if got, want := cols.FromClient(q.line, q.col), fresh.FromClient(q.line, q.col); got != want {
+				t.Errorf("%s: FromClient(%d, %d) = %d after earlier queries, %d on its own", name, q.line, q.col, got, want)
+			}
+		}
+	}
+}
+
+func TestColumnsLongLine(t *testing.T) {
+	line := "é" + strings.Repeat("$a = 'x'; ", 1000)
+	cols := NewColumns(line, UTF16)
+	for col := 2; col <= len(line); col += 10 {
+		if got := cols.ToClient(0, col); got != col-1 {
+			t.Fatalf("ToClient(0, %d) = %d, want %d", col, got, col-1)
+		}
+		if got := cols.FromClient(0, col-1); got != col {
+			t.Fatalf("FromClient(0, %d) = %d, want %d", col-1, got, col)
+		}
+	}
+}
+
+func TestASCIIPrefix(t *testing.T) {
+	long := strings.Repeat("abcdefgh", 9)
+	for i := range len(long) + 1 {
+		if got := asciiPrefix(long[:i] + "é" + long[i:]); got != i {
+			t.Fatalf("asciiPrefix with é at %d = %d", i, got)
+		}
+	}
+	if got := asciiPrefix(long); got != len(long) {
+		t.Fatalf("asciiPrefix of ASCII text = %d, want %d", got, len(long))
 	}
 }
 
