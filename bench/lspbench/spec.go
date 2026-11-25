@@ -11,8 +11,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"unicode/utf16"
 	"unicode/utf8"
+
+	"github.com/Tusk-PHP/lsp/internal/document"
 )
 
 // ServerSpec describes how to launch and configure one language server.
@@ -273,7 +274,7 @@ func byteOffsetToPosition(src string, byteIdx int) Position {
 	line := strings.Count(src[:byteIdx], "\n")
 	lineStart := strings.LastIndexByte(src[:byteIdx], '\n') + 1
 	prefix := src[lineStart:byteIdx]
-	return Position{Line: line, Character: len(utf16.Encode([]rune(prefix)))}
+	return Position{Line: line, Character: document.NewColumns(prefix, document.UTF16).ToClient(0, len(prefix))}
 }
 
 func pathToURI(p string) string {

@@ -16,7 +16,8 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf16"
+
+	"github.com/Tusk-PHP/lsp/internal/document"
 )
 
 // Status values for a graded case.
@@ -783,21 +784,10 @@ func lineAt(src string, n int) string {
 	return strings.TrimSuffix(src, "\r")
 }
 
-// utf16Slice returns the part of line between two UTF-16 column offsets, the
-// unit LSP positions count in.
 func utf16Slice(line string, from, to int) string {
-	col, start, end := 0, -1, len(line)
-	for i, r := range line {
-		if col == from && start < 0 {
-			start = i
-		}
-		if col == to {
-			end = i
-			break
-		}
-		col += len(utf16.Encode([]rune{r}))
-	}
-	if start < 0 || end < start {
+	cols := document.NewColumns(line, document.UTF16)
+	start, end := cols.FromClient(0, from), min(cols.FromClient(0, to), len(line))
+	if start > len(line) || end < start {
 		return ""
 	}
 	return line[start:end]
