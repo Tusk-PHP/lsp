@@ -183,6 +183,10 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 		return nil
 	}
 
+	if member := a.index.MemberDeclaredAt(uri, pos); member != nil {
+		return symbolLocation(member)
+	}
+
 	// Resolve via use statements
 	if file != nil {
 		for _, u := range ctx.Uses {
@@ -267,11 +271,15 @@ func (a *Analyzer) FindDefinitionWithManual(uri, source string, pos protocol.Pos
 }
 
 // FindDeclaration returns where the symbol at pos is first declared: for a
-// member, the interface, parent class or trait member it implements or
-// overrides (symbols.Index.Prototype); for anything else, or a member nothing
-// above declares, its definition.
+// member reached through a class, or named in its own declaration, the
+// interface, parent class or trait member it implements or overrides
+// (symbols.Index.Prototype); for anything else, or a member nothing above
+// declares, its definition.
 func (a *Analyzer) FindDeclaration(uri, source string, pos protocol.Position) *protocol.Location {
 	target := a.resolveDefinitionSymbol(uri, source, pos)
+	if target.receiver == "" {
+		return target.loc
+	}
 	if declared := symbolLocation(a.index.Prototype(target.receiver, target.sym)); declared != nil {
 		return declared
 	}
@@ -279,7 +287,9 @@ func (a *Analyzer) FindDeclaration(uri, source string, pos protocol.Position) *p
 }
 
 // definitionTarget is what the cursor names: the symbol, and for a member the
-// class that declares it and the class it was reached through. loc is where
+// class that declares it and the class it was reached through, or declared in
+// when the cursor is on its declaration. receiver is empty for a symbol found
+// by its name alone, which may be any member of that name. loc is where
 // the symbol is, nil for a builtin (symbolLocation filters them out) or for
 // nothing resolved; callers telling the two apart inspect sym.
 type definitionTarget struct {
@@ -371,6 +381,10 @@ func (a *Analyzer) resolveDefinitionSymbol(uri, source string, pos protocol.Posi
 			return definitionTarget{sym: member, owner: ownerSym, receiver: classFQN, loc: symbolLocation(member)}
 		}
 		return definitionTarget{}
+	}
+
+	if member := a.index.MemberDeclaredAt(uri, pos); member != nil {
+		return definitionTarget{sym: member, owner: a.index.Lookup(member.ParentFQN), receiver: member.ParentFQN, loc: symbolLocation(member)}
 	}
 
 	// Resolve via use statements

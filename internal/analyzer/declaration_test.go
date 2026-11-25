@@ -47,3 +47,58 @@ function viaTrait(ViaTrait $v): float { return $v->area(); }
 		t.Errorf("nothing under the cursor: got %v", got)
 	}
 }
+
+func positionOf(t *testing.T, src, needle string) protocol.Position {
+	t.Helper()
+	i := strings.Index(src, needle)
+	if i < 0 {
+		t.Fatalf("%q isn't in the source", needle)
+	}
+	return protocol.Position{Line: strings.Count(src[:i], "\n"), Character: i - strings.LastIndex(src[:i], "\n") - 1}
+}
+
+func TestFindDeclarationOnAMemberDeclarationNameStaysInItsClass(t *testing.T) {
+	shapes := `<?php
+namespace App;
+interface Shape { public function area(): float; }
+class Square implements Shape { public function area(): float { return 1.0; } }
+`
+	room := `<?php
+namespace Other;
+class Room {
+    public function area(): float { return 2.0; }
+}
+`
+	jobs := `<?php
+namespace App\Jobs;
+interface ShouldQueue { public function handle(): void; }
+class SendMail implements ShouldQueue {
+    public function handle(): void {}
+}
+class Cleanup {
+    public function handle(): void { echo 1; }
+}
+`
+	files := map[string]string{"file:///Shape.php": shapes, "file:///Room.php": room, "file:///Jobs.php": jobs}
+	a, _ := setupRenameAnalyzer(files)
+	cases := []struct {
+		uri, needle string
+		wantURI     string
+		wantLine    int
+	}{
+		{"file:///Room.php", "area", "file:///Room.php", 3},
+		{"file:///Shape.php", "area(): float { return", "file:///Shape.php", 2},
+		{"file:///Jobs.php", "handle(): void {}", "file:///Jobs.php", 2},
+		{"file:///Jobs.php", "handle(): void { echo", "file:///Jobs.php", 7},
+	}
+	for _, c := range cases {
+		src := files[c.uri]
+		pos := positionOf(t, src, c.needle)
+		if got := a.FindDeclaration(c.uri, src, pos); got == nil || got.URI != c.wantURI || got.Range.Start.Line != c.wantLine {
+			t.Errorf("declaration at %s %q: got %v, want %s line %d", c.uri, c.needle, got, c.wantURI, c.wantLine)
+		}
+		if got := a.FindDefinition(c.uri, src, pos); got == nil || got.URI != c.uri || got.Range.Start.Line != pos.Line {
+			t.Errorf("definition at %s %q: got %v, want the declaration itself", c.uri, c.needle, got)
+		}
+	}
+}
