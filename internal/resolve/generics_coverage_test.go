@@ -107,6 +107,14 @@ func TestArrayLiteralCoverageHelpers(t *testing.T) {
 		}
 	})
 
+	t.Run("unterminated literals are a bare array", func(t *testing.T) {
+		for _, literal := range []string{`[`, `[1, 2`, `['id' => 1`} {
+			if rt := InferArrayLiteralType(literal); rt.String() != "array" {
+				t.Errorf("InferArrayLiteralType(%q) = %q, want array", literal, rt.String())
+			}
+		}
+	})
+
 	t.Run("shape string builder and nullable shape serialization", func(t *testing.T) {
 		shape := buildShapeString([]internaltypes.ShapeField{
 			{Key: "id", Type: "int"},
