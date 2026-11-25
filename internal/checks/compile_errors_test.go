@@ -227,6 +227,7 @@ var compileErrorCases = []struct {
 	{"strict_types in a braced namespace", "namespace A { declare(strict_types=1); }", always(firstStrict)},
 	{"strict_types in a function", "function f() { declare(strict_types=1); }", always(firstStrict)},
 	{"strict_types after an empty statement", ";declare(strict_types=1);", []compileErrorFrom{{token.PHP74, token.PHP84, firstStrict}}},
+	{"strict_types after inline HTML", "?>\n<p>\n<?php declare(strict_types=1);", always(firstStrict)},
 	{"strict_types in block mode", "declare(strict_types=1) { }", always("strict_types declaration must not use block mode")},
 	{"strict_types with a constant", "declare(STRICT_TYPES=true);", always("declare(STRICT_TYPES) value must be a literal")},
 	{"ticks with a negative number", "declare(ticks=-1);", always("declare(ticks) value must be a literal")},
@@ -267,6 +268,30 @@ func TestCompileErrors(t *testing.T) {
 				t.Fatal("the source parses on no PHP version")
 			}
 		})
+	}
+}
+
+func TestStrictTypesAfterWhatPrecedesTheOpenTag(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want bool
+	}{
+		{"#!/usr/bin/env php\n<?php\ndeclare(strict_types=1);\n", false},
+		{"#!php\r\n<?php\ndeclare(strict_types=1);\n", false},
+		{"#!php\n<?php declare(strict_types=1); echo 'x';\n", false},
+		{"#!php\n\n<?php\ndeclare(strict_types=1);\n", true},
+		{" #!php\n<?php\ndeclare(strict_types=1);\n", true},
+		{" <?php\ndeclare(strict_types=1);\n", true},
+		{"\xef\xbb\xbf<?php\ndeclare(strict_types=1);\n", true},
+		{"x<?php declare(strict_types=1);\n", true},
+		{"#!php\n<?php ?>x<?php declare(strict_types=1);\n", true},
+	} {
+		for v := token.PHP74; v <= token.Latest; v++ {
+			got := (&CompileErrorRule{}).Check(parser.ParseFile(tc.src, v), tc.src, nil)
+			if reported := len(got) == 1 && got[0].Message == firstStrict; reported != tc.want || len(got) > 1 {
+				t.Errorf("PHP %s, %q: got %+v, want an error: %v", v, tc.src, got, tc.want)
+			}
+		}
 	}
 }
 

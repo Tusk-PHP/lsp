@@ -105,7 +105,6 @@ func leadingDeclares(stmts []ast.Stmt, nopAllowed bool) []*ast.Declare {
 		switch s := stmt.(type) {
 		case *ast.Declare:
 			leading = append(leading, s)
-		case *ast.InlineHTML:
 		case *ast.Nop:
 			if !nopAllowed {
 				return leading
@@ -337,7 +336,7 @@ func (c *compileChecker) declare(d *ast.Declare) {
 
 func (c *compileChecker) ternary(t *ast.Ternary) bool {
 	inner, ok := t.Cond.(*ast.Ternary)
-	if !ok || !c.since(token.PHP80) || inner.Start != t.Start {
+	if !ok || !c.since(token.PHP80) || inner.Parenthesized() {
 		return false
 	}
 	switch {
