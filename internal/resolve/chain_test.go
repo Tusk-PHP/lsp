@@ -206,6 +206,21 @@ func TestResolveClassNameLoose(t *testing.T) {
 	}
 }
 
+func TestResolveClassNameLooseFindsOnlyClasses(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///h.php", "<?php\nnamespace Helper;\nfunction person() {}\nclass Box { public function person() {} }\n")
+	r := NewResolver(idx)
+	file := parser.ParseFile("<?php\nnamespace App;\n")
+	for _, f := range []*parser.FileNode{nil, file} {
+		if got := r.ResolveClassNameLoose("person", f); got != "person" {
+			t.Errorf("a function or method named like the class is not a class, got %q", got)
+		}
+		if got := r.ResolveClassNameLoose("Box", f); got != `Helper\Box` {
+			t.Errorf("a class by its short name, got %q", got)
+		}
+	}
+}
+
 func TestExtractNewClassAndArgs(t *testing.T) {
 	for in, want := range map[string][2]string{
 		"new Foo()":       {"Foo", ""},
