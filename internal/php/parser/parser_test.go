@@ -917,6 +917,51 @@ func TestNestedCloneCallsParseInLinearTime(t *testing.T) {
 	}
 }
 
+func TestNestedAttributedClosuresParseInLinearTime(t *testing.T) {
+	const depth = 40
+	for _, closed := range []bool{true, false} {
+		src := "<?php " + strings.Repeat("#[A(static function () { ", depth)
+		if closed {
+			src += strings.Repeat("})] function () {};", depth)
+		}
+		done := make(chan *ast.File, 1)
+		go func() { done <- Parse(src, token.PHP85) }()
+		var file *ast.File
+		select {
+		case file = <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatalf("closed=%v: %d nested attributed closures did not parse within 10s", closed, depth)
+		}
+		if closed != (len(file.Errors) == 0) {
+			t.Errorf("closed=%v: errors %v", closed, file.Errors)
+		}
+		if !closed {
+			continue
+		}
+		levels := 0
+		stmts := file.Stmts
+		for len(stmts) > 0 {
+			stmt, ok := stmts[0].(*ast.ExprStmt)
+			if !ok {
+				break
+			}
+			outer, ok := stmt.Expr.(*ast.Closure)
+			if !ok || len(outer.Attrs) != 1 || outer.Attrs[0].Attrs[0].Args == nil {
+				break
+			}
+			inner, ok := outer.Attrs[0].Attrs[0].Args.Args[0].Value.(*ast.Closure)
+			if !ok || !inner.Static {
+				break
+			}
+			levels++
+			stmts = inner.Body.Stmts
+		}
+		if levels != depth {
+			t.Errorf("%d nested attributed closures, want %d", levels, depth)
+		}
+	}
+}
+
 func TestErrorMessagesAreForPeople(t *testing.T) {
 	for _, src := range programs {
 		for _, e := range Parse(src, token.Latest).Errors {

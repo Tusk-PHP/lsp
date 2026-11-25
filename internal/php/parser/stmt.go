@@ -172,9 +172,7 @@ func (p *parser) statementBody() ast.Stmt {
 	case token.Enum:
 		return p.enumDecl(start, doc, nil)
 	case token.Attribute:
-		if s := p.attributedDecl(start, doc); s != nil {
-			return s
-		}
+		return p.attributedDecl(start, doc)
 	case token.Identifier:
 		if p.peekAt(1) == token.Colon {
 			name := p.identifier()
@@ -200,9 +198,9 @@ func (p *parser) isFunctionDecl() bool {
 }
 
 func (p *parser) attributedDecl(start uint32, doc ast.Span) ast.Stmt {
-	save := p.mark()
+	attrsAt := p.pos
 	attrs := p.attributes()
-	doc = p.docSince(save.pos)
+	doc = p.docSince(attrsAt)
 	switch p.peek() {
 	case token.Function:
 		if p.isFunctionDecl() {
@@ -220,8 +218,13 @@ func (p *parser) attributedDecl(start uint32, doc ast.Span) ast.Stmt {
 		p.requires(token.PHP85, start, "attributes on constants")
 		return p.constStmt(start, attrs)
 	}
-	p.reset(save)
-	return nil
+	if !p.enter() {
+		return &ast.ExprStmt{Expr: &ast.BadExpr{Span: p.span(start)}, Span: p.span(start)}
+	}
+	e := p.operators(p.attributedClosure(start, attrs), bpLowest, start)
+	p.depth--
+	p.endStatement()
+	return &ast.ExprStmt{Expr: e, Span: p.span(start)}
 }
 
 func (p *parser) constStmt(start uint32, attrs []*ast.AttributeGroup) ast.Stmt {

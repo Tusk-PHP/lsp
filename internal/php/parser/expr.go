@@ -424,13 +424,7 @@ func (p *parser) primary() ast.Expr {
 		}
 		return &ast.ConstFetch{Name: &ast.Name{Span: p.span(start), Kind: token.Static}, Span: p.span(start)}
 	case token.Attribute:
-		attrs := p.attributes()
-		static := p.accept(token.Static)
-		if k := p.peek(); k == token.Function || k == token.Fn {
-			return p.closure(start, attrs, static)
-		}
-		p.unexpected("expected a closure after attributes")
-		return &ast.BadExpr{Span: p.span(start)}
+		return p.attributedClosure(start, p.attributes())
 	case token.Match:
 		return p.match()
 	case token.Readonly:
@@ -812,6 +806,15 @@ func (p *parser) classReference() ast.Expr {
 			return e
 		}
 	}
+}
+
+func (p *parser) attributedClosure(start uint32, attrs []*ast.AttributeGroup) ast.Expr {
+	static := p.accept(token.Static)
+	if k := p.peek(); k == token.Function || k == token.Fn {
+		return p.closure(start, attrs, static)
+	}
+	p.unexpected("expected a closure after attributes")
+	return &ast.BadExpr{Span: p.span(start)}
 }
 
 func (p *parser) closure(start uint32, attrs []*ast.AttributeGroup, static bool) ast.Expr {
