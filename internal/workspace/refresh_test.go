@@ -33,12 +33,8 @@ func refreshPaths(t *testing.T, ws *Bootstrapped, root string, names ...string) 
 	for i, name := range names {
 		paths[i] = filepath.Join(root, name)
 	}
-	out, err := ws.Refresh(Refresh{Paths: paths, Config: func() *config.Config {
-		cfg, err := config.LoadFromFile(ws.ConfigPath())
-		if err != nil {
-			t.Fatal(err)
-		}
-		return cfg
+	out, err := ws.Refresh(Refresh{Paths: paths, Config: func() (*config.Config, error) {
+		return config.LoadFromFile(ws.ConfigPath())
 	}})
 	if err != nil {
 		t.Fatal(err)

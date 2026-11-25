@@ -39,7 +39,7 @@ func TestSuggestedExtensionsReachBuiltinIndex(t *testing.T) {
 			cfg.Extensions = []string{"apcu"}
 			profile, _ = ResolveBuiltinProfileWithConfig(dir, "", time.Second, cfg, nil)
 		} else {
-			profile, _ = ResolveBuiltinProfile(dir, "", time.Second, nil)
+			profile, _ = ResolveBuiltinProfileWithConfig(dir, "", time.Second, nil, nil)
 		}
 		ws := New(Options{RootPath: dir, Framework: "none", BuiltinProfile: profile})
 		for _, name := range []string{"Imagick::readImage", "ssh2_connect"} {

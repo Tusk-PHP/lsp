@@ -11,26 +11,6 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-// ResolveBuiltinProfile applies the PHP profile fallback chain for the version:
-//  1. composer.json (config.platform.php or require.php) — highest precedence
-//  2. .tusk-php.json / initializationOptions phpVersion (only when explicitly set)
-//  3. locally installed php binary (via phpdetect)
-//  4. bundled default
-//
-// Extensions from all sources that do fire are unioned: Composer-derived
-// extensions are always included; config extensions (when present) are
-// merged on top.
-//
-// It returns the resolved profile and a source string ("composer",
-// "config", "local", or "fallback"). If logf is non-nil, it receives a
-// single human-readable provenance message.
-func ResolveBuiltinProfile(rootPath, phpBinary string, timeout time.Duration, logf func(string)) (symbols.BuiltinProfile, string) {
-	return ResolveBuiltinProfileWithConfig(rootPath, phpBinary, timeout, nil, logf)
-}
-
-// ResolveBuiltinProfileWithConfig is like ResolveBuiltinProfile but also
-// accepts the loaded workspace config so the .tusk-php.json phpVersion and
-// extensions fields can participate in the chain.
 func ResolveBuiltinProfileWithConfig(rootPath, phpBinary string, timeout time.Duration, cfg *config.Config, logf func(string)) (symbols.BuiltinProfile, string) {
 	platform := composer.GetPlatform(rootPath)
 	profile := symbols.BuiltinProfile{Extensions: platform.Extensions}
