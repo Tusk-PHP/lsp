@@ -130,3 +130,27 @@ func BenchmarkReplaceBuiltins(b *testing.B) {
 		i++
 	}
 }
+
+func TestFilesUnderListsTheIndexedFilesOfADirectory(t *testing.T) {
+	idx := NewIndex()
+	for _, uri := range []string{"file:///p/app/A.php", "file:///p/app/sub/B.php", "file:///p/app/sub/deep/C.php", "file:///p/application/D.php"} {
+		idx.IndexFile(uri, "<?php\n")
+	}
+	idx.AddTemplateFile("file:///p/app/sub/view.blade.php")
+	got := idx.FilesUnder("/p/app/sub")
+	slices.Sort(got)
+	want := []string{"file:///p/app/sub/B.php", "file:///p/app/sub/deep/C.php", "file:///p/app/sub/view.blade.php"}
+	if !slices.Equal(got, want) {
+		t.Errorf("files under /p/app/sub: got %v, want %v", got, want)
+	}
+	idx.RemoveFile("file:///p/app/sub/B.php")
+	idx.RemoveFile("file:///p/app/sub/deep/C.php")
+	idx.RemoveFile("file:///p/app/sub/view.blade.php")
+	if got := idx.FilesUnder("/p/app/sub"); len(got) != 0 {
+		t.Errorf("removed files leave the directory: %v", got)
+	}
+	idx.IndexFile("file:///p/app/A.php", "<?php\nclass A {}\n")
+	if got := idx.FilesUnder("/p"); len(got) != 2 {
+		t.Errorf("re-indexing keeps one entry per file, and a sibling with the same prefix is its own directory: %v", got)
+	}
+}

@@ -62,31 +62,40 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 	configPath := ws.ConfigPath()
 	composerState := ws.ComposerStatePaths()
 	seen := make(map[string]struct{}, len(r.Paths))
+	var sources []string
 	profile := r.Profile
 	for _, path := range r.Paths {
 		path = filepath.Clean(path)
-		if _, dup := seen[path]; dup {
-			continue
-		}
-		seen[path] = struct{}{}
 		switch {
 		case path == configPath:
 			profile = true
 		case slices.Contains(composerState, path):
 			out.Composer = true
 			profile = profile || path == manifest
-		case IsPHPSource(path) && ws.walkerReaches(path):
-			uri := "file://" + path
-			if r.EditorOwns != nil && r.EditorOwns(uri) {
-				continue
-			}
-			changed, err := ws.refreshFile(path, uri)
+		default:
+			found, err := ws.sourcesAt(path)
 			if err != nil {
 				errs = append(errs, err)
 			}
-			if changed {
-				out.Files = append(out.Files, uri)
+			for _, source := range found {
+				if _, dup := seen[source]; !dup {
+					seen[source] = struct{}{}
+					sources = append(sources, source)
+				}
 			}
+		}
+	}
+	for _, path := range sources {
+		uri := "file://" + path
+		if r.EditorOwns != nil && r.EditorOwns(uri) {
+			continue
+		}
+		changed, err := ws.refreshFile(path, uri)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		if changed {
+			out.Files = append(out.Files, uri)
 		}
 	}
 	if out.Composer {
@@ -106,6 +115,38 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 		ws.Container.Analyze()
 	}
 	return out, errors.Join(errs...)
+}
+
+func (ws *Bootstrapped) sourcesAt(path string) ([]string, error) {
+	if IsPHPSource(path) {
+		if !ws.walkerReaches(path) {
+			return nil, nil
+		}
+		return []string{path}, nil
+	}
+	if !ws.walkerReaches(path) || ws.excludedDir(path) {
+		return nil, nil
+	}
+	info, err := os.Stat(path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		uris := ws.Index.FilesUnder(path)
+		paths := make([]string, len(uris))
+		for i, uri := range uris {
+			paths[i] = symbols.URIToPath(uri)
+		}
+		return paths, nil
+	case err != nil:
+		return nil, fmt.Errorf("look at %s: %w", path, err)
+	case !info.IsDir():
+		return nil, nil
+	}
+	var paths []string
+	ws.WalkSources(path, func(source string, _ fs.FileInfo) error {
+		paths = append(paths, source)
+		return nil
+	})
+	return paths, nil
 }
 
 func (ws *Bootstrapped) refreshFile(path, uri string) (bool, error) {

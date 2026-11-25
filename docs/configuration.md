@@ -71,7 +71,7 @@ All diagnostic rules are enabled by default. Set a rule to `false` (or `"off"`) 
 
 The PHP version and extensions follow `composer.json` and `.tusk-php.json` while the server runs: save either file and builtins, completion, hover and `builtin-unavailable` use the new profile, and open files are checked again. The same happens when the client sends `workspace/didChangeConfiguration` with settings shaped like `initializationOptions` (Zed and Neovim send their `settings` this way); a client that sends no settings still makes the server read both files again. Every other option is read once, at startup, and needs a restart.
 
-PHP files created, changed or deleted outside the editor (a branch switch, a code generator, `rm`) reach the index too, except in directories under `excludePaths`. The server asks the client to watch them when the client lets servers register file watchers, as VS Code, Zed and Neovim do. A file open in the editor keeps the editor's text.
+PHP files created, changed or deleted outside the editor (a branch switch, a code generator, `rm`) reach the index too, except in directories under `excludePaths`. The server asks the client to watch them when the client lets servers register file watchers, as VS Code, Zed and Neovim do. Deleting or renaming a directory counts too: its files leave the index, or are indexed at the new place. A file open in the editor keeps the editor's text.
 
 ## Auto-import
 
