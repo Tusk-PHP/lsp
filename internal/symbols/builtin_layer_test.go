@@ -154,3 +154,25 @@ func TestFilesUnderListsTheIndexedFilesOfADirectory(t *testing.T) {
 		t.Errorf("re-indexing keeps one entry per file, and a sibling with the same prefix is its own directory: %v", got)
 	}
 }
+
+func TestFileTreeListsWindowsWorkspaceFilesUnderADirectory(t *testing.T) {
+	tree := fileTree{windows: true}
+	for _, uri := range []string{`file://C:\proj\app\Billing\Invoice.php`, `file://C:\proj\app\Billing\Tax\Rate.php`, `file://C:\proj\app\BillingKept\Receipt.php`, "file:///C:/proj/app/Billing/Open.php"} {
+		tree.add(uri)
+	}
+	got := tree.under(`C:\proj\app\Billing`)
+	slices.Sort(got)
+	want := []string{"file:///C:/proj/app/Billing/Open.php", `file://C:\proj\app\Billing\Invoice.php`, `file://C:\proj\app\Billing\Tax\Rate.php`}
+	if !slices.Equal(got, want) {
+		t.Errorf("files under C:\\proj\\app\\Billing: got %v, want %v", got, want)
+	}
+	for _, uri := range want {
+		tree.remove(uri)
+	}
+	if got := tree.under(`C:\proj\app\Billing`); len(got) != 0 {
+		t.Errorf("removed files leave the directory: %v", got)
+	}
+	if got := tree.under(`C:\proj`); len(got) != 1 {
+		t.Errorf("the sibling directory stays: %v", got)
+	}
+}

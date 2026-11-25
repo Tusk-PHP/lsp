@@ -223,6 +223,7 @@ func NewIndex() *Index {
 		fileSource:           make(map[string]indexedText),
 		generatedURIs:        make(map[string]bool),
 		generatedFrom:        make(map[string][]string),
+		files:                fileTree{windows: hostWindows},
 	}
 }
 
