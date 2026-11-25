@@ -1189,3 +1189,59 @@ func TestNestedDestructuringIsAList(t *testing.T) {
 		}
 	}
 }
+
+func TestParenthesizedExpressionsAreMarked(t *testing.T) {
+	src := "<?php $a = (1 ? 2 : 3) ? 4 : 5; $b = 1 ? 2 : 3 ? 4 : 5; $c = (($d)); $e = ($f)->g;"
+	file := Parse(src, token.PHP83)
+	if len(file.Errors) > 0 {
+		t.Fatalf("errors: %v", file.Errors)
+	}
+	var marked []string
+	ast.Walk(file, func(n ast.Node) bool {
+		if e, ok := n.(ast.Expr); ok && e.Parenthesized() {
+			marked = append(marked, e.Bounds().Text(src))
+		}
+		return true
+	})
+	want := []string{"1 ? 2 : 3", "$d", "$f"}
+	if !slices.Equal(marked, want) {
+		t.Errorf("parenthesized: got %q, want %q", marked, want)
+	}
+}
+
+func TestAParenthesizedVariableIsNotAssignable(t *testing.T) {
+	for _, src := range []string{"<?php ($a) = 1;", "<?php [$a] = [1]; ([$b]) = [2];"} {
+		if file := Parse(src, token.PHP83); len(file.Errors) == 0 {
+			t.Errorf("%q parsed without an error", src)
+		}
+	}
+}
+
+func TestAShebangLineIsNotInlineHTML(t *testing.T) {
+	for _, tc := range []struct {
+		src     string
+		shebang string
+		html    string
+	}{
+		{"#!/usr/bin/env php\n<?php echo 1;", "#!/usr/bin/env php\n", ""},
+		{"#!php\r\n<?php echo 1;", "#!php\r\n", ""},
+		{"#!php\n\n<?php echo 1;", "#!php\n", "\n"},
+		{"#!php", "#!php", ""},
+		{" #!php\n<?php echo 1;", "", " #!php\n"},
+		{"<p>\n<?php echo 1;", "", "<p>\n"},
+	} {
+		file := Parse(tc.src, token.PHP83)
+		if got := file.Shebang.Text(tc.src); got != tc.shebang {
+			t.Errorf("%q: shebang %q, want %q", tc.src, got, tc.shebang)
+		}
+		html := ""
+		if len(file.Stmts) > 0 {
+			if h, ok := file.Stmts[0].(*ast.InlineHTML); ok {
+				html = h.Text(tc.src)
+			}
+		}
+		if html != tc.html {
+			t.Errorf("%q: inline HTML %q, want %q", tc.src, html, tc.html)
+		}
+	}
+}
