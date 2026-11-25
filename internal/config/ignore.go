@@ -18,7 +18,8 @@ type IgnoreRules struct {
 func (r *IgnoreRules) UnmarshalJSON(data []byte) error {
 	var entries []json.RawMessage
 	if err := json.Unmarshal(data, &entries); err != nil {
-		return fmt.Errorf("diagnosticIgnore: %w", err)
+		*r = IgnoreRules{Invalid: []error{fmt.Errorf("diagnosticIgnore must be a list of rules, got %s: %w", data, err)}}
+		return nil
 	}
 	parsed := IgnoreRules{}
 	for _, entry := range entries {

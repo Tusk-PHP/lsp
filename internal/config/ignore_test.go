@@ -115,11 +115,15 @@ func TestLoadFromFileReadsDiagnosticIgnore(t *testing.T) {
 	if problems := cfg.Problems(); len(problems) != 1 || !strings.Contains(problems[0].Error(), `diagnosticIgnore message "("`) {
 		t.Errorf("the skipped rule is reported: %v", problems)
 	}
-	if err := os.WriteFile(path, []byte(`{"diagnosticIgnore":{"code":"unknown-member"}}`), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(`{"phpVersion":"8.1","diagnosticIgnore":{"code":"unknown-member"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadFromFile(path); err == nil || !strings.Contains(err.Error(), "diagnosticIgnore") {
-		t.Errorf("diagnosticIgnore that isn't a list fails the load: %v", err)
+	cfg, err = LoadFromFile(path)
+	if err != nil {
+		t.Fatalf("diagnosticIgnore that isn't a list is skipped, not the whole file: %v", err)
+	}
+	if problems := cfg.Problems(); cfg.PHPVersion != "8.1" || len(cfg.DiagnosticIgnore.Rules) != 0 || len(problems) != 1 || !strings.Contains(problems[0].Error(), "diagnosticIgnore must be a list of rules") {
+		t.Errorf("diagnosticIgnore that isn't a list is reported: %+v %v", cfg.DiagnosticIgnore, problems)
 	}
 }
 
