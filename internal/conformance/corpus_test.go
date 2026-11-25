@@ -188,10 +188,13 @@ func TestConformance(t *testing.T) {
 		// recorded here for the orchestrator to triage and fix. The harness itself
 		// must pass so it can be used as a regression gate once violations are fixed.
 		t.Logf("%s", sb.String())
-		// Fail only for new violation categories: panics are never acceptable.
+		// Fail only for new violation categories: panics and nameless symbols are never acceptable.
 		for _, v := range allViolations {
-			if strings.Contains(v.msg, "panic") || strings.Contains(v.msg, "panicked") {
+			switch {
+			case strings.Contains(v.msg, "panic"):
 				t.Errorf("PANIC violation (must be zero): %s", v.String())
+			case v.fatal:
+				t.Errorf("violation (must be zero): %s", v.String())
 			}
 		}
 	} else {
