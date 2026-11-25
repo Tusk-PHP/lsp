@@ -229,7 +229,7 @@ func attachShapeFields(rt ResolvedType) ResolvedType {
 
 func inferArrayLiteralType(literal string) ResolvedType {
 	literal = strings.TrimSpace(literal)
-	if !strings.HasPrefix(literal, "[") || literal == "[]" {
+	if !strings.HasPrefix(literal, "[") || !strings.HasSuffix(literal, "]") || literal == "[]" {
 		return ResolvedType{FQN: "array"}
 	}
 
