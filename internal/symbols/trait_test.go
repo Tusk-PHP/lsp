@@ -476,3 +476,34 @@ class User { use T { foo as final bar; baz as final; } }
 		t.Error("as final changed the trait's own method")
 	}
 }
+
+func TestConcreteTraitMethodBeatsAnAbstractOne(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///traits.php", `<?php
+trait Abs { abstract public function run(): void; abstract public function stop(): void; }
+trait Impl { public function run(): void {} }
+trait Other { public function run(): void {} }
+class AbsFirst { use Abs, Impl; }
+class ImplFirst { use Impl, Abs; }
+class Chosen { use Abs, Impl { Abs::run insteadof Impl; } }
+class Aliased { use Abs, Other { Other::run insteadof Abs; Other::run as go; } }
+`)
+	cases := []struct{ class, member, want string }{
+		{"AbsFirst", "run", "Impl::run"},
+		{"ImplFirst", "run", "Impl::run"},
+		{"AbsFirst", "stop", "Abs::stop"},
+		{"Chosen", "run", "Abs::run"},
+		{"Aliased", "run", "Other::run"},
+		{"Aliased", "go", "Aliased::go"},
+	}
+	for _, c := range cases {
+		named := idx.ClassMembersNamed(c.class, c.member)
+		if len(named) != 1 || named[0].FQN != c.want {
+			var got []string
+			for _, m := range named {
+				got = append(got, m.FQN)
+			}
+			t.Errorf("%s::%s = %v, want only %s", c.class, c.member, got, c.want)
+		}
+	}
+}

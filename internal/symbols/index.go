@@ -1,6 +1,7 @@
 package symbols
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1236,6 +1237,7 @@ func (idx *Index) TraitMembers(fqn string) []*Symbol {
 }
 
 func (idx *Index) appendTraitMembersLocked(members []*Symbol, traits []string, rules *traitRules, visited map[string]bool) []*Symbol {
+	start := len(members)
 	var aliases []*Symbol
 	for _, tr := range traits {
 		if rules == nil {
@@ -1250,7 +1252,30 @@ func (idx *Index) appendTraitMembersLocked(members []*Symbol, traits []string, r
 			}
 		}
 	}
-	return append(members, aliases...)
+	members = append(members, aliases...)
+	return members[:start+len(withoutAbstractsImplemented(members[start:]))]
+}
+
+func withoutAbstractsImplemented(members []*Symbol) []*Symbol {
+	if !slices.ContainsFunc(members, isAbstractMethod) {
+		return members
+	}
+	concrete := make(map[string]bool)
+	for _, m := range members {
+		if m.Kind == KindMethod && !m.IsAbstract {
+			concrete[strings.ToLower(m.Name)] = true
+		}
+	}
+	if len(concrete) == 0 {
+		return members
+	}
+	return slices.DeleteFunc(members, func(m *Symbol) bool {
+		return isAbstractMethod(m) && concrete[strings.ToLower(m.Name)]
+	})
+}
+
+func isAbstractMethod(m *Symbol) bool {
+	return m.Kind == KindMethod && m.IsAbstract
 }
 
 func (idx *Index) getClassMembersRecursive(fqn string, visited map[string]bool) []*Symbol {
