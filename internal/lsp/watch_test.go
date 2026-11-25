@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -319,4 +320,102 @@ func TestRenamedDirectoryResolvesAtTheNewPlace(t *testing.T) {
 	if got := symbolURIs(t, h, "Shipment"); !slices.Equal(got, []string{"file://" + filepath.Join(root, "app/New/Shipment.php")}) {
 		t.Errorf("Shipment is declared at the new place only: %v", got)
 	}
+}
+
+func waitForShowMessage(t *testing.T, h *lspHarness, prefix string) {
+	t.Helper()
+	deadline := time.After(10 * time.Second)
+	for {
+		select {
+		case msg := <-h.notes:
+			if msg["method"] != "window/showMessage" {
+				continue
+			}
+			if text, _ := msg["params"].(map[string]interface{})["message"].(string); strings.HasPrefix(text, prefix) {
+				return
+			}
+		case <-deadline:
+			t.Fatalf("no window/showMessage starting with %q", prefix)
+		}
+	}
+}
+
+func settleRefreshes(t *testing.T, h *lspHarness, root, class string) {
+	t.Helper()
+	name := "app/" + class + ".php"
+	writeProjectFiles(t, root, map[string]string{name: "<?php\nnamespace App;\nclass " + class + " {}\n"})
+	notifyWatched(h, root, name)
+	waitForSymbols(t, h, class, func(names []string) bool { return slices.Contains(names, class) })
+}
+
+func TestClientSettingsMergeOverTheInitializationOptions(t *testing.T) {
+	h, _ := startWatchedProject(t, map[string]string{
+		"composer.json": `{"name": "app/app"}`,
+	}, map[string]interface{}{}, map[string]interface{}{"phpVersion": "7.4", "excludePaths": []string{"vendor", "legacy"}})
+
+	h.notify("workspace/didChangeConfiguration", map[string]interface{}{"settings": map[string]interface{}{}})
+	symbolNames(t, h, "Anything")
+	if cfg := h.server.loadConfig(); cfg.PHPVersion != "7.4" || !cfg.IsPHPVersionExplicitlySet() {
+		t.Errorf("settings with no Tusk PHP keys leave the initialization options in place: PHP %s", cfg.PHPVersion)
+	}
+
+	h.notify("workspace/didChangeConfiguration", map[string]interface{}{"settings": map[string]interface{}{"diagnosticsEnabled": false}})
+	symbolNames(t, h, "Anything")
+	cfg := h.server.loadConfig()
+	if cfg.PHPVersion != "7.4" || !slices.Equal(cfg.ExcludePaths, []string{"vendor", "legacy"}) {
+		t.Errorf("settings apply over the initialization options instead of replacing them: PHP %s, excludePaths %v", cfg.PHPVersion, cfg.ExcludePaths)
+	}
+	if cfg.DiagnosticsEnabled {
+		t.Error("the settings' own keys apply")
+	}
+
+	h.notify("workspace/didChangeConfiguration", map[string]interface{}{"settings": map[string]interface{}{"phpVersion": "8.4"}})
+	symbolNames(t, h, "Anything")
+	if cfg := h.server.loadConfig(); cfg.PHPVersion != "8.4" || !cfg.DiagnosticsEnabled {
+		t.Errorf("newer settings replace older settings: PHP %s, diagnostics %v", cfg.PHPVersion, cfg.DiagnosticsEnabled)
+	}
+}
+
+func TestTuskSettingsIgnoresObjectsWithoutTuskKeys(t *testing.T) {
+	for raw, want := range map[string]bool{
+		``:                              false,
+		`null`:                          false,
+		`{}`:                            false,
+		`{"otherServer": {"a": 1}}`:     false,
+		`{"phpVersion": "8.2"}`:         true,
+		`{"diagnosticsEnabled": false}`: true,
+	} {
+		got, err := tuskSettings(json.RawMessage(raw))
+		if err != nil {
+			t.Fatalf("%s: %v", raw, err)
+		}
+		if (got != nil) != want {
+			t.Errorf("%s: settings applied = %v, want %v", raw, got != nil, want)
+		}
+	}
+	if _, err := tuskSettings(json.RawMessage(`{"phpVersion": 8}`)); err == nil {
+		t.Error("a Tusk PHP key of the wrong type is an error")
+	}
+}
+
+func TestAConfigFileWithASyntaxErrorKeepsTheLastGoodOne(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json":  `{"name": "app/app"}`,
+		".tusk-php.json": `{"phpVersion": "7.4"}`,
+	}, map[string]interface{}{}, nil)
+	uri := "file://" + filepath.Join(root, "check.php")
+	openDocument(h, uri, usesPHP80)
+	waitForDiagnostic(t, h, uri, "builtin-unavailable", true)
+
+	writeProjectFiles(t, root, map[string]string{".tusk-php.json": `{"phpVersion": "8.4"`})
+	notifyWatched(h, root, ".tusk-php.json")
+	waitForShowMessage(t, h, "Tusk PHP kept its previous configuration")
+	settleRefreshes(t, h, root, "AfterBrokenSave")
+	if version := h.server.workspace.Profile().PHPVersion; version != "7.4" {
+		t.Errorf("a half-edited config file keeps the last good PHP version, got %s", version)
+	}
+
+	writeProjectFiles(t, root, map[string]string{".tusk-php.json": `{"phpVersion": "8.4"}`})
+	notifyWatched(h, root, ".tusk-php.json")
+	waitForDiagnostic(t, h, uri, "builtin-unavailable", false)
 }

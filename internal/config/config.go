@@ -299,9 +299,18 @@ func LoadFromFile(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// MergeClientOptions applies client-provided initializationOptions over
-// the current config. Only non-zero values from the client override.
-func (c *Config) MergeClientOptions(opts *protocol.InitializationOptions) {
+// WithClientOptions returns a copy of the config with client-provided
+// options applied over it. Only non-zero values from the client override;
+// the receiver is left unchanged, and nil options return a plain copy.
+func (c *Config) WithClientOptions(opts *protocol.InitializationOptions) *Config {
+	merged := *c
+	if opts != nil {
+		merged.mergeClientOptions(opts)
+	}
+	return &merged
+}
+
+func (c *Config) mergeClientOptions(opts *protocol.InitializationOptions) {
 	if opts.PHPVersion != "" {
 		c.PHPVersion = opts.PHPVersion
 		c.phpVersionExplicitlySet = true
