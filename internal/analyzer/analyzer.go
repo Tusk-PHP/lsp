@@ -1109,8 +1109,13 @@ func (a *Analyzer) GetFoldingRanges(uri, source string) []protocol.FoldingRange 
 	return out
 }
 
+const maxWorkspaceSymbols = 500
+
 func (a *Analyzer) GetWorkspaceSymbols(query string) []protocol.SymbolInformation {
 	query = strings.TrimSpace(query)
+	if query == "" {
+		return []protocol.SymbolInformation{}
+	}
 
 	candidates := a.index.SearchByPrefix(query)
 	if strings.Contains(query, "\\") {
@@ -1139,8 +1144,6 @@ func (a *Analyzer) GetWorkspaceSymbols(query string) []protocol.SymbolInformatio
 
 		score := 3
 		switch {
-		case lowerQuery == "":
-			score = 3
 		case strings.EqualFold(sym.Name, query):
 			score = 0
 		case strings.EqualFold(sym.FQN, strings.TrimPrefix(query, "\\")):
@@ -1164,6 +1167,7 @@ func (a *Analyzer) GetWorkspaceSymbols(query string) []protocol.SymbolInformatio
 		return scored[i].sym.URI < scored[j].sym.URI
 	})
 
+	scored = scored[:min(len(scored), maxWorkspaceSymbols)]
 	results := make([]protocol.SymbolInformation, 0, len(scored))
 	for _, item := range scored {
 		sym := item.sym
