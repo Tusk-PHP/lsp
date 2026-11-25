@@ -70,6 +70,9 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 	s.blade.forget(params.TextDocument.URI)
 	s.cancelDiagnostics(params.TextDocument.URI)
 	s.diag.ClearCache(params.TextDocument.URI)
+	if s.workspace != nil && isPHPDocument(params.TextDocument.URI) {
+		s.queueRefresh([]string{symbols.URIToPath(params.TextDocument.URI)}, false)
+	}
 }
 
 func (s *Server) handleDidSave(msg *jsonRPCMessage) {
