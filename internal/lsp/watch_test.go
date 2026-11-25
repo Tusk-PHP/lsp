@@ -209,6 +209,12 @@ func TestOpenDocumentsKeepTheEditorsText(t *testing.T) {
 	if names := symbolNames(t, h, "EditedInEditor"); len(names) != 1 {
 		t.Errorf("the editor's text stays indexed: %v", names)
 	}
+
+	h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": uri}})
+	waitForSymbols(t, h, "WrittenOnDisk", func(names []string) bool { return len(names) == 1 })
+	if names := symbolNames(t, h, "EditedInEditor"); len(names) != 0 {
+		t.Errorf("closing a document without saving gives the disk its text back: %v", names)
+	}
 }
 
 const usesPHP80 = "<?php\nfunction check(string $s): bool { return str_contains($s, 'x'); }\n"
