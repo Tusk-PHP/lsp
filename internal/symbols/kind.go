@@ -13,3 +13,7 @@ func (s *Symbol) IsClassLike() bool {
 func (k SymbolKind) IsMember() bool {
 	return k == KindMethod || k == KindProperty || k == KindConstant || k == KindEnumCase
 }
+
+func (s *Symbol) isGlobal() bool {
+	return !s.Kind.IsMember() || s.Kind == KindConstant && s.ParentFQN == ""
+}

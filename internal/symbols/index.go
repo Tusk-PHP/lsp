@@ -527,7 +527,7 @@ func (idx *Index) addSymbol(uri string, sym *Symbol) {
 		// A real declaration replaces a class generated under the same name.
 		idx.dropGeneratedLocked(sym.FQN)
 	}
-	if !sym.Kind.IsMember() {
+	if sym.isGlobal() {
 		idx.shadowLocked(sym)
 	}
 	idx.symbols[sym.FQN] = sym
@@ -604,7 +604,7 @@ func (idx *Index) removeFileSymbols(uri string) {
 			idx.unshadowLocked(sym)
 			continue
 		}
-		if !sym.Kind.IsMember() && idx.promoteShadowedLocked(sym) {
+		if sym.isGlobal() && idx.promoteShadowedLocked(sym) {
 			continue
 		}
 		delete(idx.symbols, sym.FQN)
@@ -635,7 +635,7 @@ func (idx *Index) removeFileSymbols(uri string) {
 
 func (idx *Index) shadowLocked(sym *Symbol) {
 	prev := idx.symbols[sym.FQN]
-	if prev == nil || prev == sym || prev.Kind.IsMember() || prev.Source == SourceGenerated || sym.Source == SourceGenerated ||
+	if prev == nil || prev == sym || !prev.isGlobal() || prev.Source == SourceGenerated || sym.Source == SourceGenerated ||
 		(prev.Source == SourceBuiltin && sym.Source == SourceBuiltin) {
 		return
 	}
