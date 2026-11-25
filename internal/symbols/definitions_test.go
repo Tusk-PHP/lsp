@@ -166,3 +166,18 @@ func TestPromotedDeclarationReplacesTheRemovedOnesTraitsAndInterfaces(t *testing
 		t.Fatalf("Dup extends P: %v", got)
 	}
 }
+
+func TestLookupStandaloneSkipsMembersOfOtherClasses(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///room.php", "<?php\nnamespace Other;\nclass Room { public function area() {} const SIZE = 1; }\n")
+	idx.IndexFile("file:///plan.php", "<?php\nnamespace App;\nclass Plan { public function area() {} }\nconst SIZE = 2;\n")
+	if got := idx.LookupStandalone("area", ""); got != nil {
+		t.Errorf("outside a class a bare name reaches no member, got %+v", got)
+	}
+	if got := idx.LookupStandalone("area", `App\Plan`); got == nil || got.FQN != `App\Plan::area` {
+		t.Errorf("inside a class it reaches that class's own member, got %+v", got)
+	}
+	if got := idx.LookupStandalone(`App\SIZE`, `App\Plan`); got == nil || got.FQN != `App\SIZE` {
+		t.Errorf("a qualified name is looked up by its last part, got %+v", got)
+	}
+}
