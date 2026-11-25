@@ -159,7 +159,7 @@ Contributions written with AI tools are welcome, and so are those written by han
 2. `make test` passes (with `-race`).
 3. `make conformance-pr` passes for changes to the parser, index or providers, and `make field-baseline` for changes to diagnostics or typing. When a change adds or removes findings in the field baselines, look at each one, then run `make field-baseline-update` and commit the result.
 4. `make wasm` still builds.
-5. New behaviour has a test that fails without it.
+5. New behaviour has a test that fails without it. Corpus tests run against real projects fetched with `scripts/fetch-corpus.sh`.
 6. Performance numbers are in the pull request when AGENTS.md's performance rules ask for them (`make bench-self` before and after, or a `go test -bench` with `-benchmem`).
 7. The pull request description has a **Release note** for anything a user would notice, written for users: what changed for them, not which functions moved. Don't edit `CHANGELOG.md`: the maintainers write it from these notes when they release, so pull requests never conflict over it. This applies to the internals' own pull requests too.
 8. Commits are focused, one logical change each, with messages in the existing style: `fix: …`, `feat: …`, `docs: …`, `chore: …`, `refactor: …`, `test: …`.
@@ -228,7 +228,7 @@ Choose the version from the changes, following [SemVer](https://semver.org/) whi
 
 **When you release:**
 
-1. Write the release's `CHANGELOG.md` section ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)) from the release notes of the PRs in the issue's **Merged** list, in one commit, under the version and date. Only maintainers edit `CHANGELOG.md`, and only at this step.
+1. Write the release's `CHANGELOG.md` section ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)) from the release notes of the PRs in the issue's **Merged** list, in one commit, under the version and date. Only maintainers edit `CHANGELOG.md`, and only at this step. Commit it before pushing the tag: the release workflow reads that version's section of `CHANGELOG.md` for the GitHub Release notes.
 2. Check that CI, conformance and the field baselines are green on `main`.
 3. Push the tag (see [Release Process](#release-process)).
 4. Close the release issue with a link to the GitHub Release, and open the next `Release x.y.z` issue with the `release` label, moving any unticked **Planned** PRs into it.

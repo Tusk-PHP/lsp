@@ -233,6 +233,9 @@ performance numbers, the release note, commit style), keeping pull requests smal
 drafts and stacks, review and releases. Read it and follow its checklist before
 opening a pull request. This file covers the code's principles.
 
+Pull requests don't edit `CHANGELOG.md`: put a **Release note** in the pull request
+description instead, and the maintainers write the changelog from it when they release.
+
 ## Direction
 
 - **Correct answers first**, then new features. The benchmark tracks both.
