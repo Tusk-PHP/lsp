@@ -51,8 +51,7 @@ func spelledLike(tok parser.Token, target *symbols.Symbol) bool {
 	case parser.TokenVariable:
 		return target.Kind == symbols.KindProperty && tok.Value[1:] == name
 	case parser.TokenIdentifier:
-		switch target.Kind {
-		case symbols.KindFunction, symbols.KindMethod, symbols.KindClass, symbols.KindInterface, symbols.KindTrait, symbols.KindEnum:
+		if foldsCase(target.Kind) {
 			return strings.EqualFold(tok.Value, name)
 		}
 		return tok.Value == name
