@@ -27,6 +27,13 @@ type parser struct {
 
 	parenthesized ast.Expr
 	depth         int
+
+	stmtStack   scratch[ast.Stmt]
+	exprStack   scratch[ast.Expr]
+	argStack    scratch[*ast.Arg]
+	itemStack   scratch[*ast.ArrayItem]
+	paramStack  scratch[*ast.Param]
+	memberStack scratch[ast.Member]
 }
 
 const (
@@ -43,7 +50,7 @@ func ParseCode(src string, version token.Version) *ast.File {
 }
 
 func parse(src string, version token.Version, all []lexer.Token) *ast.File {
-	p := &parser{src: src, version: version, toks: make([]lexer.Token, 0, len(all)/2+1), docs: make([]ast.Span, 0, len(all)/2+1)}
+	p := &parser{src: src, version: version, toks: all[:0], docs: make([]ast.Span, 0, len(all)/2+1)}
 	var doc ast.Span
 	for _, tok := range all {
 		switch tok.Kind {
@@ -337,11 +344,25 @@ func (p *parser) name() *ast.Name {
 		p.unexpected("expected a name")
 		return nil
 	}
+	name := p.takeName(n)
+	return &name
+}
+
+func (p *parser) takeName(n int) ast.Name {
 	start, kind := p.start(), p.nameKind(n)
 	for range n {
 		p.next()
 	}
-	return &ast.Name{Span: p.span(start), Kind: kind}
+	return ast.Name{Span: p.span(start), Kind: kind}
+}
+
+func (p *parser) constFetch(start uint32) *ast.ConstFetch {
+	n := &struct {
+		ast.ConstFetch
+		name ast.Name
+	}{name: p.takeName(p.nameTokens())}
+	n.ConstFetch = ast.ConstFetch{Name: &n.name, Span: p.span(start)}
+	return &n.ConstFetch
 }
 
 func (p *parser) nameOf(allowed func(token.Kind) bool) *ast.Name {

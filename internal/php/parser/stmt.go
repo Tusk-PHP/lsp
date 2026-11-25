@@ -6,15 +6,15 @@ import (
 )
 
 func (p *parser) statements(stop func(token.Kind) bool) []ast.Stmt {
-	var stmts []ast.Stmt
+	from := p.stmtStack.mark()
 	for k := p.peek(); k != eof && k != token.RightBrace && !stop(k); k = p.peek() {
 		before := p.pos
 		if s := p.statement(); s != nil {
-			stmts = append(stmts, s)
+			p.stmtStack.push(s)
 		}
 		p.ensureProgress(before)
 	}
-	return stmts
+	return p.stmtStack.take(from)
 }
 
 func (p *parser) block() *ast.Block {
