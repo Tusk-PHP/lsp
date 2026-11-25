@@ -96,3 +96,23 @@ func withVisibility(method *Symbol, visibility string) *Symbol {
 	copied.Visibility = visibility
 	return &copied
 }
+
+func (idx *Index) aliasedMethodLocked(owner *Symbol, name string) *Symbol {
+	if owner.traitRules == nil {
+		return nil
+	}
+	for _, a := range owner.traitRules.aliases {
+		if !strings.EqualFold(a.alias, name) {
+			continue
+		}
+		for _, trait := range idx.traitMap[owner.FQN] {
+			if a.trait != "" && !strings.EqualFold(a.trait, trait) {
+				continue
+			}
+			if m := methodNamed(idx.getClassMembersRecursive(trait, map[string]bool{owner.FQN: true}), a.method); m != nil {
+				return withVisibility(m, a.visibility)
+			}
+		}
+	}
+	return nil
+}

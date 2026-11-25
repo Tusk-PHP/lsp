@@ -8,8 +8,10 @@ import "strings"
 // only an interface's or an abstract one. receiver is the class member was
 // reached through, so a trait method a class uses finds the interface the
 // class implements; when receiver doesn't extend member's class, the walk
-// starts at member's class. Builtin declarations have no location and are
-// passed over, so the project's own declaration below one wins. It returns nil
+// starts at member's class. A trait an insteadof rule leaves out declares
+// nothing, and a method a class or trait exposes under an `as` alias is
+// declared there as the method it aliases. Builtin declarations have no
+// location and are passed over, so the project's own declaration below one wins. It returns nil
 // when nothing above declares member.
 func (idx *Index) Prototype(receiver string, member *Symbol) *Symbol {
 	if member == nil || member.ParentFQN == "" || !member.Kind.IsMember() {
@@ -43,7 +45,15 @@ func (w *prototypeWalk) above(owner string, inherited bool) *Symbol {
 			return found
 		}
 	}
-	for _, trait := range w.idx.traitMap[owner] {
+	traits := w.idx.traitMap[owner]
+	var rules *traitRules
+	if len(traits) > 0 && w.member.Kind == KindMethod {
+		rules = w.idx.traitRulesLocked(owner)
+	}
+	for _, trait := range traits {
+		if rules.excludes(trait, w.member.Name) {
+			continue
+		}
 		if found := w.visit(trait, inherited); found != nil {
 			return found
 		}
@@ -86,8 +96,15 @@ func (idx *Index) declaredMemberLocked(owner string, member *Symbol) *Symbol {
 	if member.Kind != KindMethod || ownerSym == nil {
 		return nil
 	}
-	for _, sym := range ownerSym.Children {
-		if sym.Kind == KindMethod && strings.EqualFold(sym.Name, member.Name) {
+	if sym := methodNamed(ownerSym.Children, member.Name); sym != nil {
+		return sym
+	}
+	return idx.aliasedMethodLocked(ownerSym, member.Name)
+}
+
+func methodNamed(members []*Symbol, name string) *Symbol {
+	for _, sym := range members {
+		if sym.Kind == KindMethod && strings.EqualFold(sym.Name, name) {
 			return sym
 		}
 	}
