@@ -15,9 +15,8 @@ type NativeRulesOptions struct {
 	IncludedFile           bool
 }
 
-func EditRules(opts NativeRulesOptions) []checks.Rule {
+func EditRules(opts NativeRulesOptions, shared *checks.Shared) []checks.Rule {
 	typeResolver := MemoizeTypeResolver(opts.TypeResolver)
-	shared := &checks.Shared{}
 	uses := &checks.MemberUseCache{Shared: shared}
 	deprecatedFunctions := &checks.DeprecatedFunctionRule{}
 	if opts.BuiltinUnavailableRule != nil {
@@ -67,5 +66,5 @@ func SaveRules(opts NativeRulesOptions) []checks.Rule {
 }
 
 func NativeRules(opts NativeRulesOptions) []checks.Rule {
-	return append(EditRules(opts), SaveRules(opts)...)
+	return append(EditRules(opts, &checks.Shared{}), SaveRules(opts)...)
 }

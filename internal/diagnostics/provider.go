@@ -84,15 +84,16 @@ func (p *Provider) AnalyzeAll(uri, source string) []protocol.Diagnostic {
 
 func (p *Provider) analyze(uri, source string, withSaveRules bool) []protocol.Diagnostic {
 	var diags []protocol.Diagnostic
+	shared := &checks.Shared{}
 	if workspace.IsBlade(uri) {
 		// A Blade view is checked through the PHP it contains, and only what
 		// is found in that PHP is reported, at its place in the view.
 		in := p.ViewTypes.For(uri)
 		doc := blade.CompileWith(source, blade.CompileOptions{Vars: in.BladeVars(), Defined: in.Complete, Custom: p.bladeCustom()})
-		diags = toTemplate(doc, p.analyzeNative(doc.PHP, true, !in.Complete))
+		diags = toTemplate(doc, p.analyzeNative(doc.PHP, shared, true, !in.Complete))
 		diags = append(diags, p.analyzeBlade(source)...)
 	} else {
-		diags = p.analyzeNative(source, false, workspace.IsTemplate(uri))
+		diags = p.analyzeNative(source, shared, false, workspace.IsTemplate(uri))
 	}
 	p.mu.RLock()
 	if cached, ok := p.toolResults[uri]; ok {
@@ -114,11 +115,11 @@ func (p *Provider) analyze(uri, source string, withSaveRules bool) []protocol.Di
 		diags = filterOutCodes(diags, rule.UnknownClass, rule.UnknownFunction, rule.UnknownMember, rule.InvalidOverride)
 	}
 
-	return p.dropSuppressed(uri, source, diags)
+	return p.dropSuppressed(uri, source, shared, diags)
 }
 
-func (p *Provider) analyzeNative(source string, bladePHP, includedFile bool) []protocol.Diagnostic {
-	rules := EditRules(p.ruleOptions(bladePHP, includedFile))
+func (p *Provider) analyzeNative(source string, shared *checks.Shared, bladePHP, includedFile bool) []protocol.Diagnostic {
+	rules := EditRules(p.ruleOptions(bladePHP, includedFile), shared)
 	return p.toDiagnostics(p.runRules(rules, parser.ParseFile(source), source))
 }
 

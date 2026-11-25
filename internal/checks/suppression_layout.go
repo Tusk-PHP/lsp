@@ -45,7 +45,10 @@ type Layout struct {
 }
 
 func PHPLayout(source string) Layout {
-	tokens := parser.Tokenize(source)
+	return phpLayout(source, parser.Tokenize(source))
+}
+
+func phpLayout(source string, tokens []parser.Token) Layout {
 	l := newLayout(source, false)
 	regionStart := -1
 	for i := 0; i < len(tokens); i++ {
