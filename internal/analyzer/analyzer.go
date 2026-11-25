@@ -98,132 +98,7 @@ func (a *Analyzer) SetViewResolver(resolver *frameworklaravel.Views) {
 }
 
 func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *protocol.Location {
-	if a.framework == "symfony" {
-		if routeName, _, ok := frameworksymfony.RouteNameAtPosition(source, pos); ok {
-			if route := frameworksymfony.FindRoute(a.index, routeName); route != nil {
-				return &protocol.Location{URI: route.URI, Range: route.DeclRange}
-			}
-		}
-		if a.symfonyCommands != nil {
-			if loc := a.definitionForSymfonyCommand(uri, source, pos); loc != nil {
-				return loc
-			}
-		}
-		if a.symfonyTranslations != nil {
-			if loc := a.definitionForSymfonyTranslationKey(source, pos); loc != nil {
-				return loc
-			}
-		}
-	}
-	ctx := sourcectx.Analyze(uri, source, pos)
-	if ctx == nil {
-		return nil
-	}
-	line := ctx.Line
-
-	file := ctx.File
-
-	// Handle container call arguments: app('request'), app(Request::class)
-	// Go to the concrete class definition
-	if a.container != nil {
-		if loc := a.definitionForContainerArg(line, pos, source, file, false); loc != nil {
-			return loc
-		}
-	}
-	if a.framework == "laravel" && a.views != nil {
-		if loc := a.definitionForLaravelView(line, pos.Character); loc != nil {
-			return loc
-		}
-	}
-	if a.translations != nil {
-		if loc := a.definitionForTranslationKey(line, pos.Character); loc != nil {
-			return loc
-		}
-	}
-	if a.framework == "laravel" && a.routes != nil {
-		if loc := a.definitionForRouteName(line, pos.Character); loc != nil {
-			return loc
-		}
-	}
-
-	word := ctx.SymbolText
-	if word == "" {
-		return nil
-	}
-
-	// Handle $variable → go to its type definition. After `::` a $name is a
-	// static property (self::$cache), found with the other members below.
-	if strings.HasPrefix(word, "$") && ctx.AccessKind != sourcectx.AccessStatic {
-		return a.definitionForVariable(word, source, pos, file)
-	}
-
-	// self, static and parent go to the class they stand for.
-	if fqn := a.classKeywordFQN(word, ctx); fqn != "" {
-		if sym := a.index.Lookup(fqn); sym != nil {
-			return symbolLocation(sym)
-		}
-		return nil
-	}
-
-	// Check for -> or :: access (method/property on a class)
-	if ctx.AccessKind != sourcectx.AccessNone {
-		owner := a.resolver.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
-		classFQN := owner.BaseFQN()
-		if classFQN == "" {
-			return nil
-		}
-		if sym := a.resolver.FindMemberAnywhere(classFQN, word); sym != nil {
-			return symbolLocation(sym)
-		}
-		// With the receiver's type arguments and every class of a union: a
-		// local scope on Builder<Post> is found on Post.
-		if sym := a.resolver.FindMemberAnywhereOn(owner, word); sym != nil {
-			return symbolLocation(sym)
-		}
-		return nil
-	}
-
-	if member := a.index.MemberDeclaredAt(uri, pos, word); member != nil {
-		return symbolLocation(member)
-	}
-
-	// Resolve via use statements
-	if file != nil {
-		for _, u := range ctx.Uses {
-			if u.Alias == word {
-				if sym := a.index.Lookup(u.FullName); sym != nil {
-					return symbolLocation(sym)
-				}
-			}
-		}
-		// Try as class name in current namespace
-		fqn := a.resolver.ResolveClassName(word, file)
-		if fqn != word {
-			if sym := a.index.Lookup(fqn); sym != nil {
-				return symbolLocation(sym)
-			}
-		}
-	}
-
-	// FQN with backslashes
-	if strings.Contains(word, "\\") {
-		if sym := a.index.Lookup(word); sym != nil {
-			return symbolLocation(sym)
-		}
-	}
-
-	// Fallback: lookup by short name — prefer standalone-appropriate symbols
-	// (functions/classes over methods/properties) since we have no access chain.
-	lookupName := word
-	if idx := strings.LastIndex(word, "\\"); idx >= 0 {
-		lookupName = word[idx+1:]
-	}
-	syms := a.index.LookupByName(lookupName)
-	if best := symbols.PickBestStandalone(syms, word); best != nil {
-		return symbolLocation(best)
-	}
-
-	return nil
+	return a.resolveDefinitionSymbol(uri, source, pos).loc
 }
 
 // classKeywordFQN returns the class that self, static or parent stands for at
@@ -254,20 +129,11 @@ func (a *Analyzer) classKeywordFQN(word string, ctx *sourcectx.CursorContext) st
 // locale is forwarded to symbols.PHPManualURL. Empty string is fine —
 // the URL builder falls back to "en".
 func (a *Analyzer) FindDefinitionWithManual(uri, source string, pos protocol.Position, openManualEnabled bool, locale string) DefinitionResult {
-	// Quick path: when the flag is off, behave exactly like FindDefinition.
-	if !openManualEnabled {
-		return DefinitionResult{Location: a.FindDefinition(uri, source, pos)}
-	}
-
 	target := a.resolveDefinitionSymbol(uri, source, pos)
-	if target.sym != nil && symbols.IsBuiltin(target.sym) {
-		if url := symbols.PHPManualURL(target.sym, target.owner, locale); url != "" {
-			return DefinitionResult{ExternalManualURL: url}
-		}
-		// URL builder had nothing — fall through to nil location (builtin with no page).
-		return DefinitionResult{}
+	if !openManualEnabled || target.sym == nil || !symbols.IsBuiltin(target.sym) {
+		return DefinitionResult{Location: target.loc}
 	}
-	return DefinitionResult{Location: target.loc}
+	return DefinitionResult{ExternalManualURL: symbols.PHPManualURL(target.sym, target.owner, locale)}
 }
 
 // FindDeclaration returns where the symbol at pos is first declared: for a
@@ -305,6 +171,16 @@ func (a *Analyzer) resolveDefinitionSymbol(uri, source string, pos protocol.Posi
 		if routeName, _, ok := frameworksymfony.RouteNameAtPosition(source, pos); ok {
 			if route := frameworksymfony.FindRoute(a.index, routeName); route != nil {
 				return definitionTarget{loc: &protocol.Location{URI: route.URI, Range: route.DeclRange}}
+			}
+		}
+		if a.symfonyCommands != nil {
+			if l := a.definitionForSymfonyCommand(uri, source, pos); l != nil {
+				return definitionTarget{loc: l}
+			}
+		}
+		if a.symfonyTranslations != nil {
+			if l := a.definitionForSymfonyTranslationKey(source, pos); l != nil {
+				return definitionTarget{loc: l}
 			}
 		}
 	}
