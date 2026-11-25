@@ -1,8 +1,13 @@
 package lsp
 
 import (
+	"slices"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/document"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 func TestHandleSemanticTokensFull(t *testing.T) {
@@ -227,5 +232,27 @@ func TestHandleSemanticTokensFullAdvertisedInCapabilities(t *testing.T) {
 		if !typeSet[expected] {
 			t.Errorf("expected token type %q in legend, got %v", expected, tokenTypes)
 		}
+	}
+}
+
+func TestSemanticTokensNamespaceComesFromTheDeclaration(t *testing.T) {
+	source := "<?php\nnamespace App\\Http;\nnamespace\\foo();\nfunction bar() {}\n"
+	data := buildSemanticTokens(parser.New().Parse(source), document.NewColumns(source, document.UTF16), namespaceDeclarationTokens(source, parser.ParseTree(source, token.Latest)))
+	type decoded struct{ line, char, length int }
+	var namespaces []decoded
+	line, char := 0, 0
+	for i := 0; i+4 < len(data); i += 5 {
+		if data[i] > 0 {
+			line += int(data[i])
+			char = int(data[i+1])
+		} else {
+			char += int(data[i+1])
+		}
+		if data[i+3] == semTokNamespace {
+			namespaces = append(namespaces, decoded{line, char, int(data[i+2])})
+		}
+	}
+	if want := []decoded{{1, len("namespace App\\"), len("Http")}}; !slices.Equal(namespaces, want) {
+		t.Errorf("namespace tokens %+v, want only Http in the declaration %+v", namespaces, want)
 	}
 }
