@@ -41,6 +41,7 @@ type Layout struct {
 	attributes []Span
 	php        []Span
 	opaque     []Span
+	constructs []Span
 	blade      bool
 }
 
@@ -81,6 +82,9 @@ func BladeLayout(source string) Layout {
 		l.addComment(Span{c.Start, c.End})
 	}
 	for _, n := range blade.Parse(source) {
+		if (n.Kind == blade.KindDirective || n.Kind == blade.KindEcho) && strings.Contains(source[n.Span.Start:n.Span.End], "\n") {
+			l.constructs = append(l.constructs, Span{n.Span.Start, n.Span.End})
+		}
 		if n.Kind != blade.KindPHP || n.Raw {
 			continue
 		}
@@ -98,6 +102,7 @@ func BladeLayout(source string) Layout {
 		}
 	}
 	sort.Slice(l.comments, func(i, j int) bool { return l.comments[i].Start < l.comments[j].Start })
+	sort.Slice(l.constructs, func(i, j int) bool { return l.constructs[i].Start < l.constructs[j].Start })
 	return l
 }
 
@@ -171,7 +176,34 @@ func (l Layout) reach(offset int) (int, bool) {
 	}
 }
 
+func (l Layout) statementStart(line int) int {
+	for {
+		start := l.lineStarts[line]
+		offset := start + len(leadingSpace(l.source[start:], " \t"))
+		c, ok := spanBefore(l.constructs, offset)
+		if !ok || offset >= c.End {
+			return line
+		}
+		line = l.Line(c.Start)
+	}
+}
+
+func (l Layout) statementEnd(line int) int {
+	for {
+		next := len(l.source)
+		if line+1 < len(l.lineStarts) {
+			next = l.lineStarts[line+1]
+		}
+		c, ok := spanBefore(l.constructs, next)
+		if !ok || l.Line(c.End-1) <= line {
+			return line
+		}
+		line = l.Line(c.End - 1)
+	}
+}
+
 func (l Layout) MarkerLine(line int) int {
+	line = l.statementStart(line)
 	start, _ := l.LineStart(line)
 	offset := start + len(leadingSpace(l.source[start:], " \t"))
 	marker := offset

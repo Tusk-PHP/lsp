@@ -25,13 +25,14 @@ func IgnoreDiagnosticActions(uri, source string, params protocol.CodeActionParam
 		l = checks.BladeLayout
 	}
 	layout := l(source)
+	suppressed := layout.Suppressions()
 	type placedTitle struct {
 		at    protocol.Position
 		title string
 	}
 	seen := map[placedTitle]bool{}
 	for _, d := range params.Context.Diagnostics {
-		if _, ok := layout.LineStart(d.Range.Start.Line); !ok || d.Code == "" {
+		if _, ok := layout.LineStart(d.Range.Start.Line); !ok || d.Code == "" || suppressed.Suppresses(d.Range.Start.Line, d.Source, d.Code) {
 			continue
 		}
 		for _, c := range ignoreComments(layout, d, blade) {
