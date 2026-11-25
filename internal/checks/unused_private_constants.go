@@ -1,7 +1,9 @@
 package checks
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -64,16 +66,29 @@ func declarationStartLine(cls parser.ClassNode) int {
 }
 
 func constantsReferenced(tokens []parser.Token, startLine, endLine int) (used map[string]bool, dynamic bool) {
+	first, _ := slices.BinarySearchFunc(tokens, startLine, func(t parser.Token, line int) int { return cmp.Compare(t.Line, line) })
+	last, _ := slices.BinarySearchFunc(tokens, endLine+1, func(t parser.Token, line int) int { return cmp.Compare(t.Line, line) })
 	used = map[string]bool{}
-	for i, tok := range tokens {
-		if tok.Line < startLine || tok.Line > endLine {
-			continue
-		}
+	if collectConstantReads(tokens[first:], last-first, used) {
+		return nil, true
+	}
+	return used, false
+}
+
+func collectConstantReads(tokens []parser.Token, end int, used map[string]bool) (dynamic bool) {
+	for i, tok := range tokens[:end] {
 		switch tok.Kind {
+		case parser.TokenStringLiteral:
+			for _, expr := range parser.InterpolatedExpressions(tok.Value) {
+				exprTokens := parser.Tokenize("<?php " + expr)
+				if collectConstantReads(exprTokens, len(exprTokens), used) {
+					return true
+				}
+			}
 		case parser.TokenIdentifier:
 			name := strings.ToLower(tok.Value[strings.LastIndexByte(tok.Value, '\\')+1:])
 			if reflectiveConstantReads[name] {
-				return nil, true
+				return true
 			}
 			if !constantLookupFunctions[name] {
 				continue
@@ -81,7 +96,7 @@ func constantsReferenced(tokens []parser.Token, startLine, endLine int) (used ma
 			constant, lookup := constantLookupArgument(tokens, i+1)
 			switch lookup {
 			case lookupComputed:
-				return nil, true
+				return true
 			case lookupLiteral:
 				if _, member, ok := strings.Cut(constant, "::"); ok {
 					used[member] = true
@@ -91,13 +106,13 @@ func constantsReferenced(tokens []parser.Token, startLine, endLine int) (used ma
 			next := tokens[nextSignificantTokenIdx(tokens, i+1)]
 			switch next.Kind {
 			case parser.TokenOpenBrace:
-				return nil, true
+				return true
 			case parser.TokenIdentifier:
 				used[next.Value] = true
 			}
 		}
 	}
-	return used, false
+	return false
 }
 
 type constantLookup int

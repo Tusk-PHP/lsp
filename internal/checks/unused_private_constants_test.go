@@ -86,6 +86,46 @@ class A {
 	}
 }
 
+func TestUnusedPrivateConstantReadsInterpolatedExpressions(t *testing.T) {
+	src := `<?php
+class A {
+    private const IN_STRING = 'a';
+    private const IN_HEREDOC_SUBSCRIPT = 'b';
+    private const IN_HEREDOC_CALL = 'c';
+    private const VIA_STATIC = 'd';
+    private const VIA_CLASS_NAME = 'e';
+    private const IN_DOLLAR_BRACE = 'f';
+    private const IN_NOWDOC = 'g';
+    private const IN_PLAIN_STRING = 'h';
+    private const IN_SINGLE_QUOTES = 'i';
+    private const IN_HEREDOC_TEXT = 'j';
+    private const AFTER_ESCAPED_BRACE = 'k';
+    public function f(array $a): string {
+        $s = "v={$a[self::IN_STRING]} {$a[static::VIA_STATIC]} {$a[A::VIA_CLASS_NAME]} ${a[self::IN_DOLLAR_BRACE]}";
+        $s .= <<<EOT
+            {$a[self::IN_HEREDOC_SUBSCRIPT]} {$this->g(self::IN_HEREDOC_CALL)} self::IN_HEREDOC_TEXT
+            EOT;
+        $s .= <<<'EOT'
+            {$a[self::IN_NOWDOC]}
+            EOT;
+        $s .= "self::IN_PLAIN_STRING \{$a}[self::AFTER_ESCAPED_BRACE]" . '{$a[self::IN_SINGLE_QUOTES]}';
+        return $s;
+    }
+    private function g(string $k): string { return $k; }
+}
+`
+	want := []string{
+		"Private constant 'A::IN_NOWDOC' is never used",
+		"Private constant 'A::IN_PLAIN_STRING' is never used",
+		"Private constant 'A::IN_SINGLE_QUOTES' is never used",
+		"Private constant 'A::IN_HEREDOC_TEXT' is never used",
+		"Private constant 'A::AFTER_ESCAPED_BRACE' is never used",
+	}
+	if got := privateConstantFindings(t, src, nil); !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
 func TestUnusedPrivateConstantReadsTokensOnlyForClassesWithPrivateConstants(t *testing.T) {
 	src := "<?php\nclass A {\n    public const X = 1;\n    private int $p = 0;\n}\n"
 	cls := parser.ParseFile(src).Classes[0]
