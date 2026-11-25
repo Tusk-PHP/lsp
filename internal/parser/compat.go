@@ -176,6 +176,7 @@ type MethodNode struct {
 
 type ConstantNode struct {
 	Name       string
+	FullName   string
 	Value      string
 	Type       TypeNode
 	Visibility string
@@ -297,6 +298,7 @@ type FileNode struct {
 	Enums            []EnumNode
 	Functions        []FunctionNode
 	Constants        []ConstantNode
+	Defines          []ConstantNode
 	Errors           []ParseError
 }
 
