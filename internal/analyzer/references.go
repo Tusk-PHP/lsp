@@ -72,18 +72,40 @@ func (a *Analyzer) sourceOf(uri string, readDocument func(string) string) string
 
 func mayMention(src string, sym *symbols.Symbol) bool {
 	name := strings.TrimPrefix(sym.Name, "$")
+	if name == "" {
+		return false
+	}
+	fold := foldsCase(sym.Kind)
+	first := name[:1]
+	if fold && first[0] < 0x80 {
+		first = strings.ToLower(first) + strings.ToUpper(first)
+	}
 	for offset := 0; ; {
-		i := strings.Index(src[offset:], name)
+		i := strings.IndexAny(src[offset:], first)
 		if i < 0 {
 			return false
 		}
 		start, end := offset+i, offset+i+len(name)
+		offset = start + 1
+		if end > len(src) {
+			return false
+		}
+		if word := src[start:end]; word != name && (!fold || !strings.EqualFold(word, name)) {
+			continue
+		}
 		if (start == 0 || !resolve.IsWordChar(src[start-1]) && (src[start-1] != '$' || sym.Kind == symbols.KindProperty)) &&
 			(end == len(src) || !resolve.IsWordChar(src[end])) {
 			return true
 		}
-		offset = end
 	}
+}
+
+func foldsCase(kind symbols.SymbolKind) bool {
+	switch kind {
+	case symbols.KindFunction, symbols.KindMethod, symbols.KindClass, symbols.KindInterface, symbols.KindTrait, symbols.KindEnum:
+		return true
+	}
+	return false
 }
 
 func locationsIn(uri string, ranges []protocol.Range) []protocol.Location {

@@ -113,6 +113,12 @@ func TestMayMentionNeedsTheNameAsAWord(t *testing.T) {
 		{"$r->area", property, true},
 		{"public $area;", property, true},
 		{"", method, false},
+		{"$r->AREA()", method, true},
+		{"$r->AREAS()", method, false},
+		{"USER::find(1);", &symbols.Symbol{Name: "User", Kind: symbols.KindClass}, true},
+		{"echo STRTOLOWER($s);", &symbols.Symbol{Name: "strtolower", Kind: symbols.KindFunction}, true},
+		{"echo Area;", constant, false},
+		{"$r->AREA", property, false},
 	} {
 		if got := mayMention(c.src, c.sym); got != c.want {
 			t.Errorf("mayMention(%q, %s) = %v, want %v", c.src, c.sym.Name, got, c.want)
