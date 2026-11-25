@@ -525,7 +525,7 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 	doc.Scopes = append(doc.Scopes, scope)
 	decls := map[int]*Binding{}
 
-	closeParen := findMatching(tokens, nameIdx, parser.TokenOpenParen, parser.TokenCloseParen)
+	closeParen := parser.MatchingClose(tokens, nameIdx)
 	if closeParen < 0 {
 		return nil, decls
 	}
@@ -541,7 +541,7 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 	if kind == ScopeClosure && j >= 0 && tokens[j].Kind == parser.TokenUse {
 		j = nextSignificant(tokens, j+1)
 		if j >= 0 && tokens[j].Kind == parser.TokenOpenParen {
-			useClose := findMatching(tokens, j, parser.TokenOpenParen, parser.TokenCloseParen)
+			useClose := parser.MatchingClose(tokens, j)
 			for i := j + 1; i < useClose; i++ {
 				if tokens[i].Kind != parser.TokenVariable {
 					continue
@@ -588,7 +588,7 @@ func parseForeachBindings(tokens []parser.Token, start int, scope *Scope, doc *D
 	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
 		return decls
 	}
-	close := findMatching(tokens, open, parser.TokenOpenParen, parser.TokenCloseParen)
+	close := parser.MatchingClose(tokens, open)
 	if close < 0 {
 		return decls
 	}
@@ -638,7 +638,7 @@ func parseCatchBindings(tokens []parser.Token, start int, scope *Scope, doc *Doc
 	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
 		return decls
 	}
-	close := findMatching(tokens, open, parser.TokenOpenParen, parser.TokenCloseParen)
+	close := parser.MatchingClose(tokens, open)
 	if close < 0 {
 		return decls
 	}
@@ -684,7 +684,7 @@ func catchBodyOpen(tokens []parser.Token, start int) int {
 	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
 		return -1
 	}
-	close := findMatching(tokens, open, parser.TokenOpenParen, parser.TokenCloseParen)
+	close := parser.MatchingClose(tokens, open)
 	if close < 0 {
 		return -1
 	}
@@ -706,7 +706,7 @@ func parseDestructureBindings(tokens []parser.Token, start int, scope *Scope, do
 			return decls
 		}
 	}
-	close := findMatching(tokens, start, parser.TokenOpenBracket, parser.TokenCloseBracket)
+	close := parser.MatchingClose(tokens, start)
 	if close < 0 {
 		return decls
 	}
@@ -728,7 +728,7 @@ func parseListDestructureBindings(tokens []parser.Token, start int, scope *Scope
 	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
 		return decls
 	}
-	close := findMatching(tokens, open, parser.TokenOpenParen, parser.TokenCloseParen)
+	close := parser.MatchingClose(tokens, open)
 	if close < 0 {
 		return decls
 	}
@@ -778,7 +778,7 @@ func classBodyOpen(tokens []parser.Token, start int) int {
 			if tokens[start].Kind != parser.TokenClass {
 				return -1
 			}
-			if i = findMatching(tokens, i, parser.TokenOpenParen, parser.TokenCloseParen); i < 0 {
+			if i = parser.MatchingClose(tokens, i); i < 0 {
 				return -1
 			}
 		case parser.TokenSemicolon, parser.TokenCloseBrace, parser.TokenCloseParen, parser.TokenEquals:
@@ -810,14 +810,14 @@ func isNewClassReference(tokens []parser.Token, i int) bool {
 	for j >= 0 {
 		switch tokens[j].Kind {
 		case parser.TokenCloseBracket:
-			open := findMatchingBefore(tokens, j, parser.TokenOpenBracket, parser.TokenCloseBracket)
+			open := parser.MatchingOpen(tokens, j)
 			if open < 0 {
 				return false
 			}
 			j = prevSignificant(tokens, open-1)
 			continue
 		case parser.TokenCloseParen:
-			open := findMatchingBefore(tokens, j, parser.TokenOpenParen, parser.TokenCloseParen)
+			open := parser.MatchingOpen(tokens, j)
 			before := prevSignificant(tokens, open-1)
 			return open >= 0 && before >= 0 && tokens[before].Kind == parser.TokenNew
 		case parser.TokenVariable, parser.TokenIdentifier, parser.TokenStatic, parser.TokenBackslash:
@@ -840,24 +840,6 @@ func isNewClassReference(tokens []parser.Token, i int) bool {
 		}
 	}
 	return false
-}
-
-// findMatchingBefore returns the index of the token opening the group closed at
-// end, or -1.
-func findMatchingBefore(tokens []parser.Token, end int, openKind, closeKind parser.TokenKind) int {
-	depth := 0
-	for i := end; i >= 0; i-- {
-		switch tokens[i].Kind {
-		case closeKind:
-			depth++
-		case openKind:
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-	return -1
 }
 
 func isGlobalOrStaticKeyword(tok parser.Token) bool {
@@ -988,7 +970,7 @@ func foreachBodyOpen(tokens []parser.Token, start int) int {
 	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
 		return -1
 	}
-	close := findMatching(tokens, open, parser.TokenOpenParen, parser.TokenCloseParen)
+	close := parser.MatchingClose(tokens, open)
 	if close < 0 {
 		return -1
 	}
@@ -1048,7 +1030,7 @@ func parsePropertyHook(tokens []parser.Token, start int, parent *Scope, doc *Doc
 
 	j := nextSignificant(tokens, start+1)
 	if j >= 0 && tokens[j].Kind == parser.TokenOpenParen {
-		closeParen := findMatching(tokens, j, parser.TokenOpenParen, parser.TokenCloseParen)
+		closeParen := parser.MatchingClose(tokens, j)
 		if closeParen < 0 {
 			return nil, nil
 		}
@@ -1086,7 +1068,7 @@ func isSubscriptWrite(tokens []parser.Token, i int) bool {
 		return false
 	}
 	for next >= 0 && tokens[next].Kind == parser.TokenOpenBracket {
-		end := findMatching(tokens, next, parser.TokenOpenBracket, parser.TokenCloseBracket)
+		end := parser.MatchingClose(tokens, next)
 		if end < 0 {
 			return false
 		}
@@ -1238,7 +1220,7 @@ func parseSingleUseBinding(tokens []parser.Token, start int, doc *Document, scop
 		}
 		return decls
 	}
-	closeGroup := findMatching(tokens, openGroup, parser.TokenOpenBrace, parser.TokenCloseBrace)
+	closeGroup := parser.MatchingClose(tokens, openGroup)
 	if closeGroup < 0 || closeGroup > semi {
 		return decls
 	}
@@ -1380,22 +1362,6 @@ func prevSignificant(tokens []parser.Token, i int) int {
 			i--
 		default:
 			return i
-		}
-	}
-	return -1
-}
-
-func findMatching(tokens []parser.Token, start int, openKind, closeKind parser.TokenKind) int {
-	depth := 0
-	for i := start; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case openKind:
-			depth++
-		case closeKind:
-			depth--
-			if depth == 0 {
-				return i
-			}
 		}
 	}
 	return -1

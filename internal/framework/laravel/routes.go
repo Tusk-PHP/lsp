@@ -232,7 +232,7 @@ func parseRouteDefinition(tokens []parser.Token, uri string, methodTok int, meth
 	if openTok < 0 || tokens[openTok].Kind != parser.TokenOpenParen {
 		return RouteName{}, -1, false
 	}
-	closeTok := findMatchingToken(tokens, openTok, parser.TokenOpenParen, parser.TokenCloseParen)
+	closeTok := parser.MatchingClose(tokens, openTok)
 	if closeTok < 0 {
 		return RouteName{}, -1, false
 	}
@@ -307,22 +307,6 @@ func trimQuotedLiteral(raw string) string {
 		return raw[1 : len(raw)-1]
 	}
 	return raw
-}
-
-func findMatchingToken(tokens []parser.Token, openIdx int, openKind, closeKind parser.TokenKind) int {
-	depth := 0
-	for i := openIdx; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case openKind:
-			depth++
-		case closeKind:
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-	return -1
 }
 
 func splitTopLevelArgs(tokens []parser.Token, start, end int) [][]parser.Token {

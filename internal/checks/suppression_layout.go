@@ -66,7 +66,10 @@ func phpLayout(source string, tokens []parser.Token) Layout {
 		case tok.Kind == parser.TokenComment || tok.Kind == parser.TokenDocComment:
 			l.addComment(Span{tok.Offset, tok.Offset + len(tok.Value)})
 		case tok.Kind == parser.TokenHash && i+1 < len(tokens) && tokens[i+1].Kind == parser.TokenOpenBracket:
-			end := attributeEnd(tokens, i+1)
+			end := parser.MatchingClose(tokens, i+1)
+			if end < 0 {
+				end = len(tokens) - 1
+			}
 			l.addAttribute(Span{tok.Offset, tokens[end].Offset + len(tokens[end].Value)})
 		}
 	}
@@ -114,22 +117,6 @@ func newLayout(source string, isBlade bool) Layout {
 		}
 	}
 	return Layout{source: source, lineStarts: starts, skipFrom: map[int]int{}, skipTo: map[int]int{}, blade: isBlade}
-}
-
-func attributeEnd(tokens []parser.Token, open int) int {
-	depth := 0
-	for i := open; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenOpenBracket:
-			depth++
-		case parser.TokenCloseBracket:
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-	return len(tokens) - 1
 }
 
 func (l *Layout) addComment(s Span) {

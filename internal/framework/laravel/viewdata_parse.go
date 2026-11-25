@@ -70,7 +70,7 @@ func readData(uri, source string, toks []parser.Token, s tokenSpan, call int) ([
 	}
 	first := toks[s.start]
 	switch {
-	case first.Kind == parser.TokenOpenBracket && matchingClose(toks, s.start) == s.end-1:
+	case first.Kind == parser.TokenOpenBracket && parser.MatchingClose(toks, s.start) == s.end-1:
 		return readArray(source, toks, tokenSpan{s.start + 1, s.end - 1})
 	case first.Kind == parser.TokenIdentifier && strings.EqualFold(first.Value, "compact") && s.end-s.start >= 3:
 		return readCompact(toks, s)
@@ -178,7 +178,7 @@ func readAssignedArray(source string, toks []parser.Token, name string, call int
 	if start < 0 {
 		return nil, true
 	}
-	close := matchingClose(toks, start+2)
+	close := parser.MatchingClose(toks, start+2)
 	if close < 0 || close > call {
 		return nil, true
 	}
@@ -235,22 +235,6 @@ func splitItems(toks []parser.Token, s tokenSpan) []tokenSpan {
 		items = append(items, tokenSpan{start, s.end})
 	}
 	return items
-}
-
-func matchingClose(toks []parser.Token, open int) int {
-	depth := 0
-	for k := open; k < len(toks); k++ {
-		switch toks[k].Kind {
-		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
-			depth++
-		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
-			depth--
-			if depth == 0 {
-				return k
-			}
-		}
-	}
-	return -1
 }
 
 // exprVar is a variable whose value is the expression in s.

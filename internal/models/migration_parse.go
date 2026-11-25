@@ -43,7 +43,7 @@ func methodBodies(toks []parser.Token, name string) [][2]int {
 		if toks[i].Kind != parser.TokenFunction || !strings.EqualFold(toks[i+1].Value, name) || toks[i+2].Kind != parser.TokenOpenParen {
 			continue
 		}
-		closeParams := matching(toks, i+2)
+		closeParams := parser.MatchingClose(toks, i+2)
 		if closeParams < 0 {
 			continue
 		}
@@ -60,7 +60,7 @@ func methodBodies(toks []parser.Token, name string) [][2]int {
 		if open < 0 {
 			continue
 		}
-		if end := matching(toks, open); end > open {
+		if end := parser.MatchingClose(toks, open); end > open {
 			out = append(out, [2]int{open + 1, end})
 			i = end
 		}
@@ -84,39 +84,10 @@ func outside(skip [][2]int, n int) [][2]int {
 	return out
 }
 
-// matching returns the index of the bracket closing the one at open, or -1.
-func matching(toks []parser.Token, open int) int {
-	var closeKind parser.TokenKind
-	switch toks[open].Kind {
-	case parser.TokenOpenParen:
-		closeKind = parser.TokenCloseParen
-	case parser.TokenOpenBrace:
-		closeKind = parser.TokenCloseBrace
-	case parser.TokenOpenBracket:
-		closeKind = parser.TokenCloseBracket
-	default:
-		return -1
-	}
-	openKind := toks[open].Kind
-	depth := 0
-	for i := open; i < len(toks); i++ {
-		switch toks[i].Kind {
-		case openKind:
-			depth++
-		case closeKind:
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-	return -1
-}
-
 // callArgs splits the arguments of the call whose `(` is at open into token
 // ranges, and returns the index of its `)`.
 func callArgs(toks []parser.Token, open int) ([][2]int, int) {
-	end := matching(toks, open)
+	end := parser.MatchingClose(toks, open)
 	if end < 0 {
 		return nil, -1
 	}
@@ -250,7 +221,7 @@ func applyBlueprint(toks []parser.Token, arg [2]int, cols map[string]*MigrationC
 	if fn >= arg[1] || toks[fn].Kind != parser.TokenFunction || fn+1 >= arg[1] || toks[fn+1].Kind != parser.TokenOpenParen {
 		return
 	}
-	closeParams := matching(toks, fn+1)
+	closeParams := parser.MatchingClose(toks, fn+1)
 	if closeParams < 0 {
 		return
 	}
@@ -271,7 +242,7 @@ func applyBlueprint(toks []parser.Token, arg [2]int, cols map[string]*MigrationC
 	if varName == "" || open < 0 {
 		return
 	}
-	end := matching(toks, open)
+	end := parser.MatchingClose(toks, open)
 	if end < 0 {
 		return
 	}

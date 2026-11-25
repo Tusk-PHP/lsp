@@ -313,7 +313,7 @@ func closureScopeAt(result *parser.ParseResult, pos protocol.Position, classFQN 
 			continue
 		}
 
-		closeParen := findMatchingToken(result.Tokens, next, parser.TokenOpenParen, parser.TokenCloseParen)
+		closeParen := parser.MatchingClose(result.Tokens, next)
 		if closeParen < 0 {
 			continue
 		}
@@ -322,7 +322,7 @@ func closureScopeAt(result *parser.ParseResult, pos protocol.Position, classFQN 
 		if body >= 0 && result.Tokens[body].Kind == parser.TokenUse {
 			useOpen := nextSignificantToken(result.Tokens, body+1)
 			if useOpen >= 0 && result.Tokens[useOpen].Kind == parser.TokenOpenParen {
-				useClose := findMatchingToken(result.Tokens, useOpen, parser.TokenOpenParen, parser.TokenCloseParen)
+				useClose := parser.MatchingClose(result.Tokens, useOpen)
 				if useClose < 0 {
 					continue
 				}
@@ -364,7 +364,7 @@ func closureScopeAt(result *parser.ParseResult, pos protocol.Position, classFQN 
 			continue
 		}
 
-		closeBrace := findMatchingToken(result.Tokens, body, parser.TokenOpenBrace, parser.TokenCloseBrace)
+		closeBrace := parser.MatchingClose(result.Tokens, body)
 		if closeBrace < 0 {
 			continue
 		}
@@ -581,22 +581,6 @@ func prevSignificantToken(tokens []parser.Token, i int) int {
 			i--
 		default:
 			return i
-		}
-	}
-	return -1
-}
-
-func findMatchingToken(tokens []parser.Token, start int, openKind, closeKind parser.TokenKind) int {
-	depth := 0
-	for i := start; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case openKind:
-			depth++
-		case closeKind:
-			depth--
-			if depth == 0 {
-				return i
-			}
 		}
 	}
 	return -1

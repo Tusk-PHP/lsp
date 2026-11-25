@@ -98,7 +98,7 @@ func (s *viewScan) declarations() {
 			for open < len(toks) && toks[open].Kind != parser.TokenOpenBrace {
 				open++
 			}
-			end := matchingClose(toks, open)
+			end := parser.MatchingClose(toks, open)
 			if end < 0 {
 				continue
 			}
@@ -455,7 +455,7 @@ func (s *viewScan) compose(i int) {
 	if open >= len(toks) || toks[open].Kind != parser.TokenOpenBrace {
 		return
 	}
-	end := matchingClose(toks, open)
+	end := parser.MatchingClose(toks, open)
 	if end < 0 {
 		return
 	}

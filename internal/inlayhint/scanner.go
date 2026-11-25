@@ -370,7 +370,7 @@ func (p *Provider) collectClosureReturnHints(
 		if j >= len(tokens) || tokens[j].Kind != parser.TokenOpenParen {
 			continue
 		}
-		closeParenIdx := findMatchingClose(tokens, j, parser.TokenOpenParen, parser.TokenCloseParen)
+		closeParenIdx := parser.MatchingClose(tokens, j)
 		if closeParenIdx < 0 {
 			continue
 		}
@@ -418,7 +418,7 @@ func (p *Provider) collectClosureReturnHints(
 			}
 			// Find `return <expr>` tokens inside the body at depth 1.
 			bodyStart := k
-			bodyEnd := findMatchingClose(tokens, bodyStart, parser.TokenOpenBrace, parser.TokenCloseBrace)
+			bodyEnd := parser.MatchingClose(tokens, bodyStart)
 			if bodyEnd < 0 {
 				continue
 			}
@@ -521,27 +521,6 @@ func (p *Provider) resolveFirstReturn(
 	return resolve.ResolvedType{}
 }
 
-// findMatchingClose finds the index of the closing token that matches the
-// opening token at index openIdx.  Returns -1 if not found.
-func findMatchingClose(tokens []parser.Token, openIdx int, openKind, closeKind parser.TokenKind) int {
-	if openIdx >= len(tokens) || tokens[openIdx].Kind != openKind {
-		return -1
-	}
-	depth := 1
-	for i := openIdx + 1; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case openKind:
-			depth++
-		case closeKind:
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-	return -1
-}
-
 // collectTypeName reads a potentially backslash-qualified identifier starting
 // at index i and returns it as a string.
 func collectTypeName(tokens []parser.Token, i int) string {
@@ -614,7 +593,7 @@ func methodSignatureCloseParen(tokens []parser.Token, startLine int) (parser.Tok
 			if tokens[j].Kind != parser.TokenOpenParen {
 				continue
 			}
-			if closeIdx := findMatchingClose(tokens, j, parser.TokenOpenParen, parser.TokenCloseParen); closeIdx >= 0 {
+			if closeIdx := parser.MatchingClose(tokens, j); closeIdx >= 0 {
 				return tokens[closeIdx], true
 			}
 			return parser.Token{}, false
@@ -662,7 +641,7 @@ func (p *Provider) collectParamNameHints(
 		}
 
 		// Extract argument token spans.
-		closeIdx := findMatchingClose(tokens, i, parser.TokenOpenParen, parser.TokenCloseParen)
+		closeIdx := parser.MatchingClose(tokens, i)
 		if closeIdx < 0 {
 			continue
 		}
@@ -787,7 +766,7 @@ func collectReceiverExpr(tokens []parser.Token, fromIdx int) string {
 	// Closing paren: a method chain like $foo->bar()
 	if tok.Kind == parser.TokenCloseParen {
 		// Find the matching open paren.
-		openIdx := findMatchingCloseBack(tokens, i)
+		openIdx := parser.MatchingOpen(tokens, i)
 		if openIdx < 0 {
 			return ""
 		}
@@ -823,39 +802,6 @@ func collectReceiverExpr(tokens []parser.Token, fromIdx int) string {
 	}
 
 	return ""
-}
-
-// findMatchingCloseBack finds the open token that matches a closing paren/brace
-// at closeIdx by scanning backwards.
-func findMatchingCloseBack(tokens []parser.Token, closeIdx int) int {
-	if closeIdx < 0 || closeIdx >= len(tokens) {
-		return -1
-	}
-	closeTok := tokens[closeIdx]
-	var openKind, closeKind parser.TokenKind
-	switch closeTok.Kind {
-	case parser.TokenCloseParen:
-		openKind = parser.TokenOpenParen
-		closeKind = parser.TokenCloseParen
-	case parser.TokenCloseBrace:
-		openKind = parser.TokenOpenBrace
-		closeKind = parser.TokenCloseBrace
-	default:
-		return -1
-	}
-	depth := 1
-	for i := closeIdx - 1; i >= 0; i-- {
-		switch tokens[i].Kind {
-		case closeKind:
-			depth++
-		case openKind:
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-	return -1
 }
 
 // resolveCalleeParams looks up the parameter list for a call-site callee.

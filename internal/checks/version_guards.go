@@ -103,7 +103,7 @@ func conditionEnd(tokens []parser.Token, kw int) (int, bool) {
 	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
 		return -1, false
 	}
-	closeIdx := findMatchingTokenIdx(tokens, open, parser.TokenOpenParen, parser.TokenCloseParen)
+	closeIdx := parser.MatchingClose(tokens, open)
 	if closeIdx < 0 {
 		return -1, false
 	}
@@ -115,7 +115,7 @@ func conditionEnd(tokens []parser.Token, kw int) (int, bool) {
 // statement.
 func branchEnd(tokens []parser.Token, start int) int {
 	if tokens[start].Kind == parser.TokenOpenBrace {
-		return findMatchingTokenIdx(tokens, start, parser.TokenOpenBrace, parser.TokenCloseBrace)
+		return parser.MatchingClose(tokens, start)
 	}
 	return statementEnd(tokens, start)
 }

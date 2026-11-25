@@ -51,7 +51,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 	var lines []string
 	var scopes *scope.Document
 	arguments := func(open int) (int, bool) {
-		closeIdx := findMatchingTokenIdx(tokens, open, parser.TokenOpenParen, parser.TokenCloseParen)
+		closeIdx := parser.MatchingClose(tokens, open)
 		return closeIdx, closeIdx >= 0 && (wants == nil || wants(tokens, open, closeIdx))
 	}
 	emit := func(kind callKind, callees []callee, site parser.Token, name string, at, open, closeIdx int) {
