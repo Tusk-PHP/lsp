@@ -114,7 +114,6 @@ app/code/Magento/CatalogImportExport/Model/Import/Product/TaxClassProcessor.php	
 app/code/Magento/CatalogImportExport/Model/Import/Product/TaxClassProcessor.php	unknown-member	Unknown member 'save' on 'ClassModelFactory'
 app/code/Magento/CatalogImportExport/Model/Import/Product/TaxClassProcessor.php	unknown-member	Unknown member 'setClassName' on 'ClassModelFactory'
 app/code/Magento/CatalogImportExport/Model/Import/Product/TaxClassProcessor.php	unknown-member	Unknown member 'setClassType' on 'ClassModelFactory'
-app/code/Magento/CatalogImportExport/Model/Import/Product/Validator.php	unknown-class	Unknown class 'SKU'
 app/code/Magento/CatalogImportExport/Model/Import/Product/Validator.php	unused-import	Unused import 'Magento\Catalog\Model\Product\Attribute\Backend\Sku'
 app/code/Magento/CatalogImportExport/Model/Import/Product/Validator/Media.php	unused-private-constant	Private constant 'Media::ADDITIONAL_IMAGES_DELIMITER' is never used
 app/code/Magento/CatalogInventory/Model/ProductCollectionStockCondition.php	unused-import	Unused import 'Magento\Catalog\Model\CollectionConditionInterface'
@@ -423,7 +422,6 @@ app/code/Magento/RelatedProductGraphQl/Model/Resolver/Batch/CrossSellProducts.ph
 app/code/Magento/RelatedProductGraphQl/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Config\Element\Field'
 app/code/Magento/RelatedProductGraphQl/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Query\Resolver\BatchResponse'
 app/code/Magento/RelatedProductGraphQl/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Query\Resolver\ContextInterface'
-app/code/Magento/RemoteStorage/Model/File/Uploader.php	unknown-class	Unknown class 'FileSystem'
 app/code/Magento/RemoteStorage/Model/File/Uploader.php	unknown-member	Unknown member 'getDirectoryWrite' on 'FileSystem'
 app/code/Magento/Reports/Controller/Report/Product/View.php	unused-private-property	Private property 'View::$context' is never used
 app/code/Magento/Reports/Model/Config.php	unknown-member	Unknown member 'getBaseUrl' on 'StoreManagerInterface'
@@ -688,7 +686,6 @@ lib/internal/Magento/Framework/Data/Collection/Filesystem.php	unused-import	Unus
 lib/internal/Magento/Framework/Data/Form/Element/Checkbox.php	unused-variable	Variable $checked is assigned but never read
 lib/internal/Magento/Framework/Data/Form/Element/Gallery.php	unused-variable	Variable $gallery is assigned but never read
 lib/internal/Magento/Framework/Data/Tree.php	unknown-member	Unknown member 'removeChild' on 'Tree'
-lib/internal/Magento/Framework/File/Uploader.php	unknown-class	Unknown class 'FileSystem'
 lib/internal/Magento/Framework/Filesystem/Directory/Write.php	unused-import	Unused import 'Magento\Framework\Config\Dom\ValidationException'
 lib/internal/Magento/Framework/Filesystem/Driver/File.php	argument-count-mismatch	Too many arguments to feof(): 1 passed, at most 0 expected
 lib/internal/Magento/Framework/Filesystem/Driver/File.php	argument-count-mismatch	Too many arguments to file_get_contents(): 3 passed, at most 0 expected
