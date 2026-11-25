@@ -17,6 +17,7 @@ var phpstanIdentifierCodes = map[string]rule.Code{
 	"method.unused":                       rule.UnusedPrivateMethod,
 	"property.unused":                     rule.UnusedPrivateProperty,
 	"property.onlyWritten":                rule.UnusedPrivateProperty,
+	"classConstant.unused":                rule.UnusedPrivateConstant,
 	"nullsafe.neverNull":                  rule.RedundantNullsafe,
 	"method.override":                     rule.InvalidOverride,
 	"property.override":                   rule.InvalidOverride,
