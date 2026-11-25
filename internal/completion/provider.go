@@ -851,6 +851,19 @@ func (p *Provider) completeGlobal(prefix, source string, rk nameRanker, file *pa
 		}
 	}
 	var imports *importPlanner
+	constants := map[string]bool{}
+	addConstant := func(sym *symbols.Symbol, label string) {
+		if constants[label] {
+			return
+		}
+		constants[label] = true
+		items = append(items, constantItem(sym, label, rk))
+	}
+	for _, u := range importedConstants(file, lsearch) {
+		if sym := p.index.Lookup(u.FullName); sym != nil && sym.Kind == symbols.KindConstant && sym.ParentFQN == "" {
+			addConstant(sym, u.Alias)
+		}
+	}
 	for _, sym := range p.index.SearchByPrefix(search) {
 		// In standalone context only show callable/referenceable symbols:
 		// functions, classes, interfaces, enums, traits
@@ -875,6 +888,10 @@ func (p *Provider) completeGlobal(prefix, source string, rk nameRanker, file *pa
 			item.InsertText = sym.Name + "($0)"
 			item.InsertTextFormat = 2
 			items = append(items, item)
+		case symbols.KindConstant:
+			if sym.ParentFQN == "" && reachableUnqualified(sym.FQN, file) {
+				addConstant(sym, sym.Name)
+			}
 		case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
 			// Only show type-level symbols when user is actively typing a name
 			if search != "" {
@@ -892,6 +909,35 @@ func (p *Provider) completeGlobal(prefix, source string, rk nameRanker, file *pa
 		}
 	}
 	return items
+}
+
+func importedConstants(file *parser.FileNode, lsearch string) []parser.UseNode {
+	if file == nil {
+		return nil
+	}
+	var uses []parser.UseNode
+	for _, u := range file.Uses {
+		if u.Kind == "const" && strings.HasPrefix(strings.ToLower(u.Alias), lsearch) {
+			uses = append(uses, u)
+		}
+	}
+	return uses
+}
+
+func reachableUnqualified(fqn string, file *parser.FileNode) bool {
+	ns := ""
+	if i := strings.LastIndexByte(fqn, '\\'); i >= 0 {
+		ns = fqn[:i]
+	}
+	return ns == "" || file != nil && ns == file.Namespace
+}
+
+func constantItem(sym *symbols.Symbol, label string, rk nameRanker) protocol.CompletionItem {
+	detail := sym.Type
+	if sym.Value != "" {
+		detail = sym.Value
+	}
+	return protocol.CompletionItem{Label: label, Kind: protocol.CompletionItemKindConstant, Detail: detail, SortText: rk.key(sym, label)}
 }
 
 func extractVariableBefore(prefix, op string) string {
