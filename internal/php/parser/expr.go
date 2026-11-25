@@ -526,7 +526,7 @@ func (p *parser) braceOffset(e ast.Expr, start uint32) ast.Expr {
 	p.next()
 	dim := p.expr()
 	p.expect(token.RightBrace)
-	return &ast.ArrayDimFetch{Array: e, Dim: dim, Span: p.span(start)}
+	return &ast.ArrayDimFetch{Array: e, Dim: dim, Braced: true, Span: p.span(start)}
 }
 
 func (p *parser) memberAccessName() ast.Expr {
