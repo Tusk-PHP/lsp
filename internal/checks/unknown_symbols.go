@@ -1129,12 +1129,11 @@ func (h *memberHierarchy) walk(fqn string, index *symbols.Index) {
 		h.walk(sym.Extends, index)
 	}
 	for _, tr := range index.TraitsOf(fqn) {
-		if index.Lookup(tr).IsClassLike() {
-			h.members = append(h.members, index.GetClassMembers(tr)...)
-		} else {
+		if !index.Lookup(tr).IsClassLike() {
 			h.open = true
 		}
 	}
+	h.members = append(h.members, index.TraitMembers(fqn)...)
 	for _, iface := range sym.Implements {
 		h.walk(iface, index)
 	}

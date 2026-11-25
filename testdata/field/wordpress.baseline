@@ -123,7 +123,6 @@ src/wp-includes/feed-rdf.php	unused-variable	Variable $more is assigned but neve
 src/wp-includes/feed-rss.php	unused-variable	Variable $more is assigned but never read
 src/wp-includes/feed-rss2.php	unused-variable	Variable $more is assigned but never read
 src/wp-includes/ms-load.php	unused-variable	Variable $blog_id is assigned but never read
-src/wp-includes/php-ai-client/src/Providers/ProviderRegistry.php	unknown-member	Unknown member 'setHttpTransporterOriginal' on 'ProviderRegistry'
 src/wp-includes/php-ai-client/third-party/Http/Discovery/ClassDiscovery.php	unknown-class	Unknown class 'Strategy\GeneratedDiscoveryStrategy'
 src/wp-includes/php-ai-client/third-party/Http/Discovery/ClassDiscovery.php	unknown-class	Unknown class 'Strategy\GeneratedDiscoveryStrategy'
 src/wp-includes/php-ai-client/third-party/Http/Discovery/ClassDiscovery.php	unknown-class	Unknown class 'Strategy\GeneratedDiscoveryStrategy'

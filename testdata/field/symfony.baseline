@@ -168,8 +168,6 @@ src/Symfony/Bundle/SecurityBundle/Debug/TraceableFirewallListener.php	unknown-me
 src/Symfony/Bundle/SecurityBundle/DependencyInjection/SecurityExtension.php	unused-variable	Variable $authenticationProviders is assigned but never read
 src/Symfony/Bundle/SecurityBundle/DependencyInjection/SecurityExtension.php	unused-variable	Variable $usedEnvs is assigned but never read
 src/Symfony/Bundle/TwigBundle/Command/LintCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
-src/Symfony/Component/AssetMapper/Compressor/GzipCompressor.php	unknown-member	Unknown member 'baseCompress' on 'GzipCompressor'
-src/Symfony/Component/AssetMapper/Compressor/GzipCompressor.php	unknown-member	Unknown member 'baseGetUnsupportedReason' on 'GzipCompressor'
 src/Symfony/Component/BrowserKit/Test/Constraint/BrowserCookieValueSame.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/BrowserKit/Test/Constraint/BrowserHasCookie.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/BrowserKit/Test/Constraint/BrowserHistoryIsOnFirstPage.php	unknown-class	Unknown class 'Constraint'
@@ -192,15 +190,7 @@ src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function
 src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'Cluster'
 src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'ClusterOptions'
 src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'UpsertOptions'
-src/Symfony/Component/Cache/Adapter/FilesystemTagAwareAdapter.php	unknown-member	Unknown member 'doClearCache' on 'FilesystemTagAwareAdapter'
-src/Symfony/Component/Cache/Adapter/FilesystemTagAwareAdapter.php	unknown-member	Unknown member 'doPrune' on 'FilesystemTagAwareAdapter'
-src/Symfony/Component/Cache/Adapter/FilesystemTagAwareAdapter.php	unknown-member	Unknown member 'doSaveCache' on 'FilesystemTagAwareAdapter'
-src/Symfony/Component/Cache/Adapter/MongoDbTagAwareAdapter.php	unknown-member	Unknown member 'setupExpiresAtIndex' on 'MongoDbTagAwareAdapter'
-src/Symfony/Component/Cache/Adapter/PdoTagAwareAdapter.php	unknown-member	Unknown member 'doSaveItem' on 'PdoTagAwareAdapter'
-src/Symfony/Component/Cache/Adapter/PdoTagAwareAdapter.php	unknown-member	Unknown member 'pruneItems' on 'PdoTagAwareAdapter'
 src/Symfony/Component/Cache/Adapter/PdoTagAwareAdapter.php	unused-private-method	Private method 'PdoTagAwareAdapter::createTables' is never used
-src/Symfony/Component/Cache/Adapter/PhpFilesAdapter.php	unknown-member	Unknown member 'doCommonClear' on 'PhpFilesAdapter'
-src/Symfony/Component/Cache/Adapter/PhpFilesAdapter.php	unknown-member	Unknown member 'doCommonDelete' on 'PhpFilesAdapter'
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
@@ -317,16 +307,12 @@ src/Symfony/Component/Form/Extension/Core/Type/FormType.php	unknown-member	Unkno
 src/Symfony/Component/Form/Test/FormIntegrationTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-member	Unknown member 'method' on 'ValidatorInterface'
 src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-member	Unknown member 'method' on 'ValidatorInterface'
-src/Symfony/Component/HttpClient/CachingHttpClient.php	unknown-member	Unknown member 'asyncStream' on 'CachingHttpClient'
-src/Symfony/Component/HttpClient/CachingHttpClient.php	unknown-member	Unknown member 'asyncStream' on 'CachingHttpClient'
 src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
 src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown class 'Rize\UriTemplate'
 src/Symfony/Component/HttpClient/Recorder/Redactor/DefaultRedactor.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/HttpClient/Resources/config/http_client.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
 src/Symfony/Component/HttpClient/Resources/config/http_client.php	unknown-class	Unknown class 'Rize\UriTemplate'
-src/Symfony/Component/HttpClient/Response/CurlResponse.php	unknown-member	Unknown member 'doGetContent' on 'CurlResponse'
 src/Symfony/Component/HttpClient/Response/JsonMockResponse.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
-src/Symfony/Component/HttpClient/ThrottlingHttpClient.php	unknown-member	Unknown member 'traitReset' on 'ThrottlingHttpClient'
 src/Symfony/Component/HttpFoundation/RequestMatcher/IsJsonRequestMatcher.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
@@ -530,9 +516,6 @@ src/Symfony/Component/PasswordHasher/Hasher/SodiumPasswordHasher.php	unknown-fun
 src/Symfony/Component/PasswordHasher/Hasher/SodiumPasswordHasher.php	unknown-function	Unknown function 'Sodium\crypto_pwhash_str_verify'
 src/Symfony/Component/PropertyInfo/Util/PhpDocTypeHelper.php	unknown-class	Unknown class 'Collection'
 src/Symfony/Component/PropertyInfo/Util/PhpDocTypeHelper.php	unknown-class	Unknown class 'LegacyScalar'
-src/Symfony/Component/Routing/Loader/YamlFileLoader.php	unknown-member	Unknown member 'doParseImport' on 'YamlFileLoader'
-src/Symfony/Component/Routing/Loader/YamlFileLoader.php	unknown-member	Unknown member 'doParseRoute' on 'YamlFileLoader'
-src/Symfony/Component/Routing/Loader/YamlFileLoader.php	unknown-member	Unknown member 'doValidate' on 'YamlFileLoader'
 src/Symfony/Component/Routing/Matcher/Dumper/CompiledUrlMatcherTrait.php	unused-variable	Variable $request is assigned but never read
 src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'EventSubscriberInterface'
 src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'Factory'
