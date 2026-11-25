@@ -184,7 +184,7 @@ Open an issue with the **feature request** label. Describe the use case and expe
 
 ## Release Process
 
-Releases are automated via GitHub Actions. Pushing a semver tag without a `v` prefix (e.g., `0.15.0`) triggers:
+Releases are automated via GitHub Actions. Pushing a semver tag without a `v` prefix (e.g., `0.16.0`) triggers:
 
 1. Full test suite
 2. Cross-platform binary builds

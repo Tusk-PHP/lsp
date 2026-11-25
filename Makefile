@@ -1,6 +1,6 @@
 .PHONY: build install test clean dev cross-build wasm conformance conformance-pr bench bench-install bench-self field-run field-baseline field-baseline-update
 
-VERSION ?= 0.15.0
+VERSION ?= 0.16.0
 BINARY  := tusk-php
 LDFLAGS := -ldflags="-s -w -X main.version=$(VERSION)"
 

@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	version    = "0.15.0"
+	version    = "0.16.0"
 	showVer    = flag.Bool("version", false, "Print version and exit")
 	logFile    = flag.String("log", "", "Log file path (default: stderr)")
 	transport  = flag.String("transport", "stdio", "Transport: stdio")
