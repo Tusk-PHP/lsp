@@ -1,6 +1,7 @@
 package symbols
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -443,10 +444,28 @@ func (idx *Index) addBuiltinClassLikeLocked(name string, doc string) {
 
 func (idx *Index) storeBuiltinLocked(sym *Symbol) {
 	prev := idx.symbols[sym.FQN]
-	idx.storeSymbolLocked(sym, pendingRemovals{})
-	if prev != nil && prev.URI == sym.URI {
+	switch {
+	case prev == nil:
+		idx.storeSymbolLocked(sym, pendingRemovals{})
+		idx.fileSymbols[sym.URI] = append(idx.fileSymbols[sym.URI], sym)
+	case prev.URI == sym.URI:
+		idx.symbols[sym.FQN] = sym
 		idx.fileSymbols[sym.URI] = withSymbolReplaced(idx.fileSymbols[sym.URI], prev, sym)
+	default:
+		idx.shadowBuiltinLocked(sym)
+	}
+}
+
+func (idx *Index) shadowBuiltinLocked(sym *Symbol) {
+	defs := idx.shadowed[sym.FQN]
+	if i := slices.IndexFunc(defs, func(def *Symbol) bool { return def.URI == sym.URI }); i >= 0 {
+		idx.fileSymbols[sym.URI] = withSymbolReplaced(idx.fileSymbols[sym.URI], defs[i], sym)
+		defs[i] = sym
 		return
 	}
+	if idx.shadowed == nil {
+		idx.shadowed = make(map[string][]*Symbol)
+	}
+	idx.shadowed[sym.FQN] = append([]*Symbol{sym}, defs...)
 	idx.fileSymbols[sym.URI] = append(idx.fileSymbols[sym.URI], sym)
 }
