@@ -90,6 +90,7 @@ type ClassNode struct {
 	// TraitUseDoc holds the docblocks above the class's trait `use`
 	// statements, where @use gives a trait its type arguments.
 	TraitUseDoc string
+	TraitRules  TraitAdaptations
 	// BodyLine and BodyCol are where an anonymous class's `{` is, set only
 	// for AnonymousClasses.
 	BodyLine, BodyCol int
@@ -124,6 +125,7 @@ type TraitNode struct {
 	// TraitUseDoc holds the docblocks above the trait's own trait `use`
 	// statements.
 	TraitUseDoc string
+	TraitRules  TraitAdaptations
 }
 
 type EnumCaseNode struct {
@@ -144,6 +146,7 @@ type EnumNode struct {
 	Properties []PropertyNode
 	Constants  []ConstantNode
 	Traits     []string
+	TraitRules TraitAdaptations
 	Implements []string
 	Attributes []AttributeDef
 	StartLine  int
@@ -587,6 +590,7 @@ func toFileNode(result *ParseResult) *FileNode {
 			FullName:    traitDef.FullName,
 			Traits:      append([]string(nil), traitDef.Traits...),
 			TraitUseDoc: traitDef.TraitUseDoc,
+			TraitRules:  traitDef.TraitRules,
 			DocComment:  traitDef.DocComment,
 			StartLine:   traitDef.Line,
 			EndLine:     traitDef.EndLine,
@@ -611,6 +615,7 @@ func toFileNode(result *ParseResult) *FileNode {
 			BackedType: enumDef.BackedType,
 			Implements: append([]string(nil), enumDef.Implements...),
 			Traits:     append([]string(nil), enumDef.Traits...),
+			TraitRules: enumDef.TraitRules,
 			Attributes: enumDef.Attributes,
 			DocComment: enumDef.DocComment,
 			EndLine:    enumDef.EndLine,
@@ -783,6 +788,7 @@ func toClassNode(result *ParseResult, classDef ClassDef) ClassNode {
 		StartCol:    startColumnForDeclaration(result, classDef.Name, classDef.Line, TokenClass),
 		DocComment:  classDef.DocComment,
 		TraitUseDoc: classDef.TraitUseDoc,
+		TraitRules:  classDef.TraitRules,
 		BodyLine:    classDef.BodyLine,
 		BodyCol:     classDef.BodyCol,
 	}

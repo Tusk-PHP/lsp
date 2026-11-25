@@ -185,3 +185,34 @@ trait HasTimestamps {
 		t.Errorf("expected 'trait HasTimestamps' in hover, got:\n%s", val)
 	}
 }
+
+func TestHoverTraitAliasShowsTheAliasedMethod(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///traits.php", `<?php
+namespace App;
+trait A { public function talk(): int {} }
+trait B { public function talk(): string {} }
+class Talker { use B, A { A::talk insteadof B; B::talk as protected bTalk; } }
+`)
+	p := NewProvider(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"), "none")
+	source := `<?php
+namespace App;
+$t = new Talker();
+$t->talk();
+$t->bTalk();
+`
+	cases := []struct{ word, hint, want string }{
+		{"talk", "$t->talk", "function talk(): int"},
+		{"bTalk", "$t->bTalk", "protected function bTalk(): string"},
+	}
+	for _, c := range cases {
+		hover := p.GetHover("file:///test.php", source, charPosOf(t, source, c.word, c.hint))
+		if hover == nil {
+			t.Errorf("%s: no hover", c.word)
+			continue
+		}
+		if !strings.Contains(hover.Contents.Value, c.want) {
+			t.Errorf("%s: want %q in hover, got:\n%s", c.word, c.want, hover.Contents.Value)
+		}
+	}
+}

@@ -1,6 +1,7 @@
 package completion
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -170,5 +171,36 @@ $u->`
 		if !labels[name] {
 			t.Errorf("expected method %s from trait+inheritance, got labels: %v", name, labels)
 		}
+	}
+}
+
+func TestCompleteTraitAliasAndInsteadof(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///traits.php", `<?php
+namespace App;
+trait A { public function talk(): int {} }
+trait B { public function talk(): string {} }
+class Talker { use B, A { A::talk insteadof B; B::talk as bTalk; } }
+`)
+	p := NewProvider(idx, nil, "none")
+	source := `<?php
+namespace App;
+$t = new Talker();
+$t->`
+	items := p.GetCompletions("file:///test.php", source, protocol.Position{Line: 3, Character: 4})
+	var talks, bTalks int
+	for _, item := range items {
+		switch item.Label {
+		case "talk":
+			talks++
+			if !strings.Contains(item.Detail, "int") {
+				t.Errorf("talk comes from A, got detail %q", item.Detail)
+			}
+		case "bTalk":
+			bTalks++
+		}
+	}
+	if talks != 1 || bTalks != 1 {
+		t.Errorf("want talk and bTalk once each, got talk=%d bTalk=%d", talks, bTalks)
 	}
 }

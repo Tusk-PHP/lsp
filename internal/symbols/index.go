@@ -56,6 +56,7 @@ type Symbol struct {
 	Children      []*Symbol
 	Implements    []string
 	Traits        []string
+	traitRules    *traitRules
 	Extends       string
 	BackedType    string
 	Value         string
@@ -308,7 +309,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 			// Class doesn't exist yet — index it normally
 			sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, file.Uses),
 				IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly, IsConditional: c.Conditional,
-				Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve),
+				Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve), traitRules: newTraitRules(c.TraitRules, resolve),
 				Range: symRange(c.StartLine, c.StartCol, len(c.Name))}
 			if c.Extends != "" {
 				sym.Extends = resolve(c.Extends)
@@ -433,7 +434,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		}
 		sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, file.Uses),
 			IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly, IsConditional: c.Conditional,
-			Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve),
+			Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve), traitRules: newTraitRules(c.TraitRules, resolve),
 			Attributes: indexAttributes(c.Attributes, resolve),
 			Range:      symRange(c.StartLine, c.StartCol, len(c.Name))}
 		previous := idx.symbols[fqn]
@@ -468,8 +469,8 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 	for _, tr := range file.Traits {
 		fqn := buildFQN(ns, tr.Name)
 		sym := &Symbol{Name: tr.Name, FQN: fqn, Kind: KindTrait, URI: uri, DocComment: qualifyDocTypes(tr.DocComment, file.Uses),
-			Traits: resolveNames(tr.Traits, resolve),
-			Range:  symRange(tr.StartLine, tr.StartCol, len(tr.Name))}
+			Traits: resolveNames(tr.Traits, resolve), traitRules: newTraitRules(tr.TraitRules, resolve),
+			Range: symRange(tr.StartLine, tr.StartCol, len(tr.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
 		idx.linkTypeLocked(sym)
 		idx.indexProperties(uri, sym, fqn, tr.Properties, src, resolve, file.Uses)
@@ -483,6 +484,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		fqn := buildFQN(ns, en.Name)
 		sym := &Symbol{Name: en.Name, FQN: fqn, Kind: KindEnum, URI: uri, DocComment: qualifyDocTypes(en.DocComment, file.Uses),
 			BackedType: en.BackedType, Implements: resolveNames(en.Implements, resolve), Traits: resolveNames(en.Traits, resolve),
+			traitRules: newTraitRules(en.TraitRules, resolve),
 			Attributes: indexAttributes(en.Attributes, resolve),
 			Range:      symRange(en.StartLine, en.StartCol, len(en.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
@@ -853,6 +855,9 @@ func mergeEarlierLayer(sym, previous *Symbol) {
 	for _, tr := range previous.Traits {
 		sym.Traits = appendUnique(sym.Traits, tr)
 	}
+	if sym.traitRules == nil {
+		sym.traitRules = previous.traitRules
+	}
 }
 
 func indexAttributes(attrs []parser.AttributeDef, resolve func(string) string) []Attribute {
@@ -1190,6 +1195,24 @@ func (idx *Index) GetClassMembers(classFQN string) []*Symbol {
 	return idx.getClassMembersRecursive(classFQN, make(map[string]bool))
 }
 
+func (idx *Index) appendTraitMembersLocked(members []*Symbol, traits []string, rules *traitRules, visited map[string]bool) []*Symbol {
+	var aliases []*Symbol
+	for _, tr := range traits {
+		if rules == nil {
+			members = append(members, idx.getClassMembersRecursive(tr, visited)...)
+			continue
+		}
+		for _, member := range idx.getClassMembersRecursive(tr, visited) {
+			kept, renamed := rules.adapt(tr, member)
+			aliases = append(aliases, renamed...)
+			if kept != nil {
+				members = append(members, kept)
+			}
+		}
+	}
+	return append(members, aliases...)
+}
+
 func (idx *Index) getClassMembersRecursive(fqn string, visited map[string]bool) []*Symbol {
 	// A union, intersection or DNF type has the members of each class in it.
 	if strings.ContainsAny(fqn, "|&(") {
@@ -1204,10 +1227,11 @@ func (idx *Index) getClassMembersRecursive(fqn string, visited map[string]bool) 
 	}
 	visited[fqn] = true
 	var own []*Symbol
+	var rules *traitRules
 	if sym, ok := idx.symbols[fqn]; ok {
-		own = sym.Children
+		own, rules = sym.Children, sym.traitRules
 	}
-	return idx.membersLocked(own, idx.traitMap[fqn], idx.inheritanceMap[fqn], idx.implementsMap[fqn], visited)
+	return idx.membersLocked(own, idx.traitMap[fqn], rules, idx.inheritanceMap[fqn], idx.implementsMap[fqn], visited)
 }
 
 func (idx *Index) Definitions(fqn string) []*Symbol {
@@ -1229,16 +1253,14 @@ func (idx *Index) DefinitionMembers(def *Symbol) []*Symbol {
 	if idx.symbols[def.FQN] == def {
 		return idx.getClassMembersRecursive(def.FQN, make(map[string]bool))
 	}
-	return idx.membersLocked(def.Children, def.Traits, def.Extends, def.Implements, map[string]bool{def.FQN: true})
+	return idx.membersLocked(def.Children, def.Traits, def.traitRules, def.Extends, def.Implements, map[string]bool{def.FQN: true})
 }
 
-func (idx *Index) membersLocked(own []*Symbol, traits []string, parent string, interfaces []string, visited map[string]bool) []*Symbol {
+func (idx *Index) membersLocked(own []*Symbol, traits []string, rules *traitRules, parent string, interfaces []string, visited map[string]bool) []*Symbol {
 	members := append([]*Symbol(nil), own...)
 	// PHP's precedence: the class's own members, then its traits', then the
 	// parent's. Callers take the first match, so the order matters.
-	for _, tr := range traits {
-		members = append(members, idx.getClassMembersRecursive(tr, visited)...)
-	}
+	members = idx.appendTraitMembersLocked(members, traits, rules, visited)
 	if parent != "" {
 		members = append(members, idx.getClassMembersRecursive(parent, visited)...)
 	}

@@ -362,8 +362,6 @@ src/Symfony/Component/HttpKernel/Event/ViewEvent.php	unknown-member	Unknown memb
 src/Symfony/Component/HttpKernel/EventListener/ControllerAttributesListener.php	unknown-member	Unknown member 'controllerMetadata' on 'KernelEvent'
 src/Symfony/Component/HttpKernel/HttpKernel.php	unknown-member	Unknown member 'getController' on 'RequestEvent'
 src/Symfony/Component/HttpKernel/HttpKernel.php	unknown-member	Unknown member 'getControllerReflector' on 'RequestEvent'
-src/Symfony/Component/HttpKernel/Kernel.php	unknown-member	Unknown member 'doInitializeBundles' on 'Kernel'
-src/Symfony/Component/HttpKernel/Kernel.php	unknown-member	Unknown member 'doInitializeContainer' on 'Kernel'
 src/Symfony/Component/JsonPath/Test/JsonPathAssertionsTrait.php	unknown-class	Unknown class 'Assert'
 src/Symfony/Component/JsonPath/Test/JsonPathAssertionsTrait.php	unknown-class	Unknown class 'Assert'
 src/Symfony/Component/JsonPath/Test/JsonPathAssertionsTrait.php	unknown-class	Unknown class 'Assert'
