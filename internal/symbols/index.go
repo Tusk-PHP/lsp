@@ -1,6 +1,7 @@
 package symbols
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -535,32 +536,37 @@ func (idx *Index) addSymbol(uri string, sym *Symbol) {
 	if sym.isGlobal() {
 		idx.shadowLocked(sym)
 	}
-	idx.storeSymbolLocked(sym)
+	idx.storeSymbolLocked(sym, pendingRemovals{})
 	if len(sym.Attributes) > 0 {
 		idx.attributedSymbols.Store(true)
 	}
 	idx.fileSymbols[uri] = append(idx.fileSymbols[uri], sym)
 }
 
-func (idx *Index) storeSymbolLocked(sym *Symbol) {
+func (idx *Index) storeSymbolLocked(sym *Symbol, pending pendingRemovals) {
 	if _, ok := idx.symbols[sym.FQN]; !ok {
-		idx.indexNamesLocked(sym)
+		idx.indexNamesLocked(sym, pending)
 	}
 	idx.symbols[sym.FQN] = sym
 }
 
-func (idx *Index) indexNamesLocked(sym *Symbol) {
+func (idx *Index) indexNamesLocked(sym *Symbol, pending pendingRemovals) {
 	if sym.Kind == KindClass && sym.Name == parser.AnonymousClassName {
 		// Found by its FQN only: no one can write its name.
 		return
 	}
-	idx.nameIndex[sym.Name] = append(idx.nameIndex[sym.Name], sym.FQN)
 	idx.sortedNamesDirty = true
 	idx.sortedFQNsDirty = true
-	if !sym.Kind.IsMember() {
-		ns := namespaceForFQN(sym.FQN)
+	if !pending.byName.take(sym.Name, sym.FQN) {
+		idx.nameIndex[sym.Name] = append(idx.nameIndex[sym.Name], sym.FQN)
+	}
+	if sym.Kind.IsMember() {
+		return
+	}
+	if ns := namespaceForFQN(sym.FQN); !pending.byNamespace.take(ns, sym.FQN) {
 		idx.namespaceIndex[ns] = append(idx.namespaceIndex[ns], sym.FQN)
-		key := strings.ToLower(sym.FQN)
+	}
+	if key := strings.ToLower(sym.FQN); !pending.byFold.take(key, sym.FQN) {
 		idx.foldIndex[key] = append(idx.foldIndex[key], sym.FQN)
 	}
 }
@@ -591,7 +597,7 @@ func (idx *Index) addSymbolWithSource(uri string, sym *Symbol, src SymbolSource)
 
 func (idx *Index) removeFileSymbols(uri string) {
 	idx.generation.Add(1)
-	var byName, byNamespace, byFold keyedRemovals
+	var pending pendingRemovals
 	for _, sym := range idx.fileSymbols[uri] {
 		// A member this file added to a class another file declares (an IDE
 		// helper's @property) leaves that class's members with it.
@@ -616,22 +622,22 @@ func (idx *Index) removeFileSymbols(uri string) {
 			idx.unshadowLocked(sym)
 			continue
 		}
-		if sym.isGlobal() && idx.promoteShadowedLocked(sym) {
+		if sym.isGlobal() && idx.promoteShadowedLocked(sym, pending) {
 			continue
 		}
 		delete(idx.symbols, sym.FQN)
 		idx.sortedNamesDirty = true
 		idx.sortedFQNsDirty = true
-		byName.add(sym.Name, sym.FQN)
+		pending.byName.add(sym.Name, sym.FQN)
 		if !sym.Kind.IsMember() {
-			byNamespace.add(namespaceForFQN(sym.FQN), sym.FQN)
-			byFold.add(strings.ToLower(sym.FQN), sym.FQN)
+			pending.byNamespace.add(namespaceForFQN(sym.FQN), sym.FQN)
+			pending.byFold.add(strings.ToLower(sym.FQN), sym.FQN)
 		}
 		idx.unlinkTypeLocked(sym)
 	}
-	byName.applyTo(idx.nameIndex)
-	byNamespace.applyTo(idx.namespaceIndex)
-	byFold.applyTo(idx.foldIndex)
+	pending.byName.applyTo(idx.nameIndex)
+	pending.byNamespace.applyTo(idx.namespaceIndex)
+	pending.byFold.applyTo(idx.foldIndex)
 	delete(idx.fileSymbols, uri)
 	delete(idx.fileSource, uri)
 	delete(idx.generatedURIs, uri)
@@ -662,7 +668,7 @@ func (idx *Index) unshadowLocked(sym *Symbol) {
 	}
 }
 
-func (idx *Index) promoteShadowedLocked(removed *Symbol) bool {
+func (idx *Index) promoteShadowedLocked(removed *Symbol, pending pendingRemovals) bool {
 	defs := idx.shadowed[removed.FQN]
 	if len(defs) == 0 {
 		return false
@@ -670,9 +676,9 @@ func (idx *Index) promoteShadowedLocked(removed *Symbol) bool {
 	promoted := defs[len(defs)-1]
 	idx.unshadowLocked(promoted)
 	idx.unlinkTypeLocked(removed)
-	idx.storeSymbolLocked(promoted)
+	idx.storeSymbolLocked(promoted, pending)
 	for _, child := range promoted.Children {
-		idx.storeSymbolLocked(child)
+		idx.storeSymbolLocked(child, pending)
 	}
 	idx.linkTypeLocked(promoted)
 	return true
@@ -1704,6 +1710,10 @@ func appendUnique(slice []string, item string) []string {
 	return append(slice, item)
 }
 
+type pendingRemovals struct {
+	byName, byNamespace, byFold keyedRemovals
+}
+
 type keyedRemovals map[string][]string
 
 func (r *keyedRemovals) add(key, fqn string) {
@@ -1711,6 +1721,20 @@ func (r *keyedRemovals) add(key, fqn string) {
 		*r = make(keyedRemovals)
 	}
 	(*r)[key] = append((*r)[key], fqn)
+}
+
+func (r keyedRemovals) take(key, fqn string) bool {
+	fqns := r[key]
+	i := slices.Index(fqns, fqn)
+	if i < 0 {
+		return false
+	}
+	if fqns = slices.Delete(fqns, i, i+1); len(fqns) > 0 {
+		r[key] = fqns
+	} else {
+		delete(r, key)
+	}
+	return true
 }
 
 func (r keyedRemovals) applyTo(index map[string][]string) {
