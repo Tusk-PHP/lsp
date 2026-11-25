@@ -1905,10 +1905,6 @@ func (idx *Index) TemplateFileURIs() []string {
 	return uris
 }
 
-// GetFileSource returns the PHP source text of an indexed URI, or an empty
-// string if the URI has not been indexed, was removed, or its vendor file can
-// no longer be read. Vendor sources are read from disk on demand instead of
-// being kept in memory.
 func (idx *Index) GetFileSource(uri string) string {
 	idx.mu.RLock()
 	entry, stored := idx.fileSource[uri]
@@ -1924,9 +1920,19 @@ func (idx *Index) GetFileSource(uri string) string {
 	return string(data)
 }
 
-// MayMention reports whether the indexed file at uri may contain word as an
-// identifier, ignoring case. It answers false only for a vendor file that
-// certainly doesn't, so a scan can skip reading that file from disk.
+func (idx *Index) RemoveVendorFilesExcept(keep map[string]struct{}) int {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	removed := 0
+	for uri := range idx.diskSources {
+		if _, ok := keep[uri]; !ok {
+			idx.removeFileSymbols(uri)
+			removed++
+		}
+	}
+	return removed
+}
+
 func (idx *Index) MayMention(uri, word string) bool {
 	idx.mu.RLock()
 	disk, onDisk := idx.diskSources[uri]

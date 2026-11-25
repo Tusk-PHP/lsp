@@ -25,6 +25,8 @@ type Refreshed struct {
 	EditorOpened   []string
 	Failed         []string
 	Composer       bool
+	Vendor         bool
+	VendorFiles    int
 	ProfileChanged bool
 	Profile        symbols.BuiltinProfile
 	ProfileSource  string
@@ -85,6 +87,7 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 	manifest := filepath.Join(ws.RootPath, composerManifest)
 	configPath := ws.ConfigPath()
 	composerState := ws.ComposerStatePaths()
+	vendorState := ws.VendorStatePaths()
 	seen := make(map[string]struct{}, len(r.Paths))
 	var sources []string
 	profile := r.Profile
@@ -95,6 +98,7 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 			profile = true
 		case slices.Contains(composerState, path):
 			out.Composer = true
+			out.Vendor = out.Vendor || slices.Contains(vendorState, path)
 			profile = profile || path == manifest
 		default:
 			found, err := ws.sourcesAt(path)
@@ -130,6 +134,10 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 	}
 	if out.Composer {
 		ws.rereadAutoload()
+	}
+	if out.Vendor {
+		out.VendorFiles = ws.IndexComposerDependencies()
+		ws.AnalyzeModels()
 	}
 	if profile {
 		if err := ws.refreshProfile(r.Config, &out); err != nil {

@@ -108,3 +108,19 @@ func TestShadowedVendorDeclarationKeepsItsSourceOnDisk(t *testing.T) {
 		t.Error("and its source is still read from disk")
 	}
 }
+
+func TestRemoveVendorFilesExceptKeepsProjectFiles(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFileWithSource("file:///v/Kept.php", "<?php\nnamespace V;\nclass Kept {}\n", SourceVendor)
+	idx.IndexFileWithSource("file:///v/Gone.php", "<?php\nnamespace V;\nclass Gone {}\n", SourceVendor)
+	idx.IndexFileWithSource("file:///app/Own.php", "<?php\nnamespace App;\nclass Own {}\n", SourceProject)
+
+	removed := idx.RemoveVendorFilesExcept(map[string]struct{}{"file:///v/Kept.php": {}})
+
+	if removed != 1 || idx.Lookup(`V\Gone`) != nil || idx.Lookup(`V\Kept`) == nil || idx.Lookup(`App\Own`) == nil {
+		t.Errorf("only the vendor file not kept is removed: removed %d", removed)
+	}
+	if !idx.MayMention("file:///v/Gone.php", "Gone") {
+		t.Error("a removed vendor file has no word filter left")
+	}
+}
