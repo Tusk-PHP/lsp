@@ -129,7 +129,9 @@ To silence one finding, put a `@tusk-ignore` comment on the line or on its own
 line above it, naming the codes to ignore. A comment on its own line covers the
 next line of code and everything between, so markers can be stacked and can sit
 above a method's docblock and attributes. It reaches across at most one blank
-line; a marker followed by two blank lines covers nothing:
+line; a marker followed by two blank lines covers nothing. The marker starts
+the comment (or, in a docblock, one of its lines), so a note such as
+`// TODO: drop @tusk-ignore` silences nothing:
 
 ```php
 // @tusk-ignore unknown-member
