@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"errors"
 	"io"
 	"log"
 	"os"
@@ -168,6 +169,31 @@ func TestRefreshReadsComposersAutoloadMapAgain(t *testing.T) {
 	}
 	if _, ok := ws.ClassLoader().Load(`Acme\Widget`); !ok {
 		t.Error("the class loader finds a package Composer installed after startup")
+	}
+}
+
+func TestRefreshSeparatesConfigErrorsFromFilesItCouldNotRead(t *testing.T) {
+	ws, root := newRefreshWorkspace(t, nil, map[string]string{"app/Order.php": "<?php\nclass Order {}\n"})
+	writeFiles(t, root, map[string]string{"app/Locked.php": "<?php\nclass Locked {}\n", "app/Added.php": "<?php\nclass Added {}\n"})
+	locked := filepath.Join(root, "app/Locked.php")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o644) })
+	broken := errors.New("unexpected end of JSON input")
+	out, err := ws.Refresh(Refresh{
+		Paths:  []string{locked, filepath.Join(root, "app/Added.php"), ws.ConfigPath()},
+		Config: func() (*config.Config, error) { return nil, broken },
+	})
+	var configErr *ConfigError
+	if !errors.As(err, &configErr) || !errors.Is(err, broken) {
+		t.Errorf("a config that can't be loaded is a ConfigError: %v", err)
+	}
+	if len(out.Failed) != 1 || out.Failed[0] != locked {
+		t.Errorf("the unreadable file is listed as failed: %v", out.Failed)
+	}
+	if ws.Index.Lookup("Added") == nil {
+		t.Error("the other files are re-indexed")
 	}
 }
 
