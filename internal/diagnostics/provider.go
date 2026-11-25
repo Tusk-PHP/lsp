@@ -88,10 +88,10 @@ func (p *Provider) analyze(uri, source string, withSaveRules bool) []Diagnostic 
 		// is found in that PHP is reported, at its place in the view.
 		in := p.ViewTypes.For(uri)
 		doc := blade.CompileWith(source, blade.CompileOptions{Vars: in.BladeVars(), Defined: in.Complete, Custom: p.bladeCustom()})
-		diags = toTemplate(doc, p.analyzeNative(uri, doc.PHP, shared, true, !in.Complete))
+		diags = toTemplate(doc, p.analyzeNative(uri, doc.PHP, shared, doc, !in.Complete))
 		diags = append(diags, p.analyzeBlade(source)...)
 	} else {
-		diags = p.analyzeNative(uri, source, shared, false, workspace.IsTemplate(uri))
+		diags = p.analyzeNative(uri, source, shared, nil, workspace.IsTemplate(uri))
 	}
 	p.mu.RLock()
 	if cached, ok := p.toolResults[uri]; ok {
@@ -116,18 +116,19 @@ func (p *Provider) analyze(uri, source string, withSaveRules bool) []Diagnostic 
 	return p.dropSuppressed(uri, source, shared, diags)
 }
 
-func (p *Provider) analyzeNative(uri, source string, shared *checks.Shared, bladePHP, includedFile bool) []Diagnostic {
-	rules := EditRules(p.ruleOptions(bladePHP, includedFile), shared)
+func (p *Provider) analyzeNative(uri, source string, shared *checks.Shared, view *blade.Document, includedFile bool) []Diagnostic {
+	rules := EditRules(p.ruleOptions(view, includedFile), shared)
 	return p.toDiagnostics(p.runRules(rules, parser.ParseFileIn(source, p.index.GrammarOf(uri)), source))
 }
 
-func (p *Provider) ruleOptions(bladePHP, includedFile bool) NativeRulesOptions {
+func (p *Provider) ruleOptions(view *blade.Document, includedFile bool) NativeRulesOptions {
 	return NativeRulesOptions{
 		TypeResolver:           p.TypeResolver,
 		BuiltinUnavailableRule: p.BuiltinUnavailableRule(),
 		BuilderModelResolver:   p.BuilderModelResolver,
 		BuilderMemberChecker:   p.BuilderMemberChecker,
-		BladePHP:               bladePHP,
+		BladePHP:               view != nil,
+		BladeControlFlow:       view != nil && view.LaravelControlFlow,
 		IncludedFile:           includedFile,
 	}
 }
@@ -225,7 +226,7 @@ func (p *Provider) saveDiagnostics(uri, source string) []Diagnostic {
 		doc = blade.CompileWith(source, blade.CompileOptions{Vars: p.ViewTypes.For(uri).BladeVars(), Custom: p.bladeCustom()})
 		source = doc.PHP
 	}
-	diags := p.toDiagnostics(p.runRules(SaveRules(p.ruleOptions(doc != nil, false)), parser.ParseFileIn(source, p.index.GrammarOf(uri)), source))
+	diags := p.toDiagnostics(p.runRules(SaveRules(p.ruleOptions(doc, false)), parser.ParseFileIn(source, p.index.GrammarOf(uri)), source))
 	if doc != nil {
 		diags = toTemplate(doc, diags)
 	}
