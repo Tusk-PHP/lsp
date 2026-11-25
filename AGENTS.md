@@ -105,7 +105,7 @@ internal/
 ├── lsp/              LSP transport: read, schedule, write, translate to/from protocol
 ├── mcpserver/        MCP transport: tools and resources only
 ├── session/          builds and connects the analysis providers once, for every transport
-├── document/         open documents: versions, immutable snapshots, edits, UTF-16 positions
+├── document/         open documents: versions, immutable snapshots, edits, column conversion
 ├── indexing/         when and what to (re)index: scheduling, invalidation, caches
 ├── workspace/        roots, Composer discovery, project profile
 ├── php/              token, lexer, ast, parser: PHP's own grammar, version by version (issue #140)
@@ -125,7 +125,8 @@ What each piece owns once it exists:
   `lsp/initialize.go` (`handleInitialize`) and `mcpserver/server.go` (`buildRuntime`).
 - **`document`** owns the latest text of each open file and its version. Analysis
   runs on an immutable snapshot and its result is dropped if a newer version
-  arrived meanwhile.
+  arrived meanwhile. It also converts columns between the byte offsets the core
+  uses and the position encoding negotiated with the client (UTF-8 or UTF-16).
 - **`indexing`** owns scheduling and invalidation; `symbols` keeps the data and the
   queries.
 - **`lsp`** owns the single output writer and request scheduling (bounded workers,
