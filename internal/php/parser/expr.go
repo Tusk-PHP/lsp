@@ -176,7 +176,10 @@ func (p *parser) exprBP(min int) ast.Expr {
 }
 
 func (p *parser) exprBody(min int, start uint32) ast.Expr {
-	lhs := p.unary()
+	return p.operators(p.unary(), min, start)
+}
+
+func (p *parser) operators(lhs ast.Expr, min int, start uint32) ast.Expr {
 	for {
 		k := p.peek()
 		if isAssignOp(k) && p.assignable(lhs, k) {
@@ -287,16 +290,19 @@ func (p *parser) unary() ast.Expr {
 func (p *parser) clone() ast.Expr {
 	start := p.start()
 	p.next()
-	if p.version >= token.PHP85 && p.peek() == token.LeftParen {
-		save := p.mark()
-		args := p.args()
-		trailingComma := p.toks[p.pos-1].Kind == token.RightParen && p.toks[p.pos-2].Kind == token.Comma
-		if len(args.Args) != 1 || trailingComma || args.RestPlaceholder || args.Args[0].Name != nil || args.Args[0].Unpack {
-			return &ast.Clone{Args: args, Span: p.span(start)}
-		}
-		p.reset(save)
+	if p.version < token.PHP85 || p.peek() != token.LeftParen {
+		return &ast.Clone{Operand: p.exprBP(bpClone), Span: p.span(start)}
 	}
-	return &ast.Clone{Operand: p.exprBP(bpClone), Span: p.span(start)}
+	parenStart := p.start()
+	args := p.args()
+	trailingComma := p.toks[p.pos-1].Kind == token.RightParen && p.toks[p.pos-2].Kind == token.Comma
+	if len(args.Args) != 1 || trailingComma || args.RestPlaceholder || args.Args[0].Name != nil || args.Args[0].Unpack || args.Args[0].Placeholder {
+		return &ast.Clone{Args: args, Span: p.span(start)}
+	}
+	inner := args.Args[0].Value
+	p.parenthesized = inner
+	operand := p.operators(p.postfix(inner, parenStart), bpClone, parenStart)
+	return &ast.Clone{Operand: operand, Span: p.span(start)}
 }
 
 func (p *parser) yield() ast.Expr {

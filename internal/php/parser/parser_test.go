@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/lexer"
@@ -811,6 +812,40 @@ func TestAPanicKeepsThePartialFileAndReportsIt(t *testing.T) {
 	})
 	if len(file.Stmts) != 1 || len(p.errors) != 1 || p.errors[0].Message != "internal parser error: boom" {
 		t.Fatalf("got %v %v", file.Stmts, p.errors)
+	}
+}
+
+func TestNestedCloneCallsParseInLinearTime(t *testing.T) {
+	const depth = 40
+	for _, closed := range []bool{true, false} {
+		src := "<?php " + strings.Repeat("clone(", depth) + "$o"
+		if closed {
+			src += strings.Repeat(")", depth) + ";"
+		}
+		done := make(chan *ast.File, 1)
+		go func() { done <- Parse(src, token.PHP85) }()
+		var file *ast.File
+		select {
+		case file = <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatalf("closed=%v: %d nested clone( calls did not parse within 10s", closed, depth)
+		}
+		if closed != (len(file.Errors) == 0) {
+			t.Errorf("closed=%v: errors %v", closed, file.Errors)
+		}
+		clones := 0
+		var operand ast.Expr = file.Stmts[0].(*ast.ExprStmt).Expr
+		for {
+			c, ok := operand.(*ast.Clone)
+			if !ok {
+				break
+			}
+			clones++
+			operand = c.Operand
+		}
+		if _, isVar := operand.(*ast.Variable); clones != depth || !isVar {
+			t.Errorf("closed=%v: %d nested clones around %T, want %d around a variable", closed, clones, operand, depth)
+		}
 	}
 }
 
