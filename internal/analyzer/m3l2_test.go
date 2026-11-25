@@ -23,7 +23,7 @@ func setupSigHelpAnalyzer(t *testing.T, funcSource string) *Analyzer {
 func TestSignatureHelpActiveParamClamped(t *testing.T) {
 	// twoParam(string $a, int $b) — 2 parameters, indices 0 and 1.
 	// Simulate the user typing a third argument: twoParam($x, $y, |
-	// extractCallInfo counts 2 commas → activeParam = 2, which is out of range.
+	// Two commas before the cursor → activeParam = 2, which is out of range.
 	// GetSignatureHelp must clamp it to 1.
 	funcSource := `<?php
 function twoParam(string $a, int $b): void {}

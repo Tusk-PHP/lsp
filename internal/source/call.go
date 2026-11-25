@@ -67,3 +67,49 @@ func inAttribute(tokens []parser.Token, i int) bool {
 	}
 	return false
 }
+
+func CallAt(source string, pos protocol.Position) (callee protocol.Position, argument int, ok bool) {
+	tokens := parser.Tokenize(source)
+	cursor := sort.Search(len(tokens), func(i int) bool { return !tokenEndsBeforePos(tokens[i], pos) })
+	depth := 0
+	for k := cursor - 1; k >= 0; k-- {
+		switch tokens[k].Kind {
+		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
+			depth++
+		case parser.TokenOpenBracket:
+			if depth > 0 {
+				depth--
+				continue
+			}
+			argument = 0
+		case parser.TokenOpenBrace:
+			if depth == 0 {
+				return protocol.Position{}, 0, false
+			}
+			depth--
+		case parser.TokenOpenParen:
+			if depth > 0 {
+				depth--
+				continue
+			}
+			name := parser.PrevSignificant(tokens, k-1)
+			if name < 0 || tokens[name].Kind != parser.TokenIdentifier {
+				return protocol.Position{}, 0, false
+			}
+			return protocol.Position{Line: tokens[name].Line, Character: tokens[name].Column}, argument, true
+		case parser.TokenComma:
+			if depth == 0 {
+				argument++
+			}
+		case parser.TokenSemicolon:
+			if depth == 0 {
+				return protocol.Position{}, 0, false
+			}
+		}
+	}
+	return protocol.Position{}, 0, false
+}
+
+func tokenEndsBeforePos(tok parser.Token, pos protocol.Position) bool {
+	return tok.Line < pos.Line || tok.Line == pos.Line && tok.Column+len(tok.Value) <= pos.Character
+}
