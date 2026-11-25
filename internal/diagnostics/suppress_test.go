@@ -133,6 +133,25 @@ function run() {
 	}
 }
 
+func TestPHPStanIgnoreSilencesUnusedPrivateConstant(t *testing.T) {
+	p := newTestProvider()
+	p.index.MarkReady()
+	source := `<?php
+class Settings {
+    // @phpstan-ignore classConstant.unused
+    private const KEPT = 1;
+    private const DROPPED = 2;
+}
+`
+	got := codesAt(p.Analyze("file:///tmp/settings.php", source))
+	if _, ok := got[3]; ok {
+		t.Errorf("classConstant.unused silences unused-private-constant: %v", got[3])
+	}
+	if len(got[4]) != 1 || got[4][0] != "tusk-php:unused-private-constant" {
+		t.Errorf("the constant without a comment is still reported: %v", got[4])
+	}
+}
+
 func TestIgnoreRulesWithoutPathApplyOutsideTheRoot(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
