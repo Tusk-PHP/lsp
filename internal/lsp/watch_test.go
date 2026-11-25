@@ -425,3 +425,21 @@ func TestAConfigFileWithASyntaxErrorKeepsTheLastGoodOne(t *testing.T) {
 	notifyWatched(h, root, ".tusk-php.json")
 	waitForDiagnostic(t, h, uri, "builtin-unavailable", false)
 }
+
+func TestADocumentOpenedWhileItsDiskTextIsIndexedGetsTheEditorsTextBack(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json":   `{"require": {"php": "^8.1"}}`,
+		"app/Invoice.php": "<?php\nnamespace App;\nclass Invoice {}\nclass WrittenOnDisk {}\n",
+	}, map[string]interface{}{}, nil)
+	waitForSymbols(t, h, "WrittenOnDisk", func(names []string) bool { return len(names) == 1 })
+
+	uri := "file://" + filepath.Join(root, "app/Invoice.php")
+	openDocument(h, uri, "<?php\nnamespace App;\nclass Invoice {}\nclass EditedInEditor {}\n")
+	waitForSymbols(t, h, "EditedInEditor", func(names []string) bool { return len(names) == 1 })
+	h.server.workspace.IndexFile(uri, "<?php\nnamespace App;\nclass Invoice {}\nclass WrittenOnDisk {}\n")
+	h.server.reindexOpenDocument(uri)
+	waitForSymbols(t, h, "EditedInEditor", func(names []string) bool { return len(names) == 1 })
+	if names := symbolNames(t, h, "WrittenOnDisk"); len(names) != 0 {
+		t.Errorf("the disk text a refresh indexed under an open document is replaced: %v", names)
+	}
+}

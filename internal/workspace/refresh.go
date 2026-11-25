@@ -22,6 +22,7 @@ type Refresh struct {
 
 type Refreshed struct {
 	Files          []string
+	EditorOpened   []string
 	Composer       bool
 	ProfileChanged bool
 	Profile        symbols.BuiltinProfile
@@ -87,15 +88,19 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 	}
 	for _, path := range sources {
 		uri := "file://" + path
-		if r.EditorOwns != nil && r.EditorOwns(uri) {
+		if r.editorOwns(uri) {
 			continue
 		}
 		changed, err := ws.refreshFile(path, uri)
 		if err != nil {
 			errs = append(errs, err)
 		}
-		if changed {
-			out.Files = append(out.Files, uri)
+		if !changed {
+			continue
+		}
+		out.Files = append(out.Files, uri)
+		if r.editorOwns(uri) {
+			out.EditorOpened = append(out.EditorOpened, uri)
 		}
 	}
 	if out.Composer {
@@ -115,6 +120,10 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 		ws.Container.Analyze()
 	}
 	return out, errors.Join(errs...)
+}
+
+func (r Refresh) editorOwns(uri string) bool {
+	return r.EditorOwns != nil && r.EditorOwns(uri)
 }
 
 func (ws *Bootstrapped) sourcesAt(path string) ([]string, error) {

@@ -129,6 +129,9 @@ func (s *Server) refreshWorkspace() {
 	if result.ProfileChanged {
 		s.logInfo(fmt.Sprintf("PHP LSP: PHP %s (source: %s)", result.Profile.PHPVersion, result.ProfileSource))
 	}
+	for _, uri := range result.EditorOpened {
+		s.reindexOpenDocument(uri)
+	}
 	for _, uri := range result.Files {
 		if affectsComponents(s.rootPath, uri) {
 			s.components.Invalidate()
@@ -141,8 +144,13 @@ func (s *Server) refreshWorkspace() {
 }
 
 func (s *Server) isOpen(uri string) bool {
+	_, open := s.openDocument(uri)
+	return open
+}
+
+func (s *Server) openDocument(uri string) (string, bool) {
 	s.docMu.RLock()
 	defer s.docMu.RUnlock()
-	_, open := s.documents[uri]
-	return open
+	source, open := s.documents[uri]
+	return source, open
 }

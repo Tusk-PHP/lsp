@@ -84,6 +84,26 @@ func TestRefreshSkipsDocumentsTheEditorOwns(t *testing.T) {
 	}
 }
 
+func TestRefreshReportsDocumentsTheEditorOpensWhileTheyAreReadFromDisk(t *testing.T) {
+	ws, root := newRefreshWorkspace(t, nil, map[string]string{"app/Open.php": "<?php\nclass Open {}\n"})
+	writeFiles(t, root, map[string]string{"app/Open.php": "<?php\nclass FromDisk {}\n", "app/Closed.php": "<?php\nclass Closed {}\n"})
+	open := "file://" + filepath.Join(root, "app/Open.php")
+	asked := 0
+	out, err := ws.Refresh(Refresh{
+		Paths: []string{filepath.Join(root, "app/Open.php"), filepath.Join(root, "app/Closed.php")},
+		EditorOwns: func(uri string) bool {
+			if uri != open {
+				return false
+			}
+			asked++
+			return asked > 1
+		},
+	})
+	if err != nil || len(out.EditorOpened) != 1 || out.EditorOpened[0] != open {
+		t.Errorf("a document opened while its disk text was indexed is handed back to the editor: %+v %v", out, err)
+	}
+}
+
 func TestRefreshRespectsMaxIndexFiles(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.MaxIndexFiles = 1

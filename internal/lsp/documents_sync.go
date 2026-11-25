@@ -35,6 +35,25 @@ func (s *Server) indexDocumentMaybeAsync(uri, source string) {
 		s.workspace.IndexFile(uri, source)
 		return
 	}
+	start := q.queueLocked(uri, source)
+	q.mu.Unlock()
+	if start {
+		s.goSafe("indexFileByURI:"+uri, func() { s.drainDocIndex(uri) })
+	}
+}
+
+func (s *Server) reindexOpenDocument(uri string) {
+	q := &s.docIndex
+	q.mu.Lock()
+	source, open := s.openDocument(uri)
+	start := open && q.queueLocked(uri, source)
+	q.mu.Unlock()
+	if start {
+		s.goSafe("indexFileByURI:"+uri, func() { s.drainDocIndex(uri) })
+	}
+}
+
+func (q *docIndexQueue) queueLocked(uri, source string) bool {
 	if q.pending == nil {
 		q.pending = make(map[string]string)
 		q.running = make(map[string]bool)
@@ -42,10 +61,7 @@ func (s *Server) indexDocumentMaybeAsync(uri, source string) {
 	q.pending[uri] = source
 	start := !q.running[uri]
 	q.running[uri] = true
-	q.mu.Unlock()
-	if start {
-		s.goSafe("indexFileByURI:"+uri, func() { s.drainDocIndex(uri) })
-	}
+	return start
 }
 
 // drainDocIndex indexes the newest pending version of uri until none is left.
