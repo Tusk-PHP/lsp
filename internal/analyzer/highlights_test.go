@@ -116,6 +116,26 @@ func TestHighlightsOfALocalNamedLikeAPropertyAreTheLocal(t *testing.T) {
 	}
 }
 
+func TestHighlightsOfAPromotedPropertyAreTheProperty(t *testing.T) {
+	src := `<?php
+namespace App;
+class Plot {
+    public function __construct(private float $area) {
+        echo $area;
+    }
+    public function size(): float { return $this->area; }
+}
+`
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///plot.php": src})
+	var got []highlightAt
+	for _, h := range a.GetDocumentHighlights("file:///plot.php", src, positionOf(t, src, "$area)")) {
+		got = append(got, highlightAt{h.Range.Start.Line, h.Range.Start.Character, h.Kind})
+	}
+	if want := []highlightAt{{3, 46, write}, {6, 50, read}}; !slices.Equal(got, want) {
+		t.Errorf("the promoted parameter is the property's declaration, highlighted with $this->area:\n got %v\nwant %v", got, want)
+	}
+}
+
 func BenchmarkDocumentHighlights(b *testing.B) {
 	var src strings.Builder
 	src.WriteString("<?php\nnamespace App;\nclass Shape { public function area(): float { return 0.0; } }\nclass Room {\n    public function area(): float { return 1.0; }\n")
