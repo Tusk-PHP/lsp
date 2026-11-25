@@ -67,3 +67,48 @@ func TestExcludePathsAndMaxIndexFilesApplyWithoutARestart(t *testing.T) {
 	h.notify("workspace/didChangeConfiguration", map[string]interface{}{"settings": map[string]interface{}{"maxIndexFiles": 0}})
 	waitForSymbols(t, h, "Ledger", func(names []string) bool { return slices.Contains(names, "Ledger") })
 }
+
+func TestEmptyClientSettingsKeepTheInitializationOptions(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json":       `{"require": {"php": "^8.1"}}`,
+		"legacy/OldOrder.php": "<?php\nnamespace Legacy;\nclass OldOrder {}\n",
+	}, map[string]interface{}{}, map[string]interface{}{"diagnosticsEnabled": false, "excludePaths": []string{"vendor", "legacy"}})
+	uri := "file://" + filepath.Join(root, "app/make.php")
+	openDocument(h, uri, usesMissingClass)
+
+	h.notify("workspace/didChangeConfiguration", map[string]interface{}{"settings": map[string]interface{}{}})
+	settleRefreshes(t, h, root, "AfterEmptySettings")
+	if cfg := h.server.config(); cfg.DiagnosticsEnabled || !slices.Contains(cfg.ExcludePaths, "legacy") {
+		t.Errorf("settings without Tusk PHP keys change nothing: diagnostics %v, excludePaths %v", cfg.DiagnosticsEnabled, cfg.ExcludePaths)
+	}
+	if names := symbolNames(t, h, "OldOrder"); len(names) != 0 {
+		t.Errorf("the excluded directory stays out of the index: %v", names)
+	}
+
+	h.notify("workspace/didChangeConfiguration", map[string]interface{}{"settings": map[string]interface{}{"phpstanEnabled": false}})
+	settleRefreshes(t, h, root, "AfterPHPStanSetting")
+	if cfg := h.server.config(); cfg.DiagnosticsEnabled || !slices.Contains(cfg.ExcludePaths, "legacy") {
+		t.Errorf("settings apply over the initialization options: diagnostics %v, excludePaths %v", cfg.DiagnosticsEnabled, cfg.ExcludePaths)
+	}
+}
+
+func TestAConfigFileWithASyntaxErrorKeepsItsExclusions(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json":       `{"require": {"php": "^8.1"}}`,
+		".tusk-php.json":      `{"excludePaths": ["vendor", "legacy"], "diagnosticRules": {"unknown-class": "off"}}`,
+		"app/Order.php":       "<?php\nnamespace App;\nclass Order {}\n",
+		"legacy/OldOrder.php": "<?php\nnamespace Legacy;\nclass OldOrder {}\n",
+	}, map[string]interface{}{}, nil)
+	waitForSymbols(t, h, "Order", func(names []string) bool { return slices.Contains(names, "Order") })
+
+	writeProjectFiles(t, root, map[string]string{".tusk-php.json": `{"excludePaths": ["vendor"`})
+	notifyWatched(h, root, ".tusk-php.json")
+	waitForShowMessage(t, h, "Tusk PHP kept its previous configuration")
+	settleRefreshes(t, h, root, "AfterBrokenSave")
+	if names := symbolNames(t, h, "OldOrder"); len(names) != 0 {
+		t.Errorf("a half-edited config file keeps the last good exclusions: %v", names)
+	}
+	if h.server.config().IsRuleEnabled("unknown-class") {
+		t.Error("a half-edited config file keeps the last good rules")
+	}
+}
