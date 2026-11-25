@@ -161,10 +161,3 @@ func (s *Server) editorURIAt(path string) (string, bool) {
 	uri, open := s.openPaths[path]
 	return uri, open
 }
-
-func (s *Server) openDocument(uri string) (string, bool) {
-	s.docMu.RLock()
-	defer s.docMu.RUnlock()
-	source, open := s.documents[uri]
-	return source, open
-}

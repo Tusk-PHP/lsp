@@ -49,10 +49,7 @@ func (s *Server) scheduleDiagnostics(uri string) {
 		delete(d.timers, uri)
 		d.mu.Unlock()
 		s.goSafe("diagnostics:"+uri, func() {
-			s.docMu.RLock()
-			source, open := s.documents[uri]
-			s.docMu.RUnlock()
-			if open {
+			if source, open := s.docs.Text(uri); open {
 				s.publishDiagnostics(uri, source)
 			}
 		})

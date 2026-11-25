@@ -101,7 +101,7 @@ func TestDiagnosticsArePublishedOnlyForTheCurrentVersion(t *testing.T) {
 	s.analysis = session.New(s.workspace, session.Options{})
 	uri := "file:///a.php"
 	old, current := "<?php\necho $a;\n", "<?php\necho 1;\n"
-	s.documents[uri] = current
+	s.docs.Open(uri, 1, current)
 
 	s.publishDiagnostics(uri, old)
 	if out.Len() != 0 {
@@ -112,7 +112,7 @@ func TestDiagnosticsArePublishedOnlyForTheCurrentVersion(t *testing.T) {
 		t.Fatal("didn't publish diagnostics for the current version")
 	}
 	out.Reset()
-	delete(s.documents, uri)
+	s.docs.Close(uri)
 	s.publishDiagnostics(uri, current)
 	if out.Len() != 0 {
 		t.Fatalf("published diagnostics for a closed document: %s", out.String())

@@ -97,7 +97,7 @@ func TestDidChangeDoesNotWaitForDiagnostics(t *testing.T) {
 	s, out, release, analyzed := slowDiagnosticsServer(t)
 	defer close(release)
 	uri := "file:///a.php"
-	s.documents[uri] = "<?php\n"
+	s.docs.Open(uri, 1, "<?php\n")
 
 	done := make(chan struct{})
 	go func() {
@@ -121,7 +121,7 @@ func TestDidChangeDoesNotWaitForDiagnostics(t *testing.T) {
 func TestDebouncedDiagnosticsPublishOnlyTheLatestVersion(t *testing.T) {
 	s, out, release, analyzed := slowDiagnosticsServer(t)
 	uri := "file:///a.php"
-	s.documents[uri] = "<?php\n"
+	s.docs.Open(uri, 1, "<?php\n")
 	version := func(n int) string {
 		return "<?php\n$a = new Foo();\n$a->bar();\n" + strings.Repeat("// edit\n", n)
 	}
@@ -167,7 +167,7 @@ func TestDidCloseCancelsPendingDiagnostics(t *testing.T) {
 	defer close(release)
 	s.diagDebounce.delay = 50 * time.Millisecond
 	uri := "file:///a.php"
-	s.documents[uri] = "<?php\n"
+	s.docs.Open(uri, 1, "<?php\n")
 	s.handleMessage(didChangeMessage(t, uri, 2, "<?php\n$a = new Foo();\n$a->bar();\n"))
 	params, _ := json.Marshal(map[string]any{"textDocument": map[string]any{"uri": uri}})
 	s.handleMessage(&jsonRPCMessage{JSONRPC: "2.0", Method: "textDocument/didClose", Params: params})

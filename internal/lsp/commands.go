@@ -102,9 +102,7 @@ func (s *Server) commandArg[T any](msg *jsonRPCMessage, params protocol.ExecuteC
 
 func (s *Server) debugDocument(uri string) string {
 	source := s.getDocument(uri)
-	s.docMu.RLock()
-	_, inBuffer := s.documents[uri]
-	s.docMu.RUnlock()
+	_, inBuffer := s.docs.Text(uri)
 	bufferState := "disk"
 	if inBuffer {
 		bufferState = "live-buffer"

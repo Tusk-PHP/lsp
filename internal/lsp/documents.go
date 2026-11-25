@@ -3,6 +3,7 @@ package lsp
 import (
 	"os"
 
+	"github.com/Tusk-PHP/lsp/internal/document"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -17,8 +18,8 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 	text := params.TextDocument.Text
 	path := symbols.URIToPath(uri)
 	unsaved := s.index.GetFileSource(symbols.PathToURI(path)) != text
+	s.docs.Open(uri, params.TextDocument.Version, text)
 	s.docMu.Lock()
-	s.documents[uri] = text
 	s.openPaths[path] = uri
 	s.unsaved[uri] = unsaved
 	s.docMu.Unlock()
@@ -40,20 +41,28 @@ func (s *Server) handleDidChange(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	if len(params.ContentChanges) > 0 {
-		source := params.ContentChanges[len(params.ContentChanges)-1].Text
-		uri := params.TextDocument.URI
-		s.docMu.Lock()
-		s.documents[uri] = source
-		s.unsaved[uri] = true
-		s.docMu.Unlock()
-		if !isPHPDocument(uri) {
-			return
-		}
-		s.indexDocumentMaybeAsync(uri, source)
-		if s.cfg.DiagnosticsEnabled {
-			s.scheduleDiagnostics(uri)
-		}
+	if len(params.ContentChanges) == 0 {
+		return
+	}
+	uri := params.TextDocument.URI
+	source, err := s.docs.Change(uri, params.TextDocument.Version, s.encoding, documentChanges(params.ContentChanges))
+	if err != nil {
+		s.logger.Printf("didChange: %v", err)
+		s.sendNotification("window/showMessage", map[string]interface{}{
+			"type":    protocol.MessageTypeError,
+			"message": "Tusk PHP lost track of a document's text; close and reopen it: " + err.Error(),
+		})
+		return
+	}
+	s.docMu.Lock()
+	s.unsaved[uri] = true
+	s.docMu.Unlock()
+	if !isPHPDocument(uri) {
+		return
+	}
+	s.indexDocumentMaybeAsync(uri, source)
+	if s.cfg.DiagnosticsEnabled {
+		s.scheduleDiagnostics(uri)
 	}
 }
 
@@ -72,8 +81,8 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 	}
 	uri := params.TextDocument.URI
 	path := symbols.URIToPath(uri)
+	s.docs.Close(uri)
 	s.docMu.Lock()
-	delete(s.documents, uri)
 	if s.openPaths[path] == uri {
 		delete(s.openPaths, path)
 	}
@@ -104,16 +113,16 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 		return
 	}
 	uri := params.TextDocument.URI
-	s.docMu.Lock()
-	if _, open := s.documents[uri]; open {
+	if _, open := s.docs.Get(uri); open {
+		s.docMu.Lock()
 		s.unsaved[uri] = false
+		s.docMu.Unlock()
 	}
 	if params.Text != nil {
-		s.documents[uri] = *params.Text
-	}
-	s.docMu.Unlock()
-	if params.Text != nil && isPHPDocument(uri) {
-		s.indexDocumentMaybeAsync(uri, *params.Text)
+		s.docs.Save(uri, *params.Text)
+		if isPHPDocument(uri) {
+			s.indexDocumentMaybeAsync(uri, *params.Text)
+		}
 	}
 	if !isPHPDocument(uri) {
 		return
@@ -141,10 +150,7 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 // falling back to disk if the document isn't open in the editor.
 func (s *Server) getDocumentReader() func(string) string {
 	return func(uri string) string {
-		s.docMu.RLock()
-		source, ok := s.documents[uri]
-		s.docMu.RUnlock()
-		if ok {
+		if source, ok := s.docs.Text(uri); ok {
 			return source
 		}
 		// Fall back to reading from disk
@@ -164,9 +170,7 @@ func (s *Server) openDocumentReader() func(string) string {
 }
 
 func (s *Server) getDocument(uri string) string {
-	s.docMu.RLock()
-	source := s.documents[uri]
-	s.docMu.RUnlock()
+	source, _ := s.docs.Text(uri)
 	return source
 }
 
@@ -175,14 +179,21 @@ func (s *Server) getDocument(uri string) string {
 // that depended on a populated index (or were soft-moded during warm-up)
 // produce their authoritative result.
 func (s *Server) republishOpenDocuments() {
-	s.docMu.RLock()
-	pairs := make([][2]string, 0, len(s.documents))
-	for uri, source := range s.documents {
-		pairs = append(pairs, [2]string{uri, source})
+	for _, doc := range s.docs.All() {
+		s.publishDiagnostics(doc.URI, doc.Text)
 	}
-	s.docMu.RUnlock()
+}
 
-	for _, p := range pairs {
-		s.publishDiagnostics(p[0], p[1])
+func documentChanges(events []protocol.TextDocumentContentChangeEvent) []document.Change {
+	changes := make([]document.Change, len(events))
+	for i, e := range events {
+		changes[i].Text = e.Text
+		if r := e.Range; r != nil {
+			changes[i].Range = &document.Range{
+				Start: document.Position{Line: r.Start.Line, Character: r.Start.Character},
+				End:   document.Position{Line: r.End.Line, Character: r.End.Character},
+			}
+		}
 	}
+	return changes
 }

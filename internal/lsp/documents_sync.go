@@ -46,7 +46,7 @@ func (s *Server) indexDocumentMaybeAsync(uri, source string) {
 func (s *Server) reindexOpenDocument(uri string) {
 	q := &s.docIndex
 	q.mu.Lock()
-	source, open := s.openDocument(uri)
+	source, open := s.docs.Text(uri)
 	start := open && q.queueLocked(uri, source)
 	q.mu.Unlock()
 	if start {
@@ -145,8 +145,6 @@ func (s *Server) publishDiagnostics(uri, source string) {
 
 // isCurrentDocument reports whether uri is open with exactly this source.
 func (s *Server) isCurrentDocument(uri, source string) bool {
-	s.docMu.RLock()
-	current, open := s.documents[uri]
-	s.docMu.RUnlock()
+	current, open := s.docs.Text(uri)
 	return open && current == source
 }

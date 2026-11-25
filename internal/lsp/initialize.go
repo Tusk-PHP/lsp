@@ -102,7 +102,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 			PositionEncoding: s.encoding.String(),
 			TextDocumentSync: protocol.TextDocumentSyncOptions{
 				OpenClose: true,
-				Change:    1, // Full
+				Change:    protocol.TextDocumentSyncIncremental,
 				Save:      &protocol.SaveOptions{IncludeText: false},
 			},
 			CompletionProvider:        &protocol.CompletionOptions{TriggerCharacters: []string{".", ">", ":", "$", "\\", "|", "#", "[", "(", "'", "\"", "@"}, ResolveProvider: true},
