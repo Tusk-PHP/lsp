@@ -73,7 +73,7 @@ func dataSource(cfg *config.DatabaseConfig, timeout time.Duration) (driverName, 
 		mysqlCfg.User = cfg.Username
 		mysqlCfg.Passwd = cfg.Password
 		mysqlCfg.Net = "tcp"
-		mysqlCfg.Addr = net.JoinHostPort(cfg.Host, cfg.Port)
+		mysqlCfg.Addr = net.JoinHostPort(unbracketed(cfg.Host), cfg.Port)
 		mysqlCfg.DBName = cfg.Database
 		mysqlCfg.Timeout = timeout
 		return "mysql", mysqlCfg.FormatDSN(), nil
@@ -109,6 +109,15 @@ func postgresDSN(cfg *config.DatabaseConfig, timeout time.Duration) string {
 		b.WriteByte('\'')
 	}
 	return b.String()
+}
+
+func unbracketed(host string) string {
+	if inner, ok := strings.CutPrefix(host, "["); ok {
+		if inner, ok := strings.CutSuffix(inner, "]"); ok {
+			return inner
+		}
+	}
+	return host
 }
 
 func queryColumns(db *sql.DB, dbName, tableName string, timeout time.Duration) ([]SchemaColumn, error) {
