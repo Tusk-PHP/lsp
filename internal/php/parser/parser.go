@@ -18,7 +18,7 @@ type parser struct {
 	src       string
 	version   token.Version
 	toks      []lexer.Token
-	docs      []ast.Span
+	docs      []tokenDoc
 	pos       int
 	prevEnd   uint32
 	emptyAt   uint32
@@ -50,7 +50,7 @@ func ParseCode(src string, version token.Version) *ast.File {
 }
 
 func parse(src string, version token.Version, all []lexer.Token) *ast.File {
-	p := &parser{src: src, version: version, toks: all[:0], docs: make([]ast.Span, 0, len(all)/2+1)}
+	p := &parser{src: src, version: version, toks: all[:0]}
 	var doc ast.Span
 	for _, tok := range all {
 		switch tok.Kind {
@@ -61,9 +61,11 @@ func parse(src string, version token.Version, all []lexer.Token) *ast.File {
 			p.unterminated(tok)
 			doc = ast.Span{Start: tok.Start, End: tok.End}
 		default:
+			if doc != (ast.Span{}) {
+				p.docs = append(p.docs, tokenDoc{tok: len(p.toks), doc: doc})
+				doc = ast.Span{}
+			}
 			p.toks = append(p.toks, tok)
-			p.docs = append(p.docs, doc)
-			doc = ast.Span{}
 		}
 	}
 	file := &ast.File{Span: ast.Span{End: uint32(len(src))}}
@@ -157,13 +159,20 @@ func (p *parser) doc() ast.Span {
 	return p.docSince(p.pos)
 }
 
+type tokenDoc struct {
+	tok int
+	doc ast.Span
+}
+
 func (p *parser) docSince(from int) ast.Span {
-	for i := min(p.pos, len(p.docs)-1); i >= from; i-- {
-		if p.docs[i] != (ast.Span{}) {
-			return p.docs[i]
-		}
+	i, found := slices.BinarySearchFunc(p.docs, p.pos, func(d tokenDoc, pos int) int { return cmp.Compare(d.tok, pos) })
+	if !found {
+		i--
 	}
-	return ast.Span{}
+	if i < 0 || p.docs[i].tok < from {
+		return ast.Span{}
+	}
+	return p.docs[i].doc
 }
 
 func (p *parser) next() lexer.Token {
