@@ -4,7 +4,7 @@ Shared type and symbol resolution. Hover, completion, diagnostics, and the analy
 
 ## Entry points
 
-- `Resolver` (`resolve.go`) — owns a `*symbols.Index` and resolves expressions/types in context.
+- `Engine` and `Resolver` (`resolve.go`) — an `Engine` per provider owns the `*symbols.Index`, the hooks and the caches; `Engine.Resolver()` starts one `Resolver` per request, which resolves expressions/types in context and carries that request's recursion guard. Take one `Resolver` at the top of a request and pass it down; never keep one in a field or share it between goroutines. A hook (`ChainResolver`, `TypedChainResolver`, `ContainerCall`) must resolve through the `Resolver` it's handed, or a cycle through it escapes the guard and overflows the stack.
 - `ResolvedType` (`types.go`) — `{FQN, Params[]}` plus the structured parts: `Union`, `Intersection`, `Callable`, shape `Fields`, `Literal` and `Conditional`. For a union, `FQN`/`Params` mirror its most useful part, so single-class readers keep working; `FullString()` shows all of it, `MemberOwner()` gives every class to look members up on. The canonical type representation everywhere downstream.
 - `ParseGenericType(raw)` / `InferArrayLiteralType(literal)` — produce `ResolvedType` from raw strings.
 - `ResolveTemplateReturn(classFQN, methodName, typeArgs)` (`templates.go`) — applies `@template` substitution for known generic methods (e.g. `Collection<T>::first(): T`).
@@ -34,7 +34,7 @@ Templates are stored at index time (`symbols.Symbol.Templates` on classes, metho
 
 - Prefer `ResolvedType` over passing raw type strings around. The string form is fine for hover output, but internal flow should be structured.
 - `PickBestUnionPart`, `HasNullInUnion`, `IndexOutsideBrackets` are intentionally exported — they're used by completion/hover and tested via `*_coverage_test.go`. Don't inline-copy them.
-- Recursion guards exist (`recursion_test.go`) because chain resolution and template expansion can loop on self-referential generics. Preserve them.
+- Recursion guards exist (`recursion_test.go`) because chain resolution and template expansion can loop on self-referential generics. Preserve them. The guard lives on the request's `Resolver`, so it only holds while one `Resolver` is passed through the whole request.
 - New PHPDoc handling belongs in `internal/types` (the structured type) and here (reading it into `ResolvedType`), not in feature-specific string parsing.
 
 The project-wide rules in the root [AGENTS.md](../../AGENTS.md) apply here too.
