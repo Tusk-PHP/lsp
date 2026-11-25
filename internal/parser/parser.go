@@ -3,6 +3,7 @@ package parser
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // PHPParser parses PHP source into a lightweight AST for LSP features.
@@ -387,7 +388,10 @@ func (pr *ParseResult) GetContextAtPosition(line, character int) (contextType st
 }
 
 func isIdentChar(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
+	if r < utf8.RuneSelf {
+		return r == '_' || 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9'
+	}
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
 // --- Tokenizer ---
@@ -439,8 +443,22 @@ func isIdentByte(b byte) bool {
 }
 
 func tokenize(source string) ([]Token, []ParseError) {
-	var errors []ParseError
 	tokens := make([]Token, 0, len(source)/4)
+	errors := lex(source, func(tok Token) bool {
+		tokens = append(tokens, tok)
+		return true
+	})
+	return tokens, errors
+}
+
+// ScanTokens calls visit with each token of source, in order, until visit
+// returns false. It keeps no tokens, for a reader that looks at each once.
+func ScanTokens(source string, visit func(Token) bool) {
+	lex(source, visit)
+}
+
+func lex(source string, emit func(Token) bool) []ParseError {
+	var errors []ParseError
 	line, col, offset := 0, 0, 0
 	// Text outside <?php … ?> is inline HTML and produces no tokens. A source
 	// with no open tag at all (a snippet) is read as PHP throughout.
@@ -461,7 +479,9 @@ func tokenize(source string) ([]Token, []ParseError) {
 			if tagLen == 0 {
 				break
 			}
-			tokens = append(tokens, Token{TokenPHP, source[offset : offset+tagLen], line, col, offset})
+			if !emit(Token{TokenPHP, source[offset : offset+tagLen], line, col, offset}) {
+				return errors
+			}
 			offset += tagLen
 			col += tagLen
 			inHTML = false
@@ -472,7 +492,9 @@ func tokenize(source string) ([]Token, []ParseError) {
 
 		// Close tag: ends the statement and switches back to inline HTML.
 		if ch == '?' && offset+1 < len(source) && source[offset+1] == '>' {
-			tokens = append(tokens, Token{TokenSemicolon, "?>", line, col, offset})
+			if !emit(Token{TokenSemicolon, "?>", line, col, offset}) {
+				return errors
+			}
 			offset += 2
 			col += 2
 			inHTML = true
@@ -513,7 +535,9 @@ func tokenize(source string) ([]Token, []ParseError) {
 				}
 				offset++
 			}
-			tokens = append(tokens, Token{TokenDocComment, source[start:offset], startLine, startCol, start})
+			if !emit(Token{TokenDocComment, source[start:offset], startLine, startCol, start}) {
+				return errors
+			}
 			if !strings.HasSuffix(source[start:offset], "*/") {
 				errors = append(errors, ParseError{Message: "unterminated doc comment", Line: startLine, Column: startCol})
 			}
@@ -540,7 +564,9 @@ func tokenize(source string) ([]Token, []ParseError) {
 				}
 				offset++
 			}
-			tokens = append(tokens, Token{TokenComment, source[start:offset], startLine, startCol, start})
+			if !emit(Token{TokenComment, source[start:offset], startLine, startCol, start}) {
+				return errors
+			}
 			if !strings.HasSuffix(source[start:offset], "*/") {
 				errors = append(errors, ParseError{Message: "unterminated comment", Line: startLine, Column: startCol})
 			}
@@ -557,13 +583,17 @@ func tokenize(source string) ([]Token, []ParseError) {
 				offset++
 				col++
 			}
-			tokens = append(tokens, Token{TokenComment, source[start:offset], line, startCol, start})
+			if !emit(Token{TokenComment, source[start:offset], line, startCol, start}) {
+				return errors
+			}
 			continue
 		}
 
 		// Attribute #[
 		if ch == '#' && offset+1 < len(source) && source[offset+1] == '[' {
-			tokens = append(tokens, Token{TokenHash, "#", line, col, offset})
+			if !emit(Token{TokenHash, "#", line, col, offset}) {
+				return errors
+			}
 			offset++
 			col++
 			continue
@@ -585,7 +615,9 @@ func tokenize(source string) ([]Token, []ParseError) {
 					}
 					offset++
 				}
-				tokens = append(tokens, Token{TokenStringLiteral, source[start:end], startLine, startCol, start})
+				if !emit(Token{TokenStringLiteral, source[start:end], startLine, startCol, start}) {
+					return errors
+				}
 				continue
 			}
 		}
@@ -617,7 +649,9 @@ func tokenize(source string) ([]Token, []ParseError) {
 				offset++
 			}
 			val := source[start:offset]
-			tokens = append(tokens, Token{TokenStringLiteral, val, startLine, startCol, start})
+			if !emit(Token{TokenStringLiteral, val, startLine, startCol, start}) {
+				return errors
+			}
 			if len(val) < 2 || val[len(val)-1] != byte(quote) {
 				errors = append(errors, ParseError{Message: "unterminated string", Line: startLine, Column: startCol})
 			}
@@ -634,7 +668,9 @@ func tokenize(source string) ([]Token, []ParseError) {
 				offset++
 				col++
 			}
-			tokens = append(tokens, Token{TokenVariable, source[start:offset], line, startCol, start})
+			if !emit(Token{TokenVariable, source[start:offset], line, startCol, start}) {
+				return errors
+			}
 			continue
 		}
 
@@ -646,7 +682,9 @@ func tokenize(source string) ([]Token, []ParseError) {
 				offset++
 				col++
 			}
-			tokens = append(tokens, Token{TokenNumber, source[start:offset], line, startCol, start})
+			if !emit(Token{TokenNumber, source[start:offset], line, startCol, start}) {
+				return errors
+			}
 			continue
 		}
 
@@ -660,13 +698,17 @@ func tokenize(source string) ([]Token, []ParseError) {
 			}
 			word := source[start:offset]
 			kind := identifierToKind(word)
-			tokens = append(tokens, Token{kind, word, line, startCol, start})
+			if !emit(Token{kind, word, line, startCol, start}) {
+				return errors
+			}
 			continue
 		}
 
 		// Comparison operators, so that their '=' can't be read as an assignment
 		if op := comparisonOperatorAt(source, offset); op != "" {
-			tokens = append(tokens, Token{TokenUnknown, op, line, col, offset})
+			if !emit(Token{TokenUnknown, op, line, col, offset}) {
+				return errors
+			}
 			offset += len(op)
 			col += len(op)
 			continue
@@ -677,23 +719,31 @@ func tokenize(source string) ([]Token, []ParseError) {
 			two := source[offset : offset+2]
 			switch two {
 			case "->":
-				tokens = append(tokens, Token{TokenArrow, "->", line, col, offset})
+				if !emit(Token{TokenArrow, "->", line, col, offset}) {
+					return errors
+				}
 				offset += 2
 				col += 2
 				continue
 			case "=>":
-				tokens = append(tokens, Token{TokenDoubleArrow, "=>", line, col, offset})
+				if !emit(Token{TokenDoubleArrow, "=>", line, col, offset}) {
+					return errors
+				}
 				offset += 2
 				col += 2
 				continue
 			case "::":
-				tokens = append(tokens, Token{TokenDoubleColon, "::", line, col, offset})
+				if !emit(Token{TokenDoubleColon, "::", line, col, offset}) {
+					return errors
+				}
 				offset += 2
 				col += 2
 				continue
 			case "|>":
 				// PHP 8.5 pipe operator — must be checked before the single-char '|' case
-				tokens = append(tokens, Token{TokenPipeArrow, "|>", line, col, offset})
+				if !emit(Token{TokenPipeArrow, "|>", line, col, offset}) {
+					return errors
+				}
 				offset += 2
 				col += 2
 				continue
@@ -734,13 +784,15 @@ func tokenize(source string) ([]Token, []ParseError) {
 		case '\\':
 			kind = TokenBackslash
 		}
-		tokens = append(tokens, Token{kind, string(ch), line, col, offset})
+		if !emit(Token{kind, source[offset : offset+1], line, col, offset}) {
+			return errors
+		}
 		offset++
 		col++
 	}
 
-	tokens = append(tokens, Token{TokenEOF, "", line, col, offset})
-	return tokens, errors
+	emit(Token{TokenEOF, "", line, col, offset})
+	return errors
 }
 
 // comparisonOperatorAt returns the comparison operator starting at offset, or "".
@@ -805,6 +857,11 @@ func heredocEnd(source string, start int) (int, bool) {
 }
 
 func comparisonOperatorAt(source string, offset int) string {
+	switch source[offset] {
+	case '=', '!', '<', '>':
+	default:
+		return ""
+	}
 	for _, op := range []string{"===", "!==", "<=>", "==", "!=", "<=", ">="} {
 		if strings.HasPrefix(source[offset:], op) {
 			return op
