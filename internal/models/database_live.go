@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,12 +51,7 @@ func openDatabase(cfg *config.DatabaseConfig, timeout time.Duration) (*sql.DB, e
 			timeout.String())
 	case "pgsql":
 		driverName = "postgres"
-		secs := int(timeout.Seconds())
-		if secs < 1 {
-			secs = 1
-		}
-		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable connect_timeout=%d",
-			cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.Database, secs)
+		dsn = postgresDSN(cfg, timeout)
 	case "sqlite":
 		driverName = "sqlite"
 		dsn = cfg.Database
@@ -81,6 +77,31 @@ func openDatabase(cfg *config.DatabaseConfig, timeout time.Duration) (*sql.DB, e
 	db.SetMaxIdleConns(0)
 
 	return db, nil
+}
+
+var libpqEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
+
+func postgresDSN(cfg *config.DatabaseConfig, timeout time.Duration) string {
+	params := [...]struct{ key, value string }{
+		{"host", cfg.Host},
+		{"port", cfg.Port},
+		{"user", cfg.Username},
+		{"password", cfg.Password},
+		{"dbname", cfg.Database},
+		{"sslmode", "disable"},
+		{"connect_timeout", strconv.Itoa(max(int(timeout.Seconds()), 1))},
+	}
+	var b strings.Builder
+	for i, p := range params {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteString(p.key)
+		b.WriteString("='")
+		libpqEscaper.WriteString(&b, p.value)
+		b.WriteByte('\'')
+	}
+	return b.String()
 }
 
 func queryColumns(db *sql.DB, dbName, tableName string, timeout time.Duration) ([]SchemaColumn, error) {
