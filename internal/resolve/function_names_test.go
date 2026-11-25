@@ -1,4 +1,4 @@
-package checks
+package resolve
 
 import (
 	"strings"
@@ -7,7 +7,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
-func TestResolveFunctionNames(t *testing.T) {
+func TestFunctionNames(t *testing.T) {
 	src := `<?php
 namespace App;
 
@@ -16,14 +16,14 @@ use function Other\helper;
 `
 	file := parser.ParseFile(src)
 	cases := map[string]string{
-		`\Uri\WhatWg\url_percent_encode`: `Uri\WhatWg\url_percent_encode`, // fully qualified: as written
-		`Lib\run`:                        `Vendor\Lib\run`,                // qualified: class/namespace import
-		`Sub\run`:                        `App\Sub\run`,                   // qualified, no import: current namespace
-		`helper`:                         `Other\helper`,                  // unqualified: function import
+		`\Uri\WhatWg\url_percent_encode`: `Uri\WhatWg\url_percent_encode`,
+		`Lib\run`:                        `Vendor\Lib\run`,
+		`Sub\run`:                        `App\Sub\run`,
+		`helper`:                         `Other\helper`,
 		`strlen`:                         `App\strlen Global fallback`,
 	}
 	for name, want := range cases {
-		got, ok := resolveFunctionNames(name, file)
+		got, ok := FunctionNames(name, file)
 		if !ok {
 			t.Fatalf("%s: not resolved", name)
 		}

@@ -5,6 +5,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -87,7 +88,7 @@ func outArgChecker(file *parser.FileNode, index *symbols.Index) func(string, int
 		if callee == "" {
 			return true
 		}
-		fqns, ok := resolveFunctionNames(callee, file)
+		fqns, ok := resolve.FunctionNames(callee, file)
 		if !ok {
 			return true
 		}

@@ -1851,6 +1851,20 @@ func (idx *Index) TraitsOf(fqn string) []string {
 	return append([]string(nil), idx.traitMap[fqn]...)
 }
 
+func (idx *Index) LookupStandalone(word, enclosingFQN string) *Symbol {
+	name := word
+	if i := strings.LastIndex(word, "\\"); i >= 0 {
+		name = word[i+1:]
+	}
+	var candidates []*Symbol
+	for _, sym := range idx.LookupByName(name) {
+		if sym.ParentFQN == "" || sym.ParentFQN == enclosingFQN {
+			candidates = append(candidates, sym)
+		}
+	}
+	return PickBestStandalone(candidates, word)
+}
+
 // PickBestStandalone selects the most appropriate symbol when multiple symbols
 // share the same short name and the word appears in standalone context (not
 // after -> or ::). Prefers functions over classes over constants over
