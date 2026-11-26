@@ -160,3 +160,24 @@ func TestBuilderArgsOnAUnionOfModelsAreNotChecked(t *testing.T) {
     $comment->commentable()->with('clips');
 `)
 }
+
+func TestBuilderArgsAfterAJoinLeaveUnqualifiedColumnsAlone(t *testing.T) {
+	assertBuilderArgs(t, `    Post::query()->join('users', 'users.id', '=', 'posts.user_id')->where('email', $email);
+    Post::query()
+        ->leftJoin('users', 'users.id', '=', 'posts.user_id')
+        ->where('email', $email);
+    $q = Post::query();
+    $q->join('users', 'users.id', '=', 'posts.user_id');
+    $q->where('email', $email);
+    $sub = Post::query()->where('title', 'x')->crossJoin('users');
+    $sub->where('email', $email);
+    $other = Post::query();
+    $other->where('title', 'x')->joinSub($q, 'u', 'u.id');
+    $other->where('email', $email)->with('missingRelation');
+    $plain = Post::query();
+    $plain->where('email', $email);
+`,
+		"Unknown relation 'missingRelation' on model 'Post'",
+		"Unknown column 'email' on model 'Post'",
+	)
+}
