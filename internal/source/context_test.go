@@ -404,3 +404,21 @@ func TestAnalyzeNamespaceOperatorIsNotADeclaration(t *testing.T) {
 		t.Errorf("Scope = %#v, want function bar", ctx.Scope)
 	}
 }
+
+func TestAnalyzeCursorAfterAFileLevelArrowFunctionIsInNoScope(t *testing.T) {
+	for _, source := range []string{
+		"<?php\nmap(fn($x) => $x + 1); $later;\n",
+		"<?php\n$double = fn($x) => $x * 2;\n$later;\n",
+	} {
+		lines := strings.Split(source, "\n")
+		inside := protocol.Position{Line: 1, Character: strings.Index(lines[1], "$x ") + 1}
+		if ctx := Analyze("file:///a.php", source, inside, phpparser.OnlyGrammar(token.Latest)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure {
+			t.Errorf("%q: inside the arrow function, Scope = %#v, want a closure", source, ctx.Scope)
+		}
+		line := len(lines) - 2
+		after := protocol.Position{Line: line, Character: strings.Index(lines[line], "$later") + 2}
+		if ctx := Analyze("file:///a.php", source, after, phpparser.OnlyGrammar(token.Latest)); ctx.Scope != nil {
+			t.Errorf("%q: after the arrow function, Scope = %#v, want none", source, ctx.Scope)
+		}
+	}
+}
