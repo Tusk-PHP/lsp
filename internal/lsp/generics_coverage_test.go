@@ -30,9 +30,6 @@ func TestHandleInitializeWiresGenericResolvers(t *testing.T) {
 	if s.completion == nil || s.hover == nil {
 		t.Fatal("expected completion and hover providers to be initialized")
 	}
-	if rt := s.completion.ResolveExpressionTypeTyped("", "", protocol.Position{}, nil); !rt.IsEmpty() {
-		t.Fatalf("expected empty generic expression result, got %#v", rt)
-	}
 
 	source := `<?php
 namespace App;

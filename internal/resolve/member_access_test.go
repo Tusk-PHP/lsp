@@ -73,8 +73,8 @@ func TestFindAccessedMemberMatchesTheKindTheAccessNames(t *testing.T) {
 func TestStaticAccessTypesTheConstantOrTheProperty(t *testing.T) {
 	r, file := memberAccessResolver()
 	for expr, want := range map[string]string{`Room::SIZE`: "int", `Room::$SIZE`: `App\Box`} {
-		if got := r.ExpressionType(expr, ExprContext{File: file}).FullString(); got != want {
-			t.Errorf("ExpressionType(%s) = %q, want %q", expr, got, want)
+		if got := r.exprType(expr, ExprContext{File: file}).FullString(); got != want {
+			t.Errorf("exprType(%s) = %q, want %q", expr, got, want)
 		}
 	}
 }
@@ -188,7 +188,7 @@ class Extra {
 	if m, owner := r.FindMemberOn(room, "ONLY", ConstantAccess); m != nil {
 		t.Errorf("Room::ONLY names a constant of Room, and a mixin can't provide one: got %+v on %s", m, owner.FQN)
 	}
-	if got := r.ExpressionType(`Room::ONLY`, ExprContext{File: file}); !got.IsEmpty() {
+	if got := r.exprType(`Room::ONLY`, ExprContext{File: file}); !got.IsEmpty() {
 		t.Errorf("Room::ONLY isn't typed from the mixin's constant, got %q", got.FullString())
 	}
 	if m, owner := r.FindMemberOn(room, "box", CallAccess); m == nil || owner.FQN != `App\Extra` {

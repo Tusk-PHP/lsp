@@ -55,14 +55,6 @@ func NewAnalyzer(index *symbols.Index, ca *container.ContainerAnalyzer) *Analyze
 	return &Analyzer{index: index, container: ca, engine: container.NewEngine(index, ca), framework: framework}
 }
 
-func (a *Analyzer) SetChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) string) {
-	a.engine.DelegateChains(fn)
-}
-
-func (a *Analyzer) SetTypedChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType) {
-	a.engine.DelegateTypedChains(fn)
-}
-
 func (a *Analyzer) SetTranslationResolver(resolver *frameworklaravel.TranslationResolver) {
 	a.translations = resolver
 }

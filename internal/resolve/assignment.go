@@ -113,18 +113,8 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 	if !isMemberChain(v.expr) {
 		return ResolvedType{}, false
 	}
-	if rt := r.ChainType(text, r.JoinLines(lines), pos, file); !rt.IsEmpty() {
-		return rt, true
-	}
-	if rt := r.typeOf(t, v.expr, nil, ctx); !rt.IsEmpty() {
-		return rt, true
-	}
-	if r.ChainResolver != nil {
-		if fqn := r.ChainResolver(r, text, r.JoinLines(lines), pos, file); fqn != "" {
-			return ResolvedType{FQN: fqn}, true
-		}
-	}
-	return ResolvedType{}, false
+	rt := r.typeOf(t, v.expr, nil, ctx)
+	return rt, !rt.IsEmpty()
 }
 
 func (r *Resolver) assignedNewType(t *syntaxTree, n *ast.New, ctx ExprContext) (ResolvedType, bool) {
@@ -215,10 +205,10 @@ func (r *Resolver) assignedPlainType(varName string, t *syntaxTree, v assignedVa
 	if typ := literalNodeType(t, v.expr); typ != "" {
 		return typ, true
 	}
-	if r.ChainResolver == nil || !isMemberChain(v.expr) {
+	if !isMemberChain(v.expr) {
 		return "", false
 	}
-	return r.ChainResolver(r, text, r.JoinLines(lines), pos, file), true
+	return PlainTypeName(r.typeOf(t, v.expr, nil, ExprContext{Lines: lines, Pos: pos, File: file})), true
 }
 
 func variableOffsets(t *syntaxTree, e *ast.ArrayDimFetch) (origin string, dims []string, ok bool) {
@@ -264,7 +254,7 @@ func (r *Resolver) ternaryType(t *syntaxTree, n *ast.Ternary, ctx ExprContext) R
 	if n.Then == nil {
 		return r.eitherType(t, n.Cond, n.Else, ctx)
 	}
-	then, els := r.valueType(t, n.Then, ctx), r.valueType(t, n.Else, ctx)
+	then, els := r.typeOf(t, n.Then, nil, ctx), r.typeOf(t, n.Else, nil, ctx)
 	if then.IsEmpty() && !then.Nullable || els.IsEmpty() && !els.Nullable {
 		return ResolvedType{}
 	}
@@ -272,7 +262,7 @@ func (r *Resolver) ternaryType(t *syntaxTree, n *ast.Ternary, ctx ExprContext) R
 }
 
 func (r *Resolver) eitherType(t *syntaxTree, left, right ast.Expr, ctx ExprContext) ResolvedType {
-	l, rt := r.valueType(t, left, ctx), r.valueType(t, right, ctx)
+	l, rt := r.typeOf(t, left, nil, ctx), r.typeOf(t, right, nil, ctx)
 	if l.IsEmpty() && !l.Nullable || rt.IsEmpty() && !rt.Nullable {
 		return ResolvedType{}
 	}
@@ -283,13 +273,4 @@ func withoutNull(rt ResolvedType) ResolvedType {
 	out := MakeUnion([]ResolvedType{rt}, false)
 	out.Nullable = false
 	return out
-}
-
-func (r *Resolver) valueType(t *syntaxTree, e ast.Expr, ctx ExprContext) ResolvedType {
-	if isMemberChain(e) && ctx.File != nil {
-		if rt := r.ChainType(t.text(e), r.JoinLines(ctx.Lines), ctx.Pos, ctx.File); !rt.IsEmpty() {
-			return rt
-		}
-	}
-	return r.typeOf(t, e, nil, ctx)
 }

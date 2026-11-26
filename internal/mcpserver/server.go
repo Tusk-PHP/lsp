@@ -26,9 +26,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/models"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/symquery"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -732,16 +730,11 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.Hover = hover.NewProvider(ws.Index, ws.Container, s.Framework)
 	rt.Hover.SetArrayResolver(arrayResolver)
 	rt.Hover.SetConfig(ws.Config)
-	rt.Hover.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return rt.Completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	})
 
 	rt.Analyzer = analyzer.NewAnalyzer(ws.Index, ws.Container)
 	if ws.RouteIndex != nil {
 		rt.Analyzer.SetLaravelRouteIndex(ws.RouteIndex)
 	}
-	rt.Analyzer.SetChainResolver(rt.Completion.ResolveExpressionType)
-	rt.Analyzer.SetTypedChainResolver(rt.Completion.ResolveExpressionTypeTyped)
 	rt.Analyzer.SetViewResolver(viewResolver)
 	rt.Analyzer.SetTranslationResolver(translationResolver)
 	rt.Analyzer.SetSymfonyTranslationResolver(symfonyTranslations)

@@ -93,7 +93,7 @@ func TestChainType(t *testing.T) {
 		"Article":                         `App\Models\Post`,
 		"":                                ``,
 	} {
-		if got := r.ChainType(expr, chainSource, pos, file).FullString(); got != want {
+		if got := r.chainTypeOf(expr, chainSource, pos, file).FullString(); got != want {
 			t.Errorf("ChainType(%q) = %q, want %q", expr, got, want)
 		}
 	}
@@ -105,7 +105,7 @@ func TestChainTypeWithoutFile(t *testing.T) {
 	for expr, want := range map[string]string{
 		"$this": ``, "self::make()": ``, "parent::make()": ``, "Person": `App\Person`, "$p->logger()": ``,
 	} {
-		if got := r.ChainType(expr, chainSource, pos, nil).FullString(); got != want {
+		if got := r.chainTypeOf(expr, chainSource, pos, nil).FullString(); got != want {
 			t.Errorf("ChainType(%q) without a file = %q, want %q", expr, got, want)
 		}
 	}
@@ -129,26 +129,9 @@ func TestChainTypeContainerCall(t *testing.T) {
 		"config('a')->x":   ``,
 		"app('other')->x":  ``,
 	} {
-		if got := r.ChainType(expr, chainSource, pos, file).FullString(); got != want {
+		if got := r.chainTypeOf(expr, chainSource, pos, file).FullString(); got != want {
 			t.Errorf("ChainType(%q) = %q, want %q", expr, got, want)
 		}
-	}
-}
-
-// A resolver wired to another one asks it, for whole chains and receivers.
-func TestChainTypeWired(t *testing.T) {
-	r, file, pos := chainFixture(t)
-	var asked []string
-	r.TypedChainResolver = func(_ *Resolver, expr, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
-		asked = append(asked, expr)
-		return ResolvedType{FQN: `App\Logger`}
-	}
-	if got := r.ChainType("$p->logger()", chainSource, pos, file).FQN; got != `App\Logger` {
-		t.Errorf("ChainType = %q", got)
-	}
-	want := []string{"$p->logger()"}
-	if strings.Join(asked, ",") != strings.Join(want, ",") {
-		t.Errorf("asked %q, want %q", asked, want)
 	}
 }
 

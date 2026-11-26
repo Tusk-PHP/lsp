@@ -31,33 +31,6 @@ func (ctx ExprContext) grammar() token.Version {
 	return ctx.File.Grammar
 }
 
-func expressionTree(expr string, grammar token.Version) (*syntaxTree, ast.Expr) {
-	src := strings.TrimSpace(expr)
-	if src == "" {
-		return nil, nil
-	}
-	file := parser.ParseTree(src+";", grammar)
-	if len(file.Stmts) == 0 {
-		return nil, nil
-	}
-	stmt, ok := file.Stmts[0].(*ast.ExprStmt)
-	if !ok || stmt.Expr == nil {
-		return nil, nil
-	}
-	return &syntaxTree{src: src + ";", grammar: grammar, lines: ast.NewLines(src)}, stmt.Expr
-}
-
-// CallSiteFor returns the call site for the text between a call's
-// parentheses, typing each argument where it's read.
-func (r *Resolver) CallSiteFor(argStr string, ctx ExprContext) *CallSite {
-	t, e := expressionTree("f("+argStr+")", ctx.grammar())
-	call, ok := e.(*ast.Call)
-	if !ok {
-		return &CallSite{}
-	}
-	return r.callSite(t.callArgList(call.Args), ctx)
-}
-
 func (r *Resolver) callSite(args []CallArg, ctx ExprContext) *CallSite {
 	if len(args) == 0 {
 		return &CallSite{}
@@ -65,21 +38,6 @@ func (r *Resolver) callSite(args []CallArg, ctx ExprContext) *CallSite {
 	return &CallSite{Args: args, ArgType: func(arg CallArg, expected *ResolvedType) ResolvedType {
 		return r.typeOf(arg.tree, arg.node, expected, ctx)
 	}}
-}
-
-// ExpressionType returns the type of a PHP expression: a variable, a literal,
-// `new Foo(…)`, `Foo::class`, an array, a closure, a function call or a
-// chain of member accesses. It's empty when the type can't be worked out.
-func (r *Resolver) ExpressionType(expr string, ctx ExprContext) ResolvedType {
-	return r.ExpressionTypeExpecting(expr, nil, ctx)
-}
-
-// ExpressionTypeExpecting is ExpressionType for an expression passed where
-// expected is declared. A closure takes its untyped parameters' types from an
-// expected callable(…) signature.
-func (r *Resolver) ExpressionTypeExpecting(expr string, expected *ResolvedType, ctx ExprContext) ResolvedType {
-	t, e := expressionTree(expr, ctx.grammar())
-	return r.typeOf(t, e, expected, ctx)
 }
 
 func (r *Resolver) typeOf(t *syntaxTree, e ast.Expr, expected *ResolvedType, ctx ExprContext) ResolvedType {
@@ -589,17 +547,6 @@ func itoa(i int) string {
 	return string(buf[n:])
 }
 
-// FunctionCallType types a call to the function name with the arguments
-// args (the text between its parentheses), binding its templates.
-func (r *Resolver) FunctionCallType(name, args string, ctx ExprContext) ResolvedType {
-	t, e := expressionTree("f("+args+")", ctx.grammar())
-	call, ok := e.(*ast.Call)
-	if !ok {
-		return ResolvedType{}
-	}
-	return r.functionCallType(name, t.callArgList(call.Args), ctx)
-}
-
 func (r *Resolver) functionCallType(name string, args []CallArg, ctx ExprContext) ResolvedType {
 	if r.Index == nil {
 		return ResolvedType{}
@@ -612,18 +559,6 @@ func (r *Resolver) functionCallType(name string, args []CallArg, ctx ExprContext
 		return ResolvedType{}
 	}
 	return r.FunctionTypeForCall(fn, ctx.File, r.callSite(args, ctx))
-}
-
-// NewExpressionType types `new Foo(args)`. The class's templates are bound
-// from the constructor's arguments: `new Collection([$user])` is a
-// Collection<int, User>.
-func (r *Resolver) NewExpressionType(className, args string, ctx ExprContext) ResolvedType {
-	t, e := expressionTree("new "+className+"("+args+")", ctx.grammar())
-	n, ok := e.(*ast.New)
-	if !ok {
-		return ResolvedType{}
-	}
-	return r.newType(t, n, ctx)
 }
 
 func (r *Resolver) newExpressionType(className string, args []CallArg, ctx ExprContext) ResolvedType {

@@ -5,9 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/container"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -215,32 +213,5 @@ class Notifier {
 	loc := a.FindDefinition("file:///notifier.php", source, charPosOf(t, source, "send", "->send()"))
 	if loc == nil || loc.URI != "file:///mailer.php" {
 		t.Fatalf("send() on what the container makes goes to Mailer::send, got %+v", loc)
-	}
-}
-
-func TestDefinitionAsksTheTypedChainResolverItIsGiven(t *testing.T) {
-	source := `<?php
-namespace App;
-
-function build($factory) {
-    $factory->widget()->render();
-}
-`
-	a, _ := setupRenameAnalyzer(map[string]string{
-		"file:///build.php":  source,
-		"file:///widget.php": "<?php\nnamespace App;\nclass Widget {\n    public function render(): void {}\n}\n",
-	})
-	var asked []string
-	a.SetTypedChainResolver(func(expr, _ string, _ protocol.Position, _ *parser.FileNode) resolve.ResolvedType {
-		asked = append(asked, expr)
-		if strings.TrimSpace(expr) == "$factory->widget()" {
-			return resolve.ResolvedType{FQN: `App\Widget`}
-		}
-		return resolve.ResolvedType{}
-	})
-
-	loc := a.FindDefinition("file:///build.php", source, charPosOf(t, source, "render", "->render()"))
-	if loc == nil || loc.URI != "file:///widget.php" {
-		t.Fatalf("render() goes to the class the delegate typed the chain as, got %+v (asked %q)", loc, asked)
 	}
 }

@@ -95,10 +95,7 @@ func (r *Resolver) calleeForClosure(site closureCallSite, lines []string, file *
 	switch site.op {
 	case "->", "::":
 		ctx := ExprContext{Lines: lines, Pos: site.at, File: file}
-		rt := r.delegatedType(site.tree, site.receiver, ctx)
-		if rt.IsEmpty() {
-			rt = r.typeOf(site.tree, site.receiver, nil, ctx)
-		}
+		rt := r.typeOf(site.tree, site.receiver, nil, ctx)
 		if rt.IsEmpty() {
 			return nil, ResolvedType{}, false
 		}

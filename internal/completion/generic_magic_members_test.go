@@ -50,7 +50,7 @@ function run(Shelf $s): void {
 		"$s->current->get()":   "Vendor\\Boxes\\Item",
 		"$s->box()":            "Vendor\\Boxes\\Box<Vendor\\Boxes\\Item>",
 	} {
-		if got := p.ResolveExpressionTypeTyped(expr, caller, protocol.Position{Line: 6}, file).String(); got != want {
+		if got := p.exprTypeAt(expr, caller, protocol.Position{Line: 6}, file).String(); got != want {
 			t.Errorf("%s = %q, want %q", expr, got, want)
 		}
 	}

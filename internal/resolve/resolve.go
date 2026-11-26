@@ -32,14 +32,6 @@ const maxResolveDepth = 32
 // concurrent use.
 type Engine struct {
 	Index *symbols.Index
-	// ChainResolver is an optional callback to resolve method chain expressions
-	// like "Category::first()" or "$foo->bar()->baz()". Set by the completion/hover
-	// provider that has access to the full chain resolution logic.
-	ChainResolver func(r *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) string
-	// TypedChainResolver is like ChainResolver but returns a ResolvedType
-	// preserving generic parameters. Used for variable type inference that
-	// needs to carry generic context through assignments.
-	TypedChainResolver func(r *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType
 	// ContainerCall, when set, types a call the project's container answers,
 	// such as app('request') or $container->get(Foo::class); src is the
 	// source call's offsets are in. ok is false when it isn't such a call; an
@@ -91,22 +83,6 @@ func (e *Engine) Resolver() *Resolver {
 // for callers that resolve once and keep no caches.
 func NewResolver(index *symbols.Index) *Resolver {
 	return NewEngine(index).Resolver()
-}
-
-// DelegateChains sets e's ChainResolver to fn, another provider's chain
-// resolution, which starts its own request: the calling Resolver is not
-// passed on, so fn must not call back into e.
-func (e *Engine) DelegateChains(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) string) {
-	e.ChainResolver = func(_ *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) string {
-		return fn(expr, source, pos, file)
-	}
-}
-
-// DelegateTypedChains is DelegateChains for TypedChainResolver.
-func (e *Engine) DelegateTypedChains(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType) {
-	e.TypedChainResolver = func(_ *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
-		return fn(expr, source, pos, file)
-	}
 }
 
 func (r *Resolver) enterResolution(key string) (func(), bool) {

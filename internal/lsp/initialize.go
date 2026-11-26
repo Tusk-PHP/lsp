@@ -18,9 +18,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/models"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
@@ -107,9 +105,6 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if s.coverageNotifications {
 		s.coverage.OnChange(func() { s.sendNotification("tusk/coverageChanged", nil) })
 	}
-	s.hover.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	})
 	s.composerHover = cardhover.NewProvider(s.rootPath, func() string { return s.workspace.Profile().PHPVersion })
 	s.composerHover.SetEnabled(s.cfg.Composer.Hover.Enable)
 	s.composerHover.SetOpenOnDefinition(s.cfg.Composer.OpenOnDefinition)
@@ -144,8 +139,6 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if opts := params.InitializationOptions; opts != nil {
 		s.analyzer.SetClientCommands(opts.ClientCommands)
 	}
-	s.analyzer.SetChainResolver(s.completion.ResolveExpressionType)
-	s.analyzer.SetTypedChainResolver(s.completion.ResolveExpressionTypeTyped)
 	if s.routeIndex != nil {
 		s.analyzer.SetLaravelRouteIndex(s.routeIndex)
 	}

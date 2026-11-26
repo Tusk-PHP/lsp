@@ -90,13 +90,13 @@ func TestE2ESymfonyTypeResolution(t *testing.T) {
 		if line < 0 {
 			t.Fatalf("line containing %q not found", lineSubstr)
 		}
-		return p.ResolveExpressionTypeTyped(varName, source, protocol.Position{Line: line + 1}, file)
+		return p.exprTypeAt(varName, source, protocol.Position{Line: line + 1}, file)
 	}
 
 	t.Run("$this->repo resolves to ProductRepository", func(t *testing.T) {
 		r := rt("$this->repo", "$allProducts = $this->repo->findAll()")
 		// $this->repo is a property access, resolve via expression
-		r2 := p.ResolveExpressionTypeTyped("$this->repo", source, protocol.Position{Line: findLine(source, "$allProducts = $this->repo->findAll()")}, file)
+		r2 := p.exprTypeAt("$this->repo", source, protocol.Position{Line: findLine(source, "$allProducts = $this->repo->findAll()")}, file)
 		if r2.BaseFQN() != "App\\Repository\\ProductRepository" && !r2.IsEmpty() {
 			t.Errorf("got %q", r2.String())
 		}
