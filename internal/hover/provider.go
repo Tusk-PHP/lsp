@@ -184,7 +184,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 
 	// Resolve the word via use statements
 	if file != nil {
-		for _, u := range ctx.Uses {
+		for _, u := range file.Uses {
 			if u.Alias == word {
 				if sym := p.index.Lookup(u.FullName); sym != nil {
 					content := p.formatHover(sym)
@@ -195,13 +195,10 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 			}
 		}
 		// Try resolving as a class name in the current namespace context
-		fqn := r.ResolveClassName(word, file)
-		if fqn != word {
-			if sym := p.index.Lookup(fqn); sym != nil {
-				content := p.formatHover(sym)
-				if content != "" {
-					return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: content}}
-				}
+		if sym := p.index.Lookup(r.ResolveClassName(word, file)); sym != nil {
+			content := p.formatHover(sym)
+			if content != "" {
+				return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: content}}
 			}
 		}
 	}

@@ -31,8 +31,8 @@ class Handler
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
-	if ctx.Namespace != "App\\Services" {
-		t.Fatalf("Namespace = %q, want %q", ctx.Namespace, "App\\Services")
+	if ctx.File.Namespace != "App\\Services" {
+		t.Fatalf("Namespace = %q, want %q", ctx.File.Namespace, "App\\Services")
 	}
 	if ctx.SymbolText != "name" {
 		t.Fatalf("SymbolText = %q, want %q", ctx.SymbolText, "name")
@@ -49,8 +49,8 @@ class Handler
 	if ctx.EnclosingFQN != "App\\Services\\Handler" {
 		t.Fatalf("EnclosingFQN = %q", ctx.EnclosingFQN)
 	}
-	if len(ctx.Uses) != 1 || ctx.Uses[0].Alias != "User" {
-		t.Fatalf("Uses = %#v, want aliased User import", ctx.Uses)
+	if len(ctx.File.Uses) != 1 || ctx.File.Uses[0].Alias != "User" {
+		t.Fatalf("Uses = %#v, want aliased User import", ctx.File.Uses)
 	}
 	if ctx.Scope == nil || ctx.Scope.MethodName != "run" {
 		t.Fatalf("Scope = %#v, want run method scope", ctx.Scope)
@@ -113,8 +113,8 @@ function formatUser(User $user): string
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
-	if ctx.Namespace != "App\\Helpers" {
-		t.Fatalf("Namespace = %q, want %q", ctx.Namespace, "App\\Helpers")
+	if ctx.File.Namespace != "App\\Helpers" {
+		t.Fatalf("Namespace = %q, want %q", ctx.File.Namespace, "App\\Helpers")
 	}
 	if ctx.Scope == nil {
 		t.Fatal("expected function scope")
@@ -217,22 +217,22 @@ namespace App\Two {
 	if firstCtx == nil {
 		t.Fatal("expected first cursor context")
 	}
-	if firstCtx.Namespace != "App\\One" {
-		t.Fatalf("first namespace = %q, want %q", firstCtx.Namespace, "App\\One")
+	if firstCtx.File.Namespace != "App\\One" {
+		t.Fatalf("first namespace = %q, want %q", firstCtx.File.Namespace, "App\\One")
 	}
-	if len(firstCtx.Uses) != 1 || firstCtx.Uses[0].Alias != "Thing" {
-		t.Fatalf("first uses = %#v, want Thing import", firstCtx.Uses)
+	if len(firstCtx.File.Uses) != 1 || firstCtx.File.Uses[0].Alias != "Thing" {
+		t.Fatalf("first uses = %#v, want Thing import", firstCtx.File.Uses)
 	}
 
 	secondCtx := Analyze("file:///multi.php", source, protocol.Position{Line: 13, Character: 20}, phpparser.OnlyGrammar(token.Latest))
 	if secondCtx == nil {
 		t.Fatal("expected second cursor context")
 	}
-	if secondCtx.Namespace != "App\\Two" {
-		t.Fatalf("second namespace = %q, want %q", secondCtx.Namespace, "App\\Two")
+	if secondCtx.File.Namespace != "App\\Two" {
+		t.Fatalf("second namespace = %q, want %q", secondCtx.File.Namespace, "App\\Two")
 	}
-	if len(secondCtx.Uses) != 1 || secondCtx.Uses[0].Alias != "Tool" {
-		t.Fatalf("second uses = %#v, want Tool import", secondCtx.Uses)
+	if len(secondCtx.File.Uses) != 1 || secondCtx.File.Uses[0].Alias != "Tool" {
+		t.Fatalf("second uses = %#v, want Tool import", secondCtx.File.Uses)
 	}
 	if secondCtx.EnclosingFQN != "App\\Two\\Handler" {
 		t.Fatalf("EnclosingFQN = %q, want %q", secondCtx.EnclosingFQN, "App\\Two\\Handler")
@@ -255,8 +255,8 @@ use App\Later\Thing;
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
-	if len(ctx.Uses) != 0 {
-		t.Fatalf("Uses = %#v, want no active imports before declaration", ctx.Uses)
+	if len(ctx.File.Uses) != 0 {
+		t.Fatalf("Uses = %#v, want no active imports before declaration", ctx.File.Uses)
 	}
 }
 
@@ -323,8 +323,8 @@ $x = 1;
 		{FullName: "App\\Support\\LIMIT", Alias: "LIMIT", Kind: "const", StartLine: 3},
 		{FullName: "App\\Models\\User", Alias: "Account", Kind: "class", StartLine: 4},
 	}
-	if !reflect.DeepEqual(ctx.Uses, want) {
-		t.Errorf("Uses = %#v, want %#v", ctx.Uses, want)
+	if !reflect.DeepEqual(ctx.File.Uses, want) {
+		t.Errorf("Uses = %#v, want %#v", ctx.File.Uses, want)
 	}
 }
 
@@ -394,11 +394,11 @@ func TestDocumentOutsideItsLines(t *testing.T) {
 func TestAnalyzeNamespaceOperatorIsNotADeclaration(t *testing.T) {
 	source := "<?php\nnamespace App;\nuse App\\Models\\User;\nnamespace\\foo();\nfunction bar() {}\n"
 	ctx := Analyze("file:///ns.php", source, protocol.Position{Line: 4, Character: 10}, phpparser.OnlyGrammar(token.Latest))
-	if ctx.Namespace != "App" {
-		t.Errorf("Namespace after namespace\\foo() = %q, want App", ctx.Namespace)
+	if ctx.File.Namespace != "App" {
+		t.Errorf("Namespace after namespace\\foo() = %q, want App", ctx.File.Namespace)
 	}
-	if len(ctx.Uses) != 1 || ctx.Uses[0].FullName != "App\\Models\\User" {
-		t.Errorf("Uses after namespace\\foo() = %#v, want the User import", ctx.Uses)
+	if len(ctx.File.Uses) != 1 || ctx.File.Uses[0].FullName != "App\\Models\\User" {
+		t.Errorf("Uses after namespace\\foo() = %#v, want the User import", ctx.File.Uses)
 	}
 	if ctx.Scope == nil || ctx.Scope.Kind != ScopeFunction || ctx.Scope.Name != "bar" {
 		t.Errorf("Scope = %#v, want function bar", ctx.Scope)

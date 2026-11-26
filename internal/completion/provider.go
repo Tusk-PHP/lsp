@@ -161,7 +161,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		return nil
 	}
 	file := ctx.File
-	rk := newNameRanker(ctx.Namespace, ctx.Uses)
+	rk := newNameRanker(file.Namespace, file.Uses)
 
 	if strings.HasSuffix(trimmed, "->") || strings.HasSuffix(trimmed, "?->") {
 		return sanitizeCompletions(p.completeMemberAccess(r, uri, source, pos, prefix, file, parenAfterCursor))
