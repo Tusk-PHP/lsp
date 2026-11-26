@@ -22,11 +22,14 @@ func IsModel(index *symbols.Index, fqn string) bool {
 }
 
 func ModelQueriedBy(index *symbols.Index, rt resolve.ResolvedType) QueriedModel {
+	if !singleClass(rt) {
+		return QueriedModel{}
+	}
 	base := rt.BaseFQN()
 	if IsModel(index, base) {
 		return QueriedModel{FQN: base}
 	}
-	if len(rt.Params) == 0 || !isOrExtends(index, base, EloquentBuilder, EloquentRelation) {
+	if len(rt.Params) == 0 || !singleClass(rt.Params[0]) || !isOrExtends(index, base, EloquentBuilder, EloquentRelation) {
 		return QueriedModel{}
 	}
 	model := rt.Params[0].BaseFQN()
@@ -34,6 +37,10 @@ func ModelQueriedBy(index *symbols.Index, rt resolve.ResolvedType) QueriedModel 
 		return QueriedModel{}
 	}
 	return QueriedModel{FQN: model}
+}
+
+func singleClass(rt resolve.ResolvedType) bool {
+	return len(rt.Union) == 0 && len(rt.Intersection) == 0
 }
 
 func isOrExtends(index *symbols.Index, fqn string, classes ...string) bool {
