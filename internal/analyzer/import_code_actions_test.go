@@ -135,3 +135,21 @@ $user = new User();
 		t.Fatalf("expected no organize imports action for commented block, got %#v", actions)
 	}
 }
+
+func TestGetCodeActionsOrganizeImportsDropsPrefixOfNonASCIIName(t *testing.T) {
+	source := "<?php\nuse App\\Caf;\nuse App\\Café;\n\n$x = new Café();\n"
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///test.php": source})
+
+	actions := withoutIgnoreActions(a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
+		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"source.organizeImports"}},
+	}))
+
+	if len(actions) != 1 {
+		t.Fatalf("expected one organize imports action, got %#v", actions)
+	}
+	edits := actions[0].Edit.Changes["file:///test.php"]
+	if len(edits) != 1 || edits[0].NewText != "use App\\Café;" {
+		t.Fatalf("expected only App\\Café to stay, got %#v", edits)
+	}
+}

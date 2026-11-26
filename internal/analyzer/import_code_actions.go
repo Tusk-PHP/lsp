@@ -256,8 +256,8 @@ func containsImportCodeActionWord(line, name string) bool {
 		before := absIdx - 1
 		after := absIdx + len(name)
 
-		leftOK := before < 0 || !isImportCodeActionIdentChar(line[before])
-		rightOK := after >= len(line) || !isImportCodeActionIdentChar(line[after])
+		leftOK := before < 0 || !parser.IsIdentByte(line[before])
+		rightOK := after >= len(line) || !parser.IsIdentByte(line[after])
 		if leftOK && rightOK {
 			return true
 		}
@@ -267,8 +267,4 @@ func containsImportCodeActionWord(line, name string) bool {
 			return false
 		}
 	}
-}
-
-func isImportCodeActionIdentChar(b byte) bool {
-	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
 }
