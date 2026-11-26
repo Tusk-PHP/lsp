@@ -122,6 +122,8 @@ func newInlineVariablePlan(source string, result *parser.ParseResult, doc *scope
 
 var nameScopeFunctions = map[string]bool{"compact": true, "extract": true, "get_defined_vars": true, "eval": true}
 
+var includeConstructs = map[string]bool{"include": true, "include_once": true, "require": true, "require_once": true}
+
 func scopeAccessesVariablesByName(tokens []parser.Token, doc *scope.Document, owner *scope.Scope) bool {
 	for i, tok := range tokens {
 		if accessesVariablesByName(tokens, i) && variableScopeAt(doc, tokenRange(tok).Start) == owner {
@@ -147,6 +149,9 @@ func accessesVariablesByName(tokens []parser.Token, i int) bool {
 		return tok.Value == "$" && (prev < 0 || tokens[prev].Kind != parser.TokenDoubleColon)
 	case parser.TokenIdentifier:
 		name := strings.ToLower(tok.Value)
+		if includeConstructs[name] {
+			return isIncludeConstruct(tokens, prev, i)
+		}
 		if !nameScopeFunctions[name] && name != "parse_str" {
 			return false
 		}
@@ -163,6 +168,17 @@ func accessesVariablesByName(tokens []parser.Token, i int) bool {
 		return name != "parse_str" || callArgumentCount(tokens, open) < 2
 	}
 	return false
+}
+
+func isIncludeConstruct(tokens []parser.Token, prev, i int) bool {
+	if prev >= 0 {
+		switch tokens[prev].Kind {
+		case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenConst:
+			return false
+		}
+	}
+	next := parser.NextSignificant(tokens, i+1)
+	return next < 0 || tokens[next].Kind != parser.TokenColon
 }
 
 func callArgumentCount(tokens []parser.Token, open int) int {

@@ -195,6 +195,13 @@ func TestGetCodeActionsInlineVariableRejectsDynamicScopeAccess(t *testing.T) {
 		"eval":                          "eval('echo $label;');",
 		"compact in an arrow function":  "$all = (fn() => compact('label'))();",
 		"variable variable as property": "echo $data->$$name;",
+		"include":                       "include 'view.php';",
+		"include_once":                  "include_once('view.php');",
+		"require":                       "require __DIR__ . '/view.php';",
+		"require_once":                  "require_once 'view.php';",
+		"include in upper case":         "INCLUDE 'view.php';",
+		"include as a value":            "$data = include 'config.php';",
+		"include in an arrow function":  "$render = fn() => include 'view.php';",
 	} {
 		t.Run(name, func(t *testing.T) {
 			assertNoInlineVariableAction(t, dynamicScopeSource(statement), dynamicScopeLabelUse)
@@ -218,6 +225,17 @@ func TestGetCodeActionsInlineVariableIgnoresDynamicScopeAccessElsewhere(t *testi
 		"a constant named extract":    "echo extract;",
 		"extract in a closure":        "$fn = function () use ($data) { extract($data); };",
 		"get_defined_vars in a named": "function inner() { return get_defined_vars(); }",
+		"include in a closure":        "$fn = function () { include 'view.php'; };",
+		"require in a named function": "function inner() { require 'view.php'; }",
+		"include_once in a closure":   "$fn = static function () use ($data) { include_once 'view.php'; };",
+		"require_once in a named":     "function inner() { require_once 'view.php'; }",
+		"include in a string":         "echo 'include view.php; require $name';",
+		"include in a comment":        "// include 'view.php';",
+		"a method named include":      "$data->include($query);",
+		"a static method named":       "Loader::require($query);",
+		"a named argument":            "render(include: $data);",
+		"a method declared as one":    "$c = new class { function include() {} };",
+		"a class constant named one":  "$c = new class { const REQUIRE = 1; };",
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := inlinedSource(t, dynamicScopeSource(statement), dynamicScopeLabelUse)
