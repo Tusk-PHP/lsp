@@ -772,6 +772,8 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 			if sym := a.index.Lookup(ctx.EnclosingFQN + "::" + strings.TrimPrefix(word, "$")); sym != nil {
 				return sym
 			}
+		} else if alias := a.traitAliasIn(ctx.EnclosingFQN, word); alias != nil {
+			return alias
 		}
 	}
 
@@ -792,6 +794,15 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 	}
 
 	return a.index.LookupStandalone(word, ctx.EnclosingFQN)
+}
+
+func (a *Analyzer) traitAliasIn(classFQN, name string) *symbols.Symbol {
+	for _, member := range a.index.TraitMembers(classFQN) {
+		if member.AliasOf != nil && strings.EqualFold(member.Name, name) {
+			return member
+		}
+	}
+	return nil
 }
 
 // findVariableReferences finds all occurrences of a variable within its enclosing function scope.
