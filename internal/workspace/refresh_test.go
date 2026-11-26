@@ -290,6 +290,36 @@ func TestRescopeReportsDocumentsTheEditorOpensWhileTheyAreReadFromDisk(t *testin
 	}
 }
 
+func TestRefreshWithAnAnchoredExcludePathAppliesItsRulesLive(t *testing.T) {
+	ws, root := newRefreshWorkspace(t, nil, map[string]string{
+		"build/Root.php":     "<?php\nclass RootBuild {}\n",
+		"app/build/Deep.php": "<?php\nclass DeepBuild {}\n",
+	})
+	anchored := config.DefaultConfig()
+	anchored.ExcludePaths = append(slices.Clone(anchored.ExcludePaths), "/build")
+	refreshWith(t, ws, anchored, root)
+	if ws.Index.Lookup("RootBuild") != nil {
+		t.Error("a new /build entry takes the root build directory out of the index")
+	}
+	if ws.Index.Lookup("DeepBuild") == nil {
+		t.Error("a new /build entry leaves a nested build directory indexed")
+	}
+
+	writeFiles(t, root, map[string]string{
+		"build/Later.php":     "<?php\nclass LaterRootBuild {}\n",
+		"app/build/Later.php": "<?php\nclass LaterDeepBuild {}\n",
+	})
+	refreshPaths(t, ws, root, "build/Later.php", "app/build/Later.php")
+	if ws.Index.Lookup("LaterRootBuild") != nil || ws.Index.Lookup("LaterDeepBuild") == nil {
+		t.Error("files created after the change follow the new exclude rules")
+	}
+
+	refreshWith(t, ws, config.DefaultConfig(), root)
+	if ws.Index.Lookup("RootBuild") == nil || ws.Index.Lookup("LaterRootBuild") == nil {
+		t.Error("removing the /build entry indexes the root build directory again")
+	}
+}
+
 func settingsOf(cfg *config.Config) func() (*config.Config, error) {
 	return func() (*config.Config, error) { return cfg, nil }
 }
