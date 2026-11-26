@@ -5,8 +5,11 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
@@ -52,7 +55,7 @@ func (a *Analyzer) findSymbolOccurrences(sym *symbols.Symbol, readDocument func(
 		if src == "" {
 			continue
 		}
-		locs = append(locs, symbolOccurrencesIn(sym, fileURI, src)...)
+		locs = append(locs, a.symbolOccurrencesIn(sym, fileURI, src)...)
 	}
 	locs = append(locs, a.templateOccurrences(sym, readDocument, uri, source)...)
 
@@ -60,8 +63,28 @@ func (a *Analyzer) findSymbolOccurrences(sym *symbols.Symbol, readDocument func(
 	return deduplicateLocations(locs)
 }
 
-// symbolOccurrencesIn finds the words in source that may name sym.
-func symbolOccurrencesIn(sym *symbols.Symbol, fileURI, source string) []protocol.Location {
+func (a *Analyzer) symbolOccurrencesIn(sym *symbols.Symbol, fileURI, source string) []protocol.Location {
+	locs := wordOccurrencesIn(sym, fileURI, source)
+	if !sym.IsClassLike() || len(locs) == 0 {
+		return locs
+	}
+	return a.classReferencesAmong(sym, fileURI, source, locs)
+}
+
+func (a *Analyzer) classReferencesAmong(sym *symbols.Symbol, fileURI, source string, candidates []protocol.Location) []protocol.Location {
+	lines := ast.NewLines(source)
+	names := sourcectx.ClassNamesEndingIn(source, lines, parser.ParseTreeIn(source, a.index.GrammarOf(fileURI)), sym.Name)
+	kept := candidates[:0]
+	for _, loc := range candidates {
+		fqn, isName := names[lines[loc.Range.Start.Line]+uint32(loc.Range.Start.Character)]
+		if !isName || strings.EqualFold(fqn, sym.FQN) {
+			kept = append(kept, loc)
+		}
+	}
+	return kept
+}
+
+func wordOccurrencesIn(sym *symbols.Symbol, fileURI, source string) []protocol.Location {
 	var locs []protocol.Location
 	name := sym.Name
 	bareName := strings.TrimPrefix(name, "$")
@@ -107,7 +130,7 @@ func (a *Analyzer) templateOccurrences(sym *symbols.Symbol, readDocument func(st
 	templates := a.index.TemplateFileURIs()
 	if workspace.IsBlade(uri) {
 		// The requesting view is read from the request, in its PHP's positions.
-		locs := symbolOccurrencesIn(sym, uri, source)
+		locs := a.symbolOccurrencesIn(sym, uri, source)
 		templates = slices.DeleteFunc(templates, func(t string) bool { return t == uri })
 		return append(locs, a.otherTemplateOccurrences(sym, readDocument, templates)...)
 	}
@@ -130,7 +153,7 @@ func (a *Analyzer) otherTemplateOccurrences(sym *symbols.Symbol, readDocument fu
 			continue
 		}
 		doc := blade.Compile(src)
-		for _, l := range symbolOccurrencesIn(sym, t, doc.PHP) {
+		for _, l := range a.symbolOccurrencesIn(sym, t, doc.PHP) {
 			r := l.Range
 			sl, sc, el, ec, ok := doc.TemplateRange(r.Start.Line, r.Start.Character, r.End.Line, r.End.Character)
 			// The whole name must be text the view contains.

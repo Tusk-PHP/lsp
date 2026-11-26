@@ -1,9 +1,12 @@
 package analyzer
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -132,6 +135,118 @@ func TestImportClassActionUsesTheNamespaceBlockOfTheDiagnostic(t *testing.T) {
 				t.Errorf("imports = %+v, want %q at line %d", imports, tc.want, tc.line)
 			}
 		})
+	}
+}
+
+func TestReferencesResolveEachOccurrenceThroughItsNamespaceBlock(t *testing.T) {
+	const (
+		blocksURI = "file:///blocks.php"
+		otherURI  = "file:///other.php"
+		xURI      = "file:///x/Dep.php"
+		bURI      = "file:///b/Dep.php"
+	)
+	other := "<?php\nnamespace C;\nuse X\\Dep;\nnew Dep(7);\nnew \\B\\Dep(8);\n"
+	x := "<?php\nnamespace X;\nclass Dep {}\n"
+	b := "<?php\nnamespace B;\nclass Dep {}\n"
+	unbraced := "<?php\nnamespace A;\nuse X\\Dep;\nclass Foo { function f(Dep $d1) { return new Dep(1); } }\n\nnamespace B;\nclass Bar { function g(Dep $d2) { return new Dep(2); } }\n"
+	braced := "<?php\nnamespace A {\nuse X\\Dep;\nclass Foo { function f(Dep $d1) { return new Dep(1); } }\n}\nnamespace B {\nclass Bar { function g(Dep $d2) { return new Dep(2); } }\n}\nnamespace {\nuse B\\Dep;\nnew Dep(3);\n}\n"
+	sources := map[string]string{otherURI: other, xURI: x, bURI: b}
+	at := func(uri, marker string) string {
+		src := sources[uri]
+		i := strings.Index(src, marker)
+		if i < 0 {
+			t.Fatalf("marker %q not in %s", marker, uri)
+		}
+		i += strings.Index(marker, "Dep")
+		return fmt.Sprintf("%s %d:%d", uri, strings.Count(src[:i], "\n"), i-strings.LastIndex(src[:i], "\n")-1)
+	}
+	for _, tc := range []struct {
+		name, source, cursor string
+		want                 func() []string
+	}{
+		{"unbraced, second block", unbraced, "Dep(2)", func() []string {
+			return []string{at(bURI, "class Dep"), at(blocksURI, "Dep $d2"), at(blocksURI, "Dep(2)"), at(otherURI, "Dep(8)")}
+		}},
+		{"unbraced, first block", unbraced, "Dep(1)", func() []string {
+			return []string{at(xURI, "class Dep"), at(blocksURI, "Dep;"), at(blocksURI, "Dep $d1"), at(blocksURI, "Dep(1)"), at(otherURI, "Dep;"), at(otherURI, "Dep(7)")}
+		}},
+		{"braced, second block", braced, "Dep(2)", func() []string {
+			return []string{at(bURI, "class Dep"), at(blocksURI, "Dep $d2"), at(blocksURI, "Dep(2)"), at(blocksURI, "Dep;\nnew Dep(3)"), at(blocksURI, "Dep(3)"), at(otherURI, "Dep(8)")}
+		}},
+		{"braced, first block", braced, "Dep(1)", func() []string {
+			return []string{at(xURI, "class Dep"), at(blocksURI, "Dep;\nclass Foo"), at(blocksURI, "Dep $d1"), at(blocksURI, "Dep(1)"), at(otherURI, "Dep;"), at(otherURI, "Dep(7)")}
+		}},
+		{"global block", braced, "Dep(3)", func() []string {
+			return []string{at(bURI, "class Dep"), at(blocksURI, "Dep $d2"), at(blocksURI, "Dep(2)"), at(blocksURI, "Dep;\nnew Dep(3)"), at(blocksURI, "Dep(3)"), at(otherURI, "Dep(8)")}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sources[blocksURI] = tc.source
+			a, read := setupRenameAnalyzer(sources)
+			pos := markerPosition(t, tc.source, tc.cursor)
+			pos.Character -= len(tc.cursor) - 1
+			want := tc.want()
+			slices.Sort(want)
+
+			var refs []string
+			for _, loc := range a.FindAllReferences(blocksURI, tc.source, pos, read) {
+				refs = append(refs, fmt.Sprintf("%s %d:%d", loc.URI, loc.Range.Start.Line, loc.Range.Start.Character))
+			}
+			slices.Sort(refs)
+			if !slices.Equal(refs, want) {
+				t.Errorf("references =\n%s\nwant\n%s", strings.Join(refs, "\n"), strings.Join(want, "\n"))
+			}
+
+			var renamed []string
+			for uri, edits := range a.Rename(blocksURI, tc.source, pos, "Dependency", read).Changes {
+				for _, e := range edits {
+					renamed = append(renamed, fmt.Sprintf("%s %d:%d", uri, e.Range.Start.Line, e.Range.Start.Character))
+				}
+			}
+			slices.Sort(renamed)
+			if !slices.Equal(renamed, want) {
+				t.Errorf("rename edits =\n%s\nwant\n%s", strings.Join(renamed, "\n"), strings.Join(want, "\n"))
+			}
+
+			var highlighted []string
+			for _, h := range a.GetDocumentHighlights(blocksURI, tc.source, pos) {
+				highlighted = append(highlighted, fmt.Sprintf("%s %d:%d", blocksURI, h.Range.Start.Line, h.Range.Start.Character))
+			}
+			slices.Sort(highlighted)
+			inFile := slices.DeleteFunc(slices.Clone(want), func(w string) bool { return !strings.HasPrefix(w, blocksURI+" ") })
+			if !slices.Equal(highlighted, inFile) {
+				t.Errorf("highlights =\n%s\nwant\n%s", strings.Join(highlighted, "\n"), strings.Join(inFile, "\n"))
+			}
+		})
+	}
+}
+
+func TestTemplateReferencesResolveTheirClassNames(t *testing.T) {
+	const (
+		view  = "file:///resources/views/a.blade.php"
+		other = "file:///resources/views/b.blade.php"
+	)
+	templates := map[string]string{
+		view:  "<p>{{ \\B\\Dep::make() }}</p>\n<p>{{ \\X\\Dep::make() }}</p>\n",
+		other: "<p>{{ \\X\\Dep::make() }}</p>\n<p>{{ \\B\\Dep::make() }}</p>\n",
+	}
+	a, _ := setupRenameAnalyzer(map[string]string{
+		"file:///x/Dep.php": "<?php\nnamespace X;\nclass Dep {}\n",
+		"file:///b/Dep.php": "<?php\nnamespace B;\nclass Dep {}\n",
+	})
+	a.index.AddTemplateFile(view)
+	a.index.AddTemplateFile(other)
+	sym := a.index.Lookup("B\\Dep")
+	var got []string
+	for _, loc := range a.findSymbolOccurrences(sym, func(uri string) string { return templates[uri] }, view, blade.Compile(templates[view]).PHP) {
+		if loc.URI == other {
+			got = append(got, fmt.Sprintf("%s %d", loc.URI, loc.Range.Start.Line))
+		} else if loc.URI == view {
+			got = append(got, view)
+		}
+	}
+	if want := []string{view, other + " 1"}; !slices.Equal(got, want) {
+		t.Errorf("template references = %v, want %v", got, want)
 	}
 }
 

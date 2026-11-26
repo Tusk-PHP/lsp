@@ -165,3 +165,15 @@ func (ns Namespace) View(file *parser.FileNode) *parser.FileNode {
 	view.Namespace, view.Uses = ns.Name, ns.Uses
 	return &view
 }
+
+func (ns Namespace) ResolveClass(src string, name *ast.Name) string {
+	text := name.Text(src)
+	switch name.Kind {
+	case token.NameFullyQualified:
+		return text[1:]
+	case token.NameRelative:
+		_, rest, _ := strings.Cut(text, "\\")
+		return parser.ResolveImportedName(rest, ns.Name, nil, "class")
+	}
+	return parser.ResolveImportedName(text, ns.Name, ns.Uses, "class")
+}
