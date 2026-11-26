@@ -1,8 +1,10 @@
 package symbols
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -150,6 +152,12 @@ func FuzzCanonicalFileURIIsThePathToURIOfItsPath(f *testing.F) {
 		"file:/../a%3A",
 		"file:///srv/../../x",
 		"file://host/share/x.php",
+		"file://localhost/srv/x.php",
+		"file://Server/share/../x.php",
+		"file:////server/share/x.php",
+		"file:////localhost/c$/x.php",
+		"file://user@host/x.php",
+		"file://host:445/x.php",
 		"file:///a%zz",
 		`file://C:\proj\a.php`,
 		"untitled:Untitled-1",
@@ -165,6 +173,16 @@ func FuzzCanonicalFileURIIsThePathToURIOfItsPath(f *testing.F) {
 			}
 			return
 		}
+		if local, ok := strings.CutPrefix(uri, "file:///"); ok {
+			if got := canonicalURI("file://localhost/"+local, windows); got != canonical {
+				t.Errorf("%q (windows %v): with localhost as its host its canonical is %q, not %q", uri, windows, got, canonical)
+			}
+		}
+		if u, err := url.Parse(uri); err == nil && u.Host != "" && !strings.EqualFold(u.Host, localHost) && !(windows && startsWithDrive(strings.TrimPrefix(uri, fileScheme))) {
+			if c, err := url.Parse(canonical); err != nil || c.Host != strings.ToLower(u.Host) {
+				t.Errorf("%q (windows %v): its canonical %q does not keep the host %q", uri, windows, canonical, u.Host)
+			}
+		}
 		path, err := uriSlashPath(canonical, windows)
 		if err != nil {
 			t.Fatalf("%q (windows %v): its canonical %q is not a file URI: %v", uri, windows, canonical, err)
@@ -173,4 +191,101 @@ func FuzzCanonicalFileURIIsThePathToURIOfItsPath(f *testing.F) {
 			t.Errorf("%s (windows %v): canonical %s, but the URI of its path is %s", uri, windows, canonical, rebuilt)
 		}
 	})
+}
+
+func TestAFileURIWithAHostIsAUNCPathUnderWindowsRules(t *testing.T) {
+	for uri, want := range map[string]struct{ path, canonical string }{
+		"file://server/share/app/Foo.php":         {"//server/share/app/Foo.php", "file://server/share/app/Foo.php"},
+		"file://SERVER/share/app/../Foo.php":      {"//server/share/Foo.php", "file://server/share/Foo.php"},
+		"file://server/share/my%20app/caf%C3%A9":  {"//server/share/my app/café", "file://server/share/my%20app/caf%C3%A9"},
+		"file:////server/share/Foo.php":           {"//server/share/Foo.php", "file://server/share/Foo.php"},
+		"file://server/share\\app\\Foo.php":       {"//server/share/app/Foo.php", "file://server/share/app/Foo.php"},
+		"file://localhost//localhost/c$/Foo.php":  {"//localhost/c$/Foo.php", "file:////localhost/c$/Foo.php"},
+		"file://caf%C3%A9.example/share/Foo.php":  {"//café.example/share/Foo.php", "file://caf%C3%A9.example/share/Foo.php"},
+		"file:////c:/proj/Foo.php":                {"C:/proj/Foo.php", "file:///C:/proj/Foo.php"},
+		"file://fe80--1.ipv6-literal.net/s/a.php": {"//fe80--1.ipv6-literal.net/s/a.php", "file://fe80--1.ipv6-literal.net/s/a.php"},
+	} {
+		if got, err := uriSlashPath(uri, true); err != nil || got != want.path {
+			t.Errorf("%s: got %s, %v, want %s", uri, got, err, want.path)
+		}
+		if got := canonicalURI(uri, true); got != want.canonical {
+			t.Errorf("%s: canonical %s, want %s", uri, got, want.canonical)
+		}
+	}
+	for _, uri := range []string{"file://user@server/share/Foo.php", "file://server:445/share/Foo.php", "file://[::1]/share/Foo.php", "file://server:/share/Foo.php"} {
+		if got, err := uriSlashPath(uri, true); err == nil {
+			t.Errorf("%s names no UNC path, got %s", uri, got)
+		}
+		if got := canonicalURI(uri, true); got != uri {
+			t.Errorf("%s is kept as the client spelled it, got %s", uri, got)
+		}
+	}
+}
+
+func TestPathToURIWritesAUNCPathWithItsHost(t *testing.T) {
+	for path, want := range map[string]string{
+		`\\server\share\app\Foo.php`:   "file://server/share/app/Foo.php",
+		`\\Server\share\my app\#1.php`: "file://server/share/my%20app/%231.php",
+		`//server/share/app/Foo.php`:   "file://server/share/app/Foo.php",
+		`\\server`:                     "file://server/",
+		`\\localhost\c$\Foo.php`:       "file:////localhost/c$/Foo.php",
+		`\\\srv\Foo.php`:               "file:///srv/Foo.php",
+		`\\c:\proj\Foo.php`:            "file:///C:/proj/Foo.php",
+	} {
+		uri := slashPathToURI(slashPath(path, true))
+		if uri != want {
+			t.Errorf("%s: got %s, want %s", path, uri, want)
+		}
+		if back, err := uriSlashPath(uri, true); err != nil || back != slashPath(path, true) {
+			t.Errorf("%s does not round-trip: %s, %v", uri, back, err)
+		}
+	}
+}
+
+func TestLocalhostIsTheLocalMachine(t *testing.T) {
+	for _, windows := range []bool{false, true} {
+		for uri, want := range map[string]string{
+			"file://localhost/srv/app/Foo.php": "file:///srv/app/Foo.php",
+			"file://LocalHost/srv/app/Foo.php": "file:///srv/app/Foo.php",
+		} {
+			if got := canonicalURI(uri, windows); got != want {
+				t.Errorf("%s (windows %v): got %s, want %s", uri, windows, got, want)
+			}
+		}
+	}
+	if got := canonicalURI("file://localhost/c%3A/proj/Foo.php", true); got != "file:///C:/proj/Foo.php" {
+		t.Errorf("a localhost URI with a drive names the drive: %s", got)
+	}
+}
+
+func TestAFileURIWithAHostIsNoLocalFileUnderPOSIXRules(t *testing.T) {
+	uri := "file://server/share/app/Foo.php"
+	if got := canonicalURI(uri, false); got != uri {
+		t.Errorf("a URI naming another host is kept as the client spelled it, got %s", got)
+	}
+	if got, err := uriSlashPath(uri, false); err == nil || !strings.Contains(err.Error(), `"server"`) {
+		t.Errorf("the error names the host: %s, %v", got, err)
+	}
+}
+
+func TestFileTreeListsUNCFilesUnderAShare(t *testing.T) {
+	tree := fileTree{windows: true}
+	uris := []string{"file://server/share/app/A.php", "file://server/share/app/sub/B.php", "file://server/other/C.php"}
+	for _, uri := range uris {
+		tree.add(uri)
+	}
+	got := tree.under(`\\server\share`)
+	slices.Sort(got)
+	if want := uris[:2]; !slices.Equal(got, want) {
+		t.Errorf("files under \\\\server\\share: got %v, want %v", got, want)
+	}
+	if got := tree.under(`\\SERVER`); len(got) != 3 {
+		t.Errorf("every share of the host sits under it: %v", got)
+	}
+	for _, uri := range uris {
+		tree.remove(uri)
+	}
+	if got := tree.under(`\\server`); len(got) != 0 {
+		t.Errorf("removed files leave the host: %v", got)
+	}
 }

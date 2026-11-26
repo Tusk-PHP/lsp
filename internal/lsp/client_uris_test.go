@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -154,11 +155,15 @@ func (b *syncBuffer) String() string {
 }
 
 func TestAFileURIThatDoesNotParseIsIndexedUnderTheClientsURIUntilClosed(t *testing.T) {
+	assertIndexedUnderTheClientsURIUntilClosed(t, "file:///Scratch%zz.php")
+}
+
+func assertIndexedUnderTheClientsURIUntilClosed(t *testing.T, uri string) {
+	t.Helper()
 	h, _ := startWatchedProject(t, map[string]string{"composer.json": `{"require": {"php": "^8.1"}}`}, map[string]interface{}{}, nil)
 	<-h.server.indexed
 	var logged syncBuffer
 	h.server.logger.SetOutput(&logged)
-	uri := "file:///Scratch%zz.php"
 	indexedUnder := func(name string) []string {
 		t.Helper()
 		raw, _ := json.Marshal(h.readResponse(h.send("workspace/symbol", map[string]interface{}{"query": name}))["result"])
@@ -216,4 +221,40 @@ func TestADocumentThatIsNotAFileLeavesTheIndexWhenClosed(t *testing.T) {
 
 	h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": uri}})
 	waitForSymbols(t, h, "Scratchpad", func(names []string) bool { return len(names) == 0 })
+}
+
+func TestADocumentOpenedUnderLocalhostIsTheLocalFile(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json":   `{"require": {"php": "^8.1"}}`,
+		"app/Invoice.php": "<?php\nnamespace App;\nclass Invoice {}\n",
+	}, map[string]interface{}{}, nil)
+	<-h.server.indexed
+	canonical := symbols.PathToURI(filepath.Join(root, "app/Invoice.php"))
+	u, err := url.Parse(canonical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.Host = "localhost"
+	client := u.String()
+	indexedInvoices := func() []string {
+		var indexed []string
+		for _, uri := range h.server.index.GetAllFileURIs() {
+			if strings.HasSuffix(uri, "/app/Invoice.php") {
+				indexed = append(indexed, uri)
+			}
+		}
+		return indexed
+	}
+
+	openDocument(h, client, "<?php\nnamespace App;\nclass Invoice {}\nclass EditedInEditor {}\n")
+	waitForSymbols(t, h, "EditedInEditor", func(names []string) bool { return len(names) == 1 })
+	if got := indexedInvoices(); !slices.Equal(got, []string{canonical}) {
+		t.Errorf("the open file is indexed once, under its canonical URI %s: %v", canonical, got)
+	}
+
+	h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": client}})
+	waitForSymbols(t, h, "EditedInEditor", func(names []string) bool { return len(names) == 0 })
+	if got := indexedInvoices(); !slices.Equal(got, []string{canonical}) {
+		t.Errorf("the closed file is indexed once, under its canonical URI %s: %v", canonical, got)
+	}
 }

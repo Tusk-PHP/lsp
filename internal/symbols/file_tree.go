@@ -1,7 +1,5 @@
 package symbols
 
-import "path"
-
 type fileTree struct {
 	windows  bool
 	files    map[string]map[string]struct{}
@@ -21,7 +19,7 @@ func (t *fileTree) add(uri string) {
 		t.files[dir] = make(map[string]struct{})
 	}
 	t.files[dir][uri] = struct{}{}
-	for parent := path.Dir(dir); parent != dir; dir, parent = parent, path.Dir(parent) {
+	for parent := slashDir(dir); parent != dir; dir, parent = parent, slashDir(parent) {
 		if t.children[parent] == nil {
 			t.children[parent] = make(map[string]struct{})
 		}
@@ -38,7 +36,7 @@ func (t *fileTree) remove(uri string) {
 		return
 	}
 	delete(t.files[dir], uri)
-	for parent := path.Dir(dir); parent != dir && len(t.files[dir]) == 0 && len(t.children[dir]) == 0; dir, parent = parent, path.Dir(parent) {
+	for parent := slashDir(dir); parent != dir && len(t.files[dir]) == 0 && len(t.children[dir]) == 0; dir, parent = parent, slashDir(parent) {
 		delete(t.files, dir)
 		delete(t.children, dir)
 		delete(t.children[parent], dir)
@@ -66,5 +64,5 @@ func (t *fileTree) dirOf(uri string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	return path.Dir(p), true
+	return slashDir(p), true
 }
