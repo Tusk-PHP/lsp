@@ -2,19 +2,23 @@ package lexer
 
 import "github.com/Tusk-PHP/lsp/internal/php/token"
 
-var literalClosers = map[token.Kind]token.Kind{
-	token.DoubleQuote:  token.DoubleQuote,
-	token.StartHeredoc: token.EndHeredoc,
-	token.Backtick:     token.Backtick,
+func literalCloser(kind token.Kind) (token.Kind, bool) {
+	switch kind {
+	case token.DoubleQuote, token.Backtick:
+		return kind, true
+	case token.StartHeredoc:
+		return token.EndHeredoc, true
+	}
+	return token.Invalid, false
 }
 
 func OpensLiteral(kind token.Kind) bool {
-	_, ok := literalClosers[kind]
+	_, ok := literalCloser(kind)
 	return ok
 }
 
 func LiteralEnd(tokens []Token, open int) int {
-	closer := literalClosers[tokens[open].Kind]
+	closer, _ := literalCloser(tokens[open].Kind)
 	depth := 0
 	for i := open + 1; i < len(tokens); i++ {
 		kind := tokens[i].Kind
