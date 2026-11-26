@@ -1,4 +1,4 @@
-.PHONY: build install test clean dev cross-build wasm conformance conformance-pr bench bench-install bench-self field-run field-baseline field-baseline-update
+.PHONY: build install test clean dev cross-build wasm conformance conformance-pr bench bench-install bench-self field-run field-baseline field-baseline-update filament-workspace
 
 VERSION ?= 0.16.0
 BINARY  := tusk-php
@@ -54,3 +54,7 @@ field-baseline: build
 
 field-baseline-update: build
 	bash scripts/field-baseline.sh --update $(NAME)
+
+# Fetch the Filament demo app into testdata/filament (pinned; reused when current).
+filament-workspace:
+	bash scripts/fetch-filament.sh
