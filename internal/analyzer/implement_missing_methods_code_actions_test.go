@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func TestGetCodeActionsImplementMissingMethodsFromInterface(t *testing.T) {
@@ -311,6 +312,20 @@ interface Holds {
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+}
+
+func TestRenderImplementMissingMethodRefusesTypesPHPCannotDeclare(t *testing.T) {
+	for _, member := range []*symbols.Symbol{
+		{Name: "load", Params: []symbols.ParamInfo{{Name: "$ids", Type: "list<int>"}}},
+		{Name: "rows", ReturnType: "array<string, int>"},
+		{Name: "map", Params: []symbols.ParamInfo{{Name: "$fn", Type: "callable(int): string"}}},
+		{Name: "mode", ReturnType: "'fast'|'slow'"},
+		{Name: "loose", Params: []symbols.ParamInfo{{Name: "$x", Type: "int|"}}},
+	} {
+		if text, ok := renderImplementMissingMethod(member, "    ", nil); ok {
+			t.Errorf("%s has a type only PHPDoc can spell and is not rendered as code:\n%s", member.Name, text)
 		}
 	}
 }
