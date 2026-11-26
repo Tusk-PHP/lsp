@@ -53,3 +53,24 @@ func BenchmarkLex(b *testing.B) {
 		}
 	})
 }
+
+func BenchmarkLexFile(b *testing.B) {
+	for _, bc := range []struct{ name, path string }{
+		{"eloquent-builder", "laravel/framework/src/Illuminate/Database/Eloquent/Builder.php"},
+		{"unicode-string", "symfony/string/AbstractUnicodeString.php"},
+		{"php-parser-tables", "nikic/php-parser/lib/PhpParser/Parser/Php8.php"},
+	} {
+		b.Run(bc.name, func(b *testing.B) {
+			data, err := os.ReadFile(filepath.Join("../../../testdata/laravel/vendor", bc.path))
+			if err != nil {
+				b.Skip("the Laravel fixture's vendor tree isn't installed")
+			}
+			src := string(data)
+			b.SetBytes(int64(len(src)))
+			b.ReportAllocs()
+			for b.Loop() {
+				lexer.Lex(src, token.Latest)
+			}
+		})
+	}
+}

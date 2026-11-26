@@ -28,6 +28,8 @@ type lexer struct {
 	src        string
 	pos        int
 	tokens     []Token
+	grownAt    int
+	grownLen   int
 	afterArrow bool
 	haltLeft   int
 	halted     bool
@@ -60,7 +62,12 @@ func (l *lexer) emit(kind token.Kind, end int) {
 	if l.halted {
 		return
 	}
-	l.tokens = append(l.tokens, Token{Kind: kind, Start: uint32(l.pos), End: uint32(end)})
+	n := len(l.tokens)
+	if n == cap(l.tokens) {
+		l.grow()
+	}
+	l.tokens = l.tokens[:n+1]
+	l.tokens[n] = Token{Kind: kind, Start: uint32(l.pos), End: uint32(end)}
 	l.pos = end
 	if l.haltLeft == 0 || kind.IsTrivia() || kind == token.OpenTag {
 		return
@@ -73,6 +80,14 @@ func (l *lexer) emit(kind token.Kind, end int) {
 		l.tokens = append(l.tokens, Token{Kind: token.InlineHTML, Start: uint32(end), End: uint32(len(l.src))})
 	}
 	l.pos, l.halted = len(l.src), true
+}
+
+func (l *lexer) grow() {
+	n := len(l.tokens)
+	expected := (len(l.src) - l.pos) * (n - l.grownLen) / max(l.pos-l.grownAt, 1)
+	grown := make([]Token, n, n+max(expected+expected/8, n/4)+1)
+	copy(grown, l.tokens)
+	l.tokens, l.grownAt, l.grownLen = grown, l.pos, n
 }
 
 func (l *lexer) html() {
