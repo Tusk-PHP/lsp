@@ -127,3 +127,12 @@ func BenchmarkAssignedVariableAfterEdit(b *testing.B) {
 		}
 	}
 }
+
+func TestLongArraySyntaxIsTypedLikeTheShortOne(t *testing.T) {
+	src := "<?php\nfunction f() {\n    $long = array('name' => 'n', 'nested' => array('id' => 1));\n    echo $long;\n}\n"
+	r, file, lines := setupBoxResolver(t, src)
+	pos := protocol.Position{Line: lineContaining(t, lines, "echo $long")}
+	if got := r.ResolveVariableTypeTyped("$long", lines, pos, file).Shape; got != "array{name: string, nested: array{id: int}}" {
+		t.Errorf("$long = %q, want the shape of its array() literal", got)
+	}
+}
