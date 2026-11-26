@@ -102,6 +102,19 @@ func TestDocCommentsAreReadFromTheSyntaxTree(t *testing.T) {
 	}
 }
 
+func TestResolveClassNameResolvesEveryPartOfADNFType(t *testing.T) {
+	r, file, _ := docCommentTreeFixture(t)
+	for name, want := range map[string]string{
+		"(Named&User)|null": `(Other\Named&App\User)|null`,
+		"User|(":            `App\User|(`,
+		"(":                 "(",
+	} {
+		if got := r.ResolveClassName(name, file); got != want {
+			t.Errorf("ResolveClassName(%q) = %q, want %q", name, got, want)
+		}
+	}
+}
+
 func TestClosureDocStopsAtTheMemberItIsIn(t *testing.T) {
 	src := "<?php\n/** @param int $x */\nclass C {\n    const F = static function ($x) {};\n}\n/** @param int $y */\nf(fn ($y) => $y);\n"
 	tree := newSyntaxTree(src, parser.ParseTree(src, token.Latest))
