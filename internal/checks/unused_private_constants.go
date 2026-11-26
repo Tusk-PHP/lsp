@@ -79,11 +79,8 @@ func collectConstantReads(tokens []parser.Token, end int, used map[string]bool) 
 	for i, tok := range tokens[:end] {
 		switch tok.Kind {
 		case parser.TokenStringLiteral:
-			for _, expr := range parser.InterpolatedExpressions(tok.Value) {
-				exprTokens := parser.Tokenize("<?php " + expr)
-				if collectConstantReads(exprTokens, len(exprTokens), used) {
-					return true
-				}
+			if inner := parser.InterpolatedTokens(tok); collectConstantReads(inner, len(inner), used) {
+				return true
 			}
 		case parser.TokenIdentifier:
 			name := strings.ToLower(tok.Value[strings.LastIndexByte(tok.Value, '\\')+1:])
