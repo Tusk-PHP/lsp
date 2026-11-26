@@ -17,7 +17,7 @@ type Refresh struct {
 	Paths      []string
 	Profile    bool
 	Config     func() *config.Config
-	EditorOwns func(uri string) bool
+	EditorOwns func(path string) bool
 }
 
 type Refreshed struct {
@@ -87,10 +87,10 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 		}
 	}
 	for _, path := range sources {
-		uri := "file://" + path
-		if r.editorOwns(uri) {
+		if r.editorOwns(path) {
 			continue
 		}
+		uri := symbols.PathToURI(path)
 		changed, err := ws.refreshFile(path, uri)
 		if err != nil {
 			errs = append(errs, err)
@@ -99,7 +99,7 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 			continue
 		}
 		out.Files = append(out.Files, uri)
-		if r.editorOwns(uri) {
+		if r.editorOwns(path) {
 			out.EditorOpened = append(out.EditorOpened, uri)
 		}
 	}
@@ -122,8 +122,8 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 	return out, errors.Join(errs...)
 }
 
-func (r Refresh) editorOwns(uri string) bool {
-	return r.EditorOwns != nil && r.EditorOwns(uri)
+func (r Refresh) editorOwns(path string) bool {
+	return r.EditorOwns != nil && r.EditorOwns(path)
 }
 
 func (ws *Bootstrapped) sourcesAt(path string) ([]string, error) {

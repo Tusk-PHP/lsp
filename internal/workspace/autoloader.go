@@ -54,7 +54,7 @@ func (l autoloader) Load(fqn string) (symbols.LoadedClass, bool) {
 			}
 			from = symbols.SourceProject
 		}
-		return symbols.LoadedClass{URI: "file://" + path, Source: string(content), From: from}, true
+		return symbols.LoadedClass{URI: symbols.PathToURI(path), Source: string(content), From: from}, true
 	}
 	return symbols.LoadedClass{}, false
 }

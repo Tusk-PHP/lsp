@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func writeProjectFiles(t *testing.T, root string, files map[string]string) {
@@ -26,11 +28,15 @@ func writeProjectFiles(t *testing.T, root string, files map[string]string) {
 
 func startWatchedProject(t *testing.T, files map[string]string, capabilities, options map[string]interface{}) (*lspHarness, string) {
 	t.Helper()
-	root := t.TempDir()
+	return startWatchedProjectIn(t, t.TempDir(), files, capabilities, options)
+}
+
+func startWatchedProjectIn(t *testing.T, root string, files map[string]string, capabilities, options map[string]interface{}) (*lspHarness, string) {
+	t.Helper()
 	writeProjectFiles(t, root, files)
 	h := newHarness(t)
 	t.Cleanup(h.close)
-	params := map[string]interface{}{"rootUri": "file://" + root, "processId": nil, "capabilities": capabilities}
+	params := map[string]interface{}{"rootUri": symbols.PathToURI(root), "processId": nil, "capabilities": capabilities}
 	if options != nil {
 		params["initializationOptions"] = options
 	}
@@ -114,7 +120,7 @@ func openDocument(h *lspHarness, uri, text string) {
 func notifyWatched(h *lspHarness, root string, names ...string) {
 	changes := make([]map[string]interface{}, len(names))
 	for i, name := range names {
-		changes[i] = map[string]interface{}{"uri": "file://" + filepath.Join(root, name), "type": 2}
+		changes[i] = map[string]interface{}{"uri": symbols.PathToURI(filepath.Join(root, name)), "type": 2}
 	}
 	h.notify("workspace/didChangeWatchedFiles", map[string]interface{}{"changes": changes})
 }
@@ -277,7 +283,7 @@ func symbolURIs(t *testing.T, h *lspHarness, query string) []string {
 func notifyChanges(h *lspHarness, root string, changes map[string]int) {
 	events := make([]map[string]interface{}, 0, len(changes))
 	for name, kind := range changes {
-		events = append(events, map[string]interface{}{"uri": "file://" + filepath.Join(root, name), "type": kind})
+		events = append(events, map[string]interface{}{"uri": symbols.PathToURI(filepath.Join(root, name)), "type": kind})
 	}
 	h.notify("workspace/didChangeWatchedFiles", map[string]interface{}{"changes": events})
 }
@@ -544,5 +550,43 @@ func TestANewAnonymousComponentIsOfferedAfterItIsWrittenOnDisk(t *testing.T) {
 			t.Fatalf("the new component is offered: %q", names())
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestAnOpenDocumentUnderAPathWithASpaceKeepsTheEditorsText(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		editorURI func(path string) string
+	}{
+		{"the editor percent-encodes the space", symbols.PathToURI},
+		{"the editor spells the URI differently from the workspace", func(path string) string { return "file://" + path }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, root := startWatchedProjectIn(t, filepath.Join(t.TempDir(), "my app"), map[string]string{
+				"composer.json":   `{"require": {"php": "^8.1"}}`,
+				"app/Invoice.php": "<?php\nnamespace App;\nclass Invoice {}\n",
+			}, map[string]interface{}{}, nil)
+			<-h.server.indexed
+			path := filepath.Join(root, "app", "Invoice.php")
+			uri := tc.editorURI(path)
+			openDocument(h, uri, "<?php\nnamespace App;\nclass Invoice {}\nclass EditedInEditor {}\n")
+			waitForSymbols(t, h, "EditedInEditor", func(names []string) bool { return len(names) == 1 })
+
+			writeProjectFiles(t, root, map[string]string{"app/Invoice.php": "<?php\nnamespace App;\nclass Invoice {}\nclass WrittenOnDisk {}\n"})
+			notifyWatched(h, root, "app/Invoice.php")
+			settleRefreshes(t, h, root, "Probe")
+			if names := symbolNames(t, h, "WrittenOnDisk"); len(names) != 0 {
+				t.Errorf("the disk text of an open document isn't indexed next to the editor's: %v", names)
+			}
+
+			h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": uri}})
+			waitForSymbols(t, h, "WrittenOnDisk", func(names []string) bool { return len(names) == 1 })
+			if names := symbolNames(t, h, "EditedInEditor"); len(names) != 0 {
+				t.Errorf("closing without saving drops the unsaved class: %v", names)
+			}
+			if got := symbolURIs(t, h, "Invoice"); !slices.Equal(got, []string{symbols.PathToURI(path)}) {
+				t.Errorf("Invoice is declared once, under the workspace's URI: %v", got)
+			}
+		})
 	}
 }
