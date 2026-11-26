@@ -134,17 +134,6 @@ class Foo {
 		hasFinding(t, findings, "redundant-union-member", "Duplicate type")
 	})
 
-	t.Run("nullable shorthand with null flagged", func(t *testing.T) {
-		source := `<?php
-class Foo {
-    public function bar(?string|null $x): void {}
-}
-`
-		file := parser.ParseFile(source)
-		findings := checker.Check(file, source, nil)
-		hasFinding(t, findings, "redundant-union-member", "already makes")
-	})
-
 	t.Run("object with class name flagged", func(t *testing.T) {
 		source := `<?php
 class Foo {

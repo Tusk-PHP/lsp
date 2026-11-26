@@ -52,19 +52,19 @@ func TestRefreshFollowsProjectFilesOnDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFiles(t, root, map[string]string{
-		"app/New.php":            "<?php\nnamespace App;\nclass New {}\n",
+		"app/Fresh.php":          "<?php\nnamespace App;\nclass Fresh {}\n",
 		"app/Changed.php":        "<?php\nnamespace App;\nclass Renamed {}\n",
 		"vendor/acme/Vendor.php": "<?php\nclass VendorClass {}\n",
 		"app/notes.txt":          "not PHP",
 	})
-	out := refreshPaths(t, ws, root, "app/Old.php", "app/New.php", "app/Changed.php", "app/Changed.php", "vendor/acme/Vendor.php", "app/notes.txt", "app/Gone.php")
+	out := refreshPaths(t, ws, root, "app/Old.php", "app/Fresh.php", "app/Changed.php", "app/Changed.php", "vendor/acme/Vendor.php", "app/notes.txt", "app/Gone.php")
 	if len(out.Files) != 3 || out.Composer || out.ProfileChanged {
 		t.Errorf("three project files changed: %+v", out)
 	}
 	if ws.Index.Lookup(`App\Old`) != nil || ws.Index.Lookup(`App\Changed`) != nil {
 		t.Error("the deleted file and the old content leave the index")
 	}
-	if ws.Index.Lookup(`App\New`) == nil || ws.Index.Lookup(`App\Renamed`) == nil {
+	if ws.Index.Lookup(`App\Fresh`) == nil || ws.Index.Lookup(`App\Renamed`) == nil {
 		t.Error("the new file and the new content are indexed")
 	}
 	if ws.Index.Lookup("VendorClass") != nil {

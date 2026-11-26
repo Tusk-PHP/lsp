@@ -224,8 +224,8 @@ class Foo {}
 	if len(file.Errors) == 0 {
 		t.Fatal("expected ParseFile to expose tokenizer errors")
 	}
-	if file.Errors[0].Message != "unterminated string" {
-		t.Fatalf("expected unterminated string error, got %#v", file.Errors[0])
+	if want := (ParseError{Message: "unterminated string", Line: 1, Column: 5}); file.Errors[0] != want {
+		t.Fatalf("expected %#v, got %#v", want, file.Errors[0])
 	}
 }
 
@@ -245,8 +245,8 @@ class Foo {
 	if len(file.Errors) == 0 {
 		t.Fatal("expected ParseFile to expose structural errors")
 	}
-	if file.Errors[0].Message != "expected ')'" {
-		t.Fatalf("expected missing paren error, got %#v", file.Errors[0])
+	if want := (ParseError{Message: "syntax error, unexpected 'return', expected an identifier", Line: 3, Column: 8}); file.Errors[0] != want {
+		t.Fatalf("expected %#v, got %#v", want, file.Errors[0])
 	}
 }
 

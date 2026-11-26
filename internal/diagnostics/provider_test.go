@@ -287,16 +287,16 @@ class Foo {
 	}
 	found := false
 	for _, diag := range syntax {
-		if diag.Message == "expected ')'" {
+		if diag.Message == "syntax error, unexpected 'return', expected an identifier" {
 			found = true
 			if diag.Severity != protocol.DiagnosticSeverityError {
 				t.Fatalf("expected error severity, got %d", diag.Severity)
 			}
-			if diag.Range.Start.Line != 2 || diag.Range.Start.Character != 30 {
-				t.Fatalf("expected diagnostic start 2:30, got %d:%d", diag.Range.Start.Line, diag.Range.Start.Character)
+			if diag.Range.Start.Line != 3 || diag.Range.Start.Character != 8 {
+				t.Fatalf("expected diagnostic start 3:8, got %d:%d", diag.Range.Start.Line, diag.Range.Start.Character)
 			}
-			if diag.Range.End.Line != 2 || diag.Range.End.Character != 31 {
-				t.Fatalf("expected diagnostic end 2:31, got %d:%d", diag.Range.End.Line, diag.Range.End.Character)
+			if diag.Range.End.Line != 3 || diag.Range.End.Character != 9 {
+				t.Fatalf("expected diagnostic end 3:9, got %d:%d", diag.Range.End.Line, diag.Range.End.Character)
 			}
 		}
 	}
