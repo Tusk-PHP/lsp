@@ -1,7 +1,6 @@
 package scope
 
 import (
-	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -200,9 +199,10 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 	for i := 0; i < len(result.Tokens); i++ {
 		tok := result.Tokens[i]
 
-		for len(pending) > 0 && pending[0].bodyOpenIndex == i && pending[0].expressionBody {
-			active = append(active, scopeFrame{scope: pending[0].scope, braceDepth: braceDepth, exprEnd: pending[0].bodyCloseIndex})
-			pending = pending[1:]
+		for len(pending) > 0 && pending[len(pending)-1].bodyOpenIndex == i && pending[len(pending)-1].expressionBody {
+			body := pending[len(pending)-1]
+			active = append(active, scopeFrame{scope: body.scope, braceDepth: braceDepth, exprEnd: body.bodyCloseIndex})
+			pending = pending[:len(pending)-1]
 		}
 
 		if isClassKeyword(result.Tokens, i) {
@@ -223,7 +223,7 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 				named = ScopeMethod
 			}
 			if ps, decls := parseFunctionLike(result.Tokens, i, active[len(active)-1].scope, doc, named); ps != nil {
-				pending = queueBody(pending, *ps)
+				pending = append(pending, *ps)
 				for idx, binding := range decls {
 					declByToken[idx] = binding
 				}
@@ -284,7 +284,7 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 
 		if inPropertyHookBlock(classBodies, braceDepth, len(active)) && isPropertyHook(result.Tokens, i) {
 			if ps, decls := parsePropertyHook(result.Tokens, i, active[len(active)-1].scope, doc); ps != nil {
-				pending = queueBody(pending, *ps)
+				pending = append(pending, *ps)
 				for idx, binding := range decls {
 					declByToken[idx] = binding
 				}
@@ -303,9 +303,9 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 			}
 			blocks = append(blocks, foreachBodies[i])
 			delete(foreachBodies, i)
-			for len(pending) > 0 && pending[0].bodyOpenIndex == i && !pending[0].expressionBody {
-				active = append(active, scopeFrame{scope: pending[0].scope, braceDepth: braceDepth, exprEnd: -1})
-				pending = pending[1:]
+			for len(pending) > 0 && pending[len(pending)-1].bodyOpenIndex == i && !pending[len(pending)-1].expressionBody {
+				active = append(active, scopeFrame{scope: pending[len(pending)-1].scope, braceDepth: braceDepth, exprEnd: -1})
+				pending = pending[:len(pending)-1]
 			}
 			if i == pendingClassBody {
 				classBodies = append(classBodies, classBody{braceDepth: braceDepth, activeLen: len(active)})
@@ -536,9 +536,7 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 	if closeParen < 0 {
 		return nil, decls
 	}
-	eachParameter(tokens, nameIdx, closeParen, func(i int) {
-		decls[i] = doc.addBinding(scope, tokens[i].Value, BindingParameter, tokenRange(tokens[i]), nil)
-	})
+	bindParameters(tokens, nameIdx, closeParen, scope, doc, decls)
 
 	j := parser.NextSignificant(tokens, closeParen+1)
 	if kind == ScopeClosure && j >= 0 && tokens[j].Kind == parser.TokenUse {
@@ -585,15 +583,7 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 	return nil, decls
 }
 
-func queueBody(pending []pendingScope, ps pendingScope) []pendingScope {
-	at := len(pending)
-	for at > 0 && pending[at-1].bodyOpenIndex > ps.bodyOpenIndex {
-		at--
-	}
-	return slices.Insert(pending, at, ps)
-}
-
-func eachParameter(tokens []parser.Token, open, close int, visit func(int)) {
+func bindParameters(tokens []parser.Token, open, close int, scope *Scope, doc *Document, decls map[int]*Binding) {
 	depth := 0
 	named := false
 	for i := open + 1; i < close; i++ {
@@ -609,7 +599,7 @@ func eachParameter(tokens []parser.Token, open, close int, visit func(int)) {
 		case parser.TokenVariable:
 			if depth == 0 && !named {
 				named = true
-				visit(i)
+				decls[i] = doc.addBinding(scope, tokens[i].Value, BindingParameter, tokenRange(tokens[i]), nil)
 			}
 		}
 	}
@@ -1067,9 +1057,7 @@ func parsePropertyHook(tokens []parser.Token, start int, parent *Scope, doc *Doc
 		if closeParen < 0 {
 			return nil, nil
 		}
-		eachParameter(tokens, j, closeParen, func(i int) {
-			decls[i] = doc.addBinding(scope, tokens[i].Value, BindingParameter, tokenRange(tokens[i]), nil)
-		})
+		bindParameters(tokens, j, closeParen, scope, doc, decls)
 		j = parser.NextSignificant(tokens, closeParen+1)
 	} else if strings.EqualFold(tokens[start].Value, "set") {
 		doc.addBinding(scope, "$value", BindingParameter, tokenRange(tokens[start]), nil)
