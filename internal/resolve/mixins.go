@@ -43,7 +43,7 @@ func (r *Resolver) MixinTypes(rt ResolvedType) []ResolvedType {
 // first, then on what its @mixin tags bring in. owner is the type the member
 // was found on, which is rt or one of its mixins.
 func (r *Resolver) FindMemberOn(rt ResolvedType, name string, access MemberAccess) (member *symbols.Symbol, owner ResolvedType) {
-	if m := r.FindAccessedMember(rt.MemberOwner(), name, access); m != nil {
+	if m := r.FindAccessedMember(rt.MemberOwner(), name, access); m != nil || !access.reachesMagic() {
 		return m, rt
 	}
 	return r.findMixinMember(rt, name, access, 0)

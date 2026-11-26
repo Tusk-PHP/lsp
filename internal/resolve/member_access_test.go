@@ -84,7 +84,7 @@ func TestCallsReachForwardedScopesAndNestedMixins(t *testing.T) {
 	idx.SetScopeConventions(map[string]symbols.ScopeConvention{"Builder": {Prefix: "scope", Attribute: "Scope"}})
 	idx.IndexFile("file:///a.php", `<?php
 /** @template T */
-class Builder { public function where() { return $this; } }
+class Builder { const LIMIT = 1; public function where() { return $this; } }
 class Model {}
 class Category extends Model {
     public function scopeActive($query) {}
@@ -106,6 +106,9 @@ class Inner { public function deep() {} }
 	}
 	if _, ok := r.ForwardedReceiver(category, "active", PropertyAccess); ok {
 		t.Error("a scope is reached only by a call")
+	}
+	if fwd, ok := r.ForwardedReceiver(category, "LIMIT", ConstantAccess); ok {
+		t.Errorf("Category::LIMIT isn't forwarded to the builder's constant, got %+v", fwd)
 	}
 	for name, want := range map[string]string{"where": "Builder::where", "active": "Category::scopeActive"} {
 		if m, owner := r.LookupMember(category, name, CallAccess); m == nil || m.FQN != want || owner.FQN != "Builder" {
@@ -163,5 +166,31 @@ class Belt implements Iterator {
 		if !ok || k.FQN != wantKey || v.FQN != "Box" {
 			t.Errorf("iterating a %s gives %s => %s (%v), want %s => Box", class, k.FQN, v.FQN, ok, wantKey)
 		}
+	}
+}
+
+func TestAConstantIsNotReachedThroughAMixin(t *testing.T) {
+	const source = `<?php
+namespace App;
+class Box {}
+/** @mixin Extra */
+class Room {}
+class Extra {
+    const int ONLY = 1;
+    public function box(): Box {}
+}
+`
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///room.php", source)
+	r, file := NewResolver(idx), parser.ParseFile(source)
+	room := ResolvedType{FQN: `App\Room`}
+	if m, owner := r.FindMemberOn(room, "ONLY", ConstantAccess); m != nil {
+		t.Errorf("Room::ONLY names a constant of Room, and a mixin can't provide one: got %+v on %s", m, owner.FQN)
+	}
+	if got := r.ExpressionType(`Room::ONLY`, ExprContext{File: file}); !got.IsEmpty() {
+		t.Errorf("Room::ONLY isn't typed from the mixin's constant, got %q", got.FullString())
+	}
+	if m, owner := r.FindMemberOn(room, "box", CallAccess); m == nil || owner.FQN != `App\Extra` {
+		t.Errorf("a call still reaches the mixin's method: got %+v on %s", m, owner.FQN)
 	}
 }
