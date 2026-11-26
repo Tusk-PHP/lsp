@@ -23,6 +23,10 @@ func ParseTree(source string, version token.Version) *ast.File {
 }
 
 func ParseTreeIn(source string, grammars phpparser.GrammarRange) *ast.File {
+	return ParseIn(source, grammars).Tree
+}
+
+func ParseIn(source string, grammars phpparser.GrammarRange) phpparser.Parsed {
 	if !HasOpenTag(source) {
 		return grammars.ParseCode(source)
 	}

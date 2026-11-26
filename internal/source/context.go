@@ -5,6 +5,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
 	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
@@ -86,35 +87,39 @@ type MemberContext struct {
 }
 
 type Document struct {
-	uri        string
-	source     string
-	lines      []string
-	offsets    ast.Lines
-	tree       *ast.File
-	file       *parser.FileNode
-	namespaces *Namespaces
-	tokens     []parser.Token
+	uri         string
+	source      string
+	lines       []string
+	offsets     ast.Lines
+	tree        *ast.File
+	significant []lexer.Token
+	file        *parser.FileNode
+	namespaces  *Namespaces
 }
 
 func NewDocument(uri, source string, grammars phpparser.GrammarRange) *Document {
-	tree := parser.ParseTreeIn(source, grammars)
+	parsed := parser.ParseIn(source, grammars)
 	offsets := ast.NewLines(source)
 	return &Document{
-		uri:        uri,
-		source:     source,
-		lines:      strings.Split(source, "\n"),
-		offsets:    offsets,
-		tree:       tree,
-		file:       parser.FileNodeOf(source, tree),
-		namespaces: NamespacesOf(source, offsets, tree),
+		uri:         uri,
+		source:      source,
+		lines:       strings.Split(source, "\n"),
+		offsets:     offsets,
+		tree:        parsed.Tree,
+		significant: parsed.Significant,
+		file:        parser.FileNodeOf(source, parsed.Tree),
+		namespaces:  NamespacesOf(source, offsets, parsed.Tree),
 	}
 }
 
-func (d *Document) Tokens() []parser.Token {
-	if d.tokens == nil {
-		d.tokens = parser.Tokenize(d.source)
-	}
-	return d.tokens
+func (d *Document) Significant() []lexer.Token {
+	return d.significant
+}
+
+func (d *Document) Range(start, end uint32) protocol.Range {
+	startLine, startCol := d.offsets.Position(start)
+	endLine, endCol := d.offsets.Position(end)
+	return protocol.Range{Start: protocol.Position{Line: startLine, Character: startCol}, End: protocol.Position{Line: endLine, Character: endCol}}
 }
 
 func (d *Document) File() *parser.FileNode {

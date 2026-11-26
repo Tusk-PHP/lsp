@@ -35,7 +35,7 @@ func BenchmarkGrammarRangeParse(b *testing.B) {
 			clean = append(clean, input{src: src})
 		}
 		if half := src[:len(src)/2]; len(Parse(half, token.Latest).Errors) > 0 {
-			typing = append(typing, input{src: half, chosen: AnyGrammar().Parse(src).Version})
+			typing = append(typing, input{src: half, chosen: AnyGrammar().Parse(src).Tree.Version})
 		}
 	}
 	cases := []struct {

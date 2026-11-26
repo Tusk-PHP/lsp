@@ -112,7 +112,7 @@ func TestAProjectOfUnknownVersionReadsEachFileAsThePHPItParsesOn(t *testing.T) {
 }
 
 func chosenGrammar(ws *Bootstrapped, uri string) token.Version {
-	return ws.Index.GrammarOf(uri).Parse(ws.Index.GetFileSource(uri)).Version
+	return ws.Index.GrammarOf(uri).Parse(ws.Index.GetFileSource(uri)).Tree.Version
 }
 
 func TestAnEditedFileKeepsItsGrammarUntilTheNewestReadsItCleanly(t *testing.T) {
