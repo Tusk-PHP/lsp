@@ -97,15 +97,23 @@ func (r *InvalidBuilderArgRule) checkCall(syntax *fileSyntax, call memberReferen
 	}
 	args := call.args.Args
 	first := args[0].Value
-	if relation, ok := syntax.stringLiteral(first); ok && onNameLine(first) {
-		if len(args) > 1 && method.RelatedModelColumn {
-			if column, ok := syntax.stringLiteral(args[1].Value); ok && onNameLine(args[1].Value) {
-				startCol, endCol := syntax.stringContent(args[1].Value)
-				add(r.validateAggregateSecondArg(relation, column, lineNum, startCol, endCol, owner, file))
+	name, named := syntax.stringLiteral(first)
+	named = named && onNameLine(first)
+	if i, ok := method.SecondNameAt(len(args)); ok && i < len(args) {
+		second := args[i].Value
+		if column, ok := syntax.stringLiteral(second); ok && onNameLine(second) {
+			startCol, endCol := syntax.stringContent(second)
+			switch {
+			case method.Second != frameworklaravel.RelatedModelColumn:
+				add(r.validateArg(method, column, at, startCol, endCol, file, joins))
+			case named:
+				add(r.validateAggregateSecondArg(name, column, lineNum, startCol, endCol, owner, file))
 			}
 		}
+	}
+	if named {
 		startCol, endCol := syntax.stringContent(first)
-		add(r.validateArg(method, relation, at, startCol, endCol, file, joins))
+		add(r.validateArg(method, name, at, startCol, endCol, file, joins))
 	}
 	if array, ok := first.(*ast.Array); ok && onNameLine(array) {
 		for _, item := range array.Items {
