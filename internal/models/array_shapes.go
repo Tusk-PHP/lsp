@@ -203,25 +203,6 @@ func (r *FrameworkArrayResolver) resolveFormRequestKeys(classFQN string) []types
 			return extractRulesKeys(string(content), r.index.GrammarOf(m.URI))
 		}
 	}
-
-	// Walk inheritance chain
-	chain := r.index.GetInheritanceChain(classFQN)
-	for _, parent := range chain {
-		members := r.index.GetClassMembers(parent)
-		for _, m := range members {
-			if m.Name == "rules" && m.Kind == symbols.KindMethod {
-				if m.URI == "" || m.URI == "builtin" {
-					continue
-				}
-				path := symbols.URIToPath(m.URI)
-				content, err := os.ReadFile(path)
-				if err != nil {
-					continue
-				}
-				return extractRulesKeys(string(content), r.index.GrammarOf(m.URI))
-			}
-		}
-	}
 	return nil
 }
 

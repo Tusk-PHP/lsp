@@ -75,3 +75,14 @@ class After {}`, token.Latest)
 		t.Fatalf("classes = %v", names)
 	}
 }
+
+func TestTraitAdaptationWithoutAMethodNameIsSkipped(t *testing.T) {
+	file := ParseFile("<?php\nclass Talker {\n    use A {\n        A::$x as broken;\n        hello as greet;\n    }\n}\n", token.Latest)
+	if len(file.Classes) != 1 {
+		t.Fatalf("classes = %d, want 1", len(file.Classes))
+	}
+	want := TraitAdaptations{Aliases: []TraitAlias{{Method: "hello", Alias: "greet"}}}
+	if got := file.Classes[0].TraitRules; !reflect.DeepEqual(got, want) {
+		t.Errorf("TraitRules = %+v, want only the adaptation that names a method: %+v", got, want)
+	}
+}

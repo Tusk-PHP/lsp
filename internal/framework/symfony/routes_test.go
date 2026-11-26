@@ -225,3 +225,37 @@ func mustWriteFile(t *testing.T, path, content string) {
 		t.Fatalf("write %s: %v", path, err)
 	}
 }
+
+func TestDiscoverRoutesFromAControllerFileImportedInYAML(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "composer.json"), "{}\n")
+	mustWriteFile(t, filepath.Join(root, "config", "routes.yaml"), `admin:
+  resource: ../src/Admin/DashboardController.php
+  type: attribute
+  prefix: /admin
+  name_prefix: admin_
+`)
+	mustWriteFile(t, filepath.Join(root, "src", "Admin", "DashboardController.php"), `<?php
+namespace App\Admin;
+
+use Symfony\Component\Routing\Attribute\Route;
+
+class DashboardController
+{
+    #[Route('/dashboard', name: 'dashboard')]
+    public function index(): void {}
+}
+`)
+	kernel := filepath.Join(root, "src", "Kernel.php")
+	mustWriteFile(t, kernel, "<?php\nnamespace App;\nclass Kernel {}\n")
+	idx := symbols.NewIndex()
+	idx.IndexFileWithSource("file://"+filepath.ToSlash(kernel), "<?php\nnamespace App;\nclass Kernel {}\n", symbols.SourceProject)
+
+	got := map[string]string{}
+	for _, route := range DiscoverRoutes(idx) {
+		got[route.Name] = route.Path
+	}
+	if got["admin_dashboard"] != "/admin/dashboard" {
+		t.Errorf("the imported controller file's route is found under the import's prefixes: %v", got)
+	}
+}
