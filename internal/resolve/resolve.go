@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/phparray"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -51,6 +50,7 @@ type Engine struct {
 	scopeSource string
 	cachedLines []string
 	scopeDoc    *scope.Document
+	scopeTree   *syntaxTree
 	// closureMemos remembers what each closure of scopeDoc is passed to.
 	closureMemos   map[*scope.Scope]closureMemo
 	closureMemoDoc *scope.Document
@@ -832,195 +832,18 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 		return rt
 	}
 
-	// Look for assignments with chain expressions
+	tree := r.syntaxTree(lines, file)
 	for i := pos.Line; i >= vs.firstLine && i >= pos.Line-200; i-- {
 		if i >= len(lines) {
 			continue
 		}
-		rhs, firstLine, isAssignment := vs.assignmentValue(lines, i, varPrefix)
-		if !isAssignment {
+		value, ok := vs.assignedValue(tree, i, varPrefix)
+		if !ok {
 			continue
 		}
-		rhs, declaredType := assignedExpression(rhs)
-		if declaredType != "" {
-			return r.resolveDocType(declaredType, file)
-		}
-		// /** @var Collection<int, User> $users */ above the assignment.
-		if declared := varDocAbove(lines, i, varName); declared != "" {
-			owner := FindEnclosingClass(file, pos)
-			if rt := r.resolveDocTypeIn(r.expandTypeAliases(declared, owner, file), owner, file); !rt.IsEmpty() {
-				return rt
-			}
-		}
-		exprCtx := ExprContext{Lines: lines, Pos: pos, File: file}
-		// $received = yield $value: what the generator is sent, its TSend.
-		if _, ok := cutKeyword(strings.TrimSpace(rhs)+" ", "yield"); ok {
-			if gen := r.enclosingReturnType(lines, pos, file); gen.FQN == "Generator" && len(gen.Params) >= 3 {
-				return gen.Params[2]
-			}
-		}
-		// $path = $dir . '/' . $name is a string.
-		if isConcatenation(strings.TrimSuffix(strings.TrimSpace(rhs), ";")) {
-			return ResolvedType{FQN: "string"}
-		}
-		// $class = Foo::class is a class-string<Foo>.
-		if trimmed := strings.TrimSuffix(strings.TrimSpace(rhs), ";"); classConstantRe.MatchString(trimmed) {
-			if rt := r.ExpressionType(trimmed, exprCtx); !rt.IsEmpty() {
-				return rt
-			}
-		}
-
-		// $var = [...$other] — keeps the elements of what it spreads.
-		if spread := spreadOnlyVariable(rhs); spread != "" && spread != varName {
-			if rt := r.ResolveVariableTypeTyped(spread, lines, pos, file); !rt.IsEmpty() {
-				return rt
-			}
-		}
-
-		// $var = new ClassName(...) — with constructor generic inference
-		if strings.HasPrefix(rhs, "new ") && !newHasChain(rhs) {
-			className := strings.TrimSpace(rhs[4:])
-			argStr := ""
-			if idx := strings.IndexByte(className, '('); idx >= 0 {
-				// Extract the constructor argument(s) between ( and )
-				rest := className[idx+1:]
-				className = className[:idx]
-				if closeIdx := strings.LastIndexByte(rest, ')'); closeIdx >= 0 {
-					argStr = strings.TrimSpace(rest[:closeIdx])
-				}
-			}
-			className = strings.TrimSpace(className)
-			if className == "" {
-				break
-			}
-			if strings.HasPrefix(className, "$") {
-				if rt := r.NewExpressionType(className, argStr, exprCtx); !rt.IsEmpty() {
-					return rt
-				}
-				break
-			}
-			classFQN, isKeyword := r.ClassKeywordFQN(className, pos, file)
-			if !isKeyword {
-				classFQN = r.ResolveClassName(className, file)
-			}
-
-			// Bind the class's templates from the constructor's arguments.
-			if argStr != "" {
-				if rt := r.NewExpressionType(className, argStr, exprCtx); rt.FQN == classFQN && len(rt.Params) > 0 {
-					return rt
-				}
-				argRT := r.inferArgType(argStr, lines, pos, file, i)
-				if !argRT.IsEmpty() && (argRT.IsGeneric() || argRT.Shape != "") {
-					if rt := r.inferConstructorGenerics(classFQN, argRT); !rt.IsEmpty() {
-						return rt
-					}
-				}
-				// Try class-string<T> binding from @template + @param annotations.
-				if rt := r.inferClassStringBinding(classFQN, argStr, lines, pos, file); !rt.IsEmpty() {
-					return rt
-				}
-			}
-			return ResolvedType{FQN: classFQN}
-		}
-
-		// $var = [...] — array literal with shape inference
-		if strings.HasPrefix(rhs, "[") {
-			// Collect the full multi-line array literal
-			arrayLiteral := phparray.CollectArrayLiteral(lines, i)
-			if arrayLiteral != "" {
-				rt := InferArrayLiteralType(arrayLiteral)
-				if !rt.IsEmpty() {
-					return rt
-				}
-			}
-		}
-
-		// $var = $other[index] — array element access
-		if bracketIdx := strings.Index(rhs, "["); bracketIdx > 0 && strings.HasPrefix(rhs, "$") {
-			arrayVar := strings.TrimSpace(rhs[:bracketIdx])
-			if steps, origin, ok := parseChain(strings.TrimSuffix(rhs, ";")); ok && origin.kind == '$' && len(steps) > 0 {
-				// $data['user'], $map[$key], $rows[0]['id'] and the like.
-				allOffsets := true
-				for _, st := range steps {
-					if st.op != "[" {
-						allOffsets = false
-					}
-				}
-				if allOffsets {
-					cur := r.ResolveVariableTypeTyped(origin.text, lines, pos, file)
-					for _, st := range steps {
-						cur = r.OffsetType(cur, st.offset)
-					}
-					if !cur.IsEmpty() {
-						return cur
-					}
-				}
-			}
-			// Only for a plain $other[index]: anything after the brackets, as in
-			// $rows[0]->last(), is a chain the typed resolver follows below.
-			if closeIdx := strings.LastIndexByte(rhs, ']'); closeIdx > bracketIdx && strings.TrimSpace(strings.TrimSuffix(rhs[closeIdx+1:], ";")) == "" {
-				arrayType := r.ResolveVariableTypeTyped(arrayVar, lines, pos, file)
-				if arrayType.FQN == "array" && len(arrayType.Params) >= 2 {
-					// array<TKey, TValue>[index] → TValue
-					return arrayType.Params[1]
-				}
-			}
-		}
-
-		// $var = $other — preserve the referenced variable's resolved type.
-		if otherVar := extractLeadingVariable(rhs); otherVar != "" && otherVar == strings.TrimSpace(rhs) && otherVar != varName {
-			if rt := r.ResolveVariableTypeTyped(otherVar, lines, pos, file); !rt.IsEmpty() {
-				return rt
-			}
-		}
-
-		// $var = fn (int $i): Foo => …, or function () use (…): Foo { …: a
-		// Closure with that signature, so calling $var gives a Foo.
-		if closure := strings.TrimSuffix(strings.TrimSpace(rhs), ";"); isClosureExpr(closure) {
-			return r.ExpressionType(closure, exprCtx)
-		}
-
-		// $var = $fn(…): what calling it gives; $fn(...) is a Closure of it.
-		if rt, ok := r.invokedVariableType(rhs, varName, exprCtx); ok {
+		if rt, ok := r.assignedType(varName, tree, tree.reduce(value), lines, pos, file, i); ok {
 			return rt
 		}
-
-		// $var = funcName(...): the function's return type, with its templates
-		// bound from the arguments.
-		// A call followed by ->member, ::member or [offset] is a chain: what the
-		// function returns is only its start, so the chain resolvers below
-		// decide it.
-		if extractFunctionCallName(rhs) != "" && r.Index != nil {
-			if steps, origin, ok := parseChain(strings.TrimSuffix(rhs, ";")); ok && len(steps) == 0 && origin.kind == 'f' {
-				if rt := r.FunctionCallType(origin.text, origin.args, exprCtx); !rt.IsEmpty() {
-					return rt
-				}
-			}
-		}
-
-		// Use typed chain resolver if available. If a chain over several lines can't
-		// be followed to its end, what the first line gives is the best guess.
-		if strings.Contains(rhs, "->") || strings.Contains(rhs, "::") {
-			if rt := r.ChainType(rhs, r.JoinLines(lines), pos, file); !rt.IsEmpty() {
-				return rt
-			}
-			// Only when the text itself is cut short, as with unbalanced
-			// parentheses: a complete chain that can't be followed, say through
-			// a magic method, isn't what its first line is.
-			if first := strings.TrimSuffix(firstLine, ";"); first != rhs && strings.Count(rhs, "(") != strings.Count(rhs, ")") {
-				if rt := r.ChainType(first, r.JoinLines(lines), pos, file); !rt.IsEmpty() {
-					return rt
-				}
-			}
-		}
-
-		// Fall back to standard chain resolver
-		if r.ChainResolver != nil && (strings.Contains(rhs, "->") || strings.Contains(rhs, "::")) {
-			if t := r.ChainResolver(r, rhs, r.JoinLines(lines), pos, file); t != "" {
-				return ResolvedType{FQN: t}
-			}
-		}
-
 		break
 	}
 
@@ -1112,58 +935,20 @@ func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos 
 	varPrefix := "$" + bare
 
 	// 3. Look for $var = new ClassName(...) and literal assignments
+	tree := r.syntaxTree(lines, file)
 	for i := pos.Line; i >= vs.firstLine && i >= pos.Line-200; i-- {
 		if i >= len(lines) {
 			continue
 		}
-		rhs, _, isAssignment := vs.assignmentValue(lines, i, varPrefix)
-		if !isAssignment {
+		value, ok := vs.assignedValue(tree, i, varPrefix)
+		if !ok {
 			continue
 		}
-		rhs, declaredType := assignedExpression(rhs)
-		if declaredType != "" {
-			return r.resolveDocType(declaredType, file).String()
+		typ, stop := r.assignedPlainType(varName, tree, tree.reduce(value), lines, pos, file)
+		if typ != "" {
+			return typ
 		}
-		// $var = new ClassName(...)
-		if strings.HasPrefix(rhs, "new ") && !newHasChain(rhs) {
-			className := strings.TrimSpace(rhs[4:])
-			if idx := strings.IndexByte(className, '('); idx >= 0 {
-				className = className[:idx]
-			}
-			className = strings.TrimSuffix(className, ";")
-			className = strings.TrimSpace(className)
-			if fqn, isKeyword := r.ClassKeywordFQN(className, pos, file); isKeyword {
-				return fqn
-			}
-			if className != "" {
-				return r.ResolveClassName(className, file)
-			}
-		}
-		// $var = expr; — infer literal type
-		rhs = strings.TrimSuffix(rhs, ";")
-		rhs = strings.TrimSpace(rhs)
-		if t := InferLiteralType(rhs); t != "" {
-			return t
-		}
-		if otherVar := extractLeadingVariable(rhs); otherVar != "" && otherVar == strings.TrimSpace(rhs) && otherVar != varName {
-			if t := r.ResolveVariableType(otherVar, lines, pos, file); t != "" {
-				return t
-			}
-		}
-		// $var = funcName(...) — look up function return type in symbol index
-		if funcName := extractFunctionCallName(rhs); funcName != "" && r.Index != nil {
-			if IsFirstClassCallable(rhs) || isPartialApplicationCall(rhs) {
-				return "Closure" // strlen(...) and f(?, 1) make a Closure, they don't call
-			}
-			if fn := r.CalledFunction(funcName, file); fn != nil && fn.ReturnType != "" {
-				return fn.ReturnType
-			}
-		}
-		// $var = ClassName::method() or $var = $foo->bar()->baz()
-		if r.ChainResolver != nil && (strings.Contains(rhs, "->") || strings.Contains(rhs, "::")) {
-			if t := r.ChainResolver(r, rhs, r.JoinLines(lines), pos, file); t != "" {
-				return t
-			}
+		if stop {
 			break
 		}
 	}
@@ -1487,4 +1272,20 @@ func ParamDocSummary(file *parser.FileNode, pos protocol.Position, varName strin
 		}
 	}
 	return ""
+}
+
+// paramTypeName returns a parameter's declared type, or else the class its
+// PHP 8.1 `= new Foo()` default creates.
+func paramTypeName(param parser.ParamNode) string {
+	if param.Type.Name != "" {
+		return param.Type.Name
+	}
+	rest, ok := cutKeyword(param.DefaultValue, "new")
+	if !ok {
+		return ""
+	}
+	if open := strings.IndexByte(rest, '('); open >= 0 {
+		rest = rest[:open]
+	}
+	return strings.TrimSpace(rest)
 }

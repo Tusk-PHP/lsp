@@ -25,7 +25,10 @@ const maxExprDepth = 12
 // CallSiteFor returns the call site for the text between a call's
 // parentheses, typing each argument where it's read.
 func (r *Resolver) CallSiteFor(argStr string, ctx ExprContext) *CallSite {
-	args := ParseCallArgs(argStr)
+	return r.callSite(ParseCallArgs(argStr), ctx)
+}
+
+func (r *Resolver) callSite(args []CallArg, ctx ExprContext) *CallSite {
 	if len(args) == 0 {
 		return &CallSite{}
 	}
@@ -131,11 +134,13 @@ type chainOrigin struct {
 // chainStep is one access in a chain: ->name, ?->name, ::name, with call
 // arguments when it's a call, or an array offset [key].
 type chainStep struct {
-	op     string // "->", "?->", "::" or "[" for an offset
-	name   string
-	call   bool
-	args   string
-	offset string
+	op         string // "->", "?->", "::" or "[" for an offset
+	name       string
+	call       bool
+	args       string
+	offset     string
+	callArgs   []CallArg
+	parsedArgs bool
 }
 
 // parseChain splits `$a->b(1)::c['k']` into its origin and its accesses. ok
@@ -392,7 +397,10 @@ func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext
 		return PartialClosure(r.MemberCallableType(member, ctx.File, r.ReceiverFor(cur, member), cur.Params), member, st.args)
 	}
 	var call *CallSite
-	if st.call {
+	switch {
+	case st.parsedArgs:
+		call = r.callSite(st.callArgs, ctx)
+	case st.call:
 		call = r.CallSiteFor(st.args, ctx)
 	}
 	return r.MemberTypeForCall(member, ctx.File, r.ReceiverFor(cur, member), cur.Params, call)
@@ -456,25 +464,36 @@ func itoa(i int) string {
 // FunctionCallType types a call to the function name with the arguments
 // args (the text between its parentheses), binding its templates.
 func (r *Resolver) FunctionCallType(name, args string, ctx ExprContext) ResolvedType {
+	if IsCallableArgs(args) {
+		return r.functionCallType(name, args, true, nil, ctx)
+	}
+	return r.functionCallType(name, args, false, ParseCallArgs(args), ctx)
+}
+
+func (r *Resolver) functionCallType(name, argsText string, callable bool, args []CallArg, ctx ExprContext) ResolvedType {
 	if r.Index == nil {
 		return ResolvedType{}
 	}
 	fn := r.typedFunction(name, ctx.File)
-	if IsCallableArgs(args) {
+	if callable {
 		// strlen(...) is a Closure of strlen, known or not, and so is a
 		// partial application such as str_replace('a', 'b', ?).
-		return PartialClosure(r.FunctionCallableType(fn, ctx.File), fn, args)
+		return PartialClosure(r.FunctionCallableType(fn, ctx.File), fn, argsText)
 	}
 	if fn == nil {
 		return ResolvedType{}
 	}
-	return r.FunctionTypeForCall(fn, ctx.File, r.CallSiteFor(args, ctx))
+	return r.FunctionTypeForCall(fn, ctx.File, r.callSite(args, ctx))
 }
 
 // NewExpressionType types `new Foo(args)`. The class's templates are bound
 // from the constructor's arguments: `new Collection([$user])` is a
 // Collection<int, User>.
 func (r *Resolver) NewExpressionType(className, args string, ctx ExprContext) ResolvedType {
+	return r.newExpressionType(className, ParseCallArgs(args), ctx)
+}
+
+func (r *Resolver) newExpressionType(className string, args []CallArg, ctx ExprContext) ResolvedType {
 	className = strings.TrimSpace(className)
 	if strings.HasPrefix(className, "$") {
 		// new $class: the class a class-string<T> names.
@@ -502,7 +521,7 @@ func (r *Resolver) NewExpressionType(className, args string, ctx ExprContext) Re
 		return ResolvedType{}
 	}
 	tmpls := r.templatesOf(fqn)
-	if len(tmpls) == 0 || strings.TrimSpace(args) == "" || r.Index == nil {
+	if len(tmpls) == 0 || len(args) == 0 || r.Index == nil {
 		return ResolvedType{FQN: fqn}
 	}
 	ctor := r.FindMember(fqn, "__construct")
@@ -511,19 +530,16 @@ func (r *Resolver) NewExpressionType(className, args string, ctx ExprContext) Re
 	}
 	params := r.paramPatterns(ctor, parser.ParseDocBlock(ctor.DocComment))
 	names := templateNames(tmpls, ctor.Templates)
-	bound := r.bindCallTemplates(params, r.CallSiteFor(args, ctx), names, nil, ctor.ParentFQN, ctx.File)
+	bound := r.bindCallTemplates(params, r.callSite(args, ctx), names, nil, ctor.ParentFQN, ctx.File)
 	r.dropOutOfBound(bound, tmpls, fqn, ctx.File)
 	r.dropOutOfBound(bound, ctor.Templates, ctor.ParentFQN, ctx.File)
 	if len(bound) == 0 {
 		// A constructor without types for its templates, given an array: its
 		// keys and values are the class's arguments, in order.
 		if len(params) > 0 {
-			argList := ParseCallArgs(args)
-			if len(argList) > 0 {
-				if at := r.ExpressionType(argList[0].Expr, ctx); at.FQN == "array" {
-					if rt := r.inferConstructorGenerics(fqn, at); !rt.IsEmpty() {
-						return rt
-					}
+			if at := r.ExpressionType(args[0].Expr, ctx); at.FQN == "array" {
+				if rt := r.inferConstructorGenerics(fqn, at); !rt.IsEmpty() {
+					return rt
 				}
 			}
 		}
@@ -655,4 +671,16 @@ func unwrapParens(expr string) (string, bool) {
 		return inner, true
 	}
 	return "", false
+}
+
+// cutKeyword removes a leading keyword that's followed by something other than
+// more of the same word.
+func cutKeyword(expr, keyword string) (string, bool) {
+	if len(expr) <= len(keyword) || !strings.EqualFold(expr[:len(keyword)], keyword) {
+		return "", false
+	}
+	if next := expr[len(keyword)]; next != ' ' && next != '\t' && next != '(' {
+		return "", false
+	}
+	return strings.TrimSpace(expr[len(keyword):]), true
 }

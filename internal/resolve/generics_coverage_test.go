@@ -396,7 +396,7 @@ func TestDeclaredParamType(t *testing.T) {
 	}
 }
 
-func TestAssignmentValue(t *testing.T) {
+func TestAssignmentStartingLine(t *testing.T) {
 	lines := []string{
 		"$a = 1;",
 		"$a ??= 2;",
@@ -423,14 +423,18 @@ func TestAssignmentValue(t *testing.T) {
 		"    return 1;",
 		"};",
 	}
-	// A closure passed to a call is read through, so the chain after it
-	// counts; one assigned to the variable is not.
 	want := map[int]string{
-		0: "1;", 1: "2;", 6: "$b->c()->d()?->e();", 9: "f($g,)->h();", 12: "i(function () {return 1;});", 15: "$b",
-		17: "j(function () {return 1;})->k();", 21: "function () {",
+		0: "1", 1: "2", 6: "$b->c()\n    ->d()\n    ?->e()", 9: "f(\n    $g,\n)->h()", 12: "i(function () {\n    return 1;\n})", 15: "$b\n    ?? 1",
+		17: "j(function () {\n    return 1;\n})\n    ->k()", 21: "function () {\n    return 1;\n}",
 	}
+	src := strings.Join(lines, "\n")
+	tree := newSyntaxTree(src, parser.ParseTree(src, token.Latest))
 	for i := range lines {
-		got, _, ok := assignmentValue(lines, i, "$a")
+		value, ok := tree.assignmentStartingLine(i, "$a")
+		var got string
+		if ok {
+			got = tree.text(value)
+		}
 		w, wantOK := want[i]
 		if ok != wantOK || got != w {
 			t.Errorf("line %d: got %q, %v; want %q, %v", i, got, ok, w, wantOK)
