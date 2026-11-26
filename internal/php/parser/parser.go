@@ -42,15 +42,20 @@ const (
 	internalErrorPrefix = "internal parser error: "
 )
 
+type Parsed struct {
+	Tree        *ast.File
+	Significant []lexer.Token
+}
+
 func Parse(src string, version token.Version) *ast.File {
-	return parse(src, version, lexer.Lex(src, version))
+	return parse(src, version, lexer.Lex(src, version)).Tree
 }
 
 func ParseCode(src string, version token.Version) *ast.File {
-	return parse(src, version, lexer.LexCode(src, version))
+	return parse(src, version, lexer.LexCode(src, version)).Tree
 }
 
-func parse(src string, version token.Version, all []lexer.Token) *ast.File {
+func parse(src string, version token.Version, all []lexer.Token) Parsed {
 	file := &ast.File{Span: ast.Span{End: uint32(len(src))}, Version: version}
 	all, file.Shebang = skipShebang(src, all)
 	p := &parser{src: src, version: version, toks: all[:0]}
@@ -75,7 +80,7 @@ func parse(src string, version token.Version, all []lexer.Token) *ast.File {
 	slices.SortStableFunc(p.errors, func(a, b ast.Error) int { return cmp.Compare(a.Start, b.Start) })
 	file.Errors = p.errors
 	file.Warnings = p.warnings
-	return file
+	return Parsed{Tree: file, Significant: p.toks}
 }
 
 func skipShebang(src string, toks []lexer.Token) ([]lexer.Token, ast.Span) {

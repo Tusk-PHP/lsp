@@ -30,7 +30,7 @@ func TestGrammarRangeParsesWithTheNewestGrammarThatHasNoErrors(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tree := tc.grammars.Parse(tc.src)
+			tree := tc.grammars.Parse(tc.src).Tree
 			if tree.Version != tc.want || (len(tree.Errors) > 0) != tc.errors {
 				t.Fatalf("Parse = PHP %s with errors %v, want PHP %s with errors: %v", tree.Version, tree.Errors, tc.want, tc.errors)
 			}
@@ -49,7 +49,7 @@ func TestPHP74WarnsAboutAnUnterminatedComment(t *testing.T) {
 }
 
 func TestGrammarRangeParseCodeSelectsLikeParse(t *testing.T) {
-	if tree := AnyGrammar().ParseCode("function match() {}"); tree.Version != token.PHP74 || len(tree.Errors) > 0 {
+	if tree := AnyGrammar().ParseCode("function match() {}").Tree; tree.Version != token.PHP74 || len(tree.Errors) > 0 {
 		t.Errorf("ParseCode = PHP %s with errors %v, want PHP 7.4 without", tree.Version, tree.Errors)
 	}
 }
@@ -70,5 +70,18 @@ func TestGrammarRange(t *testing.T) {
 	}
 	if got := OnlyGrammar(token.PHP74).String(); got != "7.4" {
 		t.Errorf("OnlyGrammar(7.4) = %s", got)
+	}
+}
+
+func TestGrammarRangeParseGivesTheSignificantTokensOfTheGrammarItChose(t *testing.T) {
+	src := "<?php /* note */ function match() {}"
+	parsed := AnyGrammar().Parse(src)
+	var got []token.Kind
+	for _, tok := range parsed.Significant {
+		got = append(got, tok.Kind)
+	}
+	want := []token.Kind{token.Function, token.Identifier, token.LeftParen, token.RightParen, token.LeftBrace, token.RightBrace}
+	if parsed.Tree.Version != token.PHP74 || !reflect.DeepEqual(got, want) {
+		t.Errorf("Parse = PHP %s with tokens %v, want PHP 7.4's %v without the open tag, whitespace or comment", parsed.Tree.Version, got, want)
 	}
 }

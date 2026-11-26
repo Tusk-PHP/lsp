@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
@@ -51,42 +51,42 @@ func (r GrammarRange) String() string {
 	return r.oldest.String() + "-" + r.Newest().String()
 }
 
-func (r GrammarRange) Parse(src string) *ast.File {
-	return r.pick(src, Parse)
+func (r GrammarRange) Parse(src string) Parsed {
+	return r.pick(src, lexer.Lex)
 }
 
-func (r GrammarRange) ParseCode(src string) *ast.File {
-	return r.pick(src, ParseCode)
+func (r GrammarRange) ParseCode(src string) Parsed {
+	return r.pick(src, lexer.LexCode)
 }
 
-func clean(tree *ast.File) bool {
-	return len(tree.Errors) == 0 && len(tree.Warnings) == 0
+func clean(parsed Parsed) bool {
+	return len(parsed.Tree.Errors) == 0 && len(parsed.Tree.Warnings) == 0
 }
 
-func (r GrammarRange) pick(src string, parse func(string, token.Version) *ast.File) *ast.File {
+func (r GrammarRange) pick(src string, lex func(string, token.Version) []lexer.Token) Parsed {
 	if r.hasChosen {
-		return r.keepChosen(src, parse)
+		return r.keepChosen(src, lex)
 	}
-	newest := parse(src, r.Newest())
+	newest := parse(src, r.Newest(), lex(src, r.Newest()))
 	if clean(newest) {
 		return newest
 	}
 	for version := r.Newest(); version > r.oldest; {
 		version--
-		if tree := parse(src, version); clean(tree) {
-			return tree
+		if parsed := parse(src, version, lex(src, version)); clean(parsed) {
+			return parsed
 		}
 	}
 	return newest
 }
 
-func (r GrammarRange) keepChosen(src string, parse func(string, token.Version) *ast.File) *ast.File {
-	tree := parse(src, r.chosen)
-	if clean(tree) || r.chosen == r.Newest() {
-		return tree
+func (r GrammarRange) keepChosen(src string, lex func(string, token.Version) []lexer.Token) Parsed {
+	parsed := parse(src, r.chosen, lex(src, r.chosen))
+	if clean(parsed) || r.chosen == r.Newest() {
+		return parsed
 	}
-	if newest := parse(src, r.Newest()); clean(newest) {
+	if newest := parse(src, r.Newest(), lex(src, r.Newest())); clean(newest) {
 		return newest
 	}
-	return tree
+	return parsed
 }
