@@ -112,12 +112,12 @@ type builderJoins struct {
 	doc    *scope.Document
 }
 
-func (j *builderJoins) joined(line, col int) bool {
+func (j *builderJoins) mayBeJoined(line, col int) bool {
 	if j.tokens == nil {
 		j.tokens = parser.Tokenize(j.source)
 		j.doc = scope.Collect(j.source)
 	}
-	return frameworklaravel.BuilderJoined(j.tokens, j.doc, line, col)
+	return frameworklaravel.BuilderMayBeJoined(j.tokens, j.doc, line, col)
 }
 
 // callPrefix returns the line up to and including the opening parenthesis of
@@ -352,7 +352,7 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 	if msg == "" {
 		return nil
 	}
-	if !isRelMethod && (model.OtherTables || joins.joined(call.line, call.operator)) {
+	if !isRelMethod && (model.OtherTables || joins.mayBeJoined(call.line, call.operator)) {
 		return nil
 	}
 
