@@ -203,3 +203,88 @@ interface Readable {
 		}
 	}
 }
+
+func implementMissingMethodsText(t *testing.T, sources map[string]string, uri string, line int) string {
+	t.Helper()
+	a, _ := setupRenameAnalyzer(sources)
+	source := sources[uri]
+	actions := a.GetCodeActions(uri, source, protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+		Range:        protocol.Range{Start: protocol.Position{Line: line, Character: 0}, End: protocol.Position{Line: line, Character: 1}},
+		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
+	})
+	for _, action := range actions {
+		if action.Title != "Implement missing methods" || action.Edit == nil {
+			continue
+		}
+		edits := action.Edit.Changes[uri]
+		if len(edits) != 1 {
+			t.Fatalf("expected one edit, got %#v", edits)
+		}
+		return edits[0].NewText
+	}
+	t.Fatalf("expected implement missing methods action, got %#v", actions)
+	return ""
+}
+
+func TestGetCodeActionsImplementMissingMethodsFromBuiltinInterfaces(t *testing.T) {
+	source := `<?php
+namespace App;
+
+class Bag implements \Countable, \ArrayAccess, \JsonSerializable {
+}
+`
+	text := implementMissingMethodsText(t, map[string]string{"file:///test.php": source}, "file:///test.php", 3)
+	for _, want := range []string{
+		"    public function count(): int\n    {\n        throw new \\BadMethodCallException(__METHOD__ . ' is not implemented.');\n    }",
+		"public function jsonSerialize(): mixed",
+		"public function offsetExists($offset)",
+		"public function offsetGet($offset)",
+		"public function offsetSet($offset, $value)",
+		"public function offsetUnset($offset)",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+}
+
+func TestGetCodeActionsImplementMissingMethodsRendersTheSignatureForTheTargetFile(t *testing.T) {
+	source := `<?php
+namespace App\Http;
+
+use Lib\Contracts\Store as StoreContract;
+use Lib\Models\Item;
+
+class Shop implements StoreContract {
+}
+`
+	text := implementMissingMethodsText(t, map[string]string{
+		"file:///test.php": source,
+		"file:///contracts.php": `<?php
+namespace Lib\Contracts;
+
+use Lib\Models\Item;
+use Lib\Models\Cart;
+
+interface Reads { public static function find(int|string $id, ?Cart $cart = null): ?Item; }
+interface Store extends Reads {
+    abstract public function put(Item &$item, string ...$tags): void;
+    public function fill(\Traversable&\Countable $items, array $options = []): static;
+}
+`,
+		"file:///models.php": "<?php\nnamespace Lib\\Models;\nclass Item {}\nclass Cart {}\n",
+	}, "file:///test.php", 6)
+	for _, want := range []string{
+		"public static function find(int|string $id, ?\\Lib\\Models\\Cart $cart = null): ?Item",
+		"public function put(Item &$item, string ...$tags): void",
+		"public function fill(\\Traversable&\\Countable $items, array $options = []): static",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "abstract") {
+		t.Errorf("an implementation isn't abstract:\n%s", text)
+	}
+}

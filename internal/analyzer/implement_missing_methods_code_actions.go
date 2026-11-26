@@ -9,6 +9,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
 func (a *Analyzer) implementMissingMethodsCodeActions(uri, source string, result *parser.ParseResult, only []protocol.CodeActionKind, pos protocol.Position) []protocol.CodeAction {
@@ -174,7 +175,7 @@ func (a *Analyzer) collectImplementMissingMethods(r *resolve.Resolver, source st
 
 	var rendered []string
 	for _, name := range names {
-		text, ok := a.renderImplementMissingMethod(requirements[name].symbol, methodIndent)
+		text, ok := renderImplementMissingMethod(requirements[name].symbol, methodIndent, targetFile)
 		if !ok {
 			continue
 		}
@@ -198,38 +199,31 @@ func (a *Analyzer) collectInterfaceMethodRequirements(r *resolve.Resolver, iface
 			add(child)
 		}
 	}
-	for _, parentFQN := range a.interfaceExtendedFQNs(r, iface) {
+	for _, parentFQN := range iface.Implements {
 		a.collectInterfaceMethodRequirements(r, parentFQN, add, seen)
 	}
 }
 
-func (a *Analyzer) interfaceExtendedFQNs(r *resolve.Resolver, iface *symbols.Symbol) []string {
-	if iface == nil || iface.URI == "" {
-		return nil
+func classNameIn(fqn string, file *parser.FileNode) string {
+	fqn = strings.TrimPrefix(fqn, "\\")
+	short, namespace := fqn, ""
+	if i := strings.LastIndex(fqn, "\\"); i >= 0 {
+		short, namespace = fqn[i+1:], fqn[:i]
 	}
-	source := a.index.GetFileSource(iface.URI)
-	if source == "" {
-		return nil
-	}
-	file := parser.ParseFile(source)
-	if file == nil {
-		return nil
-	}
-	for _, node := range file.Interfaces {
-		fqn := node.FullName
-		if fqn == "" {
-			fqn = implementMissingMethodsBuildFQN(file.Namespace, node.Name)
-		}
-		if fqn != iface.FQN {
+	shadowed := false
+	for _, use := range file.Uses {
+		if use.Kind == "function" || use.Kind == "const" {
 			continue
 		}
-		parents := make([]string, 0, len(node.Extends))
-		for _, parent := range node.Extends {
-			parents = append(parents, r.ResolveClassName(parent, file))
+		if strings.EqualFold(use.FullName, fqn) {
+			return use.Alias
 		}
-		return parents
+		shadowed = shadowed || strings.EqualFold(use.Alias, short)
 	}
-	return nil
+	if !shadowed && strings.EqualFold(namespace, file.Namespace) {
+		return short
+	}
+	return "\\" + fqn
 }
 
 func implementMissingMethodSignatureKey(member *symbols.Symbol) string {
@@ -244,30 +238,52 @@ func implementMissingMethodSignatureKey(member *symbols.Symbol) string {
 	return b.String()
 }
 
-func (a *Analyzer) renderImplementMissingMethod(member *symbols.Symbol, indent string) (string, bool) {
-	declaration, ok := a.extractImplementMissingMethodDeclaration(member)
-	if !ok {
-		return "", false
-	}
-
-	declaration = strings.TrimSpace(declaration)
-	if declaration == "" {
-		return "", false
-	}
-	declaration = strings.TrimSuffix(declaration, ";")
-	declaration = removeStandaloneAbstractModifier(declaration)
-	declarationLines := dedentLines(strings.Split(declaration, "\n"))
-	if len(declarationLines) == 0 {
-		return "", false
-	}
-
+func renderImplementMissingMethod(member *symbols.Symbol, indent string, file *parser.FileNode) (string, bool) {
 	var b strings.Builder
-	for i, line := range declarationLines {
+	b.WriteString(indent)
+	if member.Visibility == "" {
+		b.WriteString("public")
+	} else {
+		b.WriteString(member.Visibility)
+	}
+	if member.IsStatic {
+		b.WriteString(" static")
+	}
+	b.WriteString(" function ")
+	b.WriteString(member.Name)
+	b.WriteByte('(')
+	for i, param := range member.Params {
 		if i > 0 {
-			b.WriteByte('\n')
+			b.WriteString(", ")
 		}
-		b.WriteString(indent)
-		b.WriteString(strings.TrimRight(line, " \t"))
+		if param.Type != "" {
+			typ, ok := nativeTypeDeclaration(types.ParseTypeExpr(param.Type), file)
+			if !ok {
+				return "", false
+			}
+			b.WriteString(typ)
+			b.WriteByte(' ')
+		}
+		if param.IsReference {
+			b.WriteByte('&')
+		}
+		if param.IsVariadic {
+			b.WriteString("...")
+		}
+		b.WriteString(param.Name)
+		if param.DefaultValue != "" {
+			b.WriteString(" = ")
+			b.WriteString(param.DefaultValue)
+		}
+	}
+	b.WriteByte(')')
+	if member.ReturnType != "" {
+		typ, ok := nativeTypeDeclaration(types.ParseTypeExpr(member.ReturnType), file)
+		if !ok {
+			return "", false
+		}
+		b.WriteString(": ")
+		b.WriteString(typ)
 	}
 	b.WriteString("\n")
 	b.WriteString(indent)
@@ -279,195 +295,41 @@ func (a *Analyzer) renderImplementMissingMethod(member *symbols.Symbol, indent s
 	return b.String(), true
 }
 
-func removeStandaloneAbstractModifier(declaration string) string {
-	fields := strings.Fields(declaration)
-	if len(fields) == 0 {
-		return declaration
-	}
-	filtered := make([]string, 0, len(fields))
-	removed := false
-	for _, field := range fields {
-		if !removed && field == "abstract" {
-			removed = true
-			continue
+func nativeTypeDeclaration(expr types.TypeExpr, file *parser.FileNode) (string, bool) {
+	var out string
+	switch expr.Kind {
+	case types.TypeKindNamed:
+		if expr.Name == "" {
+			return "", false
 		}
-		filtered = append(filtered, field)
-	}
-	if !removed {
-		return declaration
-	}
-
-	lines := strings.Split(declaration, "\n")
-	if len(lines) == 1 {
-		return strings.Join(filtered, " ")
-	}
-
-	rebuilt := strings.Join(filtered, " ")
-	if idx := strings.Index(rebuilt, "function "); idx >= 0 {
-		prefix := rebuilt[:idx]
-		suffix := rebuilt[idx:]
-		if prefix == "" {
-			return suffix
+		out = expr.Name
+		if !symbols.IsPHPBuiltinType(out) {
+			out = classNameIn(out, file)
 		}
-		return strings.TrimSpace(prefix) + " " + suffix
-	}
-	return rebuilt
-}
-
-func dedentLines(lines []string) []string {
-	minIndent := -1
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			continue
+	case types.TypeKindUnion, types.TypeKindIntersection:
+		sep := "|"
+		if expr.Kind == types.TypeKindIntersection {
+			sep = "&"
 		}
-		indent := len(leadingWhitespace(line))
-		if minIndent == -1 || indent < minIndent {
-			minIndent = indent
+		parts := make([]string, len(expr.Types))
+		for i, part := range expr.Types {
+			rendered, ok := nativeTypeDeclaration(part, file)
+			if !ok {
+				return "", false
+			}
+			parts[i] = rendered
 		}
-	}
-	if minIndent <= 0 {
-		return lines
-	}
-	out := make([]string, len(lines))
-	for i, line := range lines {
-		if strings.TrimSpace(line) == "" || len(line) < minIndent {
-			out[i] = line
-			continue
-		}
-		out[i] = line[minIndent:]
-	}
-	return out
-}
-
-func (a *Analyzer) extractImplementMissingMethodDeclaration(member *symbols.Symbol) (string, bool) {
-	if member == nil || member.URI == "" {
+		out = strings.Join(parts, sep)
+	default:
 		return "", false
 	}
-	source := a.index.GetFileSource(member.URI)
-	if source == "" {
-		return "", false
+	if expr.Wrapped {
+		out = "(" + out + ")"
 	}
-	result := parser.New().Parse(source)
-	if result == nil {
-		return "", false
+	if expr.Nullable {
+		out = "?" + out
 	}
-
-	method, ok := findImplementMissingMethodDef(result, member)
-	if !ok {
-		return "", false
-	}
-
-	startOffset, endOffset, ok := extractImplementMissingMethodOffsets(result, method)
-	if !ok || startOffset < 0 || endOffset <= startOffset || endOffset > len(source) {
-		return "", false
-	}
-	return source[startOffset:endOffset], true
-}
-
-func findImplementMissingMethodDef(result *parser.ParseResult, member *symbols.Symbol) (parser.MethodDef, bool) {
-	matchMethod := func(methods []parser.MethodDef) (parser.MethodDef, bool) {
-		for _, method := range methods {
-			if method.Name == member.Name && method.Line == member.Range.Start.Line {
-				return method, true
-			}
-		}
-		return parser.MethodDef{}, false
-	}
-
-	for _, cls := range result.Classes {
-		if cls.FullName == member.ParentFQN {
-			return matchMethod(cls.Methods)
-		}
-	}
-	for _, iface := range result.Interfaces {
-		if iface.FullName == member.ParentFQN {
-			return matchMethod(iface.Methods)
-		}
-	}
-	for _, tr := range result.Traits {
-		if tr.FullName == member.ParentFQN {
-			return matchMethod(tr.Methods)
-		}
-	}
-	for _, en := range result.Enums {
-		if en.FullName == member.ParentFQN {
-			return matchMethod(en.Methods)
-		}
-	}
-	return parser.MethodDef{}, false
-}
-
-func extractImplementMissingMethodOffsets(result *parser.ParseResult, method parser.MethodDef) (int, int, bool) {
-	functionIdx := -1
-	for i := range result.Tokens {
-		tok := result.Tokens[i]
-		if tok.Line != method.Line || tok.Kind != parser.TokenFunction {
-			continue
-		}
-		for j := i + 1; j < len(result.Tokens); j++ {
-			if result.Tokens[j].Line < method.Line {
-				continue
-			}
-			if result.Tokens[j].Kind == parser.TokenIdentifier && result.Tokens[j].Value == method.Name {
-				functionIdx = i
-				break
-			}
-			if result.Tokens[j].Kind == parser.TokenSemicolon || result.Tokens[j].Kind == parser.TokenOpenBrace {
-				break
-			}
-		}
-		if functionIdx >= 0 {
-			break
-		}
-	}
-	if functionIdx < 0 {
-		return 0, 0, false
-	}
-
-	startIdx := functionIdx
-	for startIdx > 0 {
-		switch result.Tokens[startIdx-1].Kind {
-		case parser.TokenPublic, parser.TokenProtected, parser.TokenPrivate, parser.TokenStatic, parser.TokenAbstract, parser.TokenFinal, parser.TokenReadonly:
-			startIdx--
-		default:
-			goto foundStart
-		}
-	}
-foundStart:
-
-	parenDepth := 0
-	bracketDepth := 0
-	braceDepth := 0
-	endOffset := 0
-	for i := functionIdx; i < len(result.Tokens); i++ {
-		switch result.Tokens[i].Kind {
-		case parser.TokenOpenParen:
-			parenDepth++
-		case parser.TokenCloseParen:
-			if parenDepth > 0 {
-				parenDepth--
-			}
-		case parser.TokenOpenBracket:
-			bracketDepth++
-		case parser.TokenCloseBracket:
-			if bracketDepth > 0 {
-				bracketDepth--
-			}
-		case parser.TokenOpenBrace:
-			braceDepth++
-		case parser.TokenCloseBrace:
-			if braceDepth > 0 {
-				braceDepth--
-			}
-		case parser.TokenSemicolon:
-			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
-				endOffset = result.Tokens[i].Offset + len(result.Tokens[i].Value)
-				return result.Tokens[startIdx].Offset, endOffset, true
-			}
-		}
-	}
-
-	return 0, 0, false
+	return out, true
 }
 
 func implementMissingMethodsInsertionEdit(uri, source string, target *implementMissingMethodsTarget, methods []string) *protocol.WorkspaceEdit {
@@ -514,11 +376,4 @@ func implementMissingMethodsNeedsLeadingBlank(lines []string, startLine, endLine
 		return true
 	}
 	return false
-}
-
-func implementMissingMethodsBuildFQN(namespace, name string) string {
-	if namespace == "" {
-		return name
-	}
-	return namespace + "\\" + name
 }
