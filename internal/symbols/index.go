@@ -66,6 +66,7 @@ type Symbol struct {
 	Extends    string
 	BackedType string
 	Value      string
+	ValueType  string
 	IsVirtual  bool
 	// IsConditional marks a class declared inside a block, such as a
 	// placeholder under `if (false)` or a polyfill under `if (!class_exists())`:
@@ -135,6 +136,7 @@ type ParamInfo struct {
 	Name         string
 	Type         string
 	DefaultValue string
+	DefaultType  string
 	IsVariadic   bool
 	IsReference  bool
 }
@@ -558,12 +560,7 @@ func FunctionSymbol(uri string, file *parser.FileNode, fn *parser.FunctionNode) 
 		Attributes: indexAttributes(fn.Attributes, resolve),
 		DocComment: qualifyDocTypes(fn.DocComment, file.Uses), Range: symRange(fn.StartLine, fn.StartCol, len(fn.Name))}
 	sym.Templates = docTemplates(sym.DocComment, resolve)
-	if len(fn.Params) > 0 {
-		sym.Params = make([]ParamInfo, 0, len(fn.Params))
-	}
-	for _, p := range fn.Params {
-		sym.Params = append(sym.Params, ParamInfo{Name: p.Name, Type: resolve(p.Type.Name), DefaultValue: p.DefaultValue, IsVariadic: p.IsVariadic, IsReference: p.IsReference})
-	}
+	sym.Params = paramInfos(fn.Params, resolve)
 	return sym
 }
 
@@ -848,18 +845,21 @@ func (idx *Index) indexMethods(uri string, parent *Symbol, parentFQN string, met
 			Range:      symRange(m.StartLine, m.StartCol, len(m.Name)),
 		}
 		ms.Templates = docTemplates(ms.DocComment, resolve)
-		for _, p := range m.Params {
-			ms.Params = append(ms.Params, ParamInfo{
-				Name:         p.Name,
-				Type:         resolve(p.Type.Name),
-				DefaultValue: p.DefaultValue,
-				IsVariadic:   p.IsVariadic,
-				IsReference:  p.IsReference,
-			})
-		}
+		ms.Params = paramInfos(m.Params, resolve)
 		parent.Children = append(parent.Children, ms)
 		idx.addSymbolWithSource(uri, ms, src)
 	}
+}
+
+func paramInfos(params []parser.ParamNode, resolve func(string) string) []ParamInfo {
+	if len(params) == 0 {
+		return nil
+	}
+	out := make([]ParamInfo, len(params))
+	for i, p := range params {
+		out[i] = ParamInfo{Name: p.Name, Type: resolve(p.Type.Name), DefaultValue: p.DefaultValue, DefaultType: p.DefaultType, IsVariadic: p.IsVariadic, IsReference: p.IsReference}
+	}
+	return out
 }
 
 func (idx *Index) indexProperties(uri string, parent *Symbol, parentFQN string, props []parser.PropertyNode, src SymbolSource, resolve func(string) string, uses []parser.UseNode) {

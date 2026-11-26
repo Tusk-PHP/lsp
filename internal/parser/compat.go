@@ -138,6 +138,7 @@ type ParamNode struct {
 	Attributes   []AttributeDef
 	Type         TypeNode
 	DefaultValue string
+	DefaultType  string
 	IsVariadic   bool
 	IsReference  bool
 	// DocComment is the parameter's own doc comment (PHP 8.6), written
@@ -178,6 +179,7 @@ type MethodNode struct {
 type ConstantNode struct {
 	Name       string
 	Value      string
+	ValueType  string
 	Type       TypeNode
 	Visibility string
 	Attributes []AttributeDef

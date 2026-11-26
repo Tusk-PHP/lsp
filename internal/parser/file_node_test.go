@@ -93,7 +93,7 @@ abstract class Base extends \Parent\Base implements A, B {
 	}
 	if want := []ParamNode{
 		{Name: "$id", Type: TypeNode{"int|string"}, DefaultValue: "self::ONE"},
-		{Name: "$out", Type: TypeNode{"?array"}, DefaultValue: "null", IsReference: true},
+		{Name: "$out", Type: TypeNode{"?array"}, DefaultValue: "null", DefaultType: "null", IsReference: true},
 		{Name: "$rest", Type: TypeNode{"Foo"}, IsVariadic: true},
 	}; !reflect.DeepEqual(make.Params, want) {
 		t.Errorf("params: %+v", make.Params)
