@@ -18,9 +18,12 @@ func queriedModelIndex() *symbols.Index {
 func TestModelQueriedBy(t *testing.T) {
 	idx := queriedModelIndex()
 	post := resolve.ResolvedType{FQN: `App\Models\Post`}
+	video := resolve.ResolvedType{FQN: `App\Models\Video`}
 	of := func(fqn string, params ...resolve.ResolvedType) resolve.ResolvedType {
 		return resolve.ResolvedType{FQN: fqn, Params: params}
 	}
+	union := resolve.ResolvedType{FQN: post.FQN, Union: []resolve.ResolvedType{post, video}}
+	intersection := resolve.ResolvedType{FQN: post.FQN, Intersection: []resolve.ResolvedType{post, video}}
 	relations := `Illuminate\Database\Eloquent\Relations\`
 	cases := []struct {
 		name string
@@ -33,6 +36,9 @@ func TestModelQueriedBy(t *testing.T) {
 		{"a builder of something else", of(EloquentBuilder, of(`App\Models\Plain`)), QueriedModel{}},
 		{"a class that isn't a builder", of(`App\Models\Plain`, post), QueriedModel{}},
 		{"a relation", of(relations+"HasMany", post), QueriedModel{FQN: post.FQN}},
+		{"a relation to a union", of(relations+"HasMany", union), QueriedModel{}},
+		{"a relation to an intersection", of(relations+"HasMany", intersection), QueriedModel{}},
+		{"a union of models", union, QueriedModel{}},
 	}
 	for _, c := range cases {
 		if got := ModelQueriedBy(idx, c.rt); got != c.want {
