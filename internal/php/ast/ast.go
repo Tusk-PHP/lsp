@@ -74,28 +74,31 @@ type File struct {
 	Span
 	Shebang  Span
 	Stmts    []Stmt
+	Docs     []DocComment
 	Errors   []Error
 	Warnings []Error
 	Version  token.Version
-	Docs     []Doc
 }
 
-// Doc is a doc comment and the start of the token after it; File.Docs holds
-// every one in source order, several of them when several come before one
-// token, the last of which documents it.
-type Doc struct {
-	Comment Span
-	Token   uint32
+type DocComment struct {
+	Doc  Span
+	Next uint32
 }
 
-// DocBefore returns the doc comment that documents the token starting at
-// offset.
-func (f *File) DocBefore(offset uint32) (Span, bool) {
-	i, _ := slices.BinarySearchFunc(f.Docs, offset+1, func(d Doc, offset uint32) int { return cmp.Compare(d.Token, offset) })
-	if i == 0 || f.Docs[i-1].Token != offset {
+func (f *File) DocBefore(off uint32) (Span, bool) {
+	d, ok := LastDoc(f.Docs, off)
+	if !ok || d.Next != off {
 		return Span{}, false
 	}
-	return f.Docs[i-1].Comment, true
+	return d.Doc, true
+}
+
+func LastDoc(docs []DocComment, at uint32) (DocComment, bool) {
+	i, _ := slices.BinarySearchFunc(docs, at+1, func(d DocComment, at uint32) int { return cmp.Compare(d.Next, at) })
+	if i == 0 {
+		return DocComment{}, false
+	}
+	return docs[i-1], true
 }
 
 type Error struct {
