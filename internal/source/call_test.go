@@ -189,3 +189,36 @@ func TestCallAtFindsANamedCallee(t *testing.T) {
 		t.Error("a variable being called has no named callee")
 	}
 }
+
+func TestDeclaredMarksTheNameAFunctionOrMethodDeclares(t *testing.T) {
+	cases := []struct {
+		src  string
+		want bool
+	}{
+		{"function ar|ea() {}", true},
+		{"function &ar|ea() {}", true},
+		{"class R { public function co|unt(): int { return 0; } }", true},
+		{"class R { abstract protected static function re|set(); }", true},
+		{"ar|ea(1);", false},
+		{"$this->ar|ea();", false},
+		{"new Ar|ea();", false},
+		{"$f = function () use ($ar|ea) {};", false},
+		{"/** function ar|ea() */", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.src, func(t *testing.T) {
+			src := "<?php\n" + tc.src + "\n"
+			offset := strings.Index(src, "|")
+			src = src[:offset] + src[offset+1:]
+			line := strings.Count(src[:offset], "\n")
+			char := offset - strings.LastIndex(src[:offset], "\n") - 1
+			ctx := Analyze("file:///a.php", src, protocol.Position{Line: line, Character: char})
+			if ctx == nil {
+				t.Fatal("expected cursor context")
+			}
+			if ctx.Declared != tc.want {
+				t.Errorf("Declared = %v, want %v", ctx.Declared, tc.want)
+			}
+		})
+	}
+}

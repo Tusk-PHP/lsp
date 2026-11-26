@@ -19,18 +19,26 @@ func isCalled(tokens []parser.Token, word protocol.Range) bool {
 	for first > 0 && (tokens[first-1].Kind == parser.TokenIdentifier || tokens[first-1].Kind == parser.TokenBackslash) {
 		first--
 	}
-	if prev := parser.PrevSignificant(tokens, first-1); prev >= 0 {
-		if tokens[prev].Kind == parser.TokenAmpersand {
-			if beforeRef := parser.PrevSignificant(tokens, prev-1); beforeRef >= 0 && tokens[beforeRef].Kind == parser.TokenFunction {
-				return false
-			}
-		}
-		switch tokens[prev].Kind {
-		case parser.TokenNew, parser.TokenFunction:
-			return false
-		}
+	if declaresName(tokens, first) {
+		return false
+	}
+	if prev := parser.PrevSignificant(tokens, first-1); prev >= 0 && tokens[prev].Kind == parser.TokenNew {
+		return false
 	}
 	return !inAttribute(tokens, first)
+}
+
+func isDeclared(tokens []parser.Token, word protocol.Range) bool {
+	last := identifierEndingAt(tokens, word.End)
+	return last >= 0 && declaresName(tokens, last)
+}
+
+func declaresName(tokens []parser.Token, name int) bool {
+	prev := parser.PrevSignificant(tokens, name-1)
+	if prev >= 0 && tokens[prev].Kind == parser.TokenAmpersand {
+		prev = parser.PrevSignificant(tokens, prev-1)
+	}
+	return prev >= 0 && tokens[prev].Kind == parser.TokenFunction
 }
 
 func identifierEndingAt(tokens []parser.Token, end protocol.Position) int {

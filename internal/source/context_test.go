@@ -360,3 +360,16 @@ func TestDocumentOutsideItsLines(t *testing.T) {
 		}
 	}
 }
+
+func TestTheLineAfterAClassIsOutsideIt(t *testing.T) {
+	src := "<?php\nnamespace App;\nclass Bag {}\nfunction filter(): void {}\ninterface Sized {\n    public function size(): int;\n}\nfunction weigh(): void {}\n"
+	for _, line := range []int{3, 7} {
+		ctx := Analyze("file:///a.php", src, protocol.Position{Line: line, Character: 10})
+		if ctx == nil || ctx.EnclosingFQN != "" {
+			t.Errorf("line %d follows the class-like and is outside it: %+v", line, ctx)
+		}
+	}
+	if ctx := Analyze("file:///a.php", src, protocol.Position{Line: 5, Character: 22}); ctx == nil || ctx.EnclosingFQN != `App\Sized` {
+		t.Errorf("a line inside the interface is inside it: %+v", ctx)
+	}
+}
