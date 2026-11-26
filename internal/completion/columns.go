@@ -19,13 +19,11 @@ func isBuilderArg(arg ast.CallArg) bool {
 	if !ok {
 		return false
 	}
-	switch {
-	case arg.Index == 1:
-		return method.RelatedModelColumn && !arg.InArray
-	case arg.Index != 0:
-		return false
+	if arg.Index == 0 {
+		return !arg.InArray || method.NamesValues()
 	}
-	return !arg.InArray || method.NamesValues()
+	second, ok := method.SecondNameAt(arg.ArgCount())
+	return ok && arg.Index == second && !arg.InArray
 }
 
 func (p *Provider) completeBuilderArg(r *resolve.Resolver, arg ast.CallArg, file *parser.FileNode) []protocol.CompletionItem {
@@ -34,7 +32,7 @@ func (p *Provider) completeBuilderArg(r *resolve.Resolver, arg ast.CallArg, file
 		return nil
 	}
 	method, _ := frameworklaravel.BuilderMethodNamed(arg.Method)
-	if arg.Index == 1 {
+	if arg.Index > 0 && method.Second == frameworklaravel.RelatedModelColumn {
 		relation, ok := arg.StringArg(0)
 		if !ok {
 			return nil

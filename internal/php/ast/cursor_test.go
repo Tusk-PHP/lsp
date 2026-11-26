@@ -131,6 +131,9 @@ func TestStringArg(t *testing.T) {
 			t.Errorf("argument %d = %q", i, got)
 		}
 	}
+	if n := arg.ArgCount(); n != 4 {
+		t.Errorf("ArgCount = %d, want 4", n)
+	}
 }
 
 func TestLastSegment(t *testing.T) {

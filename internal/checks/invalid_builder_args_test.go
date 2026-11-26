@@ -295,6 +295,27 @@ Category::withAvg('products', 'price');
 		assertNoFindings(t, findings)
 	})
 
+	t.Run("the second column of whereColumn and pluck", func(t *testing.T) {
+		source := `<?php
+use App\Models\Product;
+Product::whereColumn('price', 'missing_a');
+Product::orWhereColumn('price', '>', 'missing_b');
+Product::whereColumn($first, 'missing_c');
+Product::pluck('title', 'missing_d');
+Product::whereColumn('price', '=', 'category_id')->pluck('title', 'id');
+Product::whereColumn('price', 'missing_e', 'id');
+Product::whereColumn('price', '>=');
+`
+		file := parser.ParseFile(source, token.Latest)
+		findings := checker.Check(file, source, nil)
+		assertFindingCodes(t, findings, []string{"unknown-column", "unknown-column", "unknown-column", "unknown-column"})
+		for i, want := range []string{"missing_a", "missing_b", "missing_c", "missing_d"} {
+			if !strings.Contains(findings[i].Message, want) {
+				t.Errorf("finding %d = %q, want %s", i, findings[i].Message, want)
+			}
+		}
+	})
+
 	t.Run("orderBy with dot notation skipped", func(t *testing.T) {
 		source := `<?php
 use App\Models\Category;

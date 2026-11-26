@@ -89,6 +89,10 @@ func dimKeys(src string, e Expr) (Expr, []string, bool) {
 	return e, keys, true
 }
 
+func (a CallArg) ArgCount() int {
+	return len(a.args.Args)
+}
+
 func (a CallArg) StringArg(i int) (string, bool) {
 	if i >= len(a.args.Args) {
 		return "", false

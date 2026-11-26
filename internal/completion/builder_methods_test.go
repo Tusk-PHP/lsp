@@ -58,3 +58,26 @@ func TestBuilderCompletesTheRelatedModelsColumnOfAnAggregate(t *testing.T) {
 		}
 	}
 }
+
+func TestBuilderCompletesTheSecondColumnOfWhereColumnAndPluck(t *testing.T) {
+	p, _ := setupEloquentCompletionTest(t)
+	for _, code := range []string{
+		"<?php\nuse App\\Models\\Product;\nProduct::whereColumn('price', '‸')",
+		"<?php\nuse App\\Models\\Product;\nProduct::orWhereColumn('price', '>', '‸')",
+		"<?php\nuse App\\Models\\Product;\nProduct::pluck('name', '‸')",
+	} {
+		if labels := completeMarked(p, code); !labels["price"] || labels["sort_order"] {
+			t.Errorf("%q: want the columns of Product, got %v", code, mapKeys(labels, 20))
+		}
+	}
+	for _, code := range []string{
+		"<?php\nuse App\\Models\\Product;\nProduct::whereColumn('price', '‸', 'cost')",
+		"<?php\nuse App\\Models\\Product;\nProduct::pluck('name', 'id', '‸')",
+		"<?php\nuse App\\Models\\Product;\nProduct::pluck('name', ['‸'])",
+		"<?php\nuse App\\Models\\Product;\nProduct::value('name', '‸')",
+	} {
+		if labels := completeMarked(p, code); labels["price"] {
+			t.Errorf("%q: got %v", code, mapKeys(labels, 20))
+		}
+	}
+}

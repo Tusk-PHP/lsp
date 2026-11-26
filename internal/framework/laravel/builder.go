@@ -23,11 +23,33 @@ const (
 	NameKeys
 )
 
+type BuilderSecondName int
+
+const (
+	NoSecondName BuilderSecondName = iota
+	RelatedModelColumn
+	KeyColumn
+	ComparedColumn
+)
+
 type BuilderMethod struct {
-	Names              BuilderNames
-	Array              BuilderArray
-	MayNameAlias       bool
-	RelatedModelColumn bool
+	Names        BuilderNames
+	Array        BuilderArray
+	MayNameAlias bool
+	Second       BuilderSecondName
+}
+
+func (m BuilderMethod) SecondNameAt(argCount int) (int, bool) {
+	switch m.Second {
+	case RelatedModelColumn, KeyColumn:
+		return 1, true
+	case ComparedColumn:
+		if argCount > 2 {
+			return 2, true
+		}
+		return 1, true
+	}
+	return 0, false
 }
 
 func (m BuilderMethod) NamesValues() bool {
@@ -51,7 +73,8 @@ var builderMethods = map[string]BuilderMethod{
 	"whereDay":        {Names: BuilderColumns},
 	"whereYear":       {Names: BuilderColumns},
 	"whereTime":       {Names: BuilderColumns},
-	"whereColumn":     {Names: BuilderColumns},
+	"whereColumn":     {Names: BuilderColumns, Second: ComparedColumn},
+	"orWhereColumn":   {Names: BuilderColumns, Second: ComparedColumn},
 	"orderBy":         {Names: BuilderColumns, MayNameAlias: true},
 	"orderByDesc":     {Names: BuilderColumns, MayNameAlias: true},
 	"latest":          {Names: BuilderColumns, MayNameAlias: true},
@@ -60,7 +83,7 @@ var builderMethods = map[string]BuilderMethod{
 	"having":          {Names: BuilderColumns, MayNameAlias: true},
 	"select":          {Names: BuilderColumns, Array: NameList},
 	"addSelect":       {Names: BuilderColumns, Array: NameList},
-	"pluck":           {Names: BuilderColumns},
+	"pluck":           {Names: BuilderColumns, Second: KeyColumn},
 	"value":           {Names: BuilderColumns},
 	"increment":       {Names: BuilderColumns},
 	"decrement":       {Names: BuilderColumns},
@@ -72,10 +95,10 @@ var builderMethods = map[string]BuilderMethod{
 	"whereHas":        {Names: BuilderRelations},
 	"whereDoesntHave": {Names: BuilderRelations},
 	"withCount":       {Names: BuilderRelations, Array: NamesOrNameKeys},
-	"withSum":         {Names: BuilderRelations, Array: NamesOrNameKeys, RelatedModelColumn: true},
-	"withAvg":         {Names: BuilderRelations, Array: NamesOrNameKeys, RelatedModelColumn: true},
-	"withMin":         {Names: BuilderRelations, Array: NamesOrNameKeys, RelatedModelColumn: true},
-	"withMax":         {Names: BuilderRelations, Array: NamesOrNameKeys, RelatedModelColumn: true},
+	"withSum":         {Names: BuilderRelations, Array: NamesOrNameKeys, Second: RelatedModelColumn},
+	"withAvg":         {Names: BuilderRelations, Array: NamesOrNameKeys, Second: RelatedModelColumn},
+	"withMin":         {Names: BuilderRelations, Array: NamesOrNameKeys, Second: RelatedModelColumn},
+	"withMax":         {Names: BuilderRelations, Array: NamesOrNameKeys, Second: RelatedModelColumn},
 	"withExists":      {Names: BuilderRelations, Array: NamesOrNameKeys},
 	"load":            {Names: BuilderRelations, Array: NamesOrNameKeys},
 	"loadMissing":     {Names: BuilderRelations, Array: NamesOrNameKeys},
