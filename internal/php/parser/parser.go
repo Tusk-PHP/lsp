@@ -45,6 +45,12 @@ func Parse(src string, version token.Version) *ast.File {
 	return parse(src, version, lexer.Lex(src, version))
 }
 
+func ParseSeeingTokens(src string, version token.Version, see func([]lexer.Token)) *ast.File {
+	all := lexer.Lex(src, version)
+	see(all)
+	return parse(src, version, all)
+}
+
 func ParseCode(src string, version token.Version) *ast.File {
 	return parse(src, version, lexer.LexCode(src, version))
 }
