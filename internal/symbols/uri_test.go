@@ -1,6 +1,7 @@
 package symbols
 
 import (
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -104,4 +105,32 @@ func TestCanonicalURIIsTheURIPathToURIBuilds(t *testing.T) {
 			t.Errorf("CanonicalURI(%s) = %s, want %s", uri, got, built)
 		}
 	}
+}
+
+func FuzzCanonicalFileURIIsThePathToURIOfItsPath(f *testing.F) {
+	for _, uri := range []string{
+		"file:///srv/app/Order.php",
+		"file:///c%3A/proj/x.php",
+		"file:///C:/proj/my%20app/a%40b.php",
+		"file:Order.php",
+		"file:",
+		"file:/../a%3A",
+		"file:///srv/../../x",
+		"file://host/share/x.php",
+	} {
+		f.Add(uri, false)
+		f.Add(uri, true)
+	}
+	f.Fuzz(func(t *testing.T, uri string, windows bool) {
+		if !IsFileURI(uri) {
+			return
+		}
+		if _, err := url.Parse(uri); err != nil {
+			return
+		}
+		canonical := canonicalURI(uri, windows)
+		if rebuilt := slashPathToURI(slashPath(uriSlashPath(canonical, windows), windows)); rebuilt != canonical {
+			t.Errorf("%s (windows %v): canonical %s, but the URI of its path is %s", uri, windows, canonical, rebuilt)
+		}
+	})
 }

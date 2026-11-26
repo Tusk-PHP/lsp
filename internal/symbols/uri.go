@@ -44,11 +44,7 @@ func uriSlashPath(uri string, windows bool) string {
 	if err != nil || u.Scheme != "file" {
 		return slashPath(uri, windows)
 	}
-	p := u.Path
-	if windows && strings.HasPrefix(p, "/") && startsWithDrive(p[1:]) {
-		p = p[1:]
-	}
-	return slashPath(p, windows)
+	return slashPath(u.Path, windows)
 }
 
 func slashPath(p string, windows bool) string {
@@ -56,6 +52,9 @@ func slashPath(p string, windows bool) string {
 		return path.Clean(p)
 	}
 	p = path.Clean(strings.ReplaceAll(p, `\`, "/"))
+	if strings.HasPrefix(p, "/") && startsWithDrive(p[1:]) {
+		p = p[1:]
+	}
 	if startsWithDrive(p) {
 		p = strings.ToUpper(p[:1]) + p[1:]
 	}
@@ -64,7 +63,7 @@ func slashPath(p string, windows bool) string {
 
 func slashPathToURI(p string) string {
 	if !strings.HasPrefix(p, "/") {
-		p = "/" + p
+		p = path.Clean("/" + p)
 	}
 	return (&url.URL{Scheme: "file", Path: p}).String()
 }
