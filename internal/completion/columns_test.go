@@ -319,3 +319,62 @@ func TestBuilderColumnCompletionOnLessCommonReceivers(t *testing.T) {
 		}
 	}
 }
+
+func TestBuilderColumnCompletionOnABuilderOrRelationHeldElsewhere(t *testing.T) {
+	p, _ := setupEloquentCompletionTest(t)
+	p.index.IndexFile("file:///vendor/Relation.php", "<?php\nnamespace Illuminate\\Database\\Eloquent\\Relations;\nabstract class Relation {\n    public function where($column, $operator = null, $value = null): static { return $this; }\n}\n")
+	p.index.IndexFile("file:///vendor/HasMany.php", "<?php\nnamespace Illuminate\\Database\\Eloquent\\Relations;\nclass HasMany extends Relation {}\n")
+	category := p.index.Lookup(`App\Models\Category`)
+	if category == nil {
+		t.Fatal("the fixture indexes Category")
+	}
+	p.index.IndexFile(category.URI, strings.Replace(p.index.GetFileSource(category.URI), "    public function products(): HasMany",
+		"    /** @return HasMany<Product, $this> */\n    public function products(): HasMany", 1))
+
+	for _, tc := range []struct {
+		body     string
+		wantName string
+	}{
+		{"$q = Category::query();\n$q->where('", "slug"},
+		{"$q = Category::query()->where('slug', 'a');\n$q->orderBy('", "slug"},
+		{"/** @param \\Illuminate\\Database\\Eloquent\\Builder<Category> $q */\nfunction scoped($q) {\n    $q->where('", "slug"},
+		{"$category = new Category();\n$category->products()->where('", "category_id"},
+	} {
+		source := "<?php\nuse App\\Models\\Category;\n" + tc.body
+		lines := strings.Split(source, "\n")
+		last := len(lines) - 1
+		labels := collectLabels(p.GetCompletions("file:///test.php", source, protocol.Position{Line: last, Character: len(lines[last])}))
+		if !labels[tc.wantName] {
+			t.Errorf("%q offers the queried model's columns, got %v", tc.body, labels)
+		}
+	}
+
+	p.index.IndexFile("file:///app/Helper.php", "<?php\nnamespace App;\nclass Helper {\n    public static function where($column) {}\n}\n")
+	for _, source := range []string{
+		"<?php\nfunction any(\\Illuminate\\Database\\Eloquent\\Builder $q) {\n    $q->where('",
+		"<?php\nuse App\\Helper;\nHelper::where('",
+	} {
+		lines := strings.Split(source, "\n")
+		last := len(lines) - 1
+		if items := p.GetCompletions("file:///test.php", source, protocol.Position{Line: last, Character: len(lines[last])}); len(items) != 0 {
+			t.Errorf("%q has no model to take columns from, got %v", source, collectLabels(items))
+		}
+	}
+}
+
+func BenchmarkBuilderColumnCompletion(b *testing.B) {
+	p, _ := setupEloquentCompletionTest(b)
+	for _, source := range []string{
+		"<?php\nuse App\\Models\\Category;\nCategory::query()->where('",
+		"<?php\nuse App\\Models\\Category;\n$q = Category::query();\n$q->where('",
+	} {
+		lines := strings.Split(source, "\n")
+		pos := protocol.Position{Line: len(lines) - 1, Character: len(lines[len(lines)-1])}
+		b.Run(lines[len(lines)-1], func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				p.GetCompletions("file:///test.php", source, pos)
+			}
+		})
+	}
+}
