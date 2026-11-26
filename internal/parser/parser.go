@@ -2,7 +2,6 @@ package parser
 
 import (
 	"strings"
-	"unicode"
 )
 
 // PHPParser parses PHP source into a lightweight AST for LSP features.
@@ -324,14 +323,14 @@ func (pr *ParseResult) GetWordAtPosition(line, character int) string {
 		return ""
 	}
 	start := character
-	for start > 0 && isIdentChar(rune(ln[start-1])) {
+	for start > 0 && isIdentByte(ln[start-1]) {
 		start--
 	}
 	if start > 0 && ln[start-1] == '$' {
 		start--
 	}
 	end := character
-	for end < len(ln) && isIdentChar(rune(ln[end])) {
+	for end < len(ln) && isIdentByte(ln[end]) {
 		end++
 	}
 	return ln[start:end]
@@ -355,7 +354,7 @@ func (pr *ParseResult) GetContextAtPosition(line, character int) (contextType st
 	if pos >= 1 && pos < len(ln) && ln[pos-1] == '-' && ln[pos] == '>' {
 		rEnd := pos - 1
 		rStart := rEnd - 1
-		for rStart >= 0 && (isIdentChar(rune(ln[rStart])) || ln[rStart] == '$') {
+		for rStart >= 0 && (isIdentByte(ln[rStart]) || ln[rStart] == '$') {
 			rStart--
 		}
 		rStart++
@@ -367,7 +366,7 @@ func (pr *ParseResult) GetContextAtPosition(line, character int) (contextType st
 	if pos >= 1 && pos < len(ln) && ln[pos-1] == ':' && ln[pos] == ':' {
 		rEnd := pos - 1
 		rStart := rEnd - 1
-		for rStart >= 0 && (isIdentChar(rune(ln[rStart])) || ln[rStart] == '\\') {
+		for rStart >= 0 && (isIdentByte(ln[rStart]) || ln[rStart] == '\\') {
 			rStart--
 		}
 		rStart++
@@ -378,7 +377,7 @@ func (pr *ParseResult) GetContextAtPosition(line, character int) (contextType st
 
 	if pos >= 0 && pos < len(ln) && ln[pos] == '\\' {
 		rStart := pos - 1
-		for rStart >= 0 && (isIdentChar(rune(ln[rStart])) || ln[rStart] == '\\') {
+		for rStart >= 0 && (isIdentByte(ln[rStart]) || ln[rStart] == '\\') {
 			rStart--
 		}
 		rStart++
@@ -386,10 +385,6 @@ func (pr *ParseResult) GetContextAtPosition(line, character int) (contextType st
 	}
 
 	return "", ""
-}
-
-func isIdentChar(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
 // --- Tokenizer ---
@@ -627,12 +622,12 @@ func tokenize(source string) ([]Token, []ParseError) {
 		}
 
 		// Variable $name
-		if ch == '$' && offset+1 < len(source) && isIdentChar(rune(source[offset+1])) {
+		if ch == '$' && offset+1 < len(source) && isIdentByte(source[offset+1]) {
 			start := offset
 			startCol := col
 			offset++
 			col++
-			for offset < len(source) && isIdentChar(rune(source[offset])) {
+			for offset < len(source) && isIdentByte(source[offset]) {
 				offset++
 				col++
 			}
@@ -653,10 +648,10 @@ func tokenize(source string) ([]Token, []ParseError) {
 		}
 
 		// Identifiers and keywords
-		if isIdentChar(rune(ch)) {
+		if isIdentByte(ch) {
 			start := offset
 			startCol := col
-			for offset < len(source) && isIdentChar(rune(source[offset])) {
+			for offset < len(source) && isIdentByte(source[offset]) {
 				offset++
 				col++
 			}
@@ -761,7 +756,7 @@ func heredocEnd(source string, start int) (int, bool) {
 		i++
 	}
 	labelStart := i
-	for i < len(source) && isIdentChar(rune(source[i])) {
+	for i < len(source) && isIdentByte(source[i]) {
 		i++
 	}
 	label := source[labelStart:i]
@@ -794,7 +789,7 @@ func heredocEnd(source string, start int) (int, bool) {
 		}
 		if strings.HasPrefix(source[j:lineEnd], label) {
 			after := j + len(label)
-			if after >= len(source) || !isIdentChar(rune(source[after])) {
+			if after >= len(source) || !isIdentByte(source[after]) {
 				return after, true
 			}
 		}
@@ -1148,7 +1143,7 @@ func tokensText(tokens []Token) string {
 	var b strings.Builder
 	prevWord := false
 	for _, t := range tokens {
-		isWord := t.Value != "" && (isIdentChar(rune(t.Value[0])) || t.Value[0] == '$' || t.Value[0] == '\'')
+		isWord := t.Value != "" && (isIdentByte(t.Value[0]) || t.Value[0] == '$' || t.Value[0] == '\'')
 		if prevWord && isWord {
 			b.WriteByte(' ')
 		}
