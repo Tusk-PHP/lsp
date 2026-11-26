@@ -1,8 +1,11 @@
 package sourcectx
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -252,5 +255,73 @@ use App\Later\Thing;
 	}
 	if len(ctx.Uses) != 0 {
 		t.Fatalf("Uses = %#v, want no active imports before declaration", ctx.Uses)
+	}
+}
+
+func positionAfter(t *testing.T, source, needle string) protocol.Position {
+	t.Helper()
+	for i, line := range strings.Split(source, "\n") {
+		if col := strings.Index(line, needle); col >= 0 {
+			return protocol.Position{Line: i, Character: col + len(needle)}
+		}
+	}
+	t.Fatalf("%q is not in the source", needle)
+	return protocol.Position{}
+}
+
+func TestAnalyzeBuildsClosureScopeWithUseClause(t *testing.T) {
+	source := `<?php
+$f = function ($a) use ($b) {
+    return $a . $b;
+};
+$after = 1;
+`
+	if ctx := Analyze("file:///c.php", source, positionAfter(t, source, "return $")); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure || ctx.Scope.StartLine != 1 || ctx.Scope.EndLine != 3 {
+		t.Errorf("inside the closure body: Scope = %#v, want a closure on lines 1-3", ctx.Scope)
+	}
+	if ctx := Analyze("file:///c.php", source, positionAfter(t, source, "$aft")); ctx.Scope != nil {
+		t.Errorf("after the closure: Scope = %#v, want none", ctx.Scope)
+	}
+}
+
+func TestAnalyzeArrowFunctionScopeEndsWhereItsExpressionDoes(t *testing.T) {
+	for _, tc := range []struct {
+		name, source, inside, outside string
+	}{
+		{"closed by the call's parenthesis", "<?php\nmap(fn($x) => $x + 1); $later;\n", "+ ", "$lat"},
+		{"closed by an array's bracket", "<?php\n$fs = [fn($x) => $x * 2]; $later;\n", "* ", "$lat"},
+		{"closed by a block's brace", "<?php\nif (true) { $f = fn($x) => $x - 3 } $later;\n", "- ", "$lat"},
+		{"running to the end of the file", "<?php\n$f = fn($x) => $x / 4", "/ ", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if ctx := Analyze("file:///a.php", tc.source, positionAfter(t, tc.source, tc.inside)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure {
+				t.Errorf("inside the arrow function: Scope = %#v, want a closure", ctx.Scope)
+			}
+			if tc.outside == "" {
+				return
+			}
+			if ctx := Analyze("file:///a.php", tc.source, positionAfter(t, tc.source, tc.outside)); ctx.Scope != nil && ctx.Scope.Kind == ScopeClosure {
+				t.Errorf("after the arrow function: Scope = %#v, want no closure", ctx.Scope)
+			}
+		})
+	}
+}
+
+func TestAnalyzeReadsFunctionConstAndAliasedImports(t *testing.T) {
+	source := `<?php
+namespace App;
+use function App\Support\helper;
+use const App\Support\LIMIT;
+use App\Models\User as Account;
+$x = 1;
+`
+	ctx := Analyze("file:///u.php", source, positionAfter(t, source, "$x"))
+	want := []parser.UseNode{
+		{FullName: "App\\Support\\helper", Alias: "helper", Kind: "function", StartLine: 2},
+		{FullName: "App\\Support\\LIMIT", Alias: "LIMIT", Kind: "const", StartLine: 3},
+		{FullName: "App\\Models\\User", Alias: "Account", Kind: "class", StartLine: 4},
+	}
+	if !reflect.DeepEqual(ctx.Uses, want) {
+		t.Errorf("Uses = %#v, want %#v", ctx.Uses, want)
 	}
 }
