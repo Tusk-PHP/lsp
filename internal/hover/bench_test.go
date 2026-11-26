@@ -59,3 +59,16 @@ func BenchmarkHoverMemberChain(b *testing.B) {
 		p.GetHover("file:///project/src/Report.php", src, pos)
 	}
 }
+
+func BenchmarkHoverArrayKey(b *testing.B) {
+	p := NewProvider(symbols.NewIndex(), nil, "none")
+	src := "<?php\nclass Report {\n    public function run(): void {\n        $cfg = [\n            'host' => 'h',\n            'port' => 2,\n        ];\n        echo $cfg['port'];\n    }\n}\n"
+	pos := protocol.Position{Line: 7, Character: 20}
+	if h := p.GetHover("file:///project/src/Report.php", src, pos); h == nil || !strings.Contains(h.Contents.Value, "$port") {
+		b.Fatalf("hover on the port key: %+v", h)
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		p.GetHover("file:///project/src/Report.php", src, pos)
+	}
+}
