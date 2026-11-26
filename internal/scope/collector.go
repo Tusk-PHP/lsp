@@ -384,6 +384,11 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 		}
 	}
 
+	for _, frame := range active[1:] {
+		if frame.exprEnd < 0 {
+			frame.scope.Range.End = root.Range.End
+		}
+	}
 	for _, ps := range pending {
 		if ps.scope.Range.End == (protocol.Position{}) {
 			ps.scope.Range.End = root.Range.End
