@@ -344,6 +344,34 @@ func BenchmarkNewDocument(b *testing.B) {
 	}
 }
 
+func TestAnalyzeAdjacentClassesEndAtTheirClosingBrace(t *testing.T) {
+	source := "<?php\nnamespace App;\nclass A {\n    public function a() {}\n}\nclass B {\n    public function b() { return $this; }\n}\nclass C {}  class D { public function d() {} }\n"
+	for _, c := range []struct {
+		name      string
+		pos       protocol.Position
+		enclosing string
+		method    string
+	}{
+		{"the first line of the next class", protocol.Position{Line: 5, Character: 2}, "App\\B", ""},
+		{"a method of the next class", protocol.Position{Line: 6, Character: 32}, "App\\B", "b"},
+		{"the closing brace of the first class", protocol.Position{Line: 4, Character: 0}, "App\\A", ""},
+		{"a class after another on the same line", protocol.Position{Line: 8, Character: 43}, "App\\D", "d"},
+		{"between two classes on one line", protocol.Position{Line: 8, Character: 11}, "", ""},
+	} {
+		ctx := Analyze("file:///classes.php", source, c.pos, phpparser.OnlyGrammar(token.Latest))
+		if ctx.EnclosingFQN != c.enclosing {
+			t.Errorf("%s: EnclosingFQN = %q, want %q", c.name, ctx.EnclosingFQN, c.enclosing)
+		}
+		method := ""
+		if ctx.Scope != nil {
+			method = ctx.Scope.MethodName
+		}
+		if method != c.method {
+			t.Errorf("%s: method scope %q, want %q", c.name, method, c.method)
+		}
+	}
+}
+
 func TestDocumentOutsideItsLines(t *testing.T) {
 	source := "<?php\nnamespace App;\nclass Shop {}\n"
 	doc := NewDocument("file:///a.php", source, phpparser.OnlyGrammar(token.Latest))
@@ -360,5 +388,19 @@ func TestDocumentOutsideItsLines(t *testing.T) {
 		if name := Analyze("file:///a.php", source, pos, phpparser.OnlyGrammar(token.Latest)).Name(); name != nil {
 			t.Errorf("Analyze(%v).Name() = %+v, want nil", pos, name)
 		}
+	}
+}
+
+func TestAnalyzeNamespaceOperatorIsNotADeclaration(t *testing.T) {
+	source := "<?php\nnamespace App;\nuse App\\Models\\User;\nnamespace\\foo();\nfunction bar() {}\n"
+	ctx := Analyze("file:///ns.php", source, protocol.Position{Line: 4, Character: 10}, phpparser.OnlyGrammar(token.Latest))
+	if ctx.Namespace != "App" {
+		t.Errorf("Namespace after namespace\\foo() = %q, want App", ctx.Namespace)
+	}
+	if len(ctx.Uses) != 1 || ctx.Uses[0].FullName != "App\\Models\\User" {
+		t.Errorf("Uses after namespace\\foo() = %#v, want the User import", ctx.Uses)
+	}
+	if ctx.Scope == nil || ctx.Scope.Kind != ScopeFunction || ctx.Scope.Name != "bar" {
+		t.Errorf("Scope = %#v, want function bar", ctx.Scope)
 	}
 }

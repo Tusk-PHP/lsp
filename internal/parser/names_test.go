@@ -85,3 +85,16 @@ func TestDeclaredClasses(t *testing.T) {
 		t.Errorf("got %d classes", len(got))
 	}
 }
+
+func TestResolveImportedNameReadsTheNamespaceOperatorAsTheCurrentNamespace(t *testing.T) {
+	uses := []UseNode{{FullName: `Lib\Helpers`, Alias: "Helpers", Kind: "class"}}
+	for _, c := range []struct{ name, namespace, want string }{
+		{`namespace\foo`, "App", `App\foo`},
+		{`NAMESPACE\Helpers\go`, "App", `App\Helpers\go`},
+		{`namespace\foo`, "", "foo"},
+	} {
+		if got := ResolveImportedName(c.name, c.namespace, uses, "class"); got != c.want {
+			t.Errorf("ResolveImportedName(%q) in %q = %q, want %q", c.name, c.namespace, got, c.want)
+		}
+	}
+}
