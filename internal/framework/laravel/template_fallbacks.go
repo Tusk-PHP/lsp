@@ -4,7 +4,7 @@ import "github.com/Tusk-PHP/lsp/internal/symbols"
 
 func TemplateFallbacks() map[string]symbols.TemplateFallback {
 	return map[string]symbols.TemplateFallback{
-		"Illuminate\\Database\\Eloquent\\Builder": {
+		EloquentBuilder: {
 			Params: []string{"TModel"},
 			Methods: map[string]string{
 				// Query execution — return model or collection

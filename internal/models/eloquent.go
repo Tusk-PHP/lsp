@@ -13,36 +13,12 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
-// Eloquent relation types grouped by cardinality.
-var singularRelations = map[string]bool{
-	"HasOne": true, "BelongsTo": true, "MorphOne": true, "MorphTo": true,
-	"HasOneThrough": true,
-}
-
-var pluralRelations = map[string]bool{
-	"HasMany": true, "BelongsToMany": true, "MorphMany": true,
-	"MorphToMany": true, "MorphedByMany": true, "HasManyThrough": true,
-}
-
-// allRelationTypes is the union of singular and plural for quick lookup.
-var allRelationTypes map[string]bool
-
-func init() {
-	allRelationTypes = make(map[string]bool, len(singularRelations)+len(pluralRelations))
-	for k := range singularRelations {
-		allRelationTypes[k] = true
-	}
-	for k := range pluralRelations {
-		allRelationTypes[k] = true
-	}
-}
-
 // eloquentStaticForwards are static methods injected on Eloquent models that
 // no class declares: the SoftDeletes scope adds them to the builder at
 // runtime. Everything else a model forwards to its query builder (where(),
 // find(), first(), orderBy(), …) is looked up on the builder itself, through
 // the Model → Builder<static> call forward the Laravel framework registers
-// (framework/laravel.CallForwards). Return types use {MODEL} for the model.
+// (framework/frameworklaravel.CallForwards). Return types use {MODEL} for the model.
 var eloquentStaticForwards = []struct {
 	name       string
 	returnType string
@@ -139,7 +115,7 @@ type modelRelationMethod struct {
 
 func (m modelSource) relation(method parser.MethodNode, decl *ast.Method) (modelRelationMethod, bool) {
 	kind := shortClassName(method.ReturnType.Name)
-	if !allRelationTypes[kind] {
+	if !frameworklaravel.IsRelationType(kind) {
 		kind = ""
 	}
 	call := m.relationCall(decl)
@@ -220,7 +196,7 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source mode
 				Visibility: "public",
 				Type:       source.resolve(retType),
 				IsVirtual:  true,
-				DocComment: "Accessor from " + method.Name + "()",
+				DocComment: frameworklaravel.AccessorDocPrefix + method.Name + "()",
 				Range:      methodNameRange(method),
 			})
 			continue
@@ -244,7 +220,7 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source mode
 				Visibility: "public",
 				Type:       source.resolve(retType),
 				IsVirtual:  true,
-				DocComment: "Accessor from " + method.Name + "()",
+				DocComment: frameworklaravel.AccessorDocPrefix + method.Name + "()",
 				Range:      methodNameRange(method),
 			})
 		}
@@ -272,7 +248,7 @@ func legacyAccessorName(method string) (string, bool) {
 func injectRelation(index *symbols.Index, model *symbols.Symbol, methodName string, methodRange textpos.Range, relation modelRelationMethod) {
 	propType := "mixed"
 	if relation.target != "" {
-		if singularRelations[relation.kind] {
+		if frameworklaravel.IsSingularRelationType(relation.kind) {
 			propType = "?" + relation.target
 		} else {
 			propType = "Illuminate\\Database\\Eloquent\\Collection"
@@ -287,7 +263,7 @@ func injectRelation(index *symbols.Index, model *symbols.Symbol, methodName stri
 		Visibility: "public",
 		Type:       propType,
 		IsVirtual:  true,
-		DocComment: relation.kind + " relation",
+		DocComment: relation.kind + frameworklaravel.RelationDocSuffix,
 		Range:      methodRange,
 	})
 }
