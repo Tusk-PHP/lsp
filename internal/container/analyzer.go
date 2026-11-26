@@ -786,7 +786,7 @@ func (ca *ContainerAnalyzer) parseSymfonyAttributes(path string, content string)
 			}
 		}
 		for _, iface := range cls.Implements {
-			ifaceFQN := resolveType(iface, ns, file.Uses)
+			ifaceFQN := parser.ResolveImportedName(iface, ns, file.Uses, "class")
 			if _, exists := ca.bindings[ifaceFQN]; !exists {
 				ca.bindings[ifaceFQN] = &ServiceBinding{Abstract: ifaceFQN, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: pathToFileURI(path)}
 			}
@@ -851,25 +851,6 @@ func cleanPHPString(s string) string {
 	s = strings.TrimSuffix(s, "::class")
 	s = strings.ReplaceAll(s, "\\\\", "\\")
 	return s
-}
-
-func resolveType(name, currentNs string, uses []parser.UseNode) string {
-	if strings.HasPrefix(name, "\\") {
-		return strings.TrimPrefix(name, "\\")
-	}
-	parts := strings.SplitN(name, "\\", 2)
-	for _, u := range uses {
-		if u.Alias == parts[0] {
-			if len(parts) > 1 {
-				return u.FullName + "\\" + parts[1]
-			}
-			return u.FullName
-		}
-	}
-	if currentNs != "" {
-		return currentNs + "\\" + name
-	}
-	return name
 }
 
 func leadingIndent(s string) int {
@@ -1073,7 +1054,7 @@ func interpretSymfonyPHPServiceExpr(expr, currentNs string, uses []parser.UseNod
 		return cleanPHPString(expr)
 	}
 	if symfonyClassExprRegex.MatchString(expr) {
-		return resolveType(cleanPHPString(expr), currentNs, uses)
+		return parser.ResolveImportedName(cleanPHPString(expr), currentNs, uses, "class")
 	}
 	return ""
 }
