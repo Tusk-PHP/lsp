@@ -232,6 +232,9 @@ func parseRouteDefinition(toks []phpToken, uri string, methodTok int, method str
 	}
 
 	args := splitTopLevelArgs(toks, openTok+1, closeTok)
+	if method == "match" {
+		args = args[1:]
+	}
 	route := RouteName{URI: uri}
 	if len(args) > 0 {
 		if path, ok := firstStringLiteral(args[0]); ok {

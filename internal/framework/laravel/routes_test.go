@@ -217,3 +217,46 @@ Route::get('/z'
 		t.Errorf("route b range = %v", b.Range)
 	}
 }
+
+func TestParseRouteDefinitionsReadsEachVerbsPathAndAction(t *testing.T) {
+	source := `<?php
+use App\Http\Controllers\ContactController;
+
+Route::match(['get', 'post'], '/contact', [ContactController::class, 'show'])->name('contact');
+Route::match(['put'], '/contact/{id}', 'ContactController@update')->name('contact.update');
+Route::match(['get'])->name('contact.none');
+Route::any('/any', [ContactController::class, 'any'])->name('any');
+Route::get('/get', [ContactController::class, 'index'])->name('get');
+Route::post('/post', ContactController::class)->name('post');
+Route::put('/put', [ContactController::class, 'put'])->name('put');
+Route::patch('/patch', [ContactController::class, 'patch'])->name('patch');
+Route::delete('/delete', [ContactController::class, 'delete'])->name('delete');
+Route::options('/options', [ContactController::class, 'options'])->name('options');
+`
+	routes := map[string]RouteName{}
+	for _, r := range parseRouteDefinitions("file:///tmp/project/routes/web.php", source) {
+		routes[r.Name] = r
+	}
+	const controller = `App\Http\Controllers\ContactController`
+	for name, want := range map[string][3]string{
+		"contact":        {"/contact", "controller", controller + "@show"},
+		"contact.update": {"/contact/{id}", "controller", controller + "@update"},
+		"contact.none":   {"", "route", ""},
+		"any":            {"/any", "controller", controller + "@any"},
+		"get":            {"/get", "controller", controller + "@index"},
+		"post":           {"/post", "controller", controller + "@__invoke"},
+		"put":            {"/put", "controller", controller + "@put"},
+		"patch":          {"/patch", "controller", controller + "@patch"},
+		"delete":         {"/delete", "controller", controller + "@delete"},
+		"options":        {"/options", "controller", controller + "@options"},
+	} {
+		r, ok := routes[name]
+		if !ok {
+			t.Errorf("route %q missing from %v", name, routes)
+			continue
+		}
+		if r.Path != want[0] || r.TargetKind != want[1] || r.Target != want[2] {
+			t.Errorf("route %q: path %q target %s %q, want path %q target %s %q", name, r.Path, r.TargetKind, r.Target, want[0], want[1], want[2])
+		}
+	}
+}
