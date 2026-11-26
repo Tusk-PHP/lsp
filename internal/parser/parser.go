@@ -38,6 +38,8 @@ type ParseResult struct {
 	// $var->method chains, Type::method, new Type). The slice is populated by
 	// the expression scanner that runs after the declaration-level pass.
 	Calls callList
+
+	importSpans []tokenSpan
 }
 
 type UseStatement struct {
@@ -1110,6 +1112,7 @@ func (p *structParser) parseNamespace() {
 }
 
 func (p *structParser) parseUse() {
+	start := p.pos
 	p.advance()
 	kind := p.useKind("class")
 
@@ -1144,6 +1147,7 @@ func (p *structParser) parseUse() {
 		p.advance()
 	}
 	p.expect(TokenSemicolon)
+	p.result.importSpans = append(p.result.importSpans, tokenSpan{start: start, end: p.pos})
 }
 
 // useKind reads an optional `function` or `const` before an imported name,

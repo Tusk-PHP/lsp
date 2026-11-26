@@ -56,6 +56,7 @@ app/code/Magento/Catalog/Model/Category.php	unknown-member	Unknown member 'getAn
 app/code/Magento/Catalog/Model/Category/FileInfo.php	unused-import	Unused import 'Magento\Catalog\Model\Category\Media\PathResolverFactory'
 app/code/Magento/Catalog/Model/Category/FileInfo.php	unused-import	Unused import 'Magento\Catalog\Model\Category\Media\PathResolverInterface'
 app/code/Magento/Catalog/Model/Indexer/Product/Eav/Plugin/AttributeSet.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
+app/code/Magento/Catalog/Model/Layer/FilterList.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
 app/code/Magento/Catalog/Model/Layer/Search/CollectionFilter.php	unused-import	Unused import 'Magento\Framework\DB\Select'
 app/code/Magento/Catalog/Model/Product/Attribute/Backend/GroupPrice/AbstractGroupPrice.php	unknown-member	Unknown member 'isGroupPriceFixed' on 'Price'
 app/code/Magento/Catalog/Model/Product/Attribute/Backend/TierPrice/AbstractHandler.php	unused-import	Unused import 'Magento\Catalog\Api\Data\ProductInterface'
@@ -204,6 +205,7 @@ app/code/Magento/Customer/Controller/Ajax/Login.php	unused-import	Unused import 
 app/code/Magento/Customer/Model/Authentication.php	unused-import	Unused import 'Magento\Customer\Model\ResourceModel\CustomerRepository'
 app/code/Magento/Customer/Model/Config/Backend/Show/Customer.php	unused-private-property	Private property 'Customer::$telephoneShowDefaultValue' is never used
 app/code/Magento/Customer/Model/Indexer/Address/AttributeProvider.php	unused-import	Unused import 'Magento\Customer\Model\ResourceModel\Address\Attribute\Collection'
+app/code/Magento/Customer/Model/Indexer/Address/AttributeProvider.php	unused-import	Unused import 'Magento\Eav\Model\Entity\Attribute'
 app/code/Magento/Customer/Model/ResourceModel/AddressRepository.php	unknown-member	Unknown member 'getAddressesCollection' on 'Customer'
 app/code/Magento/Customer/Model/ResourceModel/AddressRepository.php	unknown-member	Unknown member 'getAddressesCollection' on 'Customer'
 app/code/Magento/Customer/Model/ResourceModel/AddressRepository.php	unknown-member	Unknown member 'getId' on 'Address'
@@ -281,6 +283,7 @@ app/code/Magento/GiftMessage/Setup/Patch/Data/UpdateGiftMessageAttribute.php	unu
 app/code/Magento/GoogleOptimizer/Model/Plugin/Catalog/Category/DataProvider.php	unused-import	Unused import 'Magento\Framework\Event\Observer'
 app/code/Magento/GoogleOptimizer/Model/Plugin/Catalog/Category/DataProvider.php	unused-import	Unused import 'Magento\Framework\Event\ObserverInterface'
 app/code/Magento/GraphQl/Model/Backpressure/BackpressureContextFactory.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
+app/code/Magento/GraphQl/Model/Query/ContextFactory.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
 app/code/Magento/GraphQl/Model/Query/Logger/LoggerPool.php	unused-import	Unused import 'InvalidArgumentException'
 app/code/Magento/GraphQlCache/Controller/Plugin/GraphQl.php	unused-import	Unused import 'Magento\Framework\App\ResponseInterface'
 app/code/Magento/GroupedProduct/Block/Cart/Item/Renderer/Grouped.php	unused-import	Unused import 'Magento\Catalog\Model\Config\Source\Product\Thumbnail'
@@ -300,6 +303,9 @@ app/code/Magento/Indexer/Setup/Patch/Data/InitializeIndexerState.php	unused-impo
 app/code/Magento/InstantPurchase/Model/BillingAddressChoose/DefaultBillingAddressChooser.php	unused-import	Unused import 'Magento\Customer\Model\Address'
 app/code/Magento/InstantPurchase/Model/Config.php	unused-import	Unused import 'Magento\Store\Model\StoreManagerInterface'
 app/code/Magento/InstantPurchase/Model/ShippingAddressChoose/DefaultShippingAddressChooser.php	unused-import	Unused import 'Magento\Customer\Model\Address'
+app/code/Magento/InstantPurchase/Model/ShippingMethodChoose/ShippingMethodChooserInterface.php	unused-import	Unused import 'Magento\Customer\Model\Customer'
+app/code/Magento/Integration/Controller/Adminhtml/Integration/Edit.php	unused-import	Unused import 'Magento\Backend\App\Action'
+app/code/Magento/Integration/Model/AdminTokenService.php	unused-import	Unused import 'Magento\Integration\Model\Oauth\Token'
 app/code/Magento/Integration/Model/Oauth/Token.php	unused-import	Unused import 'Magento\Integration\Model\ResourceModel\Oauth\Token\Collection'
 app/code/Magento/Integration/Model/OpaqueToken/Reader.php	unused-import	Unused import 'Magento\Authorization\Model\UserContextInterface'
 app/code/Magento/Integration/Model/OpaqueToken/Reader.php	unused-import	Unused import 'Magento\Integration\Model\Config\AuthorizationConfig'
@@ -307,10 +313,12 @@ app/code/Magento/Integration/Model/OpaqueToken/Revoker.php	unused-import	Unused 
 app/code/Magento/Integration/Model/ResourceModel/Oauth/Token.php	unused-import	Unused import 'Magento\Framework\Oauth\Helper\Oauth'
 app/code/Magento/Integration/Setup/Patch/Data/RemoveInactiveTokens.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/Integration/view/adminhtml/templates/integration/activate/permissions/tab/webapi.phtml	unused-variable	Variable $selectedJson is assigned but never read
+app/code/Magento/JwtFrameworkAdapter/Model/JweFactory.php	unused-import	Unused import 'Magento\Framework\Jwt\Jws\Jws'
 app/code/Magento/JwtFrameworkAdapter/Model/JweFactory.php	unused-import	Unused import 'Magento\Framework\Jwt\Jws\JwsHeader'
 app/code/Magento/JwtFrameworkAdapter/Model/JweFactory.php	unused-import	Unused import 'Magento\Framework\Jwt\Jws\JwsInterface'
 app/code/Magento/JwtFrameworkAdapter/Model/JweManager.php	unused-import	Unused import 'Magento\Framework\Jwt\Jws\JwsHeader'
 app/code/Magento/JwtFrameworkAdapter/Model/JwtManager.php	unused-import	Unused import 'Magento\Framework\Jwt\HeaderInterface'
+app/code/Magento/JwtFrameworkAdapter/Model/UnsecuredJwtFactory.php	unused-import	Unused import 'Magento\Framework\Jwt\Jws\Jws'
 app/code/Magento/JwtUserToken/Model/ConfigurableJwtSettingsProvider.php	unused-import	Unused import 'Magento\Framework\Jwt\JwkSet'
 app/code/Magento/JwtUserToken/Model/Revoker.php	unused-import	Unused import 'Magento\Integration\Api\Exception\UserTokenException'
 app/code/Magento/JwtUserToken/Model/SecretBasedJwksFactory.php	unused-import	Unused import 'Magento\Framework\Jwt\JwkSet'
@@ -457,6 +465,7 @@ app/code/Magento/Review/Controller/Adminhtml/Product/ReviewGrid.php	unused-impor
 app/code/Magento/Review/Observer/PredispatchReviewObserver.php	unused-import	Unused import 'Magento\Review\Block\Product\ReviewRenderer'
 app/code/Magento/Review/Setup/Patch/Data/InitReviewStatusesAndData.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/ReviewGraphQl/Mapper/ReviewDataMapper.php	unused-import	Unused import 'Magento\Catalog\Model\Product'
+app/code/Magento/ReviewGraphQl/Model/DataProvider/CustomerReviewsDataProvider.php	unused-import	Unused import 'Magento\Review\Model\Review'
 app/code/Magento/Rule/Model/Condition/Sql/Builder.php	unused-import	Unused import 'Magento\Catalog\Model\Product'
 app/code/Magento/Rule/Model/Condition/Sql/Builder.php	unused-import	Unused import 'Magento\Framework\Exception\NoSuchEntityException'
 app/code/Magento/Sales/Block/Adminhtml/Order/Invoice/Totals.php	unused-import	Unused import 'Magento\Framework\DataObject'
@@ -468,6 +477,7 @@ app/code/Magento/Sales/Controller/Adminhtml/Creditmemo/AbstractCreditmemo/Index.
 app/code/Magento/Sales/Controller/Adminhtml/Order.php	unknown-member	Unknown member 'addBreadcrumb' on 'Page'
 app/code/Magento/Sales/Controller/Adminhtml/Order.php	unknown-member	Unknown member 'addBreadcrumb' on 'Page'
 app/code/Magento/Sales/Controller/Adminhtml/Order.php	unknown-member	Unknown member 'setActiveMenu' on 'Page'
+app/code/Magento/Sales/Controller/Adminhtml/Order/Create/Start.php	unused-import	Unused import 'Magento\Backend\App\Action'
 app/code/Magento/Sales/Controller/Adminhtml/Order/Creditmemo/NewAction.php	unknown-member	Unknown member 'setActiveMenu' on 'Page'
 app/code/Magento/Sales/Controller/Adminhtml/Order/Creditmemo/View.php	unknown-member	Unknown member 'setActiveMenu' on 'Page'
 app/code/Magento/Sales/Controller/Adminhtml/Order/Invoice/View.php	unknown-member	Unknown member 'setPath' on 'RedirectFactory'
@@ -488,10 +498,13 @@ app/code/Magento/Sales/Model/ResourceModel/Order/Creditmemo.php	unused-import	Un
 app/code/Magento/Sales/Model/ResourceModel/Order/Creditmemo.php	unused-import	Unused import 'Magento\Framework\Model\ResourceModel\Db\VersionControl\Snapshot'
 app/code/Magento/Sales/Model/ResourceModel/Order/Creditmemo.php	unused-import	Unused import 'Magento\SalesSequence\Model\Manager'
 app/code/Magento/Sales/Model/ResourceModel/Order/Creditmemo.php	unused-import	Unused import 'Magento\Sales\Model\ResourceModel\Attribute'
+app/code/Magento/Sales/Model/ResourceModel/Order/Creditmemo/Comment.php	unused-import	Unused import 'Exception'
+app/code/Magento/Sales/Model/ResourceModel/Order/Invoice/Comment.php	unused-import	Unused import 'Exception'
 app/code/Magento/Sales/Model/ResourceModel/Order/Payment.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/Sales/Model/ResourceModel/Order/Shipment.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/Sales/Model/ResourceModel/Order/Shipment.php	unused-import	Unused import 'Magento\SalesSequence\Model\Manager'
 app/code/Magento/Sales/Model/ResourceModel/Order/Shipment.php	unused-import	Unused import 'Magento\Sales\Model\ResourceModel\Attribute'
+app/code/Magento/Sales/Model/ResourceModel/Order/Shipment/Comment.php	unused-import	Unused import 'Exception'
 app/code/Magento/Sales/Model/ResourceModel/Order/Status.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/Sales/Model/ResourceModel/Order/Status.php	unused-import	Unused import 'Magento\Framework\Model\ResourceModel\Db\VersionControl\Snapshot'
 app/code/Magento/Sales/Model/ResourceModel/Order/Status.php	unused-import	Unused import 'Magento\SalesSequence\Model\Manager'
@@ -532,10 +545,13 @@ app/code/Magento/SendFriendGraphQl/Model/SendFriend/SendEmail.php	unused-import	
 app/code/Magento/SendFriendGraphQl/Model/SendFriend/SendEmail.php	unused-import	Unused import 'Magento\Framework\Exception\NoSuchEntityException'
 app/code/Magento/SendFriendGraphQl/Model/SendFriend/SendEmail.php	unused-private-property	Private property 'SendEmail::$productRepository' is never used
 app/code/Magento/Shipping/Block/Adminhtml/View/Form.php	unused-variable	Variable $url is assigned but never read
+app/code/Magento/Shipping/Controller/Adminhtml/Order/Shipment/MassPrintShippingLabel.php	unused-import	Unused import 'Magento\Backend\App\Action'
 app/code/Magento/Shipping/Controller/Adminhtml/Order/Shipment/View.php	unknown-member	Unknown member 'setActiveMenu' on 'Page'
+app/code/Magento/Shipping/Controller/Adminhtml/Shipment/MassPrintShippingLabel.php	unused-import	Unused import 'Magento\Backend\App\Action'
 app/code/Magento/Shipping/Model/Carrier/AbstractCarrierOnline.php	unused-variable	Variable $isFirstRequest is assigned but never read
 app/code/Magento/Shipping/Model/Carrier/AbstractCarrierOnline.php	unused-variable	Variable $isFirstRequest is assigned but never read
 app/code/Magento/Shipping/Model/Tracking/Result.php	unknown-member	Unknown member 'getAllTrackings' on 'Result'
+app/code/Magento/Sitemap/Controller/Adminhtml/Sitemap/Index.php	unused-import	Unused import 'Magento\Backend\App\Action'
 app/code/Magento/Sitemap/Controller/Adminhtml/Sitemap/Save.php	unknown-member	Unknown member 'delete' on 'Filesystem'
 app/code/Magento/Sitemap/Controller/Adminhtml/Sitemap/Save.php	unknown-member	Unknown member 'isFile' on 'Filesystem'
 app/code/Magento/Sitemap/Model/ResourceModel/Catalog/Category.php	unused-import	Unused import 'Magento\CatalogUrlRewrite\Model\CategoryUrlRewriteGenerator'
@@ -558,6 +574,7 @@ app/code/Magento/Swatches/Setup/Patch/Data/AddSwatchImageToDefaultAttribtueSet.p
 app/code/Magento/Swatches/Setup/Patch/Data/ConvertAdditionalDataToJson.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/Swatches/Setup/Patch/Data/UpdateAdminTextSwatchValues.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/Swatches/view/frontend/templates/product/view/renderer.phtml	unused-variable	Variable $swatchOptions is assigned but never read
+app/code/Magento/Tax/Model/Calculation/RateRepository.php	unused-import	Unused import 'Magento\Tax\Model\Api\SearchCriteria\TaxRateCollectionProcessor'
 app/code/Magento/Tax/Model/Quote/GrandTotalDetailsPlugin.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
 app/code/Magento/Tax/Setup/Patch/Data/AddTaxAttributeAndTaxClasses.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/Tax/Setup/Patch/Data/UpdateTaxClassAttributeVisibility.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
@@ -593,6 +610,7 @@ app/code/Magento/Ui/view/base/templates/layout/tabs/default.phtml	unknown-member
 app/code/Magento/Ups/Model/Carrier.php	unknown-class	Unknown class 'ProxyDeferredFactory'
 app/code/Magento/Ups/Model/Carrier.php	unused-import	Unused import 'GuzzleHttp\Exception\GuzzleException'
 app/code/Magento/Ups/Model/UpsAuth.php	unused-import	Unused import 'Magento\Framework\Exception\NoSuchEntityException'
+app/code/Magento/Ups/Model/UpsAuth.php	unused-import	Unused import 'Magento\Quote\Model\Quote\Address\RateResult\Error'
 app/code/Magento/Ups/view/adminhtml/templates/system/shipping/carrier_config.phtml	unused-variable	Variable $sectionCode is assigned but never read
 app/code/Magento/UrlRewrite/Setup/Patch/Data/ConvertSerializedDataToJson.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/User/Setup/Patch/Data/UpgradeSerializedFields.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
@@ -718,6 +736,7 @@ lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable
 lib/internal/Magento/Framework/Image/Adapter/ImageMagick.php	builtin-unavailable	Class 'ImagickPixel' requires ext-imagick
 lib/internal/Magento/Framework/Indexer/GridStructure.php	unused-import	Unused import 'Magento\Framework\Search\Request\Dimension'
 lib/internal/Magento/Framework/Indexer/IndexStructure.php	unused-import	Unused import 'Magento\Framework\Search\Request\Dimension'
+lib/internal/Magento/Framework/Interception/PluginListGenerator.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
 lib/internal/Magento/Framework/Jwt/JwkFactory.php	unused-private-method	Private method 'JwkFactory::base64Decode' is never used
 lib/internal/Magento/Framework/Lock/Backend/Zookeeper.php	unknown-class	Unknown class 'Zookeeper'
 lib/internal/Magento/Framework/Lock/Backend/Zookeeper.php	unknown-class	Unknown class 'Zookeeper'
@@ -757,6 +776,7 @@ lib/internal/Magento/Framework/Setup/Declaration/Schema/Operations/DropElement.p
 lib/internal/Magento/Framework/Setup/Declaration/Schema/Operations/ModifyTable.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Db\DefinitionAggregator'
 lib/internal/Magento/Framework/Setup/Declaration/Schema/Operations/ModifyTable.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Column'
 lib/internal/Magento/Framework/Setup/Patch/PatchReader.php	unused-import	Unused import 'Magento\Framework\Config\ReaderInterface'
+lib/internal/Magento/Framework/Setup/SampleData/FixtureManager.php	unused-import	Unused import 'Magento\Framework\Filesystem'
 lib/internal/Magento/Framework/Stdlib/DateTime/DateTime.php	argument-count-mismatch	Too many arguments to gmdate(): 1 passed, at most 0 expected
 lib/internal/Magento/Framework/Stdlib/DateTime/DateTimeFormatter.php	unknown-member	Unknown member 'toDateTimeZone' on 'DateTimeZone'
 lib/internal/Magento/Framework/Stomp/Bulk/Queue.php	deprecated	'getConnectionName' is deprecated: Connection name is just a config alias. It should not be used outside of loading config data.
@@ -774,9 +794,11 @@ lib/internal/Magento/Framework/View/Element/UiComponent/Argument/Interpreter/Con
 lib/internal/Magento/Framework/View/Element/UiComponent/Config/Provider/Component/Definition.php	unused-import	Unused import 'Magento\Framework\Phrase'
 lib/internal/Magento/Framework/View/Element/UiComponent/Config/Reader.php	unused-import	Unused import 'Magento\Framework\App\Filesystem\DirectoryList'
 lib/internal/Magento/Framework/View/Element/UiComponent/Config/Reader.php	unused-import	Unused import 'Magento\Framework\Config\FileIteratorFactory'
+lib/internal/Magento/Framework/View/Element/UiComponent/Config/Reader.php	unused-import	Unused import 'Magento\Framework\Filesystem'
 lib/internal/Magento/Framework/View/Element/UiComponent/Config/Reader.php	unused-import	Unused import 'Magento\Framework\Filesystem\Directory\ReadInterface'
 lib/internal/Magento/Framework/View/Element/UiComponent/ContentType/Xml.php	unused-variable	Variable $result is assigned but never read
 lib/internal/Magento/Framework/View/Element/UiComponent/DataProvider/DataProviderInterface.php	unused-import	Unused import 'Magento\Framework\Model\ResourceModel\Db\Collection\AbstractCollection'
 lib/internal/Magento/Framework/View/Element/UiComponent/DataProvider/Document.php	unused-import	Unused import 'Magento\Framework\Profiler'
+lib/internal/Magento/Framework/View/File/Collector/Override/Base.php	unused-import	Unused import 'Magento\Framework\Filesystem'
 lib/internal/Magento/Framework/View/Helper/Js.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
 lib/internal/Magento/Framework/Webapi/Exception.php	unused-import	Unused import 'Magento\Framework\Exception\ErrorMessage'

@@ -184,6 +184,20 @@ function getUser(): User {
 		assertNoFindings(t, findings)
 	})
 
+	t.Run("mentions outside code flagged", func(t *testing.T) {
+		source := "<?php\nuse App\\Models\\Post;\n// Post\necho 'Post';\n?>\n<p>Post</p>\n"
+		file := parser.ParseFile(source)
+		findings := checker.Check(file, source, nil)
+		assertFindingCodes(t, findings, []string{"unused-import"})
+	})
+
+	t.Run("import used in interpolation not flagged", func(t *testing.T) {
+		source := "<?php\nuse App\\Models\\Post;\necho \"{$app->make(Post::class)}\";\n"
+		file := parser.ParseFile(source)
+		findings := (&UnusedImportsRule{Shared: &Shared{}}).Check(file, source, nil)
+		assertNoFindings(t, findings)
+	})
+
 	t.Run("severity is hint", func(t *testing.T) {
 		source := `<?php
 use App\Models\User;

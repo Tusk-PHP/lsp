@@ -62,20 +62,21 @@ func (a *Analyzer) importUnusedImportQuickFixes(uri, source string, params proto
 	return actions
 }
 
-func (a *Analyzer) importOrganizeImportsAction(uri, source string, file *parser.FileNode, only []protocol.CodeActionKind) *protocol.CodeAction {
+func (a *Analyzer) importOrganizeImportsAction(uri string, result *parser.ParseResult, file *parser.FileNode, only []protocol.CodeActionKind) *protocol.CodeAction {
 	if !protocol.CodeActionSourceOrganizeImports.In(only) {
 		return nil
 	}
 
-	block, ok := safeImportCodeActionBlock(source, file)
+	lines := result.Lines
+	block, ok := safeImportCodeActionBlock(lines, file)
 	if !ok {
 		return nil
 	}
 
-	lines := strings.Split(source, "\n")
+	refs := result.ImportReferences()
 	kept := make([]importCodeActionLine, 0, len(block.lines))
 	for _, line := range block.lines {
-		if importCodeActionUsed(line.useStmt, lines) {
+		if refs.Used(line.useStmt) {
 			kept = append(kept, line)
 		}
 	}
@@ -117,12 +118,11 @@ func (a *Analyzer) importOrganizeImportsAction(uri, source string, file *parser.
 	}
 }
 
-func safeImportCodeActionBlock(source string, file *parser.FileNode) (importCodeActionBlock, bool) {
+func safeImportCodeActionBlock(lines []string, file *parser.FileNode) (importCodeActionBlock, bool) {
 	if file == nil || len(file.Uses) == 0 {
 		return importCodeActionBlock{}, false
 	}
 
-	lines := strings.Split(source, "\n")
 	block := importCodeActionBlock{
 		startLine: file.Uses[0].StartLine,
 		endLine:   file.Uses[len(file.Uses)-1].StartLine,
@@ -216,55 +216,5 @@ func importKindOrder(kind string) int {
 		return 2
 	default:
 		return 0
-	}
-}
-
-func importCodeActionUsed(u parser.UseNode, lines []string) bool {
-	alias := u.Alias
-	if alias == "" {
-		if idx := strings.LastIndex(u.FullName, "\\"); idx >= 0 {
-			alias = u.FullName[idx+1:]
-		} else {
-			alias = u.FullName
-		}
-	}
-
-	for i, line := range lines {
-		if i == u.StartLine {
-			continue
-		}
-		if containsImportCodeActionWord(line, alias) {
-			return true
-		}
-	}
-	return false
-}
-
-func containsImportCodeActionWord(line, name string) bool {
-	trimmed := strings.TrimSpace(line)
-	if !strings.Contains(trimmed, name) {
-		return false
-	}
-
-	start := 0
-	for {
-		idx := strings.Index(line[start:], name)
-		if idx < 0 {
-			return false
-		}
-		absIdx := start + idx
-		before := absIdx - 1
-		after := absIdx + len(name)
-
-		leftOK := before < 0 || !parser.IsIdentByte(line[before])
-		rightOK := after >= len(line) || !parser.IsIdentByte(line[after])
-		if leftOK && rightOK {
-			return true
-		}
-
-		start = absIdx + 1
-		if start >= len(line) {
-			return false
-		}
 	}
 }

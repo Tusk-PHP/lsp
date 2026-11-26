@@ -37,7 +37,7 @@ func EditRules(opts NativeRulesOptions, shared *checks.Shared) []checks.Rule {
 		rules = append(rules, opts.BuiltinUnavailableRule)
 	}
 	rules = append(rules,
-		&checks.UnusedImportsRule{},
+		&checks.UnusedImportsRule{Shared: shared},
 		&checks.UnusedPrivateRule{Shared: shared},
 		&checks.UnreachableCodeRule{Shared: shared},
 		&checks.RedundantUnionRule{},
