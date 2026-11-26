@@ -176,26 +176,20 @@ func (a *Analyzer) resolveDefinitionSymbol(r *resolve.Resolver, uri, source stri
 	if ctx == nil {
 		return definitionTarget{}
 	}
-	if l := a.frameworkDefinition(r, source, ctx); l != nil {
+	if l := a.frameworkDefinition(r, ctx); l != nil {
 		return definitionTarget{loc: l}
 	}
 	return a.symbolTarget(r, uri, source, ctx)
 }
 
-func (a *Analyzer) frameworkDefinition(r *resolve.Resolver, source string, ctx *sourcectx.CursorContext) *protocol.Location {
-	line, pos := ctx.Line, ctx.Position
+func (a *Analyzer) frameworkDefinition(r *resolve.Resolver, ctx *sourcectx.CursorContext) *protocol.Location {
 	if arg, ok := ctx.CallArg(); ok {
 		if l := a.definitionForCallArg(r, arg, ctx.File); l != nil {
 			return l
 		}
 	}
 	if a.container != nil {
-		if l := a.definitionForContainerArg(r, line, pos, source, ctx.File, false); l != nil {
-			return l
-		}
-	}
-	if a.framework == "laravel" && a.routes != nil {
-		if l := a.definitionForRouteName(line, pos.Character); l != nil {
+		if l := a.definitionForContainerArg(r, ctx, false); l != nil {
 			return l
 		}
 	}
@@ -283,21 +277,14 @@ func (a *Analyzer) symbolTarget(r *resolve.Resolver, uri, source string, ctx *so
 	return definitionTarget{sym: best, loc: symbolLocation(best)}
 }
 
-func (a *Analyzer) definitionForRouteName(line string, character int) *protocol.Location {
-	name, ok := frameworklaravel.FindRouteNameReference(line, character)
-	if !ok {
-		return nil
-	}
-	route := a.routes.Find(name)
-	if route == nil {
-		return nil
-	}
-	return &protocol.Location{URI: route.URI, Range: route.Range}
-}
-
 func (a *Analyzer) definitionForCallArg(r *resolve.Resolver, arg sourcectx.CallArg, file *parser.FileNode) *protocol.Location {
 	if arg.Value != sourcectx.ArgString || arg.Text == "" {
 		return nil
+	}
+	if a.framework == "laravel" && a.routes != nil && frameworklaravel.IsRouteNameArg(arg) {
+		if route := a.routes.Find(arg.Text); route != nil {
+			return &protocol.Location{URI: route.URI, Range: route.Range}
+		}
 	}
 	if ctx, ok := frameworklaravel.ViewNameArg(arg); ok && a.framework == "laravel" && a.views != nil {
 		if view := a.views.Find(ctx.Name); view != nil {
@@ -354,74 +341,31 @@ func (a *Analyzer) definitionForVariable(r *resolve.Resolver, varName string, so
 	return nil
 }
 
-// definitionForContainerArg checks if the cursor is inside a container resolution
-// call argument (e.g. app('request'), app(Request::class)) and returns the
-// definition of the concrete class.
-func (a *Analyzer) definitionForContainerArg(r *resolve.Resolver, line string, pos protocol.Position, source string, file *parser.FileNode, preferType bool) *protocol.Location {
-	prefix := line[:min(pos.Character, len(line))]
-	// Check if we're inside a container call
-	patterns := []string{"app(", "resolve(", "->get(", "->make("}
-	insideCall := false
-	var argStart int
-	for _, pat := range patterns {
-		idx := strings.LastIndex(prefix, pat)
-		if idx < 0 {
-			continue
-		}
-		after := prefix[idx+len(pat):]
-		// If there's already a closing paren before cursor, we're past the call
-		if strings.Contains(after, ")") {
-			continue
-		}
-		insideCall = true
-		argStart = idx + len(pat)
-		break
-	}
-	if !insideCall {
+func (a *Analyzer) definitionForContainerArg(r *resolve.Resolver, ctx *sourcectx.CursorContext, preferType bool) *protocol.Location {
+	file := ctx.File
+	call, args := sourcectx.CallNodeAt(file.Tree, file.Source, ctx.Offset)
+	if call == nil || len(args.Args) == 0 || container.ResolvingArgs(file.Source, call) == nil {
 		return nil
 	}
-
-	// Also grab everything after cursor to the closing paren on the same line
-	rest := line[min(pos.Character, len(line)):]
-	closeIdx := strings.Index(rest, ")")
-	var fullArg string
-	if closeIdx >= 0 {
-		fullArg = line[argStart : pos.Character+closeIdx]
-	} else {
-		fullArg = line[argStart:min(pos.Character, len(line))]
+	first := args.Args[0].Value
+	if span := first.Bounds(); ctx.Offset < span.Start || ctx.Offset > span.End {
+		return nil
 	}
-
-	arg := strings.TrimSpace(fullArg)
-	// Strip first arg only
-	if commaIdx := strings.Index(arg, ","); commaIdx >= 0 {
-		arg = strings.TrimSpace(arg[:commaIdx])
+	abstract, ok := container.AbstractOf(r, file.Source, file, first)
+	if !ok {
+		return nil
 	}
-	arg = strings.Trim(arg, "'\"")
-
-	wasClassConst := false
-	if strings.HasSuffix(arg, "::class") {
-		wasClassConst = true
-		className := strings.TrimSuffix(arg, "::class")
-		arg = r.ResolveClassName(className, file)
-	}
-
-	if !preferType && !wasClassConst {
-		if binding := a.container.LookupBinding(arg); binding != nil && binding.DefinitionURI != "" {
+	if !preferType && !abstract.Class {
+		if binding := a.container.LookupBinding(abstract.Name); binding != nil && binding.DefinitionURI != "" {
 			return &protocol.Location{URI: binding.DefinitionURI, Range: binding.Definition}
 		}
 	}
-
-	// Resolve via container bindings
-	if binding := a.container.ResolveDependency(arg); binding != nil {
+	if binding := a.container.ResolveDependency(abstract.Name); binding != nil {
 		if sym := a.index.Lookup(binding.Concrete); sym != nil {
 			return symbolLocation(sym)
 		}
 	}
-	// Direct FQN lookup
-	if sym := a.index.Lookup(arg); sym != nil {
-		return symbolLocation(sym)
-	}
-	return nil
+	return symbolLocation(a.index.Lookup(abstract.Name))
 }
 
 func symbolLocation(sym *symbols.Symbol) *protocol.Location {
@@ -452,7 +396,7 @@ func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position)
 	file := ctx.File
 
 	if a.container != nil {
-		if loc := a.definitionForContainerArg(r, ctx.Line, pos, source, file, true); loc != nil {
+		if loc := a.definitionForContainerArg(r, ctx, true); loc != nil {
 			return singleLocation(loc)
 		}
 	}
