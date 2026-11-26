@@ -234,6 +234,14 @@ func (p *parser) expect(k token.Kind) bool {
 	return false
 }
 
+func (p *parser) close(k token.Kind) bool {
+	if p.expect(k) {
+		return true
+	}
+	p.emptyAt = max(p.emptyAt, p.start())
+	return false
+}
+
 func kindName(k token.Kind) string {
 	switch k {
 	case token.Variable:

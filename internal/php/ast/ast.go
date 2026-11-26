@@ -153,6 +153,7 @@ type ArgList struct {
 	Span
 	Args            []*Arg
 	RestPlaceholder bool
+	Unclosed        bool
 }
 
 type Variable struct {
@@ -206,7 +207,8 @@ type ArrayItem struct {
 
 type Array struct {
 	Span
-	Short bool
+	Short    bool
+	Unclosed bool
 	expr
 	Items []*ArrayItem
 }
@@ -390,6 +392,7 @@ type ClassConstFetch struct {
 
 type ArrayDimFetch struct {
 	expr
+	Unclosed bool
 	Span
 	Array Expr
 	Dim   Expr
