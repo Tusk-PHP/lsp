@@ -39,19 +39,15 @@ func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.In
 	var findings []Finding
 	var gatedSpans []ast.Span
 	gatedDone := false
-	var skipUntil uint32
 	syntax := shared.tree(source, file)
 	eachResolvedCall(syntax, file, source, index, typeResolver, nil, func(call resolvedCall) {
 		at := call.name.Bounds().Start
-		if call.kind == callConstructor || at < skipUntil || !allCheckable(call.callees) {
+		if call.kind == callConstructor || !allCheckable(call.callees) {
 			return
 		}
 		argCount, safe := countArguments(call.args)
 		if !safe {
 			return
-		}
-		if call.kind != callMethod {
-			skipUntil = call.args.End
 		}
 		line, col := syntax.lines.Position(at)
 		f := buildArgCountFinding(call.callees, argCount, call.kind == callFunction, line, col, syntax.text(call.name))
