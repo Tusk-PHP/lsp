@@ -10,7 +10,11 @@
       { "type": "logMessage", "pattern": "Indexed [0-9]+ files" }
     ],
     "readyTimeoutSec": 180,
-    "notes": "This repository. Build it first with `make build`. Holds its index in memory only, so there is no cache directory to reset."
+    "initializationOptions": {
+      "phpstanEnabled": false,
+      "pintEnabled": false
+    },
+    "notes": "This repository. Build it first with `make build`. Holds its index in memory only, so there is no cache directory to reset. PHPStan and Pint are turned off: when a project ships them, Tusk PHP runs them as separate processes for extra diagnostics, which no other server here does, and their memory would count as the server's."
   },
   {
     "id": "intelephense",

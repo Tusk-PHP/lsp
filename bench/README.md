@@ -66,7 +66,10 @@ second, reported both at the moment of readiness and across the whole run, plus
 total CPU seconds. A Node or PHP server carries its runtime in these numbers.
 That is a real cost to the user, but it is not a like-for-like comparison of
 indexing strategy — read it as "what the machine pays", not "who wrote better
-code".
+code". Tusk PHP runs with PHPStan and Pint turned off (`servers.json`): in a
+project that ships them it starts them as separate processes for extra
+diagnostics, which no other server here does, and on the Filament demo they
+alone would add about 270 MB.
 
 **Latency.** Per case: one warm-up call, then five timed calls, reported as
 p50/p95 per feature. Measured after readiness, so this is steady-state editing,
@@ -195,6 +198,9 @@ a benchmark reproducible. Two things to state plainly alongside it:
 
 - the case suite was written in this repository, and a suite written by someone
   else would emphasise different things;
-- memory figures include each server's language runtime.
+- memory figures include each server's language runtime;
+- framework cases (tagged `laravel`, `livewire`, `blade`, `filament`) only a
+  server with Laravel support can answer, so a server without it isn't wrong
+  there, it doesn't try.
 
 Both are honest to say, and saying them is cheaper than being corrected.
