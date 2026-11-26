@@ -341,3 +341,22 @@ func BenchmarkNewDocument(b *testing.B) {
 		}
 	}
 }
+
+func TestDocumentOutsideItsLines(t *testing.T) {
+	source := "<?php\nnamespace App;\nclass Shop {}\n"
+	doc := NewDocument("file:///a.php", source)
+	if file := doc.File(); file == nil || len(file.Classes) != 1 || file.Classes[0].Name != "Shop" {
+		t.Fatalf("the document's declarations are the parsed file's: %+v", file)
+	}
+	if name := Analyze("file:///a.php", source, protocol.Position{Line: 2, Character: 7}).Name(); name == nil || name.SymbolText != "Shop" {
+		t.Errorf("the name under the cursor is Shop, got %+v", name)
+	}
+	for _, pos := range []protocol.Position{{Line: -1}, {Line: 10}} {
+		if ctx := doc.At(pos); ctx != nil {
+			t.Errorf("At(%v) = %+v, want nil", pos, ctx)
+		}
+		if name := Analyze("file:///a.php", source, pos).Name(); name != nil {
+			t.Errorf("Analyze(%v).Name() = %+v, want nil", pos, name)
+		}
+	}
+}
