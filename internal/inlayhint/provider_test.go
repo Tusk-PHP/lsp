@@ -491,6 +491,33 @@ $svc->twoArgs($loggerA, $loggerB);
 	}
 }
 
+func TestParamName_CommentOnlyArgumentGetsNoHint(t *testing.T) {
+	p := setupProvider(t, "file:///app/HintService.php", hintsSource)
+
+	source := `<?php
+namespace App;
+use Monolog\Logger;
+
+$svc = new HintService();
+$loggerB = new Logger();
+$svc->twoArgs(/* none yet */, $loggerB);
+`
+	cfg := allCfg()
+	cfg.SuppressSingleParam = false
+	cfg.SuppressNameMatch = false
+	hints := p.GetInlayHints("file:///test.php", source, cfg)
+
+	var labels []string
+	for _, h := range hintsOnLine(hints, lineOf(source, "twoArgs")) {
+		if h.Kind == protocol.InlayHintKindParameter {
+			labels = append(labels, h.Label)
+		}
+	}
+	if len(labels) != 1 || labels[0] != "b:" {
+		t.Errorf("parameter hints = %v, want only b: (the first argument is just a comment)", labels)
+	}
+}
+
 // TestParamName_SuppressSingle verifies that with SuppressSingleParam=true a
 // one-parameter call produces no parameter name hints.
 func TestParamName_SuppressSingle(t *testing.T) {

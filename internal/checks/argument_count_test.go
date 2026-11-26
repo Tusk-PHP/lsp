@@ -371,6 +371,33 @@ if ($unrelated) {
 	}
 }
 
+func TestArgumentCountSkipsAlternativeSyntaxChainGatedByElseif(t *testing.T) {
+	idx := indexWithFunctions(`<?php
+namespace App;
+function pair($a, $b) {}
+`)
+	source := `<?php
+namespace App;
+if ($legacy):
+    pair(1);
+    if ($nested):
+        pair(1);
+    endif;
+elseif (PHP_VERSION_ID < 80000):
+    pair(1);
+endif;
+pair(1);
+`
+	got := (&ArgumentCountRule{}).Check(parser.ParseFile(source), source, idx)
+	var lines []int
+	for _, f := range got {
+		lines = append(lines, f.StartLine)
+	}
+	if len(lines) != 1 || lines[0] != 10 {
+		t.Errorf("findings on lines %v, want [10] (only after the endif that closes the chain)", lines)
+	}
+}
+
 func TestArgumentCountWithSeveralDeclarations(t *testing.T) {
 	idx := duplicateDeclarationsIndex()
 	source := `<?php
