@@ -436,3 +436,26 @@ func TestArgumentCountWhenEveryDeclarationRejectsDifferently(t *testing.T) {
 		t.Errorf("too many for one declaration and too few for the other: %+v", got)
 	}
 }
+
+func TestArgumentCountAcceptsTheGlobalFunctionANamespacedOneShadows(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	idx.IndexFile("file:///tests/class_exists_mock.php", `<?php
+namespace App\Generator;
+function class_exists($className) {}
+function only_here($a) {}
+`)
+	source := `<?php
+namespace App\Generator;
+class_exists('Foo', false);
+only_here(1, 2);
+`
+	var got []string
+	for _, f := range (&ArgumentCountRule{}).Check(parser.ParseFile(source), source, idx) {
+		got = append(got, f.Message)
+	}
+	want := []string{"Too many arguments to only_here(): 2 passed, at most 1 expected"}
+	if !slices.Equal(got, want) {
+		t.Errorf("PHP falls back to the global class_exists() when the namespaced one isn't loaded, so either may run:\ngot  %v\nwant %v", got, want)
+	}
+}

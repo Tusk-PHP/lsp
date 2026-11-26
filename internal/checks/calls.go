@@ -140,18 +140,15 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 }
 
 func functionCallees(fqns []string, index *symbols.Index) []callee {
+	var callees []callee
 	for _, fqn := range fqns {
-		var callees []callee
 		for _, def := range index.Definitions(fqn) {
 			if def.Kind == symbols.KindFunction {
 				callees = append(callees, callee{sym: def})
 			}
 		}
-		if len(callees) > 0 {
-			return callees
-		}
 	}
-	return nil
+	return callees
 }
 
 func methodCallees(classFQN, method string, index *symbols.Index) []callee {

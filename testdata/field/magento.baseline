@@ -243,7 +243,6 @@ app/code/Magento/Directory/Setup/Patch/Data/AddDataForCroatia.php	unused-import	
 app/code/Magento/Directory/Setup/Patch/Data/AddDataForIndia.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 app/code/Magento/Directory/Setup/Patch/Data/AddRegionsForIndia.php	unused-import	Unused import 'Magento\Framework\Setup\Patch\PatchVersionInterface'
 app/code/Magento/Downloadable/Controller/Adminhtml/Downloadable/Product/Edit/Form.php	unknown-member	Unknown member '_initProduct' on 'Form'
-app/code/Magento/Downloadable/Helper/Download.php	argument-count-mismatch	Too many arguments to get_headers(): 2 passed, at most 0 expected
 app/code/Magento/Downloadable/Model/Link.php	unused-import	Unused import 'Magento\Downloadable\Model\ResourceModel\Link'
 app/code/Magento/Downloadable/Model/Link/Purchased/Item.php	unused-import	Unused import 'Magento\Downloadable\Model\ResourceModel\Link\Purchased\Item'
 app/code/Magento/Downloadable/Model/Sample/Builder.php	unused-import	Unused import 'Magento\Catalog\Model\Product'
@@ -687,18 +686,7 @@ lib/internal/Magento/Framework/Data/Form/Element/Checkbox.php	unused-variable	Va
 lib/internal/Magento/Framework/Data/Form/Element/Gallery.php	unused-variable	Variable $gallery is assigned but never read
 lib/internal/Magento/Framework/Data/Tree.php	unknown-member	Unknown member 'removeChild' on 'Tree'
 lib/internal/Magento/Framework/Filesystem/Directory/Write.php	unused-import	Unused import 'Magento\Framework\Config\Dom\ValidationException'
-lib/internal/Magento/Framework/Filesystem/Driver/File.php	argument-count-mismatch	Too many arguments to feof(): 1 passed, at most 0 expected
-lib/internal/Magento/Framework/Filesystem/Driver/File.php	argument-count-mismatch	Too many arguments to file_get_contents(): 3 passed, at most 0 expected
-lib/internal/Magento/Framework/Filesystem/Driver/File.php	argument-count-mismatch	Too many arguments to file_put_contents(): 3 passed, at most 0 expected
-lib/internal/Magento/Framework/Filesystem/Driver/File.php	argument-count-mismatch	Too many arguments to fwrite(): 2 passed, at most 0 expected
 lib/internal/Magento/Framework/Filesystem/Driver/File.php	undefined-variable	Undefined variable $fwrite
-lib/internal/Magento/Framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to feof(): 1 passed, at most 0 expected
-lib/internal/Magento/Framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to file_get_contents(): 3 passed, at most 0 expected
-lib/internal/Magento/Framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to file_put_contents(): 4 passed, at most 0 expected
-lib/internal/Magento/Framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to fsockopen(): 4 passed, at most 2 expected
-lib/internal/Magento/Framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to fwrite(): 2 passed, at most 0 expected
-lib/internal/Magento/Framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to get_headers(): 2 passed, at most 0 expected
-lib/internal/Magento/Framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to get_headers(): 2 passed, at most 0 expected
 lib/internal/Magento/Framework/Filesystem/Driver/Http.php	undefined-variable	Undefined variable $errorMessage
 lib/internal/Magento/Framework/Filesystem/Driver/Http.php	undefined-variable	Undefined variable $errorMessage
 lib/internal/Magento/Framework/Filesystem/Driver/Http.php	undefined-variable	Undefined variable $errorNumber
@@ -744,8 +732,6 @@ lib/internal/Magento/Framework/Search/Dynamic/DataProviderInterface.php	unused-i
 lib/internal/Magento/Framework/Search/Response/Bucket.php	unused-import	Unused import 'Magento\Framework\Search\Response\Aggregation\Value'
 lib/internal/Magento/Framework/Session/SaveHandler/Redis.php	unused-import	Unused import 'Magento\Framework\App\Filesystem\DirectoryList'
 lib/internal/Magento/Framework/Session/SaveHandler/Redis.php	unused-private-property	Private property 'Redis::$filesystem' is never used
-lib/internal/Magento/Framework/Session/SessionManager.php	argument-count-mismatch	Too few arguments to session_regenerate_id(): 0 passed, at least 1 required
-lib/internal/Magento/Framework/Session/SessionManager.php	argument-count-mismatch	Too many arguments to session_set_save_handler(): 2 passed, at most 0 expected
 lib/internal/Magento/Framework/Setup/Declaration/Schema/Db/MySQL/DbSchemaWriter.php	unused-import	Unused import 'Magento\Framework\DB\Adapter\AdapterInterface'
 lib/internal/Magento/Framework/Setup/Declaration/Schema/Db/MySQL/Definition/Columns/Comment.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Columns\ColumnNullableAwareInterface'
 lib/internal/Magento/Framework/Setup/Declaration/Schema/Db/MySQL/Definition/Constraints/Internal.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Column'
@@ -757,7 +743,6 @@ lib/internal/Magento/Framework/Setup/Declaration/Schema/Operations/DropElement.p
 lib/internal/Magento/Framework/Setup/Declaration/Schema/Operations/ModifyTable.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Db\DefinitionAggregator'
 lib/internal/Magento/Framework/Setup/Declaration/Schema/Operations/ModifyTable.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Column'
 lib/internal/Magento/Framework/Setup/Patch/PatchReader.php	unused-import	Unused import 'Magento\Framework\Config\ReaderInterface'
-lib/internal/Magento/Framework/Stdlib/DateTime/DateTime.php	argument-count-mismatch	Too many arguments to gmdate(): 1 passed, at most 0 expected
 lib/internal/Magento/Framework/Stdlib/DateTime/DateTimeFormatter.php	unknown-member	Unknown member 'toDateTimeZone' on 'DateTimeZone'
 lib/internal/Magento/Framework/Stomp/Bulk/Queue.php	deprecated	'getConnectionName' is deprecated: Connection name is just a config alias. It should not be used outside of loading config data.
 lib/internal/Magento/Framework/Stomp/Queue.php	deprecated	'getConnectionName' is deprecated: Connection name is just a config alias. It should not be used outside of loading config data.
