@@ -57,3 +57,42 @@ func TestMatchingCloseAndOpenPairEachBracketKind(t *testing.T) {
 		}
 	}
 }
+
+func TestArrowExpressionEnd(t *testing.T) {
+	for _, tc := range []struct {
+		name, source, last string
+	}{
+		{"a statement's semicolon", "<?php $f = fn($x) => g($x, [1]);", ")"},
+		{"an argument's comma", "<?php map(fn($x) => $x * 2, $xs);", "2"},
+		{"the call's parenthesis", "<?php map(fn($x) => $x + 1 /* inc */);", "1"},
+		{"an array's bracket", "<?php [fn($x) => $x];", "$x"},
+		{"a block's brace", "<?php if (1) { $f = fn() => match($a) { 1 => 2 } }", "}"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tokens := Tokenize(tc.source)
+			start := -1
+			for i, tok := range tokens {
+				if tok.Kind == TokenDoubleArrow {
+					start = NextSignificant(tokens, i+1)
+					break
+				}
+			}
+			end := ArrowExpressionEnd(tokens, start)
+			if end < 0 || tokens[end].Value != tc.last {
+				t.Fatalf("ArrowExpressionEnd = %d, want the index of %q", end, tc.last)
+			}
+		})
+	}
+
+	t.Run("running to the end of the file", func(t *testing.T) {
+		tokens := Tokenize("<?php $f = fn($x) => $x * 2")
+		if end := ArrowExpressionEnd(tokens, len(tokens)-3); end != PrevSignificant(tokens, len(tokens)-1) {
+			t.Errorf("ArrowExpressionEnd at the end of the file = %d, want the last significant token", end)
+		}
+	})
+	t.Run("no expression", func(t *testing.T) {
+		if end := ArrowExpressionEnd(Tokenize("<?php fn() =>"), -1); end != -1 {
+			t.Errorf("ArrowExpressionEnd(-1) = %d, want -1", end)
+		}
+	})
+}

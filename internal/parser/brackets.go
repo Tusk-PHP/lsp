@@ -71,3 +71,26 @@ func openingKind(close TokenKind) (TokenKind, bool) {
 	}
 	return 0, false
 }
+
+func ArrowExpressionEnd(tokens []Token, start int) int {
+	if start < 0 {
+		return -1
+	}
+	depth := 0
+	for i := start; i < len(tokens); i++ {
+		switch tokens[i].Kind {
+		case TokenOpenParen, TokenOpenBracket, TokenOpenBrace:
+			depth++
+		case TokenCloseParen, TokenCloseBracket, TokenCloseBrace:
+			if depth == 0 {
+				return PrevSignificant(tokens, i-1)
+			}
+			depth--
+		case TokenComma, TokenSemicolon:
+			if depth == 0 {
+				return PrevSignificant(tokens, i-1)
+			}
+		}
+	}
+	return PrevSignificant(tokens, len(tokens)-1)
+}

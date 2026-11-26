@@ -314,7 +314,7 @@ func closureScopeAt(result *parser.ParseResult, pos protocol.Position, classFQN 
 		}
 		if body >= 0 && result.Tokens[body].Kind == parser.TokenDoubleArrow {
 			bodyStart := parser.NextSignificant(result.Tokens, body+1)
-			bodyEnd := arrowExpressionEnd(result.Tokens, bodyStart)
+			bodyEnd := parser.ArrowExpressionEnd(result.Tokens, bodyStart)
 			if bodyStart < 0 || bodyEnd < 0 {
 				continue
 			}
@@ -540,51 +540,6 @@ func isTopLevelImportUse(tokens []parser.Token, idx, braceDepth, namespaceDepth 
 	default:
 		return false
 	}
-}
-
-func arrowExpressionEnd(tokens []parser.Token, start int) int {
-	if start < 0 {
-		return -1
-	}
-	parenDepth := 0
-	bracketDepth := 0
-	braceDepth := 0
-	for i := start; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenOpenParen:
-			parenDepth++
-		case parser.TokenCloseParen:
-			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
-				return parser.PrevSignificant(tokens, i-1)
-			}
-			if parenDepth > 0 {
-				parenDepth--
-			}
-		case parser.TokenOpenBracket:
-			bracketDepth++
-		case parser.TokenCloseBracket:
-			if bracketDepth == 0 && parenDepth == 0 && braceDepth == 0 {
-				return parser.PrevSignificant(tokens, i-1)
-			}
-			if bracketDepth > 0 {
-				bracketDepth--
-			}
-		case parser.TokenOpenBrace:
-			braceDepth++
-		case parser.TokenCloseBrace:
-			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
-				return parser.PrevSignificant(tokens, i-1)
-			}
-			if braceDepth > 0 {
-				braceDepth--
-			}
-		case parser.TokenComma, parser.TokenSemicolon:
-			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
-				return parser.PrevSignificant(tokens, i-1)
-			}
-		}
-	}
-	return parser.PrevSignificant(tokens, len(tokens)-1)
 }
 
 func posInTokenRange(pos protocol.Position, start, end parser.Token) bool {
