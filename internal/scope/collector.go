@@ -1,6 +1,7 @@
 package scope
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -218,7 +219,7 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 
 		if tok.Kind == parser.TokenFunction {
 			if ps, decls := parseFunctionLike(result.Tokens, i, active[len(active)-1].scope, doc, declByToken); ps != nil {
-				pending = append(pending, *ps)
+				pending = queueBody(pending, *ps)
 				for idx, binding := range decls {
 					declByToken[idx] = binding
 				}
@@ -279,7 +280,7 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 
 		if inPropertyHookBlock(classBodies, braceDepth, len(active)) && isPropertyHook(result.Tokens, i) {
 			if ps, decls := parsePropertyHook(result.Tokens, i, active[len(active)-1].scope, doc); ps != nil {
-				pending = append(pending, *ps)
+				pending = queueBody(pending, *ps)
 				for idx, binding := range decls {
 					declByToken[idx] = binding
 				}
@@ -534,13 +535,9 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 	if closeParen < 0 {
 		return nil, decls
 	}
-	for i := nameIdx + 1; i < closeParen; i++ {
-		if tokens[i].Kind != parser.TokenVariable {
-			continue
-		}
-		binding := doc.addBinding(scope, tokens[i].Value, BindingParameter, tokenRange(tokens[i]), nil)
-		decls[i] = binding
-	}
+	eachParameter(tokens, nameIdx, closeParen, func(i int) {
+		decls[i] = doc.addBinding(scope, tokens[i].Value, BindingParameter, tokenRange(tokens[i]), nil)
+	})
 
 	j := parser.NextSignificant(tokens, closeParen+1)
 	if kind == ScopeClosure && j >= 0 && tokens[j].Kind == parser.TokenUse {
@@ -585,6 +582,36 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 	}
 	scope.Range.End = scope.Range.Start
 	return nil, decls
+}
+
+func queueBody(pending []pendingScope, ps pendingScope) []pendingScope {
+	at := len(pending)
+	for at > 0 && pending[at-1].bodyOpenIndex > ps.bodyOpenIndex {
+		at--
+	}
+	return slices.Insert(pending, at, ps)
+}
+
+func eachParameter(tokens []parser.Token, open, close int, visit func(int)) {
+	depth := 0
+	named := false
+	for i := open + 1; i < close; i++ {
+		switch tokens[i].Kind {
+		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
+			depth++
+		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
+			depth--
+		case parser.TokenComma:
+			if depth == 0 {
+				named = false
+			}
+		case parser.TokenVariable:
+			if depth == 0 && !named {
+				named = true
+				visit(i)
+			}
+		}
+	}
 }
 
 func parseForeachBindings(tokens []parser.Token, start int, scope *Scope, doc *Document) map[int]*Binding {
@@ -1039,11 +1066,9 @@ func parsePropertyHook(tokens []parser.Token, start int, parent *Scope, doc *Doc
 		if closeParen < 0 {
 			return nil, nil
 		}
-		for i := j + 1; i < closeParen; i++ {
-			if tokens[i].Kind == parser.TokenVariable {
-				decls[i] = doc.addBinding(scope, tokens[i].Value, BindingParameter, tokenRange(tokens[i]), nil)
-			}
-		}
+		eachParameter(tokens, j, closeParen, func(i int) {
+			decls[i] = doc.addBinding(scope, tokens[i].Value, BindingParameter, tokenRange(tokens[i]), nil)
+		})
 		j = parser.NextSignificant(tokens, closeParen+1)
 	} else if strings.EqualFold(tokens[start].Value, "set") {
 		doc.addBinding(scope, "$value", BindingParameter, tokenRange(tokens[start]), nil)
