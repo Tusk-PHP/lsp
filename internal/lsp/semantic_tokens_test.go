@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/document"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 func TestHandleSemanticTokensFull(t *testing.T) {
@@ -237,18 +236,7 @@ func TestHandleSemanticTokensFullAdvertisedInCapabilities(t *testing.T) {
 
 func TestBuildSemanticTokensReadsTheLexer(t *testing.T) {
 	source := "<?php\nnamespace App\\Http;\n\n#[ORM\\Entity]\nclass A {\n    public private(set) int $n = 0x1F;\n    function f() { $o->class = `ls`; return fn() => 1.5e3; }\n}\n"
-	lines := strings.Split(source, "\n")
-	got := map[string]uint32{}
-	data := buildSemanticTokens(parser.New().Parse(source), source, document.NewColumns(source, document.UTF8))
-	line, char := 0, 0
-	for i := 0; i+4 < len(data); i += 5 {
-		if data[i] > 0 {
-			line += int(data[i])
-			char = 0
-		}
-		char += int(data[i+1])
-		got[strconv.Itoa(line)+":"+lines[line][char:char+int(data[i+2])]] = data[i+3]
-	}
+	got := decodedSemanticTokens(source)
 	for key, want := range map[string]uint32{
 		"1:Http":         semTokNamespace,
 		"3:ORM\\Entity":  semTokDecorator,
@@ -260,13 +248,92 @@ func TestBuildSemanticTokensReadsTheLexer(t *testing.T) {
 		"6:1.5e3":        semTokNumber,
 		"6:$o":           semTokVariable,
 	} {
-		if typ, ok := got[key]; !ok || typ != want {
-			t.Errorf("%q: type %d (found %v), want %d", key, typ, ok, want)
+		if tok, ok := got[key]; !ok || tok.tokenType != want {
+			t.Errorf("%q: type %d (found %v), want %d", key, tok.tokenType, ok, want)
 		}
 	}
 	for _, key := range []string{"6:class", "1:App\\Ht"} {
 		if _, ok := got[key]; ok {
 			t.Errorf("%q: unexpected token", key)
+		}
+	}
+}
+
+func decodedSemanticTokens(source string) map[string]semToken {
+	lines := strings.Split(source, "\n")
+	got := map[string]semToken{}
+	data := buildSemanticTokens(source, document.NewColumns(source, document.UTF8))
+	line, char := 0, 0
+	for i := 0; i+4 < len(data); i += 5 {
+		if data[i] > 0 {
+			line += int(data[i])
+			char = 0
+		}
+		char += int(data[i+1])
+		got[strconv.Itoa(line)+":"+lines[line][char:char+int(data[i+2])]] = semToken{line: line, startChar: char, length: int(data[i+2]), tokenType: data[i+3], modifiers: data[i+4]}
+	}
+	return got
+}
+
+func TestBuildSemanticTokensDeclarationsFromTheSyntaxTree(t *testing.T) {
+	source := `<?php
+final class
+    Spaced { public function __construct(private int $id, int $plain) {} }
+interface Shape { public static function make(); }
+trait Greets { public string $greeting = 'hi'; public static function hi() {} }
+enum Suit { case Hearts; public static function wild(): self { return self::Hearts; } }
+function helper(
+    int $first,
+    string ...$rest,
+) {}
+$o = new class { public function anonymous() {} };
+function () { function nested() {} };
+`
+	declared := uint32(semModDeclaration)
+	static := declared | semModStatic
+	got := decodedSemanticTokens(source)
+	for key, want := range map[string][2]uint32{
+		"2:Spaced":     {semTokClass, declared},
+		"2:$id":        {semTokProperty, declared},
+		"3:Shape":      {semTokInterface, declared},
+		"3:make":       {semTokMethod, static},
+		"4:Greets":     {semTokClass, declared},
+		"4:$greeting":  {semTokProperty, declared},
+		"4:hi":         {semTokMethod, static},
+		"5:Suit":       {semTokEnum, declared},
+		"5:Hearts":     {semTokEnumMember, declared},
+		"5:wild":       {semTokMethod, static},
+		"6:helper":     {semTokFunction, declared},
+		"7:$first":     {semTokParameter, declared},
+		"8:$rest":      {semTokParameter, declared},
+		"10:anonymous": {semTokMethod, declared},
+		"11:nested":    {semTokFunction, declared},
+	} {
+		if tok, ok := got[key]; !ok || tok.tokenType != want[0] || tok.modifiers != want[1] {
+			t.Errorf("%q: %+v (found %v), want type %d modifiers %d", key, tok, ok, want[0], want[1])
+		}
+	}
+	if tok := got["2:$plain"]; tok.tokenType != semTokVariable {
+		t.Errorf("a parameter that is not promoted is not a property: %+v", tok)
+	}
+	for key := range got {
+		if strings.HasPrefix(key, "1:") && key != "1:final" && key != "1:class" {
+			t.Errorf("%q: a declaration is reported on the keyword's line", key)
+		}
+	}
+}
+
+func TestBuildSemanticTokensSkipsDeclarationsWithoutAName(t *testing.T) {
+	source := "<?php class A { public function () {} function __construct(private int) {} }\nfunction f(int"
+	got := decodedSemanticTokens(source)
+	for key, want := range map[string]uint32{"0:A": semTokClass, "0:__construct": semTokMethod, "1:f": semTokFunction} {
+		if tok, ok := got[key]; !ok || tok.tokenType != want {
+			t.Errorf("%q: %+v (found %v), want type %d", key, tok, ok, want)
+		}
+	}
+	for key, tok := range got {
+		if tok.tokenType == semTokProperty || tok.tokenType == semTokParameter {
+			t.Errorf("%q: a declaration without a name: %+v", key, tok)
 		}
 	}
 }
