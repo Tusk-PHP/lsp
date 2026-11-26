@@ -3,19 +3,21 @@ package lsp
 import (
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
 func TestWordRangeCoversNonASCIINames(t *testing.T) {
-	source := "<?php\necho PRIX_€ + $größe;\n"
-	lines := ast.NewLines(source)
-	for _, c := range []struct {
+	cases := []struct {
 		at, start, end int
-	}{{6, 5, 13}, {17, 16, 24}} {
-		rng := findWordRange(source, lines, protocol.Position{Line: 1, Character: c.at})
-		if rng.Start.Character != c.start || rng.End.Character != c.end {
-			t.Errorf("word at %d: got %+v, want %d-%d", c.at, rng, c.start, c.end)
+	}{{6, 5, 13}, {17, 16, 24}}
+	positions := make([]protocol.Position, len(cases))
+	for i, c := range cases {
+		positions[i] = protocol.Position{Line: 1, Character: c.at}
+	}
+	chains := buildSelectionChains("<?php\necho PRIX_€ + $größe;\n", positions)
+	for i, c := range cases {
+		if want := selectionRng(1, c.start, 1, c.end); chains[i].Range != want {
+			t.Errorf("word at %d: got %+v, want %+v", c.at, chains[i].Range, want)
 		}
 	}
 }

@@ -28,14 +28,6 @@ type declaration struct {
 	static bool
 }
 
-func (d declaration) isClassLike() bool {
-	return d.kind <= declaredEnum
-}
-
-func (d declaration) isCallable() bool {
-	return d.kind == declaredMethod || d.kind == declaredFunction
-}
-
 func declarationsOf(src string, file *ast.File) []declaration {
 	var out []declaration
 	add := func(kind declarationKind, name *ast.Identifier, node ast.Span) {
