@@ -704,7 +704,12 @@ func (p *parser) arg() *ast.Arg {
 			return arg
 		}
 	}
-	arg.Value = p.expr()
+	if p.peek() == token.Comma {
+		p.unexpected("expected an expression")
+		arg.Value = &ast.BadExpr{Span: p.span(p.start())}
+	} else {
+		arg.Value = p.expr()
+	}
 	arg.Span = p.span(start)
 	return arg
 }
