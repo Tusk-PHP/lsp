@@ -1,6 +1,8 @@
 package graph
 
 import (
+	"slices"
+	"sort"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -313,5 +315,36 @@ func TestBuildReferences_Sorted(t *testing.T) {
 			t.Errorf("edges not sorted at index %d: (%q,%q,%q) after (%q,%q,%q)",
 				i, b.From, b.To, b.Kind, a.From, a.To, a.Kind)
 		}
+	}
+}
+
+func TestBuildReferencesNewEdgeReadsQualifiedNames(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFileWithSource("file:///t/a.php", `<?php
+namespace App;
+
+class G {
+    public function make(): void {
+        new \App\Dep\D();
+        new Dep\E();
+        new self();
+        new static();
+        new class {};
+        $s = "new F";
+    }
+}
+`, symbols.SourceProject)
+	idx.IndexFileWithSource("file:///t/dep.php", "<?php\nnamespace App\\Dep;\nclass D {}\nclass E {}\n", symbols.SourceProject)
+	idx.IndexFileWithSource("file:///t/f.php", "<?php\nnamespace App;\nclass F {}\n", symbols.SourceProject)
+
+	var news []string
+	for _, e := range BuildReferences(idx, Options{Deps: DepsFull}).Edges {
+		if e.Kind == "new" {
+			news = append(news, e.From+" -> "+e.To)
+		}
+	}
+	sort.Strings(news)
+	if want := []string{`App\G -> App\Dep\D`, `App\G -> App\Dep\E`}; !slices.Equal(news, want) {
+		t.Errorf("new edges = %v, want %v", news, want)
 	}
 }
