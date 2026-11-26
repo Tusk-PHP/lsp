@@ -54,7 +54,7 @@ type fileNodeBuilder struct {
 }
 
 func FileNodeOf(src string, tree *ast.File) *FileNode {
-	b := &fileNodeBuilder{src: src, lines: ast.NewLines(src), file: &FileNode{Grammar: tree.Version}}
+	b := &fileNodeBuilder{src: src, lines: ast.NewLines(src), file: &FileNode{Source: src, Tree: tree, Grammar: tree.Version}}
 	for _, stmt := range tree.Stmts {
 		b.visit(stmt, scopeFile)
 	}

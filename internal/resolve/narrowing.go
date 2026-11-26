@@ -738,3 +738,35 @@ func passesOrCallsOn(stmt, varName string) bool {
 	}
 	return false
 }
+
+// splitTopLevel splits on a separator outside brackets and strings.
+func splitTopLevel(expr, sep string) []string {
+	var parts []string
+	depth, start := 0, 0
+	var quote byte
+	for i := 0; i < len(expr); i++ {
+		c := expr[i]
+		if quote != 0 {
+			if c == '\\' {
+				i++
+			} else if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch c {
+		case '\'', '"':
+			quote = c
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		}
+		if depth == 0 && strings.HasPrefix(expr[i:], sep) {
+			parts = append(parts, expr[start:i])
+			i += len(sep) - 1
+			start = i + 1
+		}
+	}
+	return append(parts, expr[start:])
+}

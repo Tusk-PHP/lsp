@@ -127,35 +127,6 @@ func writeScope(b *scope.Binding, write int, site *scope.WriteSite) variableScop
 	return vs
 }
 
-// assignmentValue is assignmentValue for line i, except that one write's
-// value is read from the write itself: from its own column to the end of the
-// statement when that's on the same line (`if ($c) { $x = new Foo(); }`,
-// `case 1: $x = new Foo(); break;`, `$x = foo(); // note`), and from the start
-// of the line when it goes on to later lines. When it can't be read that way,
-// it isn't read at all.
-func (vs variableScope) assignmentValue(lines []string, i int, varPrefix string) (full, firstLine string, ok bool) {
-	w := vs.write
-	if w == nil || i != w.At.Line || i >= len(lines) {
-		return assignmentValue(lines, i, varPrefix)
-	}
-	line := lines[i]
-	col := w.At.Character
-	if col > len(line) {
-		return "", "", false
-	}
-	// A statement that ends on its line is read up to its end, so a comment
-	// after it isn't taken for part of the value.
-	if w.Statement && w.End.Line == i && w.End.Character <= len(line) && w.End.Character >= col {
-		return assignmentValue([]string{line[col:w.End.Character] + ";"}, 0, varPrefix)
-	}
-	// One that goes on to later lines is read as before, from the start of
-	// its line.
-	if before := strings.TrimSpace(line[:col]); before == "" || strings.EqualFold(before, "static") {
-		return assignmentValue(lines, i, varPrefix)
-	}
-	return "", "", false
-}
-
 // closureParts fills in what a closure's variable comes from: its own
 // parameter, or the parent scope's variable.
 func (vs *variableScope) closureParts(s *scope.Scope, binding *scope.Binding) {
@@ -281,49 +252,4 @@ func declaredParamType(before string) string {
 		return ""
 	}
 	return strings.TrimRight(fields[len(fields)-1], "&.")
-}
-
-// assignmentValue returns the expression assigned to the variable on this line,
-// which is the text after its `=` or `??=`, both with any lines it continues on
-// and without them. It rejects `$a == 1` and `$a => 1`, which also start with the
-// variable and `=`.
-func assignmentValue(lines []string, i int, varPrefix string) (full, firstLine string, ok bool) {
-	trimmed := strings.TrimSpace(lines[i])
-	// `static $x = new Foo();` assigns the same way.
-	if rest, ok := cutKeyword(trimmed, "static"); ok && strings.HasPrefix(rest, "$") {
-		trimmed = rest
-	}
-	if !strings.HasPrefix(trimmed, varPrefix) {
-		return "", "", false
-	}
-	rest := strings.TrimSpace(trimmed[len(varPrefix):])
-	rest = strings.TrimPrefix(rest, "??")
-	if !strings.HasPrefix(rest, "=") || strings.HasPrefix(rest, "==") || strings.HasPrefix(rest, "=>") {
-		return "", "", false
-	}
-	firstLine = strings.TrimSpace(rest[1:])
-	return continuedExpression(lines, i, firstLine), firstLine, true
-}
-
-// continuedExpression adds the lines an expression carries on to, when it's still
-// inside a call's parentheses or the next line continues a method chain. A
-// closure passed as an argument is read through, so the chain after it counts.
-func continuedExpression(lines []string, i int, expr string) string {
-	const maxLines = 30
-	for j := i + 1; j < len(lines) && j <= i+maxLines; j++ {
-		open := strings.Count(expr, "(") - strings.Count(expr, ")")
-		trimmed := strings.TrimSpace(expr)
-		// A complete statement, or a block that isn't a call's argument (such
-		// as a closure assigned to the variable), ends it. A closure passed to
-		// a call is followed to its end, since the chain may go on after it.
-		if open <= 0 && (strings.HasSuffix(trimmed, ";") || strings.HasSuffix(trimmed, "{")) {
-			break
-		}
-		next := strings.TrimSpace(lines[j])
-		if open <= 0 && !strings.HasPrefix(next, "->") && !strings.HasPrefix(next, "?->") {
-			break
-		}
-		expr += next
-	}
-	return strings.TrimSpace(expr)
 }
