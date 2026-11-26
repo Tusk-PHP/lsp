@@ -1,6 +1,7 @@
 package models
 
 import (
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
@@ -8,8 +9,6 @@ import (
 	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
-
-const ConfigHelper = "config"
 
 func (r *FrameworkArrayResolver) VariableKeys(res *resolve.Resolver, file *parser.FileNode, v *ast.Variable) []types.ShapeField {
 	if keys := shapeFields(res.NodeType(file, v)); len(keys) > 0 {
@@ -36,21 +35,17 @@ func (r *FrameworkArrayResolver) assignedKeys(res *resolve.Resolver, file *parse
 		return nil
 	}
 	src := file.Source
-	switch call := value.(type) {
-	case *ast.Call:
-		if r.framework != "laravel" || sourcectx.FunctionName(src, call) != ConfigHelper {
-			return nil
-		}
-		if len(call.Args.Args) == 0 {
-			return r.ConfigKeys("")
-		}
-		if path, ok := sourcectx.StringValue(src, call.Args.Args[0].Value); ok && path != "" {
-			return r.ConfigKeys(path)
-		}
-	case *ast.MethodCall:
+	if call, ok := value.(*ast.MethodCall); ok {
 		return r.ResolveMethodReturnKeys(res.NodeType(file, call.Object).BaseFQN(), sourcectx.MethodName(src, call))
 	}
-	return nil
+	if r.framework != "laravel" {
+		return nil
+	}
+	cfg, ok := laravel.ParseConfigCall(src, value)
+	if !ok || !cfg.Repository && cfg.Key == "" {
+		return nil
+	}
+	return r.ConfigKeys(cfg.Key)
 }
 
 func offsetWrites(file *parser.FileNode, v *ast.Variable) []types.ShapeField {

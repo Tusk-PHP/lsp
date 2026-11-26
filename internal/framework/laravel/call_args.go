@@ -3,10 +3,14 @@ package laravel
 import (
 	"slices"
 
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 )
 
-const viewHelper = "view"
+const (
+	viewHelper   = "view"
+	configHelper = "config"
+)
 
 var (
 	routeNameFunctions       = []string{"route", "to_route"}
@@ -16,6 +20,27 @@ var (
 )
 
 const translationFacade = "Lang"
+
+type ConfigCall struct {
+	Repository bool
+	Key        string
+}
+
+func ParseConfigCall(src string, e ast.Expr) (ConfigCall, bool) {
+	call, ok := e.(*ast.Call)
+	if !ok || sourcectx.FunctionName(src, call) != configHelper {
+		return ConfigCall{}, false
+	}
+	if len(call.Args.Args) == 0 {
+		return ConfigCall{Repository: true}, true
+	}
+	key, _ := sourcectx.StringValue(src, call.Args.Args[0].Value)
+	return ConfigCall{Key: key}, true
+}
+
+func IsConfigKeyArg(arg sourcectx.CallArg) bool {
+	return arg.Function == configHelper && arg.Index == 0 && !arg.InArray
+}
 
 func IsRouteNameArg(arg sourcectx.CallArg) bool {
 	if arg.Index != 0 || arg.InArray {
