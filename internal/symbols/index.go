@@ -515,17 +515,28 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 
 	idx.indexConstants(uri, nil, ns, file.Constants, file.Uses, src, resolve)
 
-	for _, fn := range file.Functions {
-		fqn := buildFQN(ns, fn.Name)
-		sym := &Symbol{Name: fn.Name, FQN: fqn, Kind: KindFunction, URI: uri, ReturnType: resolve(fn.ReturnType.Name),
-			Attributes: indexAttributes(fn.Attributes, resolve),
-			DocComment: qualifyDocTypes(fn.DocComment, file.Uses), Range: symRange(fn.StartLine, fn.StartCol, len(fn.Name))}
-		sym.Templates = docTemplates(sym.DocComment, resolve)
-		for _, p := range fn.Params {
-			sym.Params = append(sym.Params, ParamInfo{Name: p.Name, Type: resolve(p.Type.Name), DefaultValue: p.DefaultValue, IsVariadic: p.IsVariadic, IsReference: p.IsReference})
-		}
-		idx.addSymbolWithSource(uri, sym, src)
+	for i := range file.Functions {
+		idx.addSymbolWithSource(uri, FunctionSymbol(uri, file, &file.Functions[i]), src)
 	}
+}
+
+// FunctionSymbol is the symbol the index keeps for a function declared in
+// file, with its names resolved against that file's namespace and imports.
+func FunctionSymbol(uri string, file *parser.FileNode, fn *parser.FunctionNode) *Symbol {
+	resolve := func(name string) string {
+		return resolveTypeName(name, file.Namespace, file.Uses)
+	}
+	sym := &Symbol{Name: fn.Name, FQN: buildFQN(file.Namespace, fn.Name), Kind: KindFunction, URI: uri, ReturnType: resolve(fn.ReturnType.Name),
+		Attributes: indexAttributes(fn.Attributes, resolve),
+		DocComment: qualifyDocTypes(fn.DocComment, file.Uses), Range: symRange(fn.StartLine, fn.StartCol, len(fn.Name))}
+	sym.Templates = docTemplates(sym.DocComment, resolve)
+	if len(fn.Params) > 0 {
+		sym.Params = make([]ParamInfo, 0, len(fn.Params))
+	}
+	for _, p := range fn.Params {
+		sym.Params = append(sym.Params, ParamInfo{Name: p.Name, Type: resolve(p.Type.Name), DefaultValue: p.DefaultValue, IsVariadic: p.IsVariadic, IsReference: p.IsReference})
+	}
+	return sym
 }
 
 func (idx *Index) addSymbol(uri string, sym *Symbol) {

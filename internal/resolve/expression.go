@@ -458,7 +458,7 @@ func (r *Resolver) FunctionCallType(name, args string, ctx ExprContext) Resolved
 	if r.Index == nil {
 		return ResolvedType{}
 	}
-	fn := r.CalledFunction(name, ctx.File)
+	fn := r.typedFunction(name, ctx.File)
 	if IsCallableArgs(args) {
 		// strlen(...) is a Closure of strlen, known or not, and so is a
 		// partial application such as str_replace('a', 'b', ?).
