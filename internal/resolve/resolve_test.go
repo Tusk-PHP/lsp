@@ -480,6 +480,11 @@ func TestIsWordChar(t *testing.T) {
 			t.Errorf("expected false for %c", ch)
 		}
 	}
+	for _, b := range []byte("größe€") {
+		if !IsWordChar(b) {
+			t.Errorf("expected true for byte %#x: PHP names take any byte from 0x80", b)
+		}
+	}
 }
 
 func TestExtractContainerCallArg(t *testing.T) {

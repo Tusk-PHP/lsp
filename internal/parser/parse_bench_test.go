@@ -42,3 +42,15 @@ func BenchmarkParse(b *testing.B) {
 		})
 	}
 }
+
+func BenchmarkTokenize(b *testing.B) {
+	for name, src := range benchSources {
+		b.Run(name, func(b *testing.B) {
+			b.SetBytes(int64(len(src)))
+			b.ReportAllocs()
+			for b.Loop() {
+				Tokenize(src)
+			}
+		})
+	}
+}
