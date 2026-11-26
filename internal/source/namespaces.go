@@ -100,6 +100,10 @@ func (b *namespaceBlock) addUse(src string, lines ast.Lines, use *ast.Use) {
 	b.lastUse = use.End
 }
 
+func (n *Namespaces) Offset(pos protocol.Position) uint32 {
+	return offsetOf(n.src, n.lines, pos)
+}
+
 func (n *Namespaces) block(offset uint32) *namespaceBlock {
 	i := sort.Search(len(n.blocks), func(i int) bool { return n.blocks[i].start > offset })
 	return &n.blocks[max(i-1, 0)]
