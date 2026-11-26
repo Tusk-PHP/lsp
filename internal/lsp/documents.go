@@ -15,9 +15,12 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 	}
 	uri := params.TextDocument.URI
 	text := params.TextDocument.Text
+	path := symbols.URIToPath(uri)
+	unsaved := s.index.GetFileSource(symbols.PathToURI(path)) != text
 	s.docMu.Lock()
 	s.documents[uri] = text
-	s.openPaths[symbols.URIToPath(uri)] = uri
+	s.openPaths[path] = uri
+	s.unsaved[uri] = unsaved
 	s.docMu.Unlock()
 	if !isPHPDocument(uri) {
 		// Non-PHP documents (composer.json, tsconfig.json, …) are only
@@ -41,6 +44,7 @@ func (s *Server) handleDidChange(msg *jsonRPCMessage) {
 		uri := params.TextDocument.URI
 		s.docMu.Lock()
 		s.documents[uri] = source
+		s.unsaved[uri] = true
 		s.docMu.Unlock()
 		if !isPHPDocument(uri) {
 			return
@@ -72,6 +76,8 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 	if s.openPaths[path] == uri {
 		delete(s.openPaths, path)
 	}
+	unsaved := s.unsaved[uri]
+	delete(s.unsaved, uri)
 	s.docMu.Unlock()
 	s.blade.forget(uri)
 	s.cancelDiagnostics(uri)
@@ -82,7 +88,9 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 	if symbols.PathToURI(path) != uri {
 		s.workspace.RemoveFile(uri)
 	}
-	s.queueRefresh([]string{path}, false)
+	if unsaved {
+		s.queueRefresh([]string{path}, false)
+	}
 }
 
 func (s *Server) handleDidSave(msg *jsonRPCMessage) {
@@ -91,13 +99,16 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 		return
 	}
 	uri := params.TextDocument.URI
+	s.docMu.Lock()
+	if _, open := s.documents[uri]; open {
+		s.unsaved[uri] = false
+	}
 	if params.Text != nil {
-		s.docMu.Lock()
 		s.documents[uri] = *params.Text
-		s.docMu.Unlock()
-		if isPHPDocument(uri) {
-			s.indexDocumentMaybeAsync(uri, *params.Text)
-		}
+	}
+	s.docMu.Unlock()
+	if params.Text != nil && isPHPDocument(uri) {
+		s.indexDocumentMaybeAsync(uri, *params.Text)
 	}
 	if !isPHPDocument(uri) {
 		return
