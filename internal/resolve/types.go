@@ -173,6 +173,10 @@ func (rt ResolvedType) FullString() string {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
+			if p.IsEmpty() {
+				sb.WriteString("mixed")
+				continue
+			}
 			sb.WriteString(p.FullString())
 		}
 		sb.WriteByte(')')
