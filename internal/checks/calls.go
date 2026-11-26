@@ -79,7 +79,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 			if !wanted {
 				continue
 			}
-			classFQN, ok := resolveClassLikeName(tok.Value, tok.Line, file)
+			classFQN, ok := resolveClassLikeName(tok.Value, tok.Line, tok.Column, file)
 			if !ok || classFQN == "" {
 				continue
 			}
@@ -117,7 +117,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 			continue
 		}
 		if prev >= 0 && tokens[prev].Kind == parser.TokenNew {
-			classFQN, ok := resolveClassLikeName(tok.Value, tok.Line, file)
+			classFQN, ok := resolveClassLikeName(tok.Value, tok.Line, tok.Column, file)
 			if !ok || classFQN == "" {
 				continue
 			}

@@ -76,13 +76,9 @@ func (r *InvalidOverrideRule) Check(file *parser.FileNode, _ string, index *symb
 		return nil
 	}
 	var findings []Finding
-	check := func(name string, methods []parser.MethodNode) {
-		fqn := name
-		if file.Namespace != "" {
-			fqn = file.Namespace + "\\" + name
-		}
+	check := func(fqn string, ns *parser.NamespaceNode, methods []parser.MethodNode) {
 		for _, m := range methods {
-			if !hasOverrideAttribute(m.Attributes, file) || strings.EqualFold(m.Name, "__toString") {
+			if !hasOverrideAttribute(m.Attributes, ns) || strings.EqualFold(m.Name, "__toString") {
 				continue
 			}
 			if overrides, known := index.OverridesInherited(fqn, m.Name); known && !overrides {
@@ -99,13 +95,9 @@ func (r *InvalidOverrideRule) Check(file *parser.FileNode, _ string, index *symb
 		}
 	}
 	// PHP 8.6 allows #[\Override] on class constants and enum cases too.
-	checkConstant := func(class, name string, attrs []parser.AttributeDef, line, col int) {
-		if !hasOverrideAttribute(attrs, file) {
+	checkConstant := func(fqn string, ns *parser.NamespaceNode, name string, attrs []parser.AttributeDef, line, col int) {
+		if !hasOverrideAttribute(attrs, ns) {
 			return
-		}
-		fqn := class
-		if file.Namespace != "" {
-			fqn = file.Namespace + "\\" + class
 		}
 		if overrides, known := index.OverridesInheritedConstant(fqn, name); known && !overrides {
 			findings = append(findings, Finding{
@@ -120,32 +112,27 @@ func (r *InvalidOverrideRule) Check(file *parser.FileNode, _ string, index *symb
 		}
 	}
 	for _, c := range file.Classes {
-		check(c.Name, c.Methods)
+		check(c.FullName, c.Namespace, c.Methods)
 		for _, k := range c.Constants {
-			checkConstant(c.Name, k.Name, k.Attributes, k.StartLine, k.StartCol)
+			checkConstant(c.FullName, c.Namespace, k.Name, k.Attributes, k.StartLine, k.StartCol)
 		}
 	}
 	for _, e := range file.Enums {
-		check(e.Name, e.Methods)
+		check(e.FullName, e.Namespace, e.Methods)
 		for _, k := range e.Constants {
-			checkConstant(e.Name, k.Name, k.Attributes, k.StartLine, k.StartCol)
+			checkConstant(e.FullName, e.Namespace, k.Name, k.Attributes, k.StartLine, k.StartCol)
 		}
 		for _, k := range e.Cases {
-			checkConstant(e.Name, k.Name, k.Attributes, k.StartLine, k.StartCol)
+			checkConstant(e.FullName, e.Namespace, k.Name, k.Attributes, k.StartLine, k.StartCol)
 		}
 	}
 	return findings
 }
 
-func hasOverrideAttribute(attrs []parser.AttributeDef, file *parser.FileNode) bool {
+func hasOverrideAttribute(attrs []parser.AttributeDef, ns *parser.NamespaceNode) bool {
 	for _, attr := range attrs {
-		if attr.Name == "\\Override" || (attr.Name == "Override" && file.Namespace == "") {
+		if resolve.ImportedName(attr.Name, ns.Name, ns.Uses, "class") == "Override" {
 			return true
-		}
-		for _, use := range file.Uses {
-			if use.FullName == "Override" && strings.EqualFold(use.Alias, attr.Name) {
-				return true
-			}
 		}
 	}
 	return false
@@ -279,7 +266,7 @@ func memberUses(file *parser.FileNode, source string, index *symbols.Index, type
 // resolveMemberOwner returns the class-like a member is accessed on.
 func resolveMemberOwner(ownerExpr string, line, col int, source string, file *parser.FileNode, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string) string {
 	if !strings.HasPrefix(ownerExpr, "$") && !strings.HasSuffix(ownerExpr, ")") && !strings.HasSuffix(ownerExpr, "]") {
-		if fqn, ok := resolveClassLikeName(ownerExpr, line, file); ok && index.Lookup(fqn).IsClassLike() {
+		if fqn, ok := resolveClassLikeName(ownerExpr, line, col, file); ok && index.Lookup(fqn).IsClassLike() {
 			return fqn
 		}
 	}

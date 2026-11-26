@@ -205,11 +205,11 @@ func (r *BuiltinUnavailableRule) classLikeFinding(name string, lineNum, start, e
 	// If the class-like is already resolved (locally defined or indexed), skip.
 	// classLikeExists returns true both for locally-defined types and for
 	// types present in the index (which includes builtins that passed the profile).
-	if classLikeExists(name, lineNum, file, index) {
+	if classLikeExists(name, lineNum, start, file, index) {
 		return nil
 	}
 
-	bare, avail, ok := builtinClassAvailability(name, lineNum, file)
+	bare, avail, ok := builtinClassAvailability(name, lineNum, start, file)
 	if !ok {
 		// Not a known builtin — UnknownClassRule handles this.
 		return nil
@@ -374,11 +374,11 @@ func (r *BuiltinUnavailableRule) attributeFinding(name string, lineNum, start, e
 		return nil
 	}
 	// If the class-like is already resolved (locally defined or indexed), skip.
-	if classLikeExists(name, lineNum, file, index) {
+	if classLikeExists(name, lineNum, start, file, index) {
 		return nil
 	}
 
-	bare, avail, ok := builtinClassAvailability(name, lineNum, file)
+	bare, avail, ok := builtinClassAvailability(name, lineNum, start, file)
 	if !ok {
 		// Not a known builtin — UnknownClassRule handles this.
 		return nil
@@ -432,8 +432,8 @@ func builtinFunctionAvailability(name string, ns *parser.NamespaceNode) (string,
 
 // builtinClassAvailability is builtinFunctionAvailability for a class-like
 // name, resolved through the file's namespace and imports.
-func builtinClassAvailability(name string, line int, file *parser.FileNode) (string, symbols.BuiltinAvailability, bool) {
-	fqn, ok := resolveClassLikeName(name, line, file)
+func builtinClassAvailability(name string, line, col int, file *parser.FileNode) (string, symbols.BuiltinAvailability, bool) {
+	fqn, ok := resolveClassLikeName(name, line, col, file)
 	if !ok || fqn == "" {
 		return "", symbols.BuiltinAvailability{}, false
 	}

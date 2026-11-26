@@ -94,7 +94,7 @@ func outArgChecker(file *parser.FileNode, index *symbols.Index) func(scope.OutAr
 		}
 		for _, fqn := range fqns {
 			for _, fn := range file.Functions {
-				if functionNodeFQN(&fn, file) != fqn {
+				if fn.FullName != fqn {
 					continue
 				}
 				params := make([]symbols.ParamInfo, 0, len(fn.Params))

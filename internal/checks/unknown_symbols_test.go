@@ -533,10 +533,10 @@ function make() { return [new Alpha(), new B(), new Gamma(), new Delta()]; }
 
 func TestResolveClassLikeNameReadsParentAsTheDeclaredParent(t *testing.T) {
 	file := parser.ParseFile("<?php\nnamespace App;\nuse Lib\\Base as Root;\nclass Child extends Root {\n    public function f() { parent::f(); }\n}\nclass Orphan {\n    public function f() { parent::f(); }\n}\n")
-	if got, ok := resolveClassLikeName("parent", 4, file); !ok || got != `Lib\Base` {
+	if got, ok := resolveClassLikeName("parent", 4, 26, file); !ok || got != `Lib\Base` {
 		t.Errorf("parent in Child = %q, %v; want the imported Lib\\Base", got, ok)
 	}
-	if got, ok := resolveClassLikeName("parent", 7, file); ok {
+	if got, ok := resolveClassLikeName("parent", 7, 26, file); ok {
 		t.Errorf("parent in a class without one = %q, want none", got)
 	}
 }
