@@ -64,9 +64,7 @@ type NameContext struct {
 
 type CursorContext struct {
 	NameContext
-	Namespace string
-	Uses      []parser.UseNode
-	Scope     *Scope
+	Scope *Scope
 }
 
 func (c *CursorContext) Name() *NameContext {
@@ -118,7 +116,7 @@ func (d *Document) At(pos protocol.Position) *CursorContext {
 	if name == nil {
 		return nil
 	}
-	return &CursorContext{NameContext: *name, Namespace: at.namespace, Uses: at.uses, Scope: at.scope}
+	return &CursorContext{NameContext: *name, Scope: at.scope}
 }
 
 func (d *Document) NameAt(pos protocol.Position) *NameContext {
@@ -148,7 +146,7 @@ func (d *Document) nameAt(pos protocol.Position) (*NameContext, cursorDeclaratio
 		Line:            line,
 		JoinedLine:      joinedLine,
 		JoinedWordStart: joinedWordStart,
-		File:            d.file,
+		File:            at.fileView(),
 		Called:          called,
 		FunctionCall:    called && accessKind == AccessNone,
 	}, at
@@ -286,6 +284,12 @@ func declarationsAt(src string, tree *ast.File, file *parser.FileNode, pos proto
 		at.enclose(stmt)
 	}
 	return at
+}
+
+func (at *cursorDeclarations) fileView() *parser.FileNode {
+	view := *at.file
+	view.Namespace, view.Uses = at.namespace, at.uses
+	return &view
 }
 
 func (at *cursorDeclarations) enterNamespace(ns *ast.Namespace) {

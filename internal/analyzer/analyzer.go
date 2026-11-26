@@ -290,7 +290,7 @@ func (a *Analyzer) symbolTarget(r *resolve.Resolver, uri, source string, ctx *so
 
 	// Resolve via use statements
 	if file != nil {
-		for _, u := range ctx.Uses {
+		for _, u := range file.Uses {
 			if u.Alias == word {
 				if s := a.index.Lookup(u.FullName); s != nil {
 					return definitionTarget{sym: s, loc: symbolLocation(s)}
@@ -298,11 +298,8 @@ func (a *Analyzer) symbolTarget(r *resolve.Resolver, uri, source string, ctx *so
 			}
 		}
 		// Try as class name in current namespace
-		fqn := r.ResolveClassName(word, file)
-		if fqn != word {
-			if s := a.index.Lookup(fqn); s != nil {
-				return definitionTarget{sym: s, loc: symbolLocation(s)}
-			}
+		if s := a.index.Lookup(r.ResolveClassName(word, file)); s != nil {
+			return definitionTarget{sym: s, loc: symbolLocation(s)}
 		}
 	}
 
@@ -603,12 +600,12 @@ func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position)
 
 func (a *Analyzer) FindImplementation(uri, source string, pos protocol.Position) []protocol.Location {
 	r := a.engine.Resolver()
-	word, _ := sourcectx.WordAt(source, pos)
-	if word == "" {
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
+	if ctx == nil || ctx.SymbolText == "" {
 		return nil
 	}
 
-	sym := a.resolveSymbolAt(r, sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri)).Name(), source)
+	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 	if sym == nil {
 		return nil
 	}
@@ -706,16 +703,14 @@ func (a *Analyzer) FindReferences(uri, source string, pos protocol.Position) []p
 // to reading from the index's stored file URIs via disk.
 func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, readDocument func(string) string) []protocol.Location {
 	r := a.engine.Resolver()
-	word, _ := sourcectx.WordAt(source, pos)
-	if word == "" {
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
+	if ctx == nil || ctx.SymbolText == "" {
 		return nil
 	}
-
-	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
+	word := ctx.SymbolText
 
 	// Try to resolve as a symbol first — this handles properties ($name in declarations)
 	// and member access contexts before falling back to variable scope
-	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 
 	// Built-in symbols are opaque to navigation: do not scan the workspace for refs.
@@ -725,13 +720,13 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 
 	// W1 guard: if we were in a member access chain and the receiver/member couldn't
 	// be resolved, do not fall through to name-based lookups.
-	if sym == nil && ctx != nil && (ctx.AccessKind != sourcectx.AccessNone || ctx.FunctionCall) {
+	if sym == nil && (ctx.AccessKind != sourcectx.AccessNone || ctx.FunctionCall) {
 		return nil
 	}
 
 	// Variable references — local scope only (if not resolved as a property/symbol)
 	if sym == nil && strings.HasPrefix(word, "$") && word != "$this" {
-		return a.findVariableReferences(uri, source, pos, word, file)
+		return a.findVariableReferences(uri, source, pos, word)
 	}
 	if sym == nil {
 		// Fallback: definition-only lookup by name (original behavior)
@@ -771,7 +766,7 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 	}
 
 	// Check if it's a class property declaration ($name on a property line)
-	if strings.HasPrefix(word, "$") && file != nil {
+	if strings.HasPrefix(word, "$") {
 		bare := strings.TrimPrefix(word, "$")
 		classFQN := resolve.FindEnclosingClass(file, pos)
 		if classFQN != "" {
@@ -797,14 +792,8 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 	}
 
 	// Try resolving as a class/interface/enum/trait name
-	fqn := ""
-	if file != nil {
-		fqn = r.ResolveClassName(word, file)
-	}
-	if fqn != "" {
-		if sym := a.index.Lookup(fqn); sym != nil {
-			return sym
-		}
+	if sym := a.index.Lookup(r.ResolveClassName(word, file)); sym != nil {
+		return sym
 	}
 
 	// Try direct lookup
@@ -816,8 +805,7 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 }
 
 // findVariableReferences finds all occurrences of a variable within its enclosing function scope.
-func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Position, varName string, file *parser.FileNode) []protocol.Location {
-	_ = file
+func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Position, varName string) []protocol.Location {
 	doc := scope.Collect(source)
 	binding := doc.BindingAt(pos)
 	if binding == nil || binding.Name != varName {
