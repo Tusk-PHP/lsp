@@ -167,7 +167,7 @@ func (r Refresh) editorOwns(path string) bool {
 
 func (ws *Bootstrapped) sourcesAt(path string) ([]string, error) {
 	if IsPHPSource(path) {
-		if !ws.walkerReaches(path) {
+		if !ws.walkerReaches(path) && !ws.Index.OnDisk(symbols.PathToURI(path)) {
 			return nil, nil
 		}
 		return []string{path}, nil
@@ -198,6 +198,9 @@ func (ws *Bootstrapped) sourcesAt(path string) ([]string, error) {
 }
 
 func (ws *Bootstrapped) refreshFile(path, uri string) (bool, error) {
+	if ws.Index.OnDisk(uri) {
+		return ws.refreshVendorFile(path, uri)
+	}
 	content, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		if !ws.Index.HasFile(uri) {
@@ -214,5 +217,18 @@ func (ws *Bootstrapped) refreshFile(path, uri string) (bool, error) {
 		return false, nil
 	}
 	ws.IndexFile(uri, string(content))
+	return true, nil
+}
+
+func (ws *Bootstrapped) refreshVendorFile(path, uri string) (bool, error) {
+	content, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		ws.RemoveFile(uri)
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("re-index %s: %w", path, err)
+	}
+	ws.Index.IndexFileWithSource(uri, string(content), symbols.SourceVendor)
 	return true, nil
 }

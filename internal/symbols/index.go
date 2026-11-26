@@ -1933,6 +1933,13 @@ func (idx *Index) RemoveVendorFilesExcept(keep map[string]struct{}) int {
 	return removed
 }
 
+func (idx *Index) OnDisk(uri string) bool {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	_, onDisk := idx.diskSources[uri]
+	return onDisk
+}
+
 func (idx *Index) MayMention(uri, word string) bool {
 	idx.mu.RLock()
 	disk, onDisk := idx.diskSources[uri]
