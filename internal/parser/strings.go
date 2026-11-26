@@ -5,12 +5,18 @@ import "strings"
 var doubleQuotedEscapes = map[byte]byte{'\\': '\\', '"': '"', '$': '$', 'n': '\n', 't': '\t', 'r': '\r', 'v': '\v', 'f': '\f', 'e': 0x1b}
 
 func ConstantString(tok Token) (string, bool) {
-	v := tok.Value
-	if tok.Kind != TokenStringLiteral || len(v) < 2 || (v[0] != '\'' && v[0] != '"') || v[len(v)-1] != v[0] {
+	if tok.Kind != TokenStringLiteral {
 		return "", false
 	}
-	body := v[1 : len(v)-1]
-	if v[0] == '\'' {
+	return Unquote(tok.Value)
+}
+
+func Unquote(lit string) (string, bool) {
+	if len(lit) < 2 || (lit[0] != '\'' && lit[0] != '"') || lit[len(lit)-1] != lit[0] {
+		return "", false
+	}
+	body := lit[1 : len(lit)-1]
+	if lit[0] == '\'' {
 		return singleQuotedValue(body), true
 	}
 	var out strings.Builder
@@ -20,22 +26,26 @@ func ConstantString(tok Token) (string, bool) {
 		if c == '$' {
 			return "", false
 		}
-		if c != '\\' {
+		if c != '\\' || i+1 == len(body) {
 			out.WriteByte(c)
 			continue
 		}
-		if i+1 == len(body) {
-			out.WriteByte(c)
+		next := body[i+1]
+		if decoded, ok := doubleQuotedEscapes[next]; ok {
+			out.WriteByte(decoded)
+			i++
 			continue
 		}
-		decoded, ok := doubleQuotedEscapes[body[i+1]]
-		if !ok {
+		if isNumericEscape(next) {
 			return "", false
 		}
-		out.WriteByte(decoded)
-		i++
+		out.WriteByte(c)
 	}
 	return out.String(), true
+}
+
+func isNumericEscape(c byte) bool {
+	return c == 'x' || c == 'u' || '0' <= c && c <= '7'
 }
 
 func singleQuotedValue(body string) string {
