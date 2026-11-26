@@ -102,6 +102,16 @@ func (a CallArg) StringArg(i int) (string, bool) {
 	return StringValue(a.src, a.args.Args[i].Value)
 }
 
+func (a CallArg) ReceiverCall() (function, firstArg string, ok bool) {
+	call, isCall := a.Receiver.(*ast.Call)
+	if !isCall || len(call.Args.Args) == 0 {
+		return "", "", false
+	}
+	function = FunctionName(a.src, call)
+	firstArg, ok = StringValue(a.src, call.Args.Args[0].Value)
+	return function, firstArg, ok && function != ""
+}
+
 func LastSegment(name string) string {
 	return name[strings.LastIndexByte(name, '\\')+1:]
 }

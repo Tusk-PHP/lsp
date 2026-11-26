@@ -27,7 +27,8 @@ const (
 	dirEndSwitch
 	dirBreak // `@break`, `@break($cond)`
 	dirContinue
-	dirUse  // `@use('App\Models\User')`
+	dirUse // `@use('App\Models\User')`
+	dirTranslate
 	dirPHP  // `@php`, read by the scanner
 	dirNone // known, with nothing to check: `@csrf`, `@endsection`
 )
@@ -44,8 +45,9 @@ const (
 )
 
 type directive struct {
-	kind directiveKind
-	cond condition
+	kind      directiveKind
+	cond      condition
+	translate string
 }
 
 // directives lists the directives of Laravel and Livewire. Anything else after
@@ -93,13 +95,15 @@ func init() {
 		"push", "pushOnce", "pushIf", "prepend", "prependOnce", "stack", "once", "fragment",
 		"component", "componentFirst", "slot", "props", "aware", "inject",
 		"json", "js", "class", "style", "checked", "selected", "disabled", "readonly", "required",
-		"method", "csrf", "lang", "choice", "dd", "dump", "vite", "viteReactRefresh", "unset",
+		"method", "csrf", "dd", "dump", "vite", "viteReactRefresh", "unset",
 		// Livewire
 		"livewire", "livewireStyles", "livewireScripts", "livewireScriptConfig", "persist", "entangle",
 		"this", "script", "assets", "teleport",
 		// Common packages
 		"filamentStyles", "filamentScripts", "routes", "inertia", "inertiaHead", "fluxAppearance", "fluxScripts",
 	)
+	directives["lang"] = directive{kind: dirTranslate, translate: "get"}
+	directives["choice"] = directive{kind: dirTranslate, translate: "choice"}
 	add(dirNone, condExpr,
 		"endsection", "endpush", "endPushOnce", "endPushIf", "endprepend", "endPrependOnce", "endonce",
 		"endfragment", "endcomponent", "endcomponentClass", "endslot", "endlang", "endpersist",
