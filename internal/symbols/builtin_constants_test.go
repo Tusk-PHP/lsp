@@ -55,12 +55,15 @@ func TestNamespacedBuiltinConstants(t *testing.T) {
 	}
 }
 
-func TestExtensionConstantsNeedTheExtension(t *testing.T) {
-	if builtinIndex("8.4").Lookup("IMG_PNG") != nil {
-		t.Error("IMG_PNG needs ext-gd")
+func TestOnlyPECLExtensionConstantsNeedTheExtension(t *testing.T) {
+	if builtinIndex("8.4").Lookup("BROTLI_COMPRESS_LEVEL_DEFAULT") != nil {
+		t.Error("BROTLI_COMPRESS_LEVEL_DEFAULT needs ext-brotli, a PECL extension")
 	}
-	if sym := builtinIndex("8.4", "gd").Lookup("IMG_PNG"); sym == nil || sym.Value != "4" {
-		t.Errorf("IMG_PNG with ext-gd: %+v", sym)
+	if builtinIndex("8.4", "brotli").Lookup("BROTLI_COMPRESS_LEVEL_DEFAULT") == nil {
+		t.Error("BROTLI_COMPRESS_LEVEL_DEFAULT is present with ext-brotli")
+	}
+	if sym := builtinIndex("8.4").Lookup("IMG_PNG"); sym == nil || sym.Value != "4" {
+		t.Errorf("gd ships with PHP's source, so IMG_PNG needs no extension in the profile: %+v", sym)
 	}
 	if builtinIndex("8.4").Lookup("CURLOPT_URL") == nil {
 		t.Error("CURLOPT_URL is in PHP's default build, so it needs no extension in the profile")

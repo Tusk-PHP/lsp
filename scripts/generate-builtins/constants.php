@@ -44,15 +44,15 @@ function languageConstants(): array
 }
 
 /**
- * @return list<array{version:string, default:bool, extensions:list<string>, constants:array<string, array<string, array{0:string, 1:?string}>>}>
+ * @return list<array{version:string, kind:string, extensions:list<string>, constants:array<string, array<string, array{0:string, 1:?string}>>}>
  */
-function dumpConstantsWith(string $commands, bool $defaultBuild): array
+function dumpConstantsWith(string $commands, string $kind): array
 {
-    return array_map(static fn(array $dump): array => $dump + ['default' => $defaultBuild], runPhpDumps($commands, constantDumpCode()));
+    return array_map(static fn(array $dump): array => $dump + ['kind' => $kind], runPhpDumps($commands, constantDumpCode()));
 }
 
 /**
- * @param list<array{version:string, default:bool, extensions:list<string>, constants:array<string, array<string, array{0:string, 1:?string}>>}> $dumps
+ * @param list<array{version:string, kind:string, extensions:list<string>, constants:array<string, array<string, array{0:string, 1:?string}>>}> $dumps
  */
 function generateGoConstants(array $dumps): string
 {
@@ -62,7 +62,7 @@ function generateGoConstants(array $dumps): string
     }
     usort($dumps, static fn(array $a, array $b): int => version_compare($a['version'], $b['version']));
     $baseline = $dumps[0]['version'];
-    $defaultExtensions = defaultBuildExtensions($dumps);
+    $peclExtensions = peclExtensions($dumps);
 
     $seen = [];
     foreach ($dumps as $dump) {
@@ -86,7 +86,7 @@ function generateGoConstants(array $dumps): string
         $type = count($types) === 1 ? $types[0] : '';
         $value = count($values) === 1 && $occurrences[0]['value'] !== null && !isBuildDependent($name) ? $occurrences[0]['value'] : '';
         $since = sinceVersion($name, $occurrences, $dumps, $baseline);
-        $gate = in_array($extension, $defaultExtensions, true) ? '' : $extension;
+        $gate = isset($peclExtensions[$extension]) ? $extension : '';
         $lines[] = sprintf(
             "	{Name: %s, Type: %s, Value: %s, BuiltinAvailability: BuiltinAvailability{Since: %s, Extension: %s}},",
             renderGoString($name),
@@ -97,7 +97,7 @@ function generateGoConstants(array $dumps): string
         );
     }
 
-    $versions = implode(', ', array_map(static fn(array $d): string => $d['version'] . ($d['default'] ? '' : ' with extensions'), $dumps));
+    $versions = implode(', ', array_map(static fn(array $d): string => $d['version'] . ($d['kind'] === 'default' ? '' : " with {$d['kind']} extensions"), $dumps));
 
     return implode("\n", [
         'package symbols',
@@ -113,20 +113,26 @@ function generateGoConstants(array $dumps): string
 }
 
 /**
- * Extensions any default build has. Their constants are not gated by
- * extension, like their functions and classes.
+ * Extensions only the PECL builds have. Their constants need the extension in
+ * the project's profile; those of PHP's own extensions are not gated, like
+ * their functions and classes.
  *
- * @return list<string>
+ * @return array<string, true>
  */
-function defaultBuildExtensions(array $dumps): array
+function peclExtensions(array $dumps): array
 {
-    $extensions = [];
+    $own = [];
+    $pecl = [];
     foreach ($dumps as $dump) {
-        if ($dump['default']) {
-            $extensions = array_merge($extensions, $dump['extensions']);
+        foreach ($dump['extensions'] as $extension) {
+            if ($dump['kind'] === 'pecl') {
+                $pecl[$extension] = true;
+            } else {
+                $own[$extension] = true;
+            }
         }
     }
-    return array_values(array_unique($extensions));
+    return array_diff_key($pecl, $own);
 }
 
 /**
@@ -159,17 +165,21 @@ function renderGoValue(string $value): string
 
 return [
     'name' => 'constants',
-    'usage' => 'php scripts/generate-builtins.php constants --php=COMMANDS [--extensions-php=COMMANDS] [--output=PATH]',
+    'usage' => 'php scripts/generate-builtins.php constants --php=COMMANDS [--extensions-php=COMMANDS] [--pecl-php=COMMANDS] [--output=PATH]',
     'help' => '  constants     Run each PHP given with --php and --extensions-php, read its
                 get_defined_constants(true), and emit the Go table of PHP\'s
                 global constants with their type, value, the version that
-                added them and, for extensions outside PHP\'s default build,
-                the extension. Output defaults to
+                added them and, for PECL extensions, the extension. Output
+                defaults to
                 internal/symbols/builtin_constants_generated.go.
 ',
     'run' => static function (array $options): void {
         writeOutput(
-            generateGoConstants(array_merge(dumpConstantsWith($options['php'], true), dumpConstantsWith($options['extensions-php'], false))),
+            generateGoConstants(array_merge(
+                dumpConstantsWith($options['php'], 'default'),
+                dumpConstantsWith($options['extensions-php'], 'extensions'),
+                dumpConstantsWith($options['pecl-php'], 'pecl')
+            )),
             $options['output'] ?? dirname(__DIR__, 2) . '/internal/symbols/builtin_constants_generated.go'
         );
     },
