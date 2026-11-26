@@ -50,6 +50,13 @@ func TestImportReferences(t *testing.T) {
 		{"class import of a called name", "<?php\nuse A\\Route;\n#[Route('/')]\nfunction f() {}\n", map[string]bool{"Route": true}},
 		{"class and function import of one name", "<?php\nuse A\\fmt;\nuse function B\\fmt;\nnew fmt();\n", map[string]bool{"fmt": true, "function fmt": false}},
 		{"doc comment counts for every kind", "<?php\nuse function A\\fmt;\nuse const A\\MAX;\n/** @see fmt() MAX */\n", map[string]bool{"function fmt": true, "const MAX": true}},
+		{"class import in another case", "<?php\nuse A\\Post;\nuse A\\User;\nuse A\\Tag;\nnew post();\nUSER::find();\necho tag\\X::class;\n", map[string]bool{"Post": true, "User": true, "Tag": true}},
+		{"lower-case class alias", "<?php\nuse A\\Post as post;\nnew POST();\n", map[string]bool{"post": true}},
+		{"non-ASCII letters keep their case", "<?php\nuse A\\Éclair;\nnew éclair();\n", map[string]bool{"Éclair": false}},
+		{"function import in another case", "<?php\nuse function A\\fmt;\nFMT('x');\n", map[string]bool{"function fmt": true}},
+		{"const import in another case", "<?php\nuse const A\\MAX;\necho max, Max;\n", map[string]bool{"const MAX": false}},
+		{"class and const import folding to one name", "<?php\nuse A\\foo;\nuse const B\\FOO;\necho Foo;\n", map[string]bool{"foo": true, "const FOO": false}},
+		{"doc comment words keep the import's spelling", "<?php\nuse A\\Post;\nuse function A\\fmt;\nuse const A\\MAX;\n/** Loads the post, @see FMT() max */\n", map[string]bool{"Post": false, "function fmt": false, "const MAX": false}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

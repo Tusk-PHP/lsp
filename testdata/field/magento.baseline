@@ -119,7 +119,6 @@ app/code/Magento/CatalogImportExport/Model/Import/Product/TaxClassProcessor.php	
 app/code/Magento/CatalogImportExport/Model/Import/Product/TaxClassProcessor.php	unknown-member	Unknown member 'save' on 'ClassModelFactory'
 app/code/Magento/CatalogImportExport/Model/Import/Product/TaxClassProcessor.php	unknown-member	Unknown member 'setClassName' on 'ClassModelFactory'
 app/code/Magento/CatalogImportExport/Model/Import/Product/TaxClassProcessor.php	unknown-member	Unknown member 'setClassType' on 'ClassModelFactory'
-app/code/Magento/CatalogImportExport/Model/Import/Product/Validator.php	unused-import	Unused import 'Magento\Catalog\Model\Product\Attribute\Backend\Sku'
 app/code/Magento/CatalogImportExport/Model/Import/Product/Validator/Media.php	unused-private-constant	Private constant 'Media::ADDITIONAL_IMAGES_DELIMITER' is never used
 app/code/Magento/CatalogInventory/Model/ProductCollectionStockCondition.php	unused-import	Unused import 'Magento\Catalog\Model\CollectionConditionInterface'
 app/code/Magento/CatalogInventory/Model/Stock/Item.php	unknown-member	Unknown member 'save' on 'StockConfigurationInterface'

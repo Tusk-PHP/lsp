@@ -200,6 +200,15 @@ function getUser(): User {
 		}
 	})
 
+	t.Run("class and function names in another case not flagged, const names flagged", func(t *testing.T) {
+		source := "<?php\nuse App\\Models\\Post;\nuse function App\\fmt;\nuse const App\\MAX;\nnew post();\necho FMT(max);\n"
+		file := parser.ParseFile(source)
+		findings := checker.Check(file, source, nil)
+		if len(findings) != 1 || findings[0].StartLine != 3 {
+			t.Fatalf("expected only MAX flagged, got %+v", findings)
+		}
+	})
+
 	t.Run("import used in interpolation not flagged", func(t *testing.T) {
 		source := "<?php\nuse App\\Models\\Post;\necho \"{$app->make(Post::class)}\";\n"
 		file := parser.ParseFile(source)

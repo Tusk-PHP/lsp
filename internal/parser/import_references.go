@@ -17,7 +17,7 @@ const (
 	functionImport
 	constImport
 
-	anyImport = classImport | functionImport | constImport
+	foldedImports = classImport | functionImport
 )
 
 func importKindOf(kind string) importKinds {
@@ -38,6 +38,7 @@ type ImportReferences struct {
 
 type importCollector struct {
 	imported map[string]importKinds
+	spelled  map[string]importKinds
 	used     map[string]importKinds
 	pending  int
 }
@@ -45,12 +46,16 @@ type importCollector struct {
 func (r *ParseResult) ImportReferences() ImportReferences {
 	c := importCollector{
 		imported: make(map[string]importKinds, len(r.Uses)),
+		spelled:  make(map[string]importKinds, len(r.Uses)),
 		used:     make(map[string]importKinds, len(r.Uses)),
 	}
+	var buf [64]byte
 	for _, u := range r.Uses {
 		kind := importKindOf(u.Kind)
-		if c.imported[u.Alias]&kind == 0 {
-			c.imported[u.Alias] |= kind
+		c.spelled[u.Alias] |= kind
+		key := appendImportKey(buf[:0], u.Alias, kind)
+		if c.imported[string(key)]&kind == 0 {
+			c.imported[string(key)] |= kind
 			c.pending++
 		}
 	}
@@ -59,7 +64,23 @@ func (r *ParseResult) ImportReferences() ImportReferences {
 }
 
 func (refs ImportReferences) Used(u UseNode) bool {
-	return refs.used[u.Alias]&importKindOf(u.Kind) != 0
+	kind := importKindOf(u.Kind)
+	var buf [64]byte
+	return refs.used[string(appendImportKey(buf[:0], u.Alias, kind))]&kind != 0
+}
+
+func appendImportKey(dst []byte, name string, kinds importKinds) []byte {
+	if kinds&foldedImports == 0 {
+		return append(dst, name...)
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if 'A' <= c && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		dst = append(dst, c)
+	}
+	return dst
 }
 
 func (c *importCollector) collect(tokens []Token, skip []tokenSpan) {
@@ -123,15 +144,28 @@ func (c *importCollector) markWords(text string) {
 		for i < len(text) && IsIdentByte(text[i]) {
 			i++
 		}
-		c.mark(text[start:i], anyImport)
+		word := text[start:i]
+		if kinds := c.spelled[word]; kinds != 0 {
+			c.mark(word, kinds)
+		}
 	}
 }
 
 func (c *importCollector) mark(name string, kinds importKinds) {
-	hit := c.imported[name] & kinds &^ c.used[name]
+	var buf [64]byte
+	if exact := kinds &^ foldedImports; exact != 0 {
+		c.markKey(appendImportKey(buf[:0], name, exact), exact)
+	}
+	if folded := kinds & foldedImports; folded != 0 {
+		c.markKey(appendImportKey(buf[:0], name, folded), folded)
+	}
+}
+
+func (c *importCollector) markKey(key []byte, kinds importKinds) {
+	hit := c.imported[string(key)] & kinds &^ c.used[string(key)]
 	if hit == 0 {
 		return
 	}
-	c.used[name] |= hit
+	c.used[string(key)] |= hit
 	c.pending -= bits.OnesCount8(uint8(hit))
 }
