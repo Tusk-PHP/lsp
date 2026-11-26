@@ -136,7 +136,7 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 		ws.rereadAutoload()
 	}
 	if out.Vendor {
-		out.VendorFiles = ws.IndexComposerDependencies()
+		out.VendorFiles = ws.indexComposerDependencies(r.editorOwns)
 		ws.AnalyzeModels()
 	}
 	if profile {

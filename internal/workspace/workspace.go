@@ -247,6 +247,10 @@ func (ws *Bootstrapped) IndexComposerDependencies() int {
 	if ws == nil {
 		return 0
 	}
+	return ws.indexComposerDependencies(func(string) bool { return false })
+}
+
+func (ws *Bootstrapped) indexComposerDependencies(editorOwns func(path string) bool) int {
 
 	if ws.Aliases != nil {
 		ws.Aliases.Load()
@@ -254,11 +258,15 @@ func (ws *Bootstrapped) IndexComposerDependencies() int {
 
 	vendorFiles := map[string]struct{}{}
 	indexVendorFile := func(path string) {
+		uri := symbols.PathToURI(path)
+		if editorOwns(path) {
+			vendorFiles[uri] = struct{}{}
+			return
+		}
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return
 		}
-		uri := symbols.PathToURI(path)
 		ws.Index.IndexFileWithSource(uri, string(content), symbols.SourceVendor)
 		vendorFiles[uri] = struct{}{}
 	}
@@ -266,6 +274,7 @@ func (ws *Bootstrapped) IndexComposerDependencies() int {
 		switch {
 		case entry.IsFile && entry.IsVendor:
 			indexVendorFile(entry.Path)
+		case entry.IsFile && editorOwns(entry.Path):
 		case entry.IsFile:
 			if content, err := os.ReadFile(entry.Path); err == nil {
 				ws.Index.IndexFileWithSource(symbols.PathToURI(entry.Path), string(content), symbols.SourceProject)
