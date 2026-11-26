@@ -349,10 +349,13 @@ func waitForShowMessage(t *testing.T, h *lspHarness, prefix string) {
 
 func settleRefreshes(t *testing.T, h *lspHarness, root, class string) {
 	t.Helper()
+	<-h.server.indexed
 	name := "app/" + class + ".php"
 	writeProjectFiles(t, root, map[string]string{name: "<?php\nnamespace App;\nclass " + class + " {}\n"})
 	notifyWatched(h, root, name)
 	waitForSymbols(t, h, class, func(names []string) bool { return slices.Contains(names, class) })
+	h.server.watch.refresh.Lock()
+	h.server.watch.refresh.Unlock()
 }
 
 func TestClientSettingsMergeOverTheInitializationOptions(t *testing.T) {
