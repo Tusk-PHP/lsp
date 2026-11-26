@@ -99,3 +99,42 @@ func TestDefinitionOfAClassWrittenInAnotherCase(t *testing.T) {
 		t.Errorf("a constant on a class written in another case resolves, got %+v", loc)
 	}
 }
+
+func highlightLines(a *Analyzer, uri, source string, pos protocol.Position) []int {
+	var lines []int
+	for _, h := range a.GetDocumentHighlights(uri, source, pos) {
+		lines = append(lines, h.Range.Start.Line)
+	}
+	slices.Sort(lines)
+	return lines
+}
+
+func TestHighlightsOfAClassSkipMembersAndFunctionsOfTheSameName(t *testing.T) {
+	source := roomSource + "$room->room;\nRoom::ROOM;\nfunction room() {}\n"
+	got := highlightLines(roomAnalyzer(), "file:///app/Room.php", source, charPosOf(t, source, "Room", "function use_room"))
+	if want := []int{2, 7, 10, 11, 14}; !slices.Equal(got, want) {
+		t.Errorf("a property, a constant and a function named like the class are not highlighted: lines %v, want %v", got, want)
+	}
+}
+
+func TestHighlightsOfAConstantMatchItsCaseAndSkipCallsAndProperties(t *testing.T) {
+	source := `<?php
+namespace App;
+class Room {
+    const SIZE = 1;
+    public function area(): int { return self::SIZE; }
+}
+function use_room(Room $room) {
+    Room::SIZE;
+    Room::size;
+    $room->SIZE;
+    SIZE();
+}
+`
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///app/Room.php", source)
+	got := highlightLines(NewAnalyzer(idx, nil), "file:///app/Room.php", source, charPosOf(t, source, "SIZE", "Room::SIZE"))
+	if want := []int{3, 4, 7}; !slices.Equal(got, want) {
+		t.Errorf("the constant's declaration and uses in its own case are highlighted: lines %v, want %v", got, want)
+	}
+}
