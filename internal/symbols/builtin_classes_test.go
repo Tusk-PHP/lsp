@@ -120,3 +120,32 @@ func TestABuiltinSwappedInUnderAProjectClassLeavesItsDocAlone(t *testing.T) {
 		t.Errorf("the project's ArrayObject keeps its own empty doc: %+v", sym)
 	}
 }
+
+func TestLaterStubLayersAddToABuiltinTrait(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFileWithSource("builtin://core/php-7.4.php", "<?php\ntrait Greets { public function hello(): string {} }\n", SourceBuiltin)
+	idx.IndexFileWithSource("builtin://core/php-8.0.php", "<?php\ntrait Greets { public function bye(): string {} }\n", SourceBuiltin)
+	trait := idx.Lookup("Greets")
+	if trait == nil || trait.Kind != KindTrait {
+		t.Fatalf("Greets: %+v", trait)
+	}
+	var names []string
+	for _, child := range trait.Children {
+		names = append(names, child.Name)
+	}
+	slices.Sort(names)
+	if !slices.Equal(names, []string{"bye", "hello"}) {
+		t.Errorf("the 8.0 layer adds bye() to the 7.4 layer's trait: %v", names)
+	}
+}
+
+func TestAStubThatDeclaresNoMembersLeavesTheClassOpen(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFileWithSource("builtin://ext/php-7.4.php", "<?php\nclass Opaque {}\nclass Child extends \\Opaque {}\n", SourceBuiltin)
+	if HasStubbedMembers(idx.Lookup("Opaque")) {
+		t.Error("a stub that lists no members can't show one is missing")
+	}
+	if !HasStubbedMembers(idx.Lookup("Child")) {
+		t.Error("a stub that names a parent declares the class's shape")
+	}
+}
