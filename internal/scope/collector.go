@@ -563,7 +563,7 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 	}
 	if j >= 0 && j < len(tokens) && tokens[j].Kind == parser.TokenDoubleArrow {
 		bodyStart := parser.NextSignificant(tokens, j+1)
-		bodyEnd := findArrowExpressionEnd(tokens, bodyStart)
+		bodyEnd := parser.ArrowExpressionEnd(tokens, bodyStart)
 		if bodyStart < 0 || bodyEnd < 0 {
 			scope.Range.End = scope.Range.Start
 			return nil, decls
@@ -1051,7 +1051,7 @@ func parsePropertyHook(tokens []parser.Token, start int, parent *Scope, doc *Doc
 		return &pendingScope{scope: scope, bodyOpenIndex: j}, decls
 	case parser.TokenDoubleArrow:
 		bodyStart := parser.NextSignificant(tokens, j+1)
-		bodyEnd := findArrowExpressionEnd(tokens, bodyStart)
+		bodyEnd := parser.ArrowExpressionEnd(tokens, bodyStart)
 		if bodyStart < 0 || bodyEnd < 0 {
 			return nil, nil
 		}
@@ -1296,51 +1296,6 @@ func ensureArrowCapture(doc *Document, scope *Scope, origin *Binding, ref protoc
 		}
 	}
 	return doc.addBinding(scope, origin.Name, BindingClosureUse, ref, origin)
-}
-
-func findArrowExpressionEnd(tokens []parser.Token, start int) int {
-	if start < 0 {
-		return -1
-	}
-	parenDepth := 0
-	bracketDepth := 0
-	braceDepth := 0
-	for i := start; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenOpenParen:
-			parenDepth++
-		case parser.TokenCloseParen:
-			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
-				return i - 1
-			}
-			if parenDepth > 0 {
-				parenDepth--
-			}
-		case parser.TokenOpenBracket:
-			bracketDepth++
-		case parser.TokenCloseBracket:
-			if bracketDepth == 0 && parenDepth == 0 && braceDepth == 0 {
-				return i - 1
-			}
-			if bracketDepth > 0 {
-				bracketDepth--
-			}
-		case parser.TokenOpenBrace:
-			braceDepth++
-		case parser.TokenCloseBrace:
-			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
-				return i - 1
-			}
-			if braceDepth > 0 {
-				braceDepth--
-			}
-		case parser.TokenComma, parser.TokenSemicolon:
-			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
-				return parser.PrevSignificant(tokens, i-1)
-			}
-		}
-	}
-	return parser.PrevSignificant(tokens, len(tokens)-1)
 }
 
 func buildAssignment(tokens []parser.Token, variableIdx, equalsIdx, relativeBraceDepth int) *Assignment {
