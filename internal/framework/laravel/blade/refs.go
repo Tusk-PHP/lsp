@@ -3,6 +3,8 @@ package blade
 import (
 	"sort"
 	"strings"
+
+	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 // RefKind is what a directive's string argument names.
@@ -108,11 +110,11 @@ func PartialRefAt(src string, offset int) (Ref, bool) {
 	lineStart := strings.LastIndexByte(src[:offset], '\n') + 1
 	line := src[lineStart:offset]
 	for at := strings.LastIndexByte(line, '@'); at >= 0; at = strings.LastIndexByte(line[:at], '@') {
-		if at > 0 && isNameByte(line[at-1]) {
+		if at > 0 && parser.IsIdentByte(line[at-1]) {
 			continue
 		}
 		j := at + 1
-		for j < len(line) && isNameByte(line[j]) {
+		for j < len(line) && parser.IsIdentByte(line[j]) {
 			j++
 		}
 		name := line[at+1 : j]
@@ -253,7 +255,7 @@ func DirectivePrefixAt(src string, nodes []Node, offset int) (at int, prefix str
 		return 0, "", false
 	}
 	j := offset
-	for j > 0 && isNameByte(src[j-1]) {
+	for j > 0 && parser.IsIdentByte(src[j-1]) {
 		j--
 	}
 	at = j - 1
@@ -261,7 +263,7 @@ func DirectivePrefixAt(src string, nodes []Node, offset int) (at int, prefix str
 		return 0, "", false
 	}
 	// `name@example.com` and `@@if` aren't directives.
-	if at > 0 && (isNameByte(src[at-1]) || src[at-1] == '@') {
+	if at > 0 && (parser.IsIdentByte(src[at-1]) || src[at-1] == '@') {
 		return 0, "", false
 	}
 	if InPHP(nodes, offset) {

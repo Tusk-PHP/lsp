@@ -4,7 +4,11 @@
 // PHP features can run on Blade.
 package blade
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/Tusk-PHP/lsp/internal/parser"
+)
 
 // Kind is the kind of a part of a template.
 type Kind int
@@ -129,7 +133,7 @@ func (s *scanner) rawPHP(i, end, openLen int, short bool) int {
 func (s *scanner) at(i, end int) int {
 	src := s.src
 	// `name@example.com`: an @ right after a word character isn't Blade.
-	if i > 0 && isNameByte(src[i-1]) {
+	if i > 0 && parser.IsIdentByte(src[i-1]) {
 		return i + 1
 	}
 	rest := src[i+1 : end]
@@ -142,13 +146,13 @@ func (s *scanner) at(i, end int) int {
 	case strings.HasPrefix(rest, "@"):
 		// `@@if` prints `@if`.
 		j := i + 2
-		for j < end && isNameByte(src[j]) {
+		for j < end && parser.IsIdentByte(src[j]) {
 			j++
 		}
 		return j
 	}
 	j := i + 1
-	for j < end && isNameByte(src[j]) {
+	for j < end && parser.IsIdentByte(src[j]) {
 		j++
 	}
 	name := src[i+1 : j]
@@ -234,7 +238,7 @@ func (s *scanner) component(i, end int) int {
 		if k+1 < tagEnd && src[k+1] == '$' {
 			// `:$user` is `:user="$user"`.
 			e := k + 2
-			for e < tagEnd && isNameByte(src[e]) {
+			for e < tagEnd && parser.IsIdentByte(src[e]) {
 				e++
 			}
 			s.scan(textStart, k)
@@ -340,16 +344,12 @@ func indexFrom(src, sep string, from, end, sepLen int) int {
 	return end
 }
 
-func isNameByte(c byte) bool {
-	return c == '_' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9') || c >= 0x80
-}
-
 func isTagNameByte(c byte) bool {
-	return isNameByte(c) || c == '-' || c == '.' || c == ':'
+	return parser.IsIdentByte(c) || c == '-' || c == '.' || c == ':'
 }
 
 func isAttrNameByte(c byte) bool {
-	return isNameByte(c) || c == '-' || c == '.' || c == ':'
+	return parser.IsIdentByte(c) || c == '-' || c == '.' || c == ':'
 }
 
 func isSpaceByte(c byte) bool {

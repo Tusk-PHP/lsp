@@ -694,7 +694,7 @@ func instanceofTargets(line, expr string) []string {
 		}
 		i := from + k + len(expr)
 		from = i
-		if i < len(line) && isIdentChar(line[i]) {
+		if i < len(line) && parser.IsIdentByte(line[i]) {
 			continue
 		}
 		rest := strings.TrimLeft(line[i:], " \t")
@@ -704,7 +704,7 @@ func instanceofTargets(line, expr string) []string {
 		}
 		after = strings.TrimLeft(after, " \t")
 		end := 0
-		for end < len(after) && (isIdentChar(after[end]) || after[end] == '\\') {
+		for end < len(after) && (parser.IsIdentByte(after[end]) || after[end] == '\\') {
 			end++
 		}
 		if end == 0 || after[0] >= '0' && after[0] <= '9' {
@@ -721,7 +721,7 @@ func isPlainVariable(expr string) bool {
 		return false
 	}
 	for i := 1; i < len(expr); i++ {
-		if !isIdentChar(expr[i]) {
+		if !parser.IsIdentByte(expr[i]) {
 			return false
 		}
 	}
@@ -814,7 +814,7 @@ func maskPHPLine(line string, st *maskState) string {
 		trimmed := strings.TrimLeft(line, " \t")
 		indent := len(line) - len(trimmed)
 		if strings.HasPrefix(trimmed, st.heredocLabel) &&
-			(len(trimmed) == len(st.heredocLabel) || !isIdentChar(trimmed[len(st.heredocLabel)])) {
+			(len(trimmed) == len(st.heredocLabel) || !parser.IsIdentByte(trimmed[len(st.heredocLabel)])) {
 			for j := 0; j < indent+len(st.heredocLabel); j++ {
 				buf[j] = ' '
 			}
@@ -925,7 +925,7 @@ func heredocOpenLabel(rest string) (string, bool) {
 		return "", false
 	}
 	for k := 0; k < len(rest); k++ {
-		if !isIdentChar(rest[k]) {
+		if !parser.IsIdentByte(rest[k]) {
 			return "", false
 		}
 	}
@@ -1262,7 +1262,7 @@ func propertyCheckedForPresence(line string, exprStart, nameEnd int) bool {
 				j--
 			}
 			k := j
-			for k > 0 && isIdentChar(line[k-1]) {
+			for k > 0 && parser.IsIdentByte(line[k-1]) {
 				k--
 			}
 			switch strings.ToLower(line[k:j]) {
@@ -1639,7 +1639,7 @@ func backwardExprStart(line string, end int) int {
 }
 
 func isExprChar(b byte) bool {
-	return isIdentChar(b) || b == '$' || b == '\\' || b == ':' || b == '>' || b == '-' || b == ')' || b == '(' || b == ']' || b == '['
+	return parser.IsIdentByte(b) || b == '$' || b == '\\' || b == ':' || b == '>' || b == '-' || b == ')' || b == '(' || b == ']' || b == '['
 }
 
 func unknownSymbolShortName(fqn string) string {

@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 type View struct {
@@ -259,7 +261,7 @@ type viewCall struct {
 
 func findViewCall(prefix string) (viewCall, bool) {
 	for idx := strings.LastIndex(prefix, "view("); idx >= 0; idx = strings.LastIndex(prefix[:idx], "view(") {
-		if idx > 0 && isWordChar(prefix[idx-1]) {
+		if idx > 0 && parser.IsIdentByte(prefix[idx-1]) {
 			continue
 		}
 		call := viewCall{argsStart: idx + len("view(")}
@@ -270,10 +272,6 @@ func findViewCall(prefix string) (viewCall, bool) {
 		return call, true
 	}
 	return viewCall{}, false
-}
-
-func isWordChar(ch byte) bool {
-	return ch == '_' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')
 }
 
 // ViewURI returns the file of a view by name. A view created since the views

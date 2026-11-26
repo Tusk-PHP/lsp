@@ -205,7 +205,7 @@ func plainMemberName(lit string) (string, bool) {
 		return "", false
 	}
 	for i := 0; i < len(name); i++ {
-		if !isIdentChar(name[i]) {
+		if !parser.IsIdentByte(name[i]) {
 			return "", false
 		}
 	}
@@ -252,7 +252,7 @@ func isGuardReceiver(expr string) bool {
 			return false
 		}
 		for i := 0; i < len(part); i++ {
-			if !isIdentChar(part[i]) && part[i] != '\\' {
+			if !parser.IsIdentByte(part[i]) && part[i] != '\\' {
 				return false
 			}
 		}

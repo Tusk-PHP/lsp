@@ -217,7 +217,7 @@ func isPropertyReferenced(name string, declLine int, cls parser.ClassNode, lines
 		// Instance access: ->name (check word boundary after)
 		if idx := strings.Index(line, accessPattern); idx >= 0 {
 			after := idx + len(accessPattern)
-			if after >= len(line) || !isIdentChar(line[after]) {
+			if after >= len(line) || !parser.IsIdentByte(line[after]) {
 				return true
 			}
 		}

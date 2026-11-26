@@ -1,7 +1,6 @@
 package lsp
 
 import (
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -119,7 +118,7 @@ func findWordRange(pr *parser.ParseResult, pos protocol.Position) *protocol.Rang
 	ch := min(pos.Character, len(line))
 
 	isWordChar := func(r rune) bool {
-		return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '$'
+		return r == '$' || parser.IsIdentByte(string(r)[0])
 	}
 
 	start := ch

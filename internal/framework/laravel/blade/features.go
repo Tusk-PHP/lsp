@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
@@ -275,7 +276,7 @@ func plainViewName(name string) bool {
 	}
 	for i := 0; i < len(name); i++ {
 		c := name[i]
-		if !(isNameByte(c) || c == '.' || c == '-' || c == '/') {
+		if !(parser.IsIdentByte(c) || c == '.' || c == '-' || c == '/') {
 			return false
 		}
 	}

@@ -1309,7 +1309,7 @@ func BuildFQN(namespace, name string) string {
 // IsWordChar returns true if the byte is a valid PHP identifier character
 // (letters, digits, underscore, bytes 0x80-0xff, backslash).
 func IsWordChar(ch byte) bool {
-	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '\\' || ch >= 0x80
+	return parser.IsIdentByte(ch) || ch == '\\'
 }
 
 // JoinChainLines joins the current line with preceding continuation lines

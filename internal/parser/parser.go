@@ -322,7 +322,7 @@ func OpenTagLen(s string, i int) int {
 		return 0
 	}
 	rest := s[i+2:]
-	if len(rest) >= 3 && strings.EqualFold(rest[:3], "php") && (len(rest) == 3 || !isIdentByte(rest[3])) {
+	if len(rest) >= 3 && strings.EqualFold(rest[:3], "php") && (len(rest) == 3 || !IsIdentByte(rest[3])) {
 		return 5
 	}
 	if len(rest) >= 1 && rest[0] == '=' {
@@ -357,7 +357,7 @@ func nextOpenTag(source string, from int) (int, int) {
 	return len(source), 0
 }
 
-func isIdentByte(b byte) bool {
+func IsIdentByte(b byte) bool {
 	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b >= 0x80
 }
 
@@ -548,12 +548,12 @@ func tokenize(source string) ([]Token, []ParseError) {
 		}
 
 		// Variable $name
-		if ch == '$' && offset+1 < len(source) && isIdentByte(source[offset+1]) {
+		if ch == '$' && offset+1 < len(source) && IsIdentByte(source[offset+1]) {
 			start := offset
 			startCol := col
 			offset++
 			col++
-			for offset < len(source) && isIdentByte(source[offset]) {
+			for offset < len(source) && IsIdentByte(source[offset]) {
 				offset++
 				col++
 			}
@@ -574,10 +574,10 @@ func tokenize(source string) ([]Token, []ParseError) {
 		}
 
 		// Identifiers and keywords
-		if isIdentByte(ch) {
+		if IsIdentByte(ch) {
 			start := offset
 			startCol := col
-			for offset < len(source) && isIdentByte(source[offset]) {
+			for offset < len(source) && IsIdentByte(source[offset]) {
 				offset++
 				col++
 			}
@@ -682,7 +682,7 @@ func heredocEnd(source string, start int) (int, bool) {
 		i++
 	}
 	labelStart := i
-	for i < len(source) && isIdentByte(source[i]) {
+	for i < len(source) && IsIdentByte(source[i]) {
 		i++
 	}
 	label := source[labelStart:i]
@@ -715,7 +715,7 @@ func heredocEnd(source string, start int) (int, bool) {
 		}
 		if strings.HasPrefix(source[j:lineEnd], label) {
 			after := j + len(label)
-			if after >= len(source) || !isIdentByte(source[after]) {
+			if after >= len(source) || !IsIdentByte(source[after]) {
 				return after, true
 			}
 		}
@@ -1069,7 +1069,7 @@ func tokensText(tokens []Token) string {
 	var b strings.Builder
 	prevWord := false
 	for _, t := range tokens {
-		isWord := t.Value != "" && (isIdentByte(t.Value[0]) || t.Value[0] == '$' || t.Value[0] == '\'')
+		isWord := t.Value != "" && (IsIdentByte(t.Value[0]) || t.Value[0] == '$' || t.Value[0] == '\'')
 		if prevWord && isWord {
 			b.WriteByte(' ')
 		}
