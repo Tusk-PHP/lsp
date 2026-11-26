@@ -727,10 +727,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.Completion.SetSymfonyTranslationResolver(symfonyTranslations)
 	rt.Completion.SetSymfonyCommands(ws.SymfonyCommands)
 
-	rt.InlayHint = inlayhint.NewProvider(ws.Index, ws.Container)
-	rt.InlayHint.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return rt.Completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	})
+	rt.InlayHint = inlayhint.NewProvider(ws.Index)
 
 	rt.Hover = hover.NewProvider(ws.Index, ws.Container, s.Framework)
 	rt.Hover.SetArrayResolver(arrayResolver)
