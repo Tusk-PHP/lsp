@@ -143,3 +143,63 @@ interface RepositoryInterface {
 		}
 	}
 }
+
+func TestGetCodeActionsImplementMissingMethodsFromExtendedInterfaces(t *testing.T) {
+	source := `<?php
+namespace App;
+
+class FileStore implements Store {
+}
+`
+
+	a, _ := setupRenameAnalyzer(map[string]string{
+		"file:///test.php": source,
+		"file:///store.php": `<?php
+namespace App;
+
+use App\Contracts\Readable;
+
+interface Store extends Readable, Writable {
+    public function flush(): void;
+}
+
+interface Writable {
+    public function write(string $key): void;
+}
+`,
+		"file:///readable.php": `<?php
+namespace App\Contracts;
+
+interface Readable {
+    public function read(string $key): string;
+}
+`,
+	})
+
+	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 3, Character: 0},
+			End:   protocol.Position{Line: 3, Character: 36},
+		},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
+	})
+
+	var text string
+	for _, action := range actions {
+		if action.Title == "Implement missing methods" && action.Edit != nil {
+			for _, edit := range action.Edit.Changes["file:///test.php"] {
+				text += edit.NewText
+			}
+		}
+	}
+	for _, want := range []string{
+		"public function flush(): void",
+		"public function read(string $key): string",
+		"public function write(string $key): void",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the stub implements %q from the interface or one it extends:\n%s", want, text)
+		}
+	}
+}

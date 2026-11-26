@@ -71,7 +71,7 @@ type Engine struct {
 type Resolver struct {
 	*Engine
 	depth  int
-	active map[string]int
+	active map[string]bool
 	cuts   int
 }
 
@@ -115,23 +115,19 @@ func (r *Resolver) enterResolution(key string) (func(), bool) {
 // enterGuard is enterResolution; a cut counts as one (cuts) only when
 // counted is set, for a caller that expects the cycle and handles it.
 func (r *Resolver) enterGuard(key string, counted bool) (func(), bool) {
-	if r.depth >= maxResolveDepth || r.active[key] > 0 {
-		if counted || r.active[key] == 0 {
+	if r.depth >= maxResolveDepth || r.active[key] {
+		if counted || !r.active[key] {
 			r.cuts++
 		}
 		return nil, false
 	}
 	if r.active == nil {
-		r.active = make(map[string]int)
+		r.active = make(map[string]bool)
 	}
 	r.depth++
-	r.active[key]++
+	r.active[key] = true
 	return func() {
-		if r.active[key] > 1 {
-			r.active[key]--
-		} else {
-			delete(r.active, key)
-		}
+		delete(r.active, key)
 		r.depth--
 	}, true
 }

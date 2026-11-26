@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/container"
+	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -169,5 +171,76 @@ enum Status: string implements StatusLabel {
 	}
 	if got := typeLocs[0].URI; got != "file:///status.php" {
 		t.Fatalf("expected enum implementor in status.php, got %s", got)
+	}
+}
+
+func TestTypeDefinitionOfAMethodNamedInItsDeclaration(t *testing.T) {
+	source := `<?php
+namespace App;
+
+class Shop {
+    public function checkout(): Receipt {
+        return new Receipt();
+    }
+}
+`
+	a, _ := setupRenameAnalyzer(map[string]string{
+		"file:///shop.php":    source,
+		"file:///receipt.php": "<?php\nnamespace App;\nclass Receipt {}\n",
+	})
+
+	locs := a.FindTypeDefinition("file:///shop.php", source, charPosOf(t, source, "checkout", "function checkout"))
+	if len(locs) != 1 || locs[0].URI != "file:///receipt.php" {
+		t.Errorf("type definition of checkout = %+v, want its return type Receipt", locs)
+	}
+}
+
+func TestDefinitionThroughAContainerMakeWithAClassConstant(t *testing.T) {
+	source := `<?php
+namespace App;
+
+use App\Services\Mailer;
+
+class Notifier {
+    public function notify($app) {
+        $app->make(Mailer::class)->send();
+    }
+}
+`
+	a, _ := setupRenameAnalyzer(map[string]string{
+		"file:///notifier.php": source,
+		"file:///mailer.php":   "<?php\nnamespace App\\Services;\nclass Mailer {\n    public function send(): void {}\n}\n",
+	})
+
+	loc := a.FindDefinition("file:///notifier.php", source, charPosOf(t, source, "send", "->send()"))
+	if loc == nil || loc.URI != "file:///mailer.php" {
+		t.Fatalf("send() on what the container makes goes to Mailer::send, got %+v", loc)
+	}
+}
+
+func TestDefinitionAsksTheTypedChainResolverItIsGiven(t *testing.T) {
+	source := `<?php
+namespace App;
+
+function build($factory) {
+    $factory->widget()->render();
+}
+`
+	a, _ := setupRenameAnalyzer(map[string]string{
+		"file:///build.php":  source,
+		"file:///widget.php": "<?php\nnamespace App;\nclass Widget {\n    public function render(): void {}\n}\n",
+	})
+	var asked []string
+	a.SetTypedChainResolver(func(expr, _ string, _ protocol.Position, _ *parser.FileNode) resolve.ResolvedType {
+		asked = append(asked, expr)
+		if strings.TrimSpace(expr) == "$factory->widget()" {
+			return resolve.ResolvedType{FQN: `App\Widget`}
+		}
+		return resolve.ResolvedType{}
+	})
+
+	loc := a.FindDefinition("file:///build.php", source, charPosOf(t, source, "render", "->render()"))
+	if loc == nil || loc.URI != "file:///widget.php" {
+		t.Fatalf("render() goes to the class the delegate typed the chain as, got %+v (asked %q)", loc, asked)
 	}
 }

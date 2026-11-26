@@ -1,8 +1,10 @@
 package completion
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
@@ -289,6 +291,31 @@ func TestResolveBuilderModelForDiagnostics(t *testing.T) {
 	} {
 		if got := p.ResolveBuilderModel(tc.prefix, tc.method, source, 2, file); got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.prefix, got, tc.want)
+		}
+	}
+}
+
+func TestBuilderColumnCompletionOnLessCommonReceivers(t *testing.T) {
+	p, _ := setupEloquentCompletionTest(t)
+	category := p.index.Lookup(`App\Models\Category`)
+	if category == nil {
+		t.Fatal("the fixture indexes Category")
+	}
+	p.index.SetScopeConventions(laravel.ScopeConventions())
+	p.index.IndexFile(category.URI, strings.Replace(p.index.GetFileSource(category.URI), "public string $slug;",
+		"public string $slug;\n\n    public function scopeActive($query) { return $query; }", 1))
+
+	for _, body := range []string{
+		"(new Category())->where('",
+		"$make = fn(): Category => new Category();\n$make()->where('",
+		"Category::active()->where('",
+	} {
+		source := "<?php\nuse App\\Models\\Category;\n" + body
+		lines := strings.Split(source, "\n")
+		last := len(lines) - 1
+		labels := collectLabels(p.GetCompletions("file:///test.php", source, protocol.Position{Line: last, Character: len(lines[last])}))
+		if !labels["name"] || !labels["slug"] {
+			t.Errorf("%q suggests Category's columns, got %v", body, labels)
 		}
 	}
 }

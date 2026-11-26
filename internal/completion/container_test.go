@@ -850,3 +850,15 @@ func models_pkg_AnalyzeEloquentModels(index *symbols.Index) {
 		}
 	}
 }
+
+func TestContainerCallWithAClassConstantCompletesTheClassMembers(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///mailer.php", "<?php\nnamespace App\\Services;\nclass Mailer {\n    public function send(): void {}\n}\n")
+	p := NewProvider(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"), "none")
+
+	source := "<?php\nnamespace App;\nuse App\\Services\\Mailer;\napp(Mailer::class)->"
+	labels := collectLabels(p.GetCompletions("file:///test.php", source, protocol.Position{Line: 3, Character: 20}))
+	if !labels["send"] {
+		t.Errorf("app(Mailer::class)-> offers Mailer's methods, got %v", labels)
+	}
+}
