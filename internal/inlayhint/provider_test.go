@@ -7,12 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/config"
-	"github.com/Tusk-PHP/lsp/internal/container"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -29,7 +25,7 @@ func localTestdata() string {
 }
 
 // readFile reads a file from the given absolute path, fataling the test on error.
-func readFile(t *testing.T, path string) string {
+func readFile(t testing.TB, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -41,7 +37,7 @@ func readFile(t *testing.T, path string) string {
 // setupProvider builds a Provider populated with the shared testdata/project
 // symbols (Monolog Logger, StreamHandler, Service) plus any extra sources
 // passed as (uri, source) pairs.
-func setupProvider(t *testing.T, extras ...string) *Provider {
+func setupProvider(t testing.TB, extras ...string) *Provider {
 	t.Helper()
 	root := projectRoot()
 
@@ -60,17 +56,7 @@ func setupProvider(t *testing.T, extras ...string) *Provider {
 		idx.IndexFile(extras[i], extras[i+1])
 	}
 
-	ca := container.NewContainerAnalyzer(idx, root, "none")
-	p := NewProvider(idx, ca)
-
-	// Wire the chain resolver through a completion provider, exactly as
-	// server.go does in handleInitialize.
-	cp := completion.NewProvider(idx, ca, "none")
-	p.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return cp.ResolveExpressionTypeTyped(expr, source, pos, file)
-	})
-
-	return p
+	return NewProvider(idx)
 }
 
 // allCfg returns a fully enabled InlayHintsConfig.
@@ -909,24 +895,5 @@ class K {
 		if got[name] != label {
 			t.Errorf("%s: want %q, got %q", name, label, got[name])
 		}
-	}
-}
-
-func TestSetTypedChainResolverKeepsThePlainChainResolverInStep(t *testing.T) {
-	idx := symbols.NewIndex()
-	p := NewProvider(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"))
-	p.SetTypedChainResolver(func(expr, _ string, _ protocol.Position, _ *parser.FileNode) resolve.ResolvedType {
-		if expr == "$repo->all()" {
-			return resolve.ResolvedType{FQN: `App\Collection`, Params: []resolve.ResolvedType{{FQN: "int"}, {FQN: `App\Widget`}}}
-		}
-		return resolve.ResolvedType{}
-	})
-
-	r := p.engine.Resolver()
-	if got, want := p.engine.ChainResolver(r, "$repo->all()", "", protocol.Position{}, nil), `App\Collection<int, App\Widget>`; got != want {
-		t.Errorf("plain chain type = %q, want the typed one written out, %q", got, want)
-	}
-	if got := p.engine.ChainResolver(r, "$repo->none()", "", protocol.Position{}, nil); got != "" {
-		t.Errorf("a chain the typed resolver can't follow has no plain type either, got %q", got)
 	}
 }

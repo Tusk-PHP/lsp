@@ -8,8 +8,8 @@ import (
 	"sort"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
-	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -18,33 +18,13 @@ import (
 // Provider produces inlay hints for a PHP source file.
 // It is designed to be constructed once and reused across requests.
 type Provider struct {
-	index     *symbols.Index
-	container *container.ContainerAnalyzer
-	engine    *resolve.Engine
+	index  *symbols.Index
+	engine *resolve.Engine
 }
 
-// NewProvider creates a Provider backed by the shared symbol index and optional
-// container analyzer. SetTypedChainResolver wires it to the resolver the other
-// features share, so its hints type chains as they do.
-func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer) *Provider {
-	return &Provider{
-		index:     index,
-		container: ca,
-		engine:    resolve.NewEngine(index),
-	}
-}
-
-// SetTypedChainResolver wires chain resolution to an external implementation —
-// typically the completion provider's ResolveExpressionTypeTyped.  It also
-// derives the plain-string ChainResolver from it so that both callbacks are
-// always in sync.
-func (p *Provider) SetTypedChainResolver(
-	fn func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType,
-) {
-	p.engine.DelegateTypedChains(fn)
-	p.engine.DelegateChains(func(expr, source string, pos protocol.Position, file *parser.FileNode) string {
-		return fn(expr, source, pos, file).String()
-	})
+// NewProvider creates a Provider backed by the shared symbol index.
+func NewProvider(index *symbols.Index) *Provider {
+	return &Provider{index: index, engine: resolve.NewEngine(index)}
 }
 
 // GetInlayHints returns all inlay hints for the given source file, filtered by
@@ -57,34 +37,23 @@ func (p *Provider) GetInlayHints(uri, source string, cfg *config.InlayHintsConfi
 	}
 
 	file := parser.ParseFileIn(source, p.index.GrammarOf(uri))
-	result := parser.New().Parse(source)
-	lines := resolve.SplitLines(source)
 	r := p.engine.Resolver()
+	h := &hinter{
+		index:   p.index,
+		r:       r,
+		file:    file,
+		lines:   r.Lines(source),
+		offsets: ast.NewLines(source),
+		cfg:     cfg,
+	}
+	ast.Walk(file.Tree, h.visit)
 
-	var hints []protocol.InlayHint
-
-	if cfg.VariableTypes {
-		hints = append(hints, p.collectVarTypeHints(r, result, lines, file, source)...)
-	}
-	if cfg.ForeachTypes {
-		hints = append(hints, p.collectForeachHints(r, result, lines, file, source)...)
-	}
-	if cfg.ClosureReturnTypes {
-		hints = append(hints, p.collectClosureReturnHints(r, result, lines, file, source)...)
-	}
-	if cfg.ReturnTypes {
-		hints = append(hints, p.collectMethodReturnHints(result, file)...)
-	}
-	if cfg.ParameterNames {
-		hints = append(hints, p.collectParamNameHints(r, result, lines, file, source, cfg)...)
-	}
-
-	sort.SliceStable(hints, func(i, j int) bool {
-		a, b := hints[i].Position, hints[j].Position
+	sort.SliceStable(h.hints, func(i, j int) bool {
+		a, b := h.hints[i].Position, h.hints[j].Position
 		if a.Line != b.Line {
 			return a.Line < b.Line
 		}
 		return a.Character < b.Character
 	})
-	return hints
+	return h.hints
 }
