@@ -218,7 +218,11 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 		}
 
 		if tok.Kind == parser.TokenFunction {
-			if ps, decls := parseFunctionLike(result.Tokens, i, active[len(active)-1].scope, doc, declByToken); ps != nil {
+			named := ScopeFunction
+			if inClassBody {
+				named = ScopeMethod
+			}
+			if ps, decls := parseFunctionLike(result.Tokens, i, active[len(active)-1].scope, doc, named); ps != nil {
 				pending = queueBody(pending, *ps)
 				for idx, binding := range decls {
 					declByToken[idx] = binding
@@ -505,7 +509,7 @@ func isWordToken(t parser.Token) bool {
 	return true
 }
 
-func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Document, declByToken map[int]*Binding) (*pendingScope, map[int]*Binding) {
+func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Document, named ScopeKind) (*pendingScope, map[int]*Binding) {
 	name := ""
 	kind := ScopeClosure
 	nameIdx := parser.NextSignificant(tokens, start+1)
@@ -517,10 +521,7 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 	// `function list(…)`), which the tokenizer reads as a keyword.
 	if nameIdx >= 0 && (tokens[nameIdx].Kind == parser.TokenIdentifier || isWordToken(tokens[nameIdx])) {
 		name = tokens[nameIdx].Value
-		kind = ScopeFunction
-		if enclosingClassName(tokens, start) != "" {
-			kind = ScopeMethod
-		}
+		kind = named
 		nameIdx = parser.NextSignificant(tokens, nameIdx+1)
 	}
 	if nameIdx < 0 || tokens[nameIdx].Kind != parser.TokenOpenParen {
@@ -1454,25 +1455,6 @@ func lineLength(result *parser.ParseResult, idx int) int {
 		return 0
 	}
 	return len(result.Lines[idx])
-}
-
-func enclosingClassName(tokens []parser.Token, idx int) string {
-	depth := 0
-	for i := idx; i >= 0; i-- {
-		switch tokens[i].Kind {
-		case parser.TokenCloseBrace:
-			depth++
-		case parser.TokenOpenBrace:
-			if depth > 0 {
-				depth--
-			}
-		case parser.TokenClass, parser.TokenTrait, parser.TokenInterface, parser.TokenEnum:
-			if depth == 0 {
-				return tokens[i].Value
-			}
-		}
-	}
-	return ""
 }
 
 func dedupeRanges(in []protocol.Range) []protocol.Range {
