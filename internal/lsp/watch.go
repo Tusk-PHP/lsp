@@ -51,13 +51,11 @@ func (s *Server) handleDidChangeWatchedFiles(msg *jsonRPCMessage) {
 	configChanged := false
 	for _, change := range params.Changes {
 		path := symbols.URIToPath(change.URI)
-		switch {
-		case path == "":
-		case filepath.Clean(path) == configPath:
+		if filepath.Clean(path) == configPath {
 			configChanged = true
-		default:
-			paths = append(paths, path)
+			continue
 		}
+		paths = append(paths, path)
 	}
 	s.queueRefresh(paths, configChanged)
 }
