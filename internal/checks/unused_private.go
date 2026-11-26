@@ -48,7 +48,7 @@ func checkUnusedPrivateMembers(cls parser.ClassNode, namespace string, fileToken
 			uses.collect(parser.Tokenize(src), declarationsAreUses)
 		}
 	}
-	uses.collect(classTokens(fileTokens(), declarationStartLine(cls), endLineOf(cls, lines)), declarationsAreNotUses)
+	uses.collect(classTokens(fileTokens(), declarationStartLine(cls), cls.EndLine), declarationsAreNotUses)
 	findings := checkUnusedPrivateMethods(cls, uses, lines)
 	findings = append(findings, checkUnusedPrivateProperties(cls, uses, lines)...)
 	return append(findings, checkUnusedPrivateConstants(cls, uses, lines)...)
@@ -158,32 +158,4 @@ func checkUnusedPrivateProperties(cls parser.ClassNode, uses *privateMemberUses,
 		})
 	}
 	return findings
-}
-
-// endLineOf estimates the end line of a class from the source. It looks for
-// the class EndLine if available, otherwise scans for the matching closing brace.
-func endLineOf(cls parser.ClassNode, lines []string) int {
-	// The parser knows where the class ends; it reads strings and comments as
-	// such, so a '{' in a string can't close the class early.
-	if cls.EndLine > cls.StartLine {
-		if cls.EndLine < len(lines) {
-			return cls.EndLine
-		}
-		return len(lines) - 1
-	}
-	// Fall back to counting braces from the class start.
-	depth := 0
-	for i := cls.StartLine; i < len(lines); i++ {
-		for _, ch := range lines[i] {
-			if ch == '{' {
-				depth++
-			} else if ch == '}' {
-				depth--
-				if depth == 0 {
-					return i
-				}
-			}
-		}
-	}
-	return len(lines) - 1
 }

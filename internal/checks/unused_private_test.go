@@ -406,3 +406,17 @@ func TestUnusedPrivateCountsReflectionOfItsOwnClass(t *testing.T) {
 		}
 	}
 }
+
+func TestUnusedPrivateReadsOnlyTheClassItsMemberBelongsTo(t *testing.T) {
+	src := `<?php
+class One { private $x = '{'; private function y() {} }
+class Two { private $x; private function y() {} public function f() { return $this->x . $this->y(); } }
+`
+	want := []string{
+		"Private method 'One::y' is never used",
+		"Private property 'One::$x' is never used",
+	}
+	if got := unusedPrivateMessages(src, nil); !slices.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
