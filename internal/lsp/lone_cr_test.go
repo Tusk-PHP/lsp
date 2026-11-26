@@ -131,3 +131,22 @@ func unknownFunctionAt(t *testing.T, h *lspHarness, uri string) [2]float64 {
 	t.Error("no unknown-function diagnostic was published")
 	return [2]float64{-1, -1}
 }
+
+func TestClosingADocumentWithLoneCRsOpenedAsOnDiskReadsNothingBack(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json":    `{"require": {"php": "^8.1"}}`,
+		"app/Shop.php":     loneCRShop,
+		"app/Checkout.php": "<?php\nnamespace App;\nfunction checkout() { return new Shop(); }\n",
+	}, map[string]interface{}{}, nil)
+	<-h.server.indexed
+	other := symbols.PathToURI(filepath.Join(root, "app", "Checkout.php"))
+	openDocument(h, other, "<?php\nnamespace App;\nfunction checkout() { return new Shop(); }\n")
+	diagnosticsPublishedFor(h, other, 3*watchedFilesDelay)
+
+	uri := symbols.PathToURI(filepath.Join(root, "app", "Shop.php"))
+	openDocument(h, uri, loneCRShop)
+	h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": uri}})
+	if n := diagnosticsPublishedFor(h, other, 3*watchedFilesDelay); n != 0 {
+		t.Errorf("closing a document opened with its disk text, lone CRs and all, re-diagnoses the open documents %d times", n)
+	}
+}
