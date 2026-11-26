@@ -1,8 +1,13 @@
 package lsp
 
 import (
+	"strconv"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/document"
+	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 func TestHandleSemanticTokensFull(t *testing.T) {
@@ -226,6 +231,42 @@ func TestHandleSemanticTokensFullAdvertisedInCapabilities(t *testing.T) {
 	for _, expected := range []string{"class", "method", "function", "variable", "keyword", "comment", "string"} {
 		if !typeSet[expected] {
 			t.Errorf("expected token type %q in legend, got %v", expected, tokenTypes)
+		}
+	}
+}
+
+func TestBuildSemanticTokensReadsTheLexer(t *testing.T) {
+	source := "<?php\nnamespace App\\Http;\n\n#[ORM\\Entity]\nclass A {\n    public private(set) int $n = 0x1F;\n    function f() { $o->class = `ls`; return fn() => 1.5e3; }\n}\n"
+	lines := strings.Split(source, "\n")
+	got := map[string]uint32{}
+	data := buildSemanticTokens(parser.New().Parse(source), source, document.NewColumns(source, document.UTF8))
+	line, char := 0, 0
+	for i := 0; i+4 < len(data); i += 5 {
+		if data[i] > 0 {
+			line += int(data[i])
+			char = 0
+		}
+		char += int(data[i+1])
+		got[strconv.Itoa(line)+":"+lines[line][char:char+int(data[i+2])]] = data[i+3]
+	}
+	for key, want := range map[string]uint32{
+		"1:Http":         semTokNamespace,
+		"3:ORM\\Entity":  semTokDecorator,
+		"4:class":        semTokKeyword,
+		"5:private(set)": semTokKeyword,
+		"5:0x1F":         semTokNumber,
+		"6:`ls`":         semTokString,
+		"6:fn":           semTokKeyword,
+		"6:1.5e3":        semTokNumber,
+		"6:$o":           semTokVariable,
+	} {
+		if typ, ok := got[key]; !ok || typ != want {
+			t.Errorf("%q: type %d (found %v), want %d", key, typ, ok, want)
+		}
+	}
+	for _, key := range []string{"6:class", "1:App\\Ht"} {
+		if _, ok := got[key]; ok {
+			t.Errorf("%q: unexpected token", key)
 		}
 	}
 }
