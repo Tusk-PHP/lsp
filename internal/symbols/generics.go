@@ -83,10 +83,10 @@ func resolveDocTypeString(t string, resolve func(string) string, templates map[s
 // isPseudoTypeName reports whether a PHPDoc type is a keyword such as
 // array-key, positive-int or list, never a class.
 func isPseudoTypeName(t string) bool {
-	if phpBuiltinTypes[strings.ToLower(t)] {
+	if phpBuiltinTypes[FoldName(t)] {
 		return true
 	}
-	switch strings.ToLower(t) {
+	switch FoldName(t) {
 	case "list", "scalar", "numeric", "integer", "boolean", "double", "class-string", "$this":
 		return true
 	}

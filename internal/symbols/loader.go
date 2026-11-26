@@ -35,7 +35,7 @@ const (
 func (h *classLoaderHolder) begin(fqn string) (chan struct{}, loadAttempt) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	key := strings.ToLower(fqn)
+	key := FoldName(fqn)
 	if done, ok := h.attempts[key]; ok {
 		return done, attemptJoined
 	}
@@ -108,14 +108,14 @@ func (idx *Index) ensureClass(fqn string) bool {
 		return idx.ensureGenerated(fqn)
 	}
 	found := idx.ensureLoaded(holder, fqn) || idx.ensureGenerated(fqn)
-	seen := map[string]bool{strings.ToLower(fqn): true}
+	seen := map[string]bool{FoldName(fqn): true}
 	for queue := []string{fqn}; len(queue) > 0; queue = queue[1:] {
 		var ancestors []string
 		idx.mu.RLock()
 		idx.walkAncestors(queue[0], func(next string, _ bool) { ancestors = append(ancestors, next) })
 		idx.mu.RUnlock()
 		for _, ancestor := range ancestors {
-			if key := strings.ToLower(ancestor); !seen[key] {
+			if key := FoldName(ancestor); !seen[key] {
 				seen[key] = true
 				idx.ensureLoaded(holder, ancestor)
 				queue = append(queue, ancestor)

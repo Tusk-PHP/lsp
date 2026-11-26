@@ -1,7 +1,5 @@
 package symbols
 
-import "strings"
-
 // Prototype returns the topmost declaration of member: the interface, parent
 // class or trait member it implements or overrides, as PHP sees it. A parent
 // class's private members aren't inherited, and a constructor's prototype is
@@ -24,7 +22,7 @@ func (idx *Index) Prototype(receiver string, member *Symbol) *Symbol {
 	if receiver != "" && idx.isSubtypeOfLocked(receiver, start) {
 		start = receiver
 	}
-	w := prototypeWalk{idx: idx, member: member, visited: map[string]bool{strings.ToLower(start): true}}
+	w := prototypeWalk{idx: idx, member: member, visited: map[string]bool{FoldName(start): true}}
 	return w.above(start, false)
 }
 
@@ -62,7 +60,7 @@ func (w *prototypeWalk) above(owner string, inherited bool) *Symbol {
 }
 
 func (w *prototypeWalk) visit(ancestor string, inherited bool) *Symbol {
-	key := strings.ToLower(ancestor)
+	key := FoldName(ancestor)
 	if w.visited[key] {
 		return nil
 	}
@@ -76,11 +74,11 @@ func (w *prototypeWalk) visit(ancestor string, inherited bool) *Symbol {
 func (w *prototypeWalk) declared(ancestor string, inherited bool) *Symbol {
 	sym := w.idx.declaredMemberLocked(ancestor, w.member)
 	switch {
-	case sym == nil, IsBuiltin(sym), strings.EqualFold(sym.ParentFQN, w.member.ParentFQN):
+	case sym == nil, IsBuiltin(sym), EqualFold(sym.ParentFQN, w.member.ParentFQN):
 		return nil
 	case inherited && sym.Visibility == "private":
 		return nil
-	case w.member.Kind == KindMethod && strings.EqualFold(w.member.Name, "__construct") && !sym.IsAbstract:
+	case w.member.Kind == KindMethod && EqualFold(w.member.Name, "__construct") && !sym.IsAbstract:
 		if owner := w.idx.symbols[ancestor]; owner == nil || owner.Kind != KindInterface {
 			return nil
 		}
@@ -104,7 +102,7 @@ func (idx *Index) declaredMemberLocked(owner string, member *Symbol) *Symbol {
 
 func methodNamed(members []*Symbol, name string) *Symbol {
 	for _, sym := range members {
-		if sym.Kind == KindMethod && strings.EqualFold(sym.Name, name) {
+		if sym.Kind == KindMethod && EqualFold(sym.Name, name) {
 			return sym
 		}
 	}

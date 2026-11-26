@@ -1,10 +1,6 @@
 package symbols
 
-import (
-	"strings"
-
-	"github.com/Tusk-PHP/lsp/internal/parser"
-)
+import "github.com/Tusk-PHP/lsp/internal/parser"
 
 type traitRules struct {
 	owner    string
@@ -21,7 +17,7 @@ type traitAlias struct {
 }
 
 func traitMethodKey(trait, method string) string {
-	return strings.ToLower(trait) + "::" + strings.ToLower(method)
+	return FoldName(trait) + "::" + FoldName(method)
 }
 
 func newTraitRules(owner string, adaptations parser.TraitAdaptations, resolve func(string) string) *traitRules {
@@ -60,8 +56,8 @@ func (r *traitRules) excludes(trait, method string) bool {
 }
 
 func (a traitAlias) applies(trait string, method *Symbol) bool {
-	return strings.EqualFold(a.method, method.Name) &&
-		(a.trait == "" || strings.EqualFold(a.trait, trait))
+	return EqualFold(a.method, method.Name) &&
+		(a.trait == "" || EqualFold(a.trait, trait))
 }
 
 func (r *traitRules) adapt(trait string, method *Symbol) (kept *Symbol, aliases []*Symbol) {
@@ -109,11 +105,11 @@ func (idx *Index) aliasedMethodLocked(owner *Symbol, name string) *Symbol {
 		return nil
 	}
 	for _, a := range owner.traitRules.aliases {
-		if !strings.EqualFold(a.alias, name) {
+		if !EqualFold(a.alias, name) {
 			continue
 		}
 		for _, trait := range idx.traitMap[owner.FQN] {
-			if a.trait != "" && !strings.EqualFold(a.trait, trait) {
+			if a.trait != "" && !EqualFold(a.trait, trait) {
 				continue
 			}
 			if m := methodNamed(idx.getClassMembersRecursive(trait, map[string]bool{owner.FQN: true}), a.method); m != nil {

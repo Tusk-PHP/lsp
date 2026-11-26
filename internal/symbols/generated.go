@@ -1,8 +1,6 @@
 package symbols
 
 import (
-	"strings"
-
 	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
@@ -80,14 +78,14 @@ func (idx *Index) ensureGenerated(fqn string) bool {
 		sym.URI = origin.URI
 		sym.Range = origin.Range
 	}
-	key := strings.ToLower(from)
+	key := FoldName(from)
 	idx.generatedFrom[key] = appendUnique(idx.generatedFrom[key], uri)
 	return true
 }
 
 // dropGeneratedFromLocked removes the classes generated from fqn.
 func (idx *Index) dropGeneratedFromLocked(fqn string) {
-	key := strings.ToLower(fqn)
+	key := FoldName(fqn)
 	uris, ok := idx.generatedFrom[key]
 	if !ok {
 		return

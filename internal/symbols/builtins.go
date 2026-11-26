@@ -357,7 +357,7 @@ func normalizeBuiltinProfile(profile BuiltinProfile) BuiltinProfile {
 	seen := make(map[string]struct{}, len(profile.Extensions))
 	extensions := make([]string, 0, len(profile.Extensions))
 	for _, ext := range profile.Extensions {
-		ext = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(ext)), "ext-")
+		ext = strings.TrimPrefix(FoldName(strings.TrimSpace(ext)), "ext-")
 		if ext == "" {
 			continue
 		}
