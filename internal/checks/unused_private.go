@@ -10,9 +10,9 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-// UnusedPrivateRule detects private methods and properties that are never
-// referenced within their declaring class or the traits it uses, which can
-// call the class's private members as their own.
+// UnusedPrivateRule detects private methods, properties and constants that are
+// never referenced within their declaring class or the traits it uses, which
+// can reach the class's private members as their own.
 type UnusedPrivateRule struct {
 	Shared *Shared
 }
@@ -28,21 +28,49 @@ func (r *UnusedPrivateRule) Check(file *parser.FileNode, source string, index *s
 	lines := strings.Split(source, "\n")
 	fileTokens := sync.OnceValue(func() []parser.Token { return r.Shared.parse(source).Tokens })
 	var findings []Finding
-
 	for _, cls := range file.Classes {
-		var traits []string
-		if len(cls.Traits) > 0 {
-			var ok bool
-			if traits, ok = traitSources(file.Namespace, cls.Name, index); !ok {
-				// A trait the server can't read might use any of them.
-				continue
-			}
-		}
-		findings = append(findings, checkUnusedPrivateMethods(cls, lines, traits)...)
-		findings = append(findings, checkUnusedPrivateProperties(cls, lines, traits)...)
-		findings = append(findings, checkUnusedPrivateConstants(cls, fileTokens, lines, traits)...)
+		findings = append(findings, checkUnusedPrivateMembers(cls, file.Namespace, fileTokens, lines, index)...)
 	}
 	return findings
+}
+
+func checkUnusedPrivateMembers(cls parser.ClassNode, namespace string, fileTokens func() []parser.Token, lines []string, index *symbols.Index) []Finding {
+	if !hasPrivateMembers(cls) {
+		return nil
+	}
+	uses := newPrivateMemberUses()
+	if len(cls.Traits) > 0 {
+		traits, ok := traitSources(namespace, cls.Name, index)
+		if !ok {
+			return nil
+		}
+		for _, src := range traits {
+			uses.collect(parser.Tokenize(src), declarationsAreUses)
+		}
+	}
+	uses.collect(classTokens(fileTokens(), declarationStartLine(cls), endLineOf(cls, lines)), declarationsAreNotUses)
+	findings := checkUnusedPrivateMethods(cls, uses, lines)
+	findings = append(findings, checkUnusedPrivateProperties(cls, uses, lines)...)
+	return append(findings, checkUnusedPrivateConstants(cls, uses, lines)...)
+}
+
+func hasPrivateMembers(cls parser.ClassNode) bool {
+	for _, m := range cls.Methods {
+		if m.Visibility == "private" {
+			return true
+		}
+	}
+	for _, p := range cls.Properties {
+		if p.Visibility == "private" {
+			return true
+		}
+	}
+	for _, c := range cls.Constants {
+		if c.Visibility == "private" {
+			return true
+		}
+	}
+	return false
 }
 
 // traitSources returns the source of every trait the class uses, directly or
@@ -82,31 +110,6 @@ func traitSources(namespace, class string, index *symbols.Index) (sources []stri
 	return sources, true
 }
 
-func anySource(sources []string, name string, uses func(src, name string) bool) bool {
-	for _, src := range sources {
-		if uses(src, name) {
-			return true
-		}
-	}
-	return false
-}
-
-// sourceUsesMethod reports whether a trait calls or declares the method; an
-// abstract private method in a trait is the class's to implement.
-func sourceUsesMethod(src, name string) bool {
-	return strings.Contains(src, "->"+name) || strings.Contains(src, "::"+name) ||
-		strings.Contains(src, "function "+name) ||
-		strings.Contains(src, "'"+name+"'") || strings.Contains(src, "\""+name+"\"")
-}
-
-// sourceUsesProperty reports whether a trait reads or writes the property.
-func sourceUsesProperty(src, name string) bool {
-	if strings.Contains(src, "::$"+name) {
-		return true
-	}
-	return containsWord(src, "->"+name)
-}
-
 // magicMethods are methods that PHP calls implicitly — never flag these as unused.
 var magicMethods = map[string]bool{
 	"__construct": true, "__destruct": true, "__get": true, "__set": true,
@@ -116,28 +119,17 @@ var magicMethods = map[string]bool{
 	"__set_state": true,
 }
 
-// traits are the sources of the traits the class uses.
-func checkUnusedPrivateMethods(cls parser.ClassNode, lines, traits []string) []Finding {
+func checkUnusedPrivateMethods(cls parser.ClassNode, uses *privateMemberUses, lines []string) []Finding {
 	var findings []Finding
 	for _, m := range cls.Methods {
-		if m.Visibility != "private" {
+		if m.Visibility != "private" || magicMethods[m.Name] || uses.usesMethod(m.Name) {
 			continue
-		}
-		if magicMethods[m.Name] {
-			continue
-		}
-		if isMethodReferenced(m.Name, m.StartLine, cls, lines) || anySource(traits, m.Name, sourceUsesMethod) {
-			continue
-		}
-		endCol := 0
-		if m.StartLine >= 0 && m.StartLine < len(lines) {
-			endCol = len(lines[m.StartLine])
 		}
 		findings = append(findings, Finding{
 			StartLine: m.StartLine,
 			StartCol:  m.StartCol,
 			EndLine:   m.StartLine,
-			EndCol:    endCol,
+			EndCol:    len(lines[m.StartLine]),
 			Severity:  rule.SeverityInfo,
 			Code:      rule.UnusedPrivateMethod,
 			Message:   fmt.Sprintf("Private method '%s::%s' is never used", cls.Name, m.Name),
@@ -147,25 +139,18 @@ func checkUnusedPrivateMethods(cls parser.ClassNode, lines, traits []string) []F
 	return findings
 }
 
-func checkUnusedPrivateProperties(cls parser.ClassNode, lines, traits []string) []Finding {
+func checkUnusedPrivateProperties(cls parser.ClassNode, uses *privateMemberUses, lines []string) []Finding {
 	var findings []Finding
 	for _, p := range cls.Properties {
-		if p.Visibility != "private" {
-			continue
-		}
 		propName := strings.TrimPrefix(p.Name, "$")
-		if isPropertyReferenced(propName, p.StartLine, cls, lines) || anySource(traits, propName, sourceUsesProperty) {
+		if p.Visibility != "private" || uses.usesProperty(propName) {
 			continue
-		}
-		endCol := 0
-		if p.StartLine >= 0 && p.StartLine < len(lines) {
-			endCol = len(lines[p.StartLine])
 		}
 		findings = append(findings, Finding{
 			StartLine: p.StartLine,
 			StartCol:  p.StartCol,
 			EndLine:   p.StartLine,
-			EndCol:    endCol,
+			EndCol:    len(lines[p.StartLine]),
 			Severity:  rule.SeverityHint,
 			Code:      rule.UnusedPrivateProperty,
 			Message:   fmt.Sprintf("Private property '%s::$%s' is never used", cls.Name, propName),
@@ -173,60 +158,6 @@ func checkUnusedPrivateProperties(cls parser.ClassNode, lines, traits []string) 
 		})
 	}
 	return findings
-}
-
-// isMethodReferenced checks if a private method name is referenced anywhere
-// in the class body outside its declaration line.
-func isMethodReferenced(name string, declLine int, cls parser.ClassNode, lines []string) bool {
-	start := cls.StartLine
-	end := endLineOf(cls, lines)
-
-	// Patterns: ->methodName(  self::methodName(  static::methodName(
-	// Also callable array: [$this, 'methodName']  [self::class, 'methodName']
-	for i := start; i <= end && i < len(lines); i++ {
-		if i == declLine {
-			continue
-		}
-		line := lines[i]
-		if strings.Contains(line, "->"+name) || strings.Contains(line, "::"+name) {
-			return true
-		}
-		// Callable string: 'methodName' or "methodName" as array element
-		if strings.Contains(line, "'"+name+"'") || strings.Contains(line, "\""+name+"\"") {
-			return true
-		}
-	}
-	return false
-}
-
-// isPropertyReferenced checks if a private property (without $ prefix) is
-// referenced anywhere in the class body outside its declaration line.
-func isPropertyReferenced(name string, declLine int, cls parser.ClassNode, lines []string) bool {
-	start := cls.StartLine
-	end := endLineOf(cls, lines)
-
-	// Patterns: $this->name  self::$name  static::$name
-	accessPattern := "->" + name
-	staticPattern := "::$" + name
-
-	for i := start; i <= end && i < len(lines); i++ {
-		if i == declLine {
-			continue
-		}
-		line := lines[i]
-		// Instance access: ->name (check word boundary after)
-		if idx := strings.Index(line, accessPattern); idx >= 0 {
-			after := idx + len(accessPattern)
-			if after >= len(line) || !parser.IsIdentByte(line[after]) {
-				return true
-			}
-		}
-		// Static access: ::$name
-		if strings.Contains(line, staticPattern) {
-			return true
-		}
-	}
-	return false
 }
 
 // endLineOf estimates the end line of a class from the source. It looks for
