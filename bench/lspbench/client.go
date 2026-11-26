@@ -12,8 +12,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -53,8 +55,9 @@ type diagEntry struct {
 // Client drives one language server process.
 type Client struct {
 	cmd     *exec.Cmd
-	stdin   io.WriteCloser
+	stdin   *os.File
 	writeMu sync.Mutex
+	stalled error // set once a write timed out; later writes fail at once
 
 	mu      sync.Mutex
 	nextID  int64
@@ -81,10 +84,13 @@ func StartClient(argv []string, dir string, env []string) (*Client, error) {
 	if len(env) > 0 {
 		cmd.Env = env
 	}
-	stdin, err := cmd.StdinPipe()
+	// Our own pipe rather than StdinPipe: an *os.File from os.Pipe takes a
+	// write deadline, so a server that stops reading can't block the run.
+	stdinR, stdin, err := os.Pipe()
 	if err != nil {
 		return nil, err
 	}
+	cmd.Stdin = stdinR
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -101,7 +107,10 @@ func StartClient(argv []string, dir string, env []string) (*Client, error) {
 		diags:   make(map[string]diagEntry),
 		exited:  make(chan struct{}),
 	}
-	if err := cmd.Start(); err != nil {
+	err = cmd.Start()
+	_ = stdinR.Close() // the child has its own copy
+	if err != nil {
+		_ = stdin.Close()
 		return nil, err
 	}
 	go c.drainStderr(stderr)
@@ -280,12 +289,30 @@ func (c *Client) send(msg rpcMessage) error {
 	}
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
-	if _, err := fmt.Fprintf(c.stdin, "Content-Length: %d\r\n\r\n", len(body)); err != nil {
-		return err
+	if c.stalled != nil {
+		return c.stalled
 	}
-	_, err = c.stdin.Write(body)
+	_ = c.stdin.SetWriteDeadline(time.Now().Add(writeTimeout))
+	if _, err = fmt.Fprintf(c.stdin, "Content-Length: %d\r\n\r\n", len(body)); err == nil {
+		_, err = c.stdin.Write(body)
+	}
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		// The server has stopped reading its input (its pipe is full). It
+		// will not answer anything else, so stop it: every pending and later
+		// request then fails at once instead of each waiting out a timeout.
+		c.stalled = fmt.Errorf("server stopped reading its input for %s", writeTimeout)
+		if c.cmd.Process != nil {
+			_ = c.cmd.Process.Kill()
+		}
+		return c.stalled
+	}
 	return err
 }
+
+// writeTimeout is how long one message may take to reach a server's input. A
+// server that is reading takes microseconds; one that takes this long has
+// stopped reading.
+var writeTimeout = 30 * time.Second
 
 // Call issues a request and waits for the matching response.
 func (c *Client) Call(ctx context.Context, method string, params interface{}) (json.RawMessage, error) {
