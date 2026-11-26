@@ -42,3 +42,24 @@ func TestRefreshAfterComposerInstallReindexesTheVendorFiles(t *testing.T) {
 		t.Error("a package Composer removed leaves the index")
 	}
 }
+
+func TestIndexComposerDependenciesSkipsAutoloadFilesThatAreMissing(t *testing.T) {
+	root := t.TempDir()
+	for name, content := range map[string]string{
+		"composer.json":                  `{"name": "app/app"}`,
+		"vendor/composer/installed.json": `{"packages": [{"name": "acme/lib", "install-path": "../acme/lib", "autoload": {"files": ["helpers.php", "missing.php"]}}]}`,
+		"vendor/acme/lib/helpers.php":    "<?php\nfunction acme_helper() {}\n",
+	} {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ws := New(Options{RootPath: root, Framework: "none", Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+	if got := ws.IndexComposerDependencies(); got != 1 {
+		t.Errorf("indexed %d vendor files, want only the helper file that exists", got)
+	}
+}

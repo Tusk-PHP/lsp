@@ -82,3 +82,29 @@ func TestComposerChangeReindexesVendorFiles(t *testing.T) {
 		t.Errorf("a class composer update removed is gone from the index: %v", found)
 	}
 }
+
+func TestComposerChangesInQuickSuccessionReindexOnce(t *testing.T) {
+	h, root := startComposerProject(t)
+	waitForLog(t, h, "PHP LSP: Indexed 3 vendor files")
+
+	h.notify("workspace/didChangeWatchedFiles", map[string]interface{}{"changes": "not a list"})
+	for _, name := range []string{"composer.lock", "vendor/composer/installed.json"} {
+		h.notify("workspace/didChangeWatchedFiles", map[string]interface{}{
+			"changes": []map[string]interface{}{{"uri": symbols.PathToURI(filepath.Join(root, name)), "type": 2}},
+		})
+	}
+	waitForLog(t, h, "PHP LSP: Re-indexed 3 vendor files after a Composer change")
+
+	deadline := time.After(2 * watchedFilesDelay)
+	for {
+		select {
+		case msg := <-h.notes:
+			params, _ := msg["params"].(map[string]interface{})
+			if text, _ := params["message"].(string); strings.HasPrefix(text, "PHP LSP: Re-indexed") {
+				t.Fatalf("changes inside the delay re-index once, got a second run: %q", text)
+			}
+		case <-deadline:
+			return
+		}
+	}
+}
