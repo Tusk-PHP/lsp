@@ -67,6 +67,76 @@ func TestLivewireLocationsUnreadable(t *testing.T) {
 	}
 }
 
+func TestLivewireLocationsFromTheReturnedArray(t *testing.T) {
+	cases := []struct {
+		name   string
+		config string
+		dirs   []string
+		known  bool
+	}{
+		{"every helper", `<?php return ['component_locations' => [
+    resource_path('views/components'), // [old, entries]
+    \app_path("Livewire"),
+    BASE_PATH('modules/ui'),
+]];`, []string{"resources/views/components", "app/Livewire", "modules/ui"}, true},
+		{"commented-out entries", `<?php return [
+    'layout' => ['a', 'b'],
+    'component_locations' => [
+        /* resource_path('views/old'), */
+        resource_path('views/livewire'),
+        # app_path('Gone'),
+    ],
+];`, []string{"resources/views/livewire"}, true},
+		{"Livewire 3", `<?php
+// 'component_locations' => [resource_path('views/x')],
+return ['class_namespace' => 'App\\Livewire'];`, nil, true},
+		{"empty", `<?php return ['component_locations' => []];`, nil, true},
+		{"not an array", `<?php return ['component_locations' => LOCATIONS];`, nil, false},
+		{"another function", `<?php return ['component_locations' => [storage_path('x')]];`, nil, false},
+		{"a variable function", `<?php return ['component_locations' => [$path('x')]];`, nil, false},
+		{"a method", `<?php return ['component_locations' => [$app->path('x')]];`, nil, false},
+		{"interpolated", `<?php return ['component_locations' => [resource_path("views/$x")]];`, nil, false},
+		{"two arguments", `<?php return ['component_locations' => [resource_path('a', 'b')]];`, nil, false},
+		{"named argument", `<?php return ['component_locations' => [resource_path(path: 'a')]];`, nil, false},
+		{"spread argument", `<?php return ['component_locations' => [resource_path(...$a)]];`, nil, false},
+		{"keyed entry", `<?php return ['component_locations' => ['x' => resource_path('a')]];`, nil, false},
+		{"spread entry", `<?php return ['component_locations' => [...resource_path('a')]];`, nil, false},
+		{"no returned array", `<?php return require __DIR__ . '/other.php';`, nil, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeFiles(t, root, map[string]string{
+				"vendor/livewire/livewire/composer.json": "{}",
+				"config/livewire.php":                    c.config,
+			})
+			dirs, known := livewireLocations(root)
+			if known != c.known {
+				t.Fatalf("known = %v, want %v", known, c.known)
+			}
+			var got []string
+			for _, dir := range dirs {
+				rel, err := filepath.Rel(root, dir)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got = append(got, filepath.ToSlash(rel))
+			}
+			if strings.Join(got, ",") != strings.Join(c.dirs, ",") {
+				t.Fatalf("dirs = %q, want %q", got, c.dirs)
+			}
+		})
+	}
+}
+
+func TestLivewireLocationsWithoutAConfig(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{"vendor/livewire/livewire/composer.json": "{}"})
+	if dirs, known := livewireLocations(root); dirs != nil || !known {
+		t.Fatalf("got %q, %v; want no locations, known", dirs, known)
+	}
+}
+
 func TestStudlyPath(t *testing.T) {
 	if got := studlyPath("forms.input-group"); got != `Forms\InputGroup` {
 		t.Fatalf("studlyPath: %s", got)
