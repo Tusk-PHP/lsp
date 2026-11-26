@@ -101,6 +101,22 @@ func (a *Analyzer) FindDefinition(uri, source string, pos protocol.Position) *pr
 	return a.resolveDefinitionSymbol(a.engine.Resolver(), uri, source, pos).loc
 }
 
+// declaredInSource swaps a property that has no position of its own for the
+// method of the same name, if the class has one. An ide-helper
+// @property-read $tags in a class docblock declares an Eloquent relation's
+// property without saying where; tags() is what declares it in the code.
+// Only go to definition does this: hover and types keep the property, whose
+// type is the one the access has.
+func declaredInSource(r *resolve.Resolver, owner resolve.ResolvedType, word string, member *symbols.Symbol) *symbols.Symbol {
+	if member.Kind != symbols.KindProperty || member.Range != (protocol.Range{}) {
+		return member
+	}
+	if method := r.FindAccessedMember(owner.BaseFQN(), word, true); method != nil && method.Kind == symbols.KindMethod {
+		return method
+	}
+	return member
+}
+
 // classKeywordFQN returns the class that self, static or parent stands for at
 // the cursor (in any letter case), or "" when word isn't one of them or there
 // is no enclosing class. A word after -> or :: is a member, never the keyword.
@@ -249,6 +265,7 @@ func (a *Analyzer) symbolTarget(r *resolve.Resolver, uri, source string, ctx *so
 			return definitionTarget{}
 		}
 		if member := r.AccessedMemberOn(owner, word, ctx.Called); member != nil {
+			member = declaredInSource(r, owner, word, member)
 			// Owner is the *declaring* class (member.ParentFQN), not the
 			// receiver — that's how php.net documents methods/properties:
 			// ReflectionMethod::getParameters lives at

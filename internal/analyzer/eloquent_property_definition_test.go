@@ -38,6 +38,9 @@ namespace App;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+/**
+ * @property-read \Illuminate\Database\Eloquent\Collection $tags
+ */
 class Category extends Model
 {
     public function products(): HasMany
@@ -54,6 +57,11 @@ class Category extends Model
     {
         return Attribute::make(get: fn () => '');
     }
+
+    public function tags(): HasMany
+    {
+        return $this->hasMany(Product::class);
+    }
 }
 `,
 	}
@@ -66,6 +74,7 @@ class Shop
         $category->products;
         $category->full_name;
         $category->slug;
+        $category->tags;
     }
 }
 `
@@ -88,9 +97,12 @@ class Shop
 	a := NewAnalyzer(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"))
 
 	for needle, wantLine := range map[string]int{
-		"products;":  7,  // public function products()
-		"full_name;": 12, // public function getFullNameAttribute()
-		"slug;":      17, // protected function slug()
+		"products;":  10, // public function products()
+		"full_name;": 15, // public function getFullNameAttribute()
+		"slug;":      20, // protected function slug()
+		// An ide-helper @property-read in the class docblock declares the
+		// relation too, without a position of its own: the method wins.
+		"tags;": 25, // public function tags()
 	} {
 		got := a.FindDefinition(uriOf("Shop.php"), use, positionOf(t, use, needle))
 		if got == nil || got.URI != uriOf("Category.php") || got.Range.Start.Line != wantLine {
