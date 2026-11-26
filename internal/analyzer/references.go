@@ -93,11 +93,15 @@ func mayMention(src string, sym *symbols.Symbol) bool {
 		if word := src[start:end]; word != name && (!fold || !strings.EqualFold(word, name)) {
 			continue
 		}
-		if (start == 0 || !resolve.IsWordChar(src[start-1]) && (src[start-1] != '$' || sym.Kind == symbols.KindProperty)) &&
-			(end == len(src) || !resolve.IsWordChar(src[end])) {
+		if (start == 0 || !continuesName(src[start-1]) && (src[start-1] != '$' || sym.Kind == symbols.KindProperty)) &&
+			(end == len(src) || !continuesName(src[end])) {
 			return true
 		}
 	}
+}
+
+func continuesName(ch byte) bool {
+	return ch != '\\' && resolve.IsWordChar(ch)
 }
 
 func foldsCase(kind symbols.SymbolKind) bool {

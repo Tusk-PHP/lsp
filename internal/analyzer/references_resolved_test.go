@@ -119,6 +119,9 @@ func TestMayMentionNeedsTheNameAsAWord(t *testing.T) {
 		{"echo STRTOLOWER($s);", &symbols.Symbol{Name: "strtolower", Kind: symbols.KindFunction}, true},
 		{"echo Area;", constant, false},
 		{"$r->AREA", property, false},
+		{"return new \\App\\Room();", &symbols.Symbol{Name: "Room", Kind: symbols.KindClass}, true},
+		{"use App\\Room;", &symbols.Symbol{Name: "Room", Kind: symbols.KindClass}, true},
+		{"use App\\Rooms;", &symbols.Symbol{Name: "Room", Kind: symbols.KindClass}, false},
 	} {
 		if got := mayMention(c.src, c.sym); got != c.want {
 			t.Errorf("mayMention(%q, %s) = %v, want %v", c.src, c.sym.Name, got, c.want)
@@ -247,5 +250,36 @@ class Show {
 	edit := a.Rename("file:///User.php", sources["file:///User.php"], positionOf(t, sources["file:///User.php"], "User {}"), "Member", read)
 	if edit == nil || len(edit.Changes["file:///use.php"]) != 3 {
 		t.Errorf("rename edits the import and both PHPDoc types: %+v", edit)
+	}
+}
+
+func TestReferencesIncludeFullyQualifiedNamesAndOtherBladeTemplates(t *testing.T) {
+	const view = "file:///views/room.blade.php"
+	const quiet = "file:///views/quiet.blade.php"
+	templates := map[string]string{
+		view:  "<div>{{ \\App\\Room::class }}</div>\n  <span>{{ new \\App\\Room() }}</span>\n",
+		quiet: "<p>{{ $title }}</p>\n",
+	}
+	a, read := setupRenameAnalyzer(map[string]string{
+		"file:///Room.php": referencesRoom,
+		"file:///make.php": "<?php\nfunction make() { return new \\App\\Room(); }\n",
+	})
+	for uri := range templates {
+		a.index.AddTemplateFile(uri)
+	}
+	readAll := func(uri string) string {
+		if src, ok := templates[uri]; ok {
+			return src
+		}
+		return read(uri)
+	}
+	var got []string
+	for _, l := range a.FindAllReferences("file:///Room.php", referencesRoom, positionOf(t, referencesRoom, "Room {"), readAll) {
+		got = append(got, fmt.Sprintf("%s:%d:%d", strings.TrimPrefix(l.URI, "file:///"), l.Range.Start.Line, l.Range.Start.Character))
+	}
+	slices.Sort(got)
+	want := []string{"Room.php:3:6", "make.php:1:34", "views/room.blade.php:0:13", "views/room.blade.php:1:20"}
+	if !slices.Equal(got, want) {
+		t.Errorf("references of Room = %v, want %v", got, want)
 	}
 }
