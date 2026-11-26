@@ -95,7 +95,7 @@ func phpLayout(source string, tokens []lexer.Token) Layout {
 		case token.Comment, token.DocComment:
 			l.addComment(span)
 		case token.Attribute:
-			l.addAttribute(Span{span.Start, int(tokens[matchingBracket(tokens, i)].End)})
+			l.addAttribute(Span{span.Start, int(tokens[attributeEnd(tokens, i)].End)})
 			continue
 		case token.ConstantString, token.DoubleQuote, token.StartHeredoc, token.Backtick:
 		default:
@@ -111,18 +111,9 @@ func phpLayout(source string, tokens []lexer.Token) Layout {
 	return l
 }
 
-func matchingBracket(tokens []lexer.Token, open int) int {
-	depth := 0
-	for i := open; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case token.Attribute, token.LeftBracket:
-			depth++
-		case token.RightBracket:
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
+func attributeEnd(tokens []lexer.Token, open int) int {
+	if end := lexer.MatchingClose(tokens, open); end >= 0 {
+		return end
 	}
 	return len(tokens) - 1
 }
