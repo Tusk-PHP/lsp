@@ -191,6 +191,15 @@ function getUser(): User {
 		assertFindingCodes(t, findings, []string{"unused-import"})
 	})
 
+	t.Run("names PHP does not resolve through the import flagged", func(t *testing.T) {
+		source := "<?php\nuse App\\Models\\Post;\nuse App\\Models\\User;\nuse function App\\fmt;\nnew \\App\\Models\\Post();\necho $x->User, Post::User, fmt;\n"
+		file := parser.ParseFile(source)
+		findings := checker.Check(file, source, nil)
+		if len(findings) != 2 || findings[0].StartLine != 2 || findings[1].StartLine != 3 {
+			t.Fatalf("expected User and fmt flagged, got %+v", findings)
+		}
+	})
+
 	t.Run("import used in interpolation not flagged", func(t *testing.T) {
 		source := "<?php\nuse App\\Models\\Post;\necho \"{$app->make(Post::class)}\";\n"
 		file := parser.ParseFile(source)

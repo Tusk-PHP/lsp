@@ -227,6 +227,10 @@ func TestOrganizeImportsAgreesWithUnusedImport(t *testing.T) {
 		"<?php\nuse App\\Concerns\\HasPosts;\nuse App\\Models\\User;\n\nclass A { use HasPosts; }\n",
 		"<?php\nuse const App\\LIMIT;\nuse function App\\format;\n\necho format('LIMIT');\n",
 		"<?php\nuse App\\Models\\Post;\nuse App\\Models\\User;\n\necho \"{$x->find(User::class)}\";\n",
+		"<?php\nuse App\\Models\\Post;\nuse App\\Models\\User;\n\nnew \\App\\Models\\Post();\nnew User();\n",
+		"<?php\nuse App\\Models;\nuse App\\Models\\User;\n\necho $x->User, $x?->User();\nnew Models\\User();\n",
+		"<?php\nuse App\\Models\\Post;\nuse App\\Models\\User;\n\nPost::User();\n",
+		"<?php\nuse const App\\LIMIT;\nuse function App\\format;\n\nLIMIT();\necho format;\n",
 	}
 	rule := &checks.UnusedImportsRule{}
 	for _, source := range sources {
