@@ -110,3 +110,46 @@ foreach (unknown() ?: [] as $unknown) {
 		}
 	}
 }
+
+func TestImportedFunctionCallsNarrowAndTypeClosures(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///helpers.php", `<?php
+namespace App\Helpers;
+class Money {}
+/** @phpstan-assert Money $value */
+function assertMoney($value): void {}
+/** @param callable(Money): void $fn */
+function eachMoney(callable $fn): void {}
+`)
+	src := `<?php
+namespace App\Http;
+use function App\Helpers\assertMoney;
+use function App\Helpers\eachMoney as everyMoney;
+
+function run($checked, $unchecked): void {
+    assertMoney($checked);
+    unknownAssert($unchecked);
+    echo $checked, $unchecked;
+    everyMoney(function ($money) {
+        echo $money;
+    });
+    unknownEach(function ($other) {
+        echo $other;
+    });
+}
+`
+	file := parser.ParseFile(src)
+	lines := SplitLines(src)
+	r := NewResolver(idx)
+	for _, c := range []struct{ variable, line, want string }{
+		{"$checked", "echo $checked", `App\Helpers\Money`},
+		{"$unchecked", "echo $checked", ""},
+		{"$money", "echo $money", `App\Helpers\Money`},
+		{"$other", "echo $other", ""},
+	} {
+		pos := protocol.Position{Line: lineContaining(t, lines, c.line), Character: 4}
+		if got := r.ResolveVariableTypeTyped(c.variable, lines, pos, file).FullString(); got != c.want {
+			t.Errorf("%s = %q, want %q", c.variable, got, c.want)
+		}
+	}
+}
