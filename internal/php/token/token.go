@@ -475,6 +475,10 @@ func (k Kind) IsTrivia() bool {
 	return k == Whitespace || k == Comment || k == DocComment
 }
 
+func (k Kind) IsAssignment() bool {
+	return k == Equals || k >= PlusEqual && k <= PowEqual
+}
+
 func (k Kind) IsSemiReserved() bool {
 	return k == Identifier || k >= Abstract && k <= TraitConst
 }

@@ -92,3 +92,14 @@ func TestIsSemiReserved(t *testing.T) {
 		}
 	}
 }
+
+func TestIsAssignment(t *testing.T) {
+	for k, want := range map[Kind]bool{
+		Equals: true, PlusEqual: true, CoalesceEqual: true, PowEqual: true, ConcatEqual: true,
+		IsEqual: false, DoubleArrow: false, Attribute: false, BooleanOr: false, Increment: false,
+	} {
+		if got := k.IsAssignment(); got != want {
+			t.Errorf("%s: IsAssignment() = %v, want %v", k, got, want)
+		}
+	}
+}
