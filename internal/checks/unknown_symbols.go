@@ -123,19 +123,18 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 		if ref.static && !ref.call() && strings.EqualFold(member, "class") {
 			continue
 		}
-		ownerSpan := ref.owner.Bounds()
-		ownerLine, ownerCol := syntax.lines.Position(ownerSpan.Start)
-		lineNum, nameCol := syntax.lines.Position(ref.name.Start)
-		if endLine, _ := syntax.lines.Position(ownerSpan.End); endLine != ownerLine || lineNum != ownerLine {
+		recv, ok := syntax.receiverOf(ref)
+		if !ok {
 			continue
 		}
-		ownerExpr := syntax.text(ref.owner)
+		lineNum, nameCol := syntax.lines.Position(ref.name.Start)
+		ownerExpr := recv.text
 		// method_exists(), property_exists() and is_callable() are how code
 		// asks whether an object has a member before using it.
 		if guards.covers(ownerExpr, member, ref.call(), ref.static, lineNum, nameCol) {
 			continue
 		}
-		owners := r.resolveOwners(ownerExpr, ownerLine, ownerCol, source, file, index)
+		owners := recv.classLikes(source, file, index, r.TypeResolver)
 		if len(owners) == 0 {
 			continue
 		}
@@ -169,21 +168,6 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 	}
 
 	return findings
-}
-
-// resolveOwners returns every class-like a member may be accessed on. It returns
-// nothing when any part of the type isn't known, since the member could be there.
-func (r *UnknownMemberRule) resolveOwners(ownerExpr string, lineNum, col int, source string, file *parser.FileNode, index *symbols.Index) []string {
-	if !strings.HasPrefix(ownerExpr, "$") && !strings.HasSuffix(ownerExpr, ")") && !strings.HasSuffix(ownerExpr, "]") {
-		fqn, ok := resolveClassLikeName(ownerExpr, lineNum, file)
-		if ok && fqn != "" {
-			if name, found := canonicalClassLike(fqn, file, index); found {
-				return []string{name}
-			}
-		}
-	}
-
-	return resolvedClassLikes(r.TypeResolver(ownerExpr, source, lineNum, col, file), file, index)
 }
 
 // instanceofOwners adds the classes an expression other than a plain
@@ -345,155 +329,6 @@ func collectClassLikes(expr types.TypeExpr, file *parser.FileNode, index *symbol
 	}
 	*owners = append(*owners, name)
 	return true
-}
-
-// maskState carries what maskPHPLine is inside of from one line to the next:
-// inline HTML, a block comment, a quoted string or a heredoc/nowdoc body.
-type maskState struct {
-	inHTML         bool // outside <?php … ?>
-	inBlockComment bool
-	quote          byte   // '\'' or '"' while inside a string spanning lines
-	heredocLabel   string // closing label while inside a heredoc/nowdoc body
-}
-
-// newMaskState returns the state for the first line of source. Text before
-// the first open tag is inline HTML; a source with no open tag is all PHP.
-func newMaskState(source string) maskState {
-	return maskState{inHTML: parser.HasOpenTag(source)}
-}
-
-// maskPHPLine blanks comments and string contents on one line so text
-// scanners only see code. Feed it every line of a file in order with the same
-// state, so strings, heredocs and comments spanning lines stay masked.
-func maskPHPLine(line string, st *maskState) string {
-	if line == "" {
-		return line
-	}
-	buf := []byte(line)
-	i := 0
-
-	if st.heredocLabel != "" {
-		// Heredoc/nowdoc body: masked until a line starting (after
-		// indentation) with the closing label.
-		trimmed := strings.TrimLeft(line, " \t")
-		indent := len(line) - len(trimmed)
-		if strings.HasPrefix(trimmed, st.heredocLabel) &&
-			(len(trimmed) == len(st.heredocLabel) || !parser.IsIdentByte(trimmed[len(st.heredocLabel)])) {
-			for j := 0; j < indent+len(st.heredocLabel); j++ {
-				buf[j] = ' '
-			}
-			i = indent + len(st.heredocLabel)
-			st.heredocLabel = ""
-		} else {
-			for j := range buf {
-				buf[j] = ' '
-			}
-			return string(buf)
-		}
-	}
-
-	escaped := false
-	for ; i < len(buf); i++ {
-		if st.inHTML {
-			// Inline HTML (and any <script> in it) is not PHP: blank it up to
-			// and including the next open tag.
-			if n := parser.OpenTagLen(line, i); n > 0 {
-				for j := i; j < i+n && j < len(buf); j++ {
-					buf[j] = ' '
-				}
-				i += n - 1
-				st.inHTML = false
-				continue
-			}
-			buf[i] = ' '
-			continue
-		}
-		if st.inBlockComment {
-			buf[i] = ' '
-			if i+1 < len(buf) && line[i] == '*' && line[i+1] == '/' {
-				buf[i+1] = ' '
-				st.inBlockComment = false
-				i++
-			}
-			continue
-		}
-		if st.quote != 0 {
-			buf[i] = ' '
-			if escaped {
-				escaped = false
-				continue
-			}
-			if line[i] == '\\' {
-				escaped = true
-				continue
-			}
-			if line[i] == st.quote {
-				st.quote = 0
-			}
-			continue
-		}
-
-		if i+1 < len(buf) && line[i] == '/' && line[i+1] == '*' {
-			buf[i] = ' '
-			buf[i+1] = ' '
-			st.inBlockComment = true
-			i++
-			continue
-		}
-		if line[i] == '?' && i+1 < len(buf) && line[i+1] == '>' {
-			// Close tag: back to inline HTML.
-			buf[i] = ' '
-			buf[i+1] = ' '
-			i++
-			st.inHTML = true
-			continue
-		}
-		if (i+1 < len(buf) && line[i] == '/' && line[i+1] == '/') || (line[i] == '#' && (i+1 >= len(buf) || line[i+1] != '[')) {
-			// `//` and `#` comments run to the end of the line or to a close
-			// tag, whichever comes first. PHP 8 attribute syntax `#[Name]`
-			// stays visible.
-			j := i
-			for ; j < len(buf) && !(line[j] == '?' && j+1 < len(buf) && line[j+1] == '>'); j++ {
-				buf[j] = ' '
-			}
-			i = j - 1
-			continue
-		}
-		if strings.HasPrefix(line[i:], "<<<") {
-			if label, ok := heredocOpenLabel(line[i+3:]); ok {
-				for j := i; j < len(buf); j++ {
-					buf[j] = ' '
-				}
-				st.heredocLabel = label
-				break
-			}
-		}
-		if line[i] == '\'' || line[i] == '"' {
-			buf[i] = ' '
-			st.quote = line[i]
-			continue
-		}
-	}
-
-	return string(buf)
-}
-
-// heredocOpenLabel reads the label after `<<<` (`SQL`, `'SQL'` or `"SQL"`)
-// when it is the last thing on the line.
-func heredocOpenLabel(rest string) (string, bool) {
-	rest = strings.TrimSpace(rest)
-	if len(rest) >= 2 && (rest[0] == '\'' || rest[0] == '"') && rest[len(rest)-1] == rest[0] {
-		rest = rest[1 : len(rest)-1]
-	}
-	if rest == "" || (rest[0] >= '0' && rest[0] <= '9') {
-		return "", false
-	}
-	for k := 0; k < len(rest); k++ {
-		if !parser.IsIdentByte(rest[k]) {
-			return "", false
-		}
-	}
-	return rest, true
 }
 
 // classLikeKnown is classLikeExists for unknown-class: a PHP builtin the
@@ -1056,43 +891,6 @@ func functionNodeFQN(fn *parser.FunctionNode, file *parser.FileNode) string {
 		return file.Namespace + "\\" + fn.Name
 	}
 	return fn.Name
-}
-
-func backwardExprStart(line string, end int) int {
-	depthParen := 0
-	depthBracket := 0
-	for i := end - 1; i >= 0; i-- {
-		switch line[i] {
-		case ')':
-			depthParen++
-		case '(':
-			if depthParen == 0 {
-				return i + 1
-			}
-			depthParen--
-		case ']':
-			depthBracket++
-		case '[':
-			if depthBracket == 0 {
-				return i + 1
-			}
-			depthBracket--
-		}
-		if depthParen > 0 || depthBracket > 0 {
-			continue
-		}
-		// The `?` of a nullsafe `?->` is part of the chain, as in `$a?->b->c()`;
-		// a ternary's isn't.
-		if isExprChar(line[i]) || line[i] == '?' && strings.HasPrefix(line[i+1:], "->") {
-			continue
-		}
-		return i + 1
-	}
-	return 0
-}
-
-func isExprChar(b byte) bool {
-	return parser.IsIdentByte(b) || b == '$' || b == '\\' || b == ':' || b == '>' || b == '-' || b == ')' || b == '(' || b == ']' || b == '['
 }
 
 func unknownSymbolShortName(fqn string) string {

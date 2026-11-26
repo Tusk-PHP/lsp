@@ -14,16 +14,18 @@ type classReference struct {
 }
 
 type functionCall struct {
-	name *ast.Name
-	args *ast.ArgList
+	name      *ast.Name
+	args      *ast.ArgList
+	statement bool
 }
 
 type memberReference struct {
-	owner    ast.Expr
-	name     *ast.IdentifierExpr
-	args     *ast.ArgList
-	static   bool
-	presence bool
+	owner     ast.Expr
+	name      *ast.IdentifierExpr
+	args      *ast.ArgList
+	static    bool
+	presence  bool
+	statement bool
 }
 
 func (m memberReference) call() bool {
@@ -31,19 +33,22 @@ func (m memberReference) call() bool {
 }
 
 type references struct {
-	classes   []classReference
-	calls     []functionCall
-	constants []*ast.Name
-	members   []memberReference
+	classes       []classReference
+	calls         []functionCall
+	constructions []functionCall
+	constants     []*ast.Name
+	members       []memberReference
+	closures      []ast.Span
 }
 
 func collectReferences(tree *ast.File) *references {
 	refs := &references{}
 	named := map[*ast.ConstFetch]bool{}
 	present := map[ast.Expr]bool{}
+	statements := map[ast.Expr]bool{}
 	member := func(n ast.Expr, owner, name ast.Expr, args *ast.ArgList, static bool) {
 		if id, ok := name.(*ast.IdentifierExpr); ok {
-			refs.members = append(refs.members, memberReference{owner: owner, name: id, args: args, static: static, presence: present[n]})
+			refs.members = append(refs.members, memberReference{owner: owner, name: id, args: args, static: static, presence: present[n], statement: statements[n]})
 		}
 	}
 	class := func(e ast.Expr) {
@@ -63,6 +68,12 @@ func collectReferences(tree *ast.File) *references {
 	}
 	ast.Walk(tree, func(n ast.Node) bool {
 		switch n := n.(type) {
+		case *ast.ExprStmt:
+			statements[n.Expr] = true
+		case *ast.Closure:
+			refs.closures = append(refs.closures, n.Span)
+		case *ast.ArrowFunction:
+			refs.closures = append(refs.closures, n.Span)
 		case *ast.Isset:
 			for _, v := range n.Vars {
 				markPresence(present, v)
@@ -95,7 +106,7 @@ func collectReferences(tree *ast.File) *references {
 			if c, ok := n.Callee.(*ast.ConstFetch); ok {
 				named[c] = true
 				if c.Name != nil && c.Name.Kind != token.Static {
-					refs.calls = append(refs.calls, functionCall{name: c.Name, args: n.Args})
+					refs.calls = append(refs.calls, functionCall{name: c.Name, args: n.Args, statement: statements[n]})
 				}
 			}
 		case *ast.ConstFetch:
@@ -104,6 +115,9 @@ func collectReferences(tree *ast.File) *references {
 			}
 		case *ast.New:
 			class(n.Class)
+			if c, ok := n.Class.(*ast.ConstFetch); ok && c.Name != nil && c.Name.Kind != token.Static && n.Args != nil {
+				refs.constructions = append(refs.constructions, functionCall{name: c.Name, args: n.Args})
+			}
 		case *ast.InstanceOf:
 			class(n.Class)
 		case *ast.StaticPropertyFetch:
