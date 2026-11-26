@@ -482,3 +482,28 @@ func TestIsWordToken(t *testing.T) {
 		t.Error("a variable is not a word")
 	}
 }
+
+func TestScopesLeftOpenRunToTheEndOfTheFile(t *testing.T) {
+	head := "<?php\nfunction other() {\n    /** @var array{id: int} $post */\n    $post = load();\n}\n\n"
+	for name, tail := range map[string]string{
+		"unterminated string":           "class Box {\n    public function test($post) {\n        $post['",
+		"unterminated string over code": "class Box {\n    public function test($post) {\n        $post['\n    }\n}\n",
+		"unclosed brace":                "class Box {\n    public function test($post) {\n        $post[",
+	} {
+		t.Run(name, func(t *testing.T) {
+			doc := Collect(head + tail)
+			cursor := protocol.Position{Line: 8, Character: 14}
+			s := doc.ScopeAt(cursor)
+			if s == nil || s.Kind != ScopeMethod || s.Name != "test" {
+				t.Fatalf("scope at the cursor = %+v, want method test", s)
+			}
+			if s.Range.End != doc.root.Range.End {
+				t.Errorf("test() ends at %v, want the end of the file %v", s.Range.End, doc.root.Range.End)
+			}
+			b := doc.BindingAt(protocol.Position{Line: 8, Character: 10})
+			if b == nil || b.Kind != BindingParameter || b.Scope != s {
+				t.Errorf("$post at the cursor = %+v, want test()'s parameter", b)
+			}
+		})
+	}
+}
