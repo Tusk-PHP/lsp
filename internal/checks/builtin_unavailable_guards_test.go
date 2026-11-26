@@ -56,6 +56,41 @@ func TestBuiltinUnavailableFollowsVersionChecksAndReportsOnce(t *testing.T) {
 	}
 }
 
+func TestBuiltinUnavailableReportsFunctionsRemovedBeforeTheProjectsPHP(t *testing.T) {
+	src := "<?php\nnamespace App;\n$a = each($arr);\n$f = \\create_function('$a', 'return $a;');\n$m = money_format('%i', 1.5);\n"
+	want := []string{
+		"builtin-unavailable: Function 'each' was removed in PHP 8.0",
+		"builtin-unavailable: Function 'create_function' was removed in PHP 8.0",
+		"builtin-unavailable: Function 'money_format' was removed in PHP 8.0",
+	}
+	if got := unavailableAndUnknown(t, src, "8.0"); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("PHP 8.0: got %q", got)
+	}
+	if got := unavailableAndUnknown(t, src, "7.4"); len(got) != 0 {
+		t.Errorf("PHP 7.4 still has them: got %q", got)
+	}
+	quiet := map[string]string{
+		"function_exists() guard": "<?php\nif (function_exists('money_format')) {\n    $m = money_format('%i', 1.5);\n}\n",
+		"PHP version check":       "<?php\nif (PHP_VERSION_ID < 80000) {\n    $a = each($arr);\n}\n",
+		"polyfill in the file":    "<?php\nfunction money_format($format, $number) { return (string) $number; }\n$m = money_format('%i', 1.5);\n",
+	}
+	for name, src := range quiet {
+		if got := unavailableAndUnknown(t, src, "8.3"); len(got) != 0 {
+			t.Errorf("%s: got %q", name, got)
+		}
+	}
+}
+
+func TestBuiltinUnavailableLeavesARemovedFunctionThePackageDeclares(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.2"})
+	idx.IndexFileWithSource("file:///vendor/polyfill/bootstrap.php", "<?php\nif (!function_exists('each')) {\n    function each(&$array) { return false; }\n}\n", symbols.SourceVendor)
+	src := "<?php\n$a = each($arr);\n"
+	if got := (&BuiltinUnavailableRule{PHPVersion: "8.2"}).Check(parser.ParseFile(src), src, idx); len(got) != 0 {
+		t.Errorf("each() comes from a polyfill: got %+v", got)
+	}
+}
+
 // Symfony's cache adapters test `$connection instanceof \Redis` without
 // ext-redis: the test is just false where PHP has no Redis class, so it is
 // never reported. Static access and `new` still are.

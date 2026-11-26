@@ -26,6 +26,27 @@ func TestFunctionAvailabilityComesFromPHPsBuilds(t *testing.T) {
 	}
 }
 
+func TestRemovedFunctionsComeFromPHPsDefaultBuilds(t *testing.T) {
+	for _, name := range []string{"each", "create_function", "money_format", "get_magic_quotes_gpc"} {
+		got, ok := LookupAvailability(name)
+		if !ok || got != (BuiltinAvailability{Removed: "8.0"}) {
+			t.Errorf("%s: got %+v %v, want removed in 8.0", name, got, ok)
+		}
+		if !got.InVersion("7.4") || got.InVersion("8.0") || got.InVersion("8.4") {
+			t.Errorf("%s is there on 7.4 only", name)
+		}
+	}
+	for _, name := range []string{"chroot", "ftp_connect", "mb_strlen"} {
+		if got, ok := LookupAvailability(name); ok {
+			t.Errorf("%s is only missing from some builds, not removed: %+v", name, got)
+		}
+	}
+	since := BuiltinAvailability{Since: "8.1"}
+	if since.InVersion("8.0") || !since.InVersion("8.1") || since.RemovedBy("8.6") {
+		t.Errorf("%+v is there from 8.1 on", since)
+	}
+}
+
 func TestPECLFunctionsNeedTheirExtension(t *testing.T) {
 	if newIndexForProfile("8.4").Lookup("brotli_compress") != nil {
 		t.Error("brotli_compress needs ext-brotli")

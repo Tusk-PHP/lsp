@@ -109,24 +109,30 @@ function generateGoFunctionAvailability(array $defaultDumps, array $extensionDum
         }
     }
 
+    $removed = removedFunctions($defaultDumps, $dumps);
     $rows = [];
     foreach ($extensionOf as $name => $extension) {
-        $rows[$name] = [$versions->since($in[$name], [$extension => true]), isset($peclExtensions[$extension]) ? $extension : ''];
+        $rows[$name] = [
+            $versions->since($in[$name], [$extension => true]),
+            isset($peclExtensions[$extension]) ? $extension : '',
+            $removed[$name] ?? '',
+        ];
     }
     foreach ($stubFunctions as $name => $extension) {
-        $rows[$name] ??= ['', $extension];
+        $rows[$name] ??= ['', $extension, ''];
     }
     ksort($rows, SORT_STRING);
 
     $lines = [];
-    foreach ($rows as $name => [$since, $extension]) {
-        if ($since === '' && $extension === '') {
+    foreach ($rows as $name => [$since, $extension, $removedIn]) {
+        if ($since === '' && $extension === '' && $removedIn === '') {
             continue;
         }
         $lines[] = "\t" . renderGoStruct([
             'Name' => renderGoString((string) $name),
             'Since' => goStringOrNull($since),
             'Extension' => goStringOrNull($extension),
+            'Removed' => goStringOrNull($removedIn),
         ]) . ',';
     }
 
@@ -142,6 +148,36 @@ function generateGoFunctionAvailability(array $defaultDumps, array $extensionDum
         '}',
         '',
     ]);
+}
+
+/**
+ * @param list<array{version:string, zts:bool, extensions:list<string>, functions:array<string, string>}> $defaultDumps
+ * @param list<array{version:string, functions:array<string, string>}> $allDumps
+ * @return array<string, string>
+ */
+function removedFunctions(array $defaultDumps, array $allDumps): array
+{
+    usort($defaultDumps, static fn(array $a, array $b): int => version_compare($a['version'], $b['version']));
+    $removed = [];
+    foreach ($defaultDumps as $i => $dump) {
+        $next = $defaultDumps[$i + 1] ?? null;
+        if ($next === null || $next['zts'] !== $dump['zts']) {
+            continue;
+        }
+        foreach ($dump['functions'] as $name => $extension) {
+            if (!isset($next['functions'][$name]) && in_array($extension, $next['extensions'], true)) {
+                $removed[$name] = $next['version'];
+            }
+        }
+    }
+    foreach ($allDumps as $dump) {
+        foreach ($removed as $name => $version) {
+            if (isset($dump['functions'][$name]) && version_compare($dump['version'], $version, '>=')) {
+                unset($removed[$name]);
+            }
+        }
+    }
+    return $removed;
 }
 
 /**
@@ -162,7 +198,8 @@ return [
     'name' => 'functions',
     'usage' => 'php scripts/generate-builtins.php functions --php=COMMANDS [--extensions-php=COMMANDS] [--pecl-php=COMMANDS] [--output=PATH]',
     'help' => '  functions     Run the same builds as classes mode and emit, for each built-in
-                function that needs it, the version that added it and, for a
+                function that needs it, the version that added it, the one
+                that removed it (from the default builds only) and, for a
                 PECL extension or one with embedded stubs, the extension.
                 Output defaults to
                 internal/symbols/builtin_functions_generated.go.

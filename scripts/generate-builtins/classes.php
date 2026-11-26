@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 /**
- * PHP code, run in each build, that starts its dump: the version, the loaded
- * extensions, and the static ones, which a run without any ini file (-n)
- * still loads.
+ * PHP code, run in each build, that starts its dump: the version, whether the
+ * build is thread-safe (ZTS), the loaded extensions, and the static ones,
+ * which a run without any ini file (-n) still loads.
  */
 function dumpHeaderCode(): string
 {
@@ -15,7 +15,7 @@ if (!is_array($static)) {
     fwrite(STDERR, "Can't list the static extensions of " . PHP_BINARY . "\n");
     exit(1);
 }
-$out = ['version' => PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION, 'extensions' => array_map('strtolower', get_loaded_extensions()), 'static' => $static];
+$out = ['version' => PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION, 'zts' => (bool) PHP_ZTS, 'extensions' => array_map('strtolower', get_loaded_extensions()), 'static' => $static];
 
 PHP;
 }

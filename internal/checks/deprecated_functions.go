@@ -81,6 +81,9 @@ func (r *DeprecatedFunctionRule) Check(file *parser.FileNode, source string, ind
 			if !ok || (r.PHPVersion != "" && compareBuiltinVersionsStrings(r.PHPVersion, dep.since) < 0) {
 				continue
 			}
+			if avail, _ := symbols.LookupAvailability(strings.ToLower(name)); r.PHPVersion != "" && avail.RemovedBy(r.PHPVersion) {
+				continue
+			}
 			if shouldSkipFunctionCall(line, start, name) || isMemberAccessBefore(line[:start], prevTail) {
 				continue
 			}

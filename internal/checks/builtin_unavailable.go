@@ -327,7 +327,7 @@ func (r *BuiltinUnavailableRule) constantMessage(name string, avail symbols.Buil
 // satisfies reports whether the rule's profile satisfies the given availability
 // constraint. Returns true if the builtin can be used under the current profile.
 func (r *BuiltinUnavailableRule) satisfies(avail symbols.BuiltinAvailability) bool {
-	if avail.Since != "" && compareBuiltinVersionsStrings(avail.Since, r.PHPVersion) > 0 {
+	if !avail.InVersion(r.PHPVersion) {
 		return r.versionChecked && avail.Extension == ""
 	}
 	if avail.Extension != "" {
@@ -374,6 +374,9 @@ func parseMajorMinor(v string) (int, int) {
 }
 
 func (r *BuiltinUnavailableRule) functionMessage(name string, avail symbols.BuiltinAvailability) string {
+	if avail.RemovedBy(r.PHPVersion) {
+		return fmt.Sprintf("Function '%s' was removed in PHP %s", name, avail.Removed)
+	}
 	if avail.Extension != "" {
 		return fmt.Sprintf("Function '%s' requires ext-%s%s", name, avail.Extension, sinceSuffix(avail))
 	}
