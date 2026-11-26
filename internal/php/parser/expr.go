@@ -362,6 +362,10 @@ func (p *parser) primary() ast.Expr {
 	case token.IntegerLiteral, token.FloatLiteral, token.ConstantString:
 		p.next()
 		return &ast.Literal{Kind: k, Span: p.span(start)}
+	case token.EncapsedAndWhitespace:
+		p.unterminatedAt(ast.Span{Start: start, End: start + 1}, "unterminated string")
+		p.next()
+		return &ast.Literal{Kind: k, Span: p.span(start)}
 	case token.DoubleQuote, token.Backtick:
 		return p.interpolated(k, k)
 	case token.StartHeredoc:
@@ -492,8 +496,8 @@ func (p *parser) postfix(e ast.Expr, start uint32) ast.Expr {
 			if p.peek() != token.RightBracket {
 				dim = p.expr()
 			}
-			p.expect(token.RightBracket)
-			e = &ast.ArrayDimFetch{Array: e, Dim: dim, Span: p.span(start)}
+			unclosed := !p.close(token.RightBracket)
+			e = &ast.ArrayDimFetch{Array: e, Dim: dim, Unclosed: unclosed, Span: p.span(start)}
 		case token.LeftBrace:
 			e = p.braceOffset(e, start)
 		case token.ObjectOperator, token.NullsafeObjectOperator:
@@ -553,9 +557,8 @@ func (p *parser) memberAccessName() ast.Expr {
 
 func (p *parser) staticMember(class ast.Expr, start uint32) ast.Expr {
 	nameStart := p.start()
-	if p.keywordStartsNextStatement() {
-		p.unexpected("expected a class member")
-		return &ast.BadExpr{Span: p.span(start)}
+	if p.keywordStartsNextStatement() || p.classStartsNextStatement() {
+		return p.missingClassMember(class, start, nameStart)
 	}
 	switch k := p.peek(); {
 	case k == token.Variable || k == token.Dollar:
@@ -581,8 +584,13 @@ func (p *parser) staticMember(class ast.Expr, start uint32) ast.Expr {
 		}
 		return &ast.ClassConstFetch{Class: class, Name: name, Span: p.span(start)}
 	}
+	return p.missingClassMember(class, start, nameStart)
+}
+
+func (p *parser) missingClassMember(class ast.Expr, start, nameStart uint32) ast.Expr {
 	p.unexpected("expected a class member")
-	return &ast.BadExpr{Span: p.span(start)}
+	name := &ast.BadExpr{Span: p.span(nameStart)}
+	return &ast.ClassConstFetch{Class: class, Name: name, Span: p.span(start)}
 }
 
 func (p *parser) keywordStartsNextStatement() bool {
@@ -609,6 +617,10 @@ func (p *parser) keywordStartsNextStatement() bool {
 	}
 	p.toks[p.pos].Kind = k
 	return true
+}
+
+func (p *parser) classStartsNextStatement() bool {
+	return p.onLaterLine() && p.peek() == token.Identifier && p.peekAt(1) == token.DoubleColon
 }
 
 func (p *parser) continuesMember(k token.Kind) bool {
@@ -680,7 +692,7 @@ func (p *parser) argsInto(list *ast.ArgList) {
 		}
 	}
 	list.Args = p.argStack.take(from)
-	p.expect(token.RightParen)
+	list.Unclosed = !p.close(token.RightParen)
 	list.Span = p.span(start)
 }
 
@@ -734,8 +746,8 @@ func (p *parser) array(short bool) ast.Expr {
 	}
 	p.next()
 	items := p.arrayItems(end)
-	p.expect(end)
-	return &ast.Array{Short: short, Items: items, Span: p.span(start)}
+	unclosed := !p.close(end)
+	return &ast.Array{Short: short, Unclosed: unclosed, Items: items, Span: p.span(start)}
 }
 
 func (p *parser) list() ast.Expr {

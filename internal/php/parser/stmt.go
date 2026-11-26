@@ -32,6 +32,9 @@ func (p *parser) endStatement() {
 		return
 	}
 	p.unexpected("expected ';'")
+	if p.onLaterLine() {
+		return
+	}
 	p.skipTo(func(k token.Kind) bool { return k == token.Semicolon || k == token.CloseTag })
 	p.accept(token.Semicolon)
 }
