@@ -146,3 +146,10 @@ class C {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+func TestParentResolvesThroughImports(t *testing.T) {
+	file := parser.ParseFile("<?php\nnamespace App;\nuse Vendor\\Base as Parent_;\nclass Child extends Parent_ {\n    function f() { parent::g(); }\n}\n", token.Latest)
+	if fqn, ok := resolveClassLikeName("parent", 4, file); !ok || fqn != `Vendor\Base` {
+		t.Errorf("parent: %q %v", fqn, ok)
+	}
+}

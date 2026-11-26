@@ -844,7 +844,7 @@ func resolveClassLikeName(name string, line int, file *parser.FileNode) (string,
 		return "", false
 	case "parent":
 		if cls := enclosingClassAtLine(file, line); cls != nil && cls.Extends != "" {
-			return resolve.ImportedName(cls.Extends, file.Namespace, file.Uses, ""), true
+			return parser.ResolveImportedName(cls.Extends, file.Namespace, file.Uses, "class"), true
 		}
 		return "", false
 	case "class", "readonly":
@@ -854,7 +854,7 @@ func resolveClassLikeName(name string, line int, file *parser.FileNode) (string,
 	if symbols.IsPHPBuiltinType(lower) {
 		return "", false
 	}
-	return resolve.ImportedName(name, file.Namespace, file.Uses, "class"), true
+	return parser.ResolveImportedName(name, file.Namespace, file.Uses, "class"), true
 }
 
 func localClassLikeExists(fqn string, file *parser.FileNode) bool {

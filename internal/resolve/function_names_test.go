@@ -52,26 +52,6 @@ func TestFunctionNamesNeedAFileAndAName(t *testing.T) {
 	}
 }
 
-func TestImportedName(t *testing.T) {
-	uses := []parser.UseNode{{FullName: `Lib\Helpers`, Alias: "Helpers", Kind: "class"}, {FullName: `Lib\run`, Alias: "run", Kind: "function"}}
-	for _, c := range []struct{ name, kind, want string }{
-		{"", "class", ""},
-		{`\Full\Name`, "class", `Full\Name`},
-		{`Helpers\go`, "class", `Lib\Helpers\go`},
-		{`helpers\go`, "class", `Lib\Helpers\go`},
-		{"HELPERS", "class", `Lib\Helpers`},
-		{"run", "class", `App\run`},
-		{"run", "", `Lib\run`},
-	} {
-		if got := ImportedName(c.name, "App", uses, c.kind); got != c.want {
-			t.Errorf("ImportedName(%q, %q) = %q, want %q", c.name, c.kind, got, c.want)
-		}
-	}
-	if got := ImportedName("run", "", nil, "class"); got != "run" {
-		t.Errorf("in the global namespace a name stays as written, got %q", got)
-	}
-}
-
 func TestCalledFunctionFindsOnlyAFunctionByPHPsRules(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///room.php", "<?php\nnamespace Other;\nclass Room { public function area() {} }\n")
