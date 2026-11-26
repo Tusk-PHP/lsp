@@ -2,6 +2,7 @@ package symbols
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -88,6 +89,19 @@ func TestCanonicalURISpellsEveryClientsURIForAFileTheSameWay(t *testing.T) {
 	} {
 		if got := canonicalURI(uri, false); got != want {
 			t.Errorf("%s: got %s, want %s", uri, got, want)
+		}
+	}
+}
+
+func TestCanonicalURIIsTheURIPathToURIBuilds(t *testing.T) {
+	built := PathToURI(filepath.Join(t.TempDir(), "team@shop", "Order.php"))
+	escaped := strings.Replace(built, "team@shop", "team%40shop", 1)
+	if escaped == built {
+		t.Fatalf("PathToURI leaves @ unescaped: %s", built)
+	}
+	for _, uri := range []string{built, escaped} {
+		if got := CanonicalURI(uri); got != built {
+			t.Errorf("CanonicalURI(%s) = %s, want %s", uri, got, built)
 		}
 	}
 }
