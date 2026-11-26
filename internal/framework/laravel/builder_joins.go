@@ -17,13 +17,14 @@ var joinMethods = map[string]bool{
 	"straightjoin": true, "straightjoinwhere": true, "straightjoinsub": true,
 }
 
-func BuilderJoined(tokens []parser.Token, doc *scope.Document, line, col int) bool {
+func BuilderMayBeJoined(tokens []parser.Token, doc *scope.Document, line, col int) bool {
 	op := tokenAt(tokens, protocol.Position{Line: line, Character: col})
 	if op < 0 || !isMemberOperator(tokens[op].Kind) {
 		return false
 	}
-	head := chainHead(tokens, nullsafeStart(tokens, op))
-	if chainJoins(tokens, head) {
+	receiverEnd := nullsafeStart(tokens, op)
+	head := chainHead(tokens, receiverEnd)
+	if chainJoins(tokens, head) || !callChainFrom(tokens, head, receiverEnd) {
 		return true
 	}
 	if tokens[head].Kind != parser.TokenVariable || doc == nil {
@@ -45,6 +46,47 @@ func BuilderJoined(tokens []parser.Token, doc *scope.Document, line, col int) bo
 		}
 	}
 	return false
+}
+
+func callChainFrom(tokens []parser.Token, head, end int) bool {
+	i, ok := chainStart(tokens, head, end)
+	for ok && i >= 0 && i < end {
+		i, ok = callLink(tokens, i)
+	}
+	return ok && i == end
+}
+
+func chainStart(tokens []parser.Token, head, end int) (int, bool) {
+	switch tokens[head].Kind {
+	case parser.TokenVariable:
+		return parser.NextSignificant(tokens, head+1), true
+	case parser.TokenDoubleColon:
+		prev := parser.PrevSignificant(tokens, head-1)
+		return head, prev >= 0 && tokens[prev].Kind == parser.TokenStatic
+	case parser.TokenIdentifier, parser.TokenBackslash:
+		i := head
+		for i < end && (tokens[i].Kind == parser.TokenIdentifier || tokens[i].Kind == parser.TokenBackslash) {
+			i = parser.NextSignificant(tokens, i+1)
+		}
+		return i, i == end || tokens[i].Kind == parser.TokenDoubleColon
+	}
+	return head, false
+}
+
+func callLink(tokens []parser.Token, i int) (int, bool) {
+	op := i
+	if tokens[op].Kind == parser.TokenQuestion {
+		op = parser.NextSignificant(tokens, op+1)
+	}
+	if op < 0 || !isMemberOperator(tokens[op].Kind) {
+		return i, false
+	}
+	name := parser.NextSignificant(tokens, op+1)
+	if name < 0 || tokens[name].Kind != parser.TokenIdentifier || !opensCall(tokens, name) {
+		return i, false
+	}
+	closing := parser.MatchingClose(tokens, parser.NextSignificant(tokens, name+1))
+	return parser.NextSignificant(tokens, closing+1), closing >= 0
 }
 
 func lastValueWritten(binding *scope.Binding, at protocol.Position) protocol.Position {

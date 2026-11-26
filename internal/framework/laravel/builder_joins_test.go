@@ -24,10 +24,10 @@ func joinedAtMarker(t *testing.T, body string, withScope bool) bool {
 	if withScope {
 		doc = scope.Collect(source)
 	}
-	return BuilderJoined(parser.Tokenize(source), doc, line, col)
+	return BuilderMayBeJoined(parser.Tokenize(source), doc, line, col)
 }
 
-func TestBuilderJoined(t *testing.T) {
+func TestBuilderMayBeJoined(t *testing.T) {
 	cases := []struct {
 		name string
 		body string
@@ -53,22 +53,53 @@ func TestBuilderJoined(t *testing.T) {
 		{"variable joined after the call", "$q = Post::query();\n$q/*call*/->where('email', 1);\n$q->join('users', 'a', '=', 'b');", false},
 		{"another variable joined", "$q = Post::query();\n$r = Post::query()->join('users', 'a', '=', 'b');\n$q/*call*/->where('email', 1);", false},
 		{"variable passed on or compared", "$q = Post::query();\nconsume($q);\n$x = $q instanceof Builder;\n$y = $q ? 1 : 2;\n$q/*call*/->where('email', 1);", false},
-		{"variable with no binding", `$this->query/*call*/->where('email', 1);`, false},
 		{"unclosed call", "$q = Post::query();\n$q->where('title';\n$q/*call*/->where('email', 1);", false},
-		{"unmatched parenthesis", `x)/*call*/->where('email', 1);`, false},
+		{"unmatched parenthesis", `x)/*call*/->where('email', 1);`, true},
 		{"operator after operator", "$q = Post::query();\n$q->->join('users');\n$q/*call*/->where('email', 1);", false},
 		{"not an operator", `Post::query()->join('users', 'a', '=', 'b')->/*call*/where('email', 1);`, false},
-		{"leading backslash only", `\/*call*/->where('email', 1);`, false},
+		{"leading backslash only", `\/*call*/->where('email', 1);`, true},
 		{"namespace-relative name", `namespace\Post::join('users', 'a')/*call*/->where('email', 1);`, true},
 	}
 	for _, c := range cases {
 		if got := joinedAtMarker(t, c.body, true); got != c.want {
-			t.Errorf("%s: BuilderJoined = %v, want %v", c.name, got, c.want)
+			t.Errorf("%s: BuilderMayBeJoined = %v, want %v", c.name, got, c.want)
 		}
 	}
 }
 
-func TestBuilderJoinedWithoutScopesReadsOnlyTheChain(t *testing.T) {
+func TestBuilderMayBeJoinedOnAReceiverItCannotFollow(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"property of $this", `$this->query/*call*/->where('email', 1);`, true},
+		{"property of a variable", `$holder->query/*call*/->where('email', 1);`, true},
+		{"property after a call", `Post::query()->builder/*call*/->where('email', 1);`, true},
+		{"static property", `Holder::$query/*call*/->where('email', 1);`, true},
+		{"array element", `$builders['post']/*call*/->where('email', 1);`, true},
+		{"element of a call result", `Post::query()->where('title', 1)[0]/*call*/->where('email', 1);`, true},
+		{"function call result", `postQuery()/*call*/->where('email', 1);`, true},
+		{"new in parentheses", `(new Post())/*call*/->where('email', 1);`, true},
+		{"clone in parentheses", `(clone $q)/*call*/->where('email', 1);`, true},
+		{"static keyword without a class", `static/*call*/->where('email', 1);`, true},
+		{"static call", `Post/*call*/::where('email', 1);`, false},
+		{"qualified static call", `\App\Models\Post/*call*/::where('email', 1);`, false},
+		{"model chain", `Post::query()->where('title', 1)/*call*/->where('email', 1);`, false},
+		{"late static binding", `static::query()/*call*/->where('email', 1);`, false},
+		{"class held in a variable", `$model::query()/*call*/->where('email', 1);`, false},
+		{"method chain on $this", `$this->posts()/*call*/->where('email', 1);`, false},
+		{"local variable", "$q = Post::query();\n$q/*call*/->where('email', 1);", false},
+		{"nullsafe chain on a variable", "$q = Post::query();\n$q?->where('title', 1)?/*call*/->where('email', 1);", false},
+	}
+	for _, c := range cases {
+		if got := joinedAtMarker(t, c.body, true); got != c.want {
+			t.Errorf("%s: BuilderMayBeJoined = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestBuilderMayBeJoinedWithoutScopesReadsOnlyTheChain(t *testing.T) {
 	body := "$q = Post::query()->join('users', 'a', '=', 'b');\n$q/*call*/->where('email', 1);"
 	if joinedAtMarker(t, body, false) {
 		t.Error("without scopes, a join on the variable elsewhere is not found")
@@ -78,20 +109,20 @@ func TestBuilderJoinedWithoutScopesReadsOnlyTheChain(t *testing.T) {
 	}
 }
 
-func TestBuilderJoinedOutsideTheTokens(t *testing.T) {
+func TestBuilderMayBeJoinedOutsideTheTokens(t *testing.T) {
 	tokens := parser.Tokenize("<?php\n$q->where('email', 1);\n")
-	if BuilderJoined(tokens, nil, 99, 0) {
+	if BuilderMayBeJoined(tokens, nil, 99, 0) {
 		t.Error("a position after the last token is no call")
 	}
 }
 
-func TestBuilderJoinedOnTokensCutShort(t *testing.T) {
+func TestBuilderMayBeJoinedOnTokensCutShort(t *testing.T) {
 	arrow := parser.Token{Kind: parser.TokenArrow, Value: "->", Column: 2}
 	variable := parser.Token{Kind: parser.TokenVariable, Value: "$q"}
-	if BuilderJoined([]parser.Token{{Kind: parser.TokenArrow, Value: "->"}}, nil, 0, 0) {
-		t.Error("an operator with nothing before it is no joined builder")
+	if !BuilderMayBeJoined([]parser.Token{{Kind: parser.TokenArrow, Value: "->"}}, nil, 0, 0) {
+		t.Error("an operator with nothing before it has a receiver that can't be followed")
 	}
-	if BuilderJoined([]parser.Token{variable, arrow}, nil, 0, 2) {
+	if BuilderMayBeJoined([]parser.Token{variable, arrow}, nil, 0, 2) {
 		t.Error("a chain that ends at an operator is no joined builder")
 	}
 }

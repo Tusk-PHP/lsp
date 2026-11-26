@@ -86,6 +86,23 @@ class Country extends Model {
 }
 class User extends Model {}
 `,
+	"file:///app/Holder.php": `<?php
+namespace App\Support;
+use App\Models\Post;
+use Illuminate\Database\Eloquent\Builder;
+
+class Holder {
+    /** @var Builder<Post> */
+    public $query;
+    /** @var Builder<Post> */
+    public static $shared;
+    /** @var array<string, Builder<Post>> */
+    public $builders;
+}
+
+/** @return Builder<Post> */
+function postQuery() {}
+`,
 }
 
 var eloquentColumns = map[string][]string{
@@ -113,7 +130,7 @@ func analyzeBuilderArgs(t *testing.T, body string) []string {
 			})
 		}
 	}
-	src := "<?php\nnamespace App\\Http;\n\nuse App\\Models\\Comment;\nuse App\\Models\\Country;\nuse App\\Models\\Post;\nuse App\\Models\\Tag;\n\nfunction run(Tag $tag, Country $country, Comment $comment, string $email): void\n{\n" + body + "}\n"
+	src := "<?php\nnamespace App\\Http;\n\nuse App\\Models\\Comment;\nuse App\\Models\\Country;\nuse App\\Models\\Post;\nuse App\\Models\\Tag;\nuse App\\Support\\Holder;\nuse function App\\Support\\postQuery;\n\nfunction run(Tag $tag, Country $country, Comment $comment, Holder $holder, string $email): void\n{\n" + body + "}\n"
 	idx.IndexFile("file:///app/Http/Run.php", src)
 	idx.MarkReady()
 	p := NewProvider(idx, "laravel", "/tmp", nil, config.DefaultConfig())
@@ -178,6 +195,23 @@ func TestBuilderArgsAfterAJoinLeaveUnqualifiedColumnsAlone(t *testing.T) {
     $plain->where('email', $email);
 `,
 		"Unknown relation 'missingRelation' on model 'Post'",
+		"Unknown column 'email' on model 'Post'",
+	)
+}
+
+func TestBuilderArgsOnABuilderHeldElsewhereLeaveUnqualifiedColumnsAlone(t *testing.T) {
+	assertBuilderArgs(t, `    $holder->query->join('users', 'users.id', '=', 'posts.user_id');
+    $holder->query->where('email', $email);
+    Holder::$shared->where('email', $email);
+    $holder->builders['posts']->where('email', $email);
+    postQuery()->where('email', $email);
+    $holder->query->with('missingRelation');
+    Post::query()->where('email', $email);
+    $q = Post::query();
+    $q->where('email', $email);
+`,
+		"Unknown relation 'missingRelation' on model 'Post'",
+		"Unknown column 'email' on model 'Post'",
 		"Unknown column 'email' on model 'Post'",
 	)
 }
