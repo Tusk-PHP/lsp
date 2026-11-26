@@ -490,3 +490,49 @@ pair(pair(1)
 		t.Errorf("a comment before -> and a method named like a keyword are checked; $this in a closure, a chain split over lines, static::, a variable class, a placeholder and an unclosed call aren't, though a closed call in it is:\ngot  %q\nwant %q", got, want)
 	}
 }
+
+func TestArgumentCountChecksEveryNestedCall(t *testing.T) {
+	idx := indexWithFunctions(`<?php
+namespace App;
+function bar(int $a): int { return $a; }
+class Mailer {
+    public function send(string $to, string $subject): bool { return true; }
+    public static function make(string $to): Mailer { return new Mailer(); }
+}
+`)
+	types := map[string]string{"$mailer": `App\Mailer`}
+	checker := &ArgumentCountRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string { return types[expr] }}
+	source := `<?php
+namespace App;
+strlen(bar(1, 2, 3));
+$list = [bar(), 'k' => bar(1, 2)];
+$v = match (true) { bar(1) > 0 => bar(), default => Mailer::make() };
+$mailer->send(bar(1), $mailer->send('a'));
+bar(Mailer::make(), bar(bar()));
+strlen(...bar(1, 2));
+strlen(bar(...$args), bar(a: 1, b: 2), bar(...), unknown(1, 2, 3), $unknown->send('a'));
+`
+	type finding struct {
+		line    int
+		message string
+	}
+	var got []finding
+	for _, f := range checker.Check(parser.ParseFile(source, token.Latest), source, idx) {
+		got = append(got, finding{f.StartLine, f.Message})
+	}
+	want := []finding{
+		{2, "Too many arguments to bar(): 3 passed, at most 1 expected"},
+		{3, "Too few arguments to bar(): 0 passed, at least 1 required"},
+		{3, "Too many arguments to bar(): 2 passed, at most 1 expected"},
+		{4, "Too few arguments to bar(): 0 passed, at least 1 required"},
+		{4, "Too few arguments to make(): 0 passed, at least 1 required"},
+		{5, "Too few arguments to send(): 1 passed, at least 2 required"},
+		{6, "Too many arguments to bar(): 2 passed, at most 1 expected"},
+		{6, "Too few arguments to make(): 0 passed, at least 1 required"},
+		{6, "Too few arguments to bar(): 0 passed, at least 1 required"},
+		{7, "Too many arguments to bar(): 2 passed, at most 1 expected"},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("a call nested in another call, an array or a match arm is checked like one on its own; spread, named and placeholder arguments and an unknown callee or receiver stay quiet:\ngot  %v\nwant %v", got, want)
+	}
+}

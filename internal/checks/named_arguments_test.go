@@ -104,7 +104,7 @@ greet(nmae: 'x'
 	}
 }
 
-func TestArgumentCountIgnoresConstructorsAndCallsInsideCheckedCalls(t *testing.T) {
+func TestArgumentCountIgnoresConstructorsButChecksCallsInsideCheckedCalls(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
 	idx.IndexFile("file:///lib.php", `<?php
@@ -117,8 +117,8 @@ class Box { public function __construct(int $size) {} }
 	for _, f := range (&ArgumentCountRule{}).Check(parser.ParseFile(source, token.Latest), source, idx) {
 		got = append(got, f.StartLine)
 	}
-	if !slices.Equal(got, []int{3}) {
-		t.Errorf("only two(1) on line 3 is reported, as before the walker was shared: %v", got)
+	if !slices.Equal(got, []int{2, 3}) {
+		t.Errorf("new Box() isn't checked; two(1) is, inside one(...) as on its own: %v", got)
 	}
 }
 
