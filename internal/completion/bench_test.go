@@ -54,3 +54,11 @@ func BenchmarkCompleteVariables(b *testing.B) { benchComplete(b, "$v1") }
 func BenchmarkCompleteMemberOnNextLine(b *testing.B) {
 	benchComplete(b, "$user\n            ->load(1);\n        $user\n            // ->x\n            ->sa")
 }
+
+func BenchmarkCompleteArrayKeys(b *testing.B) {
+	benchComplete(b, "$cfg = [\n            'host' => 1,\n            'port' => 2,\n        ];\n        $cfg['")
+}
+
+func BenchmarkCompleteArrayKeysWrittenOneByOne(b *testing.B) {
+	benchComplete(b, "$r = [];\n        $r['host'] = 1;\n        $r['port'] = 2;\n        $r['")
+}
