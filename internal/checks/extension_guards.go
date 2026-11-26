@@ -12,6 +12,7 @@ import (
 type extensionGuards struct {
 	extensions []string        // lowercase extension names from extension_loaded()
 	names      map[string]bool // lowercase class and function names from *_exists()
+	constants  map[string]bool
 }
 
 // extensionGuards reads the file's guards once. A guard anywhere in the file
@@ -24,8 +25,15 @@ func (f *fileSyntax) extensionGuards() extensionGuards {
 		if !extensionGuardFuncs[fn] || len(call.args.Args) == 0 {
 			continue
 		}
-		name, ok := f.guardedName(call.args.Args[0].Value, fn != "extension_loaded")
+		name, ok := f.guardedName(call.args.Args[0].Value, fn != "extension_loaded" && fn != "defined")
 		if !ok {
+			continue
+		}
+		if fn == "defined" {
+			if g.constants == nil {
+				g.constants = map[string]bool{}
+			}
+			g.constants[strings.TrimPrefix(name, "\\")] = true
 			continue
 		}
 		name = strings.ToLower(strings.TrimPrefix(name, "\\"))
@@ -44,6 +52,7 @@ func (f *fileSyntax) extensionGuards() extensionGuards {
 var extensionGuardFuncs = map[string]bool{
 	"extension_loaded": true, "class_exists": true, "interface_exists": true,
 	"trait_exists": true, "enum_exists": true, "function_exists": true,
+	"defined": true,
 }
 
 func (f *fileSyntax) guardedName(arg ast.Expr, classConst bool) (string, bool) {

@@ -412,12 +412,16 @@ func availableIn(availability BuiltinAvailability, profile BuiltinProfile) bool 
 // to a version or extension constraint. The hand-authored override map
 // (builtinAvailabilityByName in this file) wins over the generated table
 // (builtin_availability_generated.go) so we can correct upstream stub data
-// without regenerating.
+// without regenerating. Generated constants count only when their presence
+// depends on the PHP version alone (Warnable).
 func LookupAvailability(name string) (BuiltinAvailability, bool) {
 	if a, ok := builtinAvailabilityByName[name]; ok {
 		return a, true
 	}
 	if a, ok := generatedBuiltinAvailability[name]; ok {
+		return a, true
+	}
+	if a, ok := lookupWarnableConstant(name); ok && a != (BuiltinAvailability{}) {
 		return a, true
 	}
 	return BuiltinAvailability{}, false

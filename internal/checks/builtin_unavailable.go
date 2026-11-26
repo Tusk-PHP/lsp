@@ -49,6 +49,7 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 	r = &copied
 	syntax := r.Shared.tree(source, file.Grammar)
 	refs := syntax.references()
+	guards := syntax.extensionGuards()
 	var findings []Finding
 	for _, call := range refs.calls {
 		findings = append(findings, r.functionFinding(syntax, call.name, file, index)...)
@@ -62,12 +63,12 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 		}
 	}
 	for _, constant := range refs.constants {
-		findings = append(findings, r.constantFinding(syntax, constant)...)
+		findings = append(findings, r.constantFinding(syntax, constant, index, guards)...)
 	}
 	slices.SortStableFunc(findings, compareFindingStarts)
 	// Code that checks for an extension or symbol first runs only where it
 	// exists, so it is fine on a profile without it.
-	return dropGuarded(findings, strings.Split(source, "\n"), syntax.extensionGuards())
+	return dropGuarded(findings, strings.Split(source, "\n"), guards)
 }
 
 func (r *BuiltinUnavailableRule) functionFinding(syntax *fileSyntax, call *ast.Name, file *parser.FileNode, index *symbols.Index) []Finding {
@@ -104,13 +105,13 @@ func (r *BuiltinUnavailableRule) classLikeFinding(syntax *fileSyntax, node *ast.
 	})}
 }
 
-func (r *BuiltinUnavailableRule) constantFinding(syntax *fileSyntax, node *ast.Name) []Finding {
+func (r *BuiltinUnavailableRule) constantFinding(syntax *fileSyntax, node *ast.Name, index *symbols.Index, guards extensionGuards) []Finding {
 	name := strings.TrimPrefix(syntax.text(node), "\\")
 	if strings.Contains(name, "\\") {
 		return nil
 	}
 	avail, ok := symbols.LookupAvailability(name)
-	if !ok || r.satisfies(avail) {
+	if !ok || r.satisfies(avail) || guards.constants[name] || declaredByProject(index, name) {
 		return nil
 	}
 	return []Finding{syntax.at(node, Finding{
@@ -262,4 +263,16 @@ func sinceSuffix(avail symbols.BuiltinAvailability) string {
 		return ""
 	}
 	return " (PHP >= " + avail.Since + ")"
+}
+
+func declaredByProject(index *symbols.Index, name string) bool {
+	if index == nil {
+		return false
+	}
+	for _, def := range index.Definitions(name) {
+		if def.Kind == symbols.KindConstant && def.Source != symbols.SourceBuiltin {
+			return true
+		}
+	}
+	return false
 }
