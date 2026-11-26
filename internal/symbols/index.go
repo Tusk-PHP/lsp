@@ -163,10 +163,8 @@ type Index struct {
 	reverseImplementsMap map[string][]string // interface → classes that implement it
 	subInterfaceMap      map[string][]string // interface → interfaces that extend it
 	traitMap             map[string][]string
-	sortedNames          []string // sorted lowercase name keys for binary search
-	sortedNamesDirty     bool     // rebuild flag
-	sortedFQNs           []string // sorted FQN keys for binary search (SearchByFQNPrefix)
-	sortedFQNsDirty      bool     // rebuild flag for sortedFQNs
+	sortedNames          sortedKeys // nameIndex's keys, for prefix search by name
+	sortedFQNs           sortedKeys // FQNs of named class-likes, functions and constants, for prefix search by FQN
 	fileSource           map[string]indexedText
 	ready                atomic.Bool // true once project + vendor indexing has completed at least once
 	generator            atomic.Pointer[classGeneratorHolder]
@@ -581,9 +579,10 @@ func (idx *Index) indexNamesLocked(sym *Symbol, pending pendingRemovals) {
 		// Found by its FQN only: no one can write its name.
 		return
 	}
-	idx.sortedNamesDirty = true
-	idx.sortedFQNsDirty = true
 	if !pending.byName.take(sym.Name, sym.FQN) {
+		if len(idx.nameIndex[sym.Name]) == 0 {
+			idx.sortedNames.add(sym.Name)
+		}
 		idx.nameIndex[sym.Name] = append(idx.nameIndex[sym.Name], sym.FQN)
 	}
 	if sym.Kind.IsMember() {
@@ -593,6 +592,9 @@ func (idx *Index) indexNamesLocked(sym *Symbol, pending pendingRemovals) {
 		idx.namespaceIndex[ns] = append(idx.namespaceIndex[ns], sym.FQN)
 	}
 	if key := strings.ToLower(sym.FQN); !pending.byFold.take(key, sym.FQN) {
+		if sym.Name != "" {
+			idx.sortedFQNs.add(sym.FQN)
+		}
 		idx.foldIndex[key] = append(idx.foldIndex[key], sym.FQN)
 	}
 }
@@ -652,8 +654,6 @@ func (idx *Index) removeFileSymbols(uri string) {
 			continue
 		}
 		delete(idx.symbols, sym.FQN)
-		idx.sortedNamesDirty = true
-		idx.sortedFQNsDirty = true
 		pending.byName.add(sym.Name, sym.FQN)
 		if !sym.Kind.IsMember() {
 			pending.byNamespace.add(namespaceForFQN(sym.FQN), sym.FQN)
@@ -664,6 +664,16 @@ func (idx *Index) removeFileSymbols(uri string) {
 	pending.byName.applyTo(idx.nameIndex)
 	pending.byNamespace.applyTo(idx.namespaceIndex)
 	pending.byFold.applyTo(idx.foldIndex)
+	for name := range pending.byName {
+		if len(idx.nameIndex[name]) == 0 {
+			idx.sortedNames.remove(name)
+		}
+	}
+	for _, fqns := range pending.byFold {
+		for _, fqn := range fqns {
+			idx.sortedFQNs.remove(fqn)
+		}
+	}
 	if _, ok := idx.fileSymbols[uri]; ok {
 		idx.files.remove(uri)
 	}
@@ -1049,26 +1059,59 @@ func (idx *Index) LookupByName(name string) []*Symbol {
 	return results
 }
 
+// ensureSortedNames brings the sorted name list in step with the index,
+// taking the write lock only when names were added or removed since.
 func (idx *Index) ensureSortedNames() {
 	idx.mu.RLock()
-	needRebuild := idx.sortedNamesDirty || len(idx.sortedNames) == 0
+	stale := idx.sortedNames.needsUpdate()
 	idx.mu.RUnlock()
-	if !needRebuild {
+	if !stale {
 		return
 	}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-	if !idx.sortedNamesDirty && len(idx.sortedNames) > 0 {
+	idx.updateSortedNamesLocked()
+}
+
+func (idx *Index) updateSortedNamesLocked() {
+	if !idx.sortedNames.needsUpdate() {
 		return
 	}
-	idx.sortedNames = make([]string, 0, len(idx.nameIndex))
-	for name := range idx.nameIndex {
-		idx.sortedNames = append(idx.sortedNames, name)
-	}
-	sort.Slice(idx.sortedNames, func(i, j int) bool {
-		return strings.ToLower(idx.sortedNames[i]) < strings.ToLower(idx.sortedNames[j])
+	idx.sortedNames.update(func(yield func(string)) {
+		for name := range idx.nameIndex {
+			yield(name)
+		}
 	})
-	idx.sortedNamesDirty = false
+}
+
+// ensureSortedFQNs is ensureSortedNames for the sorted FQN list.
+func (idx *Index) ensureSortedFQNs() {
+	idx.mu.RLock()
+	stale := idx.sortedFQNs.needsUpdate()
+	idx.mu.RUnlock()
+	if !stale {
+		return
+	}
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	idx.updateSortedFQNsLocked()
+}
+
+func (idx *Index) updateSortedFQNsLocked() {
+	if !idx.sortedFQNs.needsUpdate() {
+		return
+	}
+	idx.sortedFQNs.update(func(yield func(string)) {
+		for fqn, sym := range idx.symbols {
+			// Only top-level symbols are needed for FQN-prefix search, and
+			// never one with an empty short name (M1 guard) or an anonymous
+			// class, which no one can write.
+			if sym.Kind.IsMember() || sym.Name == "" || sym.Name == parser.AnonymousClassName {
+				continue
+			}
+			yield(fqn)
+		}
+	})
 }
 
 // FirstDeclaredByName returns the declared symbols (not builtins, and with a
@@ -1085,7 +1128,7 @@ func (idx *Index) FirstDeclaredByName(limit int, keep func(SymbolKind) bool) []*
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	results := make([]*Symbol, 0, limit)
-	for _, name := range idx.sortedNames {
+	for _, name := range idx.sortedNames.keys {
 		for _, fqn := range idx.nameIndex[name] {
 			sym, ok := idx.symbols[fqn]
 			if !ok || IsBuiltin(sym) || sym.URI == "" || !keep(sym.Kind) {
@@ -1123,14 +1166,15 @@ func (idx *Index) SearchByPrefix(prefix string) []*Symbol {
 	defer idx.mu.RUnlock()
 
 	lp := strings.ToLower(prefix)
-	start := sort.Search(len(idx.sortedNames), func(i int) bool {
-		return strings.ToLower(idx.sortedNames[i]) >= lp
+	names := idx.sortedNames.keys
+	start := sort.Search(len(names), func(i int) bool {
+		return compareFold(names[i], lp) >= 0
 	})
 
 	var results []*Symbol
-	for i := start; i < len(idx.sortedNames); i++ {
-		name := idx.sortedNames[i]
-		if !strings.HasPrefix(strings.ToLower(name), lp) {
+	for i := start; i < len(names); i++ {
+		name := names[i]
+		if !hasFoldPrefix(name, lp) {
 			break
 		}
 		for _, fqn := range idx.nameIndex[name] {
@@ -1142,28 +1186,6 @@ func (idx *Index) SearchByPrefix(prefix string) []*Symbol {
 	return results
 }
 
-// rebuildSortedFQNs rebuilds the sorted FQN slice used by SearchByFQNPrefix.
-// Must be called with the write lock held.
-func (idx *Index) rebuildSortedFQNs() {
-	idx.sortedFQNs = make([]string, 0, len(idx.symbols))
-	for fqn, sym := range idx.symbols {
-		// Only top-level symbols are needed for FQN-prefix search
-		if sym.Kind.IsMember() {
-			continue
-		}
-		// Never store a symbol with an empty short name (M1 guard), nor an
-		// anonymous class, which no one can write.
-		if sym.Name == "" || sym.Name == parser.AnonymousClassName {
-			continue
-		}
-		idx.sortedFQNs = append(idx.sortedFQNs, fqn)
-	}
-	sort.Slice(idx.sortedFQNs, func(i, j int) bool {
-		return strings.ToLower(idx.sortedFQNs[i]) < strings.ToLower(idx.sortedFQNs[j])
-	})
-	idx.sortedFQNsDirty = false
-}
-
 // SearchByFQNPrefix returns symbols whose FQN starts with the given prefix,
 // plus unique namespace segments at the next level for progressive completion.
 // For example, prefix "Illuminate\" returns both direct symbols in that namespace
@@ -1171,38 +1193,25 @@ func (idx *Index) rebuildSortedFQNs() {
 // Uses binary search over a sorted FQN slice — O(log N + K) where K is the
 // number of matching symbols.
 func (idx *Index) SearchByFQNPrefix(prefix string) ([]*Symbol, []string) {
-	// Ensure the sorted FQN slice is up-to-date under a write lock if needed,
-	// then perform the binary search under a read lock.
-	idx.mu.RLock()
-	needRebuild := idx.sortedFQNsDirty || len(idx.sortedFQNs) == 0
-	idx.mu.RUnlock()
-
-	if needRebuild {
-		idx.mu.Lock()
-		// Re-check under write lock to avoid duplicate work when two goroutines
-		// both observed dirty and one completes the rebuild before the other.
-		if idx.sortedFQNsDirty || len(idx.sortedFQNs) == 0 {
-			idx.rebuildSortedFQNs()
-		}
-		idx.mu.Unlock()
-	}
+	idx.ensureSortedFQNs()
 
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
 	lp := strings.ToLower(prefix)
+	fqns := idx.sortedFQNs.keys
 	// Find the first FQN >= prefix (case-insensitive)
-	start := sort.Search(len(idx.sortedFQNs), func(i int) bool {
-		return strings.ToLower(idx.sortedFQNs[i]) >= lp
+	start := sort.Search(len(fqns), func(i int) bool {
+		return compareFold(fqns[i], lp) >= 0
 	})
 
 	var syms []*Symbol
 	nsSeen := make(map[string]bool)
 	var nsSegments []string
 
-	for i := start; i < len(idx.sortedFQNs); i++ {
-		fqn := idx.sortedFQNs[i]
-		if !strings.HasPrefix(strings.ToLower(fqn), lp) {
+	for i := start; i < len(fqns); i++ {
+		fqn := fqns[i]
+		if !hasFoldPrefix(fqn, lp) {
 			break
 		}
 		sym, ok := idx.symbols[fqn]
@@ -1233,20 +1242,8 @@ func (idx *Index) SearchByFQNPrefix(prefix string) ([]*Symbol, []string) {
 func (idx *Index) WarmSearchIndexes() {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-
-	if idx.sortedNamesDirty || len(idx.sortedNames) == 0 {
-		idx.sortedNames = make([]string, 0, len(idx.nameIndex))
-		for name := range idx.nameIndex {
-			idx.sortedNames = append(idx.sortedNames, name)
-		}
-		sort.Slice(idx.sortedNames, func(i, j int) bool {
-			return strings.ToLower(idx.sortedNames[i]) < strings.ToLower(idx.sortedNames[j])
-		})
-		idx.sortedNamesDirty = false
-	}
-	if idx.sortedFQNsDirty || len(idx.sortedFQNs) == 0 {
-		idx.rebuildSortedFQNs()
-	}
+	idx.updateSortedNamesLocked()
+	idx.updateSortedFQNsLocked()
 }
 
 func (idx *Index) GetFileSymbols(uri string) []*Symbol {
