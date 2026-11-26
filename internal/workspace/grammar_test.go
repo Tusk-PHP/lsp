@@ -3,6 +3,8 @@ package workspace
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -214,5 +216,21 @@ func TestARefreshedProfileBringsItsGrammars(t *testing.T) {
 	ws.Index.IndexFile(uri, "<?php\n#[Marker]\nclass Card {}\n")
 	if got := chosenGrammar(ws, uri); got != token.Latest {
 		t.Errorf("b.php is read as PHP %s, want %s", got, token.Latest)
+	}
+}
+
+func TestAVersionThePHPOnPathReportsButNoGrammarReadsIsIgnored(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "php")
+	writeExecutable(t, binary, "#!/bin/sh\necho 999.1\n")
+	var logs []string
+	profile, source := ResolveBuiltinProfileWithConfig(dir, binary, 5*time.Second, nil, func(line string) { logs = append(logs, line) })
+	if source != "fallback" || profile.Grammars != phpparser.AnyGrammar() {
+		t.Errorf("an unreadable local version falls back to any grammar: %s %+v", source, profile)
+	}
+	if !slices.ContainsFunc(logs, func(line string) bool {
+		return strings.HasPrefix(line, "PHP LSP: ignoring the version of the php on PATH") && strings.Contains(line, "999.1")
+	}) {
+		t.Errorf("the ignored version is logged: %q", logs)
 	}
 }

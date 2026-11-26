@@ -158,6 +158,11 @@ func TestParsePHPConstraint(t *testing.T) {
 		{"^9.0", "9.0", "8.6"},
 		{"^7.4 || >=8.3 <8.1", "7.4", "7.4"},
 		{">=8.1 <8.3 || >=8.5", "8.1", "8.1-8.6"},
+		{">=7.4 <8.2 <8.4", "7.4", "7.4-8.1"},
+		{">=7.4 !=8.0", "7.4", "7.4-8.6"},
+		{"^0.3", "0.3", "7.4"},
+		{"X", "0.0", "7.4-8.6"},
+		{"8.1.2.3", "8.1", "8.1"},
 	}
 	for _, tt := range tests {
 		got, ok := ParsePHPConstraint(tt.constraint)
@@ -165,7 +170,7 @@ func TestParsePHPConstraint(t *testing.T) {
 			t.Errorf("ParsePHPConstraint(%q) = %+v, %v; want oldest %s, grammars %s", tt.constraint, got, ok, tt.oldest, tt.grammars)
 		}
 	}
-	for _, constraint := range []string{"", "dev-main", "~", ">=x", ">=8.2 <8.0"} {
+	for _, constraint := range []string{"", "dev-main", "~", ">=x", ">=8.2 <8.0", "8.1 - dev", "=>8.0"} {
 		if got, ok := ParsePHPConstraint(constraint); ok {
 			t.Errorf("ParsePHPConstraint(%q) = %+v, want no version", constraint, got)
 		}
