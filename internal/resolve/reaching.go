@@ -46,7 +46,7 @@ func (r *Resolver) reachingType(varName string, lines []string, pos textpos.Posi
 		// values for the variables on its right; and for a destructuring it
 		// would find an earlier write instead, as a foreach over the same
 		// variable before `[$a, $route] = $route;`.
-		return ResolvedType{}, inRHS || readableWrite(lines, b, reach.Latest) || b.Site(reach.Latest).Destructure
+		return ResolvedType{}, inRHS || readableWrite(r.syntaxTree(lines, file), b, reach.Latest) || b.Site(reach.Latest).Destructure
 	}
 	return r.narrowVariable(varName, rt, lines, pos, file), true
 }
@@ -82,12 +82,12 @@ func (r *Resolver) reachingValuesType(varName string, lines []string, pos textpo
 
 // readableWrite reports whether write w is an assignment its value can be
 // read from, so the line scan from a read would find nothing else.
-func readableWrite(lines []string, b *scope.Binding, w int) bool {
+func readableWrite(t *syntaxTree, b *scope.Binding, w int) bool {
 	site := b.Site(w)
 	if site.RHS == site.End || w == scope.DeclWrite && b.Kind == scope.BindingParameter {
 		return false
 	}
-	_, _, ok := writeScope(b, w, &site).assignmentValue(lines, site.At.Line, b.Name)
+	_, ok := writeScope(b, w, &site).assignedValue(t, site.At.Line, b.Name)
 	return ok
 }
 

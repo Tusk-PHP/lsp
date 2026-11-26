@@ -19,7 +19,7 @@ import (
 //
 // Variables from parameters or with multiple assignments are not bound —
 // kept restrictive to avoid false positives.
-func (r *Resolver) inferClassStringBinding(classFQN, argStr string, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) inferClassStringBinding(classFQN string, args []CallArg, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	sym := r.Index.Lookup(classFQN)
 	if sym == nil || len(sym.Templates) == 0 {
 		return ResolvedType{}
@@ -30,10 +30,10 @@ func (r *Resolver) inferClassStringBinding(classFQN, argStr string, lines []stri
 		return ResolvedType{}
 	}
 
-	arg := nthConstructorArg(argStr, paramIdx)
-	if arg == "" {
+	if paramIdx >= len(args) || args[paramIdx].Name != "" || args[paramIdx].Spread {
 		return ResolvedType{}
 	}
+	arg := args[paramIdx].Expr
 
 	boundFQN := r.resolveClassStringArg(arg, lines, pos, file)
 	if boundFQN == "" {
@@ -145,16 +145,6 @@ func splitUnionParts(raw string) []string {
 	}
 	parts = append(parts, raw[start:])
 	return parts
-}
-
-// nthConstructorArg splits a constructor argument string by top-level commas
-// and returns the argument at 0-based index n.
-func nthConstructorArg(argStr string, n int) string {
-	args := splitArgList(argStr)
-	if n >= len(args) {
-		return ""
-	}
-	return strings.TrimSpace(args[n])
 }
 
 // splitArgList splits a function argument list by top-level commas.

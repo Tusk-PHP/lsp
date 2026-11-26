@@ -103,21 +103,6 @@ func ClosureCallType(rt ResolvedType, name string) (ResolvedType, bool) {
 	return *rt.Callable.Return, true
 }
 
-// invokedVariableType types an assigned `$fn(…)`, what calling the variable
-// gives, and `$fn(...)`, a Closure of it. ok is false for anything else, and
-// for a variable assigned from calling itself.
-func (r *Resolver) invokedVariableType(rhs, varName string, ctx ExprContext) (ResolvedType, bool) {
-	if rhs == "" || rhs[0] != '$' {
-		return ResolvedType{}, false
-	}
-	steps, origin, ok := parseChain(rhs)
-	if !ok || len(steps) == 0 || steps[0].op != "()" || origin.text == varName {
-		return ResolvedType{}, false
-	}
-	rt := r.ExpressionType(rhs, ctx)
-	return rt, !rt.IsEmpty()
-}
-
 // callableParams is the parameter types of a method or function as a
 // callable signature lists them, read in env; an untyped one is mixed.
 func (r *Resolver) callableParams(sym *symbols.Symbol, env typeEnv) []ResolvedType {
@@ -160,18 +145,6 @@ func IsPartialApplicationArgs(args string) bool {
 // rather than calling: first-class callable syntax or partial application.
 func IsCallableArgs(args string) bool {
 	return IsFirstClassCallableArgs(args) || IsPartialApplicationArgs(args)
-}
-
-// isPartialApplicationCall reports whether expr is a single call whose
-// arguments are a partial application: `greet('Hi', ?)`.
-func isPartialApplicationCall(expr string) bool {
-	s := strings.TrimRight(strings.TrimSpace(expr), "; \t")
-	open := strings.IndexByte(s, '(')
-	if open < 0 || !strings.Contains(s, "?") && !strings.Contains(s, "...") {
-		return false
-	}
-	end := matchingParen(s, open)
-	return end == len(s)-1 && IsPartialApplicationArgs(s[open+1:end])
 }
 
 func isPlaceholderArg(a CallArg) bool {

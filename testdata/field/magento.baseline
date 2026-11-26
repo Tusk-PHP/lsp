@@ -420,7 +420,6 @@ app/code/Magento/RelatedProductGraphQl/Model/Resolver/Batch/CrossSellProducts.ph
 app/code/Magento/RelatedProductGraphQl/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Config\Element\Field'
 app/code/Magento/RelatedProductGraphQl/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Query\Resolver\BatchResponse'
 app/code/Magento/RelatedProductGraphQl/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Query\Resolver\ContextInterface'
-app/code/Magento/RemoteStorage/Model/File/Uploader.php	unknown-member	Unknown member 'getDirectoryWrite' on 'FileSystem'
 app/code/Magento/Reports/Controller/Report/Product/View.php	unused-private-property	Private property 'View::$context' is never used
 app/code/Magento/Reports/Model/Config.php	unknown-member	Unknown member 'getBaseUrl' on 'StoreManagerInterface'
 app/code/Magento/Reports/Setup/Patch/Data/InitializeReportEntityTypesAndPages.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'

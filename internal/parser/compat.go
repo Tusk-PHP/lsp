@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
@@ -285,6 +286,8 @@ type FunctionNode struct {
 }
 
 type FileNode struct {
+	Source    string
+	Tree      *ast.File
 	Grammar   token.Version
 	Namespace string
 	Uses      []UseNode
