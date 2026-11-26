@@ -288,3 +288,29 @@ interface Store extends Reads {
 		t.Errorf("an implementation isn't abstract:\n%s", text)
 	}
 }
+
+func TestGetCodeActionsImplementMissingMethodsRendersEveryNativeType(t *testing.T) {
+	source := "<?php\nnamespace App;\n\nclass Box implements Holds {\n}\n"
+	text := implementMissingMethodsText(t, map[string]string{
+		"file:///test.php": source,
+		"file:///holds.php": `<?php
+namespace App;
+interface Holds {
+    function area(): float;
+    public function each(callable $fn, ?callable $fallback = null): iterable;
+    public function read(string $id): string|false;
+    public function pick((\Countable&\Traversable)|null $items): true;
+}
+`,
+	}, "file:///test.php", 3)
+	for _, want := range []string{
+		"public function area(): float",
+		"public function each(callable $fn, ?callable $fallback = null): iterable",
+		"public function read(string $id): string|false",
+		"public function pick((\\Countable&\\Traversable)|null $items): true",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+}

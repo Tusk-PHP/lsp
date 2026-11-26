@@ -320,6 +320,18 @@ func nativeTypeDeclaration(expr types.TypeExpr, file *parser.FileNode) (string, 
 			parts[i] = rendered
 		}
 		out = strings.Join(parts, sep)
+	case types.TypeKindCallable:
+		if expr.ParamTypes != nil || expr.ReturnType != nil {
+			return "", false
+		}
+		out = expr.Name
+	case types.TypeKindLiteral:
+		switch strings.ToLower(expr.Literal) {
+		case "null", "false", "true":
+			out = expr.Literal
+		default:
+			return "", false
+		}
 	default:
 		return "", false
 	}
