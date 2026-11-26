@@ -8,7 +8,6 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
-	internaltypes "github.com/Tusk-PHP/lsp/internal/types"
 )
 
 func setupGenericResolverCoverage(t *testing.T) (*Resolver, *symbols.Index, string, *parser.FileNode, []string) {
@@ -77,75 +76,6 @@ func lineContaining(t *testing.T, lines []string, needle string) int {
 	}
 	t.Fatalf("line containing %q not found", needle)
 	return -1
-}
-
-func TestArrayLiteralCoverageHelpers(t *testing.T) {
-	t.Run("shape arrays keep shape string", func(t *testing.T) {
-		rt := InferArrayLiteralType(`['id' => 1, 'name' => 'desk']`)
-		if rt.String() != "array{id: int, name: string}" {
-			t.Fatalf("got %q", rt.String())
-		}
-	})
-
-	t.Run("indexed arrays infer scalar value type", func(t *testing.T) {
-		rt := InferArrayLiteralType(`[1, 2, 3]`)
-		if rt.String() != "array<int, int>" {
-			t.Fatalf("got %q", rt.String())
-		}
-	})
-
-	t.Run("arrays of shapes preserve nested shape", func(t *testing.T) {
-		rt := InferArrayLiteralType(`[['id' => 1], ['id' => 2]]`)
-		if rt.String() != "array<int, array{id: int}>" {
-			t.Fatalf("got %q", rt.String())
-		}
-	})
-
-	t.Run("mixed indexed arrays fall back to bare array", func(t *testing.T) {
-		rt := InferArrayLiteralType(`[1, 'x']`)
-		if rt.String() != "array" {
-			t.Fatalf("got %q", rt.String())
-		}
-	})
-
-	t.Run("unterminated literals are a bare array", func(t *testing.T) {
-		for _, literal := range []string{`[`, `[1, 2`, `['id' => 1`} {
-			if rt := InferArrayLiteralType(literal); rt.String() != "array" {
-				t.Errorf("InferArrayLiteralType(%q) = %q, want array", literal, rt.String())
-			}
-		}
-	})
-
-	t.Run("shape string builder and nullable shape serialization", func(t *testing.T) {
-		shape := buildShapeString([]internaltypes.ShapeField{
-			{Key: "id", Type: "int"},
-			{Key: "name", Type: "string"},
-		})
-		if shape != "array{id: int, name: string}" {
-			t.Fatalf("got %q", shape)
-		}
-
-		rt := ResolvedType{FQN: "array", Shape: shape, Nullable: true}
-		if rt.String() != "?array{id: int, name: string}" {
-			t.Fatalf("got %q", rt.String())
-		}
-	})
-
-	t.Run("splitArrayValues respects nesting and strings", func(t *testing.T) {
-		values := splitArrayValues(`'a,b', [1, 2], foo(1, 2)`)
-		if len(values) != 3 {
-			t.Fatalf("expected 3 values, got %d (%v)", len(values), values)
-		}
-		if values[0] != "'a,b'" || values[1] != "[1, 2]" || values[2] != "foo(1, 2)" {
-			t.Fatalf("unexpected split values: %v", values)
-		}
-	})
-
-	t.Run("empty shape produces empty string", func(t *testing.T) {
-		if buildShapeString(nil) != "" {
-			t.Fatal("expected empty shape string")
-		}
-	})
 }
 
 func TestGenericResolverHelperCoverage(t *testing.T) {

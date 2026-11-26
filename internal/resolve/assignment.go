@@ -62,7 +62,7 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 			}
 		}
 		if n.Short {
-			if rt := literalArrayType(t, n); !rt.IsEmpty() {
+			if rt := r.literalArrayType(t, n); !rt.IsEmpty() {
 				return rt, true
 			}
 		}
@@ -158,7 +158,7 @@ func (r *Resolver) documentedAssignment(varName string, t *syntaxTree, v assigne
 }
 
 func (r *Resolver) assignedPlainType(t *syntaxTree, v assignedValue) (string, bool) {
-	if typ := literalNodeType(t, v.expr); typ != "" {
+	if typ := parser.LiteralValueType(v.expr, t.src); typ != "" {
 		return typ, true
 	}
 	_, ternary := v.expr.(*ast.Ternary)

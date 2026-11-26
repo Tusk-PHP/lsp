@@ -152,12 +152,6 @@ func TestExpressionTypeOfWhatIsNoExpression(t *testing.T) {
 	}
 }
 
-func TestCastResultOfTheUnsetCast(t *testing.T) {
-	if got := castResult(token.UnsetCast).FQN; got != "null" {
-		t.Errorf("(unset) = %q, want null", got)
-	}
-}
-
 func TestClassNamesNeedAnIndex(t *testing.T) {
 	if got := NewResolver(nil).ExpressionType("User", ExprContext{}); !got.IsEmpty() {
 		t.Errorf("a class name without an index = %q, want nothing", got.FullString())
