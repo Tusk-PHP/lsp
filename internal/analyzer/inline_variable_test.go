@@ -145,3 +145,98 @@ func TestGetCodeActionsInlineVariableRejectsArrowFunctionBody(t *testing.T) {
 	source := "<?php\nfunction run() {\n    return fn() => ($sum = 1) + $sum;\n}\n"
 	assertNoInlineVariableAction(t, source, protocol.Position{Line: 2, Character: 34})
 }
+
+func inlinedSource(t *testing.T, source string, pos protocol.Position) string {
+	t.Helper()
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///test.php": source})
+	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
+		Range:        protocol.Range{Start: pos, End: pos},
+		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor.inline"}},
+	})
+	for _, action := range actions {
+		if action.Kind != "refactor.inline" || action.Edit == nil {
+			continue
+		}
+		result := source
+		for _, edit := range action.Edit.Changes["file:///test.php"] {
+			start, okStart := positionToOffset(result, edit.Range.Start)
+			end, okEnd := positionToOffset(result, edit.Range.End)
+			if !okStart || !okEnd {
+				t.Fatalf("edit %+v is outside the source", edit)
+			}
+			result = result[:start] + edit.NewText + result[end:]
+		}
+		return result
+	}
+	t.Fatal("expected a refactor.inline code action")
+	return ""
+}
+
+func dynamicScopeSource(statement string) string {
+	return "<?php\nfunction run($data, $query, $name, $args) {\n    $label = 'x';\n    " + statement + "\n    return $label;\n}\n"
+}
+
+var dynamicScopeLabelUse = protocol.Position{Line: 4, Character: 12}
+
+func TestGetCodeActionsInlineVariableRejectsDynamicScopeAccess(t *testing.T) {
+	for name, statement := range map[string]string{
+		"extract":                       "extract($data);",
+		"fully qualified extract":       "\\extract($data);",
+		"extract in upper case":         "EXTRACT($data);",
+		"parse_str without a result":    "parse_str($query);",
+		"parse_str with a spread":       "parse_str(...$args);",
+		"parse_str unclosed":            "parse_str($query",
+		"variable variable write":       "$$name = 1;",
+		"variable variable read":        "echo $$name;",
+		"braced variable variable":      "echo ${'label'};",
+		"compact":                       "$all = compact('label');",
+		"get_defined_vars":              "$all = get_defined_vars();",
+		"eval":                          "eval('echo $label;');",
+		"compact in an arrow function":  "$all = (fn() => compact('label'))();",
+		"variable variable as property": "echo $data->$$name;",
+	} {
+		t.Run(name, func(t *testing.T) {
+			assertNoInlineVariableAction(t, dynamicScopeSource(statement), dynamicScopeLabelUse)
+		})
+	}
+}
+
+func TestGetCodeActionsInlineVariableIgnoresDynamicScopeAccessElsewhere(t *testing.T) {
+	for name, statement := range map[string]string{
+		"names in a string":           "echo 'extract($data) compact(\"label\") $$name ${label}';",
+		"names in a comment":          "// extract($data); eval($query); $$name",
+		"names in a block comment":    "/* get_defined_vars() ${'label'} */",
+		"parse_str with a result":     "parse_str($query, $parsed);",
+		"parse_str with a named one":  "parse_str(string: $query, result: $parsed);",
+		"parse_str with nested calls": "parse_str(trim(substr($query, 1)), $parsed[0]);",
+		"parse_str with a comment":    "parse_str(/* raw */ $query, $parsed);",
+		"a method named extract":      "$data->extract($query);",
+		"a static method named eval":  "Loader::eval($query);",
+		"a function named compact":    "$all = new compact($query);",
+		"a static variable property":  "echo Loader::$$name;",
+		"a constant named extract":    "echo extract;",
+		"extract in a closure":        "$fn = function () use ($data) { extract($data); };",
+		"get_defined_vars in a named": "function inner() { return get_defined_vars(); }",
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := inlinedSource(t, dynamicScopeSource(statement), dynamicScopeLabelUse)
+			want := "<?php\nfunction run($data, $query, $name, $args) {\n    " + statement + "\n    return 'x';\n}\n"
+			if got != want {
+				t.Errorf("inlined source = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestGetCodeActionsInlineVariableRejectsDynamicScopeAccessAtFileScope(t *testing.T) {
+	for name, statement := range map[string]string{
+		"extract":           "extract($data);",
+		"variable variable": "$$name = 1;",
+		"compact":           "$all = compact('label');",
+	} {
+		t.Run(name, func(t *testing.T) {
+			assertNoInlineVariableAction(t, "<?php\n$label = 'x';\n"+statement+"\necho $label;\n", protocol.Position{Line: 3, Character: 7})
+		})
+	}
+}
