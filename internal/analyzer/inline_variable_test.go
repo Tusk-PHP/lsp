@@ -240,3 +240,17 @@ func TestGetCodeActionsInlineVariableRejectsDynamicScopeAccessAtFileScope(t *tes
 		})
 	}
 }
+
+func TestGetCodeActionsInlineVariableKeepsTheCloseTag(t *testing.T) {
+	source := "<?php\nfunction run() {\n    $title = 'Home' ?>\n<h1><?= $title ?></h1>\n<?php\n}\n"
+	got := inlinedSource(t, source, protocol.Position{Line: 3, Character: 10})
+	want := "<?php\nfunction run() {\n     ?>\n<h1><?= 'Home' ?></h1>\n<?php\n}\n"
+	if got != want {
+		t.Errorf("inlined source = %q, want %q", got, want)
+	}
+}
+
+func TestGetCodeActionsInlineVariableRejectsAnEchoedAssignment(t *testing.T) {
+	source := "<?php\nfunction run() {\n    ?><?= $title = 'Home' ?>\n<h1><?= $title ?></h1>\n<?php\n}\n"
+	assertNoInlineVariableAction(t, source, protocol.Position{Line: 3, Character: 10})
+}
