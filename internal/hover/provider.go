@@ -9,7 +9,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/coverage"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/phparray"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
@@ -59,9 +59,8 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 
 	file := ctx.File
 
-	// Check for array key hover: $config['key'] or $config['db']['host'] — cursor on a key
-	if ctx, ok := getArrayKeyContext(line, pos.Character); ok {
-		return p.hoverArrayKey(source, pos, ctx, file)
+	if v, path, key, ok := arrayKeyAt(ctx); ok {
+		return p.hoverArrayKey(r, file, v, path, key)
 	}
 
 	// Check for config key hover: config('database.connections.mysql')
@@ -421,177 +420,41 @@ func (p *Provider) getEffectiveDocBlock(sym *symbols.Symbol) *parser.DocBlock {
 	return nil
 }
 
-// hoverArrayKeyContext holds the parsed context for hovering an array key.
-type hoverArrayKeyContext struct {
-	VarName    string   // e.g. "$config"
-	AccessKeys []string // preceding completed keys, e.g. ["database"] for $config['database']['host']
-	CurrentKey string   // the key the cursor is on, e.g. "host"
-}
-
-// getArrayKeyContext checks if the cursor is on a string key inside an array access
-// expression like $config['key'] or $config['db']['host'].
-func getArrayKeyContext(line string, character int) (*hoverArrayKeyContext, bool) {
-	if character >= len(line) || len(line) < 4 {
-		return nil, false
-	}
-
-	// Step 1: find the string literal boundaries around the cursor
-	left := character
-	for left > 0 && line[left] != '\'' && line[left] != '"' {
-		if line[left] == ']' || line[left] == '[' {
-			return nil, false
+func (p *Provider) hoverArrayKey(r *resolve.Resolver, file *parser.FileNode, v *ast.Variable, path []string, key string) *protocol.Hover {
+	for _, f := range types.FieldsAt(p.arrayResolver.VariableKeys(r, file, v), path) {
+		if f.Key != key {
+			continue
 		}
-		left--
-	}
-	if left <= 0 || (line[left] != '\'' && line[left] != '"') {
-		return nil, false
-	}
-	openQuote := line[left]
-
-	right := character
-	if right < len(line) && line[right] == openQuote {
-		right++
-	} else {
-		for right < len(line) && line[right] != openQuote {
-			right++
+		var sb strings.Builder
+		sb.WriteString("```php\n(array key) ")
+		if f.Type != "" {
+			sb.WriteString(f.Type)
+			sb.WriteByte(' ')
 		}
-		if right >= len(line) {
-			return nil, false
+		sb.WriteString("$" + key)
+		if f.Optional {
+			sb.WriteString(" (optional)")
 		}
-		right++
+		sb.WriteString("\n```")
+		return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: sb.String()}}
 	}
-
-	if left+1 >= right-1 {
-		return nil, false
-	}
-	currentKey := line[left+1 : right-1]
-	if currentKey == "" {
-		return nil, false
-	}
-
-	// Step 2: expect [ before the opening quote
-	i := left - 1
-	for i >= 0 && (line[i] == ' ' || line[i] == '\t') {
-		i--
-	}
-	if i < 0 || line[i] != '[' {
-		return nil, false
-	}
-	i--
-
-	// Step 3: collect preceding completed access keys backward: ]['key2']['key1']
-	var accessKeys []string
-	for i >= 0 {
-		for i >= 0 && (line[i] == ' ' || line[i] == '\t') {
-			i--
-		}
-		if i < 0 || line[i] != ']' {
-			break
-		}
-		i-- // skip ]
-
-		if i < 0 || (line[i] != '\'' && line[i] != '"') {
-			break
-		}
-		closeQ := line[i]
-		i--
-
-		keyEnd := i + 1
-		for i >= 0 && line[i] != closeQ {
-			i--
-		}
-		if i < 0 {
-			break
-		}
-		key := line[i+1 : keyEnd]
-		i-- // skip opening quote
-
-		for i >= 0 && (line[i] == ' ' || line[i] == '\t') {
-			i--
-		}
-		if i < 0 || line[i] != '[' {
-			break
-		}
-		i-- // skip [
-		accessKeys = append([]string{key}, accessKeys...)
-	}
-
-	// Step 4: skip whitespace and extract $variable
-	for i >= 0 && (line[i] == ' ' || line[i] == '\t') {
-		i--
-	}
-	if i < 0 {
-		return nil, false
-	}
-
-	end := i + 1
-	for i >= 0 && resolve.IsWordChar(line[i]) {
-		i--
-	}
-	if i >= 0 && line[i] == '$' {
-		return &hoverArrayKeyContext{
-			VarName:    line[i:end],
-			AccessKeys: accessKeys,
-			CurrentKey: currentKey,
-		}, true
-	}
-	return nil, false
-}
-
-// getArrayKeyAt is a convenience wrapper for backward compatibility in tests.
-func getArrayKeyAt(line string, character int) (varName, key string, ok bool) {
-	ctx, found := getArrayKeyContext(line, character)
-	if !found {
-		return "", "", false
-	}
-	return ctx.VarName, ctx.CurrentKey, true
-}
-
-// hoverArrayKey provides hover information for an array key, including nested access.
-func (p *Provider) hoverArrayKey(source string, pos protocol.Position, ctx *hoverArrayKeyContext, file *parser.FileNode) *protocol.Hover {
-	// Resolve top-level shape
-	fields := p.resolveArrayShape(source, pos, ctx.VarName, file)
-	if len(fields) == 0 {
-		fields = scanArrayKeysForHover(source, pos, ctx.VarName)
-	}
-
-	// Drill into nested shapes via accessKeys
-	for _, accessKey := range ctx.AccessKeys {
-		var nestedType string
-		for _, f := range fields {
-			if f.Key == accessKey {
-				nestedType = f.Type
-				break
-			}
-		}
-		if nestedType == "" {
-			return nil
-		}
-		fields = types.ParseArrayShape(nestedType)
-		if len(fields) == 0 {
-			return nil
-		}
-	}
-
-	// Find the current key in the (possibly nested) shape
-	for _, f := range fields {
-		if f.Key == ctx.CurrentKey {
-			var sb strings.Builder
-			sb.WriteString("```php\n")
-			if f.Type != "" {
-				sb.WriteString(fmt.Sprintf("(array key) %s $%s", f.Type, ctx.CurrentKey))
-			} else {
-				sb.WriteString(fmt.Sprintf("(array key) $%s", ctx.CurrentKey))
-			}
-			if f.Optional {
-				sb.WriteString(" (optional)")
-			}
-			sb.WriteString("\n```")
-			return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: sb.String()}}
-		}
-	}
-
 	return nil
+}
+
+func arrayKeyAt(ctx *sourcectx.CursorContext) (*ast.Variable, []string, string, bool) {
+	dim, ok := ctx.StringDim()
+	if !ok {
+		return nil, nil, "", false
+	}
+	v, ok := dim.Base.(*ast.Variable)
+	if !ok {
+		return nil, nil, "", false
+	}
+	key, ok := sourcectx.StringValue(ctx.File.Source, dim.Fetch.Dim)
+	if !ok || ctx.Offset < dim.Fetch.Dim.Bounds().Start {
+		return nil, nil, "", false
+	}
+	return v, dim.Keys, key, true
 }
 
 // hoverConfigKey provides hover for config key strings inside config('key.path').
@@ -707,125 +570,4 @@ func (p *Provider) hoverConfigKey(line string, character int) *protocol.Hover {
 		Kind:  "markdown",
 		Value: fmt.Sprintf("```php\n(config) %s: %s\n```", fullKey, detail),
 	}}
-}
-
-// resolveArrayShape resolves shape fields for a variable from docblock annotations.
-func (p *Provider) resolveArrayShape(source string, pos protocol.Position, varName string, file *parser.FileNode) []types.ShapeField {
-	if file == nil {
-		return nil
-	}
-	bare := strings.TrimPrefix(varName, "$")
-
-	// Check method parameters
-	for _, cls := range file.Classes {
-		for _, m := range cls.Methods {
-			if pos.Line >= m.StartLine {
-				if m.DocComment != "" {
-					doc := parser.ParseDocBlock(m.DocComment)
-					if doc != nil {
-						for _, param := range doc.Params {
-							if param.Name == "$"+bare {
-								if fields := types.ParseArrayShape(param.Type); len(fields) > 0 {
-									return fields
-								}
-							}
-						}
-					}
-				}
-				for _, param := range m.Params {
-					if param.Name == varName {
-						if fields := types.ParseArrayShape(param.Type.Name); len(fields) > 0 {
-							return fields
-						}
-					}
-				}
-			}
-		}
-	}
-	for _, fn := range file.Functions {
-		if pos.Line >= fn.StartLine {
-			if fn.DocComment != "" {
-				doc := parser.ParseDocBlock(fn.DocComment)
-				if doc != nil {
-					for _, param := range doc.Params {
-						if param.Name == "$"+bare {
-							if fields := types.ParseArrayShape(param.Type); len(fields) > 0 {
-								return fields
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Check @var annotations
-	lines := strings.Split(source, "\n")
-	for i := pos.Line; i >= 0 && i >= pos.Line-10; i-- {
-		if i >= len(lines) {
-			continue
-		}
-		line := strings.TrimSpace(lines[i])
-		if strings.Contains(line, "@var") && strings.Contains(line, varName) {
-			varIdx := strings.Index(line, "@var ")
-			if varIdx >= 0 {
-				rest := strings.TrimSpace(line[varIdx+5:])
-				typeStr, _ := types.ExtractDocTypeString(rest)
-				if fields := types.ParseArrayShape(typeStr); len(fields) > 0 {
-					return fields
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-// scanArrayKeysForHover extracts keys from literal array assignments,
-// preserving nested structure for drilling.
-func scanArrayKeysForHover(source string, pos protocol.Position, varName string) []types.ShapeField {
-	lines := strings.Split(source, "\n")
-	var keys []types.ShapeField
-	seen := make(map[string]bool)
-
-	for i := pos.Line; i >= 0 && i >= pos.Line-200; i-- {
-		if i >= len(lines) {
-			continue
-		}
-		trimmed := strings.TrimSpace(lines[i])
-		if strings.HasPrefix(trimmed, varName) {
-			rest := strings.TrimSpace(trimmed[len(varName):])
-			if strings.HasPrefix(rest, "=") {
-				rhs := strings.TrimSpace(rest[1:])
-				if strings.HasPrefix(rhs, "[") || strings.HasPrefix(strings.ToLower(rhs), "array(") {
-					arrayText := phparray.CollectArrayLiteral(lines, i)
-					return phparray.ParseLiteralToShape(arrayText)
-				}
-			}
-		}
-		// Incremental: $var['key'] = ... (must have = after ])
-		if strings.HasPrefix(trimmed, varName+"[") {
-			after := trimmed[len(varName)+1:]
-			if len(after) > 2 && (after[0] == '\'' || after[0] == '"') {
-				q := after[0]
-				endQ := strings.IndexByte(after[1:], q)
-				if endQ > 0 {
-					afterClose := strings.TrimSpace(after[endQ+2:])
-					if !strings.HasPrefix(afterClose, "]") {
-						continue
-					}
-					afterBracket := strings.TrimSpace(afterClose[1:])
-					if !strings.HasPrefix(afterBracket, "=") {
-						continue
-					}
-					key := after[1 : endQ+1]
-					if !seen[key] {
-						seen[key] = true
-						keys = append(keys, types.ShapeField{Key: key})
-					}
-				}
-			}
-		}
-	}
-	return keys
 }
