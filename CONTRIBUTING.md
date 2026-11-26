@@ -183,6 +183,15 @@ Tests use `testdata/project/` which contains a mock PHP project with `composer.j
 - Add PHP fixtures to `testdata/project/src/` or `testdata/project/vendor/`
 - Index fixtures in your test setup and assert against hover content, symbol resolution, etc.
 
+### Issues, Goals and Milestones
+
+Issues are organised two ways, and each answers a different question:
+
+- **Goals say why.** The [Roadmap](https://github.com/Tusk-PHP/lsp/issues/39) lists the project's goals as its sub-issues, such as #116 Fewer false warnings or #378 Laravel awareness, and every other issue is a sub-issue of one goal. A goal is open-ended and has no end date. When you open an issue, say which goal it belongs to if you know; the maintainers link it.
+- **Milestones say when.** There is one milestone per version, named like its tag (`x.y.z`). An issue or pull request in a milestone is planned for, or has shipped in, that release, and one without a milestone is in the backlog. Only maintainers set milestones, and a theme never gets one: it becomes a goal.
+
+Each issue also gets a type (**Bug**, **Feature** or **Task**) and, where one fits, an `area:` label (`area: diagnostics`, `area: navigation`, `area: parser`, `area: indexing`, `area: tooling`).
+
 ## Reporting Bugs
 
 - Use the [GitHub issue tracker](https://github.com/Tusk-PHP/lsp/issues)
@@ -210,7 +219,7 @@ This section is for internals, the team behind Tusk PHP who review, merge and re
 
 **Who the internals are.** Anyone can become one. The core maintainer (@d8vjork) decides, weighing the work a contributor has done on the project, community demand (issues, discussions) and the project's own workload (internal tasks, milestones and their scope).
 
-**One tracking issue per release.** The next release always has an open issue titled `Release x.y.z` and the [`release`](https://github.com/Tusk-PHP/lsp/issues?q=is%3Aissue+label%3Arelease) label. It lists:
+**One milestone and one tracking issue per release.** The next release always has an open milestone named after its version (`x.y.z`) holding the issues and PRs it ships, and an open issue titled `Release x.y.z` with the [`release`](https://github.com/Tusk-PHP/lsp/issues?q=is%3Aissue+label%3Arelease) label, in that milestone. Create the same milestone in [`Tusk-PHP/vscode`](https://github.com/Tusk-PHP/vscode/milestones) and [`Tusk-PHP/zed`](https://github.com/Tusk-PHP/zed/milestones) for their release that pins it. The release issue lists:
 
 - **Merged:** every PR merged into `main` since the last release, ticked.
 - **Planned:** PRs in review that should ship with it, unticked. One that isn't ready by release time moves to the next release's issue. A stack of PRs is one item and ships together.
@@ -223,7 +232,7 @@ Choose the version from the changes, following [SemVer](https://semver.org/) whi
 
 1. Merge with **Rebase and merge**. No squash merges or merge commits, so `main` keeps each commit as written.
 2. If an earlier merge left the PR conflicting, rebase it onto `main` before merging (maintainers can push to contributors' PR branches), and run the tests for the packages involved.
-3. Add the PR to the release issue: tick it under **Merged**, or add `- [x] #123 title` if it wasn't planned. Linking it there shows the release issue on the PR's timeline, so anyone looking at the PR can see which release it ships in.
+3. Set the PR's milestone to the next release, and add it to the release issue: tick it under **Merged**, or add `- [x] #123 title` if it wasn't planned. Linking it there shows the release issue on the PR's timeline, so anyone looking at the PR can see which release it ships in.
 4. Make sure the PR description has a release note that reads well for users, or that the PR needs none (tests, refactors, docs for contributors). Don't add it to `CHANGELOG.md` yet.
 
 **When you release:**
@@ -231,7 +240,7 @@ Choose the version from the changes, following [SemVer](https://semver.org/) whi
 1. Write the release's `CHANGELOG.md` section ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)) from the release notes of the PRs in the issue's **Merged** list, in one commit, under the version and date. Only maintainers edit `CHANGELOG.md`, and only at this step. Commit it before pushing the tag: the release workflow reads that version's section of `CHANGELOG.md` for the GitHub Release notes.
 2. Check that CI, conformance and the field baselines are green on `main`.
 3. Push the tag (see [Release Process](#release-process)).
-4. Close the release issue with a link to the GitHub Release, and open the next `Release x.y.z` issue with the `release` label, moving any unticked **Planned** PRs into it.
+4. Close the release issue with a link to the GitHub Release, and close the milestone. Open the next milestone and the next `Release x.y.z` issue with the `release` label, moving any unticked **Planned** PRs and any of the milestone's issues still open into them.
 
 ## License
 

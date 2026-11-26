@@ -247,6 +247,22 @@ opening a pull request. This file covers the code's principles.
 Pull requests don't edit `CHANGELOG.md`: put a **Release note** in the pull request
 description instead, and the maintainers write the changelog from it when they release.
 
+## Opening an issue
+
+Follow [CONTRIBUTING.md › Issues, goals and milestones](CONTRIBUTING.md#issues-goals-and-milestones).
+An issue you open is a sub-issue of one goal on the
+[Roadmap](https://github.com/Tusk-PHP/lsp/issues/39) (the Roadmap's sub-issues are the
+goals), has a type (Bug, Feature or Task) and an `area:` label where one fits. Link it
+to its goal after creating it:
+
+```bash
+gh api -X POST repos/Tusk-PHP/lsp/issues/<goal>/sub_issues \
+  -F sub_issue_id="$(gh api repos/Tusk-PHP/lsp/issues/<new> --jq .id)"
+```
+
+Never set a milestone: milestones are versions, and the maintainers decide what goes in
+a release.
+
 ## Direction
 
 - **Correct answers first**, then new features. The benchmark tracks both.
