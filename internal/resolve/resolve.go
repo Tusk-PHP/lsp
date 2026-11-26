@@ -148,9 +148,9 @@ func (r *Resolver) ResolveClassName(name string, file *parser.FileNode) string {
 		name = name[1:]
 	}
 	if strings.ContainsAny(name, "|&(") {
-		return typeNamePartRe.ReplaceAllStringFunc(name, func(part string) string {
-			return r.ResolveClassName(part, file)
-		})
+		if expr := types.ParseTypeExpr(name); expr.Kind == types.TypeKindUnion || expr.Kind == types.TypeKindIntersection || expr.Wrapped {
+			return r.resolveNativeTypeNames(expr, file).NativeString()
+		}
 	}
 	parts := strings.SplitN(name, "\\", 2)
 	for _, u := range file.Uses {
@@ -170,8 +170,19 @@ func (r *Resolver) ResolveClassName(name string, file *parser.FileNode) string {
 	return name
 }
 
-// typeNamePartRe matches each name in a union, intersection or DNF type.
-var typeNamePartRe = regexp.MustCompile(`[^|&()\s]+`)
+func (r *Resolver) resolveNativeTypeNames(expr types.TypeExpr, file *parser.FileNode) types.TypeExpr {
+	switch expr.Kind {
+	case types.TypeKindUnion, types.TypeKindIntersection:
+		parts := make([]types.TypeExpr, len(expr.Types))
+		for i, part := range expr.Types {
+			parts[i] = r.resolveNativeTypeNames(part, file)
+		}
+		expr.Types = parts
+	case types.TypeKindNamed:
+		expr.Name = r.ResolveClassName(expr.Name, file)
+	}
+	return expr
+}
 
 // classLike is the part of a class, trait, interface or enum that positions are
 // matched against.

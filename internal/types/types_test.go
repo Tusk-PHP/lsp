@@ -130,3 +130,19 @@ func TestExtractDocTypeString(t *testing.T) {
 		})
 	}
 }
+
+func TestNativeStringKeepsTheDeclarationSyntax(t *testing.T) {
+	for raw, want := range map[string]string{
+		"Foo|null":         "Foo|null",
+		"(A & B) | null":   "(A&B)|null",
+		"?Foo":             "?Foo",
+		"A&B":              "A&B",
+		"array<int, Foo>":  "array<int, Foo>",
+		"(A&B)|(C&D)|null": "(A&B)|(C&D)|null",
+		"?(A & B)":         "?(A&B)",
+	} {
+		if got := ParseTypeExpr(raw).NativeString(); got != want {
+			t.Errorf("NativeString(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}

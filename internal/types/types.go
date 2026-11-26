@@ -150,6 +150,36 @@ func (expr TypeExpr) String() string {
 	return out
 }
 
+func (expr TypeExpr) NativeString() string {
+	var out string
+	switch expr.Kind {
+	case TypeKindUnion:
+		out = joinNativeTypeExprs(expr.Types, "|")
+	case TypeKindIntersection:
+		out = joinNativeTypeExprs(expr.Types, "&")
+	default:
+		return expr.String()
+	}
+	if expr.Wrapped {
+		out = "(" + out + ")"
+	}
+	if expr.Nullable {
+		out = "?" + out
+	}
+	return out
+}
+
+func joinNativeTypeExprs(parts []TypeExpr, sep string) string {
+	var b strings.Builder
+	for i, part := range parts {
+		if i > 0 {
+			b.WriteString(sep)
+		}
+		b.WriteString(part.NativeString())
+	}
+	return b.String()
+}
+
 // ParseArrayShape extracts shape fields from a PHPStan array shape type string.
 // Input: "array{name: string, age: int, address?: string}"
 // Returns the fields, or nil if the type is not a shape.
