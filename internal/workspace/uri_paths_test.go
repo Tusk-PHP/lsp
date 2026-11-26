@@ -41,3 +41,16 @@ func TestFilesUnderPathsWithSpecialCharactersAreIndexedOnceUnderTheEditorsURI(t 
 		})
 	}
 }
+
+func TestIDEHelperUnderAPathWithSpacesIsIndexedUnderTheEditorsURI(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "my app")
+	writeFiles(t, root, map[string]string{"_ide_helper.php": "<?php\nnamespace Illuminate\\Support\\Facades {\nclass Route {}\n}\n"})
+	ws := New(Options{RootPath: root, Config: config.DefaultConfig()})
+	ws.IndexWorkspace()
+
+	want := symbols.PathToURI(filepath.Join(root, "_ide_helper.php"))
+	route := ws.Index.Lookup(`Illuminate\Support\Facades\Route`)
+	if route == nil || route.URI != want {
+		t.Fatalf("the IDE helper's class is declared at %s: %+v", want, route)
+	}
+}

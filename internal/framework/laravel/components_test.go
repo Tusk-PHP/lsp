@@ -74,3 +74,18 @@ func TestStudlyPath(t *testing.T) {
 		t.Fatalf("studlyPath: %s", got)
 	}
 }
+
+func TestClassComponentWrittenSinceTheIndexWasBuilt(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "my app")
+	writeFiles(t, root, map[string]string{
+		"app/View/Components/Forms/Button.php": "<?php\nnamespace App\\View\\Components\\Forms;\nclass Button {}\n",
+	})
+	c := NewComponents(root, symbols.NewIndex(), nil, nil)
+	comp, ok := c.Component("forms.button")
+	if !ok {
+		t.Fatal("a class component on disk but not yet indexed is found")
+	}
+	if want := symbols.PathToURI(filepath.Join(root, "app", "View", "Components", "Forms", "Button.php")); comp.URI != want {
+		t.Errorf("component URI = %q, want %q", comp.URI, want)
+	}
+}
