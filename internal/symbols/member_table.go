@@ -53,7 +53,7 @@ func (idx *Index) ClassMembersNamed(classFQN, name string) []*Symbol {
 
 func memberNamed(m *Symbol, name string) bool {
 	if m.Kind == KindMethod {
-		return strings.EqualFold(m.Name, name)
+		return EqualFold(m.Name, name)
 	}
 	return m.Name == name || len(m.Name) == len(name)+1 && m.Name[0] == '$' && m.Name[1:] == name
 }
@@ -75,7 +75,7 @@ func (idx *Index) memberTable(classFQN string) map[string][]*Symbol {
 	members := idx.GetClassMembers(classFQN)
 	table := make(map[string][]*Symbol, len(members))
 	for _, m := range members {
-		key := strings.ToLower(strings.TrimPrefix(m.Name, "$"))
+		key := FoldName(strings.TrimPrefix(m.Name, "$"))
 		table[key] = append(table[key], m)
 	}
 
@@ -89,24 +89,4 @@ func (idx *Index) memberTable(classFQN string) map[string][]*Symbol {
 	}
 	t.mu.Unlock()
 	return table
-}
-
-// FoldKey lower-cases an ASCII s into buf, so that a lookup such as
-// m[string(FoldKey(&buf, s))] doesn't allocate. Longer or non-ASCII names
-// fall back to strings.ToLower.
-func FoldKey(buf *[64]byte, s string) []byte {
-	if len(s) > len(buf) {
-		return []byte(strings.ToLower(s))
-	}
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 0x80 {
-			return []byte(strings.ToLower(s))
-		}
-		if 'A' <= c && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		buf[i] = c
-	}
-	return buf[:len(s)]
 }

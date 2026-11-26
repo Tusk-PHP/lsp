@@ -27,3 +27,18 @@ func TestResolveClassNameReturnsTheDeclaredCase(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveClassNameFoldsASCIICaseOnly(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///post.php", "<?php\nnamespace App;\nclass Post {}\n")
+	r := NewResolver(idx)
+	file := &parser.FileNode{Namespace: "Other", Uses: []parser.UseNode{{FullName: `App\Post`, Alias: "Älias"}}}
+	for _, resolve := range []func(string, *parser.FileNode) string{r.ResolveClassName, r.ResolveClassNameLoose} {
+		if got := resolve("ÄLIAS", file); got != `App\Post` {
+			t.Errorf("ÄLIAS is the alias Älias, got %q", got)
+		}
+		if got := resolve("älias", file); got == `App\Post` {
+			t.Errorf("älias is not the alias Älias")
+		}
+	}
+}

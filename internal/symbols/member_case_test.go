@@ -63,12 +63,35 @@ func TestClassMembersNamedKeepsTheHierarchyOrderWhenFiltering(t *testing.T) {
 	}
 }
 
-func TestFoldKeyLowerCasesLongAndNonASCIINames(t *testing.T) {
+func TestFoldingIsASCIIOnlyAsInPHP(t *testing.T) {
 	long := strings.Repeat("AbC", 30)
 	var buf [64]byte
-	for _, s := range []string{"MixedCase", long, "ÉtatSTATE"} {
-		if got, want := string(FoldKey(&buf, s)), strings.ToLower(s); got != want {
+	for s, want := range map[string]string{"MixedCase": "mixedcase", long: strings.Repeat("abc", 30), "ÄtnaSTATE": "Ätnastate", "lower": "lower"} {
+		if got := string(FoldKey(&buf, s)); got != want {
 			t.Errorf("FoldKey(%q) = %q, want %q", s, got, want)
 		}
+		if got := FoldName(s); got != want {
+			t.Errorf("FoldName(%q) = %q, want %q", s, got, want)
+		}
+	}
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{{"A", "a", true}, {"Ärea", "ÄREA", true}, {"Ä", "ä", false}, {"Ärea", "ärea", false}, {"area", "areas", false}} {
+		if got := EqualFold(c.a, c.b); got != c.want {
+			t.Errorf("EqualFold(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}
+
+func TestMethodsMatchIgnoringASCIICaseOnly(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///a.php", "<?php\nclass Mountain {}\n")
+	idx.AddVirtualMember("Mountain", &Symbol{Name: "Ärea", FQN: "Mountain::Ärea", Kind: KindMethod, URI: "file:///a.php"})
+	if got := memberLabels(idx.ClassMembersNamed("Mountain", "ÄREA")); len(got) != 1 {
+		t.Errorf("ÄREA matches Ärea: %v", got)
+	}
+	if got := memberLabels(idx.ClassMembersNamed("Mountain", "ärea")); len(got) != 0 {
+		t.Errorf("ärea does not match Ärea: %v", got)
 	}
 }

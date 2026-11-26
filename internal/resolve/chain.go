@@ -395,7 +395,7 @@ func (r *Resolver) ResolveClassNameLoose(name string, file *parser.FileNode) str
 	// Check use statements
 	parts := strings.SplitN(name, "\\", 2)
 	for _, u := range file.Uses {
-		if strings.EqualFold(u.Alias, parts[0]) {
+		if symbols.EqualFold(u.Alias, parts[0]) {
 			if len(parts) > 1 {
 				return r.declaredClassName(u.FullName + "\\" + parts[1])
 			}

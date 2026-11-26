@@ -154,7 +154,7 @@ func (r *Resolver) ResolveClassName(name string, file *parser.FileNode) string {
 	}
 	parts := strings.SplitN(name, "\\", 2)
 	for _, u := range file.Uses {
-		if strings.EqualFold(u.Alias, parts[0]) {
+		if symbols.EqualFold(u.Alias, parts[0]) {
 			if len(parts) > 1 {
 				return r.declaredClassName(u.FullName + "\\" + parts[1])
 			}

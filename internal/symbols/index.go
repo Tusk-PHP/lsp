@@ -591,7 +591,7 @@ func (idx *Index) indexNamesLocked(sym *Symbol, pending pendingRemovals) {
 	if ns := namespaceForFQN(sym.FQN); !pending.byNamespace.take(ns, sym.FQN) {
 		idx.namespaceIndex[ns] = append(idx.namespaceIndex[ns], sym.FQN)
 	}
-	if key := strings.ToLower(sym.FQN); !pending.byFold.take(key, sym.FQN) {
+	if key := FoldName(sym.FQN); !pending.byFold.take(key, sym.FQN) {
 		if sym.Name != "" {
 			idx.sortedFQNs.add(sym.FQN)
 		}
@@ -610,7 +610,7 @@ func (idx *Index) LookupFold(fqn string, match func(*Symbol) bool) *Symbol {
 	if sym := idx.symbols[fqn]; sym != nil && (match == nil || match(sym)) {
 		return sym
 	}
-	for _, candidate := range idx.foldIndex[strings.ToLower(fqn)] {
+	for _, candidate := range idx.foldIndex[FoldName(fqn)] {
 		if sym := idx.symbols[candidate]; sym != nil && (match == nil || match(sym)) {
 			return sym
 		}
@@ -657,7 +657,7 @@ func (idx *Index) removeFileSymbols(uri string) {
 		pending.byName.add(sym.Name, sym.FQN)
 		if !sym.Kind.IsMember() {
 			pending.byNamespace.add(namespaceForFQN(sym.FQN), sym.FQN)
-			pending.byFold.add(strings.ToLower(sym.FQN), sym.FQN)
+			pending.byFold.add(FoldName(sym.FQN), sym.FQN)
 		}
 		idx.unlinkTypeLocked(sym)
 	}
@@ -1165,7 +1165,7 @@ func (idx *Index) SearchByPrefix(prefix string) []*Symbol {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
-	lp := strings.ToLower(prefix)
+	lp := FoldName(prefix)
 	names := idx.sortedNames.keys
 	start := sort.Search(len(names), func(i int) bool {
 		return compareFold(names[i], lp) >= 0
@@ -1198,7 +1198,7 @@ func (idx *Index) SearchByFQNPrefix(prefix string) ([]*Symbol, []string) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
-	lp := strings.ToLower(prefix)
+	lp := FoldName(prefix)
 	fqns := idx.sortedFQNs.keys
 	// Find the first FQN >= prefix (case-insensitive)
 	start := sort.Search(len(fqns), func(i int) bool {

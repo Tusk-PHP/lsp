@@ -65,7 +65,7 @@ func mayName(tokens []parser.Token, i int, target *symbols.Symbol) bool {
 		}
 		switch target.Kind {
 		case symbols.KindFunction, symbols.KindMethod, symbols.KindClass, symbols.KindInterface, symbols.KindTrait, symbols.KindEnum:
-			return strings.EqualFold(tok.Value, name)
+			return symbols.EqualFold(tok.Value, name)
 		}
 		return tok.Value == name
 	}
