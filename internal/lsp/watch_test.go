@@ -561,6 +561,9 @@ func TestAnOpenDocumentUnderAPathWithASpaceKeepsTheEditorsText(t *testing.T) {
 	}{
 		{"the editor percent-encodes the space", symbols.PathToURI},
 		{"the editor spells the URI differently from the workspace", func(path string) string { return strings.ReplaceAll(symbols.PathToURI(path), "%20", " ") }},
+		{"the editor percent-encodes what the workspace leaves plain", func(path string) string {
+			return strings.Replace(symbols.PathToURI(path), "/app/", "/%61pp/", 1)
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h, root := startWatchedProjectIn(t, filepath.Join(t.TempDir(), "my app"), map[string]string{

@@ -15,11 +15,9 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 	}
 	uri := params.TextDocument.URI
 	text := params.TextDocument.Text
-	path := symbols.URIToPath(uri)
-	unsaved := s.index.GetFileSource(symbols.PathToURI(path)) != text
+	unsaved := s.index.GetFileSource(uri) != text
 	s.docMu.Lock()
 	s.documents[uri] = text
-	s.openPaths[path] = uri
 	s.unsaved[uri] = unsaved
 	s.docMu.Unlock()
 	if !isPHPDocument(uri) {
@@ -71,12 +69,8 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 		return
 	}
 	uri := params.TextDocument.URI
-	path := symbols.URIToPath(uri)
 	s.docMu.Lock()
 	delete(s.documents, uri)
-	if s.openPaths[path] == uri {
-		delete(s.openPaths, path)
-	}
 	unsaved := s.unsaved[uri]
 	delete(s.unsaved, uri)
 	s.docMu.Unlock()
@@ -95,7 +89,7 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 			return
 		}
 		if unsaved {
-			s.queueRefresh([]string{path}, false)
+			s.queueRefresh([]string{symbols.URIToPath(uri)}, false)
 		}
 	})
 }
