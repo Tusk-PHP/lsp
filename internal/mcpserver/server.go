@@ -1215,7 +1215,7 @@ func (s *Service) symbolCatalog() []SymbolMatch {
 
 func (s *Service) laravelModels() []map[string]any {
 	ws := s.runtime().Workspace
-	modelsList := ws.Index.GetDescendants("Illuminate\\Database\\Eloquent\\Model")
+	modelsList := ws.Index.GetDescendants(frameworklaravel.EloquentModel)
 	sort.Slice(modelsList, func(i, j int) bool { return modelsList[i].FQN < modelsList[j].FQN })
 	out := make([]map[string]any, 0, len(modelsList))
 	for _, model := range modelsList {

@@ -288,8 +288,10 @@ func TestResolveBuilderModelForDiagnostics(t *testing.T) {
 		{"Category::query()->where(", "where", `App\Models\Category`},
 		{"Category::query()->where('name', 1)->with(", "with", `App\Models\Category`},
 		{"$unknown->where(", "where", ""},
+		{"where(", "where", ""},
+		{"::where(", "where", ""},
 	} {
-		if got := p.ResolveBuilderModel(tc.prefix, tc.method, source, 2, file); got != tc.want {
+		if got := p.ResolveBuilderModel(tc.prefix, tc.method, source, 2, file).FQN; got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.prefix, got, tc.want)
 		}
 	}

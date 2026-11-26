@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -222,7 +223,7 @@ func ScanMigrationSchema(rootPath string) *Schema {
 // buildModelTableMap creates a mapping from table names to model FQNs.
 func buildModelTableMap(index *symbols.Index, rootPath string) map[string]string {
 	result := make(map[string]string)
-	models := index.GetDescendants("Illuminate\\Database\\Eloquent\\Model")
+	models := index.GetDescendants(frameworklaravel.EloquentModel)
 	for _, model := range models {
 		tableName := ResolveModelTableName(index, model, rootPath)
 		if tableName != "" {
