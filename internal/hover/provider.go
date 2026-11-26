@@ -179,11 +179,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		if fn == nil {
 			return nil
 		}
-		content := p.formatHover(fn)
-		if content == "" {
-			return nil
-		}
-		return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: content}}
+		return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: p.formatHover(fn)}}
 	}
 
 	// Resolve the word via use statements

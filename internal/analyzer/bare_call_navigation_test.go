@@ -97,3 +97,21 @@ function perimeter(int $w, int $h): float { return 0.0; }
 		t.Errorf("signature help for perimeter( inside app(...): got %+v", help)
 	}
 }
+
+func TestMemberOfAnUnresolvedReceiverIsNotNavigated(t *testing.T) {
+	room := `<?php
+class Room {
+    public function area(): float { return 1.0; }
+}
+function measure($unknown) { return $unknown->area(); }
+`
+	a, read := setupRenameAnalyzer(map[string]string{"file:///Room.php": room})
+	pos := positionOf(t, room, "area(); }")
+
+	if got := a.FindAllReferences("file:///Room.php", room, pos, read); len(got) != 0 {
+		t.Errorf("references of a member on an unresolved receiver: got %v, want none", got)
+	}
+	if got := a.PrepareRename("file:///Room.php", room, pos); got != nil {
+		t.Errorf("rename of a member on an unresolved receiver: got %+v, want none", got)
+	}
+}

@@ -634,3 +634,39 @@ function run(): void {
 		}
 	}
 }
+
+func TestAccessedMemberOn(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.SetScopeConventions(map[string]symbols.ScopeConvention{"Builder": {Prefix: "scope"}})
+	idx.IndexFile("file:///a.php", `<?php
+class Builder { public function where() { return $this; } }
+/** @mixin Builder */
+class Category { public $status; public function status() {} public function scopeActive($query) {} }
+`)
+	r := NewResolver(idx)
+	category := ResolvedType{FQN: "Category"}
+	builder := ResolvedType{FQN: "Builder", Params: []ResolvedType{category}}
+	for _, tc := range []struct {
+		name   string
+		owner  ResolvedType
+		member string
+		call   bool
+		want   string
+		kind   symbols.SymbolKind
+	}{
+		{"a call finds the method", category, "status", true, "Category::status", symbols.KindMethod},
+		{"an access finds the property", category, "status", false, "Category::$status", symbols.KindProperty},
+		{"a member of a @mixin", category, "where", true, "Builder::where", symbols.KindMethod},
+		{"a scope through the builder's type argument", builder, "active", true, "Category::scopeActive", symbols.KindMethod},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := r.AccessedMemberOn(tc.owner, tc.member, tc.call)
+			if m == nil || m.FQN != tc.want || m.Kind != tc.kind {
+				t.Errorf("AccessedMemberOn(%s, %q, %v) = %#v, want %s (%v)", tc.owner.FQN, tc.member, tc.call, m, tc.want, tc.kind)
+			}
+		})
+	}
+	if m := r.AccessedMemberOn(builder, "missing", true); m != nil {
+		t.Errorf("AccessedMemberOn(Builder, missing) = %s, want nil", m.FQN)
+	}
+}
