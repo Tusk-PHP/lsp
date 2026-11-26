@@ -36,6 +36,9 @@ func (r *Resolver) ForwardTypes(rt ResolvedType) []ResolvedType {
 // forwards it: Builder<Category> for Category::where(). ok is false when rt
 // has the member itself or nothing it forwards to does.
 func (r *Resolver) ForwardedReceiver(rt ResolvedType, name string, access MemberAccess) (ResolvedType, bool) {
+	if !access.reachesMagic() {
+		return ResolvedType{}, false
+	}
 	if m, _ := r.FindMemberOn(rt, name, access); m != nil {
 		// A #[Scope] method is declared on the model under the name it's
 		// called by, but it's protected: Category::active() still goes
