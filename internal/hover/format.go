@@ -30,7 +30,7 @@ func shortTypes(rendered string) string {
 	return qualifiedName.ReplaceAllString(rendered, "")
 }
 
-func (p *Provider) formatHoverDeclaration(sym *symbols.Symbol) string {
+func (p *Provider) formatHoverDeclaration(sym *symbols.Symbol, doc *parser.DocBlock) string {
 	var sb strings.Builder
 
 	switch sym.Kind {
@@ -132,8 +132,8 @@ func (p *Provider) formatHoverDeclaration(sym *symbols.Symbol) string {
 		}
 	case symbols.KindConstant:
 		sb.WriteString("const ")
-		if sym.Type != "" {
-			sb.WriteString(shortTypes(types.RenderTypeExpr(sym.Type)) + " ")
+		if t := constantType(sym, doc); t != "" {
+			sb.WriteString(shortTypes(types.RenderTypeExpr(t)) + " ")
 		}
 		sb.WriteString(sym.Name)
 		if sym.Value != "" {
@@ -144,6 +144,13 @@ func (p *Provider) formatHoverDeclaration(sym *symbols.Symbol) string {
 	}
 
 	return formatAttributes(sym.Attributes) + sb.String()
+}
+
+func constantType(sym *symbols.Symbol, doc *parser.DocBlock) string {
+	if sym.Type != "" || doc == nil || len(doc.Vars) == 0 {
+		return sym.Type
+	}
+	return doc.Vars[0].Type
 }
 
 // formatAttributes renders a symbol's attributes as written, one to a line.

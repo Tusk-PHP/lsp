@@ -197,6 +197,7 @@ type ConstantDef struct {
 	Type       string
 	Visibility string
 	Attributes []AttributeDef
+	DocComment string
 	Line       int
 }
 
@@ -1044,7 +1045,7 @@ func (p *structParser) parse() {
 		case TokenFunction:
 			p.parseFunction(lastDocComment)
 		case TokenConst:
-			p.parseConst()
+			p.parseConst(lastDocComment)
 		case TokenOpenBrace:
 			p.blocks = append(p.blocks, false)
 			p.advance()
@@ -1512,9 +1513,9 @@ func (p *structParser) collectNestedFunctions(start, end int) {
 	}
 }
 
-func (p *structParser) parseConst() {
+func (p *structParser) parseConst(docComment string) {
 	p.advance()
-	c := ConstantDef{Line: p.peek().Line}
+	c := ConstantDef{DocComment: docComment, Line: p.peek().Line}
 	if t, ok := p.expect(TokenIdentifier); ok {
 		c.Name = t.Value
 	}
@@ -1696,7 +1697,7 @@ func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDe
 
 		case TokenConst:
 			p.advance()
-			consts = append(consts, p.parseClassConstants(visibility, attributes)...)
+			consts = append(consts, p.parseClassConstants(visibility, attributes, docComment)...)
 
 		case TokenVariable:
 			prop := PropertyDef{
@@ -1771,14 +1772,14 @@ func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDe
 
 // parseClassConstants reads the rest of a `const` statement, which may give a
 // PHP 8.3 type and declare several constants: `const string A = 'a', B = 'b';`.
-func (p *structParser) parseClassConstants(visibility string, attributes []AttributeDef) []ConstantDef {
+func (p *structParser) parseClassConstants(visibility string, attributes []AttributeDef, docComment string) []ConstantDef {
 	typeName := ""
 	if !isNameToken(p.peek()) || (p.pos+1 < len(p.tokens) && p.tokens[p.pos+1].Kind != TokenEquals) {
 		typeName = p.readTypeName()
 	}
 	var consts []ConstantDef
 	for isNameToken(p.peek()) {
-		c := ConstantDef{Name: p.peek().Value, Type: typeName, Visibility: visibility, Attributes: attributes, Line: p.peek().Line}
+		c := ConstantDef{Name: p.peek().Value, Type: typeName, Visibility: visibility, Attributes: attributes, DocComment: docComment, Line: p.peek().Line}
 		p.advance()
 		if p.peek().Kind == TokenEquals {
 			p.advance()

@@ -329,11 +329,12 @@ func (p *Provider) formatHover(sym *symbols.Symbol) string {
 	// === 1. Header: bold FQN ===
 	sb.WriteString("**" + sym.FQN + "**\n")
 
+	doc := p.getEffectiveDocBlock(sym)
+
 	// === 2. Code block: PHP declaration ===
-	sb.WriteString("\n" + phpFence(p.formatHoverDeclaration(sym)))
+	sb.WriteString("\n" + phpFence(p.formatHoverDeclaration(sym, doc)))
 
 	// === 3. Summary (from docblock) ===
-	doc := p.getEffectiveDocBlock(sym)
 	if doc != nil && doc.Summary != "" {
 		sb.WriteString("\n" + doc.Summary + "\n")
 	}

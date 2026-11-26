@@ -448,7 +448,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		idx.addSymbolWithSource(uri, sym, src)
 		idx.indexProperties(uri, sym, fqn, c.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, c.Methods, src, resolve, file.Uses)
-		idx.indexConstants(uri, sym, fqn, c.Constants, src, resolve)
+		idx.indexConstants(uri, sym, fqn, c.Constants, file.Uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 		sym.Supertypes = append(sym.Supertypes, traitUseSupertypes(c.TraitUseDoc, file.Uses, resolve)...)
 		if src == SourceBuiltin {
@@ -466,7 +466,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		idx.linkTypeLocked(sym)
 		idx.indexProperties(uri, sym, fqn, iface.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, iface.Methods, src, resolve, file.Uses)
-		idx.indexConstants(uri, sym, fqn, iface.Constants, src, resolve)
+		idx.indexConstants(uri, sym, fqn, iface.Constants, file.Uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 	}
 
@@ -479,7 +479,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		idx.linkTypeLocked(sym)
 		idx.indexProperties(uri, sym, fqn, tr.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, tr.Methods, src, resolve, file.Uses)
-		idx.indexConstants(uri, sym, fqn, tr.Constants, src, resolve)
+		idx.indexConstants(uri, sym, fqn, tr.Constants, file.Uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 		sym.Supertypes = append(sym.Supertypes, traitUseSupertypes(tr.TraitUseDoc, file.Uses, resolve)...)
 	}
@@ -502,11 +502,11 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		}
 		idx.indexProperties(uri, sym, fqn, en.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, en.Methods, src, resolve, file.Uses)
-		idx.indexConstants(uri, sym, fqn, en.Constants, src, resolve)
+		idx.indexConstants(uri, sym, fqn, en.Constants, file.Uses, src, resolve)
 		idx.indexEnumMembers(uri, sym, src)
 	}
 
-	idx.indexConstants(uri, nil, ns, file.Constants, src, resolve)
+	idx.indexConstants(uri, nil, ns, file.Constants, file.Uses, src, resolve)
 
 	for _, fn := range file.Functions {
 		fqn := buildFQN(ns, fn.Name)

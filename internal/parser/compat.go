@@ -64,6 +64,7 @@ type ConstantNode struct {
 	Type       TypeNode
 	Visibility string
 	Attributes []AttributeDef
+	DocComment string
 	StartLine  int
 	StartCol   int
 }
@@ -725,6 +726,7 @@ func toConstantNode(result *ParseResult, constantDef ConstantDef) ConstantNode {
 		Type:       TypeNode{Name: constantDef.Type},
 		Visibility: constantDef.Visibility,
 		Attributes: constantDef.Attributes,
+		DocComment: constantDef.DocComment,
 		StartLine:  constantDef.Line,
 		StartCol:   nameColumnOnLine(result, constantDef.Name, constantDef.Line),
 	}
