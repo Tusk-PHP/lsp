@@ -1,8 +1,6 @@
 package laravel
 
 import (
-	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
-	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,7 +8,7 @@ import (
 
 func TestRouteIndexScanWorkspaceFindsNamedRoutes(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "testdata", "laravel")
-	idx := NewRouteIndex(root, func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
+	idx := NewRouteIndex(root, latestGrammar)
 
 	if err := idx.ScanWorkspace(); err != nil {
 		t.Fatalf("ScanWorkspace() error = %v", err)
@@ -44,7 +42,7 @@ func TestRouteIndexScanWorkspaceFindsNamedRoutes(t *testing.T) {
 }
 
 func TestRouteIndexReplacesEntriesOnReindex(t *testing.T) {
-	idx := NewRouteIndex("/tmp/project", func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
+	idx := NewRouteIndex("/tmp/project", latestGrammar)
 	uri := "file:///tmp/project/routes/web.php"
 
 	idx.IndexFile(uri, "<?php\nRoute::get('/')->name('home');\n")
@@ -105,7 +103,7 @@ func TestFindRouteNameReference(t *testing.T) {
 }
 
 func TestRouteIndexCapturesControllerMetadata(t *testing.T) {
-	idx := NewRouteIndex("/tmp/project", func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
+	idx := NewRouteIndex("/tmp/project", latestGrammar)
 	uri := "file:///tmp/project/routes/web.php"
 	source := `<?php
 
@@ -150,5 +148,28 @@ Route::view('/welcome', 'welcome')->name('welcome');
 	}
 	if welcome.TargetKind != "view" || welcome.Target != "welcome" {
 		t.Fatalf("expected view target welcome, got kind=%q target=%q", welcome.TargetKind, welcome.Target)
+	}
+}
+
+func TestRouteIndexReadsAFileWithTheIndexsGrammar(t *testing.T) {
+	uri := "file:///tmp/project/routes/web.php"
+	source := `<?php
+namespace App\Http\Controllers;
+
+use Illuminate\Support\Facades\Route;
+#[Pinned] function pinned() {} use App\Http\Controllers\Admin\UserController;
+
+Route::get('/users', [UserController::class, 'index'])->name('users');
+`
+	idx := pinnedToPHP74(t, uri, source)
+	routes := NewRouteIndex("/tmp/project", idx.GrammarOf)
+	routes.IndexFile(uri, source)
+
+	users := routes.Find("users")
+	if users == nil {
+		t.Fatal("expected users route")
+	}
+	if users.HandlerFQN != `App\Http\Controllers\UserController` {
+		t.Errorf("users is handled by %q, want the class PHP 7.4 reads, where the import is a comment", users.HandlerFQN)
 	}
 }

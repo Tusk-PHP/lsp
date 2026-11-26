@@ -25,20 +25,20 @@ type RouteName struct {
 }
 
 type RouteIndex struct {
-	rootPath string
-	grammars func() phpparser.GrammarRange
+	rootPath  string
+	grammarOf func(uri string) phpparser.GrammarRange
 
 	mu     sync.RWMutex
 	byURI  map[string][]RouteName
 	byName map[string][]RouteName
 }
 
-func NewRouteIndex(rootPath string, grammars func() phpparser.GrammarRange) *RouteIndex {
+func NewRouteIndex(rootPath string, grammarOf func(uri string) phpparser.GrammarRange) *RouteIndex {
 	return &RouteIndex{
-		rootPath: rootPath,
-		grammars: grammars,
-		byURI:    make(map[string][]RouteName),
-		byName:   make(map[string][]RouteName),
+		rootPath:  rootPath,
+		grammarOf: grammarOf,
+		byURI:     make(map[string][]RouteName),
+		byName:    make(map[string][]RouteName),
 	}
 }
 
@@ -73,7 +73,7 @@ func (idx *RouteIndex) IndexFile(uri, source string) {
 		return
 	}
 
-	routes := parseRouteDefinitions(uri, source, idx.grammars())
+	routes := parseRouteDefinitions(uri, source, idx.grammarOf(uri))
 
 	idx.mu.Lock()
 	defer idx.mu.Unlock()

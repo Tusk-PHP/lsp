@@ -15,7 +15,7 @@ func setupLaravelRouteAnalyzer(t *testing.T) *Analyzer {
 	t.Helper()
 
 	a := setupLaravelAnalyzer(t)
-	routes := frameworklaravel.NewRouteIndex(filepath.Join("..", "..", "testdata", "laravel"), func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
+	routes := frameworklaravel.NewRouteIndex(filepath.Join("..", "..", "testdata", "laravel"), func(string) phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
 	if err := routes.ScanWorkspace(); err != nil {
 		t.Fatalf("ScanWorkspace() error = %v", err)
 	}

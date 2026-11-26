@@ -20,6 +20,27 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
+func latestGrammar(string) phpparser.GrammarRange {
+	return phpparser.OnlyGrammar(token.Latest)
+}
+
+// pinnedToPHP74 indexes source at uri after a first text that only PHP 7.4
+// reads cleanly, so the index keeps reading uri as PHP 7.4 while the newest
+// grammar of its range reads source cleanly too.
+func pinnedToPHP74(t *testing.T, uri, source string) *symbols.Index {
+	t.Helper()
+	idx := symbols.NewIndexFor(phpparser.GrammarsBetween(token.PHP74, token.Latest))
+	idx.IndexFile(uri, source+"match('pin');\n")
+	idx.IndexFile(uri, source)
+	if tree := idx.GrammarOf(uri).Parse(source); tree.Version != token.PHP74 || !tree.Clean() {
+		t.Fatalf("the index reads %s as PHP %s (clean %v), want a clean PHP 7.4 tree", uri, tree.Version, tree.Clean())
+	}
+	if tree := idx.Grammars().Parse(source); tree.Version != token.Latest || !tree.Clean() {
+		t.Fatalf("the whole range reads %s as PHP %s (clean %v), want a clean tree of the newest grammar", uri, tree.Version, tree.Clean())
+	}
+	return idx
+}
+
 // aliasProject writes a Laravel app with a config alias, a discovered package
 // alias and a package the app opts out of, and indexes the classes they name
 // beside Laravel's route() helper.
@@ -69,7 +90,7 @@ class Flux {}
 namespace Acme;
 class Hidden {}
 `)
-	aliases := NewAliases(root, func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
+	aliases := NewAliases(root, latestGrammar)
 	aliases.Load()
 	idx.SetClassGenerator(aliases)
 	return aliases, idx
@@ -134,5 +155,27 @@ return [
 		if got[k] != v {
 			t.Errorf("configAliases[%s] = %q, want %q", k, got[k], v)
 		}
+	}
+}
+
+func TestAliasesReadConfigWithTheIndexsGrammar(t *testing.T) {
+	root := t.TempDir()
+	appConfig := filepath.Join(root, "config", "app.php")
+	source := `<?php
+namespace App\Support;
+
+#[Pinned] function pinned() {} use App\Billing\Money;
+
+return [
+    'aliases' => ['Money' => Money::class],
+];
+`
+	writeFile(t, appConfig, source)
+	idx := pinnedToPHP74(t, symbols.PathToURI(appConfig), source)
+	aliases := NewAliases(root, idx.GrammarOf)
+	aliases.Load()
+
+	if got, _ := aliases.Target("Money"); got != `App\Support\Money` {
+		t.Errorf("Money stands for %q, want the class PHP 7.4 reads, where the import is a comment", got)
 	}
 }

@@ -57,7 +57,7 @@ func TestAnalyzeBladeFacadeAliases(t *testing.T) {
 	idx.RegisterBuiltins()
 	idx.IndexFile("file:///vendor/Route.php", "<?php\nnamespace Illuminate\\Support\\Facades;\n/** @method static bool has(string $name) */\nclass Route {}\n")
 	idx.IndexFile("file:///vendor/helpers.php", "<?php\nfunction route($name) {}\n")
-	aliases := frameworklaravel.NewAliases(t.TempDir(), func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
+	aliases := frameworklaravel.NewAliases(t.TempDir(), func(string) phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
 	aliases.Load()
 	idx.SetClassGenerator(aliases)
 	idx.MarkReady()

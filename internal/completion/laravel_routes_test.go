@@ -16,7 +16,7 @@ func setupLaravelRouteCompletion(t *testing.T) *Provider {
 	idx, ca := setupLaravelIndex(t)
 	p := NewProvider(idx, ca, "laravel")
 
-	routes := frameworklaravel.NewRouteIndex(filepath.Join("..", "..", "testdata", "laravel"), func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
+	routes := frameworklaravel.NewRouteIndex(filepath.Join("..", "..", "testdata", "laravel"), func(string) phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
 	if err := routes.ScanWorkspace(); err != nil {
 		t.Fatalf("ScanWorkspace() error = %v", err)
 	}

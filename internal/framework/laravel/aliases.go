@@ -75,8 +75,8 @@ var defaultAliases = map[string]string{
 // resolves, hovers and goes to its target. An alias whose target isn't
 // indexed stays unknown.
 type Aliases struct {
-	rootPath string
-	grammars func() phpparser.GrammarRange
+	rootPath  string
+	grammarOf func(uri string) phpparser.GrammarRange
 	// byName maps a lower-case alias to its name as written and its target.
 	byName atomic.Pointer[map[string]alias]
 }
@@ -87,8 +87,8 @@ type alias struct {
 
 // NewAliases returns the aliases of the Laravel app at rootPath. They are
 // empty until Load reads them.
-func NewAliases(rootPath string, grammars func() phpparser.GrammarRange) *Aliases {
-	return &Aliases{rootPath: rootPath, grammars: grammars}
+func NewAliases(rootPath string, grammarOf func(uri string) phpparser.GrammarRange) *Aliases {
+	return &Aliases{rootPath: rootPath, grammarOf: grammarOf}
 }
 
 // Load reads the aliases from the project: Laravel's defaults, then
@@ -107,8 +107,9 @@ func (a *Aliases) Load() {
 	for name, target := range defaultAliases {
 		add(name, target)
 	}
-	if data, err := os.ReadFile(filepath.Join(a.rootPath, "config", "app.php")); err == nil {
-		for name, target := range configAliases(string(data), a.grammars()) {
+	appConfig := filepath.Join(a.rootPath, "config", "app.php")
+	if data, err := os.ReadFile(appConfig); err == nil {
+		for name, target := range configAliases(string(data), a.grammarOf(symbols.PathToURI(appConfig))) {
 			add(name, target)
 		}
 	}
