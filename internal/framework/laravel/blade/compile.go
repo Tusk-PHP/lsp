@@ -3,6 +3,8 @@ package blade
 import (
 	"sort"
 	"strings"
+
+	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 // Document is a template's PHP as a virtual PHP file. The PHP written in the
@@ -435,7 +437,7 @@ func validVarName(s string) bool {
 		return false
 	}
 	for i := 0; i < len(s); i++ {
-		if !isNameByte(s[i]) {
+		if !parser.IsIdentByte(s[i]) {
 			return false
 		}
 	}

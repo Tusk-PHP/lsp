@@ -169,7 +169,7 @@ func containsWord(src, word string) bool {
 			return false
 		}
 		after := i + len(word)
-		if after >= len(rest) || !isIdentChar(rest[after]) {
+		if after >= len(rest) || !parser.IsIdentByte(rest[after]) {
 			return true
 		}
 		rest = rest[after:]
