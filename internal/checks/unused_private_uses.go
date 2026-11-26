@@ -49,6 +49,16 @@ var reflectiveConstantReads = map[string]bool{
 	"reflectionclassconstant": true,
 }
 
+var propertyListings = map[string]bool{
+	"get_object_vars": true,
+	"get_class_vars":  true,
+}
+
+var reflectionClasses = map[string]bool{
+	"reflectionclass":  true,
+	"reflectionobject": true,
+}
+
 var constantLookupFunctions = map[string]bool{
 	"constant": true,
 	"defined":  true,
@@ -165,6 +175,24 @@ func (u *privateMemberUses) collectCall(tokens []parser.Token, i int) {
 	case name == "array":
 		if open := nextSignificant(tokens, i+1); tokenAt(tokens, open).Kind == parser.TokenOpenParen {
 			u.collectCallable(tokens, open)
+		} else if isArrayCastOfThis(tokens, i) {
+			u.anyProperty = true
+		}
+	case name == "foreach":
+		if isForeachOverThis(tokens, i) {
+			u.anyProperty = true
+		}
+	case propertyListings[name]:
+		if ownClassArgument(tokens, i+1) {
+			u.anyProperty = true
+		}
+	case name == "get_class_methods":
+		if ownClassArgument(tokens, i+1) {
+			u.anyMethod = true
+		}
+	case reflectionClasses[name]:
+		if isInstantiation(tokens, i) && ownClassArgument(tokens, i+1) {
+			u.anyMethod, u.anyProperty, u.anyConstant = true, true, true
 		}
 	case name == "property_exists":
 		u.collectPropertyExists(tokens, nextSignificant(tokens, i+1))
@@ -233,7 +261,7 @@ func (u *privateMemberUses) collectCallable(tokens []parser.Token, open int) {
 func classReferenceEnd(tokens []parser.Token, target int) int {
 	tok := tokenAt(tokens, target)
 	switch {
-	case tok.Kind == parser.TokenVariable && tok.Value == "$this", tok.Value == "__CLASS__":
+	case isThis(tok), tok.Value == "__CLASS__":
 		return nextSignificant(tokens, target+1)
 	case !isWordToken(tok):
 		return len(tokens)
@@ -244,6 +272,67 @@ func classReferenceEnd(tokens []parser.Token, target int) int {
 		return len(tokens)
 	}
 	return nextSignificant(tokens, class+1)
+}
+
+func ownClassReferenceEnd(tokens []parser.Token, target int) int {
+	tok := tokenAt(tokens, target)
+	if isWordToken(tok) && !strings.EqualFold(tok.Value, "self") && !strings.EqualFold(tok.Value, "static") && tok.Value != "__CLASS__" {
+		return len(tokens)
+	}
+	return classReferenceEnd(tokens, target)
+}
+
+func ownClassArgument(tokens []parser.Token, from int) bool {
+	open := nextSignificant(tokens, from)
+	if tokenAt(tokens, open).Kind != parser.TokenOpenParen {
+		return false
+	}
+	return tokenAt(tokens, ownClassReferenceEnd(tokens, nextSignificant(tokens, open+1))).Kind == parser.TokenCloseParen
+}
+
+func isInstantiation(tokens []parser.Token, class int) bool {
+	before := parser.PrevSignificant(tokens, class-1)
+	if before >= 0 && tokens[before].Kind == parser.TokenBackslash {
+		before = parser.PrevSignificant(tokens, before-1)
+	}
+	return before >= 0 && tokens[before].Kind == parser.TokenNew
+}
+
+func isArrayCastOfThis(tokens []parser.Token, array int) bool {
+	open := parser.PrevSignificant(tokens, array-1)
+	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
+		return false
+	}
+	closing := nextSignificant(tokens, array+1)
+	if tokenAt(tokens, closing).Kind != parser.TokenCloseParen {
+		return false
+	}
+	this := nextSignificant(tokens, closing+1)
+	return isThis(tokenAt(tokens, this)) && !startsMemberAccess(tokens, nextSignificant(tokens, this+1))
+}
+
+func isForeachOverThis(tokens []parser.Token, foreach int) bool {
+	open := nextSignificant(tokens, foreach+1)
+	if tokenAt(tokens, open).Kind != parser.TokenOpenParen {
+		return false
+	}
+	this := nextSignificant(tokens, open+1)
+	as := significantAt(tokens, this+1)
+	return isThis(tokenAt(tokens, this)) && as.Kind == parser.TokenIdentifier && strings.EqualFold(as.Value, "as")
+}
+
+func isThis(tok parser.Token) bool {
+	return tok.Kind == parser.TokenVariable && tok.Value == "$this"
+}
+
+func startsMemberAccess(tokens []parser.Token, at int) bool {
+	switch tokenAt(tokens, at).Kind {
+	case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenOpenBracket:
+		return true
+	case parser.TokenQuestion:
+		return significantAt(tokens, at+1).Kind == parser.TokenArrow
+	}
+	return false
 }
 
 type constantLookup int

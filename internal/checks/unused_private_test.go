@@ -359,3 +359,50 @@ class Foo {
 		}
 	}
 }
+
+func TestUnusedPrivateCountsReflectionOfItsOwnClass(t *testing.T) {
+	const (
+		method   = "Private method 'Foo::helper' is never used"
+		property = "Private property 'Foo::$value' is never used"
+		constant = "Private constant 'Foo::LIMIT' is never used"
+	)
+	for name, tc := range map[string]struct {
+		body string
+		want []string
+	}{
+		"get_object_vars($this)":                {"return get_object_vars( $this );", []string{method, constant}},
+		"get_class_vars(self::class)":           {"return \\get_class_vars(self::class);", []string{method, constant}},
+		"(array) $this":                         {"return (array) $this;", []string{method, constant}},
+		"(array) $this before a ternary":        {"return (array) $this ?: [];", []string{method, constant}},
+		"foreach ($this as ...)":                {"foreach ($this as $k => $v) {} return [];", []string{method, constant}},
+		"get_class_methods($this)":              {"return get_class_methods($this);", []string{property, constant}},
+		"get_class_methods(self::class)":        {"return get_class_methods(SELF::class);", []string{property, constant}},
+		"get_class_methods(static::class)":      {"return get_class_methods(static::class);", []string{property, constant}},
+		"get_class_methods(__CLASS__)":          {"return get_class_methods(__CLASS__);", []string{property, constant}},
+		"new ReflectionClass($this)":            {"return (new ReflectionClass($this))->getMethods();", nil},
+		"new \\ReflectionClass(self::class)":    {"$r = new \\ReflectionClass(self::class); return [];", nil},
+		"new ReflectionObject(static::class)":   {"$r = new ReflectionObject(static::class); return [];", nil},
+		"get_object_vars of another object":     {"return get_object_vars($other);", []string{method, property, constant}},
+		"get_object_vars of a property":         {"return get_object_vars($this->items);", []string{method, property, constant}},
+		"get_object_vars without a call":        {"return [get_object_vars];", []string{method, property, constant}},
+		"(array) of a property":                 {"return (array) $this->items;", []string{method, property, constant}},
+		"(array) of a nullsafe property":        {"return (array) $this?->items;", []string{method, property, constant}},
+		"(array) of an offset":                  {"return (array) $this[0];", []string{method, property, constant}},
+		"(array) of another variable":           {"return (array) $other;", []string{method, property, constant}},
+		"array() of $this":                      {"return array($this);", []string{method, property, constant}},
+		"(array) without parentheses around it": {"return [array, $this];", []string{method, property, constant}},
+		"(array) not closed":                    {"return (array $this);", []string{method, property, constant}},
+		"foreach over another variable":         {"foreach ($other as $v) {} return [];", []string{method, property, constant}},
+		"foreach over a property":               {"foreach ($this->items as $v) {} return [];", []string{method, property, constant}},
+		"foreach without parentheses":           {"return [foreach];", []string{method, property, constant}},
+		"get_class_methods of another class":    {"return get_class_methods(Other::class);", []string{method, property, constant}},
+		"get_class_methods with a second value": {"return get_class_methods($this, 1);", []string{method, property, constant}},
+		"ReflectionClass of another class":      {"$r = new ReflectionClass(Other::class); return [];", []string{method, property, constant}},
+		"ReflectionClass without new":           {"$r = ReflectionClass($this); return [];", []string{method, property, constant}},
+	} {
+		src := "<?php\nclass Foo {\n    private const LIMIT = 1;\n    private string $value = '';\n    private function helper(): void {}\n    public function run($other): array { " + tc.body + " }\n}\n"
+		if got := unusedPrivateMessages(src, nil); !slices.Equal(got, tc.want) {
+			t.Errorf("%s: got %q, want %q", name, got, tc.want)
+		}
+	}
+}
