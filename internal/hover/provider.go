@@ -75,7 +75,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 
 	// Check for array key hover: $config['key'] or $config['db']['host'] — cursor on a key
 	if ctx, ok := getArrayKeyContext(line, pos.Character); ok {
-		return p.hoverArrayKey(source, pos, ctx, file)
+		return p.hoverArrayKey(r, lines, source, pos, ctx, file)
 	}
 
 	// Check for config key hover: config('database.connections.mysql')
@@ -562,9 +562,9 @@ func getArrayKeyAt(line string, character int) (varName, key string, ok bool) {
 }
 
 // hoverArrayKey provides hover information for an array key, including nested access.
-func (p *Provider) hoverArrayKey(source string, pos protocol.Position, ctx *hoverArrayKeyContext, file *parser.FileNode) *protocol.Hover {
+func (p *Provider) hoverArrayKey(r *resolve.Resolver, lines []string, source string, pos protocol.Position, ctx *hoverArrayKeyContext, file *parser.FileNode) *protocol.Hover {
 	// Resolve top-level shape
-	fields := p.resolveArrayShape(source, pos, ctx.VarName, file)
+	fields := p.resolveArrayShape(r, lines, pos, ctx.VarName, file)
 	if len(fields) == 0 {
 		fields = scanArrayKeysForHover(source, pos, ctx.VarName)
 	}
@@ -724,7 +724,7 @@ func (p *Provider) hoverConfigKey(line string, character int) *protocol.Hover {
 }
 
 // resolveArrayShape resolves shape fields for a variable from docblock annotations.
-func (p *Provider) resolveArrayShape(source string, pos protocol.Position, varName string, file *parser.FileNode) []types.ShapeField {
+func (p *Provider) resolveArrayShape(r *resolve.Resolver, lines []string, pos protocol.Position, varName string, file *parser.FileNode) []types.ShapeField {
 	if file == nil {
 		return nil
 	}
@@ -773,23 +773,8 @@ func (p *Provider) resolveArrayShape(source string, pos protocol.Position, varNa
 		}
 	}
 
-	// Check @var annotations
-	lines := strings.Split(source, "\n")
-	for i := pos.Line; i >= 0 && i >= pos.Line-10; i-- {
-		if i >= len(lines) {
-			continue
-		}
-		line := strings.TrimSpace(lines[i])
-		if strings.Contains(line, "@var") && strings.Contains(line, varName) {
-			varIdx := strings.Index(line, "@var ")
-			if varIdx >= 0 {
-				rest := strings.TrimSpace(line[varIdx+5:])
-				typeStr, _ := types.ExtractDocTypeString(rest)
-				if fields := types.ParseArrayShape(typeStr); len(fields) > 0 {
-					return fields
-				}
-			}
-		}
+	if fields := types.ParseArrayShape(r.VarDocType(varName, lines, pos, file)); len(fields) > 0 {
+		return fields
 	}
 
 	return nil

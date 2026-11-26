@@ -1,6 +1,7 @@
 package hover
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -239,6 +240,74 @@ function test() {
 		// Should not contain type info for non-existent key
 		if strings.Contains(hover.Contents.Value, "array key") {
 			t.Error("expected no array key hover for non-existent key")
+		}
+	}
+}
+
+func TestHoverArrayKeyTakesOnlyTheVariablesOwnVarDoc(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+	}{
+		{"var doc in a string", `<?php
+function test() {
+    $doc = '/** @var array{id: int} $post */';
+    $post = getPost();
+    $post['id'];
+}
+`},
+		{"var in a plain comment", `<?php
+function test() {
+    /* @var array{id: int} $post */
+    $post = getPost();
+    $post['id'];
+}
+`},
+		{"var doc in another function", `<?php
+function other() {
+    /** @var array{id: int} $post */
+    $post = getPost();
+}
+function test() {
+    $post = getPost();
+    $post['id'];
+}
+`},
+		{"var doc of a longer name", `<?php
+function test() {
+    /** @var array{id: int} $posts */
+    $posts = getPosts();
+    $post = getPost();
+    $post['id'];
+}
+`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewProvider(symbols.NewIndex(), nil, "")
+			lines := strings.Split(tt.source, "\n")
+			line := len(lines) - 3
+			pos := protocol.Position{Line: line, Character: strings.Index(lines[line], "id")}
+			if hover := p.GetHover("file:///test.php", tt.source, pos); hover != nil {
+				t.Fatalf("hover from a @var that doesn't declare this $post:\n%s", hover.Contents.Value)
+			}
+		})
+	}
+}
+
+func BenchmarkHoverArrayKeyFromVarDoc(b *testing.B) {
+	var src strings.Builder
+	src.WriteString("<?php\nfunction run(array $rows, int $limit) {\n")
+	for i := range 200 {
+		src.WriteString("    $v" + strconv.Itoa(i) + " = $rows[" + strconv.Itoa(i) + "] ?? $limit;\n")
+	}
+	src.WriteString("    /** @var array{id: int, title: string} $post */\n    $post = load();\n    $post['title'];\n}\n")
+	p := NewProvider(symbols.NewIndex(), nil, "")
+	pos := protocol.Position{Line: 204, Character: 12}
+	b.ReportAllocs()
+	for b.Loop() {
+		if p.GetHover("file:///s.php", src.String(), pos) == nil {
+			b.Fatal("the key of the @var shape has a hover")
 		}
 	}
 }
