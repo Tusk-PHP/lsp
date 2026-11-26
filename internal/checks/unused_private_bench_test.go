@@ -30,7 +30,7 @@ func BenchmarkUnusedPrivateRule(b *testing.B) {
 	source := src.String()
 	file := parser.ParseFile(source)
 	r := &UnusedPrivateRule{Shared: &Shared{}}
-	r.Shared.parse(source)
+	r.Shared.lex(source)
 	b.ReportAllocs()
 	for b.Loop() {
 		if len(r.Check(file, source, nil)) != 0 {

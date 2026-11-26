@@ -1,11 +1,11 @@
 package checks
 
 import (
-	"cmp"
-	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 type privateMemberUses struct {
@@ -69,114 +69,204 @@ var reflectionClasses = map[string]bool{
 	"reflectionobject": true,
 }
 
-var includes = map[string]bool{
-	"include":      true,
-	"include_once": true,
-	"require":      true,
-	"require_once": true,
-}
-
 var constantLookupFunctions = map[string]bool{
 	"constant": true,
 	"defined":  true,
 }
 
-func classTokens(tokens []parser.Token, startLine, endLine int) []parser.Token {
-	byLine := func(t parser.Token, line int) int { return cmp.Compare(t.Line, line) }
-	first, _ := slices.BinarySearchFunc(tokens, startLine, byLine)
-	last, _ := slices.BinarySearchFunc(tokens, endLine+1, byLine)
-	return tokens[first:last]
+type codeTokens struct {
+	src    string
+	tokens []lexer.Token
 }
 
-// collect reads the uses in the tokens of class, or of a trait it uses.
-func (u *privateMemberUses) collect(tokens []parser.Token, decl declarations, class string) {
-	c := &useCollector{u: u, scope: tokens, class: class, methodVars: map[string]bool{}}
-	c.collect(tokens, decl)
+func (c codeTokens) at(i int) lexer.Token {
+	if i >= 0 && i < len(c.tokens) {
+		return c.tokens[i]
+	}
+	return lexer.Token{Kind: token.Invalid}
+}
+
+func (c codeTokens) kind(i int) token.Kind {
+	return c.at(i).Kind
+}
+
+func (c codeTokens) text(i int) string {
+	return c.at(i).Text(c.src)
+}
+
+func (c codeTokens) isName(i int) bool {
+	return c.kind(i).IsSemiReserved()
+}
+
+func (c codeTokens) isThis(i int) bool {
+	return c.kind(i) == token.Variable && c.text(i) == "$this"
+}
+
+// collect reads the uses in the tokens of class, or of a trait it uses. A
+// dynamic call on the class's own methods through a variable, `$this->$m()`,
+// is resolved from the variable's assignments once every token is read.
+func (u *privateMemberUses) collect(code codeTokens, decl declarations, class string) {
+	c := &useCollector{u: u, class: class, methodVars: map[string]bool{}}
+	c.collect(code, decl)
 	for name := range c.methodVars {
-		u.collectMethodVariable(tokens, name)
+		u.collectMethodVariable(code, name)
 	}
 }
 
-// useCollector reads one class's or trait's tokens. A dynamic call on the
-// class's own methods through a variable, `$this->$m()`, is resolved from the
-// variable's assignments in scope once every token is read.
 type useCollector struct {
 	u          *privateMemberUses
-	scope      []parser.Token
 	class      string
 	methodVars map[string]bool
 }
 
-func (c *useCollector) collect(tokens []parser.Token, decl declarations) {
+func (c *useCollector) collect(code codeTokens, decl declarations) {
 	u := c.u
-	for i, tok := range tokens {
+	for i, tok := range code.tokens {
 		switch tok.Kind {
-		case parser.TokenStringLiteral:
-			u.collectLiteral(tok.Value)
-			c.collect(parser.InterpolatedTokens(tok), decl)
-		case parser.TokenIdentifier:
-			c.collectCall(tokens, i)
-		case parser.TokenOpenBracket:
-			c.collectCallable(tokens, i)
-		case parser.TokenArrow:
-			c.collectInstanceAccess(tokens, i)
-		case parser.TokenDoubleColon:
-			c.collectStaticAccess(tokens, i)
-		case parser.TokenFunction:
-			if name := significantAt(tokens, i+1); decl == declarationsAreUses && isWordToken(name) {
-				u.methods[strings.ToLower(name.Value)] = true
+		case token.ConstantString:
+			u.collectLiteral(code.text(i))
+		case token.Include, token.IncludeOnce, token.Require, token.RequireOnce:
+			u.anyMethod, u.anyProperty, u.anyConstant = true, true, true
+		case token.Identifier, token.NameFullyQualified, token.NameQualified:
+			u.collectCall(code, i)
+		case token.Array:
+			if code.kind(i+1) == token.LeftParen {
+				c.collectCallable(code, i+1)
+			}
+		case token.ArrayCast:
+			if code.isThis(i+1) && !startsMemberAccess(code, i+2) {
+				u.anyProperty = true
+			}
+		case token.Foreach:
+			if code.kind(i+1) == token.LeftParen && code.isThis(i+2) && code.kind(i+3) == token.As {
+				u.anyProperty = true
+			}
+		case token.LeftBracket:
+			c.collectCallable(code, i)
+		case token.ObjectOperator, token.NullsafeObjectOperator:
+			c.collectInstanceAccess(code, i+1)
+		case token.DoubleColon:
+			c.collectStaticAccess(code, i+1)
+		case token.Function:
+			if decl == declarationsAreUses && code.isName(i+1) {
+				u.methods[strings.ToLower(code.text(i+1))] = true
 			}
 		}
 	}
 }
 
-// dynamicMethod records a call on one of the class's own methods whose name
-// starts at tokens[at]: a variable, a string with a literal prefix, or a
-// concatenation that starts with one. Any other name may be any method.
-func (c *useCollector) dynamicMethod(tokens []parser.Token, at int) {
-	tok := tokenAt(tokens, at)
-	if tok.Kind == parser.TokenVariable && endsName(tokens, at) {
-		c.methodVars[tok.Value] = true
+func (c *useCollector) collectInstanceAccess(code codeTokens, name int) {
+	u := c.u
+	if code.isName(name) {
+		u.methods[strings.ToLower(code.text(name))] = true
+		u.properties[code.text(name)] = true
 		return
 	}
-	if prefix, ok := literalPrefix(tokens, at); ok {
+	u.anyProperty = true
+	if !ownReceiver(code, name-1) {
+		return
+	}
+	switch code.kind(name) {
+	case token.Variable:
+		if code.kind(name+1) == token.LeftParen {
+			c.dynamicMethod(code, name)
+		}
+	case token.LeftBrace:
+		if code.kind(matchingBrace(code, name)+1) == token.LeftParen {
+			c.dynamicMethod(code, name+1)
+		}
+	}
+}
+
+// ownReceiver reports whether the member access at code.tokens[arrow] is on
+// $this itself.
+func ownReceiver(code codeTokens, arrow int) bool {
+	return code.isThis(arrow-1) && !isMemberAccess(code.kind(arrow-2))
+}
+
+func matchingBrace(code codeTokens, open int) int {
+	depth := 0
+	for i := open; i < len(code.tokens); i++ {
+		switch code.kind(i) {
+		case token.LeftBrace, token.CurlyOpen, token.DollarOpenCurlyBraces:
+			depth++
+		case token.RightBrace:
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return len(code.tokens)
+}
+
+func (c *useCollector) collectStaticAccess(code codeTokens, name int) {
+	u := c.u
+	own := c.ownClassName(code, name-2)
+	switch {
+	case code.isName(name):
+		u.methods[strings.ToLower(code.text(name))] = true
+		u.constants[code.text(name)] = true
+	case code.kind(name) == token.Variable && code.kind(name+1) == token.LeftParen:
+		if own {
+			c.dynamicMethod(code, name)
+		}
+	case code.kind(name) == token.Variable:
+		u.properties[code.text(name)[1:]] = true
+	default:
+		u.anyProperty, u.anyConstant = true, true
+		if own {
+			u.anyMethod = true
+		}
+	}
+}
+
+// ownClassName reports whether code.tokens[i] names the class itself: self,
+// static or its own name, qualified or not.
+func (c *useCollector) ownClassName(code codeTokens, i int) bool {
+	switch code.kind(i) {
+	case token.Static:
+		return true
+	case token.Identifier, token.NameQualified, token.NameFullyQualified:
+		text := code.text(i)
+		name := text[strings.LastIndexByte(text, '\\')+1:]
+		return strings.EqualFold(name, "self") || strings.EqualFold(name, c.class)
+	}
+	return false
+}
+
+// dynamicMethod records a call on one of the class's own methods whose name
+// starts at code.tokens[at]: a variable, a string with a literal prefix, or a
+// concatenation that starts with one. Any other name may be any method.
+func (c *useCollector) dynamicMethod(code codeTokens, at int) {
+	if code.kind(at) == token.Variable && endsName(code, at+1) {
+		c.methodVars[code.text(at)] = true
+		return
+	}
+	if prefix, ok := literalPrefix(code, at); ok {
 		c.u.methodPrefixes = append(c.u.methodPrefixes, strings.ToLower(prefix))
 		return
 	}
 	c.u.anyMethod = true
 }
 
-// isMemberName reports whether the name at tokens[i] follows `->`, `::` or
-// `function`, so it names a member rather than a language construct.
-func isMemberName(tokens []parser.Token, i int) bool {
-	prev := parser.PrevSignificant(tokens, i-1)
-	if prev < 0 {
-		return false
-	}
-	switch tokens[prev].Kind {
-	case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenFunction:
-		return true
-	}
-	return false
-}
-
 // collectMethodVariable records what a variable used as a method name may
 // hold: the literal prefix of every value assigned to it, or any method when
-// one of them has none or it's never assigned.
-func (u *privateMemberUses) collectMethodVariable(tokens []parser.Token, name string) {
+// one of them has none or it may get a value otherwise.
+func (u *privateMemberUses) collectMethodVariable(code codeTokens, name string) {
 	assigned := false
-	for i, tok := range tokens {
-		if tok.Kind != parser.TokenVariable || tok.Value != name {
+	for i, tok := range code.tokens {
+		if tok.Kind != token.Variable || code.text(i) != name {
 			continue
 		}
-		if boundOtherwise(tokens, i) {
+		if boundOtherwise(code, i) {
 			u.anyMethod = true
 			return
 		}
-		if tokenAt(tokens, i+1).Kind != parser.TokenEquals || tokenAt(tokens, i+2).Kind == parser.TokenEquals {
+		if code.kind(i+1) != token.Equals {
 			continue
 		}
-		prefix, ok := literalPrefix(tokens, nextSignificant(tokens, i+2))
+		prefix, ok := literalPrefix(code, i+2)
 		if !ok {
 			u.anyMethod = true
 			return
@@ -189,55 +279,44 @@ func (u *privateMemberUses) collectMethodVariable(tokens []parser.Token, name st
 	}
 }
 
-// boundOtherwise reports whether the variable at tokens[i] may get a value
-// other than by a plain assignment: as a parameter, a foreach target, a
-// reference, a global or static, or inside a destructuring.
-func boundOtherwise(tokens []parser.Token, i int) bool {
-	prev := parser.PrevSignificant(tokens, i-1)
-	if prev >= 0 {
-		p := tokens[prev]
-		if p.Kind == parser.TokenAmpersand || p.Kind == parser.TokenStatic || (p.Kind == parser.TokenIdentifier && (strings.EqualFold(p.Value, "as") || strings.EqualFold(p.Value, "global"))) {
-			return true
-		}
+// boundOtherwise reports whether the variable at code.tokens[i] may get a
+// value other than by a plain assignment: as a parameter, a foreach target,
+// a reference, a global or static, or inside a destructuring.
+func boundOtherwise(code codeTokens, i int) bool {
+	switch code.kind(i - 1) {
+	case token.Ampersand, token.AmpersandFollowedByVarOrVararg, token.AmpersandNotFollowedByVarOrVararg, token.As, token.Global, token.Static:
+		return true
 	}
-	open := enclosingOpen(tokens, i)
+	open := enclosingOpen(code, i)
 	if open < 0 {
 		return false
 	}
-	switch tokens[open].Kind {
-	case parser.TokenOpenBracket:
-		return significantAt(tokens, matchingClose(tokens, open)+1).Kind == parser.TokenEquals
-	case parser.TokenOpenParen:
-		before := parser.PrevSignificant(tokens, open-1)
-		if before < 0 {
-			return false
-		}
-		if strings.EqualFold(tokens[before].Value, "list") {
+	switch code.kind(open) {
+	case token.LeftBracket:
+		return code.kind(matchingClose(code, open)+1) == token.Equals
+	case token.LeftParen:
+		switch code.kind(open - 1) {
+		case token.List, token.Function, token.Fn, token.Use:
 			return true
 		}
-		if tokens[before].Kind == parser.TokenFunction || strings.EqualFold(tokens[before].Value, "fn") || tokens[before].Kind == parser.TokenUse {
-			return true
-		}
-		fn := parser.PrevSignificant(tokens, before-1)
-		return fn >= 0 && tokens[fn].Kind == parser.TokenFunction
+		return code.kind(open-2) == token.Function
 	}
 	return false
 }
 
-// enclosingOpen returns the `(` or `[` that the token at tokens[i] is inside,
-// or -1 when it isn't inside either.
-func enclosingOpen(tokens []parser.Token, i int) int {
+// enclosingOpen returns the `(` or `[` that code.tokens[i] is inside, or -1.
+func enclosingOpen(code codeTokens, i int) int {
 	depth := 0
 	for j := i - 1; j >= 0; j-- {
-		switch tokens[j].Kind {
-		case parser.TokenCloseParen, parser.TokenCloseBracket:
+		switch code.kind(j) {
+		case token.RightParen, token.RightBracket:
 			depth++
-		case parser.TokenOpenParen, parser.TokenOpenBracket:
+		case token.LeftParen, token.LeftBracket:
 			if depth == 0 {
 				return j
 			}
 			depth--
-		case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace:
+		case token.Semicolon, token.LeftBrace, token.RightBrace:
 			if depth == 0 {
 				return -1
 			}
@@ -246,170 +325,55 @@ func enclosingOpen(tokens []parser.Token, i int) int {
 	return -1
 }
 
-func matchingClose(tokens []parser.Token, open int) int {
+func matchingClose(code codeTokens, open int) int {
 	depth := 0
-	for i := open; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenOpenParen, parser.TokenOpenBracket:
+	for i := open; i < len(code.tokens); i++ {
+		switch code.kind(i) {
+		case token.LeftParen, token.LeftBracket:
 			depth++
-		case parser.TokenCloseParen, parser.TokenCloseBracket:
+		case token.RightParen, token.RightBracket:
 			depth--
 			if depth == 0 {
 				return i
 			}
 		}
 	}
-	return len(tokens)
+	return len(code.tokens)
 }
 
 // literalPrefix returns the literal start of the method name that starts at
-// tokens[at]: a whole literal, the literal before `.`, or the text before the
-// first variable of an interpolated string. ok is false when the name doesn't
-// start with a literal.
-func literalPrefix(tokens []parser.Token, at int) (string, bool) {
-	tok := tokenAt(tokens, at)
-	if tok.Kind != parser.TokenStringLiteral {
-		return "", false
-	}
-	if value, ok := plainStringLiteral(tok.Value); ok {
-		if endsName(tokens, at) || significantAt(tokens, at+1).Value == "." {
-			return value, value != ""
+// code.tokens[at]: a whole literal, the literal before `.`, or the text
+// before the first variable of an interpolated string. ok is false when the
+// name doesn't start with a literal.
+func literalPrefix(code codeTokens, at int) (string, bool) {
+	switch code.kind(at) {
+	case token.ConstantString:
+		value, ok := plainStringLiteral(code.text(at))
+		if !ok || value == "" || !endsName(code, at+1) && code.kind(at+1) != token.Dot {
+			return "", false
 		}
-		return "", false
+		return value, true
+	case token.DoubleQuote:
+		if code.kind(at+1) != token.EncapsedAndWhitespace {
+			return "", false
+		}
+		prefix := code.text(at + 1)
+		if prefix == "" || strings.ContainsRune(prefix, '\\') {
+			return "", false
+		}
+		return prefix, true
 	}
-	if !endsName(tokens, at) || len(tok.Value) < 2 || tok.Value[0] != '"' {
-		return "", false
-	}
-	body := tok.Value[1 : len(tok.Value)-1]
-	end := strings.IndexByte(body, '$')
-	if end <= 0 || strings.ContainsRune(body[:end], '\\') {
-		return "", false
-	}
-	return strings.TrimSuffix(body[:end], "{"), true
+	return "", false
 }
 
-// endsName reports whether the name at tokens[at] is all of it: what follows
-// closes the call's name, its argument or the statement.
-func endsName(tokens []parser.Token, at int) bool {
-	switch significantAt(tokens, at+1).Kind {
-	case parser.TokenOpenParen, parser.TokenCloseBrace, parser.TokenCloseBracket, parser.TokenCloseParen, parser.TokenComma, parser.TokenSemicolon:
+// endsName reports whether code.tokens[at] closes a call's name, its
+// argument or the statement.
+func endsName(code codeTokens, at int) bool {
+	switch code.kind(at) {
+	case token.LeftParen, token.RightBrace, token.RightBracket, token.RightParen, token.Comma, token.Semicolon:
 		return true
 	}
 	return false
-}
-
-// ownReceiver reports whether the access at tokens[arrow] is on $this.
-func ownReceiver(tokens []parser.Token, arrow int) bool {
-	before := parser.PrevSignificant(tokens, arrow-1)
-	if before >= 0 && tokens[before].Kind == parser.TokenQuestion {
-		before = parser.PrevSignificant(tokens, before-1)
-	}
-	if before < 0 || !isThis(tokens[before]) {
-		return false
-	}
-	prev := parser.PrevSignificant(tokens, before-1)
-	return prev < 0 || (tokens[prev].Kind != parser.TokenArrow && tokens[prev].Kind != parser.TokenDoubleColon)
-}
-
-// ownClassName reports whether tok names the class itself: self, static or
-// its own name.
-func (c *useCollector) ownClassName(tok parser.Token) bool {
-	if !isWordToken(tok) {
-		return false
-	}
-	name := tok.Value[strings.LastIndexByte(tok.Value, '\\')+1:]
-	return strings.EqualFold(name, "self") || strings.EqualFold(name, "static") || strings.EqualFold(name, c.class)
-}
-
-func nextSignificant(tokens []parser.Token, from int) int {
-	if i := parser.NextSignificant(tokens, from); i >= 0 {
-		return i
-	}
-	return len(tokens)
-}
-
-func tokenAt(tokens []parser.Token, i int) parser.Token {
-	if i < len(tokens) {
-		return tokens[i]
-	}
-	return parser.Token{Kind: parser.TokenEOF}
-}
-
-func significantAt(tokens []parser.Token, from int) parser.Token {
-	return tokenAt(tokens, nextSignificant(tokens, from))
-}
-
-func isWordToken(tok parser.Token) bool {
-	if tok.Kind == parser.TokenVariable || tok.Kind == parser.TokenNumber || tok.Value == "" {
-		return false
-	}
-	return parser.IsIdentByte(tok.Value[0])
-}
-
-func (c *useCollector) collectInstanceAccess(tokens []parser.Token, arrow int) {
-	u := c.u
-	at := nextSignificant(tokens, arrow+1)
-	name := tokenAt(tokens, at)
-	if isWordToken(name) {
-		u.methods[strings.ToLower(name.Value)] = true
-		u.properties[name.Value] = true
-		return
-	}
-	u.anyProperty = true
-	if !ownReceiver(tokens, arrow) {
-		return
-	}
-	switch {
-	case name.Kind == parser.TokenVariable && significantAt(tokens, at+1).Kind == parser.TokenOpenParen:
-		c.dynamicMethod(tokens, at)
-	case name.Kind == parser.TokenOpenBrace:
-		closing := matchingBrace(tokens, at)
-		if significantAt(tokens, closing+1).Kind == parser.TokenOpenParen {
-			c.dynamicMethod(tokens, nextSignificant(tokens, at+1))
-		}
-	}
-}
-
-func matchingBrace(tokens []parser.Token, open int) int {
-	depth := 0
-	for i := open; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenOpenBrace:
-			depth++
-		case parser.TokenCloseBrace:
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-	return len(tokens)
-}
-
-func (c *useCollector) collectStaticAccess(tokens []parser.Token, colons int) {
-	u := c.u
-	at := nextSignificant(tokens, colons+1)
-	name := tokenAt(tokens, at)
-	own := false
-	if class := parser.PrevSignificant(tokens, colons-1); class >= 0 {
-		own = c.ownClassName(tokens[class])
-	}
-	switch {
-	case isWordToken(name):
-		u.methods[strings.ToLower(name.Value)] = true
-		u.constants[name.Value] = true
-	case name.Kind == parser.TokenVariable && significantAt(tokens, at+1).Kind == parser.TokenOpenParen:
-		if own {
-			c.dynamicMethod(tokens, at)
-		}
-	case name.Kind == parser.TokenVariable:
-		u.properties[name.Value[1:]] = true
-	default:
-		u.anyProperty, u.anyConstant = true, true
-		if own {
-			u.anyMethod = true
-		}
-	}
 }
 
 func (u *privateMemberUses) collectLiteral(lit string) {
@@ -438,40 +402,28 @@ func isIdentifierName(s string) bool {
 	return true
 }
 
-func (c *useCollector) collectCall(tokens []parser.Token, i int) {
-	u := c.u
-	name := strings.ToLower(tokens[i].Value[strings.LastIndexByte(tokens[i].Value, '\\')+1:])
+func (u *privateMemberUses) collectCall(code codeTokens, i int) {
+	text := code.text(i)
+	name := strings.ToLower(text[strings.LastIndexByte(text, '\\')+1:])
 	switch {
-	case includes[name] && !isMemberName(tokens, i):
-		u.anyMethod, u.anyProperty, u.anyConstant = true, true, true
-	case name == "array":
-		if open := nextSignificant(tokens, i+1); tokenAt(tokens, open).Kind == parser.TokenOpenParen {
-			c.collectCallable(tokens, open)
-		} else if isArrayCastOfThis(tokens, i) {
-			u.anyProperty = true
-		}
-	case name == "foreach":
-		if isForeachOverThis(tokens, i) {
-			u.anyProperty = true
-		}
+	case name == "property_exists":
+		u.collectPropertyExists(code, i+1)
 	case propertyListings[name]:
-		if ownClassArgument(tokens, i+1) {
+		if ownClassArgument(code, i+1) {
 			u.anyProperty = true
 		}
 	case name == "get_class_methods":
-		if ownClassArgument(tokens, i+1) {
+		if ownClassArgument(code, i+1) {
 			u.anyMethod = true
 		}
 	case reflectionClasses[name]:
-		if isInstantiation(tokens, i) && ownClassArgument(tokens, i+1) {
+		if code.kind(i-1) == token.New && ownClassArgument(code, i+1) {
 			u.anyMethod, u.anyProperty, u.anyConstant = true, true, true
 		}
-	case name == "property_exists":
-		u.collectPropertyExists(tokens, nextSignificant(tokens, i+1))
 	case reflectiveConstantReads[name]:
 		u.anyConstant = true
 	case constantLookupFunctions[name]:
-		constant, lookup := constantLookupArgument(tokens, i+1)
+		constant, lookup := constantLookupArgument(code, i+1)
 		switch lookup {
 		case lookupComputed:
 			u.anyConstant = true
@@ -483,27 +435,26 @@ func (c *useCollector) collectCall(tokens []parser.Token, i int) {
 	}
 }
 
-func (u *privateMemberUses) collectPropertyExists(tokens []parser.Token, open int) {
-	if tokenAt(tokens, open).Kind != parser.TokenOpenParen {
+func (u *privateMemberUses) collectPropertyExists(code codeTokens, open int) {
+	if code.kind(open) != token.LeftParen {
 		return
 	}
 	depth := 0
-	for i := open + 1; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
+	for i := open + 1; i < len(code.tokens); i++ {
+		switch code.kind(i) {
+		case token.LeftParen, token.LeftBracket, token.LeftBrace:
 			depth++
-		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
+		case token.RightParen, token.RightBracket, token.RightBrace:
 			if depth == 0 {
 				return
 			}
 			depth--
-		case parser.TokenComma:
+		case token.Comma:
 			if depth > 0 {
 				continue
 			}
-			name := nextSignificant(tokens, i+1)
-			value, ok := plainStringLiteral(tokenAt(tokens, name).Value)
-			if after := significantAt(tokens, name+1).Kind; !ok || (after != parser.TokenCloseParen && after != parser.TokenComma) {
+			value, ok := plainStringLiteral(code.text(i + 1))
+			if after := code.kind(i + 2); code.kind(i+1) != token.ConstantString || !ok || (after != token.RightParen && after != token.Comma) {
 				u.anyProperty = true
 				return
 			}
@@ -513,106 +464,54 @@ func (u *privateMemberUses) collectPropertyExists(tokens []parser.Token, open in
 	}
 }
 
-func (c *useCollector) collectCallable(tokens []parser.Token, open int) {
-	target := nextSignificant(tokens, open+1)
-	comma := c.ownClassReferenceEnd(tokens, target)
-	if tokenAt(tokens, comma).Kind != parser.TokenComma {
+func (c *useCollector) collectCallable(code codeTokens, open int) {
+	target := open + 1
+	if kind := code.kind(target); kind != token.ClassConst && kind != token.Static && (code.isName(target) || kind == token.NameQualified || kind == token.NameFullyQualified) {
+		if !c.ownClassName(code, target) {
+			return
+		}
+	}
+	comma := classReferenceEnd(code, target)
+	if code.kind(comma) != token.Comma {
 		return
 	}
-	method := nextSignificant(tokens, comma+1)
-	if _, ok := plainStringLiteral(tokenAt(tokens, method).Value); ok && endsName(tokens, method) {
+	method := comma + 1
+	if _, ok := plainStringLiteral(code.text(method)); ok && code.kind(method) == token.ConstantString && endsName(code, method+1) {
 		return
 	}
-	c.dynamicMethod(tokens, method)
+	c.dynamicMethod(code, method)
 }
 
-// ownClassReferenceEnd returns where a reference to the class itself that
-// starts at tokens[target] ends: $this, __CLASS__, or self::class,
-// static::class or its own name with ::class. It's len(tokens) for anything
-// else.
-func (c *useCollector) ownClassReferenceEnd(tokens []parser.Token, target int) int {
-	tok := tokenAt(tokens, target)
-	if isWordToken(tok) && tok.Value != "__CLASS__" && !c.ownClassName(tok) {
-		return len(tokens)
+func classReferenceEnd(code codeTokens, target int) int {
+	switch kind := code.kind(target); {
+	case code.isThis(target), kind == token.ClassConst:
+		return target + 1
+	case !code.isName(target) && kind != token.NameQualified && kind != token.NameFullyQualified && kind != token.NameRelative:
+		return len(code.tokens)
 	}
-	return classReferenceEnd(tokens, target)
+	if code.kind(target+1) != token.DoubleColon || code.kind(target+2) != token.Class {
+		return len(code.tokens)
+	}
+	return target + 3
 }
 
-func classReferenceEnd(tokens []parser.Token, target int) int {
-	tok := tokenAt(tokens, target)
-	switch {
-	case isThis(tok), tok.Value == "__CLASS__":
-		return nextSignificant(tokens, target+1)
-	case !isWordToken(tok):
-		return len(tokens)
+func ownClassReferenceEnd(code codeTokens, target int) int {
+	if code.kind(target) == token.Identifier && !strings.EqualFold(code.text(target), "self") {
+		return len(code.tokens)
 	}
-	colons := nextSignificant(tokens, target+1)
-	class := nextSignificant(tokens, colons+1)
-	if tokenAt(tokens, colons).Kind != parser.TokenDoubleColon || tokenAt(tokens, class).Kind != parser.TokenClass {
-		return len(tokens)
+	if kind := code.kind(target); kind != token.Identifier && kind != token.Static && kind != token.Variable && kind != token.ClassConst {
+		return len(code.tokens)
 	}
-	return nextSignificant(tokens, class+1)
+	return classReferenceEnd(code, target)
 }
 
-func ownClassReferenceEnd(tokens []parser.Token, target int) int {
-	tok := tokenAt(tokens, target)
-	if isWordToken(tok) && !strings.EqualFold(tok.Value, "self") && !strings.EqualFold(tok.Value, "static") && tok.Value != "__CLASS__" {
-		return len(tokens)
-	}
-	return classReferenceEnd(tokens, target)
+func ownClassArgument(code codeTokens, open int) bool {
+	return code.kind(open) == token.LeftParen && code.kind(ownClassReferenceEnd(code, open+1)) == token.RightParen
 }
 
-func ownClassArgument(tokens []parser.Token, from int) bool {
-	open := nextSignificant(tokens, from)
-	if tokenAt(tokens, open).Kind != parser.TokenOpenParen {
-		return false
-	}
-	return tokenAt(tokens, ownClassReferenceEnd(tokens, nextSignificant(tokens, open+1))).Kind == parser.TokenCloseParen
-}
-
-func isInstantiation(tokens []parser.Token, class int) bool {
-	before := parser.PrevSignificant(tokens, class-1)
-	if before >= 0 && tokens[before].Kind == parser.TokenBackslash {
-		before = parser.PrevSignificant(tokens, before-1)
-	}
-	return before >= 0 && tokens[before].Kind == parser.TokenNew
-}
-
-func isArrayCastOfThis(tokens []parser.Token, array int) bool {
-	open := parser.PrevSignificant(tokens, array-1)
-	if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
-		return false
-	}
-	closing := nextSignificant(tokens, array+1)
-	if tokenAt(tokens, closing).Kind != parser.TokenCloseParen {
-		return false
-	}
-	this := nextSignificant(tokens, closing+1)
-	return isThis(tokenAt(tokens, this)) && !startsMemberAccess(tokens, nextSignificant(tokens, this+1))
-}
-
-func isForeachOverThis(tokens []parser.Token, foreach int) bool {
-	open := nextSignificant(tokens, foreach+1)
-	if tokenAt(tokens, open).Kind != parser.TokenOpenParen {
-		return false
-	}
-	this := nextSignificant(tokens, open+1)
-	as := significantAt(tokens, this+1)
-	return isThis(tokenAt(tokens, this)) && as.Kind == parser.TokenIdentifier && strings.EqualFold(as.Value, "as")
-}
-
-func isThis(tok parser.Token) bool {
-	return tok.Kind == parser.TokenVariable && tok.Value == "$this"
-}
-
-func startsMemberAccess(tokens []parser.Token, at int) bool {
-	switch tokenAt(tokens, at).Kind {
-	case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenOpenBracket:
-		return true
-	case parser.TokenQuestion:
-		return significantAt(tokens, at+1).Kind == parser.TokenArrow
-	}
-	return false
+func startsMemberAccess(code codeTokens, at int) bool {
+	kind := code.kind(at)
+	return isMemberAccess(kind) || kind == token.LeftBracket
 }
 
 type constantLookup int
@@ -623,17 +522,15 @@ const (
 	lookupLiteral
 )
 
-func constantLookupArgument(tokens []parser.Token, from int) (string, constantLookup) {
-	open := nextSignificant(tokens, from)
-	if tokenAt(tokens, open).Kind != parser.TokenOpenParen {
+func constantLookupArgument(code codeTokens, open int) (string, constantLookup) {
+	if code.kind(open) != token.LeftParen {
 		return "", lookupNotACall
 	}
-	arg := nextSignificant(tokens, open+1)
-	value, ok := plainStringLiteral(tokenAt(tokens, arg).Value)
-	if !ok {
+	value, ok := plainStringLiteral(code.text(open + 1))
+	if code.kind(open+1) != token.ConstantString || !ok {
 		return "", lookupComputed
 	}
-	if after := significantAt(tokens, arg+1).Kind; after != parser.TokenCloseParen && after != parser.TokenComma {
+	if after := code.kind(open + 2); after != token.RightParen && after != token.Comma {
 		return "", lookupComputed
 	}
 	return value, lookupLiteral
