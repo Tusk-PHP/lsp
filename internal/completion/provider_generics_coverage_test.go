@@ -133,3 +133,15 @@ $container->
 
 	t.Fatal("expected get completion item")
 }
+
+func TestStaticAccessOnAClassStringVariableCompletesTheClass(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///widget.php", "<?php\nnamespace App;\nclass Widget {\n    public static function make(): static { return new static(); }\n}\n")
+	p := NewProvider(idx, nil, "none")
+
+	source := "<?php\nnamespace App;\n/** @param class-string<Widget> $cls */\nfunction build(string $cls) {\n    $cls::\n}\n"
+	labels := collectLabels(p.GetCompletions("file:///build.php", source, protocol.Position{Line: 4, Character: 10}))
+	if !labels["make"] {
+		t.Errorf("$cls:: for a class-string<Widget> offers Widget's static methods, got %v", labels)
+	}
+}

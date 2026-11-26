@@ -436,3 +436,29 @@ func TestAssignmentValue(t *testing.T) {
 		}
 	}
 }
+
+func TestDelegatedChainsAnswerChainAssignments(t *testing.T) {
+	r, _, _, file, lines := setupGenericResolverCoverage(t)
+	r.DelegateTypedChains(func(expr, _ string, _ protocol.Position, _ *parser.FileNode) ResolvedType {
+		if expr == "Factory::make()" {
+			return ResolvedType{FQN: "App\\Collection", Params: []ResolvedType{{FQN: "int"}, {FQN: "App\\Logger"}}}
+		}
+		return ResolvedType{}
+	})
+	r.DelegateChains(func(expr, _ string, _ protocol.Position, _ *parser.FileNode) string {
+		if expr == "Factory::fallback()" {
+			return "App\\Logger"
+		}
+		return ""
+	})
+
+	for _, tc := range []struct{ name, needle, want string }{
+		{"$fromChain", "$fromChain =", "App\\Collection<int, App\\Logger>"},
+		{"$fromFallback", "$fromFallback =", "App\\Logger"},
+	} {
+		rt := r.ResolveVariableTypeTyped(tc.name, lines, protocol.Position{Line: lineContaining(t, lines, tc.needle)}, file)
+		if got := rt.String(); got != tc.want {
+			t.Errorf("%s = %q, want the delegate's %q", tc.name, got, tc.want)
+		}
+	}
+}

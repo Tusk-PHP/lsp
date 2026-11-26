@@ -911,3 +911,22 @@ class K {
 		}
 	}
 }
+
+func TestSetTypedChainResolverKeepsThePlainChainResolverInStep(t *testing.T) {
+	idx := symbols.NewIndex()
+	p := NewProvider(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"))
+	p.SetTypedChainResolver(func(expr, _ string, _ protocol.Position, _ *parser.FileNode) resolve.ResolvedType {
+		if expr == "$repo->all()" {
+			return resolve.ResolvedType{FQN: `App\Collection`, Params: []resolve.ResolvedType{{FQN: "int"}, {FQN: `App\Widget`}}}
+		}
+		return resolve.ResolvedType{}
+	})
+
+	r := p.engine.Resolver()
+	if got, want := p.engine.ChainResolver(r, "$repo->all()", "", protocol.Position{}, nil), `App\Collection<int, App\Widget>`; got != want {
+		t.Errorf("plain chain type = %q, want the typed one written out, %q", got, want)
+	}
+	if got := p.engine.ChainResolver(r, "$repo->none()", "", protocol.Position{}, nil); got != "" {
+		t.Errorf("a chain the typed resolver can't follow has no plain type either, got %q", got)
+	}
+}
