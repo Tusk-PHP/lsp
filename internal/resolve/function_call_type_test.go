@@ -65,3 +65,48 @@ foreach (orphans() as $stray) {
 		}
 	}
 }
+
+func TestForeachOverAFunctionCallTheExpressionTyperCannotRead(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///helpers.php", `<?php
+namespace App\Helpers;
+class Money {}
+/** @return Money[] */
+function monies(): array {}
+function plain(): array {}
+function nothing(): void {}
+`)
+	src := `<?php
+namespace App\Http;
+use function App\Helpers\monies;
+use function App\Helpers\plain;
+use function App\Helpers\nothing;
+
+foreach (monies() ?: [] as $money) {
+    echo $money;
+}
+foreach (plain() ?: [] as $nothing) {
+    echo $nothing;
+}
+foreach (nothing() ?: [] as $void) {
+    echo $void;
+}
+foreach (unknown() ?: [] as $unknown) {
+    echo $unknown;
+}
+`
+	file := parser.ParseFile(src)
+	lines := SplitLines(src)
+	r := NewResolver(idx)
+	for variable, want := range map[string]string{
+		"$money":   `App\Helpers\Money`,
+		"$nothing": "",
+		"$void":    "",
+		"$unknown": "",
+	} {
+		pos := protocol.Position{Line: lineContaining(t, lines, "echo "+variable)}
+		if got := r.ResolveVariableTypeTyped(variable, lines, pos, file).FullString(); got != want {
+			t.Errorf("foreach %s = %q, want %q", variable, got, want)
+		}
+	}
+}

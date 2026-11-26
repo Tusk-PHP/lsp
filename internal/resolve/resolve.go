@@ -1459,34 +1459,3 @@ func ParamDocSummary(file *parser.FileNode, pos protocol.Position, varName strin
 	}
 	return ""
 }
-
-func (r *Resolver) resolveFunctionCallReturnType(funcName string, file *parser.FileNode) ResolvedType {
-	fqns, _ := FunctionNames(funcName, file)
-	for _, fqn := range fqns {
-		if fn := declaredFunction(file, fqn); fn != nil {
-			return r.declaredReturnType(fn.DocComment, r.ResolveClassName(fn.ReturnType.Name, file), file)
-		}
-		if fn := r.Index.LookupFold(fqn, isFunction); fn != nil {
-			return r.declaredReturnType(fn.DocComment, fn.ReturnType, file)
-		}
-	}
-	return ResolvedType{}
-}
-
-func declaredFunction(file *parser.FileNode, fqn string) *parser.FunctionNode {
-	for i := range file.Functions {
-		if strings.EqualFold(file.Functions[i].FullName, fqn) {
-			return &file.Functions[i]
-		}
-	}
-	return nil
-}
-
-func (r *Resolver) declaredReturnType(docComment, returnType string, file *parser.FileNode) ResolvedType {
-	if doc := parser.ParseDocBlock(docComment); doc != nil && doc.Return.Type != "" {
-		if rt := r.resolveDocType(doc.Return.Type, file); !rt.IsEmpty() {
-			return rt
-		}
-	}
-	return ResolvedType{FQN: returnType}
-}
