@@ -83,3 +83,14 @@ class User { public string $email; public int $age; }
 		t.Errorf("toArray() on a User gives the User's properties, got %v", got)
 	}
 }
+
+func TestArrayKeysFromAFunctionWithoutAShapeWithAFrameworkResolver(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///app/helpers.php", "<?php\nnamespace App;\nfunction rows(): array {}\n")
+	p := NewProvider(idx, nil, "laravel")
+	p.SetArrayResolver(models.NewFrameworkArrayResolver(idx, "/project", "laravel"))
+	source := "<?php\nnamespace App;\nfunction show() {\n    $data = rows();\n    $data['"
+	if got := arrayKeyLabels(t, p, source, "$data['"); len(got) != 0 {
+		t.Errorf("a function returning a plain array has no keys to offer, got %v", got)
+	}
+}
