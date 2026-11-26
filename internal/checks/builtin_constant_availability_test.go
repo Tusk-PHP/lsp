@@ -61,3 +61,22 @@ func TestBuiltinUnavailableIgnoresAConstantTheProjectDeclares(t *testing.T) {
 		t.Errorf("a constant the project declares itself, as a polyfill does, is not reported: got %v, want %v", got, want)
 	}
 }
+
+func TestBuiltinUnavailableReportsConstantsWithoutAnIndex(t *testing.T) {
+	source := "<?php\n$id = T_MATCH;\n"
+	var got []string
+	for _, f := range (&BuiltinUnavailableRule{PHPVersion: "7.4"}).Check(parser.ParseFile(source, token.Latest), source, nil) {
+		got = append(got, f.Message)
+	}
+	if want := []string{"Constant 'T_MATCH' requires PHP >= 8.0"}; !slices.Equal(got, want) {
+		t.Errorf("with no index to find a project's own declaration, the constant is reported: got %v, want %v", got, want)
+	}
+}
+
+func TestBuiltinUnavailableOnlyTrustsDefinedCalledWithALiteralName(t *testing.T) {
+	source := "<?php\n$name = 'T_MATCH';\nif (defined($name) && $flags->defined) {\n    $id = T_MATCH;\n}\n"
+	got := unavailableConstantMessages(t, "7.4", source)
+	if want := []string{"Constant 'T_MATCH' requires PHP >= 8.0"}; !slices.Equal(got, want) {
+		t.Errorf("defined() of a variable, and a property named defined, guard nothing: got %v, want %v", got, want)
+	}
+}
