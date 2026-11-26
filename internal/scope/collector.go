@@ -34,12 +34,13 @@ const (
 )
 
 type Scope struct {
-	Kind     ScopeKind
-	Name     string
-	Range    textpos.Range
-	ExprBody bool
-	Parent   *Scope
-	Bindings []*Binding
+	Kind                    ScopeKind
+	Name                    string
+	Range                   textpos.Range
+	ExprBody                bool
+	AccessesVariablesByName bool
+	Parent                  *Scope
+	Bindings                []*Binding
 }
 
 type Binding struct {
@@ -111,6 +112,7 @@ type Document struct {
 	// variables: declarations, and static accesses such as `self::$name`.
 	Properties []textpos.Range
 	root       *Scope
+	braced     map[textpos.Range]bool
 	// The control flow ReachingWrites reads, in the order it appears.
 	blocks []block
 	jumps  []flowMark
@@ -302,9 +304,7 @@ func (c *Collector) collect(t *tokens) *Document {
 		}
 
 		for ; nextString < len(t.strings) && t.strings[nextString].literal == i; nextString++ {
-			if binding := resolveVariable(active, t.strings[nextString].name); binding != nil {
-				binding.References = append(binding.References, t.strings[nextString].at)
-			}
+			doc.addStringVariable(active, t.strings[nextString])
 		}
 
 		if kind == token.Variable {
@@ -425,7 +425,19 @@ func (d *Document) ScopeAt(pos textpos.Position) *Scope {
 	return best
 }
 
-func (d *Document) Occurrences(binding *Binding) []textpos.Range {
+type Occurrence struct {
+	Range  textpos.Range
+	Braced bool
+}
+
+func (o Occurrence) Spelling(name string) string {
+	if o.Braced {
+		return strings.TrimPrefix(name, "$")
+	}
+	return name
+}
+
+func (d *Document) Occurrences(binding *Binding) []Occurrence {
 	if binding == nil {
 		return nil
 	}
@@ -439,7 +451,12 @@ func (d *Document) Occurrences(binding *Binding) []textpos.Range {
 		ranges = append(ranges, candidate.References...)
 		ranges = append(ranges, candidate.Writes...)
 	}
-	return dedupeRanges(ranges)
+	ranges = dedupeRanges(ranges)
+	occurrences := make([]Occurrence, len(ranges))
+	for i, rng := range ranges {
+		occurrences[i] = Occurrence{Range: rng, Braced: d.braced[rng]}
+	}
+	return occurrences
 }
 
 func (b *Binding) root() *Binding {
@@ -467,6 +484,33 @@ func (d *Document) addBinding(scope *Scope, name string, kind BindingKind, decl 
 	scope.Bindings = append(scope.Bindings, binding)
 	d.Bindings = append(d.Bindings, binding)
 	return binding
+}
+
+func (d *Document) addStringVariable(active []scopeFrame, v stringVariable) {
+	if v.form == stringComputedName {
+		variableScope(active).AccessesVariablesByName = true
+		return
+	}
+	binding := resolveVariable(active, v.name)
+	if binding == nil {
+		return
+	}
+	binding.References = append(binding.References, v.at)
+	if v.form != stringBracedName {
+		return
+	}
+	if d.braced == nil {
+		d.braced = map[textpos.Range]bool{}
+	}
+	d.braced[v.at] = true
+}
+
+func variableScope(active []scopeFrame) *Scope {
+	s := active[len(active)-1].scope
+	for s.ExprBody {
+		s = s.Parent
+	}
+	return s
 }
 
 func resolveVariable(active []scopeFrame, name string) *Binding {

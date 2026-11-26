@@ -21,9 +21,18 @@ type tokens struct {
 
 type stringVariable struct {
 	literal int
+	form    stringForm
 	name    string
 	at      textpos.Range
 }
+
+type stringForm uint8
+
+const (
+	stringVariableName stringForm = iota
+	stringBracedName
+	stringComputedName
+)
 
 func lexTokens(src string) *tokens {
 	all := lexer.Lex(src, token.Latest)
@@ -38,11 +47,7 @@ func lexTokens(src string) *tokens {
 		}
 		if lexer.OpensLiteral(tok.Kind) {
 			end := lexer.LiteralEnd(all, i)
-			for _, inner := range all[i+1 : end+1] {
-				if inner.Kind == token.Variable {
-					t.strings = append(t.strings, stringVariable{literal: len(t.list), name: inner.Text(src), at: t.rangeOf(inner)})
-				}
-			}
+			t.addStringVariables(all[i+1:end+1], len(t.list))
 			tok.End = all[end].End
 			i = end
 		}
@@ -55,6 +60,22 @@ func lexTokens(src string) *tokens {
 		t.ranges[i] = t.rangeOf(tok)
 	}
 	return t
+}
+
+func (t *tokens) addStringVariables(inner []lexer.Token, literal int) {
+	for j := 0; j < len(inner); j++ {
+		switch inner[j].Kind {
+		case token.Variable:
+			t.strings = append(t.strings, stringVariable{literal: literal, form: stringVariableName, name: inner[j].Text(t.src), at: t.rangeOf(inner[j])})
+		case token.DollarOpenCurlyBraces:
+			if j+1 == len(inner) || inner[j+1].Kind != token.StringVarname {
+				t.strings = append(t.strings, stringVariable{literal: literal, form: stringComputedName})
+				continue
+			}
+			j++
+			t.strings = append(t.strings, stringVariable{literal: literal, form: stringBracedName, name: "$" + inner[j].Text(t.src), at: t.rangeOf(inner[j])})
+		}
+	}
 }
 
 func (t *tokens) position(offset uint32) textpos.Position {

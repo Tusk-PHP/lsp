@@ -824,8 +824,8 @@ func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Posit
 		return nil
 	}
 	var locs []protocol.Location
-	for _, rng := range doc.Occurrences(binding) {
-		locs = append(locs, protocol.Location{URI: uri, Range: rng})
+	for _, occurrence := range doc.Occurrences(binding) {
+		locs = append(locs, protocol.Location{URI: uri, Range: occurrence.Range})
 	}
 	return locs
 }
@@ -890,14 +890,14 @@ func highlightVariableOccurrences(source string, pos protocol.Position, varName 
 	if binding == nil || binding.Name != varName {
 		return nil
 	}
-	ranges := doc.Occurrences(binding)
-	highlights := make([]protocol.DocumentHighlight, 0, len(ranges))
-	for _, rng := range ranges {
+	occurrences := doc.Occurrences(binding)
+	highlights := make([]protocol.DocumentHighlight, 0, len(occurrences))
+	for _, occurrence := range occurrences {
 		kind := protocol.DocumentHighlightKindRead
-		if sameRange(rng, binding.Decl) {
+		if sameRange(occurrence.Range, binding.Decl) {
 			kind = protocol.DocumentHighlightKindWrite
 		}
-		highlights = append(highlights, protocol.DocumentHighlight{Range: rng, Kind: kind})
+		highlights = append(highlights, protocol.DocumentHighlight{Range: occurrence.Range, Kind: kind})
 	}
 	return deduplicateHighlights(highlights)
 }
@@ -1448,8 +1448,8 @@ func (a *Analyzer) renameVariable(uri, source string, pos protocol.Position, old
 	}
 
 	var edits []protocol.TextEdit
-	for _, rng := range doc.Occurrences(binding) {
-		edits = append(edits, protocol.TextEdit{Range: rng, NewText: newName})
+	for _, occurrence := range doc.Occurrences(binding) {
+		edits = append(edits, protocol.TextEdit{Range: occurrence.Range, NewText: occurrence.Spelling(newName)})
 	}
 
 	if len(edits) == 0 {

@@ -53,11 +53,12 @@ func TestInterpolatedVariablesAreReadFromTheLexer(t *testing.T) {
 	if n == nil {
 		t.Fatal("no binding for $n")
 	}
-	want := []textpos.Range{
-		{Start: at(t, source, "$n, $m"), End: textpos.Position{Line: 1, Character: 15}},
-		{Start: textpos.Position{Line: 2, Character: 12}, End: textpos.Position{Line: 2, Character: 14}},
-		{Start: textpos.Position{Line: 2, Character: 33}, End: textpos.Position{Line: 2, Character: 35}},
-		{Start: at(t, source, "$n`"), End: textpos.Position{Line: 2, Character: 52}},
+	want := []Occurrence{
+		{Range: textpos.Range{Start: at(t, source, "$n, $m"), End: textpos.Position{Line: 1, Character: 15}}},
+		{Range: textpos.Range{Start: textpos.Position{Line: 2, Character: 12}, End: textpos.Position{Line: 2, Character: 14}}},
+		{Range: textpos.Range{Start: textpos.Position{Line: 2, Character: 33}, End: textpos.Position{Line: 2, Character: 35}}},
+		{Range: textpos.Range{Start: textpos.Position{Line: 2, Character: 40}, End: textpos.Position{Line: 2, Character: 41}}, Braced: true},
+		{Range: textpos.Range{Start: at(t, source, "$n`"), End: textpos.Position{Line: 2, Character: 52}}},
 	}
 	got := doc.Occurrences(n)
 	if len(got) != len(want) {

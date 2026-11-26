@@ -303,7 +303,7 @@ class C {
 		t.Fatal("expected a binding for the local $builder")
 	}
 	// Its declaration and the constructor argument on line 4, nothing after `::`.
-	if got := doc.Occurrences(builder); len(got) != 2 || got[1].Start != (textpos.Position{Line: 4, Character: 34}) {
+	if got := doc.Occurrences(builder); len(got) != 2 || got[1].Range.Start != (textpos.Position{Line: 4, Character: 34}) {
 		t.Fatalf("local $builder occurrences = %+v", got)
 	}
 	if got := len(doc.Properties); got != 7 {
@@ -521,12 +521,13 @@ func TestCollectReadsVariablesInsideInterpolatedStrings(t *testing.T) {
 	if binding == nil {
 		t.Fatal("expected parameter binding at $n")
 	}
-	want := []textpos.Range{
-		{Start: textpos.Position{Line: 1, Character: 13}, End: textpos.Position{Line: 1, Character: 15}},
-		{Start: textpos.Position{Line: 2, Character: 12}, End: textpos.Position{Line: 2, Character: 14}},
-		{Start: textpos.Position{Line: 2, Character: 21}, End: textpos.Position{Line: 2, Character: 23}},
-		{Start: textpos.Position{Line: 2, Character: 44}, End: textpos.Position{Line: 2, Character: 46}},
-		{Start: textpos.Position{Line: 3, Character: 4}, End: textpos.Position{Line: 3, Character: 6}},
+	want := []Occurrence{
+		{Range: textpos.Range{Start: textpos.Position{Line: 1, Character: 13}, End: textpos.Position{Line: 1, Character: 15}}},
+		{Range: textpos.Range{Start: textpos.Position{Line: 2, Character: 12}, End: textpos.Position{Line: 2, Character: 14}}},
+		{Range: textpos.Range{Start: textpos.Position{Line: 2, Character: 21}, End: textpos.Position{Line: 2, Character: 23}}},
+		{Range: textpos.Range{Start: textpos.Position{Line: 2, Character: 34}, End: textpos.Position{Line: 2, Character: 35}}, Braced: true},
+		{Range: textpos.Range{Start: textpos.Position{Line: 2, Character: 44}, End: textpos.Position{Line: 2, Character: 46}}},
+		{Range: textpos.Range{Start: textpos.Position{Line: 3, Character: 4}, End: textpos.Position{Line: 3, Character: 6}}},
 	}
 	got := doc.Occurrences(binding)
 	if len(got) != len(want) {

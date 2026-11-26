@@ -407,6 +407,13 @@ func TestUnusedVariableCountsComparisonAsRead(t *testing.T) {
 	}
 }
 
+func TestUnusedVariableCountsBracedNameInStringAsRead(t *testing.T) {
+	source := "<?php\nfunction f() {\n    $x = 1;\n    return \"${x}\";\n}\n"
+	if findings := checkUnusedVariables(source, nil); len(findings) != 0 {
+		t.Errorf("unexpected findings: %+v", findings)
+	}
+}
+
 func TestUndefinedVariableNotFlagged(t *testing.T) {
 	cases := map[string]string{
 		"array key on write":        "function f($a) { $k = 1; $a[$k] = 2; $this->h[$k] = 3; return $a; }",
