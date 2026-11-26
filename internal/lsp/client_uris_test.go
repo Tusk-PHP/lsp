@@ -106,3 +106,41 @@ func TestRespellReplacesOnlyWholeURIs(t *testing.T) {
 		t.Errorf("a forgotten document is sent as is: %s", got)
 	}
 }
+
+func TestClosingADocumentOpenedUnderAnotherSpellingLeavesOnlyTheDiskText(t *testing.T) {
+	h, root := startWatchedProjectIn(t, filepath.Join(t.TempDir(), "team@shop"), map[string]string{
+		"composer.json":   `{"require": {"php": "^8.1"}}`,
+		"app/Invoice.php": "<?php\nnamespace App;\nclass Invoice {}\n",
+	}, map[string]interface{}{}, nil)
+	<-h.server.indexed
+	canonical := symbols.PathToURI(filepath.Join(root, "app/Invoice.php"))
+	client := strings.Replace(canonical, "team@shop", "team%40shop", 1)
+	if client == canonical {
+		t.Fatal("the client spells the URI differently")
+	}
+	openDocument(h, client, "<?php\nnamespace App;\nclass Invoice {}\nclass EditedInEditor {}\n")
+	waitForSymbols(t, h, "EditedInEditor", func(names []string) bool { return len(names) == 1 })
+
+	h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": client}})
+	waitForSymbols(t, h, "EditedInEditor", func(names []string) bool { return len(names) == 0 })
+	var indexed []string
+	for _, uri := range h.server.index.GetAllFileURIs() {
+		if strings.HasSuffix(uri, "/app/Invoice.php") {
+			indexed = append(indexed, uri)
+		}
+	}
+	if len(indexed) != 1 || indexed[0] != canonical {
+		t.Errorf("the closed file is indexed once, under its canonical URI %s: %v", canonical, indexed)
+	}
+}
+
+func TestADocumentThatIsNotAFileLeavesTheIndexWhenClosed(t *testing.T) {
+	h, _ := startWatchedProject(t, map[string]string{"composer.json": `{"require": {"php": "^8.1"}}`}, map[string]interface{}{}, nil)
+	<-h.server.indexed
+	uri := "untitled:Scratch.php"
+	openDocument(h, uri, "<?php\nclass Scratchpad {}\n")
+	waitForSymbols(t, h, "Scratchpad", func(names []string) bool { return len(names) == 1 })
+
+	h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": uri}})
+	waitForSymbols(t, h, "Scratchpad", func(names []string) bool { return len(names) == 0 })
+}

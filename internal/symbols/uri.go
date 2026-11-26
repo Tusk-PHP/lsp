@@ -25,8 +25,12 @@ func CanonicalURI(uri string) string {
 	return canonicalURI(uri, hostWindows)
 }
 
+func IsFileURI(uri string) bool {
+	return strings.HasPrefix(uri, "file:")
+}
+
 func canonicalURI(uri string, windows bool) string {
-	if !strings.HasPrefix(uri, "file:") {
+	if !IsFileURI(uri) {
 		return uri
 	}
 	return slashPathToURI(uriSlashPath(uri, windows))
