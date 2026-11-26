@@ -12,34 +12,6 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-// Builder method categories — mirrors the lists in completion/columns.go.
-var builderColumnMethods = map[string]bool{
-	"where": true, "whereIn": true, "whereNotIn": true,
-	"whereNull": true, "whereNotNull": true,
-	"whereBetween": true, "whereNotBetween": true,
-	"whereDate": true, "whereMonth": true, "whereDay": true,
-	"whereYear": true, "whereTime": true, "whereColumn": true,
-	"orderBy": true, "orderByDesc": true,
-	"latest": true, "oldest": true,
-	"groupBy": true, "having": true,
-	"select": true, "addSelect": true,
-	"pluck": true, "value": true,
-	"increment": true, "decrement": true,
-}
-
-var builderDBColumnMethods = map[string]bool{
-	"get": true,
-}
-
-var builderRelationMethods = map[string]bool{
-	"with": true, "without": true,
-	"has": true, "doesntHave": true,
-	"whereHas": true, "whereDoesntHave": true,
-	"withCount": true, "withSum": true, "withAvg": true,
-	"withMin": true, "withMax": true, "withExists": true,
-	"load": true, "loadMissing": true, "loadCount": true,
-}
-
 // ModelResolverFunc gives the Eloquent model a builder call is made on, from
 // the call's receiver node in file: the class of `Post::where(`, or the
 // builder or model `$query->where(` is called on. Its FQN is "" when the
@@ -61,20 +33,6 @@ type MemberChecker interface {
 	// KnowsRelations reports whether every class and trait the model is made
 	// of is indexed, so a relation method missing from it really is missing.
 	KnowsRelations(modelFQN string) bool
-}
-
-// aliasColumnMethods take a name that may be an alias from the select list
-// (`selectRaw('count(*) as total')->orderBy('total')`, `withCount('posts')`
-// then `having('posts_count', ...)`) rather than a column, which the rule
-// can't tell apart, so their arguments are not checked.
-var aliasColumnMethods = map[string]bool{
-	"orderBy": true, "orderByDesc": true, "latest": true, "oldest": true,
-	"groupBy": true, "having": true,
-}
-
-// Aggregate relation methods where the second arg is a column on the related model.
-var aggregateRelationMethods = map[string]bool{
-	"withSum": true, "withAvg": true, "withMin": true, "withMax": true,
 }
 
 // InvalidBuilderArgRule detects string arguments in Builder method calls that
@@ -100,8 +58,7 @@ func (r *InvalidBuilderArgRule) Check(file *parser.FileNode, source string, _ *s
 		if !m.call() || len(m.args.Args) == 0 {
 			continue
 		}
-		method := syntax.text(m.name)
-		if builderRelationMethods[method] || builderColumnMethods[method] || builderDBColumnMethods[method] {
+		if method, ok := frameworklaravel.BuilderMethodNamed(syntax.text(m.name)); ok && !method.MayNameAlias {
 			findings = append(findings, r.checkCall(syntax, m, method, file, joins)...)
 		}
 	}
@@ -122,7 +79,7 @@ func (j *builderJoins) mayBeJoined(line, col int) bool {
 	return frameworklaravel.BuilderMayBeJoined(j.tokens, j.doc, line, col)
 }
 
-func (r *InvalidBuilderArgRule) checkCall(syntax *fileSyntax, call memberReference, method string, file *parser.FileNode, joins *builderJoins) []Finding {
+func (r *InvalidBuilderArgRule) checkCall(syntax *fileSyntax, call memberReference, method frameworklaravel.BuilderMethod, file *parser.FileNode, joins *builderJoins) []Finding {
 	lineNum := syntax.line(call.name)
 	owner := call.owner
 	at := builderCall{line: lineNum, owner: owner}
@@ -141,10 +98,10 @@ func (r *InvalidBuilderArgRule) checkCall(syntax *fileSyntax, call memberReferen
 	args := call.args.Args
 	first := args[0].Value
 	if relation, ok := syntax.stringLiteral(first); ok && onNameLine(first) {
-		if len(args) > 1 && aggregateRelationMethods[method] {
+		if len(args) > 1 && method.RelatedModelColumn {
 			if column, ok := syntax.stringLiteral(args[1].Value); ok && onNameLine(args[1].Value) {
 				startCol, endCol := syntax.stringContent(args[1].Value)
-				add(r.validateAggregateSecondArg(method, relation, column, lineNum, startCol, endCol, owner, file))
+				add(r.validateAggregateSecondArg(relation, column, lineNum, startCol, endCol, owner, file))
 			}
 		}
 		startCol, endCol := syntax.stringContent(first)
@@ -152,17 +109,29 @@ func (r *InvalidBuilderArgRule) checkCall(syntax *fileSyntax, call memberReferen
 	}
 	if array, ok := first.(*ast.Array); ok && onNameLine(array) {
 		for _, item := range array.Items {
-			name := item.Key
+			name := arrayItemName(item, method)
 			if name == nil {
-				name = item.Value
+				continue
 			}
 			if value, ok := syntax.stringLiteral(name); ok {
 				startCol, endCol := syntax.stringContent(name)
-				add(r.validateArg(method, stripAlias(value), at, startCol, endCol, file, joins))
+				add(r.validateArg(method, frameworklaravel.WithoutAlias(value), at, startCol, endCol, file, joins))
 			}
 		}
 	}
 	return findings
+}
+
+func arrayItemName(item *ast.ArrayItem, method frameworklaravel.BuilderMethod) ast.Expr {
+	switch {
+	case item == nil:
+		return nil
+	case item.Key != nil && method.NamesKeys():
+		return item.Key
+	case item.Key == nil && method.NamesValues():
+		return item.Value
+	}
+	return nil
 }
 
 // isPlainName reports whether s is a bare column or relation name. Anything
@@ -183,7 +152,7 @@ func isPlainName(s string) bool {
 
 // validateAggregateSecondArg validates the second argument of aggregate methods
 // like withSum('relation', 'column') — the column must exist on the related model.
-func (r *InvalidBuilderArgRule) validateAggregateSecondArg(method, relationName, columnName string, lineNum, startCol, endCol int, owner ast.Expr, file *parser.FileNode) *Finding {
+func (r *InvalidBuilderArgRule) validateAggregateSecondArg(relationName, columnName string, lineNum, startCol, endCol int, owner ast.Expr, file *parser.FileNode) *Finding {
 	if !isPlainName(columnName) || relationName == "" {
 		return nil
 	}
@@ -194,7 +163,7 @@ func (r *InvalidBuilderArgRule) validateAggregateSecondArg(method, relationName,
 	}
 
 	// Resolve the related model from the relation
-	relatedFQN := r.Members.RelatedModelFQN(modelFQN, stripAlias(relationName))
+	relatedFQN := r.Members.RelatedModelFQN(modelFQN, frameworklaravel.WithoutAlias(relationName))
 	if relatedFQN == "" {
 		return nil // can't determine related model — skip
 	}
@@ -220,23 +189,15 @@ type builderCall struct {
 	owner        ast.Expr
 }
 
-func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builderCall, startCol, endCol int, file *parser.FileNode, joins *builderJoins) *Finding {
+func (r *InvalidBuilderArgRule) validateArg(method frameworklaravel.BuilderMethod, argValue string, call builderCall, startCol, endCol int, file *parser.FileNode, joins *builderJoins) *Finding {
 	if argValue == "" {
 		return nil
 	}
 
 	// Strip " as alias" (e.g., "products as product_count")
-	argValue = stripAlias(argValue)
+	argValue = frameworklaravel.WithoutAlias(argValue)
 
-	// For dot-notation in column methods (e.g., orderBy('relation.column')),
-	// skip validation — it requires join context we don't have.
-	isRelMethod := builderRelationMethods[method]
-	isColMethod := builderColumnMethods[method]
-	isDBColMethod := builderDBColumnMethods[method]
-
-	if !isRelMethod && !isColMethod && !isDBColMethod || aliasColumnMethods[method] {
-		return nil
-	}
+	isRelMethod := method.Names == frameworklaravel.BuilderRelations
 
 	// For dot-notation, validate the first segment only
 	segments := strings.SplitN(argValue, ".", 2)
@@ -247,11 +208,6 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 		return nil
 	}
 
-	// Handle closure-based array syntax: 'products' => function($q) {...}
-	// The regex captures 'products' before '=>', strip anything after =>
-	if idx := strings.Index(checkName, " =>"); idx >= 0 {
-		checkName = checkName[:idx]
-	}
 	// `with('posts:id,title')` loads only those columns of the relation.
 	if isRelMethod {
 		if idx := strings.IndexByte(checkName, ':'); idx >= 0 {
@@ -278,12 +234,12 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 			short := shortName(modelFQN)
 			msg = fmt.Sprintf("Unknown relation '%s' on model '%s'", checkName, short)
 		}
-	} else if isDBColMethod {
+	} else if method.Names == frameworklaravel.BuilderDBColumns {
 		if !r.Members.IsDBColumn(modelFQN, checkName) {
 			short := shortName(modelFQN)
 			msg = fmt.Sprintf("Unknown column '%s' on model '%s'", checkName, short)
 		}
-	} else if isColMethod {
+	} else {
 		if !r.Members.IsColumn(modelFQN, checkName) {
 			short := shortName(modelFQN)
 			msg = fmt.Sprintf("Unknown column '%s' on model '%s'", checkName, short)
@@ -311,14 +267,6 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 		Code:      code,
 		Message:   msg,
 	}
-}
-
-// stripAlias removes " as alias" from a string (e.g., "products as cnt" → "products").
-func stripAlias(s string) string {
-	if idx := strings.Index(s, " as "); idx >= 0 {
-		return s[:idx]
-	}
-	return s
 }
 
 func shortName(fqn string) string {

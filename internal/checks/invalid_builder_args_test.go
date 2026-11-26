@@ -396,3 +396,34 @@ $s = "Category::where('quoted')";
 		t.Errorf("got\n%s", strings.Join(got, "\n"))
 	}
 }
+
+func TestInvalidBuilderArgReadsArraysAsLaravelDoes(t *testing.T) {
+	checker := setupBuilderArgRule()
+	tests := []struct {
+		name string
+		code string
+		want []string
+	}{
+		{name: "where keys are columns", code: "Category::where(['nonexistent' => 1, 'name' => 2]);", want: []string{"unknown-column"}},
+		{name: "where values are not columns", code: "Category::where(['nonexistent']);"},
+		{name: "select values are columns", code: "Category::select(['name', 'nonexistent']);", want: []string{"unknown-column"}},
+		{name: "select keys are subquery aliases", code: "Category::select(['latest_price' => Product::select('price')]);"},
+		{name: "with keys and values are relations", code: "Category::with(['nonexistent' => fn ($q) => $q, 'missing']);", want: []string{"unknown-relation", "unknown-relation"}},
+		{name: "without values are relations", code: "Category::without(['nonexistent']);", want: []string{"unknown-relation"}},
+		{name: "without keys are not", code: "Category::without(['nonexistent' => 1]);"},
+		{name: "an empty slot", code: "Category::select(['name', , 'nonexistent']);", want: []string{"unknown-column"}},
+		{name: "pluck takes no array of columns", code: "Category::pluck(['nonexistent']);"},
+		{name: "whereIn takes its values in the array", code: "Category::whereIn(['nonexistent']);"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			source := "<?php\nuse App\\Models\\Category;\n" + tt.code + "\n"
+			findings := checker.Check(parser.ParseFile(source, token.Latest), source, nil)
+			if tt.want == nil {
+				assertNoFindings(t, findings)
+				return
+			}
+			assertFindingCodes(t, findings, tt.want)
+		})
+	}
+}

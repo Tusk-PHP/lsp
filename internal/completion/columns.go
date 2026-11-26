@@ -13,73 +13,21 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-// Builder methods whose first string argument is a column name.
-// These suggest all model properties (declared, virtual, migration-derived, etc.)
-// except relations and accessors.
-var columnMethods = map[string]bool{
-	"where": true, "whereIn": true, "whereNotIn": true,
-	"whereNull": true, "whereNotNull": true,
-	"whereBetween": true, "whereNotBetween": true,
-	"whereDate": true, "whereMonth": true, "whereDay": true,
-	"whereYear": true, "whereTime": true, "whereColumn": true,
-	"orderBy": true, "orderByDesc": true,
-	"latest": true, "oldest": true,
-	"groupBy": true, "having": true,
-	"select": true, "addSelect": true,
-	"pluck": true, "value": true,
-	"increment": true, "decrement": true,
-}
-
-// Builder methods that only accept actual database column names (from
-// migrations, database introspection, IDE helper @property, or Doctrine).
-// These are stricter than columnMethods — they exclude declared PHP properties
-// and accessors since those aren't real DB columns.
-var dbColumnMethods = map[string]bool{
-	"get": true,
-}
-
-// Builder methods whose first string argument is a relation name.
-var relationMethods = map[string]bool{
-	"with": true, "without": true,
-	"has": true, "doesntHave": true,
-	"whereHas": true, "whereDoesntHave": true,
-	"withCount": true, "withSum": true, "withAvg": true,
-	"withMin": true, "withMax": true, "withExists": true,
-	"load": true, "loadMissing": true, "loadCount": true,
-}
-
-// Methods that accept arrays of column/relation names as elements.
-// Methods NOT in this set (e.g. where) use associative array syntax
-// and should not trigger completion inside array arguments.
-var arrayArgMethods = map[string]bool{
-	// Column arrays
-	"select": true, "addSelect": true, "get": true,
-	"groupBy": true, "whereNull": true, "whereNotNull": true,
-	// Relation arrays
-	"with": true, "without": true,
-	"withCount": true, "withSum": true, "withAvg": true,
-	"withMin": true, "withMax": true, "withExists": true,
-	"load": true, "loadMissing": true, "loadCount": true,
-}
-
-// Relation return type FQN fragments used to identify relation methods on models.
-var relationReturnTypes = map[string]bool{
-	"HasOne": true, "HasMany": true,
-	"BelongsTo": true, "BelongsToMany": true,
-	"MorphOne": true, "MorphMany": true,
-	"MorphTo": true, "MorphToMany": true, "MorphedByMany": true,
-	"HasOneThrough": true, "HasManyThrough": true,
-}
-
 func isBuilderArg(arg sourcectx.CallArg) bool {
-	m := arg.Method
-	if m == "" || arg.Index != 0 || arg.Value == sourcectx.ArgName {
+	if arg.Method == "" || arg.Value == sourcectx.ArgName {
 		return false
 	}
-	if !columnMethods[m] && !relationMethods[m] && !dbColumnMethods[m] {
+	method, ok := frameworklaravel.BuilderMethodNamed(arg.Method)
+	if !ok {
 		return false
 	}
-	return !arg.InArray || arrayArgMethods[m]
+	switch {
+	case arg.Index == 1:
+		return method.RelatedModelColumn && !arg.InArray
+	case arg.Index != 0:
+		return false
+	}
+	return !arg.InArray || method.NamesValues()
 }
 
 func (p *Provider) completeBuilderArg(r *resolve.Resolver, arg sourcectx.CallArg, file *parser.FileNode) []protocol.CompletionItem {
@@ -87,11 +35,23 @@ func (p *Provider) completeBuilderArg(r *resolve.Resolver, arg sourcectx.CallArg
 	if modelFQN == "" {
 		return nil
 	}
-	if dbColumnMethods[arg.Method] {
-		return p.completeBuilderDBColumns(modelFQN, arg.Partial, arg.Quote)
+	method, _ := frameworklaravel.BuilderMethodNamed(arg.Method)
+	if arg.Index == 1 {
+		relation, ok := arg.StringArg(0)
+		if !ok {
+			return nil
+		}
+		related := frameworklaravel.RelatedModel(p.index, modelFQN, frameworklaravel.WithoutAlias(relation))
+		if related == "" {
+			return nil
+		}
+		return p.completeBuilderProperties(related, arg.Partial, arg.Quote, frameworklaravel.IsColumnProperty)
 	}
-	if columnMethods[arg.Method] {
-		return p.completeBuilderColumns(modelFQN, arg.Partial, arg.Quote)
+	switch method.Names {
+	case frameworklaravel.BuilderDBColumns:
+		return p.completeBuilderProperties(modelFQN, arg.Partial, arg.Quote, frameworklaravel.IsDBColumnProperty)
+	case frameworklaravel.BuilderColumns:
+		return p.completeBuilderProperties(modelFQN, arg.Partial, arg.Quote, frameworklaravel.IsColumnProperty)
 	}
 	return p.completeBuilderRelations(modelFQN, arg.Partial, arg.Quote)
 }
@@ -122,108 +82,25 @@ func (p *Provider) modelClass(r *resolve.Resolver, e ast.Expr, file *parser.File
 	return frameworklaravel.QueriedModel{}
 }
 
-// isDBColumn returns true if the symbol represents an actual database column
-// (from IDE helper @property, migrations, database introspection, or Doctrine).
-func isDBColumn(m *symbols.Symbol) bool {
-	if m.Kind != symbols.KindProperty {
-		return false
-	}
-	if !m.IsVirtual {
-		return false
-	}
-	doc := m.DocComment
-	// Migration-derived
-	if strings.HasPrefix(doc, "From migration") {
-		return true
-	}
-	// Database introspection
-	if strings.HasPrefix(doc, "(database column)") {
-		return true
-	}
-	// Doctrine ORM
-	if doc == "Doctrine column" || doc == "Doctrine ID column" {
-		return true
-	}
-	// Skip relations and accessors — everything else from @property is a column
-	if strings.HasSuffix(doc, " relation") {
-		return false
-	}
-	if strings.HasPrefix(doc, "Accessor from ") {
-		return false
-	}
-	// IDE helper @property and other docblock-derived properties
-	// These are virtual properties from class docblocks, typically DB columns
-	return true
-}
-
-// completeBuilderDBColumns returns completion items for strict database column
-// names only (IDE helper, migrations, database introspection, Doctrine).
-func (p *Provider) completeBuilderDBColumns(modelFQN, partial, quote string) []protocol.CompletionItem {
-	members := p.index.GetClassMembers(modelFQN)
+func (p *Provider) completeBuilderProperties(modelFQN, partial, quote string, is func(*symbols.Symbol) bool) []protocol.CompletionItem {
 	lpartial := strings.ToLower(partial)
-
 	q := "'"
 	if quote == "\"" {
 		q = "\""
 	}
-
 	var items []protocol.CompletionItem
-	for _, m := range members {
-		if !isDBColumn(m) {
+	for _, m := range p.index.GetClassMembers(modelFQN) {
+		if !is(m) {
 			continue
 		}
-
 		colName := strings.TrimPrefix(m.Name, "$")
 		if lpartial != "" && !strings.HasPrefix(strings.ToLower(colName), lpartial) {
 			continue
 		}
-
 		insertText := colName
 		if quote == "" {
 			insertText = q + colName + q
 		}
-
-		items = append(items, protocol.CompletionItem{
-			Label:      colName,
-			Kind:       protocol.CompletionItemKindProperty,
-			Detail:     m.Type,
-			InsertText: insertText,
-			SortText:   "0" + colName,
-		})
-	}
-	return items
-}
-
-// completeBuilderColumns returns completion items for column names on the given model.
-func (p *Provider) completeBuilderColumns(modelFQN, partial, quote string) []protocol.CompletionItem {
-	members := p.index.GetClassMembers(modelFQN)
-	lpartial := strings.ToLower(partial)
-
-	q := "'"
-	if quote == "\"" {
-		q = "\""
-	}
-
-	var items []protocol.CompletionItem
-	for _, m := range members {
-		if m.Kind != symbols.KindProperty {
-			continue
-		}
-		// Skip relation-derived virtual properties (they appear as columns otherwise)
-		if m.IsVirtual && strings.HasSuffix(m.DocComment, " relation") {
-			continue
-		}
-
-		colName := strings.TrimPrefix(m.Name, "$")
-		if lpartial != "" && !strings.HasPrefix(strings.ToLower(colName), lpartial) {
-			continue
-		}
-
-		insertText := colName
-		if quote == "" {
-			insertText = q + colName + q
-		}
-
 		items = append(items, protocol.CompletionItem{
 			Label:      colName,
 			Kind:       protocol.CompletionItemKindProperty,
@@ -257,7 +134,7 @@ func (p *Provider) completeBuilderRelations(modelFQN, partial, quote string) []p
 			continue
 		}
 		shortRet := shortClassName(retType)
-		if !relationReturnTypes[shortRet] {
+		if !frameworklaravel.IsRelationType(shortRet) {
 			continue
 		}
 

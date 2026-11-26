@@ -104,7 +104,7 @@ func extractEloquentRelations(model *symbols.Symbol, grammars phpparser.GrammarR
 			continue
 		}
 		cardinality := "one"
-		if pluralRelations[relation.kind] {
+		if frameworklaravel.IsPluralRelationType(relation.kind) {
 			cardinality = "many"
 		}
 		result = append(result, Relation{

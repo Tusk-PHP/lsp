@@ -312,7 +312,7 @@ func injectColumnsAsProperties(index *symbols.Index, classSym *symbols.Symbol, c
 			Visibility: "public",
 			Type:       phpType,
 			IsVirtual:  true,
-			DocComment: fmt.Sprintf("(database column) %s — %s", col.DataType, col.ColumnType),
+			DocComment: fmt.Sprintf("%s %s — %s", frameworklaravel.DatabaseColumnDoc, col.DataType, col.ColumnType),
 		})
 	}
 }
