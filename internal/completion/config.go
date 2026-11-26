@@ -3,6 +3,7 @@ package completion
 import (
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/types"
@@ -15,11 +16,9 @@ type configResultArrayContext struct {
 	Quote      string
 }
 
-const configHelper = "config"
-
 func configResultContext(src string, dim ast.StringDim) *configResultArrayContext {
 	call, ok := dim.Base.(*ast.Call)
-	if !ok || ast.FunctionName(src, call) != configHelper || len(call.Args.Args) == 0 {
+	if !ok || ast.FunctionName(src, call) != models.ConfigHelper || len(call.Args.Args) == 0 {
 		return nil
 	}
 	configArg, ok := ast.StringValue(src, call.Args.Args[0].Value)
@@ -69,7 +68,7 @@ func (p *Provider) completeConfigResultKeys(ctx *configResultArrayContext) []pro
 }
 
 func configArgContext(arg ast.CallArg) (configPath, partial, quote string, ok bool) {
-	if arg.Function != configHelper || arg.Index != 0 || arg.InArray {
+	if arg.Function != models.ConfigHelper || arg.Index != 0 || arg.InArray {
 		return "", "", "", false
 	}
 	lastDot := strings.LastIndex(arg.Partial, ".")

@@ -151,61 +151,8 @@ func InferValueType(value string) string {
 	return "mixed"
 }
 
-// CollectArrayLiteral collects the full text of a PHP array literal starting
-// from startLine, tracking bracket depth. Handles strings but not comments.
-func CollectArrayLiteral(lines []string, startLine int) string {
-	var sb strings.Builder
-	depth := 0
-	started := false
-	inString := byte(0)
-
-	for i := startLine; i < len(lines) && i < startLine+100; i++ {
-		line := lines[i]
-		for j := 0; j < len(line); j++ {
-			ch := line[j]
-			if inString != 0 {
-				if ch == inString && (j == 0 || line[j-1] != '\\') {
-					inString = 0
-				}
-				if started {
-					sb.WriteByte(ch)
-				}
-				continue
-			}
-			switch ch {
-			case '\'', '"':
-				inString = ch
-				if started {
-					sb.WriteByte(ch)
-				}
-			case '[':
-				depth++
-				started = true
-				sb.WriteByte(ch)
-			case ']':
-				if started {
-					depth--
-					sb.WriteByte(ch)
-					if depth == 0 {
-						return sb.String()
-					}
-				}
-			default:
-				if started {
-					sb.WriteByte(ch)
-				}
-			}
-		}
-		if started {
-			sb.WriteByte('\n')
-		}
-	}
-	return sb.String()
-}
-
 // CollectReturnArray collects an array literal from a PHP return statement,
 // skipping block comments (/* ... */) and line comments (// ...).
-// More robust than CollectArrayLiteral — use for config files.
 func CollectReturnArray(lines []string, startLine int) string {
 	var sb strings.Builder
 	depth := 0
