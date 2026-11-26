@@ -1,9 +1,13 @@
 package sourcectx
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -46,5 +50,44 @@ func TestAnalyzeTakesTheNamespaceAndImportsOfTheBlockAroundTheCursor(t *testing.
 				t.Errorf("Uses = %q, want %q", got, tc.uses)
 			}
 		})
+	}
+}
+
+func TestClassNamesEndingInResolveThroughTheirNamespaceBlock(t *testing.T) {
+	src := "<?php\nnamespace Dep;\nuse X\\{Dep as D1};\nuse function F\\Dep;\nclass Dep extends Base\\Dep implements \\G\\Dep {}\nnew namespace\\Dep(); DEP::class; Dep(); Dep; $a instanceof Dep;\n" +
+		"namespace B;\nuse X\\Dep;\n/** Dep */\nfunction f(?Dep $d): Dep { return Dep::make() ?? Dep::$p; }\ntrait Dep {}\nuse ;\n"
+	tree := parser.ParseTreeIn(src, phpparser.OnlyGrammar(token.Latest))
+	names := ClassNamesEndingIn(src, ast.NewLines(src), tree, "Dep")
+	var got []string
+	for offset, fqn := range names {
+		got = append(got, fmt.Sprintf("%d:%s", offset, fqn))
+	}
+	slices.Sort(got)
+	var want []string
+	add := func(marker string, nth int, fqn string) {
+		i := -1
+		for range nth {
+			i += 1 + strings.Index(src[i+1:], marker)
+		}
+		i += strings.Index(strings.ToLower(marker), "dep")
+		want = append(want, fmt.Sprintf("%d:%s", i, fqn))
+	}
+	add("{Dep", 1, "X\\Dep")
+	add("F\\Dep", 1, "")
+	add("class Dep", 1, "Dep\\Dep")
+	add("Base\\Dep", 1, "Dep\\Base\\Dep")
+	add("G\\Dep", 1, "G\\Dep")
+	add("namespace\\Dep", 1, "Dep\\Dep")
+	add("DEP::", 1, "Dep\\DEP")
+	add("instanceof Dep", 1, "Dep\\Dep")
+	add("X\\Dep;", 1, "X\\Dep")
+	add("?Dep", 1, "X\\Dep")
+	add(": Dep", 1, "X\\Dep")
+	add("Dep::make", 1, "X\\Dep")
+	add("Dep::$p", 1, "X\\Dep")
+	add("trait Dep", 1, "B\\Dep")
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("names =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
