@@ -664,6 +664,19 @@ func TestParseDocBlockPropertyAndMethod(t *testing.T) {
 	}
 }
 
+func TestParseDocBlockMethodWithoutParentheses(t *testing.T) {
+	doc := ParseDocBlock("/**\n * @method Collection getCollection the items\n * @method getName\n */")
+	if len(doc.Methods) != 2 {
+		t.Fatalf("expected 2 methods, got %d", len(doc.Methods))
+	}
+	if m := doc.Methods[0]; m.ReturnType != "Collection" || m.Name != "getCollection" || m.Description != "the items" || m.ParsedType == nil {
+		t.Errorf("unexpected method 0: %+v", m)
+	}
+	if m := doc.Methods[1]; m.ReturnType != "" || m.Name != "getName" {
+		t.Errorf("unexpected method 1: %+v", m)
+	}
+}
+
 func TestParseDocBlockStructuredTypeAliases(t *testing.T) {
 	raw := `/**
 	 * @phpstan-type Payload array{id: int, name: string}

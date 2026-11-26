@@ -32,9 +32,15 @@ type TypeExpr struct {
 	Params      []TypeExpr
 	Types       []TypeExpr
 	ShapeFields []ShapeExprField
+	Templates   []CallableTemplate
 	ParamTypes  []TypeExpr
 	ReturnType  *TypeExpr
 	Condition   *ConditionalType
+}
+
+type CallableTemplate struct {
+	Name  string
+	Bound *TypeExpr
 }
 
 type Type = TypeExpr
@@ -124,6 +130,16 @@ func (expr TypeExpr) String() string {
 		out = trimLeadingSlash(expr.Name)
 		if out == "" {
 			out = "callable"
+		}
+		if len(expr.Templates) > 0 {
+			templates := make([]string, len(expr.Templates))
+			for i, tmpl := range expr.Templates {
+				templates[i] = tmpl.Name
+				if tmpl.Bound != nil {
+					templates[i] += " of " + tmpl.Bound.String()
+				}
+			}
+			out += "<" + strings.Join(templates, ", ") + ">"
 		}
 		if expr.ParamTypes != nil || expr.ReturnType != nil {
 			out += "(" + joinTypeExprs(expr.ParamTypes, ", ") + ")"
@@ -381,30 +397,31 @@ func joinTypeExprs(parts []TypeExpr, sep string) string {
 }
 
 func parseCallableExpr(raw string, nullable bool) (TypeExpr, bool) {
-	name := ""
-	switch {
-	case raw == "callable":
+	if raw == "callable" {
 		return TypeExpr{Kind: TypeKindCallable, Nullable: nullable, Name: "callable"}, true
-	case strings.HasPrefix(raw, "callable("):
-		name = "callable"
-	case strings.HasPrefix(raw, "Closure("):
-		name = "Closure"
-	case strings.HasPrefix(raw, "\\Closure("):
-		name = "\\Closure"
-	default:
-		return TypeExpr{}, false
 	}
-
-	open := strings.IndexByte(raw, '(')
-	close := findMatchingParen(raw, open)
-	if open < 0 || close < 0 {
+	name := callableName(raw)
+	if name == "" {
 		return TypeExpr{}, false
 	}
 
 	expr := TypeExpr{Kind: TypeKindCallable, Nullable: nullable, Name: name, ParamTypes: []TypeExpr{}}
+	open := len(name)
+	if raw[open] == '<' {
+		end := findMatchingBracket(raw, open)
+		if end < 0 {
+			return TypeExpr{}, false
+		}
+		expr.Templates = parseCallableTemplates(raw[open+1 : end])
+		open = end + 1
+	}
+	close := findMatchingBracket(raw, open)
+	if close < 0 {
+		return TypeExpr{}, false
+	}
 	paramsStr := strings.TrimSpace(raw[open+1 : close])
 	if paramsStr != "" {
-		expr.ParamTypes = parseTypeExprs(splitTopLevelByComma(paramsStr))
+		expr.ParamTypes = parseTypeExprs(SplitTopLevelByComma(paramsStr))
 	}
 
 	rest := strings.TrimSpace(raw[close+1:])
@@ -415,8 +432,41 @@ func parseCallableExpr(raw string, nullable bool) (TypeExpr, bool) {
 	return expr, true
 }
 
-func findMatchingParen(s string, open int) int {
-	if open < 0 || open >= len(s) || s[open] != '(' {
+func callableName(raw string) string {
+	for _, name := range [...]string{"callable", "Closure", "\\Closure"} {
+		if len(raw) > len(name) && strings.HasPrefix(raw, name) && (raw[len(name)] == '(' || raw[len(name)] == '<') {
+			return name
+		}
+	}
+	return ""
+}
+
+func parseCallableTemplates(list string) []CallableTemplate {
+	parts := SplitTopLevelByComma(list)
+	templates := make([]CallableTemplate, 0, len(parts))
+	for _, part := range parts {
+		name, bound, bounded := strings.Cut(part, " of ")
+		tmpl := CallableTemplate{Name: strings.TrimSpace(name)}
+		if bounded {
+			expr := parseTypeExpr(strings.TrimSpace(bound))
+			tmpl.Bound = &expr
+		}
+		templates = append(templates, tmpl)
+	}
+	return templates
+}
+
+func findMatchingBracket(s string, open int) int {
+	if open >= len(s) {
+		return -1
+	}
+	var openCh, closeCh byte
+	switch s[open] {
+	case '(':
+		openCh, closeCh = '(', ')'
+	case '<':
+		openCh, closeCh = '<', '>'
+	default:
 		return -1
 	}
 	depth := 0
@@ -432,9 +482,9 @@ func findMatchingParen(s string, open int) int {
 		switch ch {
 		case '\'', '"':
 			inString = ch
-		case '(':
+		case openCh:
 			depth++
-		case ')':
+		case closeCh:
 			depth--
 			if depth == 0 {
 				return i
@@ -582,8 +632,8 @@ func derefType(expr *Type) TypeExpr {
 }
 
 func parseShapeExpr(raw string, nullable bool) (TypeExpr, bool) {
-	for _, prefix := range []string{"array", "list", "object"} {
-		if !strings.HasPrefix(raw, prefix+"{") {
+	for _, prefix := range [...]string{"array", "list", "object"} {
+		if len(raw) <= len(prefix) || raw[len(prefix)] != '{' || !strings.HasPrefix(raw, prefix) {
 			continue
 		}
 		if !strings.HasSuffix(raw, "}") {
@@ -601,7 +651,7 @@ func parseShapeExpr(raw string, nullable bool) (TypeExpr, bool) {
 }
 
 func parseShapeExprFields(inner string) []ShapeExprField {
-	parts := splitTopLevelByComma(inner)
+	parts := SplitTopLevelByComma(inner)
 	fields := make([]ShapeExprField, 0, len(parts))
 	for _, part := range parts {
 		part = trim(part)
@@ -668,7 +718,7 @@ func parseGenericExpr(raw string) (string, []TypeExpr, bool) {
 	// String() leaves it out.
 	name := strings.TrimSpace(raw[:openIdx])
 	paramsStr := raw[openIdx+1 : len(raw)-1]
-	params := splitTopLevelByComma(paramsStr)
+	params := SplitTopLevelByComma(paramsStr)
 	if len(params) == 0 {
 		return name, nil, true
 	}
@@ -720,7 +770,7 @@ func unwrapOuterParens(raw string) (string, bool) {
 	return strings.TrimSpace(raw[1 : len(raw)-1]), true
 }
 
-func splitTopLevelByComma(s string) []string {
+func SplitTopLevelByComma(s string) []string {
 	var parts []string
 	depth := 0
 	inString := byte(0)

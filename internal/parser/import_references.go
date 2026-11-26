@@ -38,7 +38,6 @@ type ImportReferences struct {
 
 type importCollector struct {
 	imported map[string]importKinds
-	spelled  map[string]importKinds
 	used     map[string]importKinds
 	pending  int
 }
@@ -46,13 +45,11 @@ type importCollector struct {
 func (r *ParseResult) ImportReferences() ImportReferences {
 	c := importCollector{
 		imported: make(map[string]importKinds, len(r.Uses)),
-		spelled:  make(map[string]importKinds, len(r.Uses)),
 		used:     make(map[string]importKinds, len(r.Uses)),
 	}
 	var buf [64]byte
 	for _, u := range r.Uses {
 		kind := importKindOf(u.Kind)
-		c.spelled[u.Alias] |= kind
 		key := appendImportKey(buf[:0], u.Alias, kind)
 		if c.imported[string(key)]&kind == 0 {
 			c.imported[string(key)] |= kind
@@ -94,10 +91,10 @@ func (c *importCollector) collect(tokens []Token, skip []tokenSpan) {
 		case TokenIdentifier:
 			c.mark(tok.Value, nameImportKinds(tokens, i))
 		case TokenDocComment:
-			c.markWords(tok.Value)
+			c.markDocComment(tok.Value)
 		case TokenComment:
 			if isAnnotationComment(tok.Value) {
-				c.markWords(tok.Value)
+				c.markDocComment(tok.Value)
 			}
 		case TokenStringLiteral:
 			c.collect(InterpolatedTokens(tok), nil)
@@ -132,23 +129,6 @@ func significantKind(tokens []Token, i int) TokenKind {
 func isAnnotationComment(comment string) bool {
 	body, ok := strings.CutPrefix(comment, "/*")
 	return ok && strings.HasPrefix(strings.TrimLeft(body, " \t\r\n"), "@")
-}
-
-func (c *importCollector) markWords(text string) {
-	for i := 0; i < len(text); {
-		if !IsIdentByte(text[i]) {
-			i++
-			continue
-		}
-		start := i
-		for i < len(text) && IsIdentByte(text[i]) {
-			i++
-		}
-		word := text[start:i]
-		if kinds := c.spelled[word]; kinds != 0 {
-			c.mark(word, kinds)
-		}
-	}
 }
 
 func (c *importCollector) mark(name string, kinds importKinds) {

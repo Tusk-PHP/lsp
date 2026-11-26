@@ -209,6 +209,15 @@ function getUser(): User {
 		}
 	})
 
+	t.Run("names only in doc comment prose flagged, types in tags not flagged", func(t *testing.T) {
+		source := "<?php\nuse App\\Backend\\Action;\nuse App\\Models\\Post;\n/**\n * Ajax grid action.\n * @return Post|null the loaded post\n */\nfunction f() {}\n"
+		file := parser.ParseFile(source)
+		findings := checker.Check(file, source, nil)
+		if len(findings) != 1 || findings[0].StartLine != 1 {
+			t.Fatalf("expected only Action flagged, got %+v", findings)
+		}
+	})
+
 	t.Run("import used in interpolation not flagged", func(t *testing.T) {
 		source := "<?php\nuse App\\Models\\Post;\necho \"{$app->make(Post::class)}\";\n"
 		file := parser.ParseFile(source)

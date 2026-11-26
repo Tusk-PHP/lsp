@@ -316,19 +316,10 @@ func ParseDocBlock(raw string) *DocBlock {
 		return nil
 	}
 
-	trimmed = strings.TrimPrefix(trimmed, "/**")
-	trimmed = strings.TrimSuffix(trimmed, "*/")
-	lines := strings.Split(trimmed, "\n")
 	doc := &DocBlock{Tags: make(map[string][]string)}
 	var tagged []docTag
 
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		line = strings.TrimPrefix(line, "*")
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+	for line := range docLines(trimmed) {
 		if strings.HasPrefix(line, "@") {
 			name, value := splitDocTag(line[1:])
 			doc.Tags[name] = append(doc.Tags[name], value)
@@ -451,8 +442,14 @@ func parseDocMethod(value string) DocMethod {
 	// A method name will be followed by '(' while a type won't.
 	firstParen := strings.Index(value, "(")
 	if firstParen < 0 {
-		// No parens at all — malformed, just store as name
-		m.Name = value
+		parts := strings.Fields(value)
+		if len(parts) < 2 {
+			m.Name = value
+			return m
+		}
+		m.ReturnType, m.Name = parts[0], parts[1]
+		m.ParsedType = parseDocTypeExprPtr(m.ReturnType)
+		m.Description = strings.Join(parts[2:], " ")
 		return m
 	}
 

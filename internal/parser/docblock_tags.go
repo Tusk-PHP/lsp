@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"iter"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/types"
@@ -21,10 +22,42 @@ func splitDocTag(s string) (name, value string) {
 	return s[:end], strings.TrimSpace(s[end+1:])
 }
 
+func docLines(comment string) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		body := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(comment), "/*"), "*/")
+		for line := range strings.Lines(body) {
+			line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "*"))
+			if line != "" && !yield(line) {
+				return
+			}
+		}
+	}
+}
+
 // docTagBase maps a tag name to the tag it stands for and its precedence:
 // @phpstan-X beats @psalm-X, which beats @X. ok is false for tags this parser
 // doesn't interpret.
 func docTagBase(name string) (base string, prio int, ok bool) {
+	base, prio = docTagName(name)
+	switch base {
+	case "param", "return", "var", "template", "extends", "implements", "use",
+		"param-out", "self-out", "param-closure-this", "mixin":
+		return base, prio, true
+	case "assert", "assert-if-true", "assert-if-false":
+		// A bare @assert is PHPUnit's own annotation, not a type assertion.
+		return base, prio, prio > 0
+	case "type", "import-type":
+		// Aliases are only read in their prefixed forms.
+		return base, prio, prio > 0
+	}
+	switch name {
+	case "throws", "deprecated", "property", "property-read", "property-write", "method":
+		return name, 0, true
+	}
+	return "", 0, false
+}
+
+func docTagName(name string) (base string, prio int) {
 	switch {
 	case strings.HasPrefix(name, "phpstan-"):
 		base, prio = name[len("phpstan-"):], 2
@@ -45,22 +78,7 @@ func docTagBase(name string) (base string, prio int, ok bool) {
 	case "template-covariant", "template-contravariant":
 		base = "template"
 	}
-	switch base {
-	case "param", "return", "var", "template", "extends", "implements", "use",
-		"param-out", "self-out", "param-closure-this", "mixin":
-		return base, prio, true
-	case "assert", "assert-if-true", "assert-if-false":
-		// A bare @assert is PHPUnit's own annotation, not a type assertion.
-		return base, prio, prio > 0
-	case "type", "import-type":
-		// Aliases are only read in their prefixed forms.
-		return base, prio, prio > 0
-	}
-	switch name {
-	case "throws", "deprecated", "property", "property-read", "property-write", "method":
-		return name, 0, true
-	}
-	return "", 0, false
+	return base, prio
 }
 
 type pickedTag struct {

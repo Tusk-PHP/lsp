@@ -369,13 +369,16 @@ func IsIdentByte(b byte) bool {
 	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b >= 0x80
 }
 
+// Text outside <?php … ?> is inline HTML and produces no tokens. A source
+// with no open tag at all (a snippet) is read as PHP throughout.
 func tokenize(source string) ([]Token, []ParseError) {
+	return tokenizeFrom(source, HasOpenTag(source))
+}
+
+func tokenizeFrom(source string, inHTML bool) ([]Token, []ParseError) {
 	var errors []ParseError
 	tokens := make([]Token, 0, len(source)/4)
 	line, col, offset := 0, 0, 0
-	// Text outside <?php … ?> is inline HTML and produces no tokens. A source
-	// with no open tag at all (a snippet) is read as PHP throughout.
-	inHTML := HasOpenTag(source)
 
 	for offset < len(source) {
 		if inHTML {
