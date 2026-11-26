@@ -4,6 +4,9 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/types"
@@ -240,9 +243,9 @@ type refEdgeKey struct{ from, to, kind string }
 // This is the only heuristic part of BuildReferences; all other edges are
 // derived directly from the symbol index.
 //
-// Conservative approach: only a TokenNew immediately followed by a TokenIdentifier
-// (not TokenVariable, TokenOpenParen, or the keywords "self"/"static"/"class")
-// produces an edge. Fully dynamic or anonymous-class new expressions are skipped.
+// Conservative approach: only a `new` immediately followed by a class name
+// (not a variable, an open paren, or self/static/parent/class) produces an
+// edge. Fully dynamic or anonymous-class new expressions are skipped.
 func scanNewExpressions(
 	idx *symbols.Index,
 	nodeMap map[string]Node,
@@ -259,7 +262,7 @@ func scanNewExpressions(
 			continue
 		}
 
-		// Parse to get tokens and class line ranges.
+		// Parse to get class line ranges.
 		pr := parser.New().Parse(src)
 		if pr == nil {
 			continue
@@ -271,7 +274,8 @@ func scanNewExpressions(
 			continue
 		}
 
-		tokens := pr.Tokens
+		lines := ast.NewLines(src)
+		tokens := lexer.WholeLiterals(lexer.Significant(lexer.Lex(src, token.Latest)))
 
 		// Build sorted list of (startLine, endLine, FQN) for enclosing-class lookup.
 		type classRange struct {
@@ -307,27 +311,13 @@ func scanNewExpressions(
 			return best
 		}
 
-		for i := 0; i < len(tokens); i++ {
-			tok := tokens[i]
-			if tok.Kind != parser.TokenNew {
+		for i := 0; i+1 < len(tokens); i++ {
+			if tokens[i].Kind != token.New || !isClassName(tokens[i+1].Kind) {
 				continue
 			}
-
-			j := parser.NextSignificant(tokens, i+1)
-			if j < 0 {
-				continue
-			}
-
-			next := tokens[j]
-
-			// Only accept plain identifiers — skip variables, open parens (dynamic),
-			// and the pseudo-class keywords self/static/parent/$this.
-			if next.Kind != parser.TokenIdentifier {
-				continue
-			}
-			name := next.Value
+			name := tokens[i+1].Text(src)
 			lower := strings.ToLower(name)
-			if lower == "self" || lower == "static" || lower == "parent" || lower == "class" {
+			if lower == "self" || lower == "parent" {
 				continue
 			}
 
@@ -339,7 +329,8 @@ func scanNewExpressions(
 			}
 
 			// Attribute edge to the class whose line range contains this token.
-			enclosing := enclosingClass(tok.Line)
+			line, _ := lines.Position(tokens[i].Start)
+			enclosing := enclosingClass(line)
 			if enclosing == "" {
 				continue
 			}
@@ -351,4 +342,8 @@ func scanNewExpressions(
 			}
 		}
 	}
+}
+
+func isClassName(kind token.Kind) bool {
+	return kind == token.Identifier || kind == token.NameQualified || kind == token.NameFullyQualified
 }
