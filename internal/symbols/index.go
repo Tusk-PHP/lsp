@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -138,6 +140,7 @@ type ParamInfo struct {
 }
 
 type Index struct {
+	grammars          phpparser.GrammarRange
 	attributedSymbols atomic.Bool
 	// generation counts changes to the index, so caches built from it can
 	// tell when they're out of date.
@@ -206,7 +209,12 @@ func (idx *Index) MayNarrow(name string) bool {
 }
 
 func NewIndex() *Index {
+	return NewIndexFor(phpparser.AnyGrammar())
+}
+
+func NewIndexFor(grammars phpparser.GrammarRange) *Index {
 	return &Index{
+		grammars:             grammars,
 		symbols:              make(map[string]*Symbol),
 		nameIndex:            make(map[string][]string),
 		foldIndex:            make(map[string][]string),
@@ -225,6 +233,31 @@ func NewIndex() *Index {
 	}
 }
 
+var builtinGrammars = phpparser.OnlyGrammar(token.Latest)
+
+func (idx *Index) Grammars() phpparser.GrammarRange {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.grammars
+}
+
+func (idx *Index) GrammarOf(uri string) phpparser.GrammarRange {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	indexed, ok := idx.fileSource[uri]
+	if !ok {
+		return idx.grammars
+	}
+	return idx.grammarsForLocked(indexed.from).After(indexed.grammar)
+}
+
+func (idx *Index) grammarsForLocked(src SymbolSource) phpparser.GrammarRange {
+	if src == SourceBuiltin {
+		return builtinGrammars
+	}
+	return idx.grammars
+}
+
 func (idx *Index) IndexFile(uri string, source string) {
 	idx.IndexFileWithSource(uri, source, SourceProject)
 }
@@ -233,7 +266,7 @@ func (idx *Index) IndexFile(uri string, source string) {
 // merging virtual members from @property/@method docblocks into existing class symbols.
 // Classes that don't already exist in the index are indexed normally.
 func (idx *Index) IndexIDEHelperFile(uri string, source string) {
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, idx.GrammarOf(uri))
 	if file == nil {
 		return
 	}
@@ -242,7 +275,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 
 	// Remove any previously indexed symbols from this URI (for re-indexing)
 	idx.removeFileSymbols(uri)
-	idx.fileSource[uri] = indexedText{text: source, ideHelper: true}
+	idx.fileSource[uri] = indexedText{text: source, ideHelper: true, grammar: file.Grammar}
 	if _, ok := idx.fileSymbols[uri]; !ok {
 		idx.fileSymbols[uri] = nil
 		idx.files.add(uri)
@@ -341,20 +374,25 @@ type indexedText struct {
 	text      string
 	from      SymbolSource
 	ideHelper bool
+	grammar   token.Version
 }
 
 func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSource) {
-	indexed := indexedText{text: source, from: src}
 	idx.mu.RLock()
 	previous, indexedBefore := idx.fileSource[uri]
+	grammars := idx.grammarsForLocked(src)
 	idx.mu.RUnlock()
-	if indexedBefore && previous == indexed {
+	if indexedBefore && previous.text == source && previous.from == src && !previous.ideHelper {
 		return
 	}
-	file := parser.ParseFile(source)
+	if indexedBefore {
+		grammars = grammars.After(previous.grammar)
+	}
+	file := parser.ParseFileIn(source, grammars)
 	if file == nil {
 		return
 	}
+	indexed := indexedText{text: source, from: src, grammar: file.Grammar}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	foreign := idx.foreignMembersLocked(uri)

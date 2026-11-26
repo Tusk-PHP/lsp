@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -62,7 +63,7 @@ func chainFixture(t *testing.T) (*Resolver, *parser.FileNode, protocol.Position)
 	t.Helper()
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///chain.php", chainSource)
-	file := parser.ParseFile(chainSource)
+	file := parser.ParseFile(chainSource, token.Latest)
 	line := strings.Count(chainSource[:strings.Index(chainSource, "return 1;")], "\n")
 	return NewResolver(idx), file, protocol.Position{Line: line, Character: 8}
 }
@@ -200,7 +201,7 @@ func TestResolveClassNameLoose(t *testing.T) {
 		t.Errorf("unknown without a file = %q", got)
 	}
 	// A global class is found as written.
-	global := parser.ParseFile("<?php\nnamespace Other;\n")
+	global := parser.ParseFile("<?php\nnamespace Other;\n", token.Latest)
 	if got := r.ResolveClassNameLoose(`App\Person`, global); got != `App\Person` {
 		t.Errorf("a full name as written = %q", got)
 	}
@@ -210,7 +211,7 @@ func TestResolveClassNameLooseFindsOnlyClasses(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///h.php", "<?php\nnamespace Helper;\nfunction person() {}\nclass Box { public function person() {} }\n")
 	r := NewResolver(idx)
-	file := parser.ParseFile("<?php\nnamespace App;\n")
+	file := parser.ParseFile("<?php\nnamespace App;\n", token.Latest)
 	for _, f := range []*parser.FileNode{nil, file} {
 		if got := r.ResolveClassNameLoose("person", f); got != "person" {
 			t.Errorf("a function or method named like the class is not a class, got %q", got)

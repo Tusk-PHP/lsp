@@ -8,12 +8,17 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func newTestProvider() *Provider {
-	idx := symbols.NewIndex()
+	return newTestProviderOn(symbols.NewIndex())
+}
+
+func newTestProviderOn(idx *symbols.Index) *Provider {
 	idx.RegisterBuiltins()
 	logger := log.New(io.Discard, "", 0)
 	cfg := config.DefaultConfig()
@@ -268,6 +273,14 @@ class Foo {}
 	}
 	if syntax[0].Range.End.Line != 1 || syntax[0].Range.End.Character != 2 {
 		t.Fatalf("expected diagnostic end 1:2, got %d:%d", syntax[0].Range.End.Line, syntax[0].Range.End.Character)
+	}
+}
+
+func TestAnUnterminatedCommentIsNoSyntaxErrorInAPHP74OnlyProject(t *testing.T) {
+	p := newTestProviderOn(symbols.NewIndexFor(phpparser.OnlyGrammar(token.PHP74)))
+	diags := p.Analyze("file:///test.php", "<?php\n/* never closed\nclass Foo {}\n")
+	if syntax := filterByCode(diags, "syntax-error"); len(syntax) != 0 {
+		t.Fatalf("PHP 7.4 accepts an unterminated comment, got %#v", syntax)
 	}
 }
 

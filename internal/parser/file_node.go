@@ -11,11 +11,15 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
-func ParseFile(source string) *FileNode {
+func ParseFile(source string, version token.Version) *FileNode {
+	return ParseFileIn(source, phpparser.OnlyGrammar(version))
+}
+
+func ParseFileIn(source string, grammars phpparser.GrammarRange) *FileNode {
 	if !HasOpenTag(source) {
-		return newFileNode(source, phpparser.ParseCode(source, token.Latest))
+		return newFileNode(source, grammars.ParseCode(source))
 	}
-	return newFileNode(source, phpparser.Parse(source, token.Latest))
+	return newFileNode(source, grammars.Parse(source))
 }
 
 type declScope int
@@ -43,7 +47,7 @@ type fileNodeBuilder struct {
 }
 
 func newFileNode(src string, tree *ast.File) *FileNode {
-	b := &fileNodeBuilder{src: src, lineStarts: lineStarts(src), file: &FileNode{}}
+	b := &fileNodeBuilder{src: src, lineStarts: lineStarts(src), file: &FileNode{Grammar: tree.Version}}
 	for _, stmt := range tree.Stmts {
 		b.visit(stmt, scopeFile)
 	}

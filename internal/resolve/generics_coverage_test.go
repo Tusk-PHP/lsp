@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	internaltypes "github.com/Tusk-PHP/lsp/internal/types"
@@ -59,7 +60,7 @@ class Service {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///coverage.php", source)
 
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}
@@ -318,7 +319,7 @@ class Service {
 	idx.IndexFile("file:///this.php", source)
 
 	r := NewResolver(idx)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}
@@ -362,7 +363,7 @@ class Category {}
 	idx.IndexFile("file:///controller.php", source)
 
 	r := NewResolver(idx)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}

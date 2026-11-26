@@ -6,6 +6,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -283,7 +284,7 @@ func TestBuilderRelationCompletion(t *testing.T) {
 func TestResolveBuilderModelForDiagnostics(t *testing.T) {
 	p, _ := setupEloquentCompletionTest(t)
 	source := "<?php\nuse App\\Models\\Category;\nCategory::query()->where('name', 1)->with('products');\n"
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	for _, tc := range []struct{ prefix, method, want string }{
 		{"Category::query()->where(", "where", `App\Models\Category`},
 		{"Category::query()->where('name', 1)->with(", "with", `App\Models\Category`},

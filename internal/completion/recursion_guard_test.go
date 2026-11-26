@@ -5,6 +5,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -17,7 +18,7 @@ func TestSelfReferentialAssignmentsStopThroughTheChainHook(t *testing.T) {
 		{"<?php\n$a = $b->x();\n$b = $a->y();\n$a->", "$a"},
 	} {
 		source, expr := c.source, c.expr
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		pos := protocol.Position{Line: 3}
 		if got := p.ResolveExpressionType(expr+"->foo()", source, pos, file); got != "" {
 			t.Errorf("%q: got %q, want nothing", source, got)

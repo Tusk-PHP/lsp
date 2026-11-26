@@ -1,6 +1,9 @@
 package parser
 
-import "testing"
+import (
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+	"testing"
+)
 
 func TestDeclarationsEndOnTheirClosingLine(t *testing.T) {
 	source := `<?php
@@ -33,7 +36,7 @@ function helper(): void
 $x = new class {
 };
 `
-	file := ParseFile(source)
+	file := ParseFile(source, token.Latest)
 	if len(file.Classes) != 1 || len(file.Interfaces) != 1 || len(file.Traits) != 1 || len(file.Enums) != 1 || len(file.Functions) != 1 || len(file.AnonymousClasses) != 1 {
 		t.Fatalf("want one of each declaration, got %+v", file)
 	}

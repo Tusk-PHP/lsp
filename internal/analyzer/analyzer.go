@@ -201,7 +201,7 @@ func (a *Analyzer) resolveDefinitionSymbol(r *resolve.Resolver, uri, source stri
 			}
 		}
 	}
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	if ctx == nil {
 		return definitionTarget{}
 	}
@@ -372,7 +372,7 @@ func (a *Analyzer) definitionForSymfonyCommand(r *resolve.Resolver, uri, source 
 	if cmd == nil {
 		return nil
 	}
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
 	if !frameworksymfony.IsConsoleApplication(a.index, a.engine.ChainResolver(r, receiver, source, pos, file)) {
 		return nil
 	}
@@ -537,7 +537,7 @@ func singleLocation(loc *protocol.Location) []protocol.Location {
 
 func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position) []protocol.Location {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	if ctx == nil {
 		return nil
 	}
@@ -591,7 +591,7 @@ func (a *Analyzer) FindImplementation(uri, source string, pos protocol.Position)
 		return nil
 	}
 
-	sym := a.resolveSymbolAt(r, sourcectx.Analyze(uri, source, pos).Name(), source)
+	sym := a.resolveSymbolAt(r, sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri)).Name(), source)
 	if sym == nil {
 		return nil
 	}
@@ -694,11 +694,11 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 		return nil
 	}
 
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
 
 	// Try to resolve as a symbol first — this handles properties ($name in declarations)
 	// and member access contexts before falling back to variable scope
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 
 	// Built-in symbols are opaque to navigation: do not scan the workspace for refs.
@@ -927,7 +927,7 @@ func sameRange(a, b protocol.Range) bool {
 }
 
 func (a *Analyzer) GetDocumentSymbols(uri, source string) []protocol.DocumentSymbol {
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
 	if file == nil {
 		return nil
 	}
@@ -1076,7 +1076,7 @@ func (a *Analyzer) GetWorkspaceSymbols(query string) []protocol.SymbolInformatio
 }
 
 func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *protocol.SignatureHelp {
-	callee, activeParam, ok := sourcectx.CallAt(uri, source, pos)
+	callee, activeParam, ok := sourcectx.CallAt(uri, source, pos, a.index.GrammarOf(uri))
 	if !ok {
 		return nil
 	}
@@ -1139,7 +1139,7 @@ type ReferenceVariant struct {
 // resolvable named symbol.
 func (a *Analyzer) CopyReference(uri, source string, pos protocol.Position) []ReferenceVariant {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 	if sym == nil {
 		return nil
@@ -1236,7 +1236,7 @@ func getWordRangeAt(source string, pos protocol.Position) (string, protocol.Rang
 // the range and current name as a placeholder.
 func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *protocol.PrepareRenameResult {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	if ctx == nil {
 		return nil
 	}
@@ -1346,7 +1346,7 @@ func isPrepareRenameVariableBindingSupported(binding *scope.Binding, word string
 // readDocument is used to read file contents for files not open in the editor.
 func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName string, readDocument func(string) string) *protocol.WorkspaceEdit {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	if ctx == nil {
 		return nil
 	}
@@ -1484,7 +1484,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 		return actions
 	}
 
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
 	if file == nil {
 		return actions
 	}
@@ -1626,7 +1626,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 // GetFileNamespace returns the FQN of the primary class/interface/enum in a file,
 // or the namespace if no named type exists.
 func (a *Analyzer) GetFileNamespace(uri, source string) string {
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
 	if file == nil {
 		return ""
 	}
@@ -1656,7 +1656,7 @@ func (a *Analyzer) GetFileNamespace(uri, source string) string {
 // the namespace declaration, all use imports across the workspace, FQN references,
 // and computing the new file path per PSR-4 autoload mappings.
 func (a *Analyzer) MoveToNamespace(uri, source, targetNS string, autoloadEntries []composer.AutoloadEntry, readDocument func(string) string) *protocol.WorkspaceEdit {
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
 	if file == nil {
 		return nil
 	}
@@ -1751,7 +1751,7 @@ func (a *Analyzer) MoveToNamespace(uri, source, targetNS string, autoloadEntries
 			continue
 		}
 
-		fileFile := parser.ParseFile(fileSource)
+		fileFile := parser.ParseFileIn(fileSource, a.index.GrammarOf(fileURI))
 		fileLines := strings.Split(fileSource, "\n")
 		var fileEdits []protocol.TextEdit
 

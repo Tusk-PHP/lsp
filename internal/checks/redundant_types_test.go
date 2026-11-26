@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -17,7 +18,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		checker := &RedundantNullsafeRule{
 			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				if expr == "$user" {
@@ -38,7 +39,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		checker := &RedundantNullsafeRule{
 			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				if expr == "$user" {
@@ -59,7 +60,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		checker := &RedundantNullsafeRule{
 			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				return "mixed"
@@ -77,7 +78,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		checker := &RedundantNullsafeRule{
 			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				return "User|null"
@@ -96,7 +97,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		checker := &RedundantNullsafeRule{
 			TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
 				return "null"
@@ -113,7 +114,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		checker := &RedundantNullsafeRule{}
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
@@ -129,7 +130,7 @@ class Foo {
     public function bar(string|string $x): void {}
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		hasFinding(t, findings, "redundant-union-member", "Duplicate type")
 	})
@@ -140,7 +141,7 @@ class Foo {
     public function bar(object|DateTime $x): void {}
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		hasFinding(t, findings, "redundant-union-member", "covered by 'object'")
 	})
@@ -151,7 +152,7 @@ class Foo {
     public function bar(mixed|string $x): void {}
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		hasFinding(t, findings, "redundant-union-member", "covered by 'mixed'")
 	})
@@ -169,7 +170,7 @@ class Foo {
     public function bar(Animal|Dog $x): void {}
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		hasFinding(t, findings, "redundant-union-member", "covered by parent 'Animal'")
 	})
@@ -180,7 +181,7 @@ class Foo {
     public function bar(string|int $x): void {}
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -191,7 +192,7 @@ class Foo {
     public function bar(iterable|array $x): void {}
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		hasFinding(t, findings, "redundant-union-member", "covered by 'iterable'")
 	})
@@ -251,7 +252,7 @@ class Registry {
     }
 }
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	checker := &RedundantNullsafeRule{
 		// What the resolver gives today: the types without their null.
 		TypeResolver: func(expr, source string, line, col int, file *parser.FileNode) string {
@@ -280,7 +281,7 @@ class Service {
 }
 function standalone(Clock $clock) { return $clock?->now(); }
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	checker := &RedundantNullsafeRule{TypeResolver: func(string, string, int, int, *parser.FileNode) string { return "" }}
 	findings := checker.Check(file, source, nil)
 	var got []string

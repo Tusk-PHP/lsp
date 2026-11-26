@@ -235,7 +235,7 @@ func runIntrospect(args []string) error {
 	uri := "file://" + absFile
 
 	// Parse and run native checks synchronously for a self-consistent dump.
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, ws.Index.GrammarOf(uri))
 	rules := diagnostics.NativeRules(diagnostics.NativeRulesOptions{})
 	findings := checks.CheckFile(file, source, ws.Index, rules)
 

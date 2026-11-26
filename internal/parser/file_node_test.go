@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"reflect"
 	"strings"
 	"testing"
@@ -20,7 +21,7 @@ class C {
     public string $title { get => $this->title; SET => $value; }
     final public protected(set) int $z;
 }
-`)
+`, token.Latest)
 	r, c := file.Classes[0], file.Classes[1]
 	if got := propertySummary(r.Properties); got != "$a private  readonly | $b public private getreadonly" {
 		t.Errorf("promoted: %s", got)
@@ -68,7 +69,7 @@ abstract class Base extends \Parent\Base implements A, B {
     abstract protected static function make(int|string $id = self::ONE, ?array &$out = null, Foo ...$rest): static;
     final public function new(/** The id. */ int $id, $tail /** Tail. */): void {}
 }
-`)
+`, token.Latest)
 	c := file.Classes[0]
 	if c.FullName != `App\Base` || c.Extends != `\Parent\Base` || !reflect.DeepEqual(c.Implements, []string{"A", "B"}) || !c.IsAbstract {
 		t.Errorf("class header: %+v", c)
@@ -103,7 +104,7 @@ abstract class Base extends \Parent\Base implements A, B {
 }
 
 func TestFileNodeDefaultValuesKeepTheirWords(t *testing.T) {
-	file := ParseFile("<?php function f($a = new Foo ( 1 ), $b = 0o777, $c = \"x $y\" . 'z', $d = 1.5e3, $e = PHP_EOL /* c */, $f = <<<EOT\n  x\n  EOT) {}")
+	file := ParseFile("<?php function f($a = new Foo ( 1 ), $b = 0o777, $c = \"x $y\" . 'z', $d = 1.5e3, $e = PHP_EOL /* c */, $f = <<<EOT\n  x\n  EOT) {}", token.Latest)
 	var got []string
 	for _, p := range file.Functions[0].Params {
 		got = append(got, p.DefaultValue)
@@ -136,7 +137,7 @@ namespace Second;
 interface I extends J, K { public function i(); public string $p { get; } const C = 1; }
 trait T { use U; }
 enum E: string implements I { use T; case A = 'a'; case B = 'b' . 'c'; const D = self::A; public function e() {} }
-`)
+`, token.Latest)
 	var functions []string
 	for _, f := range file.Functions {
 		functions = append(functions, f.FullName)
@@ -179,7 +180,7 @@ $a = new /* c */ readonly class(1) extends Base implements I, J
 };
 $b = new #[A] class {};
 `
-	file := ParseFile(src)
+	file := ParseFile(src, token.Latest)
 	if len(file.AnonymousClasses) != 3 {
 		t.Fatalf("got %+v", file.AnonymousClasses)
 	}
@@ -202,7 +203,7 @@ $b = new #[A] class {};
 }
 
 func TestFileNodeAnonymousClassArgsAreInTheEnclosingScope(t *testing.T) {
-	file := ParseFile("<?php new class(function () { function g() {} }) {};")
+	file := ParseFile("<?php new class(function () { function g() {} }) {};", token.Latest)
 	if len(file.Functions) != 1 || file.Functions[0].Name != "g" {
 		t.Errorf("functions: %+v", file.Functions)
 	}
@@ -219,7 +220,7 @@ func TestFileNodeSkipsWhatHasNoName(t *testing.T) {
 		"<?php enum E { case; }",
 		"<?php class K { public int ; }",
 	} {
-		file := ParseFile(src)
+		file := ParseFile(src, token.Latest)
 		if len(file.Errors) == 0 {
 			t.Errorf("%q: expected syntax errors", src)
 		}
@@ -231,7 +232,7 @@ func TestFileNodeSkipsWhatHasNoName(t *testing.T) {
 }
 
 func TestFileNodeReadsAroundComments(t *testing.T) {
-	file := ParseFile("<?php function f(int /* a */ | # b\n string $x = 'it\\'s' /* c */, $y = \"open\n")
+	file := ParseFile("<?php function f(int /* a */ | # b\n string $x = 'it\\'s' /* c */, $y = \"open\n", token.Latest)
 	params := file.Functions[0].Params
 	if params[0].Type.Name != "int|string" || params[0].DefaultValue != `'it\'s'` || params[1].DefaultValue != "\"open\n" {
 		t.Errorf("params: %+v", params)
@@ -244,7 +245,7 @@ func TestFileNodeReadsAroundComments(t *testing.T) {
 		"<?php new class \n":            {1, 0},
 		"<?php new class(1) {};":        {0, 19},
 	} {
-		file := ParseFile(src)
+		file := ParseFile(src, token.Latest)
 		if got := [2]int{file.AnonymousClasses[0].BodyLine, file.AnonymousClasses[0].BodyCol}; got != want {
 			t.Errorf("%q: body at %v, want %v", src, got, want)
 		}
@@ -252,19 +253,30 @@ func TestFileNodeReadsAroundComments(t *testing.T) {
 }
 
 func TestFileNodeSetVisibility(t *testing.T) {
-	file := ParseFile("<?php class C { public function __construct(public(set) int $a, protected(set) int $b) {} }")
+	file := ParseFile("<?php class C { public function __construct(public(set) int $a, protected(set) int $b) {} }", token.Latest)
 	if got := propertySummary(file.Classes[0].Properties); got != "$a public public  | $b public protected " {
 		t.Errorf("got %s", got)
 	}
 }
 
 func TestFileNodeErrorPositions(t *testing.T) {
-	file := ParseFile("<?php\n$a = ;\n/* open")
+	file := ParseFile("<?php\n$a = ;\n/* open", token.Latest)
 	want := []ParseError{
 		{Message: "syntax error, unexpected ';', expected an expression", Line: 1, Column: 5},
 		{Message: "unterminated comment", Line: 2, Column: 0},
 	}
 	if !reflect.DeepEqual(file.Errors, want) {
 		t.Errorf("errors: %+v", file.Errors)
+	}
+}
+
+func TestParseFileReadsTheGrammarItIsGiven(t *testing.T) {
+	src := "<?php\n#[ a comment before PHP 8\nfunction match() {}\n"
+	old, current := ParseFile(src, token.PHP74), ParseFile(src, token.PHP80)
+	if old.Grammar != token.PHP74 || len(old.Errors) != 0 || len(old.Functions) != 1 {
+		t.Errorf("PHP 7.4: grammar %s, errors %v, functions %v", old.Grammar, old.Errors, old.Functions)
+	}
+	if current.Grammar != token.PHP80 || len(current.Errors) == 0 {
+		t.Errorf("PHP 8.0: grammar %s, errors %v", current.Grammar, current.Errors)
 	}
 }

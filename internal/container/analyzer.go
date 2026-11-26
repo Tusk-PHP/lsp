@@ -686,7 +686,7 @@ func (ca *ContainerAnalyzer) parseSymfonyServicesPHP() {
 }
 
 func (ca *ContainerAnalyzer) parseSymfonyPHPConfigFile(path, content string) {
-	file := parser.ParseFile(content)
+	file := parser.ParseFileIn(content, ca.index.Grammars())
 	var (
 		ns   string
 		uses []parser.UseNode
@@ -773,7 +773,7 @@ func (ca *ContainerAnalyzer) parseSymfonyAttributes(path string, content string)
 	if !strings.HasSuffix(path, ".php") {
 		return
 	}
-	file := parser.ParseFile(content)
+	file := parser.ParseFileIn(content, ca.index.Grammars())
 	if file == nil {
 		return
 	}

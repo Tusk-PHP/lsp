@@ -1,6 +1,9 @@
 package parser
 
-import "testing"
+import (
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+	"testing"
+)
 
 func TestTokenizeHeredocAndNowdocAsSingleString(t *testing.T) {
 	src := "<?php\nfunction f() {\n    $a = <<<SQL\n    insert into t (a) values\n    {$values};\n    SQL;\n    $b = <<<'TXT'\n}\nTXT;\n    $c = <<<\"X\"\n    X . 'y';\n}\n"
@@ -28,7 +31,7 @@ func TestTokenizeHeredocAndNowdocAsSingleString(t *testing.T) {
 		t.Errorf("line tracking after heredocs: 'y' on line %d, want 10", strs[3].Line)
 	}
 	// The `}` inside the nowdoc must not close the function.
-	file := ParseFile(src)
+	file := ParseFile(src, token.Latest)
 	if len(file.Functions) != 1 || file.Functions[0].EndLine != 11 {
 		t.Errorf("function bounds wrong: %+v", file.Functions)
 	}

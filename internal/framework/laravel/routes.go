@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -25,15 +26,17 @@ type RouteName struct {
 
 type RouteIndex struct {
 	rootPath string
+	grammars func() phpparser.GrammarRange
 
 	mu     sync.RWMutex
 	byURI  map[string][]RouteName
 	byName map[string][]RouteName
 }
 
-func NewRouteIndex(rootPath string) *RouteIndex {
+func NewRouteIndex(rootPath string, grammars func() phpparser.GrammarRange) *RouteIndex {
 	return &RouteIndex{
 		rootPath: rootPath,
+		grammars: grammars,
 		byURI:    make(map[string][]RouteName),
 		byName:   make(map[string][]RouteName),
 	}
@@ -70,7 +73,7 @@ func (idx *RouteIndex) IndexFile(uri, source string) {
 		return
 	}
 
-	routes := parseRouteDefinitions(uri, source)
+	routes := parseRouteDefinitions(uri, source, idx.grammars())
 
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -196,9 +199,9 @@ var supportedRouteMethods = map[string]bool{
 	"redirect": true,
 }
 
-func parseRouteDefinitions(uri, source string) []RouteName {
+func parseRouteDefinitions(uri, source string, grammars phpparser.GrammarRange) []RouteName {
 	result := parser.New().Parse(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, grammars)
 	var routes []RouteName
 
 	for i := 0; i < len(result.Tokens); i++ {
