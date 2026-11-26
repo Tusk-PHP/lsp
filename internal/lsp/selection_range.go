@@ -1,9 +1,13 @@
 package lsp
 
 import (
+	"slices"
 	"unicode/utf8"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -61,7 +65,7 @@ func buildSelectionChain(pr *parser.ParseResult, pos protocol.Position, source s
 	}
 
 	// Innermost balanced bracket region
-	if br := findBracketRange(pr, pos); br != nil {
+	if br := findBracketRange(source, ast.NewLines(source), pos); br != nil {
 		candidates = append(candidates, candidate{r: *br})
 	}
 
@@ -152,102 +156,72 @@ func findWordRange(pr *parser.ParseResult, pos protocol.Position) *protocol.Rang
 	}
 }
 
-// findBracketRange finds the innermost balanced bracket pair ({}, (), []) that
-// contains the given position.
-func findBracketRange(pr *parser.ParseResult, pos protocol.Position) *protocol.Range {
-	// Walk tokens to find bracket pairs that contain the position
-	type bracket struct {
-		open  parser.Token
-		close parser.Token
-	}
-
-	// We need to track open brackets before position and find their closes after.
-	type openBracket struct {
-		tok   parser.Token
-		depth int
-	}
-
-	posLine := pos.Line
-	posChar := pos.Character
-
-	// Find the innermost open bracket before or at position
-	// and its matching close bracket after position.
-	type candidatePair struct {
-		startLine, startChar int
-		endLine, endChar     int
-		size                 int // (endLine-startLine)*big + endChar - startChar
-	}
-
-	var best *candidatePair
-
-	// Simple bracket matching: find all matching pairs and pick the smallest
-	// that contains the position.
-	openStack := make([]openBracket, 0, 16)
-	depth := 0
-
-	for _, tok := range pr.Tokens {
-		switch tok.Kind {
-		case parser.TokenOpenBrace, parser.TokenOpenParen, parser.TokenOpenBracket:
-			depth++
-			openStack = append(openStack, openBracket{tok: tok, depth: depth})
-		case parser.TokenCloseBrace, parser.TokenCloseParen, parser.TokenCloseBracket:
-			if len(openStack) == 0 {
-				continue
-			}
-			// Find matching open bracket
-			matchIdx := -1
-			for i := len(openStack) - 1; i >= 0; i-- {
-				open := openStack[i]
-				if (tok.Kind == parser.TokenCloseBrace && open.tok.Kind == parser.TokenOpenBrace) ||
-					(tok.Kind == parser.TokenCloseParen && open.tok.Kind == parser.TokenOpenParen) ||
-					(tok.Kind == parser.TokenCloseBracket && open.tok.Kind == parser.TokenOpenBracket) {
-					matchIdx = i
-					break
-				}
-			}
-			if matchIdx < 0 {
-				depth--
-				continue
-			}
-			open := openStack[matchIdx]
-			openStack = append(openStack[:matchIdx], openStack[matchIdx+1:]...)
-			depth--
-
-			// Check if this bracket pair contains the position
-			startLine := open.tok.Line
-			startChar := open.tok.Column
-			endLine := tok.Line
-			endChar := tok.Column + len(tok.Value)
-
-			// Position must be strictly inside
-			startBefore := startLine < posLine || (startLine == posLine && startChar <= posChar)
-			endAfter := endLine > posLine || (endLine == posLine && endChar >= posChar)
-
-			if !startBefore || !endAfter {
-				continue
-			}
-
-			size := (endLine-startLine)*10000000 + (endChar - startChar)
-			if best == nil || size < best.size {
-				best = &candidatePair{
-					startLine: startLine,
-					startChar: startChar,
-					endLine:   endLine,
-					endChar:   endChar,
-					size:      size,
-				}
-			}
-		}
-	}
-
-	if best == nil {
+func findBracketRange(source string, lines ast.Lines, pos protocol.Position) *protocol.Range {
+	if pos.Line >= len(lines) {
 		return nil
 	}
-
-	return &protocol.Range{
-		Start: protocol.Position{Line: best.startLine, Character: best.startChar},
-		End:   protocol.Position{Line: best.endLine, Character: best.endChar},
+	offset := lineOffset(source, lines, pos)
+	toks := lexer.Lex(source, token.Latest)
+	opens := make([]lexer.Token, 0, 16)
+	var best ast.Span
+	found := false
+	for i := 0; i < len(toks); i++ {
+		tok := toks[i]
+		if lexer.OpensLiteral(tok.Kind) {
+			i = lexer.LiteralEnd(toks, i)
+			continue
+		}
+		var opener token.Kind
+		switch tok.Kind {
+		case token.LeftBrace, token.LeftParen, token.LeftBracket:
+			opens = append(opens, tok)
+			continue
+		case token.Attribute:
+			tok.Kind, tok.Start = token.LeftBracket, tok.End-1
+			opens = append(opens, tok)
+			continue
+		case token.RightBrace:
+			opener = token.LeftBrace
+		case token.RightParen:
+			opener = token.LeftParen
+		case token.RightBracket:
+			opener = token.LeftBracket
+		default:
+			continue
+		}
+		at := -1
+		for j := len(opens) - 1; j >= 0; j-- {
+			if opens[j].Kind == opener {
+				at = j
+				break
+			}
+		}
+		if at < 0 {
+			continue
+		}
+		pair := ast.Span{Start: opens[at].Start, End: tok.End}
+		opens = slices.Delete(opens, at, at+1)
+		if pair.Start <= offset && offset <= pair.End && (!found || pair.End-pair.Start < best.End-best.Start) {
+			best, found = pair, true
+		}
 	}
+	if !found {
+		return nil
+	}
+	return &protocol.Range{Start: spanPosition(lines, best.Start), End: spanPosition(lines, best.End)}
+}
+
+func lineOffset(source string, lines ast.Lines, pos protocol.Position) uint32 {
+	end := uint32(len(source))
+	if pos.Line+1 < len(lines) {
+		end = lines[pos.Line+1] - 1
+	}
+	return min(lines[pos.Line]+uint32(pos.Character), end)
+}
+
+func spanPosition(lines ast.Lines, offset uint32) protocol.Position {
+	line, col := lines.Position(offset)
+	return protocol.Position{Line: line, Character: col}
 }
 
 // findContainingMethodRange returns the range of the method or function body
