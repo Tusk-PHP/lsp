@@ -6,6 +6,9 @@ import (
 	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -26,15 +29,27 @@ func (r *UnusedPrivateRule) Check(file *parser.FileNode, source string, index *s
 		return nil
 	}
 	lines := strings.Split(source, "\n")
-	fileTokens := sync.OnceValue(func() []parser.Token { return r.Shared.parse(source).Tokens })
+	fileCode := sync.OnceValue(func() fileCode {
+		return fileCode{codeTokens{source, lexer.Significant(r.Shared.lex(source))}, ast.NewLines(source)}
+	})
 	var findings []Finding
 	for _, cls := range file.Classes {
-		findings = append(findings, checkUnusedPrivateMembers(cls, file.Namespace, fileTokens, lines, index)...)
+		findings = append(findings, checkUnusedPrivateMembers(cls, file.Namespace, fileCode, lines, index)...)
 	}
 	return findings
 }
 
-func checkUnusedPrivateMembers(cls parser.ClassNode, namespace string, fileTokens func() []parser.Token, lines []string, index *symbols.Index) []Finding {
+type fileCode struct {
+	code  codeTokens
+	lines ast.Lines
+}
+
+func (f fileCode) class(cls parser.ClassNode) codeTokens {
+	from, to := lineSpan(f.lines, declarationStartLine(cls), cls.EndLine, len(f.code.src))
+	return codeTokens{f.code.src, tokensWithin(f.code.tokens, from, to)}
+}
+
+func checkUnusedPrivateMembers(cls parser.ClassNode, namespace string, fileCode func() fileCode, lines []string, index *symbols.Index) []Finding {
 	if !hasPrivateMembers(cls) {
 		return nil
 	}
@@ -45,10 +60,10 @@ func checkUnusedPrivateMembers(cls parser.ClassNode, namespace string, fileToken
 			return nil
 		}
 		for _, src := range traits {
-			uses.collect(parser.Tokenize(src), declarationsAreUses, cls.Name)
+			uses.collect(codeTokens{src, lexer.Significant(lexer.Lex(src, token.Latest))}, declarationsAreUses, cls.Name)
 		}
 	}
-	uses.collect(classTokens(fileTokens(), declarationStartLine(cls), cls.EndLine), declarationsAreNotUses, cls.Name)
+	uses.collect(fileCode().class(cls), declarationsAreNotUses, cls.Name)
 	findings := checkUnusedPrivateMethods(cls, uses, lines)
 	findings = append(findings, checkUnusedPrivateProperties(cls, uses, lines)...)
 	return append(findings, checkUnusedPrivateConstants(cls, uses, lines)...)

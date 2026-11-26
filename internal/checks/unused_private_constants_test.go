@@ -130,9 +130,9 @@ class A {
 func TestUnusedPrivateReadsTokensOnlyForClassesWithPrivateMembers(t *testing.T) {
 	src := "<?php\nclass A {\n    public const X = 1;\n    protected int $p = 0;\n    public function f(): void {}\n}\n"
 	cls := parser.ParseFile(src).Classes[0]
-	tokens := func() []parser.Token {
+	tokens := func() fileCode {
 		t.Fatal("tokens fetched for a class without private members")
-		return nil
+		return fileCode{}
 	}
 	if got := checkUnusedPrivateMembers(cls, "", tokens, strings.Split(src, "\n"), nil); got != nil {
 		t.Errorf("got %v", got)
