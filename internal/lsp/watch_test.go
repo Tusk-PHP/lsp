@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -694,5 +695,54 @@ func TestClosingADocumentWhileItIsIndexedInTheBackgroundLetsTheDiskTextLandLast(
 	time.Sleep(3 * watchedFilesDelay)
 	if names := symbolNames(t, h, "Reopened"); len(names) != 1 {
 		t.Errorf("a document opened again before its background index finished keeps the editor's text: %v", names)
+	}
+}
+
+func showMessagesStarting(h *lspHarness, prefix string, quiet time.Duration) int {
+	shown := 0
+	for {
+		select {
+		case msg := <-h.notes:
+			if params, _ := msg["params"].(map[string]interface{}); msg["method"] == "window/showMessage" {
+				if text, _ := params["message"].(string); strings.HasPrefix(text, prefix) {
+					shown++
+				}
+			}
+		case <-time.After(quiet):
+			return shown
+		}
+	}
+}
+
+func TestAConfigurationProblemIsShownOnceUntilItChanges(t *testing.T) {
+	const broken = `{"diagnosticIgnore": [{"message": "("}]}`
+	const skipped = "Tusk PHP skipped part of its configuration"
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json":  `{"name": "app/app"}`,
+		".tusk-php.json": broken,
+	}, map[string]interface{}{}, nil)
+	settleRefreshes(t, h, root, "Started")
+	if n := showMessagesStarting(h, skipped, watchedFilesDelay); n != 1 {
+		t.Fatalf("the problem is shown once at startup, got %d", n)
+	}
+
+	for i, settings := range []map[string]interface{}{{"phpVersion": "8.2"}, {"phpVersion": "8.3"}} {
+		h.notify("workspace/didChangeConfiguration", map[string]interface{}{"settings": settings})
+		settleRefreshes(t, h, root, fmt.Sprintf("AfterSettings%d", i))
+	}
+	notifyWatched(h, root, ".tusk-php.json")
+	settleRefreshes(t, h, root, "AfterTouch")
+	if n := showMessagesStarting(h, skipped, watchedFilesDelay); n != 0 {
+		t.Errorf("re-reading the same problem doesn't show it again, got %d", n)
+	}
+
+	writeProjectFiles(t, root, map[string]string{".tusk-php.json": `{}`})
+	notifyWatched(h, root, ".tusk-php.json")
+	settleRefreshes(t, h, root, "AfterFix")
+	writeProjectFiles(t, root, map[string]string{".tusk-php.json": broken})
+	notifyWatched(h, root, ".tusk-php.json")
+	settleRefreshes(t, h, root, "AfterBreakingAgain")
+	if n := showMessagesStarting(h, skipped, watchedFilesDelay); n != 1 {
+		t.Errorf("a problem that comes back after being fixed is shown again, got %d", n)
 	}
 }
