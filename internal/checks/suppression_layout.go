@@ -78,7 +78,6 @@ func PHPLayout(source string) Layout {
 func phpLayout(source string, tokens []lexer.Token) Layout {
 	l := newLayout(source)
 	regionStart := -1
-	tokens = lexer.WholeLiterals(tokens)
 	for i := 0; i < len(tokens); i++ {
 		tok := tokens[i]
 		span := Span{int(tok.Start), int(tok.End)}
@@ -97,7 +96,10 @@ func phpLayout(source string, tokens []lexer.Token) Layout {
 		case token.Attribute:
 			l.addAttribute(Span{span.Start, int(tokens[attributeEnd(tokens, i)].End)})
 			continue
-		case token.ConstantString, token.DoubleQuote, token.StartHeredoc, token.Backtick:
+		case token.DoubleQuote, token.StartHeredoc, token.Backtick:
+			i = lexer.LiteralEnd(tokens, i)
+			span.End = int(tokens[i].End)
+		case token.ConstantString:
 		default:
 			continue
 		}
