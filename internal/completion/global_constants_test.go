@@ -41,3 +41,38 @@ func TestStandaloneCompletionOffersReachableGlobalConstants(t *testing.T) {
 		t.Error("functions are still offered")
 	}
 }
+
+func TestStandaloneCompletionOffersAnImportedGlobalConstantOnce(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFileWithSource("file:///config.php", "<?php\nconst APP_VENDOR = 'acme';\n", symbols.SourceProject)
+	p := NewProvider(idx, nil, "")
+	src := "<?php\nnamespace App\\Shop;\nuse const APP_VENDOR;\n\necho APP_"
+	lines := strings.Split(src, "\n")
+	pos := protocol.Position{Line: len(lines) - 1, Character: len(lines[len(lines)-1])}
+	count := 0
+	for _, item := range p.GetCompletions("file:///app/Shop/Cart.php", src, pos) {
+		if item.Label == "APP_VENDOR" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("APP_VENDOR is offered %d times, want once", count)
+	}
+}
+
+func TestStandaloneCompletionWithoutAParsedFileOffersOnlyGlobalConstants(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFileWithSource("file:///config.php", "<?php\nconst APP_VENDOR = 'acme';\n", symbols.SourceProject)
+	idx.IndexFileWithSource("file:///shop.php", "<?php\nnamespace App\\Shop;\nconst APP_TAX = 0.2;\n", symbols.SourceProject)
+	p := NewProvider(idx, nil, "")
+	got := map[string]bool{}
+	for _, item := range p.completeGlobal("echo APP_", "", newNameRanker("", nil), nil) {
+		got[item.Label] = true
+	}
+	if !got["APP_VENDOR"] {
+		t.Error("the global APP_VENDOR is offered")
+	}
+	if got["APP_TAX"] {
+		t.Error("the namespaced APP_TAX is not reachable without knowing the file's namespace")
+	}
+}
