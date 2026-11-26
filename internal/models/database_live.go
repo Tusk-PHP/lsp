@@ -90,7 +90,7 @@ var libpqEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
 
 func postgresDSN(cfg *config.DatabaseConfig, timeout time.Duration) string {
 	params := [...]struct{ key, value string }{
-		{"host", cfg.Host},
+		{"host", unbracketed(cfg.Host)},
 		{"port", cfg.Port},
 		{"user", cfg.Username},
 		{"password", cfg.Password},

@@ -71,6 +71,9 @@ func TestPostgresDataSourceReachesTheConfiguredServer(t *testing.T) {
 	}{
 		{"db", "db", 3 * time.Second, 3 * time.Second},
 		{"db", "db", 200 * time.Millisecond, time.Second},
+		{"::1", "::1", 3 * time.Second, 3 * time.Second},
+		{"[::1]", "::1", 3 * time.Second, 3 * time.Second},
+		{"[fe80::1%en0]", "fe80::1%en0", 3 * time.Second, 3 * time.Second},
 	}
 	for _, c := range cases {
 		cfg := &config.DatabaseConfig{Driver: "pgsql", Host: c.host, Port: "5432", Username: "app", Password: "secret", Database: "shop"}
