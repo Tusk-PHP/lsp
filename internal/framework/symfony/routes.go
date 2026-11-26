@@ -288,28 +288,17 @@ func FindRoute(index *symbols.Index, name string) *Route {
 	return nil
 }
 
-func ExtractRouteNameContext(trimmed string) (partial, quote string, ok bool) {
-	patterns := []string{
-		"generateUrl(",
-		"redirectToRoute(",
-		"->generate(",
+var routeCallPatterns = routePatterns()
+
+func routePatterns() []string {
+	patterns := make([]string, 0, len(routeNameCalls)+len(routeNameMethods))
+	for _, c := range routeNameCalls {
+		patterns = append(patterns, c+"(")
 	}
-	for _, pat := range patterns {
-		idx := strings.LastIndex(trimmed, pat)
-		if idx < 0 {
-			continue
-		}
-		after := trimmed[idx+len(pat):]
-		if strings.Contains(after, ")") || strings.Contains(after, ",") {
-			continue
-		}
-		after = strings.TrimLeft(after, " \t")
-		if len(after) > 0 && (after[0] == '\'' || after[0] == '"') {
-			return after[1:], string(after[0]), true
-		}
-		return after, "", true
+	for _, m := range routeNameMethods {
+		patterns = append(patterns, "->"+m+"(")
 	}
-	return "", "", false
+	return patterns
 }
 
 func RouteNameAtPosition(source string, pos protocol.Position) (string, protocol.Range, bool) {
@@ -322,12 +311,7 @@ func RouteNameAtPosition(source string, pos protocol.Position) (string, protocol
 		return "", protocol.Range{}, false
 	}
 
-	patterns := []string{
-		"generateUrl(",
-		"redirectToRoute(",
-		"->generate(",
-	}
-	for _, pat := range patterns {
+	for _, pat := range routeCallPatterns {
 		idx := strings.LastIndex(line[:pos.Character], pat)
 		if idx < 0 {
 			continue

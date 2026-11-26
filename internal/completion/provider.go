@@ -146,59 +146,28 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 	if pos.Character <= len(line) {
 		prefix = line[:pos.Character]
 	}
-
-	// Join multi-line chains: if the current line is a continuation (starts with ->),
-	// prepend previous lines so the chain resolver can see the full expression.
-	joinedLine, joinedChar := resolve.JoinChainLines(lines, pos.Line, pos.Character)
-	if joinedChar > pos.Character && joinedChar <= len(joinedLine) {
-		prefix = joinedLine[:joinedChar]
-	}
-
 	trimmed := strings.TrimSpace(prefix)
-
-	// Check if there's already a '(' after the cursor (skip remaining identifier chars)
-	parenAfterCursor := false
-	if pos.Character < len(line) {
-		rest := line[pos.Character:]
-		for i := 0; i < len(rest); i++ {
-			if resolve.IsWordChar(rest[i]) || rest[i] == '$' {
-				continue
-			}
-			parenAfterCursor = rest[i] == '('
-			break
-		}
-	}
-	if p.framework == "laravel" && p.views != nil {
-		if viewCtx, ok := frameworklaravel.ExtractViewCompletionContext(trimmed); ok {
-			return sanitizeCompletions(p.completeLaravelViews(viewCtx))
-		}
-	}
 
 	ctx := sourcectx.Analyze(uri, source, pos, p.index.GrammarOf(uri))
 	if ctx == nil {
 		return nil
 	}
 	file := ctx.File
+	arg, inArg := ctx.CallArg()
+	if inArg && p.framework == "laravel" && p.views != nil {
+		if viewCtx, ok := frameworklaravel.ViewNameArg(arg); ok {
+			return sanitizeCompletions(p.completeLaravelViews(viewCtx))
+		}
+	}
 	rk := newNameRanker(ctx.Namespace, ctx.Uses)
 
-	if strings.HasSuffix(trimmed, "->") || strings.HasSuffix(trimmed, "?->") {
-		return sanitizeCompletions(p.completeMemberAccess(r, uri, source, pos, prefix, file, parenAfterCursor))
-	}
-	// Container argument context takes priority over :: detection
-	// (e.g. app(Request::class) should not trigger static access)
-	if _, _, isContainer := extractContainerArgContext(trimmed); !isContainer {
-		if strings.HasSuffix(trimmed, "::") {
-			return sanitizeCompletions(p.completeStaticAccess(r, source, prefix, pos, file, parenAfterCursor))
-		}
-		// Typing after -> or :: (e.g. "$foo->ba" or "Foo::cr")
-		if memberCtx, ok := sourcectx.DetectMemberContext(trimmed); ok {
-			if memberCtx.AccessKind == sourcectx.AccessStatic {
-				items := p.completeStaticAccess(r, source, memberCtx.Prefix, pos, file, parenAfterCursor)
-				return sanitizeCompletions(filterByPrefix(items, memberCtx.Filter))
-			}
-			items := p.completeMemberAccess(r, uri, source, pos, memberCtx.Prefix, file, parenAfterCursor)
-			return sanitizeCompletions(filterByPrefix(items, memberCtx.Filter))
-		}
+	switch ctx.AccessKind {
+	case sourcectx.AccessStatic:
+		items := p.completeStaticAccess(r, source, pos, file, ctx.Member.Call)
+		return sanitizeCompletions(filterByPrefix(items, ctx.Member.Filter))
+	case sourcectx.AccessInstance, sourcectx.AccessNullsafe:
+		items := p.completeMemberAccess(r, source, pos, file, ctx.Member.Call)
+		return sanitizeCompletions(filterByPrefix(items, ctx.Member.Filter))
 	}
 	if strings.HasSuffix(trimmed, "|>") {
 		return sanitizeCompletions(p.completePipe(rk))
@@ -213,9 +182,8 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 	if len(words) >= 1 && words[0] == "use" {
 		return sanitizeCompletions(p.completeUse(prefix, rk))
 	}
-	// Builder column/relation argument completion: ->where('col, ->with('rel
-	if method, partial, quote, ok := extractBuilderArgContext(trimmed); ok {
-		if items := p.completeBuilderArg(r, method, partial, quote, prefix, source, pos, file); items != nil {
+	if inArg && isBuilderArg(arg) {
+		if items := p.completeBuilderArg(r, arg, source, file); items != nil {
 			return sanitizeCompletions(items)
 		}
 	}
@@ -223,17 +191,15 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 	if ctx := parseArrayKeyContext(prefix); ctx != nil {
 		return sanitizeCompletions(p.completeArrayKeys(source, pos, ctx, file))
 	}
-	// Config result array access: config('database')['connections']['
-	if ctx := parseConfigResultArrayContext(prefix); ctx != nil {
-		return sanitizeCompletions(p.completeConfigResultKeys(ctx))
+	if configCtx := configResultContext(ctx); configCtx != nil {
+		return sanitizeCompletions(p.completeConfigResultKeys(configCtx))
 	}
-	// Config key completion: config('database.|') with dot-notation navigation
-	if configPath, partial, quote, ok := extractConfigArgContext(trimmed); ok {
-		return sanitizeCompletions(p.completeConfigKeys(configPath, partial, quote))
-	}
-	if p.framework == "laravel" && p.routes != nil {
-		if partial, quote, ok := frameworklaravel.ExtractRouteNameArgContext(trimmed); ok {
-			return sanitizeCompletions(p.completeLaravelRouteNames(partial, quote))
+	if inArg {
+		if configPath, partial, quote, ok := configArgContext(arg); ok {
+			return sanitizeCompletions(p.completeConfigKeys(configPath, partial, quote))
+		}
+		if p.framework == "laravel" && p.routes != nil && frameworklaravel.IsRouteNameArg(arg) {
+			return sanitizeCompletions(p.completeLaravelRouteNames(arg.Partial, arg.Quote))
 		}
 	}
 	if p.framework == "laravel" && p.translations != nil {
@@ -242,14 +208,12 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 	}
 	if p.framework == "symfony" {
-		if partial, quote, ok := frameworksymfony.ExtractRouteNameContext(trimmed); ok {
-			return sanitizeCompletions(p.completeSymfonyRouteNames(partial, quote))
+		if inArg && frameworksymfony.IsRouteNameArg(arg) {
+			return sanitizeCompletions(p.completeSymfonyRouteNames(arg.Partial, arg.Quote))
 		}
-		if p.symfonyCommands != nil {
-			if receiver, partial, quote, ok := frameworksymfony.CommandNameCall(trimmed); ok &&
-				frameworksymfony.IsConsoleApplication(p.index, p.resolveExpressionType(r, receiver, source, pos, file)) {
-				return sanitizeCompletions(p.completeSymfonyCommandNames(partial, quote))
-			}
+		if inArg && p.symfonyCommands != nil && frameworksymfony.IsCommandNameArg(arg) &&
+			frameworksymfony.IsConsoleApplication(p.index, resolve.PlainTypeName(r.NodeType(file, arg.Receiver))) {
+			return sanitizeCompletions(p.completeSymfonyCommandNames(arg.Partial, arg.Quote))
 		}
 		if p.symfonyTranslations != nil {
 			if txCtx := frameworksymfony.DetectSymfonyTranslationContext(line, pos.Character); txCtx != nil {
@@ -257,8 +221,8 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 			}
 		}
 	}
-	if filter, quoteCtx, ok := extractContainerArgContext(trimmed); ok {
-		return sanitizeCompletions(p.completeContainerResolve(source, filter, quoteCtx, file, rk))
+	if inArg && isContainerArg(arg, source) {
+		return sanitizeCompletions(p.completeContainerResolve(source, arg.Partial, arg.Quote, file, rk))
 	}
 	// Variables in scope: `$` or `$na`
 	if typed, ok := typedVariablePrefix(prefix); ok {
@@ -377,7 +341,7 @@ func (p *Provider) completeSymfonyCommandNames(partial, quote string) []protocol
 	return items
 }
 
-func (p *Provider) completeMemberAccess(r *resolve.Resolver, uri, source string, pos protocol.Position, prefix string, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
+func (p *Provider) completeMemberAccess(r *resolve.Resolver, source string, pos protocol.Position, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
 	resolved := r.ReceiverTypeAt(source, pos, file)
 	if resolved.FQN == "object" && len(resolved.Fields) > 0 {
 		return objectShapeCompletions(resolved)
@@ -500,7 +464,7 @@ func objectShapeCompletions(rt resolve.ResolvedType) []protocol.CompletionItem {
 	return items
 }
 
-func (p *Provider) completeStaticAccess(r *resolve.Resolver, source, prefix string, pos protocol.Position, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
+func (p *Provider) completeStaticAccess(r *resolve.Resolver, source string, pos protocol.Position, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
 	recv, _ := r.ReceiverAt(source, pos, file)
 	typeName := ""
 	// $class:: where $class is a class-string<Foo>.

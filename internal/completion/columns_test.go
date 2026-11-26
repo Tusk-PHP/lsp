@@ -6,11 +6,30 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 )
 
-func TestExtractBuilderArgContext(t *testing.T) {
+func callArgAt(t *testing.T, marked string) (sourcectx.CallArg, bool) {
+	t.Helper()
+	at := strings.Index(marked, "|")
+	if at < 0 {
+		at = len(marked)
+	} else {
+		marked = marked[:at] + marked[at+1:]
+	}
+	before := marked[:at]
+	pos := protocol.Position{Line: strings.Count(before, "\n"), Character: at - strings.LastIndex(before, "\n") - 1}
+	ctx := sourcectx.Analyze("file:///test.php", marked, pos, phpparser.OnlyGrammar(token.Latest))
+	if ctx == nil {
+		t.Fatalf("no cursor context in %q", marked)
+	}
+	return ctx.CallArg()
+}
+
+func TestBuilderArgContext(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -31,8 +50,11 @@ func TestExtractBuilderArgContext(t *testing.T) {
 		{"select", "Category::select('", true, "select", "", "'"},
 		{"pluck", "$q->pluck('", true, "pluck", "", "'"},
 		{"latest", "Category::latest('", true, "latest", "", "'"},
+		{"closed string", "Category::where('na|')", true, "where", "na", "'"},
+		{"closed call, cursor in its parentheses", "Category::where(|);", true, "where", "", ""},
+		{"argument on the next line", "Category::query()\n    ->where(\n        'na|'\n    );", true, "where", "na", "'"},
+		{"unterminated string before more code", "function f() {\n    Category::where('na|\n}\nfunction g() { return 'x'; }", true, "where", "na", "'"},
 
-		// Array arguments
 		{"array first element quoted", "Category::with(['", true, "with", "", "'"},
 		{"array first element partial", "Category::with(['pro", true, "with", "pro", "'"},
 		{"array after comma", "Category::select(['id', '", true, "select", "", "'"},
@@ -41,35 +63,41 @@ func TestExtractBuilderArgContext(t *testing.T) {
 		{"array after comma no quote", "Category::select(['id', ", true, "select", "", ""},
 		{"array double quote", `Category::with(["pro`, true, "with", "pro", "\""},
 		{"get with array", "Category::get(['", true, "get", "", "'"},
+		{"array between elements", "Category::select(['id', |'name']);", true, "select", "", ""},
 
-		// Should NOT match
 		{"closed paren", "Category::where('name')", false, "", "", ""},
 		{"second arg", "Category::where('name', ", false, "", "", ""},
+		{"after the first argument without a comma", "Category::where('name' |);", false, "", "", ""},
+		{"comma in a comment is not a separator", "Category::where('name' /* , */ |);", false, "", "", ""},
 		{"unknown method", "$foo->someCustomMethod('", false, "", "", ""},
 		{"variable arg", "Category::where($col", false, "", "", ""},
 		{"closure arg", "Category::where(function", false, "", "", ""},
 		{"where array not supported", "Category::where(['", false, "", "", ""},
 		{"closed array", "Category::with(['products'])", false, "", "", ""},
+		{"closed array inside open call", "Category::with(['products']|", false, "", "", ""},
 		{"assoc array", "Category::where(['name' =>", false, "", "", ""},
+		{"function call", "where('", false, "", "", ""},
+		{"inner call closed", "Category::where(trim()|", false, "", "", ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			method, partial, quote, ok := extractBuilderArgContext(tt.input)
+			arg, ok := callArgAt(t, "<?php\n"+tt.input)
+			ok = ok && isBuilderArg(arg)
 			if ok != tt.wantOk {
-				t.Fatalf("ok = %v, want %v", ok, tt.wantOk)
+				t.Fatalf("ok = %v, want %v (%#v)", ok, tt.wantOk, arg)
 			}
 			if !tt.wantOk {
 				return
 			}
-			if method != tt.wantMeth {
-				t.Errorf("method = %q, want %q", method, tt.wantMeth)
+			if arg.Method != tt.wantMeth {
+				t.Errorf("method = %q, want %q", arg.Method, tt.wantMeth)
 			}
-			if partial != tt.wantPart {
-				t.Errorf("partial = %q, want %q", partial, tt.wantPart)
+			if arg.Partial != tt.wantPart {
+				t.Errorf("partial = %q, want %q", arg.Partial, tt.wantPart)
 			}
-			if quote != tt.wantQt {
-				t.Errorf("quote = %q, want %q", quote, tt.wantQt)
+			if arg.Quote != tt.wantQt {
+				t.Errorf("quote = %q, want %q", arg.Quote, tt.wantQt)
 			}
 		})
 	}
@@ -294,6 +322,46 @@ func TestResolveBuilderModelForDiagnostics(t *testing.T) {
 	} {
 		if got := p.ResolveBuilderModel(tc.prefix, tc.method, source, 2, file).FQN; got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.prefix, got, tc.want)
+		}
+	}
+}
+
+func TestBuilderModelOfACallOnAContinuationLine(t *testing.T) {
+	p, _ := setupEloquentCompletionTest(t)
+	source := "<?php\nuse App\\Models\\Category;\nCategory::query()\n    // ->with(\n    ->where('name', 1);\n"
+	file := parser.ParseFile(source, token.Latest)
+	if got := p.ResolveBuilderModel("    ->where(", "where", source, 4, file).FQN; got != `App\Models\Category` {
+		t.Errorf("diagnostics model = %q", got)
+	}
+	if got := p.ResolveBuilderModel("    ->where(", "with", source, 4, file).FQN; got != "" {
+		t.Errorf("a different method's model = %q", got)
+	}
+	if got := p.ResolveBuilderModel("    ->where(", "where", source, 4, nil).FQN; got != "" {
+		t.Errorf("model without a file = %q", got)
+	}
+
+	items := p.GetCompletions("file:///test.php", "<?php\nuse App\\Models\\Category;\nCategory::query()\n    ->with([\n        'products',\n        'pro'\n    ])\n    ->get();", protocol.Position{Line: 5, Character: 12})
+	if labels := collectLabels(items); !labels["products"] {
+		t.Errorf("expected the products relation in a multi-line with([...]), got %v", labels)
+	}
+}
+
+func TestBuilderModelOfTheCallsReceiver(t *testing.T) {
+	p, _ := setupEloquentCompletionTest(t)
+	file := func(body string) (string, *parser.FileNode) {
+		source := "<?php\nuse App\\Models\\Category;\n" + body
+		return source, parser.ParseFile(source, token.Latest)
+	}
+	for _, tc := range []struct{ body, prefix, want string }{
+		{"Unknown::where('name');", "Unknown::where(", ""},
+		{"$q = Category::query();\n$q->where('name');", "$q->where(", `App\Models\Category`},
+		{"Category::query()->where('a', 1)->where('name');", "Category::query()->where('a', 1)->where(", `App\Models\Category`},
+		{"Category::query()->toBase()->where('name');", "Category::query()->toBase()->where(", ""},
+	} {
+		source, f := file(tc.body)
+		line := strings.Count(source[:strings.LastIndex(source, tc.prefix)], "\n")
+		if got := p.ResolveBuilderModel(tc.prefix, "where", source, line, f).FQN; got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.body, got, tc.want)
 		}
 	}
 }

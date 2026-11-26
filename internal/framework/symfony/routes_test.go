@@ -49,35 +49,6 @@ class ProductController
 	}
 }
 
-func TestExtractRouteNameContext(t *testing.T) {
-	tests := []struct {
-		name      string
-		input     string
-		wantOk    bool
-		wantPart  string
-		wantQuote string
-	}{
-		{name: "generateUrl single quote", input: "$this->generateUrl('product_", wantOk: true, wantPart: "product_", wantQuote: "'"},
-		{name: "generate no quote yet", input: "$router->generate(prod", wantOk: true, wantPart: "prod", wantQuote: ""},
-		{name: "second arg should not match", input: "$this->redirectToRoute('product_show', ", wantOk: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			part, quote, ok := ExtractRouteNameContext(tt.input)
-			if ok != tt.wantOk {
-				t.Fatalf("ok = %v, want %v", ok, tt.wantOk)
-			}
-			if part != tt.wantPart {
-				t.Fatalf("partial = %q, want %q", part, tt.wantPart)
-			}
-			if quote != tt.wantQuote {
-				t.Fatalf("quote = %q, want %q", quote, tt.wantQuote)
-			}
-		})
-	}
-}
-
 func TestRouteNameAtPosition(t *testing.T) {
 	source := `<?php
 class ProductController

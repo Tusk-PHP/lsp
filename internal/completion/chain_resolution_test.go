@@ -1,15 +1,14 @@
 package completion
 
 import (
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
-	"strings"
 	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -361,23 +360,13 @@ func TestMultiLineChainResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("multi-line: hover on get() after with() shows Builder member", func(t *testing.T) {
-		source := "<?php\nuse App\\Models\\Category;\nCategory::query()\n    ->with('rel')\n    ->get()"
-		// Line 4: "    ->get()", cursor on "get" at character 6
-		lines := strings.Split(source, "\n")
-		joined, wordStart := resolve.JoinChainLines(lines, 4, 6)
-
-		// The joined line should contain the full chain
-		if !strings.Contains(joined, "Category::query()") {
-			t.Errorf("joined line should contain chain origin, got: %q", joined)
+	t.Run("multi-line: a name typed on a continuation line after a comment", func(t *testing.T) {
+		source := "<?php\nuse App\\Models\\Category;\nCategory::query()\n    // with(\n    ->with('rel')\n    ->ord"
+		items := p.GetCompletions("file:///test.php", source, protocol.Position{Line: 5, Character: 9})
+		labels := collectLabels(items)
+		if !labels["orderBy"] || labels["get"] {
+			t.Errorf("expected Builder methods starting with ord, got: %v", labels)
 		}
-		if !strings.Contains(joined, "->with") {
-			t.Errorf("joined line should contain ->with, got: %q", joined)
-		}
-		if !strings.Contains(joined, "->get") {
-			t.Errorf("joined line should contain ->get, got: %q", joined)
-		}
-		_ = wordStart
 	})
 
 	t.Run("multi-line: completions after get()-> on continuation line", func(t *testing.T) {

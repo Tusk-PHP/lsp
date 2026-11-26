@@ -1,7 +1,6 @@
 package resolve
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -366,69 +365,6 @@ func TestInferLiteralType(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestJoinChainLines(t *testing.T) {
-	t.Run("single line no-op", func(t *testing.T) {
-		lines := []string{"Category::query()->get()"}
-		joined, offset := JoinChainLines(lines, 0, 24)
-		if joined != "Category::query()->get()" || offset != 24 {
-			t.Errorf("got %q offset %d", joined, offset)
-		}
-	})
-
-	t.Run("two-line chain", func(t *testing.T) {
-		lines := []string{"Category::query()", "    ->get()"}
-		joined, _ := JoinChainLines(lines, 1, 6)
-		if joined != "Category::query()    ->get()" {
-			t.Errorf("got %q", joined)
-		}
-	})
-
-	t.Run("three-line chain", func(t *testing.T) {
-		lines := []string{"Category::query()", "    ->with('rel')", "    ->get()"}
-		joined, _ := JoinChainLines(lines, 2, 6)
-		if joined != "Category::query()    ->with('rel')    ->get()" {
-			t.Errorf("got %q", joined)
-		}
-	})
-
-	t.Run("argument list of hundreds of lines with brackets in strings", func(t *testing.T) {
-		lines := []string{"$x = 1;", "Collection::make(["}
-		for i := 0; i < 400; i++ {
-			lines = append(lines, `    ['form' => '[{"a":[1]}]'],`)
-		}
-		lines = append(lines, "])->each(fn ($i) => $i);")
-		last := len(lines) - 1
-		joined, offset := JoinChainLines(lines, last, 4)
-		if !strings.HasPrefix(joined, "Collection::make([") || !strings.HasPrefix(joined[offset:], "each(") {
-			t.Errorf("joined starts %q, at offset %q", joined[:min(30, len(joined))], joined[offset:min(offset+10, len(joined))])
-		}
-	})
-
-	t.Run("non-chain line not joined", func(t *testing.T) {
-		lines := []string{"$x = 1;", "$y = 2;"}
-		joined, offset := JoinChainLines(lines, 1, 3)
-		if joined != "$y = 2;" || offset != 3 {
-			t.Errorf("got %q offset %d", joined, offset)
-		}
-	})
-
-	t.Run("out of bounds", func(t *testing.T) {
-		lines := []string{"hello"}
-		joined, offset := JoinChainLines(lines, 5, 0)
-		if joined != "" || offset != 0 {
-			t.Errorf("got %q offset %d", joined, offset)
-		}
-	})
-
-	t.Run("nullsafe chain", func(t *testing.T) {
-		lines := []string{"$user", "    ?->getName()"}
-		joined, _ := JoinChainLines(lines, 1, 6)
-		if joined != "$user    ?->getName()" {
-			t.Errorf("got %q", joined)
-		}
-	})
 }
 
 func TestBuildFQN(t *testing.T) {

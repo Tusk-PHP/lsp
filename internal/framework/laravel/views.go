@@ -260,11 +260,12 @@ type viewCall struct {
 }
 
 func findViewCall(prefix string) (viewCall, bool) {
-	for idx := strings.LastIndex(prefix, "view("); idx >= 0; idx = strings.LastIndex(prefix[:idx], "view(") {
+	const open = viewHelper + "("
+	for idx := strings.LastIndex(prefix, open); idx >= 0; idx = strings.LastIndex(prefix[:idx], open) {
 		if idx > 0 && parser.IsIdentByte(prefix[idx-1]) {
 			continue
 		}
-		call := viewCall{argsStart: idx + len("view(")}
+		call := viewCall{argsStart: idx + len(open)}
 		before := strings.TrimSpace(prefix[:idx])
 		if strings.HasSuffix(before, "::") || strings.HasSuffix(before, "->") {
 			call.targetArg = 1

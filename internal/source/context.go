@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
@@ -45,20 +46,19 @@ type Scope struct {
 }
 
 type NameContext struct {
-	URI             string
-	Position        protocol.Position
-	SymbolText      string
-	SymbolKind      ContextSymbolKind
-	AccessKind      AccessKind
-	SubjectExpr     string
-	EnclosingFQN    string
-	WordRange       protocol.Range
-	Line            string
-	JoinedLine      string
-	JoinedWordStart int
-	File            *parser.FileNode
-	Called          bool
-	FunctionCall    bool
+	URI          string
+	Position     protocol.Position
+	SymbolText   string
+	SymbolKind   ContextSymbolKind
+	AccessKind   AccessKind
+	Member       Member
+	EnclosingFQN string
+	WordRange    protocol.Range
+	Line         string
+	Offset       uint32
+	File         *parser.FileNode
+	Called       bool
+	FunctionCall bool
 }
 
 type CursorContext struct {
@@ -79,14 +79,15 @@ func (c *NameContext) MemberAccess() resolve.MemberAccess {
 	return resolve.MemberAccessOf(c.Called, c.AccessKind == AccessStatic, c.SymbolText)
 }
 
-type MemberContext struct {
-	Prefix     string
-	Filter     string
-	AccessKind AccessKind
+type Member struct {
+	Access ast.Expr
+	Filter string
+	Call   bool
 }
 
 type Document struct {
 	uri    string
+	source string
 	lines  []string
 	result *parser.ParseResult
 	file   *parser.FileNode
@@ -94,7 +95,7 @@ type Document struct {
 
 func NewDocument(uri, source string, grammars phpparser.GrammarRange) *Document {
 	result := parser.New().Parse(source)
-	return &Document{uri: uri, lines: result.Lines, result: result, file: parser.ParseFileIn(source, grammars)}
+	return &Document{uri: uri, source: source, lines: result.Lines, result: result, file: parser.ParseFileIn(source, grammars)}
 }
 
 func (d *Document) Tokens() []parser.Token {
@@ -126,24 +127,23 @@ func (d *Document) NameAt(pos protocol.Position) *NameContext {
 	}
 	line := d.lines[pos.Line]
 	word, wordRange := wordAtLine(line, pos)
-	joinedLine, joinedWordStart := resolve.JoinChainLines(d.lines, pos.Line, wordRange.Start.Character)
-	accessKind, subjectExpr := detectAccess(joinedLine, joinedWordStart)
+	off := Offset(d.source, pos)
+	accessKind, member := memberAt(d.file, off)
 	called := isCalled(d.result.Tokens, wordRange)
 	return &NameContext{
-		URI:             d.uri,
-		Position:        pos,
-		SymbolText:      word,
-		SymbolKind:      classifySymbolKind(word),
-		AccessKind:      accessKind,
-		SubjectExpr:     subjectExpr,
-		EnclosingFQN:    enclosingClassAt(d.result, d.file, pos),
-		WordRange:       wordRange,
-		Line:            line,
-		JoinedLine:      joinedLine,
-		JoinedWordStart: joinedWordStart,
-		File:            d.file,
-		Called:          called,
-		FunctionCall:    called && accessKind == AccessNone,
+		URI:          d.uri,
+		Position:     pos,
+		SymbolText:   word,
+		SymbolKind:   classifySymbolKind(word),
+		AccessKind:   accessKind,
+		Member:       member,
+		EnclosingFQN: enclosingClassAt(d.result, d.file, pos),
+		WordRange:    wordRange,
+		Line:         line,
+		Offset:       off,
+		File:         d.file,
+		Called:       called,
+		FunctionCall: called && accessKind == AccessNone,
 	}
 }
 
@@ -196,45 +196,38 @@ func wordAtLine(line string, pos protocol.Position) (string, protocol.Range) {
 	}
 }
 
-func DetectMemberContext(trimmed string) (MemberContext, bool) {
-	for i := len(trimmed) - 1; i >= 2; i-- {
-		if i >= 2 && trimmed[i-2] == '?' && trimmed[i-1] == '-' && trimmed[i] == '>' {
-			filter := trimmed[i+1:]
-			if isMemberFilter(filter) {
-				return MemberContext{Prefix: trimmed[:i+1], Filter: filter, AccessKind: AccessNullsafe}, true
-			}
-		}
-		if trimmed[i-1] == '-' && trimmed[i] == '>' {
-			filter := trimmed[i+1:]
-			if isMemberFilter(filter) {
-				return MemberContext{Prefix: trimmed[:i+1], Filter: filter, AccessKind: AccessInstance}, true
-			}
-		}
-		if trimmed[i-1] == ':' && trimmed[i] == ':' {
-			filter := trimmed[i+1:]
-			if isMemberFilter(filter) {
-				return MemberContext{Prefix: trimmed[:i+1], Filter: filter, AccessKind: AccessStatic}, true
-			}
-		}
-	}
-	return MemberContext{}, false
+func Offset(source string, pos protocol.Position) uint32 {
+	off, _ := ast.NewLines(source).Offset(pos.Line, pos.Character, len(source))
+	return off
 }
 
-func detectAccess(line string, wordStart int) (AccessKind, string) {
-	i := wordStart
-	for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {
-		i--
+func memberAt(file *parser.FileNode, off uint32) (AccessKind, Member) {
+	access := ast.MemberAccessAt(file.Tree, off)
+	_, name, static := ast.MemberAccess(access)
+	if access == nil {
+		return AccessNone, Member{}
 	}
-	if i >= 3 && line[i-3] == '?' && line[i-2] == '-' && line[i-1] == '>' {
-		return AccessNullsafe, strings.TrimSpace(line[:i-3])
+	m := Member{Access: access}
+	if span := name.Bounds(); span.Start < off {
+		m.Filter = file.Source[span.Start:min(off, span.End)]
 	}
-	if i >= 2 && line[i-2] == '-' && line[i-1] == '>' {
-		return AccessInstance, strings.TrimSpace(line[:i-2])
+	switch access := access.(type) {
+	case *ast.MethodCall:
+		m.Call = name.Bounds().Start <= off
+		if access.Nullsafe {
+			return AccessNullsafe, m
+		}
+	case *ast.StaticCall:
+		m.Call = name.Bounds().Start <= off
+	case *ast.PropertyFetch:
+		if access.Nullsafe {
+			return AccessNullsafe, m
+		}
 	}
-	if i >= 2 && line[i-2] == ':' && line[i-1] == ':' {
-		return AccessStatic, strings.TrimSpace(line[:i-2])
+	if static {
+		return AccessStatic, m
 	}
-	return AccessNone, ""
+	return AccessInstance, m
 }
 
 func classifySymbolKind(word string) ContextSymbolKind {
@@ -245,10 +238,6 @@ func classifySymbolKind(word string) ContextSymbolKind {
 		return ContextSymbolIdentifier
 	}
 	return ContextSymbolUnknown
-}
-
-func isMemberFilter(filter string) bool {
-	return filter != "" && !strings.ContainsAny(filter, " \t(=;,")
 }
 
 func scopeAt(result *parser.ParseResult, pos protocol.Position, classFQN string) *Scope {
