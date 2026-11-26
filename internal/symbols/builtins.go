@@ -319,7 +319,17 @@ func (idx *Index) registerBuiltinRegistryLocked(profile BuiltinProfile) {
 		idx.addBuiltinFunctionLocked(name, nil, "mixed", "PHP built-in function")
 	}
 
+	for _, c := range generatedBuiltinClassLikes {
+		idx.addBuiltinClassLikeWithMembersLocked(c, profile)
+	}
+
 	for _, cls := range builtinClasses {
+		if sym := idx.builtinLocked(cls.Name); sym != nil {
+			if sym.DocComment == "" {
+				sym.DocComment = cls.Doc
+			}
+			continue
+		}
 		if !builtinAvailable(cls.Name, profile) {
 			continue
 		}

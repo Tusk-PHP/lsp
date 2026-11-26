@@ -467,12 +467,16 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		sym := &Symbol{Name: iface.Name, FQN: fqn, Kind: KindInterface, URI: uri, DocComment: qualifyDocTypes(iface.DocComment, file.Uses),
 			Implements: resolveNames(iface.Extends, resolve), Attributes: indexAttributes(iface.Attributes, resolve),
 			Range: symRange(iface.StartLine, iface.StartCol, len(iface.Name))}
+		previous := idx.symbols[fqn]
 		idx.addSymbolWithSource(uri, sym, src)
-		idx.linkTypeLocked(sym)
 		idx.indexProperties(uri, sym, fqn, iface.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, iface.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, iface.Constants, file.Uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
+		if src == SourceBuiltin {
+			mergeEarlierLayer(sym, previous)
+		}
+		idx.linkTypeLocked(sym)
 	}
 
 	for _, tr := range file.Traits {
@@ -480,13 +484,17 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		sym := &Symbol{Name: tr.Name, FQN: fqn, Kind: KindTrait, URI: uri, DocComment: qualifyDocTypes(tr.DocComment, file.Uses),
 			Traits: resolveNames(tr.Traits, resolve), traitRules: newTraitRules(fqn, tr.TraitRules, resolve),
 			Range: symRange(tr.StartLine, tr.StartCol, len(tr.Name))}
+		previous := idx.symbols[fqn]
 		idx.addSymbolWithSource(uri, sym, src)
-		idx.linkTypeLocked(sym)
 		idx.indexProperties(uri, sym, fqn, tr.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, tr.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, tr.Constants, file.Uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 		sym.Supertypes = append(sym.Supertypes, traitUseSupertypes(tr.TraitUseDoc, file.Uses, resolve)...)
+		if src == SourceBuiltin {
+			mergeEarlierLayer(sym, previous)
+		}
+		idx.linkTypeLocked(sym)
 	}
 
 	for _, en := range file.Enums {
@@ -496,8 +504,8 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 			traitRules: newTraitRules(fqn, en.TraitRules, resolve),
 			Attributes: indexAttributes(en.Attributes, resolve),
 			Range:      symRange(en.StartLine, en.StartCol, len(en.Name))}
+		previous := idx.symbols[fqn]
 		idx.addSymbolWithSource(uri, sym, src)
-		idx.linkTypeLocked(sym)
 		for _, ec := range en.Cases {
 			cs := &Symbol{Name: ec.Name, FQN: fqn + "::" + ec.Name, Kind: KindEnumCase, URI: uri, ParentFQN: fqn, Value: ec.Value,
 				DocComment: ec.DocComment, Attributes: indexAttributes(ec.Attributes, resolve),
@@ -509,6 +517,10 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		idx.indexMethods(uri, sym, fqn, en.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, en.Constants, file.Uses, src, resolve)
 		idx.indexEnumMembers(uri, sym, src)
+		if src == SourceBuiltin {
+			mergeEarlierLayer(sym, previous)
+		}
+		idx.linkTypeLocked(sym)
 	}
 
 	idx.indexConstants(uri, nil, ns, file.Constants, file.Uses, src, resolve)
@@ -800,6 +812,10 @@ func namespaceForFQN(fqn string) string {
 	return ""
 }
 
+func shortName(fqn string) string {
+	return fqn[strings.LastIndex(fqn, "\\")+1:]
+}
+
 func (idx *Index) indexMethods(uri string, parent *Symbol, parentFQN string, methods []parser.MethodNode, src SymbolSource, resolve func(string) string, uses []parser.UseNode) {
 	for _, m := range methods {
 		ms := &Symbol{
@@ -883,6 +899,9 @@ func mergeEarlierLayer(sym, previous *Symbol) {
 		if !declared[child.Name] {
 			sym.Children = append(sym.Children, child)
 		}
+	}
+	if previous.URI == builtinRegistryURI {
+		return
 	}
 	if sym.DocComment == "" {
 		sym.DocComment = previous.DocComment
