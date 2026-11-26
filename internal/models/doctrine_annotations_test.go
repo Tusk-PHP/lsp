@@ -78,6 +78,14 @@ class Person {}
 class Log {}
 /** @ORM\Entity(repositoryClass="App\Repository\NoteRepository") */
 class Note {}
+/** @ORM\Entity(repositoryClass="TagRepository") */
+class Tag {}
+/** @ORM\Entity(repositoryClass="\App\Repository\PageRepository") */
+class Page {}
+/** @ORM\Entity(repositoryClass="Odd""Repository") */
+class Odd {}
+/** @ORM\Entity(repositoryClass=BareRepository) */
+class Bare {}
 /** Written by someone@ORM\Entity.example; see @ORM\Table. */
 class Plain {}
 /** @Other\Entity */
@@ -87,9 +95,58 @@ class Unrelated {}
 	for _, entity := range doctrineEntities(file) {
 		got = append(got, entity.fqn+" "+entity.repository)
 	}
-	want := []string{`App\Entity\Person App\Entity\PersonRepository`, `App\Entity\Log Other\LogRepository`, `App\Entity\Note `}
+	want := []string{`App\Entity\Person App\Entity\PersonRepository`, `App\Entity\Log Other\LogRepository`, `App\Entity\Note App\Repository\NoteRepository`, `App\Entity\Tag App\Entity\TagRepository`, `App\Entity\Page App\Repository\PageRepository`, `App\Entity\Odd App\Entity\Odd"Repository`, `App\Entity\Bare `}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestDoctrineEntityAttributeRepositoryStrings(t *testing.T) {
+	cases := []struct {
+		name, source, want string
+	}{
+		{"single-quoted", `<?php
+namespace App\Entity;
+use Doctrine\ORM\Mapping as ORM;
+#[ORM\Entity(repositoryClass: 'App\Repository\UserRepository')]
+class User {}`, `App\Repository\UserRepository`},
+		{"double-quoted", `<?php
+namespace App\Entity;
+use Doctrine\ORM\Mapping as ORM;
+#[ORM\Entity(repositoryClass: "App\Repository\UserRepository")]
+class User {}`, `App\Repository\UserRepository`},
+		{"bare name", `<?php
+namespace App\Entity;
+use Doctrine\ORM\Mapping as ORM;
+#[ORM\Entity('UserRepository')]
+class User {}`, `App\Entity\UserRepository`},
+		{"leading backslash", `<?php
+namespace App\Entity;
+use Doctrine\ORM\Mapping as ORM;
+#[ORM\Entity(repositoryClass: '\App\Repository\UserRepository')]
+class User {}`, `App\Repository\UserRepository`},
+		{"global namespace", `<?php
+use Doctrine\ORM\Mapping as ORM;
+#[ORM\Entity(repositoryClass: 'UserRepository')]
+class User {}`, `UserRepository`},
+		{"empty string", `<?php
+namespace App\Entity;
+use Doctrine\ORM\Mapping as ORM;
+#[ORM\Entity(repositoryClass: '')]
+class User {}`, ``},
+		{"interpolated", `<?php
+namespace App\Entity;
+use Doctrine\ORM\Mapping as ORM;
+#[ORM\Entity(repositoryClass: "App\Repository\{$name}")]
+class User {}`, ``},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			entities := doctrineEntities(parser.ParseFile(c.source, token.Latest))
+			if len(entities) != 1 || entities[0].repository != c.want {
+				t.Fatalf("got %+v, want repository %q", entities, c.want)
+			}
+		})
 	}
 }
 

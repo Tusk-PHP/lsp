@@ -57,9 +57,9 @@ func doctrineEntities(file *parser.FileNode) []doctrineEntity {
 		cls := &file.Classes[i]
 		entity := doctrineEntity{class: cls, fqn: cls.FullName, resolve: resolve}
 		if attr := entity.attribute(cls.Attributes, "Entity"); attr != nil {
-			entity.repository = entity.classArgument(attr.Args, "repositoryClass", 0)
+			entity.repository = entity.classArgument(attr.Args, "repositoryClass", 0, parser.Unquote)
 		} else if args, ok := entity.annotation(cls.DocComment, "Entity"); ok {
-			entity.repository = entity.classArgument(args, "repositoryClass", -1)
+			entity.repository = entity.classArgument(args, "repositoryClass", -1, annotationString)
 		} else {
 			continue
 		}
@@ -84,13 +84,33 @@ func (e doctrineEntity) annotation(doc, kind string) (parser.AttributeArgs, bool
 	})
 }
 
-func (e doctrineEntity) classArgument(args parser.AttributeArgs, name string, position int) string {
+func (e doctrineEntity) classArgument(args parser.AttributeArgs, name string, position int, unquote func(string) (string, bool)) string {
 	value, _ := args.Get(name, position)
-	class, ok := strings.CutSuffix(value, "::class")
+	if class, ok := strings.CutSuffix(value, "::class"); ok {
+		return e.resolve(class)
+	}
+	class, ok := unquote(value)
 	if !ok || class == "" {
 		return ""
 	}
-	return e.resolve(class)
+	return e.className(class)
+}
+
+func (e doctrineEntity) className(name string) string {
+	if strings.Contains(name, `\`) {
+		return strings.TrimPrefix(name, `\`)
+	}
+	if namespace := strings.LastIndexByte(e.fqn, '\\'); namespace >= 0 {
+		return e.fqn[:namespace+1] + name
+	}
+	return name
+}
+
+func annotationString(value string) (string, bool) {
+	if len(value) < 2 || value[0] != '"' || value[len(value)-1] != '"' {
+		return "", false
+	}
+	return strings.ReplaceAll(value[1:len(value)-1], `""`, `"`), true
 }
 
 type doctrineRelationProperty struct {
@@ -102,7 +122,7 @@ type doctrineRelationProperty struct {
 func (e doctrineEntity) relation(prop parser.PropertyNode) (doctrineRelationProperty, bool) {
 	for _, kind := range doctrineRelationKinds {
 		if attr := e.attribute(prop.Attributes, kind); attr != nil {
-			return doctrineRelationProperty{name: prop.Name, kind: kind, target: e.classArgument(attr.Args, "targetEntity", -1)}, true
+			return doctrineRelationProperty{name: prop.Name, kind: kind, target: e.classArgument(attr.Args, "targetEntity", -1, parser.Unquote)}, true
 		}
 	}
 	return doctrineRelationProperty{}, false
@@ -111,19 +131,12 @@ func (e doctrineEntity) relation(prop parser.PropertyNode) (doctrineRelationProp
 func (e doctrineEntity) tableName() string {
 	if table := e.attribute(e.class.Attributes, "Table"); table != nil {
 		if name, ok := table.Args.Get("name", 0); ok {
-			if unquoted, ok := phpStringLiteral(name); ok && unquoted != "" {
+			if unquoted, ok := parser.Unquote(name); ok && unquoted != "" {
 				return unquoted
 			}
 		}
 	}
 	return toSnakeCase(e.class.Name)
-}
-
-func phpStringLiteral(value string) (string, bool) {
-	if len(value) < 2 || value[0] != value[len(value)-1] || value[0] != '\'' && value[0] != '"' {
-		return "", false
-	}
-	return value[1 : len(value)-1], true
 }
 
 // Singular Doctrine relations (result is nullable entity).
@@ -193,7 +206,7 @@ func resolveColumnType(column *parser.AttributeDef, propType string) string {
 		return propType
 	}
 	value, _ := column.Args.Get("type", 1)
-	name, ok := phpStringLiteral(value)
+	name, ok := parser.Unquote(value)
 	if !ok {
 		constant, isConstant := strings.CutPrefix(value, "Types::")
 		name, ok = strings.ToLower(constant), isConstant

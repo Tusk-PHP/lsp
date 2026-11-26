@@ -320,7 +320,7 @@ func injectColumnsAsProperties(index *symbols.Index, classSym *symbols.Symbol, c
 // ResolveModelTableName determines the database table name for a Laravel Eloquent model.
 func ResolveModelTableName(index *symbols.Index, model *symbols.Symbol) string {
 	if tableProp := index.Lookup(model.FQN + "::$table"); tableProp != nil {
-		if table, ok := phpStringLiteral(tableProp.Value); ok && table != "" {
+		if table, ok := parser.Unquote(tableProp.Value); ok && table != "" {
 			return table
 		}
 	}
