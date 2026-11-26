@@ -7,7 +7,6 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -15,7 +14,7 @@ type callBenchmark struct {
 	index    *symbols.Index
 	file     *parser.FileNode
 	source   string
-	resolver func(expr, source string, line, col int, file *parser.FileNode) string
+	resolver TypeResolver
 }
 
 func newCallBenchmark() callBenchmark {
@@ -42,12 +41,10 @@ function score(int $a, int $b = 0): int { return $a + $b; }
 	idx.IndexFile("file:///service.php", source)
 	types := completion.NewProvider(idx, nil, "")
 	return callBenchmark{
-		index:  idx,
-		file:   parser.ParseFile(source, token.Latest),
-		source: source,
-		resolver: func(expr, source string, line, col int, file *parser.FileNode) string {
-			return types.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
-		},
+		index:    idx,
+		file:     parser.ParseFile(source, token.Latest),
+		source:   source,
+		resolver: types.DiagnosticType,
 	}
 }
 

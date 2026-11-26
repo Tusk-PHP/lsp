@@ -41,9 +41,9 @@ class Invoice extends \Fw\Notification {}
 			}
 			source := "<?php\nnamespace App\\Http;\n" + tc.use + "\n"
 			checker := &UnknownMemberRule{
-				TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string {
+				TypeResolver: typesByText(func(expr string) string {
 					return map[string]string{"$v": tc.typ}[expr]
-				},
+				}),
 				ConventionMethod: convention,
 			}
 			got := unknownMemberMessages(checker.Check(parser.ParseFile(source, token.Latest), source, idx))

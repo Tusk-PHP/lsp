@@ -10,6 +10,7 @@ import (
 	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
@@ -54,15 +55,17 @@ func (p *Provider) resolveExpressionType(r *resolve.Resolver, expr string, sourc
 	return resolve.PlainTypeName(r.ChainType(expr, source, pos, file))
 }
 
-// ResolveDiagnosticType returns the type diagnostics check an expression
-// against: the generic-aware type, written out in full ("?Foo",
-// "Foo|Bar", "Collection<int, User>"), the same one hover and completion
-// see. It falls back to the plain chain type when that can't be worked out.
-func (p *Provider) ResolveDiagnosticType(expr string, source string, pos protocol.Position, file *parser.FileNode) string {
-	if rt := p.ResolveExpressionTypeTyped(expr, source, pos, file); !rt.IsEmpty() {
-		return rt.FullString()
-	}
-	return p.ResolveExpressionType(expr, source, pos, file)
+// Resolver starts a request on completion's resolver, for the providers
+// that type the same expressions.
+func (p *Provider) Resolver() *resolve.Resolver {
+	return p.engine.Resolver()
+}
+
+// DiagnosticType returns the type diagnostics check an expression node of
+// file against, written out in full ("?Foo", "Foo|Bar",
+// "Collection<int, User>"), the same one hover and completion see.
+func (p *Provider) DiagnosticType(file *parser.FileNode, e ast.Expr) string {
+	return p.engine.Resolver().NodeType(file, e).FullString()
 }
 
 // ResolveExpressionTypeTyped resolves the type of an expression preserving
@@ -176,7 +179,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 	}
 	if inArg && isBuilderArg(arg) {
-		if items := p.completeBuilderArg(r, arg, source, file); items != nil {
+		if items := p.completeBuilderArg(r, arg, file); items != nil {
 			return sanitizeCompletions(items)
 		}
 	}

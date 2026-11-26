@@ -93,7 +93,7 @@ func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index 
 // UnknownMemberRule detects unresolved method/property/constant accesses when
 // the receiver type can be resolved reliably.
 type UnknownMemberRule struct {
-	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
+	TypeResolver TypeResolver
 	// ConventionMethod, when set, reports whether a framework calls method on
 	// instances of class (one class of the receiver's hierarchy) by convention,
 	// without the class declaring it, as Laravel does with a notification's
@@ -134,7 +134,7 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 		if guards.covers(ownerExpr, member, ref.call(), ref.static, lineNum, nameCol) {
 			continue
 		}
-		owners := recv.classLikes(source, file, index, r.TypeResolver)
+		owners := recv.classLikes(file, index, r.TypeResolver)
 		if len(owners) == 0 {
 			continue
 		}

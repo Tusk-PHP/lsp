@@ -15,7 +15,7 @@ import (
 
 // DeprecatedUsageRule flags uses of what's marked with PHP 8.4's #[\Deprecated].
 type DeprecatedUsageRule struct {
-	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
+	TypeResolver TypeResolver
 	// Uses, when set, shares the attribute uses found in a file with the
 	// other rules run over it.
 	Uses *MemberUseCache
@@ -42,7 +42,7 @@ func (r *DeprecatedUsageRule) Check(file *parser.FileNode, source string, index 
 // UnusedResultRule flags calls to what's marked with PHP 8.5's #[\NoDiscard]
 // whose result is thrown away. A `(void)` cast is the way to do that on purpose.
 type UnusedResultRule struct {
-	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
+	TypeResolver TypeResolver
 	// Uses, when set, shares the attribute uses found in a file with the
 	// other rules run over it.
 	Uses *MemberUseCache
@@ -181,7 +181,7 @@ type MemberUseCache struct {
 	done   bool
 }
 
-func (c *MemberUseCache) get(file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string) []memberUse {
+func (c *MemberUseCache) get(file *parser.FileNode, source string, index *symbols.Index, typeResolver TypeResolver) []memberUse {
 	if c == nil {
 		return memberUses(file, source, index, typeResolver, nil)
 	}
@@ -198,7 +198,7 @@ func (u memberUse) finding(code rule.Code, message string, tags []Tag) Finding {
 	return f
 }
 
-func memberUses(file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string, shared *Shared) []memberUse {
+func memberUses(file *parser.FileNode, source string, index *symbols.Index, typeResolver TypeResolver, shared *Shared) []memberUse {
 	if file == nil || index == nil {
 		return nil
 	}
@@ -225,7 +225,7 @@ func memberUses(file *parser.FileNode, source string, index *symbols.Index, type
 		if !ok {
 			continue
 		}
-		owners := recv.classLikes(source, file, index, typeResolver)
+		owners := recv.classLikes(file, index, typeResolver)
 		if len(owners) == 0 {
 			continue
 		}

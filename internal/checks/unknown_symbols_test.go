@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -181,9 +182,9 @@ func checkUnknownMembers(t *testing.T, vars map[string]string, sources ...string
 		idx.IndexFileWithSource("file:///f"+strconv.Itoa(i)+".php", source, src)
 	}
 	source := sources[len(sources)-1]
-	checker := &UnknownMemberRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string {
+	checker := &UnknownMemberRule{TypeResolver: typesByText(func(expr string) string {
 		return vars[expr]
-	}}
+	})}
 	return checker.Check(parser.ParseFile(source, token.Latest), source, idx)
 }
 
@@ -306,7 +307,7 @@ func TestUnknownMemberBuiltinWithoutMembersIsNotFlagged(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
 	source := "<?php\nnamespace App;\n$v->open();\n"
-	checker := &UnknownMemberRule{TypeResolver: func(string, string, int, int, *parser.FileNode) string { return "ZipArchive" }}
+	checker := &UnknownMemberRule{TypeResolver: func(*parser.FileNode, ast.Expr) string { return "ZipArchive" }}
 	if sym := idx.Lookup("ZipArchive"); sym == nil || len(sym.Children) != 0 {
 		t.Skip("ZipArchive now has its members listed")
 	}
@@ -402,9 +403,9 @@ $t = DateTime::createFromTimestamp(1);
 	check := func(version string) []string {
 		idx := symbols.NewIndex()
 		idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: version})
-		checker := &UnknownMemberRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string {
+		checker := &UnknownMemberRule{TypeResolver: typesByText(func(expr string) string {
 			return vars[expr]
-		}}
+		})}
 		return unknownMemberMessages(checker.Check(parser.ParseFile(source, token.Latest), source, idx))
 	}
 	if got := check("8.4"); len(got) != 0 {

@@ -6,21 +6,24 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
+// TypeResolver gives the type of an expression node of file, written as the
+// class names it can be ("" when it can't be worked out).
+type TypeResolver func(file *parser.FileNode, e ast.Expr) string
+
 type receiver struct {
 	node   ast.Expr
 	static bool
 	text   string
 	line   int
-	col    int
 }
 
 func (f *fileSyntax) receiverOf(ref memberReference) (receiver, bool) {
 	span := ref.owner.Bounds()
-	line, col := f.lines.Position(span.Start)
+	line, _ := f.lines.Position(span.Start)
 	if endLine, _ := f.lines.Position(span.End); endLine != line || f.line(ref.name) != line {
 		return receiver{}, false
 	}
-	return receiver{node: ref.owner, static: ref.static, text: span.Text(f.src), line: line, col: col}, true
+	return receiver{node: ref.owner, static: ref.static, text: span.Text(f.src), line: line}, true
 }
 
 func (r receiver) className(file *parser.FileNode, index *symbols.Index) (string, bool) {
@@ -30,14 +33,14 @@ func (r receiver) className(file *parser.FileNode, index *symbols.Index) (string
 	return classNamed(r.text, r.line, file, index)
 }
 
-func (r receiver) classLikes(source string, file *parser.FileNode, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string) []string {
+func (r receiver) classLikes(file *parser.FileNode, index *symbols.Index, typeResolver TypeResolver) []string {
 	if name, ok := r.className(file, index); ok {
 		return []string{name}
 	}
 	if typeResolver == nil {
 		return nil
 	}
-	return resolvedClassLikes(typeResolver(r.text, source, r.line, r.col, file), file, index)
+	return resolvedClassLikes(typeResolver(file, r.node), file, index)
 }
 
 func (f *fileSyntax) onThis(e ast.Expr) bool {

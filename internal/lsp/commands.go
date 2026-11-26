@@ -113,7 +113,7 @@ func (s *Server) debugDocument(uri string) string {
 	}
 
 	file := parser.ParseFileIn(source, s.index.GrammarOf(uri))
-	var typeRes diagnostics.TypeResolverFunc
+	var typeRes checks.TypeResolver
 	var builtinRule *checks.BuiltinUnavailableRule
 	if s.diag != nil {
 		typeRes = s.diag.TypeResolver

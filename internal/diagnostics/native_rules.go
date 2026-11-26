@@ -3,11 +3,10 @@ package diagnostics
 import (
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 type NativeRulesOptions struct {
-	TypeResolver           func(expr string, source string, line, col int, file *parser.FileNode) string
+	TypeResolver           checks.TypeResolver
 	BuiltinUnavailableRule *checks.BuiltinUnavailableRule
 	BuilderModelResolver   checks.ModelResolverFunc
 	BuilderMemberChecker   checks.MemberChecker

@@ -9,6 +9,9 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -28,18 +31,15 @@ type TypedInputs struct {
 	Complete bool
 }
 
-// ResolveFunc types a PHP expression written at a line and column of a
-// file.
-type ResolveFunc func(expr, source string, file *parser.FileNode, line, col int) string
-
 // ViewTypes types the variables views receive (see ViewData). A view's
 // types are worked out the first time they are needed and kept until the
 // index or the view data change.
 type ViewTypes struct {
 	Data  *ViewData
 	Index *symbols.Index
-	// Resolve types an expression where it is written.
-	Resolve ResolveFunc
+	// Resolver starts the resolver that types the expressions passed to
+	// views, where they are written.
+	Resolver func() *resolve.Resolver
 	// Read returns a file's source, open in the editor or on disk.
 	Read func(uri string) string
 
@@ -73,6 +73,7 @@ type typingState struct {
 type siteFile struct {
 	source string
 	file   *parser.FileNode
+	lines  ast.Lines
 }
 
 func (t *ViewTypes) of(view string, st *typingState) TypedInputs {
@@ -344,7 +345,7 @@ func (t *ViewTypes) siteType(site ViewVar, st *typingState) string {
 		}
 		return ""
 	}
-	if t.Resolve == nil {
+	if t.Resolver == nil {
 		return ""
 	}
 	f, ok := st.files[site.URI]
@@ -352,13 +353,26 @@ func (t *ViewTypes) siteType(site ViewVar, st *typingState) string {
 		f.source = t.source(site.URI)
 		if f.source != "" {
 			f.file = parser.ParseFileIn(f.source, t.Index.GrammarOf(site.URI))
+			f.lines = ast.NewLines(f.source)
 		}
 		st.files[site.URI] = f
 	}
 	if f.source == "" {
 		return ""
 	}
-	return t.Resolve(expr, f.source, f.file, site.ExprLine, site.ExprCol)
+	start, ok := f.lines.Offset(site.ExprLine, site.ExprCol, len(f.source))
+	if !ok {
+		return ""
+	}
+	r := t.Resolver()
+	if e := ast.ExprSpanning(f.file.Tree, ast.Span{Start: start, End: start + uint32(len(expr))}); e != nil {
+		return resolve.PlainTypeName(r.NodeType(f.file, e))
+	}
+	if !strings.HasPrefix(expr, "$") || !isVarName(expr[1:]) {
+		return ""
+	}
+	pos := protocol.Position{Line: site.ExprLine, Character: site.ExprCol}
+	return resolve.PlainTypeName(r.ResolveVariableTypeTyped(expr, r.Lines(f.source), pos, f.file))
 }
 
 func (t *ViewTypes) source(uri string) string {

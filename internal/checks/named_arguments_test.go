@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -43,7 +44,7 @@ new static(x: 1);
 greet(name: 'a', times: fn () => greet(bad: 1));
 strlen(string: 'x');
 `
-	resolver := func(expr, _ string, _, _ int, _ *parser.FileNode) string {
+	resolver := typesByText(func(expr string) string {
 		switch expr {
 		case "$u":
 			return `App\User`
@@ -51,7 +52,7 @@ strlen(string: 'x');
 			return `App\Magic`
 		}
 		return ""
-	}
+	})
 	r := &UnknownNamedArgumentRule{TypeResolver: resolver}
 	var got []string
 	for _, f := range r.Check(parser.ParseFile(source, token.Latest), source, idx) {
@@ -136,7 +137,8 @@ class Dup { public function __construct($b, $c) {} public static function make($
 	return idx
 }
 
-func dupResolver(expr, _ string, _, _ int, _ *parser.FileNode) string {
+func dupResolver(file *parser.FileNode, e ast.Expr) string {
+	expr := e.Bounds().Text(file.Source)
 	if expr == "$dup" {
 		return "Dup"
 	}
@@ -171,9 +173,9 @@ func TestUnknownNamedArgumentWhenOneDeclarationForwardsOrLacksTheMethod(t *testi
 	idx.IndexFile("file:///a.php", "<?php\nclass Dup { public function __call($n, $a) {} public function run($a) {} }\nclass Gap { public function run($a) {} }\n")
 	idx.IndexFile("file:///b.php", "<?php\nclass Dup { public function run($b) {} }\nclass Gap {}\n")
 	source := "<?php\n$dup->run(z: 1);\n$gap->run(z: 1);\n"
-	resolver := func(expr, _ string, _, _ int, _ *parser.FileNode) string {
+	resolver := typesByText(func(expr string) string {
 		return map[string]string{"$dup": "Dup", "$gap": "Gap"}[expr]
-	}
+	})
 	if got := (&UnknownNamedArgumentRule{TypeResolver: resolver}).Check(parser.ParseFile(source, token.Latest), source, idx); len(got) != 0 {
 		t.Errorf("a declaration with __call, or without the method, may accept anything: %+v", got)
 	}

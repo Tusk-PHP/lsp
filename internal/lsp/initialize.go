@@ -122,9 +122,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		})
 	}
 	s.diag = diagnostics.NewProvider(s.index, s.framework, s.rootPath, s.logger, s.cfg)
-	s.diag.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		return s.completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
-	}
+	s.diag.TypeResolver = s.completion.DiagnosticType
 	s.diag.BuilderModelResolver = s.completion.ResolveBuilderModel
 	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(s.index, s.workspace.SchemaIsLive)
 	s.diag.Profile = s.workspace.Profile
@@ -135,12 +133,10 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.diag.Blade = s.bladeFeatures
 	if s.workspace.ViewData != nil {
 		s.viewTypes = &frameworklaravel.ViewTypes{
-			Data:  s.workspace.ViewData,
-			Index: s.index,
-			Read:  s.getDocumentReader(),
-			Resolve: func(expr, source string, file *parser.FileNode, line, col int) string {
-				return s.completion.ResolveExpressionType(expr, source, protocol.Position{Line: line, Character: col}, file)
-			},
+			Data:     s.workspace.ViewData,
+			Index:    s.index,
+			Read:     s.getDocumentReader(),
+			Resolver: s.completion.Resolver,
 		}
 		s.diag.ViewTypes = s.viewTypes
 	}

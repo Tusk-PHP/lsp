@@ -39,3 +39,22 @@ func MemberAccessAt(root Node, off uint32) Expr {
 	visit(root)
 	return best
 }
+
+func ExprSpanning(root Node, span Span) Expr {
+	var found Expr
+	Walk(root, func(n Node) bool {
+		if found != nil {
+			return false
+		}
+		b := n.Bounds()
+		if b.Start > span.Start || b.End < span.End {
+			return false
+		}
+		if e, ok := n.(Expr); ok && b == span {
+			found = e
+			return false
+		}
+		return true
+	})
+	return found
+}

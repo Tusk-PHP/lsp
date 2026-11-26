@@ -7,6 +7,7 @@ import (
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
@@ -79,7 +80,8 @@ func setupBuilderArgRule() *InvalidBuilderArgRule {
 		},
 	}
 
-	resolver := func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
+	resolver := func(file *parser.FileNode, receiver ast.Expr) frameworklaravel.QueriedModel {
+		prefix := receiver.Bounds().Text(file.Source)
 		if strings.Contains(prefix, "Category") {
 			return frameworklaravel.QueriedModel{FQN: "App\\Models\\Category"}
 		}
@@ -312,7 +314,8 @@ func TestInvalidBuilderArgRuleStaysQuietWhenUnsure(t *testing.T) {
 	checker := setupBuilderArgRule()
 	checker.Members.(*mockMemberChecker).columns["App\\Models\\Draft"] = map[string]bool{"id": true}
 	checker.Members.(*mockMemberChecker).partial = map[string]bool{"App\\Models\\Draft": true}
-	checker.ModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
+	checker.ModelResolver = func(file *parser.FileNode, receiver ast.Expr) frameworklaravel.QueriedModel {
+		prefix := receiver.Bounds().Text(file.Source)
 		switch {
 		case strings.Contains(prefix, "Draft"):
 			return frameworklaravel.QueriedModel{FQN: "App\\Models\\Draft"}
@@ -341,27 +344,30 @@ Draft::with('fromAnUnindexedTrait');
 	assertNoFindings(t, checker.Check(file, source, nil))
 }
 
-// TestInvalidBuilderArgRulePassesCallPrefix checks that the model resolver
-// gets the line up to the call's opening parenthesis, the form completion
-// resolves builder models from.
-func TestInvalidBuilderArgRulePassesCallPrefix(t *testing.T) {
+// TestInvalidBuilderArgRulePassesCallReceiver checks that the model resolver
+// gets each builder call's receiver node, even when the call starts on an
+// earlier line.
+func TestInvalidBuilderArgRulePassesCallReceiver(t *testing.T) {
 	checker := setupBuilderArgRule()
-	var prefixes []string
-	checker.ModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
-		prefixes = append(prefixes, prefix)
+	var receivers []string
+	checker.ModelResolver = func(file *parser.FileNode, receiver ast.Expr) frameworklaravel.QueriedModel {
+		receivers = append(receivers, receiver.Bounds().Text(file.Source))
 		return frameworklaravel.QueriedModel{}
 	}
 	source := `<?php
 Category::query()->where('name', 1)->with('products');
+Category::query()
+    ->with('products');
 `
 	file := parser.ParseFile(source, token.Latest)
 	checker.Check(file, source, nil)
 	want := []string{
-		"Category::query()->where(",
-		"Category::query()->where('name', 1)->with(",
+		"Category::query()",
+		"Category::query()->where('name', 1)",
+		"Category::query()",
 	}
-	if strings.Join(prefixes, "|") != strings.Join(want, "|") {
-		t.Errorf("prefixes: want %q, got %q", want, prefixes)
+	if strings.Join(receivers, "|") != strings.Join(want, "|") {
+		t.Errorf("receivers: want %q, got %q", want, receivers)
 	}
 }
 

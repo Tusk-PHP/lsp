@@ -748,20 +748,16 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.Analyzer.SetSymfonyCommands(ws.SymfonyCommands)
 
 	rt.Diagnostics = diagnostics.NewProvider(ws.Index, s.Framework, s.RootPath, newStdLogger(nil), ws.Config)
-	rt.Diagnostics.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		return rt.Completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
-	}
+	rt.Diagnostics.TypeResolver = rt.Completion.DiagnosticType
 	rt.Diagnostics.BuilderModelResolver = rt.Completion.ResolveBuilderModel
 	rt.Diagnostics.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(ws.Index, ws.SchemaIsLive)
 	rt.Diagnostics.Profile = ws.Profile
 	if ws.ViewData != nil {
 		rt.Diagnostics.ViewTypes = &frameworklaravel.ViewTypes{
-			Data:  ws.ViewData,
-			Index: ws.Index,
-			Read:  readFile,
-			Resolve: func(expr, source string, file *parser.FileNode, line, col int) string {
-				return rt.Completion.ResolveExpressionType(expr, source, protocol.Position{Line: line, Character: col}, file)
-			},
+			Data:     ws.ViewData,
+			Index:    ws.Index,
+			Read:     readFile,
+			Resolver: rt.Completion.Resolver,
 		}
 	}
 	providers := frameworklaravel.NewProviders(s.RootPath, ws.Index)

@@ -82,8 +82,8 @@ func isBuilderArg(arg sourcectx.CallArg) bool {
 	return !arg.InArray || arrayArgMethods[m]
 }
 
-func (p *Provider) completeBuilderArg(r *resolve.Resolver, arg sourcectx.CallArg, source string, file *parser.FileNode) []protocol.CompletionItem {
-	modelFQN := p.builderModel(r, arg.Call, source, file).FQN
+func (p *Provider) completeBuilderArg(r *resolve.Resolver, arg sourcectx.CallArg, file *parser.FileNode) []protocol.CompletionItem {
+	modelFQN := p.builderModel(r, arg.Receiver, file).FQN
 	if modelFQN == "" {
 		return nil
 	}
@@ -96,38 +96,27 @@ func (p *Provider) completeBuilderArg(r *resolve.Resolver, arg sourcectx.CallArg
 	return p.completeBuilderRelations(modelFQN, arg.Partial, arg.Quote)
 }
 
-// ResolveBuilderModel returns the Eloquent model a builder call on line is
-// made on, for the unknown-column and unknown-relation diagnostics: prefix is
-// the line up to the call's opening parenthesis, method the called method.
-func (p *Provider) ResolveBuilderModel(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
-	if file == nil {
-		return frameworklaravel.QueriedModel{}
-	}
-	r := p.engine.Resolver()
-	pos := protocol.Position{Line: line, Character: len(prefix)}
-	call, _ := sourcectx.CallNodeAt(file.Tree, source, sourcectx.Offset(source, pos))
-	if call == nil || sourcectx.MethodName(source, call) != method {
-		return frameworklaravel.QueriedModel{}
-	}
-	return p.builderModel(r, call, source, file)
+// ResolveBuilderModel returns the Eloquent model a builder call with the
+// receiver node of file is made on, for the unknown-column and
+// unknown-relation diagnostics. Its FQN is "" when the model can't be worked
+// out.
+func (p *Provider) ResolveBuilderModel(file *parser.FileNode, receiver ast.Expr) frameworklaravel.QueriedModel {
+	return p.builderModel(p.engine.Resolver(), receiver, file)
 }
 
-func (p *Provider) builderModel(r *resolve.Resolver, call ast.Expr, source string, file *parser.FileNode) frameworklaravel.QueriedModel {
-	switch call := call.(type) {
-	case *ast.StaticCall:
-		return p.modelClass(r, call.Class, source, file)
-	case *ast.MethodCall:
-		return frameworklaravel.ModelQueriedBy(p.index, r.NodeType(file, call.Object))
+func (p *Provider) builderModel(r *resolve.Resolver, receiver ast.Expr, file *parser.FileNode) frameworklaravel.QueriedModel {
+	if class, ok := receiver.(*ast.ConstFetch); ok {
+		return p.modelClass(r, class, file)
 	}
-	return frameworklaravel.QueriedModel{}
+	return frameworklaravel.ModelQueriedBy(p.index, r.NodeType(file, receiver))
 }
 
-func (p *Provider) modelClass(r *resolve.Resolver, e ast.Expr, source string, file *parser.FileNode) frameworklaravel.QueriedModel {
+func (p *Provider) modelClass(r *resolve.Resolver, e ast.Expr, file *parser.FileNode) frameworklaravel.QueriedModel {
 	name, ok := e.(*ast.ConstFetch)
 	if !ok {
 		return frameworklaravel.QueriedModel{}
 	}
-	if fqn := r.ResolveClassNameLoose(name.Name.Bounds().Text(source), file); frameworklaravel.IsModel(p.index, fqn) {
+	if fqn := r.ResolveClassNameLoose(name.Name.Bounds().Text(file.Source), file); frameworklaravel.IsModel(p.index, fqn) {
 		return frameworklaravel.QueriedModel{FQN: fqn}
 	}
 	return frameworklaravel.QueriedModel{}
