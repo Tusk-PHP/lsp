@@ -1,5 +1,7 @@
 package document
 
+import "bytes"
+
 type lineBreaks[T string | []byte] struct {
 	s     T
 	index func(T, byte) int
@@ -35,10 +37,5 @@ func previousLineStart(s []byte, lineStart int) int {
 	if s[i] == '\n' && i > 0 && s[i-1] == '\r' {
 		i--
 	}
-	for i--; i >= 0; i-- {
-		if s[i] == '\n' || s[i] == '\r' {
-			return i + 1
-		}
-	}
-	return 0
+	return bytes.LastIndexAny(s[:i], "\r\n") + 1
 }
