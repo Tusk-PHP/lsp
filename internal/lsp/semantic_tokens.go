@@ -6,6 +6,9 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/document"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -48,6 +51,24 @@ var SemanticTokensLegend = protocol.SemanticTokensLegend{
 	TokenModifiers: []string{"declaration", "static", "readonly", "deprecated"},
 }
 
+var lexedSemanticTypes = func() map[token.Kind]uint32 {
+	types := map[token.Kind]uint32{
+		token.ConstantString: semTokString, token.DoubleQuote: semTokString, token.StartHeredoc: semTokString, token.Backtick: semTokString,
+		token.IntegerLiteral: semTokNumber, token.FloatLiteral: semTokNumber,
+		token.Comment: semTokComment, token.DocComment: semTokComment,
+		token.Variable: semTokVariable,
+	}
+	for _, kind := range []token.Kind{
+		token.Public, token.Protected, token.Private, token.PublicSet, token.ProtectedSet, token.PrivateSet,
+		token.Static, token.Abstract, token.Final, token.Readonly, token.Return, token.New,
+		token.Class, token.Interface, token.Trait, token.Enum, token.Function, token.Fn, token.Namespace,
+		token.Use, token.Extends, token.Implements, token.Const, token.Var,
+	} {
+		types[kind] = semTokKeyword
+	}
+	return types
+}()
+
 type semToken struct {
 	line      int
 	startChar int
@@ -66,12 +87,12 @@ func (s *Server) handleSemanticTokensFull(msg *jsonRPCMessage) {
 	source := s.getDocument(uri)
 	pr := parser.New().Parse(source)
 
-	data := buildSemanticTokens(pr, document.NewColumns(source, s.encoding))
+	data := buildSemanticTokens(pr, source, document.NewColumns(source, s.encoding))
 	s.sendResponse(msg.ID, protocol.SemanticTokens{Data: data})
 }
 
 // buildSemanticTokens builds the LSP relative-encoded semantic token data from a ParseResult.
-func buildSemanticTokens(pr *parser.ParseResult, cols *document.Columns) []uint32 {
+func buildSemanticTokens(pr *parser.ParseResult, source string, cols *document.Columns) []uint32 {
 	var tokens []semToken
 
 	// Track ranges already covered by declaration tokens to avoid duplicates.
@@ -80,84 +101,7 @@ func buildSemanticTokens(pr *parser.ParseResult, cols *document.Columns) []uint3
 	}
 	covered := make(map[coveredKey]bool)
 
-	// -- Walk pr.Tokens for raw token types --
-	pendingAttr := false
-	for i, tok := range pr.Tokens {
-		switch tok.Kind {
-		case parser.TokenPublic, parser.TokenProtected, parser.TokenPrivate,
-			parser.TokenStatic, parser.TokenAbstract, parser.TokenFinal,
-			parser.TokenReadonly, parser.TokenReturn, parser.TokenNew,
-			parser.TokenClass, parser.TokenInterface, parser.TokenTrait,
-			parser.TokenEnum, parser.TokenFunction, parser.TokenNamespace,
-			parser.TokenUse, parser.TokenExtends, parser.TokenImplements,
-			parser.TokenConst, parser.TokenVar:
-			tokens = append(tokens, semToken{
-				line:      tok.Line,
-				startChar: tok.Column,
-				length:    len(tok.Value),
-				tokenType: semTokKeyword,
-			})
-			pendingAttr = false
-		case parser.TokenString:
-			tokens = append(tokens, semToken{
-				line:      tok.Line,
-				startChar: tok.Column,
-				length:    len(tok.Value),
-				tokenType: semTokString,
-			})
-			pendingAttr = false
-		case parser.TokenStringLiteral:
-			tokens = append(tokens, semToken{
-				line:      tok.Line,
-				startChar: tok.Column,
-				length:    len(tok.Value),
-				tokenType: semTokString,
-			})
-			pendingAttr = false
-		case parser.TokenNumber:
-			tokens = append(tokens, semToken{
-				line:      tok.Line,
-				startChar: tok.Column,
-				length:    len(tok.Value),
-				tokenType: semTokNumber,
-			})
-			pendingAttr = false
-		case parser.TokenComment, parser.TokenDocComment:
-			tokens = append(tokens, semToken{
-				line:      tok.Line,
-				startChar: tok.Column,
-				length:    len(tok.Value),
-				tokenType: semTokComment,
-			})
-			pendingAttr = false
-		case parser.TokenVariable:
-			tokens = append(tokens, semToken{
-				line:      tok.Line,
-				startChar: tok.Column,
-				length:    len(tok.Value),
-				tokenType: semTokVariable,
-			})
-			pendingAttr = false
-		case parser.TokenHash:
-			// PHP 8 attribute opener `#[Attr]`: only a hash directly followed
-			// by '[' starts an attribute group.
-			pendingAttr = i+1 < len(pr.Tokens) && pr.Tokens[i+1].Kind == parser.TokenOpenBracket
-		case parser.TokenOpenBracket:
-			// Preserve a pending attribute across the '[' of `#[`.
-		case parser.TokenIdentifier:
-			if pendingAttr {
-				tokens = append(tokens, semToken{
-					line:      tok.Line,
-					startChar: tok.Column,
-					length:    len(tok.Value),
-					tokenType: semTokDecorator,
-				})
-				pendingAttr = false
-			}
-		default:
-			pendingAttr = false
-		}
-	}
+	tokens = append(tokens, lexedSemanticTokens(source)...)
 
 	// -- Walk declarations for typed tokens --
 
@@ -178,32 +122,6 @@ func buildSemanticTokens(pr *parser.ParseResult, cols *document.Columns) []uint3
 			pos++
 		}
 		return pos
-	}
-
-	// Namespace
-	if pr.Namespace != "" {
-		for _, tok := range pr.Tokens {
-			if tok.Kind == parser.TokenNamespace {
-				col := findIdentCol(tok.Line, "namespace")
-				if col > 0 {
-					nsName := pr.Namespace
-					// Only the last segment as identifier
-					if idx := strings.LastIndex(nsName, "\\"); idx >= 0 {
-						nsName = nsName[idx+1:]
-					}
-					t := semToken{
-						line:      tok.Line,
-						startChar: col,
-						length:    len(nsName),
-						tokenType: semTokNamespace,
-						modifiers: semModDeclaration,
-					}
-					covered[coveredKey{t.line, t.startChar, t.startChar + t.length}] = true
-					tokens = append(tokens, t)
-					break
-				}
-			}
-		}
 	}
 
 	// Classes
@@ -441,6 +359,49 @@ func buildSemanticTokens(pr *parser.ParseResult, cols *document.Columns) []uint3
 	}
 
 	return result
+}
+
+func lexedSemanticTokens(source string) []semToken {
+	lines := ast.NewLines(source)
+	all := lexer.Lex(source, token.Latest)
+	add := func(out []semToken, tok lexer.Token, tokenType, modifiers uint32) []semToken {
+		line, col := lines.Position(tok.Start)
+		return append(out, semToken{line: line, startChar: col, length: int(tok.End - tok.Start), tokenType: tokenType, modifiers: modifiers})
+	}
+	out := make([]semToken, 0, len(all)/4)
+	prev := token.Invalid
+	for i := 0; i < len(all); i++ {
+		tok := all[i]
+		if tok.Kind == token.Whitespace {
+			continue
+		}
+		if lexer.OpensLiteral(tok.Kind) {
+			i = lexer.LiteralEnd(all, i)
+			tok.End = all[i].End
+		}
+		if tokenType, ok := lexedSemanticTypes[tok.Kind]; ok {
+			out = add(out, tok, tokenType, 0)
+		}
+		switch {
+		case prev == token.Namespace && isDeclaredNamespace(tok.Kind):
+			tok.Start += uint32(strings.LastIndexByte(tok.Text(source), '\\') + 1)
+			out = add(out, tok, semTokNamespace, semModDeclaration)
+		case prev == token.Attribute && isAttributeName(tok.Kind):
+			out = add(out, tok, semTokDecorator, 0)
+		}
+		if !tok.Kind.IsTrivia() {
+			prev = tok.Kind
+		}
+	}
+	return out
+}
+
+func isDeclaredNamespace(kind token.Kind) bool {
+	return kind == token.Identifier || kind == token.NameQualified
+}
+
+func isAttributeName(kind token.Kind) bool {
+	return kind == token.Identifier || kind == token.NameQualified || kind == token.NameFullyQualified
 }
 
 // findPropCol finds the column of a property name (including the $ sigil) on the given line.
