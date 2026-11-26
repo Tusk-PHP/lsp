@@ -3,7 +3,8 @@ package models
 import (
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 // parseMigrationFile applies one migration file's schema changes to
@@ -11,56 +12,55 @@ import (
 // runs counts: the body of up() (or, in a migration without one, everything
 // outside down()), so a rollback's dropColumn() doesn't remove a column.
 func parseMigrationFile(source string, tableColumns map[string]map[string]*MigrationColumn) {
-	toks := migrationTokens(source)
+	toks := migrationTokens{source, lexer.WholeLiterals(lexer.Significant(lexer.Lex(source, token.Latest)))}
 	ranges := methodBodies(toks, "up")
 	if len(ranges) == 0 {
-		ranges = outside(methodBodies(toks, "down"), len(toks))
+		ranges = outside(methodBodies(toks, "down"), len(toks.all))
 	}
 	for _, r := range ranges {
 		scanSchemaCalls(toks, r[0], r[1], tableColumns)
 	}
 }
 
-// migrationTokens returns source's tokens without comments.
-func migrationTokens(source string) []parser.Token {
-	all := parser.Tokenize(source)
-	toks := make([]parser.Token, 0, len(all))
-	for _, t := range all {
-		switch t.Kind {
-		case parser.TokenComment, parser.TokenDocComment, parser.TokenEOF:
-			continue
-		}
-		toks = append(toks, t)
-	}
-	return toks
+type migrationTokens struct {
+	src string
+	all []lexer.Token
+}
+
+func (t migrationTokens) kind(i int) token.Kind {
+	return t.all[i].Kind
+}
+
+func (t migrationTokens) text(i int) string {
+	return t.all[i].Text(t.src)
 }
 
 // methodBodies returns the token ranges, inside the braces, of every
 // `function name(...) {...}`.
-func methodBodies(toks []parser.Token, name string) [][2]int {
+func methodBodies(toks migrationTokens, name string) [][2]int {
 	var out [][2]int
-	for i := 0; i+2 < len(toks); i++ {
-		if toks[i].Kind != parser.TokenFunction || !strings.EqualFold(toks[i+1].Value, name) || toks[i+2].Kind != parser.TokenOpenParen {
+	for i := 0; i+2 < len(toks.all); i++ {
+		if toks.kind(i) != token.Function || !strings.EqualFold(toks.text(i+1), name) || toks.kind(i+2) != token.LeftParen {
 			continue
 		}
-		closeParams := parser.MatchingClose(toks, i+2)
+		closeParams := lexer.MatchingClose(toks.all, i+2)
 		if closeParams < 0 {
 			continue
 		}
 		open := -1
-		for j := closeParams + 1; j < len(toks); j++ {
-			if toks[j].Kind == parser.TokenOpenBrace {
+		for j := closeParams + 1; j < len(toks.all); j++ {
+			if toks.kind(j) == token.LeftBrace {
 				open = j
 				break
 			}
-			if toks[j].Kind == parser.TokenSemicolon {
-				break // abstract or interface method
+			if toks.kind(j) == token.Semicolon {
+				break
 			}
 		}
 		if open < 0 {
 			continue
 		}
-		if end := parser.MatchingClose(toks, open); end > open {
+		if end := lexer.MatchingClose(toks.all, open); end > open {
 			out = append(out, [2]int{open + 1, end})
 			i = end
 		}
@@ -86,8 +86,8 @@ func outside(skip [][2]int, n int) [][2]int {
 
 // callArgs splits the arguments of the call whose `(` is at open into token
 // ranges, and returns the index of its `)`.
-func callArgs(toks []parser.Token, open int) ([][2]int, int) {
-	end := parser.MatchingClose(toks, open)
+func callArgs(toks migrationTokens, open int) ([][2]int, int) {
+	end := lexer.MatchingClose(toks.all, open)
 	if end < 0 {
 		return nil, -1
 	}
@@ -95,12 +95,12 @@ func callArgs(toks []parser.Token, open int) ([][2]int, int) {
 	start := open + 1
 	depth := 0
 	for i := open + 1; i < end; i++ {
-		switch toks[i].Kind {
-		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
+		switch toks.kind(i) {
+		case token.LeftParen, token.LeftBracket, token.LeftBrace:
 			depth++
-		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
+		case token.RightParen, token.RightBracket, token.RightBrace:
 			depth--
-		case parser.TokenComma:
+		case token.Comma:
 			if depth == 0 {
 				args = append(args, [2]int{start, i})
 				start = i + 1
@@ -115,9 +115,9 @@ func callArgs(toks []parser.Token, open int) ([][2]int, int) {
 
 // literal returns the value of a plain string literal, unquoted. A string
 // with interpolation, or anything else, gives false.
-func literal(t parser.Token) (string, bool) {
-	v := t.Value
-	if t.Kind != parser.TokenStringLiteral || len(v) < 2 || (v[0] != '\'' && v[0] != '"') || v[len(v)-1] != v[0] {
+func (t migrationTokens) literal(i int) (string, bool) {
+	v := t.text(i)
+	if t.kind(i) != token.ConstantString {
 		return "", false
 	}
 	inner := v[1 : len(v)-1]
@@ -131,24 +131,24 @@ func literal(t parser.Token) (string, bool) {
 }
 
 // argString is the string literal an argument consists of.
-func argString(toks []parser.Token, arg [2]int) (string, bool) {
+func argString(toks migrationTokens, arg [2]int) (string, bool) {
 	if arg[1]-arg[0] != 1 {
 		return "", false
 	}
-	return literal(toks[arg[0]])
+	return toks.literal(arg[0])
 }
 
 // argStrings reads an argument that is a string or an array of strings.
-func argStrings(toks []parser.Token, arg [2]int) []string {
+func argStrings(toks migrationTokens, arg [2]int) []string {
 	if s, ok := argString(toks, arg); ok {
 		return []string{s}
 	}
-	if arg[1]-arg[0] < 2 || toks[arg[0]].Kind != parser.TokenOpenBracket {
+	if arg[1]-arg[0] < 2 || toks.kind(arg[0]) != token.LeftBracket {
 		return nil
 	}
 	var out []string
 	for i := arg[0] + 1; i < arg[1]; i++ {
-		if s, ok := literal(toks[i]); ok {
+		if s, ok := toks.literal(i); ok {
 			out = append(out, s)
 		}
 	}
@@ -157,19 +157,19 @@ func argStrings(toks []parser.Token, arg [2]int) []string {
 
 // scanSchemaCalls applies the Schema::create(), table(), drop(),
 // dropIfExists() and rename() calls in toks[lo:hi].
-func scanSchemaCalls(toks []parser.Token, lo, hi int, tables map[string]map[string]*MigrationColumn) {
+func scanSchemaCalls(toks migrationTokens, lo, hi int, tables map[string]map[string]*MigrationColumn) {
 	for i := lo; i+3 < hi; i++ {
-		if toks[i].Value != "Schema" || toks[i+1].Kind != parser.TokenDoubleColon {
+		if !isSchemaFacade(toks.text(i)) || toks.kind(i+1) != token.DoubleColon {
 			continue
 		}
 		m := i + 2
 		// Schema::connection('other')->create(...)
-		if strings.EqualFold(toks[m].Value, "connection") && m+1 < hi && toks[m+1].Kind == parser.TokenOpenParen {
-			if _, end := callArgs(toks, m+1); end > 0 && end+2 < hi && toks[end+1].Kind == parser.TokenArrow {
+		if strings.EqualFold(toks.text(m), "connection") && m+1 < hi && toks.kind(m+1) == token.LeftParen {
+			if _, end := callArgs(toks, m+1); end > 0 && end+2 < hi && toks.kind(end+1) == token.ObjectOperator {
 				m = end + 2
 			}
 		}
-		if m+1 >= hi || toks[m+1].Kind != parser.TokenOpenParen {
+		if m+1 >= hi || toks.kind(m+1) != token.LeftParen {
 			continue
 		}
 		args, end := callArgs(toks, m+1)
@@ -181,7 +181,7 @@ func scanSchemaCalls(toks []parser.Token, lo, hi int, tables map[string]map[stri
 			i = end
 			continue
 		}
-		switch strings.ToLower(toks[m].Value) {
+		switch strings.ToLower(toks.text(m)) {
 		case "create":
 			tables[table] = map[string]*MigrationColumn{}
 			if len(args) > 1 {
@@ -210,31 +210,35 @@ func scanSchemaCalls(toks []parser.Token, lo, hi int, tables map[string]map[stri
 	}
 }
 
+func isSchemaFacade(name string) bool {
+	return name[strings.LastIndexByte(name, '\\')+1:] == "Schema"
+}
+
 // applyBlueprint applies the statements of a `function (Blueprint $table) {}`
 // closure argument to cols, following whatever the closure names its
 // parameter.
-func applyBlueprint(toks []parser.Token, arg [2]int, cols map[string]*MigrationColumn) {
+func applyBlueprint(toks migrationTokens, arg [2]int, cols map[string]*MigrationColumn) {
 	fn := arg[0]
-	if toks[fn].Kind == parser.TokenStatic {
+	if toks.kind(fn) == token.Static {
 		fn++
 	}
-	if fn >= arg[1] || toks[fn].Kind != parser.TokenFunction || fn+1 >= arg[1] || toks[fn+1].Kind != parser.TokenOpenParen {
+	if fn >= arg[1] || toks.kind(fn) != token.Function || fn+1 >= arg[1] || toks.kind(fn+1) != token.LeftParen {
 		return
 	}
-	closeParams := parser.MatchingClose(toks, fn+1)
+	closeParams := lexer.MatchingClose(toks.all, fn+1)
 	if closeParams < 0 {
 		return
 	}
 	varName := ""
 	for j := fn + 2; j < closeParams; j++ {
-		if toks[j].Kind == parser.TokenVariable {
-			varName = toks[j].Value
+		if toks.kind(j) == token.Variable {
+			varName = toks.text(j)
 			break
 		}
 	}
 	open := -1
 	for j := closeParams + 1; j < arg[1]; j++ {
-		if toks[j].Kind == parser.TokenOpenBrace {
+		if toks.kind(j) == token.LeftBrace {
 			open = j
 			break
 		}
@@ -242,15 +246,15 @@ func applyBlueprint(toks []parser.Token, arg [2]int, cols map[string]*MigrationC
 	if varName == "" || open < 0 {
 		return
 	}
-	end := parser.MatchingClose(toks, open)
+	end := lexer.MatchingClose(toks.all, open)
 	if end < 0 {
 		return
 	}
 	for j := open + 1; j+3 < end; j++ {
-		if toks[j].Kind != parser.TokenVariable || toks[j].Value != varName || toks[j+1].Kind != parser.TokenArrow || toks[j+3].Kind != parser.TokenOpenParen {
+		if toks.kind(j) != token.Variable || toks.text(j) != varName || toks.kind(j+1) != token.ObjectOperator || toks.kind(j+3) != token.LeftParen {
 			continue
 		}
-		method := toks[j+2].Value
+		method := toks.text(j + 2)
 		args, callEnd := callArgs(toks, j+3)
 		if callEnd < 0 {
 			continue
@@ -258,12 +262,12 @@ func applyBlueprint(toks []parser.Token, arg [2]int, cols map[string]*MigrationC
 		// The modifiers chained after the call, up to the end of the statement.
 		var mods []blueprintModifier
 		k := callEnd + 1
-		for k+2 < end && toks[k].Kind == parser.TokenArrow && toks[k+2].Kind == parser.TokenOpenParen {
+		for k+2 < end && toks.kind(k) == token.ObjectOperator && toks.kind(k+2) == token.LeftParen {
 			modArgs, modEnd := callArgs(toks, k+2)
 			if modEnd < 0 {
 				break
 			}
-			mods = append(mods, blueprintModifier{name: toks[k+1].Value, args: modArgs})
+			mods = append(mods, blueprintModifier{name: toks.text(k + 1), args: modArgs})
 			k = modEnd + 1
 		}
 		applyColumnCall(toks, method, args, mods, cols)
@@ -293,7 +297,7 @@ var incrementsMethods = map[string]bool{
 	"smallIncrements": true, "tinyIncrements": true, "integerIncrements": true,
 }
 
-func applyColumnCall(toks []parser.Token, method string, args [][2]int, mods []blueprintModifier, cols map[string]*MigrationColumn) {
+func applyColumnCall(toks migrationTokens, method string, args [][2]int, mods []blueprintModifier, cols map[string]*MigrationColumn) {
 	first := ""
 	if len(args) > 0 {
 		first, _ = argString(toks, args[0])
@@ -306,7 +310,7 @@ func applyColumnCall(toks []parser.Token, method string, args [][2]int, mods []b
 		for _, m := range mods {
 			switch m.name {
 			case "nullable":
-				col.Nullable = len(m.args) == 0 || toks[m.args[0][0]].Value != "false"
+				col.Nullable = len(m.args) == 0 || toks.text(m.args[0][0]) != "false"
 			case "default":
 				if len(m.args) > 0 {
 					col.Default = joinTokens(toks, m.args[0])
@@ -358,8 +362,8 @@ func applyColumnCall(toks []parser.Token, method string, args [][2]int, mods []b
 		if len(args) > 1 {
 			name, _ = argString(toks, args[1])
 		} else if len(args) == 1 && args[0][1]-args[0][0] >= 3 &&
-			toks[args[0][1]-1].Kind == parser.TokenClass && toks[args[0][1]-2].Kind == parser.TokenDoubleColon {
-			class := toks[args[0][1]-3].Value
+			toks.kind(args[0][1]-1) == token.Class && toks.kind(args[0][1]-2) == token.DoubleColon {
+			class := toks.text(args[0][1] - 3)
 			name = toSnakeCase(class[strings.LastIndex(class, "\\")+1:]) + "_id"
 		}
 		add(name, "int", "foreignId", false)
@@ -395,10 +399,10 @@ func applyColumnCall(toks []parser.Token, method string, args [][2]int, mods []b
 	}
 }
 
-func joinTokens(toks []parser.Token, r [2]int) string {
+func joinTokens(toks migrationTokens, r [2]int) string {
 	var b strings.Builder
 	for i := r[0]; i < r[1]; i++ {
-		b.WriteString(toks[i].Value)
+		b.WriteString(toks.text(i))
 	}
 	return b.String()
 }

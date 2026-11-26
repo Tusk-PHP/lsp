@@ -113,3 +113,25 @@ function down() {
 		t.Errorf("flags: %q", got)
 	}
 }
+
+func TestParseMigrationFileReadsStringsAndNamesWhole(t *testing.T) {
+	tables := map[string]map[string]*MigrationColumn{}
+	parseMigrationFile(`<?php
+abstract class Base { abstract public function up(): void; }
+return new class extends Base {
+    public function up(): void
+    {
+        \Illuminate\Support\Facades\Schema::create('posts', function (Blueprint $table) {
+            $table->string('title')->default("draft {$suffix}");
+            $table->string('slug');
+        });
+    }
+};
+`, tables)
+	if got := columnNames(tables["posts"]); got != "slug,title" {
+		t.Fatalf("posts columns = %q, want slug,title", got)
+	}
+	if got := tables["posts"]["title"].Default; got != `"draft {$suffix}"` {
+		t.Errorf("title default = %q", got)
+	}
+}
