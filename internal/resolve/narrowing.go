@@ -1,9 +1,12 @@
 package resolve
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
@@ -35,263 +38,568 @@ type narrowingFact struct {
 }
 
 // narrowVariable applies to t what the code between the variable's last
-// assignment and pos says about varName.
+// assignment and pos says about varName: calls that assert it, early-leaving
+// guards, the if, elseif, else and while blocks pos is in, a `switch (true)`
+// case, and tests before `&&`, `||`, `?` and a `match (true)` arm in the
+// read's own statement. A test on an assignment, `($r = f()) instanceof X`,
+// is a test on the variable assigned.
 func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	if file == nil || r.Index == nil || pos.Line >= len(lines) {
 		return t
 	}
-	from := r.lastWriteLine(varName, lines, pos)
-	if from < 0 || from > pos.Line || !r.mayNarrow(lines, from, pos, varName) {
+	n, path, ok := r.narrowingAt(varName, lines, pos, file)
+	if !ok {
 		return t
 	}
 	// Narrowing doesn't nest: the calls it reads type their receivers and
 	// arguments without narrowing them in turn, which keeps it linear.
-	exit, ok := r.enterResolution("narrowing")
-	if !ok {
+	exit, entered := r.enterResolution("narrowing")
+	if !entered {
 		return t
 	}
 	defer exit()
 
-	// Depth at the start of each line from `from` to pos, and the lowest it
-	// gets after each line, to tell which statements still hold at pos.
-	n := pos.Line - from + 1
-	depth := make([]int, n+1)
-	for i := 0; i < n; i++ {
-		line := lines[from+i]
-		if i == n-1 && pos.Character <= len(line) {
-			line = line[:pos.Character]
-		}
-		depth[i+1] = depth[i] + braceDelta(line)
+	for _, stmt := range n.statementsBefore(path) {
+		t = n.applyStatement(t, stmt)
 	}
-	minAfter := make([]int, n+1)
-	minAfter[n] = depth[n]
-	for i := n - 1; i >= 0; i-- {
-		minAfter[i] = min(depth[i+1], minAfter[i+1])
-	}
-
-	statements := 0
-	for i := from; i <= pos.Line && statements < maxNarrowingStatements; i++ {
-		line := strings.TrimSpace(lines[i])
-		if i == pos.Line && pos.Character <= len(lines[i]) {
-			line = strings.TrimSpace(lines[i][:pos.Character])
-		}
-		if line == "" || !strings.Contains(line, varName) || !r.callsNarrowing(line) && !strings.Contains(line, "instanceof") {
-			continue
-		}
-		rel := i - from
-		lineDepth := depth[rel]
-		// Inside a block that has closed again before pos: doesn't hold.
-		if minAfter[rel] < lineDepth {
-			continue
-		}
-		if strings.HasPrefix(line, "if") {
-			// An if whose block only leaves (return, throw…): what follows runs
-			// only when its condition was false.
-			if cond, ok := guardCondition(lines, i); ok && i < pos.Line {
-				statements++
-				t = r.applyCondition(varName, t, cond, true, lines, textpos.Position{Line: i}, file)
-			}
-			continue
-		}
-		if !strings.HasSuffix(line, ";") || strings.HasPrefix(line, "return") {
-			continue
-		}
-		// A statement that is a call: assertSomething($x); $c->add($x);
-		stmt := strings.TrimSpace(strings.TrimSuffix(line, ";"))
-		if strings.HasPrefix(stmt, varName+" =") || strings.HasPrefix(stmt, varName+"=") {
-			continue
-		}
-		statements++
-		if cond, ok := assertedCondition(stmt); ok {
-			t = r.applyCondition(varName, t, cond, false, lines, textpos.Position{Line: i, Character: 0}, file)
-			continue
-		}
-		t = r.applyStatementCall(varName, t, stmt, lines, textpos.Position{Line: i, Character: 0}, file)
-	}
-
-	// The if blocks pos is inside of.
-	for _, h := range enclosingIfConditions(lines, from, pos) {
-		t = r.applyCondition(varName, t, h.cond, h.inElse, lines, textpos.Position{Line: h.line}, file)
-	}
-	// A switch (true) case the read is under.
-	t = r.switchCaseInstanceof(varName, t, lines, from, pos, file)
-	// An instanceof test before && or || in the read's own statement.
-	t = r.statementInstanceof(varName, t, statementPrefix(lines, pos), file)
-	return t
+	t = n.enclosingConditions(t, path)
+	t = n.switchCase(t, path)
+	return n.statementTests(t, path)
 }
 
-// mayNarrow reports whether any line after the assignment on line from, up
-// to pos, mentions varName and calls something that narrows types (see
-// symbols.Index.MayNarrow), which is all that can narrow it. It reads the
-// text and does lookups only, so most variables stop here.
-func (r *Resolver) mayNarrow(lines []string, from int, pos textpos.Position, varName string) bool {
-	for i := pos.Line; i >= from; i-- {
-		line := lines[i]
-		if i == pos.Line && pos.Character <= len(line) {
-			line = line[:pos.Character]
-		}
-		if !strings.Contains(line, varName) {
-			continue
-		}
-		if strings.Contains(line, "instanceof") {
-			return true
-		}
-		if strings.IndexByte(line, '(') < 0 {
-			continue
-		}
-		if r.callsNarrowing(line) {
-			return true
-		}
+func (r *Resolver) mayBeNarrowed(varName string, lines []string, pos textpos.Position, file *parser.FileNode) bool {
+	if file == nil || r.Index == nil || pos.Line >= len(lines) {
+		return false
 	}
-	return false
+	_, _, ok := r.narrowingAt(varName, lines, pos, file)
+	return ok
 }
 
-// callsNarrowing reports whether a line calls a method or function whose
-// PHPDoc narrows types, or PHPUnit's assertInstanceOf(), which is read by
-// name when PHPUnit isn't installed where it can be read.
-func (r *Resolver) callsNarrowing(line string) bool {
-	for i := 0; i < len(line); i++ {
-		if line[i] != '(' {
-			continue
-		}
-		j := i
-		for j > 0 && (line[j-1] == ' ' || line[j-1] == '\t') {
-			j--
-		}
-		k := j
-		for k > 0 && (isIdentByte(line[k-1]) || line[k-1] >= '0' && line[k-1] <= '9') {
-			k--
-		}
-		if k == j {
-			continue
-		}
-		name := line[k:j]
-		if strings.EqualFold(name, "assertInstanceOf") || r.Index != nil && r.Index.MayNarrow(name) {
-			return true
-		}
+func (r *Resolver) narrowingAt(varName string, lines []string, pos textpos.Position, file *parser.FileNode) (narrowing, []ast.Node, bool) {
+	tree := r.syntaxTree(lines, file)
+	off, ok := tree.offset(pos)
+	if !ok {
+		return narrowing{}, nil, false
 	}
-	return false
+	after, ok := r.lastWrite(varName, lines, tree, pos, off)
+	if !ok {
+		return narrowing{}, nil, false
+	}
+	path := tree.path(off)
+	n := narrowing{r: r, t: tree, varName: varName, file: file, lines: lines, after: after, off: off}
+	return n, path, n.mayNarrow(path)
 }
 
-// lastWriteLine returns the line of the last assignment to varName before
-// pos, or the start of its scope when it's a parameter never written.
-func (r *Resolver) lastWriteLine(varName string, lines []string, pos textpos.Position) int {
+type narrowing struct {
+	r       *Resolver
+	t       *syntaxTree
+	varName string
+	file    *parser.FileNode
+	lines   []string
+	after   uint32
+	off     uint32
+}
+
+func (n narrowing) ctxAt(e ast.Node, known map[string]ResolvedType) ExprContext {
+	line, col := n.t.lines.Position(e.Bounds().Start)
+	return ExprContext{Lines: n.lines, Pos: textpos.Position{Line: line, Character: col}, File: n.file, Locals: known}
+}
+
+func (r *Resolver) lastWrite(varName string, lines []string, t *syntaxTree, pos textpos.Position, off uint32) (uint32, bool) {
 	s := r.scopeDocument(lines).ScopeAt(pos)
-	if s == nil {
-		return -1
-	}
 	for ; s != nil; s = s.Parent {
+		captured := false
 		for _, b := range s.Bindings {
 			if b.Name != varName {
 				continue
 			}
-			last := b.Decl.Start.Line
+			if b.Kind == scope.BindingClosureUse && rangeHolds(b.Decl, pos) {
+				captured = true
+				break
+			}
+			last, ok := t.offset(b.Decl.Start)
 			if b.Kind == scope.BindingParameter {
-				last = s.Range.Start.Line
+				last, ok = t.offset(s.Range.Start)
+			}
+			if !ok {
+				return 0, false
 			}
 			for _, w := range b.Writes {
-				// A write on the read's own line is the one whose right-hand
-				// side it's in, as `$x = $x->inner()` inside an instanceof test.
-				if w.Start.Line < pos.Line && w.Start.Line > last {
-					last = w.Start.Line
+				at, found := t.offset(w.Start)
+				if !found || at >= off || at <= last || t.writeHolds(at, off) {
+					continue
 				}
+				last = at
 			}
-			if last > pos.Line {
-				return -1
+			if last > off {
+				return 0, false
 			}
-			return last
+			return last, true
 		}
-		if s.Kind != scope.ScopeClosure || !s.ExprBody {
-			return s.Range.Start.Line
-		}
-	}
-	return -1
-}
-
-// braceDelta counts how a line changes the brace depth, skipping strings.
-func braceDelta(line string) int {
-	d := 0
-	var quote byte
-	for i := 0; i < len(line); i++ {
-		c := line[i]
-		if quote != 0 {
-			if c == '\\' {
-				i++
-			} else if c == quote {
-				quote = 0
-			}
+		if captured {
 			continue
 		}
-		switch c {
-		case '\'', '"':
-			quote = c
-		case '{':
-			d++
-		case '}':
-			d--
-		case '/':
-			if i+1 < len(line) && line[i+1] == '/' {
-				return d
-			}
-		case '#':
-			return d
+		if s.Kind != scope.ScopeClosure || !s.ExprBody {
+			start, ok := t.offset(s.Range.Start)
+			return start, ok
 		}
 	}
-	return d
+	return 0, false
 }
 
-// applyStatementCall applies what a call statement says: asserts on the
-// argument passed for a parameter, @param-out, and self-out on the receiver.
-func (r *Resolver) applyStatementCall(varName string, t ResolvedType, stmt string, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
-	// Only a call the variable is passed to, or called on, can say anything
-	// about it. Checking that first keeps from resolving every call.
-	if !passesOrCallsOn(stmt, varName) {
-		return t
-	}
-	callee, receiverExpr, args, ok := r.statementCalleeWith(stmt, lines, pos, file, map[string]ResolvedType{varName: t})
+func rangeHolds(r textpos.Range, pos textpos.Position) bool {
+	return !positionBefore(pos, r.Start) && !positionBefore(r.End, pos)
+}
+
+func (t *syntaxTree) writeHolds(at, off uint32) bool {
+	a, ok := t.assigns[at]
 	if !ok {
-		return r.applyUnresolvedAssertion(varName, t, stmt, lines, pos, file)
+		return false
+	}
+	span := a.value.Bounds()
+	return span.Start <= off && off <= span.End
+}
+
+func (t *syntaxTree) path(off uint32) []ast.Node {
+	path := []ast.Node{t.root}
+	for {
+		var next ast.Node
+		ast.Children(path[len(path)-1], func(c ast.Node) {
+			if next != nil {
+				return
+			}
+			if span := c.Bounds(); span.Start <= off && off <= span.End && span.End > span.Start {
+				next = c
+			}
+		})
+		if next == nil {
+			return path
+		}
+		path = append(path, next)
+	}
+}
+
+func isFunctionLike(n ast.Node) bool {
+	switch n.(type) {
+	case *ast.Closure, *ast.ArrowFunction, *ast.FunctionDecl, *ast.Method, *ast.ClassDecl, *ast.InterfaceDecl, *ast.TraitDecl, *ast.EnumDecl:
+		return true
+	}
+	return false
+}
+
+func innerPath(path []ast.Node) []ast.Node {
+	for i := len(path) - 1; i >= 0; i-- {
+		if !isFunctionLike(path[i]) {
+			continue
+		}
+		if i+1 == len(path) {
+			continue
+		}
+		if _, capture := path[i+1].(*ast.ClosureUse); capture {
+			continue
+		}
+		return path[i+1:]
+	}
+	return path
+}
+
+func (n narrowing) mayNarrow(path []ast.Node) bool {
+	inner := innerPath(path)
+	if len(inner) == 0 {
+		return false
+	}
+	found := false
+	ast.Walk(inner[0], func(node ast.Node) bool {
+		if found {
+			return false
+		}
+		span := node.Bounds()
+		if span.End <= n.after || span.Start > n.off {
+			return false
+		}
+		switch node := node.(type) {
+		case *ast.InstanceOf:
+			found = true
+		case *ast.Call:
+			if name, ok := node.Callee.(*ast.ConstFetch); ok && n.narrowsByName(n.t.text(name)) {
+				found = true
+			}
+		case *ast.MethodCall:
+			found = n.narrowsByName(n.t.text(node.Name))
+		case *ast.StaticCall:
+			found = n.narrowsByName(n.t.text(node.Name))
+		}
+		return true
+	})
+	return found
+}
+
+func (n narrowing) narrowsByName(name string) bool {
+	if i := strings.LastIndexByte(name, '\\'); i >= 0 {
+		name = name[i+1:]
+	}
+	return strings.EqualFold(name, "assertInstanceOf") || strings.EqualFold(name, "assert") || n.r.Index.MayNarrow(name)
+}
+
+func (n narrowing) statementsBefore(path []ast.Node) []ast.Stmt {
+	inner := innerPath(path)
+	var out []ast.Stmt
+	for i, node := range inner {
+		var stmts []ast.Stmt
+		switch node := node.(type) {
+		case *ast.Block:
+			stmts = node.Stmts
+		case *ast.Case:
+			stmts = node.Stmts
+		case *ast.Namespace:
+			stmts = node.Stmts
+		case *ast.File:
+			stmts = node.Stmts
+		default:
+			continue
+		}
+		var child ast.Node
+		if i+1 < len(inner) {
+			child = inner[i+1]
+		}
+		for _, stmt := range stmts {
+			if ast.Node(stmt) == child || stmt.Bounds().Start >= n.off {
+				break
+			}
+			if stmt.Bounds().End > n.after {
+				out = append(out, stmt)
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b ast.Stmt) int { return int(a.Bounds().Start) - int(b.Bounds().Start) })
+	if len(out) > maxNarrowingStatements {
+		out = out[len(out)-maxNarrowingStatements:]
+	}
+	return out
+}
+
+func (n narrowing) applyStatement(t ResolvedType, stmt ast.Stmt) ResolvedType {
+	switch s := stmt.(type) {
+	case *ast.ExprStmt:
+		if call, ok := s.Expr.(*ast.Call); ok && isAssertCall(n.t, call) {
+			return n.applyCondition(t, call.Args.Args[0].Value, true, false)
+		}
+		switch s.Expr.(type) {
+		case *ast.Call, *ast.MethodCall, *ast.StaticCall:
+			return n.applyCall(t, s.Expr)
+		}
+	case *ast.If:
+		if len(s.ElseIfs) == 0 && s.Else == nil && alwaysLeaves(s.Then) {
+			return n.applyCondition(t, s.Cond, false, false)
+		}
+	}
+	return t
+}
+
+func isAssertCall(t *syntaxTree, call *ast.Call) bool {
+	name, ok := call.Callee.(*ast.ConstFetch)
+	return ok && strings.EqualFold(strings.TrimPrefix(t.text(name), "\\"), "assert") && len(call.Args.Args) > 0 && call.Args.Args[0].Value != nil
+}
+
+func alwaysLeaves(body ast.Stmt) bool {
+	last := body
+	if b, ok := body.(*ast.Block); ok {
+		if len(b.Stmts) == 0 {
+			return false
+		}
+		last = b.Stmts[len(b.Stmts)-1]
+	}
+	switch s := last.(type) {
+	case *ast.Return, *ast.Continue, *ast.Break:
+		return true
+	case *ast.ExprStmt:
+		switch s.Expr.(type) {
+		case *ast.Throw, *ast.Exit:
+			return true
+		}
+	}
+	return false
+}
+
+func (n narrowing) isVar(e ast.Expr) bool {
+	switch e := e.(type) {
+	case *ast.Variable:
+		return n.t.text(e) == n.varName
+	case *ast.Assign:
+		v, ok := e.Target.(*ast.Variable)
+		return ok && e.Op == token.Equals && n.t.text(v) == n.varName
+	}
+	return false
+}
+
+func (n narrowing) applyCall(t ResolvedType, call ast.Expr) ResolvedType {
+	callee, receiver, args, ok := n.callee(call, map[string]ResolvedType{n.varName: t})
+	if !ok {
+		return n.applyUnresolvedAssertion(t, call)
+	}
+	onVar := receiver != nil && n.isVar(receiver)
+	if !onVar && !slices.ContainsFunc(args, func(a CallArg) bool { return a.node != nil && n.isVar(a.node) }) {
+		return t
 	}
 	if callee.member.DocComment == "" {
 		return t
 	}
-	doc := r.parseDoc(callee.member.DocComment)
+	doc := n.r.parseDoc(callee.member.DocComment)
 	if doc == nil || len(doc.Asserts)+len(doc.ParamOuts) == 0 && doc.SelfOut == "" {
 		return t
 	}
-	if strings.TrimSpace(receiverExpr) == varName {
-		// Self-out builds on what the object is by now.
+	if onVar {
 		callee.receiver = t
 	}
-	env := r.calleeEnv(callee, args, lines, pos, file)
-	byParam := argumentsByParam(callee.params, args)
-	argIs := func(paramName string) bool {
-		for i, p := range callee.params {
-			if p.name == paramName && i < len(byParam) {
-				for _, a := range byParam[i] {
-					if strings.TrimSpace(a.Expr) == varName {
-						return true
-					}
-				}
-			}
-		}
-		return false
-	}
+	env := n.r.calleeEnv(callee, args, n.ctxAt(call, nil))
+	argIs := n.argIs(callee, args)
 	for _, a := range doc.Asserts {
 		if a.Kind != parser.AssertAlways {
 			continue
 		}
-		if a.Target == "$this" && strings.TrimSpace(receiverExpr) == varName || argIs(a.Target) {
-			t = r.applyFact(t, narrowingFact{typ: r.applyEnv(r.parseType(a.Type), env), negated: a.Negated, equality: a.Equality})
+		if a.Target == "$this" && onVar || argIs(a.Target) {
+			t = n.r.applyFact(t, narrowingFact{typ: n.r.applyEnv(n.r.parseType(a.Type), env), negated: a.Negated, equality: a.Equality})
 		}
 	}
 	for _, out := range doc.ParamOuts {
 		if argIs(out.Name) {
-			t = r.applyEnv(r.parseType(out.Type), env)
+			t = n.r.applyEnv(n.r.parseType(out.Type), env)
 		}
 	}
-	if doc.SelfOut != "" && strings.TrimSpace(receiverExpr) == varName {
-		t = r.applyEnv(r.parseType(doc.SelfOut), env)
+	if doc.SelfOut != "" && onVar {
+		t = n.r.applyEnv(n.r.parseType(doc.SelfOut), env)
+	}
+	return t
+}
+
+func (n narrowing) argIs(callee resolvedCallee, args []CallArg) func(string) bool {
+	byParam := argumentsByParam(callee.params, args)
+	return func(paramName string) bool {
+		for i, p := range callee.params {
+			if p.name == paramName && i < len(byParam) && len(byParam[i]) > 0 {
+				a := byParam[i][0]
+				return a.node != nil && n.isVar(a.node)
+			}
+		}
+		return false
+	}
+}
+
+func (n narrowing) callee(call ast.Expr, known map[string]ResolvedType) (callee resolvedCallee, receiver ast.Expr, args []CallArg, ok bool) {
+	ctx := n.ctxAt(call, known)
+	var name string
+	var op string
+	switch c := call.(type) {
+	case *ast.Call:
+		fname, isName := c.Callee.(*ast.ConstFetch)
+		if !isName {
+			return callee, nil, nil, false
+		}
+		fn := n.r.CalledFunction(n.t.text(fname), n.file)
+		if fn == nil {
+			return callee, nil, nil, false
+		}
+		return resolvedCallee{member: fn, params: n.r.paramPatterns(fn, n.r.parseDoc(fn.DocComment))}, nil, n.t.callArgList(c.Args), true
+	case *ast.MethodCall:
+		receiver, name, op, args = c.Object, n.t.text(c.Name), "->", n.t.callArgList(c.Args)
+	case *ast.StaticCall:
+		receiver, name, op, args = c.Class, n.t.text(c.Name), "::", n.t.callArgList(c.Args)
+	default:
+		return callee, nil, nil, false
+	}
+	recvType := n.r.typeOf(n.t, receiver, nil, ctx)
+	if op == "::" {
+		recvType = ClassStringTarget(recvType)
+	}
+	m, owner := n.r.FindMemberOn(recvType, name, CallAccess)
+	if m == nil {
+		return callee, nil, nil, false
+	}
+	return resolvedCallee{member: m, receiver: owner, params: n.r.paramPatterns(m, n.r.parseDoc(m.DocComment))}, receiver, args, true
+}
+
+func (n narrowing) applyUnresolvedAssertion(t ResolvedType, call ast.Expr) ResolvedType {
+	var name string
+	var argList *ast.ArgList
+	switch c := call.(type) {
+	case *ast.Call:
+		name, argList = n.t.text(c.Callee), c.Args
+	case *ast.MethodCall:
+		name, argList = n.t.text(c.Name), c.Args
+	case *ast.StaticCall:
+		name, argList = n.t.text(c.Name), c.Args
+	}
+	if !strings.EqualFold(name, "assertInstanceOf") || len(argList.Args) < 2 || argList.Args[1].Value == nil || !n.isVar(argList.Args[1].Value) {
+		return t
+	}
+	cls := ClassStringTarget(n.r.typeOf(n.t, argList.Args[0].Value, nil, n.ctxAt(call, nil)))
+	if cls.FQN == "" || cls.FQN == "class-string" || IsBuiltinTypeName(cls.FQN) {
+		return t
+	}
+	return cls
+}
+
+func (n narrowing) applyCondition(t ResolvedType, cond ast.Expr, value, instanceofOnly bool) ResolvedType {
+	if cond == nil || cond.Bounds().End <= n.after {
+		return t
+	}
+	switch c := cond.(type) {
+	case *ast.Unary:
+		if c.Op == token.Bang {
+			return n.applyCondition(t, c.Operand, !value, instanceofOnly)
+		}
+	case *ast.Binary:
+		switch {
+		case (c.Op == token.BooleanAnd || c.Op == token.And) && value, (c.Op == token.BooleanOr || c.Op == token.Or) && !value:
+			t = n.applyCondition(t, c.Left, value, instanceofOnly)
+			return n.applyCondition(t, c.Right, value, instanceofOnly)
+		}
+	case *ast.InstanceOf:
+		class, ok := c.Class.(*ast.ConstFetch)
+		if ok && n.isVar(c.Operand) {
+			return n.r.narrowInstanceof(t, n.t.text(class), value, n.file)
+		}
+	case *ast.Call, *ast.MethodCall, *ast.StaticCall:
+		if !instanceofOnly {
+			return n.applyAssertingCall(t, c, value)
+		}
+	}
+	return t
+}
+
+func (n narrowing) applyAssertingCall(t ResolvedType, call ast.Expr, value bool) ResolvedType {
+	callee, receiver, args, ok := n.callee(call, nil)
+	if !ok || !strings.Contains(callee.member.DocComment, "assert") {
+		return t
+	}
+	doc := n.r.parseDoc(callee.member.DocComment)
+	if doc == nil {
+		return t
+	}
+	env := n.r.calleeEnv(callee, args, n.ctxAt(call, nil))
+	argIs := n.argIs(callee, args)
+	for _, a := range doc.Asserts {
+		holds := a.Kind == parser.AssertIfTrue && value || a.Kind == parser.AssertIfFalse && !value
+		opposite := a.Kind == parser.AssertIfTrue && !value || a.Kind == parser.AssertIfFalse && value
+		if !holds && !opposite {
+			continue
+		}
+		target := argIs(a.Target)
+		if a.Target == "$this" {
+			target = receiver != nil && n.isVar(receiver)
+		}
+		if !target {
+			continue
+		}
+		fact := narrowingFact{typ: n.r.applyEnv(n.r.parseType(a.Type), env), negated: a.Negated, equality: a.Equality}
+		if opposite {
+			// The other outcome: the type is ruled out. =Type says nothing then.
+			if a.Equality {
+				continue
+			}
+			fact.negated = !fact.negated
+		}
+		t = n.r.applyFact(t, fact)
+	}
+	return t
+}
+
+func (n narrowing) enclosingConditions(t ResolvedType, path []ast.Node) ResolvedType {
+	inner := innerPath(path)
+	for i := len(inner) - 2; i >= 0; i-- {
+		child := inner[i+1]
+		switch node := inner[i].(type) {
+		case *ast.If:
+			switch {
+			case ast.Node(node.Then) == child:
+				t = n.applyCondition(t, node.Cond, true, false)
+			case node.Else != nil && ast.Node(node.Else) == child && len(node.ElseIfs) == 0:
+				t = n.applyCondition(t, node.Cond, false, false)
+			}
+		case *ast.ElseIf:
+			if ast.Node(node.Body) == child {
+				t = n.applyCondition(t, node.Cond, true, false)
+			}
+		case *ast.While:
+			if ast.Node(node.Body) == child {
+				t = n.applyCondition(t, node.Cond, true, false)
+			}
+		}
+	}
+	return t
+}
+
+func (n narrowing) switchCase(t ResolvedType, path []ast.Node) ResolvedType {
+	inner := innerPath(path)
+	for i := len(inner) - 2; i >= 0; i-- {
+		sw, ok := inner[i].(*ast.Switch)
+		if !ok {
+			continue
+		}
+		if lit := constantLiteral(n.t.text(sw.Subject)); lit.Literal != "true" {
+			return t
+		}
+		k := slices.IndexFunc(sw.Cases, func(c *ast.Case) bool { return ast.Node(c) == inner[i+1] })
+		if k < 0 {
+			return t
+		}
+		var parts []ResolvedType
+		for j := k; j >= 0 && (j == k || len(sw.Cases[j].Stmts) == 0); j-- {
+			cond := sw.Cases[j].Cond
+			if cond == nil || !n.testsVar(cond) {
+				return t
+			}
+			narrowed := n.applyCondition(t, cond, true, true)
+			if narrowed.IsEmpty() {
+				return narrowed
+			}
+			parts = append(parts, narrowed)
+		}
+		return MakeUnion(parts, false)
+	}
+	return t
+}
+
+func (n narrowing) testsVar(cond ast.Expr) bool {
+	switch c := cond.(type) {
+	case *ast.InstanceOf:
+		_, named := c.Class.(*ast.ConstFetch)
+		return named && n.isVar(c.Operand)
+	case *ast.Binary:
+		return (c.Op == token.BooleanAnd || c.Op == token.And) && (n.testsVar(c.Left) || n.testsVar(c.Right))
+	}
+	return false
+}
+
+func (n narrowing) statementTests(t ResolvedType, path []ast.Node) ResolvedType {
+	inner := innerPath(path)
+	for i := len(inner) - 2; i >= 0; i-- {
+		child := inner[i+1]
+		switch node := inner[i].(type) {
+		case *ast.Binary:
+			if ast.Node(node.Right) != child {
+				continue
+			}
+			switch node.Op {
+			case token.BooleanAnd, token.And:
+				t = n.applyCondition(t, node.Left, true, true)
+			case token.BooleanOr, token.Or:
+				t = n.applyCondition(t, node.Left, false, true)
+			}
+		case *ast.Ternary:
+			if node.Then != nil && ast.Node(node.Then) == child {
+				t = n.applyCondition(t, node.Cond, true, true)
+			}
+		case *ast.MatchArm:
+			if ast.Node(node.Body) == child && len(node.Conds) == 1 && i > 0 {
+				if m, ok := inner[i-1].(*ast.Match); ok && constantLiteral(n.t.text(m.Subject)).Literal == "true" {
+					t = n.applyCondition(t, node.Conds[0], true, true)
+				}
+			}
+		}
+		if _, ok := inner[i].(ast.Stmt); ok {
+			return t
+		}
 	}
 	return t
 }
@@ -303,86 +611,10 @@ type resolvedCallee struct {
 	params   []paramPattern
 }
 
-// statementCallee works out what the outermost call of a statement calls:
-// foo($x), $obj->foo($x), Foo::bar($x), $this->assertX($x).
-func (r *Resolver) statementCallee(stmt string, lines []string, pos textpos.Position, file *parser.FileNode) (callee resolvedCallee, receiverExpr string, args []CallArg, ok bool) {
-	return r.statementCalleeWith(stmt, lines, pos, file, nil)
-}
-
-// statementCalleeWith is statementCallee with the types of some variables
-// already known, so they aren't worked out again.
-func (r *Resolver) statementCalleeWith(stmt string, lines []string, pos textpos.Position, file *parser.FileNode, known map[string]ResolvedType) (callee resolvedCallee, receiverExpr string, args []CallArg, ok bool) {
-	steps, origin, parsed := parseChain(stmt)
-	if !parsed {
-		return callee, "", nil, false
-	}
-	ctx := ExprContext{Lines: lines, Pos: pos, File: file, Locals: known}
-	if len(steps) == 0 {
-		if origin.kind != 'f' {
-			return callee, "", nil, false
-		}
-		fn := r.CalledFunction(origin.text, file)
-		if fn == nil {
-			return callee, "", nil, false
-		}
-		callee = resolvedCallee{member: fn, params: r.paramPatterns(fn, r.parseDoc(fn.DocComment))}
-		return callee, "", ParseCallArgs(origin.args), true
-	}
-	last := steps[len(steps)-1]
-	if !last.call || last.op == "[" || last.op == "()" {
-		return callee, "", nil, false
-	}
-	receiverExpr = chainPrefix(stmt, origin, steps[:len(steps)-1])
-	recvType := r.chainOriginType(origin, ctx)
-	for _, st := range steps[:len(steps)-1] {
-		if recvType.IsEmpty() {
-			return callee, "", nil, false
-		}
-		recvType = r.chainStepType(recvType, st, ctx)
-	}
-	if last.op == "::" {
-		recvType = ClassStringTarget(recvType)
-	}
-	m, owner := r.FindMemberOn(recvType, last.name, CallAccess)
-	if m == nil {
-		return callee, "", nil, false
-	}
-	callee = resolvedCallee{member: m, receiver: owner, params: r.paramPatterns(m, r.parseDoc(m.DocComment))}
-	return callee, receiverExpr, ParseCallArgs(last.args), true
-}
-
-// chainPrefix rebuilds the text of a chain's origin and steps, which is what
-// a receiver is written as.
-func chainPrefix(stmt string, origin chainOrigin, steps []chainStep) string {
-	if len(steps) == 0 && origin.kind == '$' {
-		return origin.text
-	}
-	var sb strings.Builder
-	switch origin.kind {
-	case '$', 'c':
-		sb.WriteString(origin.text)
-	default:
-		return ""
-	}
-	for _, st := range steps {
-		switch st.op {
-		case "[":
-			sb.WriteString("[" + st.offset + "]")
-		case "()":
-			sb.WriteString("(" + st.args + ")")
-		default:
-			sb.WriteString(st.op + st.name)
-			if st.call {
-				sb.WriteString("(" + st.args + ")")
-			}
-		}
-	}
-	return sb.String()
-}
-
 // calleeEnv is what a callee's PHPDoc types mean at a call: its templates
 // bound from the receiver and the arguments.
-func (r *Resolver) calleeEnv(c resolvedCallee, args []CallArg, lines []string, pos textpos.Position, file *parser.FileNode) typeEnv {
+func (r *Resolver) calleeEnv(c resolvedCallee, args []CallArg, ctx ExprContext) typeEnv {
+	file := ctx.File
 	owner := c.member.ParentFQN
 	if c.member.Kind == symbols.KindFunction {
 		owner = c.member.FQN
@@ -392,10 +624,7 @@ func (r *Resolver) calleeEnv(c resolvedCallee, args []CallArg, lines []string, p
 		subst = r.classSubst(c.member.ParentFQN, r.ReceiverFor(c.receiver, c.member), c.receiver.Params)
 	}
 	if len(c.member.Templates) > 0 {
-		ctx := ExprContext{Lines: lines, Pos: pos, File: file}
-		bound := r.bindCallTemplates(append([]paramPattern(nil), c.params...), &CallSite{Args: args, ArgType: func(expr string, expected *ResolvedType) ResolvedType {
-			return r.ExpressionTypeExpecting(expr, expected, ctx)
-		}}, templateNames(c.member.Templates), subst, owner, file)
+		bound := r.bindCallTemplates(append([]paramPattern(nil), c.params...), r.callSite(args, ctx), templateNames(c.member.Templates), subst, owner, file)
 		if subst == nil {
 			subst = make(map[string]ResolvedType, len(bound))
 		}
@@ -452,321 +681,4 @@ func (r *Resolver) removeType(t, remove ResolvedType) ResolvedType {
 		return t
 	}
 	return MakeUnion(kept, t.Nullable && !remove.Nullable)
-}
-
-// ifCondition is the condition of an if block that holds where it's read.
-type ifCondition struct {
-	cond   string
-	line   int
-	inElse bool // the condition was false: pos is in the else block
-}
-
-// enclosingIfConditions returns the conditions of the if (and else) blocks
-// that pos is inside, from `from` on.
-func enclosingIfConditions(lines []string, from int, pos textpos.Position) []ifCondition {
-	var out []ifCondition
-	depth := 0
-	for i := pos.Line; i >= from && i >= 0; i-- {
-		line := lines[i]
-		if i == pos.Line && pos.Character <= len(line) {
-			line = line[:pos.Character]
-		}
-		for k := len(line) - 1; k >= 0; k-- {
-			switch line[k] {
-			case '}':
-				depth++
-			case '{':
-				if depth > 0 {
-					depth--
-					continue
-				}
-				// This brace opens a block pos is in.
-				header := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line[:k]), "}"))
-				switch {
-				case strings.HasPrefix(header, "if") || strings.HasPrefix(header, "elseif") || strings.HasPrefix(header, "else if") || strings.HasPrefix(header, "while"):
-					// An elseif's own condition holds in its block; the ones
-					// before it were false, which isn't read here.
-					if c, ok := conditionOf(header); ok {
-						out = append(out, ifCondition{cond: c, line: i})
-					}
-				case header == "else":
-					if c, l, ok := matchingIfCondition(lines, i, from); ok {
-						out = append(out, ifCondition{cond: c, line: l, inElse: true})
-					}
-				case strings.Contains(header, "function") || strings.Contains(header, "fn") || strings.HasPrefix(header, "class"):
-					// A function or closure body ends what ifs can say.
-					return out
-				}
-				line = line[:k]
-			}
-		}
-	}
-	return out
-}
-
-// conditionOf returns the condition of `if (…) {` or `elseif (…) {`.
-func conditionOf(header string) (string, bool) {
-	open := strings.IndexByte(header, '(')
-	if open < 0 {
-		return "", false
-	}
-	close := matchingParen(header, open)
-	if close < 0 {
-		return "", false
-	}
-	return strings.TrimSpace(header[open+1 : close]), true
-}
-
-// matchingIfCondition finds the condition of the plain if (no elseif) whose
-// else block starts on line elseLine.
-func matchingIfCondition(lines []string, elseLine, from int) (string, int, bool) {
-	depth := 0
-	for i := elseLine; i >= from; i-- {
-		line := lines[i]
-		if i == elseLine {
-			k := strings.Index(line, "else")
-			if k < 0 {
-				return "", 0, false
-			}
-			line = line[:k]
-		}
-		for k := len(line) - 1; k >= 0; k-- {
-			switch line[k] {
-			case '}':
-				depth++
-			case '{':
-				depth--
-				if depth == 0 {
-					header := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line[:k]), "}"))
-					if strings.HasPrefix(header, "if") {
-						c, ok := conditionOf(header)
-						return c, i, ok
-					}
-					return "", 0, false // elseif chains: nothing simple holds
-				}
-			}
-		}
-	}
-	return "", 0, false
-}
-
-// guardCondition returns the condition of an if at line i whose block does
-// nothing but leave (return, throw, continue, break, exit), so whatever
-// follows it runs only when the condition was false.
-func guardCondition(lines []string, i int) (string, bool) {
-	line := strings.TrimSpace(lines[i])
-	if !strings.HasPrefix(line, "if") {
-		return "", false
-	}
-	cond, ok := conditionOf(line)
-	if !ok {
-		return "", false
-	}
-	open := strings.IndexByte(line, '{')
-	if open < 0 {
-		return "", false
-	}
-	body := strings.TrimSpace(line[open+1:])
-	for j := i + 1; !strings.Contains(body, "}") && j < len(lines) && j <= i+maxGuardLines; j++ {
-		body += " " + strings.TrimSpace(lines[j])
-	}
-	close := strings.IndexByte(body, '}')
-	if close < 0 || strings.IndexByte(body[:close], '{') >= 0 {
-		return "", false // nested blocks may leave only sometimes
-	}
-	// The block's last statement leaves; what comes before it doesn't matter.
-	stmts := splitTopLevel(strings.TrimSpace(body[:close]), ";")
-	last := ""
-	for k := len(stmts) - 1; k >= 0; k-- {
-		if s := strings.TrimSpace(stmts[k]); s != "" {
-			last = s
-			break
-		}
-	}
-	for _, kw := range []string{"return", "throw", "continue", "break", "exit", "die"} {
-		if hasLeaveKeyword(last, kw) {
-			return cond, true
-		}
-	}
-	return "", false
-}
-
-// maxGuardLines bounds how far a guard's block is read.
-const maxGuardLines = 12
-
-func hasLeaveKeyword(stmt, kw string) bool {
-	if !strings.HasPrefix(stmt, kw) {
-		return false
-	}
-	if len(stmt) == len(kw) {
-		return true
-	}
-	c := stmt[len(kw)]
-	return c == ' ' || c == '\t' || c == '(' || c == ';'
-}
-
-// applyCondition applies what holds of varName when cond is true, or false
-// when negate is set.
-func (r *Resolver) applyCondition(varName string, t ResolvedType, cond string, negate bool, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
-	conjuncts := splitTopLevel(cond, "&&")
-	if negate && len(conjuncts) > 1 {
-		return t // !(a && b) says nothing about either alone
-	}
-	if negate {
-		// !(a || b) is !a && !b: each of them was false.
-		if disjuncts := splitTopLevel(cond, "||"); len(disjuncts) > 1 {
-			conjuncts = disjuncts
-		}
-	} else if len(splitTopLevel(cond, "||")) > 1 {
-		return t // a || b says nothing about either alone
-	}
-	for _, c := range conjuncts {
-		c = strings.TrimSpace(c)
-		value := !negate
-		for strings.HasPrefix(c, "!") {
-			value = !value
-			c = strings.TrimSpace(c[1:])
-		}
-		if inner, ok := unwrapParens(c); ok {
-			c = inner
-			for strings.HasPrefix(c, "!") {
-				value = !value
-				c = strings.TrimSpace(c[1:])
-			}
-		}
-		if name, ok := instanceofTest(c, varName); ok {
-			t = r.narrowInstanceof(t, name, value, file)
-			continue
-		}
-		if !strings.Contains(c, varName) || !strings.HasSuffix(c, ")") {
-			continue
-		}
-		callee, receiverExpr, args, ok := r.statementCallee(c, lines, pos, file)
-		if !ok || !strings.Contains(callee.member.DocComment, "assert") {
-			continue
-		}
-		doc := r.parseDoc(callee.member.DocComment)
-		if doc == nil {
-			continue
-		}
-		env := r.calleeEnv(callee, args, lines, pos, file)
-		byParam := argumentsByParam(callee.params, args)
-		for _, a := range doc.Asserts {
-			holds := a.Kind == parser.AssertIfTrue && value || a.Kind == parser.AssertIfFalse && !value
-			opposite := a.Kind == parser.AssertIfTrue && !value || a.Kind == parser.AssertIfFalse && value
-			if !holds && !opposite {
-				continue
-			}
-			target := false
-			if a.Target == "$this" {
-				target = strings.TrimSpace(receiverExpr) == varName
-			} else {
-				for i, p := range callee.params {
-					if p.name == a.Target && i < len(byParam) && len(byParam[i]) > 0 && strings.TrimSpace(byParam[i][0].Expr) == varName {
-						target = true
-					}
-				}
-			}
-			if !target {
-				continue
-			}
-			fact := narrowingFact{typ: r.applyEnv(r.parseType(a.Type), env), negated: a.Negated, equality: a.Equality}
-			if opposite {
-				// The other outcome: the type is ruled out. =Type says nothing then.
-				if a.Equality {
-					continue
-				}
-				fact.negated = !fact.negated
-			}
-			t = r.applyFact(t, fact)
-		}
-	}
-	return t
-}
-
-// applyUnresolvedAssertion handles PHPUnit's assertInstanceOf(Foo::class, $x)
-// when PHPUnit itself isn't installed where it can be read (Symfony runs it
-// through simple-phpunit, outside vendor/): the call is what it says.
-func (r *Resolver) applyUnresolvedAssertion(varName string, t ResolvedType, stmt string, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
-	steps, origin, ok := parseChain(stmt)
-	if !ok {
-		return t
-	}
-	name, args := origin.text, origin.args
-	if len(steps) > 0 {
-		last := steps[len(steps)-1]
-		name, args = last.name, last.args
-	}
-	if !strings.EqualFold(name, "assertInstanceOf") {
-		return t
-	}
-	list := ParseCallArgs(args)
-	if len(list) < 2 || strings.TrimSpace(list[1].Expr) != varName {
-		return t
-	}
-	cls := ClassStringTarget(r.ExpressionType(list[0].Expr, ExprContext{Lines: lines, Pos: pos, File: file}))
-	if cls.FQN == "" || cls.FQN == "class-string" || IsBuiltinTypeName(cls.FQN) {
-		return t
-	}
-	return cls
-}
-
-// passesOrCallsOn reports whether a call statement passes varName as one of
-// its arguments or calls a method on it: foo($x), $this->assert($x),
-// $x->add(1). It reads the text only.
-func passesOrCallsOn(stmt, varName string) bool {
-	if strings.HasPrefix(stmt, varName+"->") || strings.HasPrefix(stmt, varName+"?->") {
-		return true
-	}
-	for i := strings.Index(stmt, varName); i >= 0; {
-		end := i + len(varName)
-		if end < len(stmt) && (isIdentByte(stmt[end]) || stmt[end] >= '0' && stmt[end] <= '9') {
-			// $xs, not $x
-		} else {
-			before := strings.TrimRight(stmt[:i], " \t&")
-			after := strings.TrimLeft(stmt[end:], " \t")
-			if (strings.HasSuffix(before, "(") || strings.HasSuffix(before, ",") || strings.HasSuffix(before, ":")) &&
-				(strings.HasPrefix(after, ")") || strings.HasPrefix(after, ",")) {
-				return true
-			}
-		}
-		next := strings.Index(stmt[end:], varName)
-		if next < 0 {
-			break
-		}
-		i = end + next
-	}
-	return false
-}
-
-// splitTopLevel splits on a separator outside brackets and strings.
-func splitTopLevel(expr, sep string) []string {
-	var parts []string
-	depth, start := 0, 0
-	var quote byte
-	for i := 0; i < len(expr); i++ {
-		c := expr[i]
-		if quote != 0 {
-			if c == '\\' {
-				i++
-			} else if c == quote {
-				quote = 0
-			}
-			continue
-		}
-		switch c {
-		case '\'', '"':
-			quote = c
-		case '(', '[', '{':
-			depth++
-		case ')', ']', '}':
-			depth--
-		}
-		if depth == 0 && strings.HasPrefix(expr[i:], sep) {
-			parts = append(parts, expr[start:i])
-			i += len(sep) - 1
-			start = i + 1
-		}
-	}
-	return append(parts, expr[start:])
 }

@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -22,18 +24,46 @@ type ExprContext struct {
 // maxExprDepth bounds how deeply nested expressions are followed.
 const maxExprDepth = 12
 
+func (ctx ExprContext) grammar() token.Version {
+	if ctx.File == nil {
+		return token.Latest
+	}
+	return ctx.File.Grammar
+}
+
+func expressionTree(expr string, grammar token.Version) (*syntaxTree, ast.Expr) {
+	src := strings.TrimSpace(expr)
+	if src == "" {
+		return nil, nil
+	}
+	file := parser.ParseTree(src+";", grammar)
+	if len(file.Stmts) == 0 {
+		return nil, nil
+	}
+	stmt, ok := file.Stmts[0].(*ast.ExprStmt)
+	if !ok || stmt.Expr == nil {
+		return nil, nil
+	}
+	return &syntaxTree{src: src + ";", grammar: grammar, lines: ast.NewLines(src)}, stmt.Expr
+}
+
 // CallSiteFor returns the call site for the text between a call's
 // parentheses, typing each argument where it's read.
 func (r *Resolver) CallSiteFor(argStr string, ctx ExprContext) *CallSite {
-	return r.callSite(ParseCallArgs(argStr), ctx)
+	t, e := expressionTree("f("+argStr+")", ctx.grammar())
+	call, ok := e.(*ast.Call)
+	if !ok {
+		return &CallSite{}
+	}
+	return r.callSite(t.callArgList(call.Args), ctx)
 }
 
 func (r *Resolver) callSite(args []CallArg, ctx ExprContext) *CallSite {
 	if len(args) == 0 {
 		return &CallSite{}
 	}
-	return &CallSite{Args: args, ArgType: func(expr string, expected *ResolvedType) ResolvedType {
-		return r.ExpressionTypeExpecting(expr, expected, ctx)
+	return &CallSite{Args: args, ArgType: func(arg CallArg, expected *ResolvedType) ResolvedType {
+		return r.typeOf(arg.tree, arg.node, expected, ctx)
 	}}
 }
 
@@ -48,362 +78,467 @@ func (r *Resolver) ExpressionType(expr string, ctx ExprContext) ResolvedType {
 // expected is declared. A closure takes its untyped parameters' types from an
 // expected callable(…) signature.
 func (r *Resolver) ExpressionTypeExpecting(expr string, expected *ResolvedType, ctx ExprContext) ResolvedType {
-	if ctx.depth > maxExprDepth {
+	t, e := expressionTree(expr, ctx.grammar())
+	return r.typeOf(t, e, expected, ctx)
+}
+
+func (r *Resolver) typeOf(t *syntaxTree, e ast.Expr, expected *ResolvedType, ctx ExprContext) ResolvedType {
+	if e == nil || ctx.depth > maxExprDepth {
 		return ResolvedType{}
 	}
 	ctx.depth++
-	expr = strings.TrimSuffix(strings.TrimSpace(expr), ";")
-	expr = strings.TrimSpace(expr)
-	if expr == "" {
-		return ResolvedType{}
-	}
-	if inner, ok := unwrapParens(expr); ok {
-		return r.ExpressionTypeExpecting(inner, expected, ctx)
-	}
-	if isClosureExpr(expr) {
-		return r.closureType(expr, expected, ctx)
-	}
-	if isConcatenation(expr) {
+	switch n := e.(type) {
+	case *ast.Variable:
+		return r.variableType(t.text(n), ctx)
+	case *ast.Literal:
+		return literalType(t, n)
+	case *ast.InterpolatedString:
 		return ResolvedType{FQN: "string"}
-	}
-	if rest, ok := cutKeyword(expr, "clone"); ok {
-		return r.ExpressionType(rest, ctx)
-	}
-	lower := strings.ToLower(expr)
-	if strings.HasSuffix(lower, "::class") && classConstantRe.MatchString(expr) {
-		name := strings.TrimSpace(expr[:len(expr)-len("::class")])
-		fqn, isKeyword := r.ClassKeywordFQN(name, ctx.Pos, ctx.File)
-		if !isKeyword {
-			fqn = r.ResolveClassName(name, ctx.File)
+	case *ast.MagicConst:
+		if n.Kind == token.LineConst {
+			return ResolvedType{FQN: "int"}
 		}
-		if fqn == "" {
-			return ResolvedType{FQN: "class-string"}
-		}
-		return ResolvedType{FQN: "class-string", Params: []ResolvedType{{FQN: fqn}}}
-	}
-	if expr[0] == '[' || strings.HasPrefix(lower, "array(") {
-		return r.arrayLiteralType(expr, ctx)
-	}
-	if lit := literalExprType(expr); !lit.IsEmpty() {
-		return lit
-	}
-	if expr[0] == '$' {
-		if name := extractLeadingVariable(expr); name == expr {
-			if t, ok := ctx.Locals[name]; ok {
-				return t
-			}
-			if ctx.File == nil {
-				return ResolvedType{}
-			}
-			return r.ResolveVariableTypeTyped(name, ctx.Lines, ctx.Pos, ctx.File)
-		}
-	}
-	if steps, origin, ok := parseChain(expr); ok {
-		if len(steps) == 0 {
-			return r.chainOriginType(origin, ctx)
-		}
-		_, local := ctx.Locals[origin.text]
-		if !local && ctx.File != nil && len(ctx.Lines) > 0 {
-			if rt := r.ChainType(expr, r.JoinLines(ctx.Lines), ctx.Pos, ctx.File); !rt.IsEmpty() {
+		return ResolvedType{FQN: "string"}
+	case *ast.Unary:
+		if lit, ok := n.Operand.(*ast.Literal); ok && (n.Op == token.Minus || n.Op == token.Plus) {
+			if rt := literalType(t, lit); rt.Literal != "" {
+				rt.Literal = t.src[n.Start:lit.End]
 				return rt
 			}
+			return literalType(t, lit)
 		}
-		cur := r.chainOriginType(origin, ctx)
-		for _, st := range steps {
-			if cur.IsEmpty() {
-				return ResolvedType{}
-			}
-			cur = r.chainStepType(cur, st, ctx)
+	case *ast.Cast:
+		return castResult(n.Kind)
+	case *ast.ConstFetch:
+		if lit := constantLiteral(t.text(n)); !lit.IsEmpty() {
+			return lit
 		}
-		return cur
-	}
-	if ctx.File != nil && len(ctx.Lines) > 0 && (strings.Contains(expr, "->") || strings.Contains(expr, "::")) {
-		return r.ChainType(expr, r.JoinLines(ctx.Lines), ctx.Pos, ctx.File)
+		return r.classReference(t, n, ctx)
+	case *ast.Array:
+		return r.arrayType(t, n, ctx)
+	case *ast.New:
+		return r.newType(t, n, ctx)
+	case *ast.Clone:
+		if n.Operand != nil {
+			return r.typeOf(t, n.Operand, nil, ctx)
+		}
+		if len(n.Args.Args) > 0 {
+			return r.typeOf(t, n.Args.Args[0].Value, nil, ctx)
+		}
+	case *ast.Closure:
+		return r.closureType(t, closureOf(n), expected, ctx)
+	case *ast.ArrowFunction:
+		return r.closureType(t, arrowOf(n), expected, ctx)
+	case *ast.Binary:
+		switch n.Op {
+		case token.Dot:
+			return ResolvedType{FQN: "string"}
+		case token.Coalesce:
+			return r.eitherType(t, n.Left, n.Right, ctx)
+		case token.Pipe:
+			return r.InvokeType(r.typeOf(t, n.Right, nil, ctx))
+		}
+	case *ast.Ternary:
+		return r.ternaryType(t, n, ctx)
+	case *ast.Call:
+		return r.callType(t, n, ctx)
+	case *ast.MethodCall:
+		return r.accessType(t, n, n.Object, "->", n.Name, n.Args, ctx)
+	case *ast.PropertyFetch:
+		return r.accessType(t, n, n.Object, "->", n.Name, nil, ctx)
+	case *ast.StaticCall:
+		return r.accessType(t, n, n.Class, "::", n.Name, n.Args, ctx)
+	case *ast.StaticPropertyFetch:
+		return r.accessType(t, n, n.Class, "::", n.Name, nil, ctx)
+	case *ast.ClassConstFetch:
+		if strings.EqualFold(t.text(n.Name), "class") {
+			return r.classStringOf(t, n.Class, ctx)
+		}
+		return r.accessType(t, n, n.Class, "::", n.Name, nil, ctx)
+	case *ast.ArrayDimFetch:
+		if n.Dim == nil {
+			return ResolvedType{}
+		}
+		base := r.typeOf(t, n.Array, nil, ctx)
+		if base.IsEmpty() {
+			return ResolvedType{}
+		}
+		return r.OffsetType(base, t.text(n.Dim))
 	}
 	return ResolvedType{}
 }
 
-// chainOrigin is the first part of a chain: $var, a class name, `new Foo(…)`
-// or a function call.
-type chainOrigin struct {
-	kind byte // '$' variable, 'c' class name, 'n' new, 'f' function call
-	text string
-	args string
+func (r *Resolver) variableType(name string, ctx ExprContext) ResolvedType {
+	if rt, ok := ctx.Locals[name]; ok {
+		return rt
+	}
+	if ctx.File == nil {
+		return ResolvedType{}
+	}
+	return r.ResolveVariableTypeTyped(name, ctx.Lines, ctx.Pos, ctx.File)
 }
 
-// chainStep is one access in a chain: ->name, ?->name, ::name, with call
-// arguments when it's a call, or an array offset [key].
-type chainStep struct {
-	op         string // "->", "?->", "::" or "[" for an offset
-	name       string
-	call       bool
-	args       string
-	offset     string
-	callArgs   []CallArg
-	parsedArgs bool
+func literalType(t *syntaxTree, n *ast.Literal) ResolvedType {
+	text := t.text(n)
+	switch n.Kind {
+	case token.ConstantString:
+		return ResolvedType{FQN: "string", Literal: text}
+	case token.IntegerLiteral:
+		return ResolvedType{FQN: "int", Literal: text}
+	case token.FloatLiteral:
+		return ResolvedType{FQN: "float", Literal: text}
+	case token.StartHeredoc:
+		return ResolvedType{FQN: "string"}
+	}
+	return ResolvedType{}
 }
 
-// parseChain splits `$a->b(1)::c['k']` into its origin and its accesses. ok
-// is false when expr isn't such a chain.
-func parseChain(expr string) (steps []chainStep, origin chainOrigin, ok bool) {
-	i := 0
-	n := len(expr)
-	readIdent := func() string {
-		start := i
-		for i < n && (isIdentByte(expr[i]) || expr[i] >= '0' && expr[i] <= '9' || expr[i] == '\\') {
-			i++
-		}
-		return expr[start:i]
+func constantLiteral(name string) ResolvedType {
+	switch lower := strings.ToLower(strings.TrimPrefix(name, "\\")); lower {
+	case "true", "false":
+		return ResolvedType{FQN: "bool", Literal: lower}
+	case "null":
+		return ResolvedType{FQN: "null"}
 	}
-	readBalanced := func(open, close byte) (string, bool) {
-		if i >= n || expr[i] != open {
-			return "", false
-		}
-		depth := 0
-		var quote byte
-		start := i + 1
-		for ; i < n; i++ {
-			c := expr[i]
-			if quote != 0 {
-				if c == '\\' {
-					i++
-				} else if c == quote {
-					quote = 0
-				}
-				continue
-			}
-			switch c {
-			case '\'', '"':
-				quote = c
-			case '(', '[', '{':
-				depth++
-			case ')', ']', '}':
-				depth--
-				if depth == 0 {
-					i++
-					return expr[start : i-1], c == close
-				}
-			}
-		}
-		return "", false
-	}
-	skipSpace := func() {
-		for i < n && (expr[i] == ' ' || expr[i] == '\t' || expr[i] == '\n' || expr[i] == '\r') {
-			i++
-		}
-	}
-
-	switch {
-	case expr[0] == '$':
-		i = 1
-		origin = chainOrigin{kind: '$', text: "$" + readIdent()}
-		if origin.text == "$" {
-			return nil, origin, false
-		}
-		skipSpace()
-		// $fn(…): calling the variable.
-		if i < n && expr[i] == '(' {
-			args, closed := readBalanced('(', ')')
-			if !closed {
-				return nil, origin, false
-			}
-			steps = append(steps, chainStep{op: "()", call: true, args: args})
-		}
-	case strings.HasPrefix(expr, "new ") || strings.HasPrefix(expr, "(new "):
-		wrapped := expr[0] == '('
-		if wrapped {
-			inner, closed := readBalanced('(', ')')
-			if !closed {
-				return nil, origin, false
-			}
-			name, args := splitNewExpr(strings.TrimSpace(inner[4:]))
-			origin = chainOrigin{kind: 'n', text: name, args: args}
-		} else {
-			// `new Foo(…)->bar()` only chains in PHP 8.4; take the whole as new.
-			i = 4
-			skipSpace()
-			name := readIdent()
-			skipSpace()
-			args := ""
-			if i < n && expr[i] == '(' {
-				a, closed := readBalanced('(', ')')
-				if !closed {
-					return nil, origin, false
-				}
-				args = a
-			}
-			origin = chainOrigin{kind: 'n', text: name, args: args}
-		}
-	case isIdentByte(expr[0]) || expr[0] == '\\':
-		name := readIdent()
-		skipSpace()
-		if i < n && expr[i] == '(' {
-			args, closed := readBalanced('(', ')')
-			if !closed {
-				return nil, origin, false
-			}
-			origin = chainOrigin{kind: 'f', text: name, args: args}
-		} else {
-			origin = chainOrigin{kind: 'c', text: name}
-		}
-	default:
-		return nil, origin, false
-	}
-
-	for {
-		skipSpace()
-		if i >= n {
-			return steps, origin, true
-		}
-		var st chainStep
-		switch {
-		case strings.HasPrefix(expr[i:], "?->"):
-			st.op = "->"
-			i += 3
-		case strings.HasPrefix(expr[i:], "->"):
-			st.op = "->"
-			i += 2
-		case strings.HasPrefix(expr[i:], "::"):
-			st.op = "::"
-			i += 2
-		case expr[i] == '[':
-			key, closed := readBalanced('[', ']')
-			if !closed {
-				return nil, origin, false
-			}
-			steps = append(steps, chainStep{op: "[", offset: strings.TrimSpace(key)})
-			continue
-		default:
-			return nil, origin, false
-		}
-		skipSpace()
-		if i < n && expr[i] == '$' && st.op == "::" {
-			i++
-			st.name = "$" + readIdent()
-		} else {
-			st.name = readIdent()
-		}
-		if st.name == "" || st.name == "$" {
-			return nil, origin, false
-		}
-		skipSpace()
-		if i < n && expr[i] == '(' {
-			args, closed := readBalanced('(', ')')
-			if !closed {
-				return nil, origin, false
-			}
-			st.call, st.args = true, args
-		}
-		steps = append(steps, st)
-	}
+	return ResolvedType{}
 }
 
-// splitNewExpr splits `Foo(1, 2)` into the class name and its arguments.
-func splitNewExpr(s string) (name, args string) {
-	open := strings.IndexByte(s, '(')
-	if open < 0 {
-		return strings.TrimSpace(s), ""
+func castResult(kind token.Kind) ResolvedType {
+	switch kind {
+	case token.IntCast:
+		return ResolvedType{FQN: "int"}
+	case token.FloatCast:
+		return ResolvedType{FQN: "float"}
+	case token.StringCast:
+		return ResolvedType{FQN: "string"}
+	case token.BoolCast:
+		return ResolvedType{FQN: "bool"}
+	case token.ArrayCast:
+		return ResolvedType{FQN: "array"}
+	case token.ObjectCast:
+		return ResolvedType{FQN: "object"}
+	case token.UnsetCast:
+		return ResolvedType{FQN: "null"}
 	}
-	close := strings.LastIndexByte(s, ')')
-	if close < open {
-		return strings.TrimSpace(s[:open]), ""
-	}
-	return strings.TrimSpace(s[:open]), s[open+1 : close]
+	return ResolvedType{}
 }
 
-// chainOriginType types the start of a chain.
-func (r *Resolver) chainOriginType(o chainOrigin, ctx ExprContext) ResolvedType {
-	switch o.kind {
-	case '$':
-		if t, ok := ctx.Locals[o.text]; ok {
-			return t
-		}
-		if ctx.File == nil {
-			return ResolvedType{}
-		}
-		return r.ResolveVariableTypeTyped(o.text, ctx.Lines, ctx.Pos, ctx.File)
-	case 'n':
-		return r.NewExpressionType(o.text, o.args, ctx)
-	case 'c':
-		fqn, isKeyword := r.ClassKeywordFQN(o.text, ctx.Pos, ctx.File)
-		if !isKeyword {
-			fqn = r.ResolveClassName(o.text, ctx.File)
-		}
+func (r *Resolver) classReference(t *syntaxTree, n *ast.ConstFetch, ctx ExprContext) ResolvedType {
+	name := t.text(n)
+	if fqn, isKeyword := r.ClassKeywordFQN(name, ctx.Pos, ctx.File); isKeyword {
 		if fqn == "" {
 			return ResolvedType{}
 		}
 		return ResolvedType{FQN: fqn}
-	case 'f':
-		return r.FunctionCallType(o.text, o.args, ctx)
-	}
-	return ResolvedType{}
-}
-
-// chainStepType types one access on a value of type cur.
-func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext) ResolvedType {
-	if st.op == "[" {
-		return r.OffsetType(cur, st.offset)
-	}
-	fcc := st.call && IsCallableArgs(st.args)
-	if st.op == "()" {
-		if fcc {
-			return r.CallableOf(cur)
-		}
-		return r.InvokeType(cur)
 	}
 	if r.Index == nil {
 		return ResolvedType{}
 	}
-	if st.op == "->" {
-		if rt, ok := ClosureCallType(cur, st.name); ok {
+	fqn := r.ResolveClassNameLoose(name, ctx.File)
+	if fqn == "" {
+		return ResolvedType{}
+	}
+	if sym := r.Index.Lookup(fqn); sym != nil {
+		switch sym.Kind {
+		case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
+			return ResolvedType{FQN: fqn}
+		}
+		return ResolvedType{}
+	}
+	return ResolvedType{FQN: fqn}
+}
+
+func (r *Resolver) classStringOf(t *syntaxTree, class ast.Expr, ctx ExprContext) ResolvedType {
+	name, ok := class.(*ast.ConstFetch)
+	if !ok {
+		return ResolvedType{FQN: "class-string"}
+	}
+	fqn, isKeyword := r.ClassKeywordFQN(t.text(name), ctx.Pos, ctx.File)
+	if !isKeyword {
+		fqn = r.ResolveClassName(t.text(name), ctx.File)
+	}
+	if fqn == "" {
+		return ResolvedType{FQN: "class-string"}
+	}
+	return ResolvedType{FQN: "class-string", Params: []ResolvedType{{FQN: fqn}}}
+}
+
+func (r *Resolver) newType(t *syntaxTree, n *ast.New, ctx ExprContext) ResolvedType {
+	if n.Anonymous != nil {
+		return ResolvedType{}
+	}
+	args := t.callArgList(n.Args)
+	if v, ok := n.Class.(*ast.Variable); ok {
+		target := ClassStringTarget(r.variableType(t.text(v), ctx))
+		if target.FQN == "class-string" || target.FQN == "string" {
+			return ResolvedType{}
+		}
+		return target
+	}
+	name, ok := n.Class.(*ast.ConstFetch)
+	if !ok {
+		return ResolvedType{}
+	}
+	return r.newExpressionType(t.text(name), args, ctx)
+}
+
+func (r *Resolver) callType(t *syntaxTree, n *ast.Call, ctx ExprContext) ResolvedType {
+	if rt, ok := r.containerCallType(t, n, ctx); ok {
+		return rt
+	}
+	args := t.callArgList(n.Args)
+	if name, ok := n.Callee.(*ast.ConstFetch); ok {
+		return r.functionCallType(t.text(name), args, ctx)
+	}
+	callee := r.typeOf(t, n.Callee, nil, ctx)
+	if isCallableArgs(args) {
+		return r.CallableOf(callee)
+	}
+	return r.InvokeType(callee)
+}
+
+func (r *Resolver) containerCallType(t *syntaxTree, call ast.Expr, ctx ExprContext) (ResolvedType, bool) {
+	if r.ContainerCall == nil || len(ctx.Lines) == 0 {
+		return ResolvedType{}, false
+	}
+	switch concrete := r.ContainerCall(r, t.text(call), r.JoinLines(ctx.Lines), ctx.File); concrete {
+	case "":
+		return ResolvedType{}, false
+	case "-":
+		return ResolvedType{}, true
+	default:
+		return ResolvedType{FQN: concrete}, true
+	}
+}
+
+func (r *Resolver) accessType(t *syntaxTree, n, receiver ast.Expr, op string, nameNode ast.Expr, argList *ast.ArgList, ctx ExprContext) ResolvedType {
+	call := argList != nil
+	if call {
+		if rt, ok := r.containerCallType(t, n, ctx); ok {
 			return rt
 		}
 	}
-	access := MemberAccessOf(st.call, st.op == "::", st.name)
-	name := st.name
-	if st.op == "::" && !st.call && strings.HasPrefix(name, "$") {
+	name := t.text(nameNode)
+	access := MemberAccessOf(call, op == "::", name)
+	switch nameNode.(type) {
+	case *ast.IdentifierExpr:
+	case *ast.Variable:
+		if op == "->" || call {
+			return ResolvedType{}
+		}
 		name = name[1:]
+	default:
+		return ResolvedType{}
 	}
-	if st.op == "::" {
+	cur := r.typeOf(t, receiver, nil, ctx)
+	if cur.IsEmpty() || r.Index == nil {
+		return ResolvedType{}
+	}
+	args := t.callArgList(argList)
+	if call && op == "->" {
+		if rt, ok := ClosureCallType(cur, name); ok {
+			return rt
+		}
+	}
+	if op == "::" {
 		cur = ClassStringTarget(cur)
 	}
 	if fwd, ok := r.ForwardedReceiver(cur, name, access); ok {
-		// Category::where() runs on Builder<Category>.
 		cur = fwd
 	}
+	callable := call && isCallableArgs(args)
 	member, owner := r.FindMemberOn(cur, name, access)
 	if member != nil && owner.FQN != cur.FQN {
-		// Through @mixin: a fluent method of the mixin gives back the object
-		// it was called on, as forwarding through __call does.
-		if !fcc && r.ReturnsCallingClass(member) {
+		if !callable && r.ReturnsCallingClass(member) {
 			return cur
 		}
 		cur = owner
 	}
-	if member == nil && st.call && r.ScopeMethod(cur, name) != nil {
-		// A local scope: Builder<Category>->active() is the builder again.
-		return cur
-	}
 	if member == nil {
-		// A member of an object shape.
-		for _, f := range cur.Fields {
-			if cur.FQN == "object" && f.Key == name {
-				return f.Type
+		if call && r.ScopeMethod(cur, name) != nil {
+			return cur
+		}
+		if !call && cur.FQN == "object" {
+			for _, f := range cur.Fields {
+				if f.Key == name {
+					return f.Type
+				}
 			}
 		}
 		return ResolvedType{}
 	}
-	if fcc {
-		return PartialClosure(r.MemberCallableType(member, ctx.File, r.ReceiverFor(cur, member), cur.Params), member, st.args)
+	callerFQN := r.ReceiverFor(cur, member)
+	if op == "::" && forwardsCallingClass(t, receiver) {
+		if enclosing := FindEnclosingClass(ctx.File, ctx.Pos); enclosing != "" {
+			callerFQN = enclosing
+		}
 	}
-	var call *CallSite
+	if callable {
+		return PartialClosure(r.MemberCallableType(member, ctx.File, callerFQN, cur.Params), member, args)
+	}
+	var site *CallSite
+	if call {
+		site = r.callSite(args, ctx)
+	}
+	return r.MemberTypeForCall(member, ctx.File, callerFQN, cur.Params, site)
+}
+
+func forwardsCallingClass(t *syntaxTree, class ast.Expr) bool {
+	name, ok := class.(*ast.ConstFetch)
+	if !ok {
+		return false
+	}
+	switch ClassKeyword(t.text(name)) {
+	case "self", "parent", "static":
+		return true
+	}
+	return false
+}
+
+// arrayType types an array literal. A list of values that aren't plain
+// literals, such as [$user, new User], gets the union of their types.
+func (r *Resolver) arrayType(t *syntaxTree, n *ast.Array, ctx ExprContext) ResolvedType {
+	rt := literalArrayType(t, n)
+	if len(n.Items) == 0 {
+		return rt
+	}
+	if n.Items[0] != nil && n.Items[0].Key != nil {
+		if rt.Shape == "" {
+			return rt
+		}
+		fields := make([]ShapeEntry, 0, len(n.Items))
+		for _, item := range n.Items {
+			if item == nil || item.Key == nil {
+				return rt
+			}
+			key := t.text(item.Key)
+			if lit, ok := item.Key.(*ast.Literal); ok && lit.Kind == token.ConstantString {
+				key = key[1 : len(key)-1]
+			}
+			vt := r.typeOf(t, item.Value, nil, ctx)
+			if vt.IsEmpty() {
+				vt = ResolvedType{FQN: "mixed"}
+			}
+			fields = append(fields, ShapeEntry{Key: key, Type: vt})
+		}
+		out := ResolvedType{FQN: "array", Fields: fields}
+		out.Shape = shapeString("array", "array{", fields)
+		return out
+	}
+	if rt.FQN == "array" && len(rt.Params) == 2 && rt.Params[1].FQN != "mixed" && rt.Params[1].FQN != "" {
+		return rt
+	}
+	parts := make([]ResolvedType, 0, len(n.Items))
+	for _, item := range n.Items {
+		if item == nil {
+			continue
+		}
+		vt := r.typeOf(t, item.Value, nil, ctx)
+		if item.Unpack {
+			_, ev, ok := r.IterableTypes(vt)
+			if !ok {
+				return rt
+			}
+			vt = ev
+		}
+		if vt.IsEmpty() {
+			return rt
+		}
+		parts = append(parts, vt)
+	}
+	if len(parts) == 0 {
+		return rt
+	}
+	return ResolvedType{FQN: "array", Params: []ResolvedType{{FQN: "int"}, MakeUnion(parts, false)}}
+}
+
+func literalArrayType(t *syntaxTree, n *ast.Array) ResolvedType {
+	var fields []string
+	keyed := false
+	for _, item := range n.Items {
+		if item == nil || item.Key == nil {
+			continue
+		}
+		keyed = true
+		fields = append(fields, arrayKey(t, item.Key)+": "+literalValueType(t, item.Value))
+	}
+	if keyed {
+		return attachShapeFields(ResolvedType{FQN: "array", Shape: "array{" + strings.Join(fields, ", ") + "}"})
+	}
+	common, sameShape := "", true
+	for i, item := range n.Items {
+		if item == nil {
+			continue
+		}
+		vt := "mixed"
+		if !item.Unpack {
+			vt = literalValueType(t, item.Value)
+		}
+		if _, nested := item.Value.(*ast.Array); !nested || !strings.HasPrefix(vt, "array{") {
+			sameShape = false
+		}
+		if i > 0 && vt != common {
+			return ResolvedType{FQN: "array"}
+		}
+		common = vt
+	}
 	switch {
-	case st.parsedArgs:
-		call = r.callSite(st.callArgs, ctx)
-	case st.call:
-		call = r.CallSiteFor(st.args, ctx)
+	case common == "":
+		return ResolvedType{FQN: "array"}
+	case sameShape:
+		return attachShapeFields(ResolvedType{FQN: "array", Params: []ResolvedType{{FQN: "int"}, {FQN: "array", Shape: common}}})
+	case common == "mixed":
+		return ResolvedType{FQN: "array"}
 	}
-	return r.MemberTypeForCall(member, ctx.File, r.ReceiverFor(cur, member), cur.Params, call)
+	return ResolvedType{FQN: "array", Params: []ResolvedType{{FQN: "int"}, {FQN: common}}}
+}
+
+func arrayKey(t *syntaxTree, key ast.Expr) string {
+	text := t.text(key)
+	if lit, ok := key.(*ast.Literal); ok && lit.Kind == token.ConstantString {
+		return text[1 : len(text)-1]
+	}
+	return text
+}
+
+func literalValueType(t *syntaxTree, e ast.Expr) string {
+	switch n := e.(type) {
+	case *ast.Array:
+		rt := literalArrayType(t, n)
+		if rt.Shape != "" {
+			return rt.Shape
+		}
+		return "array"
+	case *ast.Literal, *ast.InterpolatedString, *ast.ConstFetch, *ast.Unary:
+		if rt := literalNodeType(t, e); rt != "" {
+			return rt
+		}
+	}
+	return "mixed"
+}
+
+func literalNodeType(t *syntaxTree, e ast.Expr) string {
+	switch n := e.(type) {
+	case *ast.Literal:
+		return literalType(t, n).FQN
+	case *ast.InterpolatedString:
+		return "string"
+	case *ast.ConstFetch:
+		return constantLiteral(t.text(n)).FQN
+	case *ast.Unary:
+		if lit, ok := n.Operand.(*ast.Literal); ok && (n.Op == token.Minus || n.Op == token.Plus) {
+			return literalType(t, lit).FQN
+		}
+	case *ast.Array:
+		return "array"
+	case *ast.Cast:
+		return castResult(n.Kind).FQN
+	case *ast.ClassConstFetch:
+		if _, named := n.Class.(*ast.ConstFetch); named && strings.EqualFold(t.text(n.Name), "class") {
+			return "string"
+		}
+	}
+	return ""
 }
 
 // ReceiverFor returns which class of a union or intersection receiver a
@@ -464,21 +599,21 @@ func itoa(i int) string {
 // FunctionCallType types a call to the function name with the arguments
 // args (the text between its parentheses), binding its templates.
 func (r *Resolver) FunctionCallType(name, args string, ctx ExprContext) ResolvedType {
-	if IsCallableArgs(args) {
-		return r.functionCallType(name, args, true, nil, ctx)
+	t, e := expressionTree("f("+args+")", ctx.grammar())
+	call, ok := e.(*ast.Call)
+	if !ok {
+		return ResolvedType{}
 	}
-	return r.functionCallType(name, args, false, ParseCallArgs(args), ctx)
+	return r.functionCallType(name, t.callArgList(call.Args), ctx)
 }
 
-func (r *Resolver) functionCallType(name, argsText string, callable bool, args []CallArg, ctx ExprContext) ResolvedType {
+func (r *Resolver) functionCallType(name string, args []CallArg, ctx ExprContext) ResolvedType {
 	if r.Index == nil {
 		return ResolvedType{}
 	}
 	fn := r.typedFunction(name, ctx.File)
-	if callable {
-		// strlen(...) is a Closure of strlen, known or not, and so is a
-		// partial application such as str_replace('a', 'b', ?).
-		return PartialClosure(r.FunctionCallableType(fn, ctx.File), fn, argsText)
+	if isCallableArgs(args) {
+		return PartialClosure(r.FunctionCallableType(fn, ctx.File), fn, args)
 	}
 	if fn == nil {
 		return ResolvedType{}
@@ -490,29 +625,15 @@ func (r *Resolver) functionCallType(name, argsText string, callable bool, args [
 // from the constructor's arguments: `new Collection([$user])` is a
 // Collection<int, User>.
 func (r *Resolver) NewExpressionType(className, args string, ctx ExprContext) ResolvedType {
-	return r.newExpressionType(className, ParseCallArgs(args), ctx)
+	t, e := expressionTree("new "+className+"("+args+")", ctx.grammar())
+	n, ok := e.(*ast.New)
+	if !ok {
+		return ResolvedType{}
+	}
+	return r.newType(t, n, ctx)
 }
 
 func (r *Resolver) newExpressionType(className string, args []CallArg, ctx ExprContext) ResolvedType {
-	className = strings.TrimSpace(className)
-	if strings.HasPrefix(className, "$") {
-		// new $class: the class a class-string<T> names.
-		if name := extractLeadingVariable(className); name == className {
-			var vt ResolvedType
-			if t, ok := ctx.Locals[name]; ok {
-				vt = t
-			} else if ctx.File != nil {
-				vt = r.ResolveVariableTypeTyped(name, ctx.Lines, ctx.Pos, ctx.File)
-			}
-			if t := ClassStringTarget(vt); t.FQN != "class-string" && t.FQN != "string" && !t.IsEmpty() {
-				return t
-			}
-		}
-		return ResolvedType{}
-	}
-	if className == "" || strings.HasPrefix(className, "class") {
-		return ResolvedType{}
-	}
 	fqn, isKeyword := r.ClassKeywordFQN(className, ctx.Pos, ctx.File)
 	if !isKeyword {
 		fqn = r.ResolveClassName(className, ctx.File)
@@ -530,14 +651,15 @@ func (r *Resolver) newExpressionType(className string, args []CallArg, ctx ExprC
 	}
 	params := r.paramPatterns(ctor, parser.ParseDocBlock(ctor.DocComment))
 	names := templateNames(tmpls, ctor.Templates)
-	bound := r.bindCallTemplates(params, r.callSite(args, ctx), names, nil, ctor.ParentFQN, ctx.File)
+	site := r.callSite(args, ctx)
+	bound := r.bindCallTemplates(params, site, names, nil, ctor.ParentFQN, ctx.File)
 	r.dropOutOfBound(bound, tmpls, fqn, ctx.File)
 	r.dropOutOfBound(bound, ctor.Templates, ctor.ParentFQN, ctx.File)
 	if len(bound) == 0 {
 		// A constructor without types for its templates, given an array: its
 		// keys and values are the class's arguments, in order.
 		if len(params) > 0 {
-			if at := r.ExpressionType(args[0].Expr, ctx); at.FQN == "array" {
+			if at := site.ArgType(args[0], nil); at.FQN == "array" {
 				if rt := r.inferConstructorGenerics(fqn, at); !rt.IsEmpty() {
 					return rt
 				}
@@ -555,122 +677,6 @@ func (r *Resolver) newExpressionType(className string, args []CallArg, ctx ExprC
 		out.Params[i] = r.applyEnv(bound[t.Name], typeEnv{owner: fqn, file: ctx.File})
 	}
 	return out
-}
-
-// arrayLiteralType types an array literal. A list of values that aren't
-// plain literals, such as [$user, new User], gets the union of their types.
-func (r *Resolver) arrayLiteralType(literal string, ctx ExprContext) ResolvedType {
-	rt := InferArrayLiteralType(literal)
-	body := literal
-	if strings.HasPrefix(strings.ToLower(body), "array(") {
-		body = "[" + body[6:]
-		if strings.HasSuffix(body, ")") {
-			body = body[:len(body)-1] + "]"
-		}
-	}
-	if len(body) < 2 || body[len(body)-1] != ']' {
-		return rt
-	}
-	inner := strings.TrimSpace(body[1 : len(body)-1])
-	if inner == "" {
-		return rt
-	}
-	values := splitArrayValues(inner)
-	if len(values) == 0 {
-		return rt
-	}
-	// Associative arrays with values the literal inference can't read.
-	if IndexOutsideBrackets(values[0], '=') >= 0 && strings.Contains(values[0], "=>") {
-		if rt.Shape == "" {
-			return rt
-		}
-		fields := make([]ShapeEntry, 0, len(values))
-		for _, v := range values {
-			arrow := strings.Index(v, "=>")
-			if arrow < 0 {
-				return rt
-			}
-			key := strings.Trim(strings.TrimSpace(v[:arrow]), `'"`)
-			vt := r.ExpressionType(strings.TrimSpace(v[arrow+2:]), ctx)
-			if vt.IsEmpty() {
-				vt = ResolvedType{FQN: "mixed"}
-			}
-			fields = append(fields, ShapeEntry{Key: key, Type: vt})
-		}
-		out := ResolvedType{FQN: "array", Fields: fields}
-		out.Shape = shapeString("array", "array{", fields)
-		return out
-	}
-	if rt.FQN == "array" && len(rt.Params) == 2 && rt.Params[1].FQN != "mixed" && rt.Params[1].FQN != "" {
-		return rt
-	}
-	parts := make([]ResolvedType, 0, len(values))
-	for _, v := range values {
-		v = strings.TrimSpace(v)
-		if strings.HasPrefix(v, "...") {
-			if _, ev, ok := r.IterableTypes(r.ExpressionType(v[3:], ctx)); ok {
-				parts = append(parts, ev)
-				continue
-			}
-			return rt
-		}
-		vt := r.ExpressionType(v, ctx)
-		if vt.IsEmpty() {
-			return rt
-		}
-		parts = append(parts, vt)
-	}
-	return ResolvedType{FQN: "array", Params: []ResolvedType{{FQN: "int"}, MakeUnion(parts, false)}}
-}
-
-// matchingParen returns the index of the parenthesis closing the one at
-// open, skipping quoted strings.
-func matchingParen(s string, open int) int {
-	if open >= len(s) || s[open] != '(' {
-		return -1
-	}
-	depth := 0
-	var quote byte
-	for i := open; i < len(s); i++ {
-		c := s[i]
-		if quote != 0 {
-			if c == '\\' {
-				i++
-			} else if c == quote {
-				quote = 0
-			}
-			continue
-		}
-		switch c {
-		case '\'', '"':
-			quote = c
-		case '(':
-			depth++
-		case ')':
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-	return -1
-}
-
-// unwrapParens returns the inside of an expression wrapped in one pair of
-// parentheses, as in `(new Foo)`.
-func unwrapParens(expr string) (string, bool) {
-	if len(expr) < 2 || expr[0] != '(' {
-		return "", false
-	}
-	if c := matchingParen(expr, 0); c == len(expr)-1 {
-		inner := strings.TrimSpace(expr[1:c])
-		// A cast like (int) isn't a wrapped expression.
-		if castType(expr) != "" && !strings.ContainsAny(inner, " $(") {
-			return "", false
-		}
-		return inner, true
-	}
-	return "", false
 }
 
 // cutKeyword removes a leading keyword that's followed by something other than

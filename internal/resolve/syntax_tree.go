@@ -10,17 +10,17 @@ import (
 )
 
 type syntaxTree struct {
-	root    *ast.File
-	src     string
-	grammar token.Version
-	lines   ast.Lines
-	assigns map[uint32]assignment
+	root      *ast.File
+	src       string
+	grammar   token.Version
+	lines     ast.Lines
+	assigns   map[uint32]assignment
+	foreaches []*ast.Foreach
 }
 
 type assignment struct {
-	name      string
-	value     ast.Expr
-	statement bool
+	name  string
+	value ast.Expr
 }
 
 func newSyntaxTree(src string, tree *ast.File) *syntaxTree {
@@ -48,37 +48,22 @@ func (r *Resolver) syntaxTree(lines []string, file *parser.FileNode) *syntaxTree
 
 func (t *syntaxTree) collect(n ast.Node) bool {
 	switch n := n.(type) {
-	case *ast.ExprStmt:
-		for e := n.Expr; ; {
-			a, ok := e.(*ast.Assign)
-			if !ok || !t.add(a, true) {
-				break
-			}
-			e = a.Value
-		}
+	case *ast.Foreach:
+		t.foreaches = append(t.foreaches, n)
 	case *ast.Assign:
-		if _, seen := t.assigns[n.Target.Bounds().Start]; !seen {
-			t.add(n, false)
+		if v, ok := n.Target.(*ast.Variable); ok && (n.Op == token.Equals || n.Op == token.CoalesceEqual) {
+			t.assigns[v.Start] = assignment{name: t.text(v), value: n.Value}
 		}
 	case *ast.Static:
 		if len(n.Vars) > 0 && n.Vars[0].Default != nil {
-			t.assigns[n.Start] = assignment{name: t.text(n.Vars[0].Var), value: n.Vars[0].Default, statement: true}
+			t.assigns[n.Start] = assignment{name: t.text(n.Vars[0].Var), value: n.Vars[0].Default}
 		}
 		for _, v := range n.Vars {
 			if v.Default != nil {
-				t.assigns[v.Var.Start] = assignment{name: t.text(v.Var), value: v.Default, statement: true}
+				t.assigns[v.Var.Start] = assignment{name: t.text(v.Var), value: v.Default}
 			}
 		}
 	}
-	return true
-}
-
-func (t *syntaxTree) add(a *ast.Assign, statement bool) bool {
-	v, ok := a.Target.(*ast.Variable)
-	if !ok || a.Op != token.Equals && a.Op != token.CoalesceEqual {
-		return false
-	}
-	t.assigns[v.Start] = assignment{name: t.text(v), value: a.Value, statement: statement}
 	return true
 }
 
@@ -109,11 +94,6 @@ func (t *syntaxTree) assignmentStartingLine(line int, name string) (ast.Expr, bo
 	}
 	a, ok := t.assignmentAt(t.indented(off), name)
 	return a.value, ok
-}
-
-func (t *syntaxTree) startsLine(off uint32) bool {
-	line, _ := t.lines.Position(off)
-	return t.indented(t.lines[line]) == off
 }
 
 func (t *syntaxTree) indented(lineStart uint32) uint32 {
@@ -195,49 +175,28 @@ func isFirstClassCallable(args *ast.ArgList) bool {
 	return args.RestPlaceholder && len(args.Args) == 0
 }
 
-func isCallableArgList(args *ast.ArgList) bool {
-	if args.RestPlaceholder {
-		return true
-	}
-	for _, a := range args.Args {
-		if a.Placeholder {
-			return true
-		}
-	}
-	return false
-}
-
-func (t *syntaxTree) argsText(args *ast.ArgList) string {
-	if args == nil {
-		return ""
-	}
-	var text string
-	if n := len(args.Args); n > 0 {
-		text = t.src[args.Args[0].Start:args.Args[n-1].End]
-	}
-	if !args.RestPlaceholder {
-		return text
-	}
-	if text == "" {
-		return "..."
-	}
-	return text + ", ..."
-}
-
 func (t *syntaxTree) callArgList(args *ast.ArgList) []CallArg {
-	if args == nil || len(args.Args) == 0 {
+	if args == nil {
 		return nil
 	}
-	out := make([]CallArg, 0, len(args.Args))
+	out := make([]CallArg, 0, len(args.Args)+1)
 	for _, a := range args.Args {
-		if a.Value == nil {
+		arg := CallArg{Spread: a.Unpack, node: a.Value, tree: t}
+		switch {
+		case a.Placeholder:
+			arg.Expr = "?"
+		case a.Value != nil:
+			arg.Expr = t.text(a.Value)
+		default:
 			continue
 		}
-		arg := CallArg{Expr: t.text(a.Value), Spread: a.Unpack}
 		if a.Name != nil {
 			arg.Name = t.text(a.Name)
 		}
 		out = append(out, arg)
+	}
+	if args.RestPlaceholder {
+		out = append(out, CallArg{Spread: true, tree: t})
 	}
 	return out
 }
@@ -271,68 +230,4 @@ func isMemberChain(e ast.Expr) bool {
 			return false
 		}
 	}
-}
-
-func (r *Resolver) syntaxType(t *syntaxTree, e ast.Expr, ctx ExprContext) ResolvedType {
-	if ctx.depth > maxExprDepth {
-		return ResolvedType{}
-	}
-	ctx.depth++
-	switch n := e.(type) {
-	case *ast.Variable:
-		return r.chainOriginType(chainOrigin{kind: '$', text: t.text(n)}, ctx)
-	case *ast.New:
-		if n.Anonymous != nil {
-			return ResolvedType{}
-		}
-		return r.newExpressionType(t.text(n.Class), t.callArgList(n.Args), ctx)
-	case *ast.Call:
-		if name, ok := n.Callee.(*ast.ConstFetch); ok {
-			return r.functionCallType(t.text(name), t.argsText(n.Args), isCallableArgList(n.Args), t.callArgList(n.Args), ctx)
-		}
-		return r.chainStepType(r.syntaxType(t, n.Callee, ctx), t.callStep("()", "", n.Args), ctx)
-	case *ast.MethodCall:
-		return r.memberStep(t, n.Object, "->", n.Name, n.Args, ctx)
-	case *ast.PropertyFetch:
-		return r.memberStep(t, n.Object, "->", n.Name, nil, ctx)
-	case *ast.StaticCall:
-		return r.memberStep(t, n.Class, "::", n.Name, n.Args, ctx)
-	case *ast.StaticPropertyFetch:
-		return r.memberStep(t, n.Class, "::", n.Name, nil, ctx)
-	case *ast.ClassConstFetch:
-		return r.memberStep(t, n.Class, "::", n.Name, nil, ctx)
-	case *ast.ArrayDimFetch:
-		if n.Dim == nil {
-			return ResolvedType{}
-		}
-		cur := r.syntaxType(t, n.Array, ctx)
-		if cur.IsEmpty() {
-			return ResolvedType{}
-		}
-		return r.OffsetType(cur, t.text(n.Dim))
-	case *ast.ConstFetch:
-		if lit := literalExprType(t.text(n)); !lit.IsEmpty() {
-			return lit
-		}
-		return r.chainOriginType(chainOrigin{kind: 'c', text: t.text(n)}, ctx)
-	}
-	return r.ExpressionType(t.text(e), ctx)
-}
-
-func (r *Resolver) memberStep(t *syntaxTree, receiver ast.Expr, op string, name ast.Expr, args *ast.ArgList, ctx ExprContext) ResolvedType {
-	if _, ok := name.(*ast.IdentifierExpr); !ok && op == "->" {
-		return ResolvedType{}
-	}
-	cur := r.syntaxType(t, receiver, ctx)
-	if cur.IsEmpty() {
-		return ResolvedType{}
-	}
-	if args == nil {
-		return r.chainStepType(cur, chainStep{op: op, name: t.text(name)}, ctx)
-	}
-	return r.chainStepType(cur, t.callStep(op, t.text(name), args), ctx)
-}
-
-func (t *syntaxTree) callStep(op, name string, args *ast.ArgList) chainStep {
-	return chainStep{op: op, name: name, call: true, args: t.argsText(args), callArgs: t.callArgList(args), parsedArgs: true}
 }
