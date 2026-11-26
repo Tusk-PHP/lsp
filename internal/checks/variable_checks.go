@@ -83,33 +83,31 @@ func (r *UnusedVariableRule) Check(file *parser.FileNode, source string, _ *symb
 // outArgChecker reports whether a call's argument may be written to, as $matches
 // is by preg_match. Calls that can't be looked up may do so, since reporting a
 // variable they define would be wrong.
-func outArgChecker(file *parser.FileNode, index *symbols.Index) func(string, int) bool {
-	return func(callee string, arg int) bool {
-		if callee == "" {
+func outArgChecker(file *parser.FileNode, index *symbols.Index) func(scope.OutArgument) bool {
+	return func(out scope.OutArgument) bool {
+		if out.Callee == "" {
 			return true
 		}
-		fqns, ok := resolve.FunctionNames(callee, file)
+		fqns, ok := resolve.FunctionNames(out.Callee, file.NamespaceAt(out.Line, out.Column))
 		if !ok {
 			return true
 		}
 		for _, fqn := range fqns {
-			if file != nil {
-				for _, fn := range file.Functions {
-					if functionNodeFQN(&fn, file) != fqn {
-						continue
-					}
-					params := make([]symbols.ParamInfo, 0, len(fn.Params))
-					for _, p := range fn.Params {
-						params = append(params, symbols.ParamInfo{IsVariadic: p.IsVariadic, IsReference: p.IsReference})
-					}
-					return argIsReference(params, arg, true)
+			for _, fn := range file.Functions {
+				if functionNodeFQN(&fn, file) != fqn {
+					continue
 				}
+				params := make([]symbols.ParamInfo, 0, len(fn.Params))
+				for _, p := range fn.Params {
+					params = append(params, symbols.ParamInfo{IsVariadic: p.IsVariadic, IsReference: p.IsReference})
+				}
+				return argIsReference(params, out.Index, true)
 			}
 			if index == nil {
 				continue
 			}
 			if sym := index.Lookup(fqn); sym != nil && sym.Kind == symbols.KindFunction {
-				return argIsReference(sym.Params, arg, sym.URI != "builtin")
+				return argIsReference(sym.Params, out.Index, sym.URI != "builtin")
 			}
 		}
 		return true
@@ -134,7 +132,7 @@ func argIsReference(params []symbols.ParamInfo, arg int, complete bool) bool {
 }
 
 // checkUndefinedVariables detects reads of undefined variables.
-func checkUndefinedVariables(file *parser.FileNode, source string, outArg func(string, int) bool, includedFile bool, shared *Shared) []Finding {
+func checkUndefinedVariables(file *parser.FileNode, source string, outArg func(scope.OutArgument) bool, includedFile bool, shared *Shared) []Finding {
 	doc := (&scope.Collector{OutArg: outArg}).Collect(source)
 	if doc == nil {
 		return nil

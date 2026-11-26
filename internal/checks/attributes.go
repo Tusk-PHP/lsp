@@ -266,7 +266,7 @@ func memberUses(file *parser.FileNode, source string, index *symbols.Index, type
 		case isCall && i > 0 && (tokens[i-1].Kind == parser.TokenFunction || strings.EqualFold(tokens[i-1].Value, "new")):
 			continue
 		case isCall:
-			sym = lookupCalledFunction(tok.Value, file, index)
+			sym = lookupCalledFunction(tok.Value, file.NamespaceAt(tok.Line, tok.Column), index)
 		}
 		if sym == nil || len(sym.Attributes) == 0 {
 			continue
@@ -289,8 +289,8 @@ func resolveMemberOwner(ownerExpr string, line, col int, source string, file *pa
 	return ""
 }
 
-func lookupCalledFunction(name string, file *parser.FileNode, index *symbols.Index) *symbols.Symbol {
-	fqns, _ := resolve.FunctionNames(name, file)
+func lookupCalledFunction(name string, ns *parser.NamespaceNode, index *symbols.Index) *symbols.Symbol {
+	fqns, _ := resolve.FunctionNames(name, ns)
 	for _, fqn := range fqns {
 		if sym := index.LookupFold(fqn, isFunctionSymbol); sym != nil {
 			return sym

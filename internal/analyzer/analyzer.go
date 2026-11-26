@@ -284,7 +284,7 @@ func (a *Analyzer) symbolTarget(r *resolve.Resolver, uri, source string, ctx *so
 		return definitionTarget{sym: member, owner: a.index.Lookup(member.ParentFQN), receiver: member.ParentFQN, loc: symbolLocation(member)}
 	}
 	if ctx.FunctionCall {
-		fn := r.CalledFunction(word, file)
+		fn := r.CalledFunction(word, file.NamespaceAt(pos.Line, pos.Character))
 		return definitionTarget{sym: fn, loc: symbolLocation(fn)}
 	}
 
@@ -767,7 +767,7 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 		return r.AccessedMemberOn(owner, word, ctx.MemberAccess())
 	}
 	if ctx.FunctionCall {
-		return r.CalledFunction(word, file)
+		return r.CalledFunction(word, file.NamespaceAt(pos.Line, pos.Character))
 	}
 
 	// Check if it's a class property declaration ($name on a property line)

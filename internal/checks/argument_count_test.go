@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 
@@ -457,5 +458,28 @@ only_here(1, 2);
 	want := []string{"Too many arguments to only_here(): 2 passed, at most 1 expected"}
 	if !slices.Equal(got, want) {
 		t.Errorf("PHP falls back to the global class_exists() when the namespaced one isn't loaded, so either may run:\ngot  %v\nwant %v", got, want)
+	}
+}
+
+func TestArgumentCountUsesTheCallsNamespaceBlock(t *testing.T) {
+	source := `<?php
+namespace A;
+function f($x) {}
+f(1);
+f(1, 2);
+
+namespace B;
+function f($x, $y) {}
+f(1, 2);
+`
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///blocks.php", source)
+	var got []string
+	for _, f := range (&ArgumentCountRule{}).Check(parser.ParseFile(source), source, idx) {
+		got = append(got, fmt.Sprintf("%d: %s", f.StartLine, f.Message))
+	}
+	want := []string{"4: Too many arguments to f(): 2 passed, at most 1 expected"}
+	if !slices.Equal(got, want) {
+		t.Errorf("each call is checked against its own block's f():\ngot  %v\nwant %v", got, want)
 	}
 }

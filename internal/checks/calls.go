@@ -134,7 +134,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 				}
 			}
 		}
-		fqns, _ := resolve.FunctionNames(tok.Value, file)
+		fqns, _ := resolve.FunctionNames(tok.Value, file.NamespaceAt(tok.Line, tok.Column))
 		emit(callFunction, functionCallees(fqns, index), tok, tok.Value, i, next, closeIdx)
 	}
 }

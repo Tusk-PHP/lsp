@@ -2,6 +2,7 @@ package parser
 
 import (
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/types"
@@ -13,8 +14,28 @@ type TypeNode struct {
 }
 
 type NamespaceNode struct {
-	Name string
-	Uses []UseNode
+	Name      string
+	Uses      []UseNode
+	StartLine int
+	StartCol  int
+}
+
+func (f *FileNode) NamespaceAt(line, character int) *NamespaceNode {
+	if f == nil {
+		return nil
+	}
+	return namespaceAt(f.Namespaces, line, character)
+}
+
+func namespaceAt(namespaces []*NamespaceNode, line, character int) *NamespaceNode {
+	after := sort.Search(len(namespaces), func(i int) bool {
+		ns := namespaces[i]
+		return ns.StartLine > line || (ns.StartLine == line && ns.StartCol > character)
+	})
+	if after == 0 {
+		return nil
+	}
+	return namespaces[after-1]
 }
 
 type UseNode struct {
@@ -181,9 +202,10 @@ type FunctionNode struct {
 }
 
 type FileNode struct {
-	Namespace string
-	Uses      []UseNode
-	Classes   []ClassNode
+	Namespace  string
+	Namespaces []*NamespaceNode
+	Uses       []UseNode
+	Classes    []ClassNode
 	// AnonymousClasses are the `new class { ... }` expressions in the file.
 	// Their Name is AnonymousClassName and their FullName is unique to the file.
 	AnonymousClasses []ClassNode
@@ -553,8 +575,9 @@ func parseDocImportedTypeAlias(value string) DocImportedTypeAlias {
 
 func toFileNode(result *ParseResult) *FileNode {
 	file := &FileNode{
-		Namespace: result.Namespace,
-		Errors:    append([]ParseError(nil), result.Errors...),
+		Namespace:  result.Namespace,
+		Namespaces: result.Namespaces,
+		Errors:     append([]ParseError(nil), result.Errors...),
 	}
 
 	for _, namespace := range result.Namespaces {

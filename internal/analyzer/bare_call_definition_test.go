@@ -98,3 +98,45 @@ func BenchmarkFindDefinitionOfABareCall(b *testing.B) {
 		}
 	}
 }
+
+func TestDefinitionOfABareCallUsesItsNamespaceBlock(t *testing.T) {
+	src := `<?php
+namespace A;
+function make() {}
+$a = make();
+
+namespace B;
+function make() {}
+$b = make();
+
+namespace C;
+use function A\make as build;
+$c = build();
+
+namespace D;
+$d = build();
+`
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///blocks.php": src})
+	for _, c := range []struct {
+		call     string
+		wantLine int
+	}{
+		{"$a = ", 2},
+		{"$b = ", 6},
+		{"$c = ", 2},
+		{"$d = ", -1},
+	} {
+		pos := positionOf(t, src, c.call)
+		pos.Character += len(c.call)
+		got := a.FindDefinition("file:///blocks.php", src, pos)
+		if c.wantLine < 0 {
+			if got != nil {
+				t.Errorf("definition of %q: got %v, want none", c.call, got)
+			}
+			continue
+		}
+		if got == nil || got.Range.Start.Line != c.wantLine {
+			t.Errorf("definition of %q: got %v, want line %d", c.call, got, c.wantLine)
+		}
+	}
+}

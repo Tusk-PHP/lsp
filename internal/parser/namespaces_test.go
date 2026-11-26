@@ -48,3 +48,38 @@ func TestParseFileWithoutNamespaceUsesTheGlobalOne(t *testing.T) {
 		t.Errorf("Foo's namespace = %+v, want the global one importing X\\Dep", ns)
 	}
 }
+
+func TestNamespaceAtFindsTheBlockAroundAPosition(t *testing.T) {
+	file := ParseFile("<?php\nnamespace A;\nuse X\\Dep;\nf(); namespace B; g();\n")
+	for _, c := range []struct {
+		line, character int
+		want            string
+	}{
+		{0, 3, ""},
+		{1, 0, "A"},
+		{3, 0, "A"},
+		{3, 4, "A"},
+		{3, 5, "B"},
+		{3, 18, "B"},
+	} {
+		if got := file.NamespaceAt(c.line, c.character); got == nil || got.Name != c.want {
+			t.Errorf("NamespaceAt(%d, %d) = %+v, want %q", c.line, c.character, got, c.want)
+		}
+	}
+	if got := file.NamespaceAt(3, 0).Uses; len(got) != 1 || got[0].FullName != `X\Dep` {
+		t.Errorf("A's imports = %+v, want X\\Dep", got)
+	}
+	braced := ParseFile("<?php\nnamespace A {\n    f();\n}\nnamespace {\n    g();\n}\n")
+	if got := braced.NamespaceAt(2, 4); got == nil || got.Name != "A" {
+		t.Errorf("inside the braced block A: %+v", got)
+	}
+	if got := braced.NamespaceAt(5, 4); got == nil || got.Name != "" || got == braced.NamespaceAt(0, 0) {
+		t.Errorf("inside the braced global block: %+v, want its own global namespace", got)
+	}
+	if got := (*FileNode)(nil).NamespaceAt(0, 0); got != nil {
+		t.Errorf("no file has no namespace, got %+v", got)
+	}
+	if got := file.NamespaceAt(-1, 0); got != nil {
+		t.Errorf("a position before the file has no namespace, got %+v", got)
+	}
+}

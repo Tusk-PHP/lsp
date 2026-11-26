@@ -26,7 +26,7 @@ use function Other\helper;
 		`strlen`:                         `App\strlen Global fallback`,
 	}
 	for name, want := range cases {
-		got, ok := FunctionNames(name, file)
+		got, ok := FunctionNames(name, file.NamespaceAt(5, 0))
 		if !ok {
 			t.Fatalf("%s: not resolved", name)
 		}
@@ -44,9 +44,9 @@ use function Other\helper;
 
 func TestFunctionNamesNeedAFileAndAName(t *testing.T) {
 	if _, ok := FunctionNames("f", nil); ok {
-		t.Error("no file, no names")
+		t.Error("no namespace, no names")
 	}
-	if _, ok := FunctionNames(" \\", parser.ParseFile("<?php\n")); ok {
+	if _, ok := FunctionNames(" \\", parser.ParseFile("<?php\n").NamespaceAt(0, 0)); ok {
 		t.Error("an empty name has no names")
 	}
 }
@@ -79,11 +79,11 @@ func TestCalledFunctionFindsOnlyAFunctionByPHPsRules(t *testing.T) {
 	r := NewResolver(idx)
 	file := parser.ParseFile("<?php\nnamespace App;\n")
 	for name, want := range map[string]string{"local": `App\local`, "HELPER": "helper", `\helper`: "helper"} {
-		if fn := r.CalledFunction(name, file); fn == nil || fn.FQN != want {
+		if fn := r.CalledFunction(name, file.NamespaceAt(2, 0)); fn == nil || fn.FQN != want {
 			t.Errorf("CalledFunction(%q) = %+v, want %s", name, fn, want)
 		}
 	}
-	if fn := r.CalledFunction("area", file); fn != nil {
+	if fn := r.CalledFunction("area", file.NamespaceAt(2, 0)); fn != nil {
 		t.Errorf("a method is never a called function, got %+v", fn)
 	}
 }

@@ -1,6 +1,7 @@
 package sourcectx
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -114,7 +115,9 @@ func (d *Document) At(pos protocol.Position) *CursorContext {
 		return nil
 	}
 	ctx := &CursorContext{NameContext: *name}
-	ctx.Namespace, ctx.Uses = namespaceUsesAt(d.result, pos)
+	if ns := d.file.NamespaceAt(pos.Line, pos.Character); ns != nil {
+		ctx.Namespace, ctx.Uses = ns.Name, importsBefore(ns.Uses, pos.Line)
+	}
 	ctx.Scope = scopeAt(d.result, pos, ctx.EnclosingFQN)
 	return ctx
 }
@@ -412,57 +415,9 @@ func closureScopeAt(result *parser.ParseResult, pos protocol.Position, classFQN 
 	return best
 }
 
-func namespaceUsesAt(result *parser.ParseResult, pos protocol.Position) (string, []parser.UseNode) {
-	if result == nil {
-		return "", nil
-	}
-
-	namespace := ""
-	var uses []parser.UseNode
-	braceDepth := 0
-	namespaceDepth := 0
-	namespaceBraced := false
-	pendingNamespaceBrace := false
-
-	for i := 0; i < len(result.Tokens); i++ {
-		tok := result.Tokens[i]
-		if tokenStartsAfterPos(tok, pos) {
-			break
-		}
-
-		switch tok.Kind {
-		case parser.TokenNamespace:
-			if braceDepth == 0 {
-				namespace, namespaceBraced, pendingNamespaceBrace = parseNamespaceState(result.Tokens, i)
-				namespaceDepth = 0
-				uses = nil
-			}
-		case parser.TokenUse:
-			if isTopLevelImportUse(result.Tokens, i, braceDepth, namespaceDepth) {
-				if useNode, ok := parseUseNode(result.Tokens, i); ok {
-					uses = append(uses, useNode)
-				}
-			}
-		case parser.TokenOpenBrace:
-			braceDepth++
-			if pendingNamespaceBrace {
-				namespaceDepth = braceDepth
-				pendingNamespaceBrace = false
-			}
-		case parser.TokenCloseBrace:
-			if namespaceBraced && braceDepth == namespaceDepth {
-				namespace = ""
-				uses = nil
-				namespaceBraced = false
-				namespaceDepth = 0
-			}
-			if braceDepth > 0 {
-				braceDepth--
-			}
-		}
-	}
-
-	return namespace, uses
+func importsBefore(uses []parser.UseNode, line int) []parser.UseNode {
+	end := sort.Search(len(uses), func(i int) bool { return uses[i].StartLine > line })
+	return uses[:end:end]
 }
 
 func enclosingClassAt(result *parser.ParseResult, file *parser.FileNode, pos protocol.Position) string {
@@ -497,98 +452,6 @@ func enclosingClassAt(result *parser.ParseResult, file *parser.FileNode, pos pro
 	return ""
 }
 
-func parseNamespaceState(tokens []parser.Token, start int) (string, bool, bool) {
-	var parts []string
-	for i := start + 1; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenIdentifier:
-			parts = append(parts, tokens[i].Value)
-		case parser.TokenBackslash:
-			parts = append(parts, "\\")
-		case parser.TokenComment, parser.TokenDocComment:
-			continue
-		case parser.TokenOpenBrace:
-			return strings.Join(parts, ""), true, true
-		case parser.TokenSemicolon:
-			return strings.Join(parts, ""), false, false
-		default:
-			return strings.Join(parts, ""), false, false
-		}
-	}
-	return strings.Join(parts, ""), false, false
-}
-
-func parseUseNode(tokens []parser.Token, start int) (parser.UseNode, bool) {
-	kind := "class"
-	i := parser.NextSignificant(tokens, start+1)
-	if i < 0 {
-		return parser.UseNode{}, false
-	}
-	if tokens[i].Kind == parser.TokenFunction {
-		kind = "function"
-		i = parser.NextSignificant(tokens, i+1)
-	} else if tokens[i].Kind == parser.TokenConst {
-		kind = "const"
-		i = parser.NextSignificant(tokens, i+1)
-	}
-
-	if i < 0 {
-		return parser.UseNode{}, false
-	}
-
-	var parts []string
-	line := tokens[start].Line
-	alias := ""
-	for ; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenIdentifier:
-			if tokens[i].Value == "as" {
-				aliasIdx := parser.NextSignificant(tokens, i+1)
-				if aliasIdx >= 0 && tokens[aliasIdx].Kind == parser.TokenIdentifier {
-					alias = tokens[aliasIdx].Value
-				}
-				i = aliasIdx
-				continue
-			}
-			parts = append(parts, tokens[i].Value)
-		case parser.TokenBackslash:
-			parts = append(parts, "\\")
-		case parser.TokenComment, parser.TokenDocComment:
-			continue
-		case parser.TokenSemicolon:
-			fullName := strings.Join(parts, "")
-			if fullName == "" {
-				return parser.UseNode{}, false
-			}
-			if alias == "" {
-				segments := strings.Split(fullName, "\\")
-				alias = segments[len(segments)-1]
-			}
-			return parser.UseNode{FullName: fullName, Alias: alias, Kind: kind, StartLine: line}, true
-		default:
-			return parser.UseNode{}, false
-		}
-	}
-
-	return parser.UseNode{}, false
-}
-
-func isTopLevelImportUse(tokens []parser.Token, idx, braceDepth, namespaceDepth int) bool {
-	if braceDepth != namespaceDepth {
-		return false
-	}
-	prev := parser.PrevSignificant(tokens, idx-1)
-	if prev < 0 {
-		return true
-	}
-	switch tokens[prev].Kind {
-	case parser.TokenPHP, parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace:
-		return true
-	default:
-		return false
-	}
-}
-
 func posInTokenRange(pos protocol.Position, start, end parser.Token) bool {
 	if pos.Line < start.Line || pos.Line > end.Line {
 		return false
@@ -600,16 +463,6 @@ func posInTokenRange(pos protocol.Position, start, end parser.Token) bool {
 		return false
 	}
 	return true
-}
-
-func tokenStartsAfterPos(tok parser.Token, pos protocol.Position) bool {
-	if tok.Line > pos.Line {
-		return true
-	}
-	if tok.Line < pos.Line {
-		return false
-	}
-	return tok.Column > pos.Character
 }
 
 func lineInRange(line, start, end int) bool {

@@ -46,15 +46,11 @@ func (f *FileNode) AnonymousClassAt(line, character int) *ClassNode {
 // by name.
 func (p *structParser) parseAnonymousClasses() {
 	var fileHash string
-	namespace := 0
 	for i := 0; i < len(p.tokens); i++ {
 		if p.tokens[i].Kind != TokenNew {
 			continue
 		}
-		for namespace+1 < len(p.namespaceStarts) && p.namespaceStarts[namespace+1] <= i {
-			namespace++
-		}
-		p.namespace = p.result.Namespaces[namespace]
+		p.namespace = namespaceAt(p.result.Namespaces, p.tokens[i].Line, p.tokens[i].Column)
 		j := p.nextCode(i + 1)
 		isReadonly := false
 		if j < len(p.tokens) && p.tokens[j].Kind == TokenReadonly {

@@ -809,9 +809,8 @@ type structParser struct {
 	traitRules   TraitAdaptations
 	// blocks holds the braces open at the top level: true for a braced
 	// namespace, false for any other block (if, else, try, …).
-	blocks          []bool
-	namespace       *NamespaceNode
-	namespaceStarts []int
+	blocks    []bool
+	namespace *NamespaceNode
 }
 
 // inBlock reports whether the parser is inside a top-level block other than
@@ -1090,7 +1089,6 @@ func (p *structParser) takeAttributes() []AttributeDef {
 
 func (p *structParser) enterNamespace(ns *NamespaceNode) {
 	p.namespace = ns
-	p.namespaceStarts = append(p.namespaceStarts, p.pos)
 	p.result.Namespaces = append(p.result.Namespaces, ns)
 }
 
@@ -1102,7 +1100,7 @@ func (p *structParser) qualify(name string) string {
 }
 
 func (p *structParser) parseNamespace() {
-	p.advance()
+	keyword := p.advance()
 	var parts []string
 	for {
 		t := p.peek()
@@ -1116,7 +1114,7 @@ func (p *structParser) parseNamespace() {
 		}
 	}
 	p.result.Namespace = strings.Join(parts, "\\")
-	p.enterNamespace(&NamespaceNode{Name: p.result.Namespace})
+	p.enterNamespace(&NamespaceNode{Name: p.result.Namespace, StartLine: keyword.Line, StartCol: keyword.Column})
 	p.expect(TokenSemicolon)
 }
 

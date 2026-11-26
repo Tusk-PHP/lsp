@@ -7,8 +7,8 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func FunctionNames(name string, file *parser.FileNode) ([]string, bool) {
-	if file == nil {
+func FunctionNames(name string, ns *parser.NamespaceNode) ([]string, bool) {
+	if ns == nil {
 		return nil, false
 	}
 	name = strings.TrimSpace(name)
@@ -21,16 +21,16 @@ func FunctionNames(name string, file *parser.FileNode) ([]string, bool) {
 		return []string{name}, true
 	}
 	if strings.Contains(name, "\\") {
-		return []string{ImportedName(name, file.Namespace, file.Uses, "class")}, true
+		return []string{ImportedName(name, ns.Name, ns.Uses, "class")}, true
 	}
-	for _, u := range file.Uses {
+	for _, u := range ns.Uses {
 		if u.Kind == "function" && strings.EqualFold(u.Alias, name) {
 			return []string{u.FullName}, true
 		}
 	}
 	var fqns []string
-	if file.Namespace != "" {
-		fqns = append(fqns, file.Namespace+"\\"+name)
+	if ns.Name != "" {
+		fqns = append(fqns, ns.Name+"\\"+name)
 	}
 	fqns = append(fqns, name)
 	return fqns, true
@@ -62,8 +62,8 @@ func ImportedName(name, currentNs string, uses []parser.UseNode, useKind string)
 	return name
 }
 
-func (r *Resolver) CalledFunction(name string, file *parser.FileNode) *symbols.Symbol {
-	fqns, _ := FunctionNames(name, file)
+func (r *Resolver) CalledFunction(name string, ns *parser.NamespaceNode) *symbols.Symbol {
+	fqns, _ := FunctionNames(name, ns)
 	for _, fqn := range fqns {
 		if fn := r.Index.LookupFold(fqn, isFunction); fn != nil {
 			return fn
@@ -72,8 +72,8 @@ func (r *Resolver) CalledFunction(name string, file *parser.FileNode) *symbols.S
 	return nil
 }
 
-func (r *Resolver) typedFunction(name string, file *parser.FileNode) *symbols.Symbol {
-	fqns, _ := FunctionNames(name, file)
+func (r *Resolver) typedFunction(name string, file *parser.FileNode, ns *parser.NamespaceNode) *symbols.Symbol {
+	fqns, _ := FunctionNames(name, ns)
 	for _, fqn := range fqns {
 		if fn := r.Index.LookupFold(fqn, isFunction); fn != nil {
 			return fn

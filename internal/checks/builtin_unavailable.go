@@ -86,11 +86,12 @@ func (r *BuiltinUnavailableRule) checkFunctions(line string, lineNum int, file *
 		// handles it. We only fire when the function is NOT in the index but
 		// IS a known builtin — which means it was excluded by the profile.
 		written := writtenName(line, start, name)
-		if functionExists(written, file, index) {
+		ns := file.NamespaceAt(lineNum, start)
+		if functionExists(written, ns, file, index) {
 			continue
 		}
 
-		bare, avail, ok := builtinFunctionAvailability(written, file)
+		bare, avail, ok := builtinFunctionAvailability(written, ns)
 		if !ok {
 			// Not a known builtin — UnknownFunctionRule handles this.
 			continue
@@ -413,8 +414,8 @@ func (r *BuiltinUnavailableRule) attributeMessage(name string, avail symbols.Bui
 // PHP looks it up (the namespaced name, then the global one). ok is false
 // when it isn't a builtin. Builtin function names are matched in lowercase,
 // as the registry lists them.
-func builtinFunctionAvailability(name string, file *parser.FileNode) (string, symbols.BuiltinAvailability, bool) {
-	fqns, ok := resolve.FunctionNames(name, file)
+func builtinFunctionAvailability(name string, ns *parser.NamespaceNode) (string, symbols.BuiltinAvailability, bool) {
+	fqns, ok := resolve.FunctionNames(name, ns)
 	if !ok {
 		return "", symbols.BuiltinAvailability{}, false
 	}

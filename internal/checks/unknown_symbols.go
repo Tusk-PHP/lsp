@@ -393,12 +393,14 @@ func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index 
 			if shouldSkipFunctionCall(line, start, name) {
 				continue
 			}
-			if functionExists(writtenName(line, start, name), file, index) {
+			written := writtenName(line, start, name)
+			ns := file.NamespaceAt(lineNum, start)
+			if functionExists(written, ns, file, index) {
 				continue
 			}
 			// A PHP builtin the project's PHP version or extensions don't
 			// have is reported once, by builtin-unavailable.
-			if _, _, builtin := builtinFunctionAvailability(writtenName(line, start, name), file); builtin {
+			if _, _, builtin := builtinFunctionAvailability(written, ns); builtin {
 				continue
 			}
 			findings = append(findings, Finding{
@@ -983,8 +985,8 @@ func isFunctionSymbol(sym *symbols.Symbol) bool {
 	return sym != nil && sym.Kind == symbols.KindFunction
 }
 
-func functionExists(name string, file *parser.FileNode, index *symbols.Index) bool {
-	fqns, ok := resolve.FunctionNames(name, file)
+func functionExists(name string, ns *parser.NamespaceNode, file *parser.FileNode, index *symbols.Index) bool {
+	fqns, ok := resolve.FunctionNames(name, ns)
 	if !ok || len(fqns) == 0 {
 		return true
 	}

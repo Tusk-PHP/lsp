@@ -117,10 +117,17 @@ type Document struct {
 }
 
 type Collector struct {
-	// OutArg, if set, reports whether a call may write to its arg'th argument
-	// (0-based). callee is the function's name as written, or "" when it can't be
-	// told from the source alone, such as for methods.
-	OutArg func(callee string, arg int) bool
+	// OutArg, if set, reports whether a call may write to an argument: the
+	// Index'th (0-based) of the call written at Line and Column. Callee is the
+	// function's name as written, or "" when it can't be told from the source
+	// alone, such as for methods.
+	OutArg func(OutArgument) bool
+}
+
+type OutArgument struct {
+	Callee       string
+	Line, Column int
+	Index        int
 }
 
 func NewCollector() *Collector {
@@ -1108,7 +1115,7 @@ var notCalls = map[string]bool{
 
 // isOutArgument reports whether the variable at i is a whole argument of a call
 // that may write to it.
-func isOutArgument(tokens []parser.Token, i int, outArg func(string, int) bool) bool {
+func isOutArgument(tokens []parser.Token, i int, outArg func(OutArgument) bool) bool {
 	if outArg == nil {
 		return false
 	}
@@ -1156,12 +1163,13 @@ func isOutArgument(tokens []parser.Token, i int, outArg func(string, int) bool) 
 	if callee < 0 {
 		return false
 	}
+	unnamed := OutArgument{Line: tokens[open].Line, Column: tokens[open].Column, Index: arg}
 	switch tokens[callee].Kind {
 	case parser.TokenVariable, parser.TokenCloseParen, parser.TokenCloseBracket:
-		return outArg("", arg)
+		return outArg(unnamed)
 	case parser.TokenStatic:
 		before := parser.PrevSignificant(tokens, callee-1)
-		return before >= 0 && tokens[before].Kind == parser.TokenNew && outArg("", arg)
+		return before >= 0 && tokens[before].Kind == parser.TokenNew && outArg(unnamed)
 	case parser.TokenIdentifier:
 	default:
 		return false
@@ -1189,12 +1197,12 @@ func isOutArgument(tokens []parser.Token, i int, outArg func(string, int) bool) 
 	if before := parser.PrevSignificant(tokens, first-1); before >= 0 {
 		switch tokens[before].Kind {
 		case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenNew:
-			return outArg("", arg)
+			return outArg(unnamed)
 		case parser.TokenFunction:
 			return false
 		}
 	}
-	return outArg(name, arg)
+	return outArg(OutArgument{Callee: name, Line: tokens[first].Line, Column: tokens[first].Column, Index: arg})
 }
 
 func parseUseBindings(tokens []parser.Token, doc *Document, scope *Scope) map[int]*Binding {
