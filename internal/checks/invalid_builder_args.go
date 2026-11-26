@@ -114,7 +114,7 @@ type builderJoins struct {
 
 func (j *builderJoins) mayBeJoined(line, col int) bool {
 	if j.tokens == nil {
-		j.tokens = parser.Tokenize(j.source)
+		j.tokens = parser.New().Parse(j.source).Tokens
 		j.doc = scope.Collect(j.source)
 	}
 	return frameworklaravel.BuilderMayBeJoined(j.tokens, j.doc, line, col)

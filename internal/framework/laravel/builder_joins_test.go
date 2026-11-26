@@ -24,7 +24,7 @@ func joinedAtMarker(t *testing.T, body string, withScope bool) bool {
 	if withScope {
 		doc = scope.Collect(source)
 	}
-	return BuilderMayBeJoined(parser.Tokenize(source), doc, line, col)
+	return BuilderMayBeJoined(parser.New().Parse(source).Tokens, doc, line, col)
 }
 
 func TestBuilderMayBeJoined(t *testing.T) {
@@ -119,7 +119,7 @@ func TestBuilderMayBeJoinedWithoutScopesReadsOnlyTheChain(t *testing.T) {
 }
 
 func TestBuilderMayBeJoinedOutsideTheTokens(t *testing.T) {
-	tokens := parser.Tokenize("<?php\n$q->where('email', 1);\n")
+	tokens := parser.New().Parse("<?php\n$q->where('email', 1);\n").Tokens
 	if BuilderMayBeJoined(tokens, nil, 99, 0) {
 		t.Error("a position after the last token is no call")
 	}

@@ -133,7 +133,8 @@ const codePrefix = "<?php "
 
 func (p *placer) appendTokenized(tokens []Token, start, end int) []Token {
 	first := p.at(start)
-	for _, tok := range Tokenize(codePrefix + p.lit.Value[start:end]) {
+	code, _ := tokenize(codePrefix + p.lit.Value[start:end])
+	for _, tok := range code {
 		if tok.Kind == TokenPHP || tok.Kind == TokenEOF {
 			continue
 		}

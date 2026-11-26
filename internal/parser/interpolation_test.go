@@ -42,7 +42,7 @@ func TestInterpolatedTokensOnlyReadStringLiterals(t *testing.T) {
 func TestInterpolatedTokensArePlacedInTheFile(t *testing.T) {
 	src := "<?php\n$s = \"a {$r->area()}\";\n$h = <<<EOT\n  x {$g\n  ->h}\n  EOT;\n$t = \"$u?->v\";\n"
 	var got []Token
-	for _, tok := range Tokenize(src) {
+	for _, tok := range tokensOf(src) {
 		got = append(got, InterpolatedTokens(tok)...)
 	}
 	want := []Token{
@@ -71,7 +71,7 @@ func TestInterpolatedTokensArePlacedInTheFile(t *testing.T) {
 
 func TestInterpolatedTokensHaveTheKindsOfCode(t *testing.T) {
 	lit := `"$a?->b {$c->enum[$d]} {$e->f()} $g[h]"`
-	code := Tokenize("<?php $a?->b $c->enum[$d] $e->f() $g")
+	code := tokensOf("<?php $a?->b $c->enum[$d] $e->f() $g")
 	var want []TokenKind
 	for _, tok := range code[1 : len(code)-1] {
 		want = append(want, tok.Kind)
