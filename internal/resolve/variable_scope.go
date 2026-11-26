@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -176,21 +177,31 @@ func (r *Resolver) IsLocalVariable(varName string, lines []string, pos textpos.P
 }
 
 // closureParamType returns a closure parameter's type: from the doc comment
-// of the closure or of the statement it's in, as `@param` tags aren't attached
-// to closures by the parser, or else from its declaration.
+// right before the closure or the statement it's in, as `@param` tags aren't
+// attached to closures by the parser, or else from its declaration.
 func (r *Resolver) closureParamType(param *scope.Binding, lines []string, file *parser.FileNode) ResolvedType {
-	if docType := resolveDocParam(r.closureDoc(param, lines, file), param.Name); docType != "" {
+	t := r.syntaxTree(lines, file)
+	off, ok := t.offset(param.Decl.Start)
+	if !ok {
+		return ResolvedType{}
+	}
+	closure, doc, ok := t.closureAt(off)
+	if !ok {
+		return ResolvedType{}
+	}
+	if docType := resolveDocParam(r.parseDoc(t.text(doc)), param.Name); docType != "" {
 		if rt := r.resolveDocType(docType, file); !rt.IsEmpty() {
 			return rt
 		}
 	}
-	line := param.Decl.Start.Line
-	if line < 0 || line >= len(lines) || param.Decl.Start.Character > len(lines[line]) {
-		return ResolvedType{}
+	var declared ast.Type
+	for _, p := range closure.params {
+		if p.Var != nil && p.Var.Start == off {
+			declared = p.Type
+		}
 	}
-	declared := declaredParamType(lines[line][:param.Decl.Start.Character])
-	if declared == "" {
-		// Untyped: what the callable(…) it's passed for says.
+	switch declared.(type) {
+	case nil:
 		if expected, _, ok := r.closureExpectations(param.Scope, lines, file); ok {
 			if sig := callableSignature(expected); sig != nil {
 				if i := closureParamIndex(param); i >= 0 && i < len(sig.Params) {
@@ -199,23 +210,26 @@ func (r *Resolver) closureParamType(param *scope.Binding, lines []string, file *
 			}
 		}
 		return ResolvedType{}
+	case *ast.UnionType, *ast.IntersectionType:
+		return ResolvedType{FQN: t.text(declared)}
 	}
-	// A union is shown as written. Resolving it would pick one of its members.
-	if strings.ContainsAny(declared, "|&") {
-		return ResolvedType{FQN: declared}
-	}
-	return r.resolveDocType(declared, file)
+	return r.resolveDocType(t.text(declared), file)
 }
 
-// declaredParamType extracts the type from the text before a parameter's name,
-// such as `function (int $a, null|string ` or `    ?Foo &`.
-func declaredParamType(before string) string {
-	if i := strings.LastIndexAny(before, "(,"); i >= 0 {
-		before = before[i+1:]
-	}
-	fields := strings.Fields(strings.TrimRight(strings.TrimSpace(before), "&."))
-	if len(fields) == 0 {
+// docVarType returns the type doc gives varName with `@var Type $name`, or,
+// when bare is set, with a bare `@var Type`.
+func (r *Resolver) docVarType(t *syntaxTree, doc ast.Span, varName string, bare bool) string {
+	if doc == (ast.Span{}) {
 		return ""
 	}
-	return strings.TrimRight(fields[len(fields)-1], "&.")
+	d := r.parseDoc(t.text(doc))
+	if d == nil {
+		return ""
+	}
+	for _, v := range d.Vars {
+		if v.Name == varName || bare && v.Name == "" {
+			return v.Type
+		}
+	}
+	return ""
 }

@@ -16,11 +16,13 @@ type syntaxTree struct {
 	lines     ast.Lines
 	assigns   map[uint32]assignment
 	foreaches []*ast.Foreach
+	stmtDoc   ast.Span
 }
 
 type assignment struct {
 	name  string
 	value ast.Expr
+	doc   ast.Span
 }
 
 func newSyntaxTree(src string, tree *ast.File) *syntaxTree {
@@ -47,20 +49,27 @@ func (r *Resolver) syntaxTree(lines []string, file *parser.FileNode) *syntaxTree
 }
 
 func (t *syntaxTree) collect(n ast.Node) bool {
+	if s, ok := n.(ast.Stmt); ok {
+		t.stmtDoc = ast.Span{}
+		switch s.(type) {
+		case *ast.ExprStmt, *ast.Static:
+			t.stmtDoc, _ = t.root.DocBefore(s.Bounds().Start)
+		}
+	}
 	switch n := n.(type) {
 	case *ast.Foreach:
 		t.foreaches = append(t.foreaches, n)
 	case *ast.Assign:
 		if v, ok := n.Target.(*ast.Variable); ok && (n.Op == token.Equals || n.Op == token.CoalesceEqual) {
-			t.assigns[v.Start] = assignment{name: t.text(v), value: n.Value}
+			t.assigns[v.Start] = assignment{name: t.text(v), value: n.Value, doc: t.stmtDoc}
 		}
 	case *ast.Static:
 		if len(n.Vars) > 0 && n.Vars[0].Default != nil {
-			t.assigns[n.Start] = assignment{name: t.text(n.Vars[0].Var), value: n.Vars[0].Default}
+			t.assigns[n.Start] = assignment{name: t.text(n.Vars[0].Var), value: n.Vars[0].Default, doc: t.stmtDoc}
 		}
 		for _, v := range n.Vars {
 			if v.Default != nil {
-				t.assigns[v.Var.Start] = assignment{name: t.text(v.Var), value: v.Default}
+				t.assigns[v.Var.Start] = assignment{name: t.text(v.Var), value: v.Default, doc: t.stmtDoc}
 			}
 		}
 	}
@@ -87,13 +96,12 @@ func (t *syntaxTree) assignmentAt(off uint32, name string) (assignment, bool) {
 	return a, ok && a.name == name
 }
 
-func (t *syntaxTree) assignmentStartingLine(line int, name string) (ast.Expr, bool) {
+func (t *syntaxTree) assignmentStartingLine(line int, name string) (assignment, bool) {
 	off, ok := t.offset(textpos.Position{Line: line})
 	if !ok {
-		return nil, false
+		return assignment{}, false
 	}
-	a, ok := t.assignmentAt(t.indented(off), name)
-	return a.value, ok
+	return t.assignmentAt(t.indented(off), name)
 }
 
 func (t *syntaxTree) indented(lineStart uint32) uint32 {
@@ -228,6 +236,38 @@ func isMemberChain(e ast.Expr) bool {
 			e = n.Callee
 		default:
 			return false
+		}
+	}
+}
+
+func (t *syntaxTree) closureAt(off uint32) (closureNode, ast.Span, bool) {
+	path := t.path(off)
+	for i := len(path) - 1; i >= 0; i-- {
+		var c closureNode
+		switch n := path[i].(type) {
+		case *ast.Closure:
+			c = closureOf(n)
+		case *ast.ArrowFunction:
+			c = arrowOf(n)
+		default:
+			continue
+		}
+		return c, t.closureDoc(path[:i+1]), true
+	}
+	return closureNode{}, ast.Span{}, false
+}
+
+func (t *syntaxTree) closureDoc(path []ast.Node) ast.Span {
+	if doc, ok := t.root.DocBefore(path[len(path)-1].Bounds().Start); ok {
+		return doc
+	}
+	for i := len(path) - 2; ; i-- {
+		switch n := path[i].(type) {
+		case ast.Stmt:
+			doc, _ := t.root.DocBefore(n.Bounds().Start)
+			return doc
+		case ast.Member, *ast.File:
+			return ast.Span{}
 		}
 	}
 }
