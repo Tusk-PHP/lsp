@@ -10,21 +10,17 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
-func (vs variableScope) assignedValue(t *syntaxTree, line int, varName string) (ast.Expr, bool) {
+func (vs variableScope) assignedValue(t *syntaxTree, line int, varName string) (assignment, bool) {
 	w := vs.write
 	if w == nil || line != w.At.Line {
 		return t.assignmentStartingLine(line, varName)
 	}
-	off := t.offset(w.At)
-	a, ok := t.assignmentAt(off, varName)
-	if !ok {
-		return nil, false
-	}
-	return a.value, true
+	return t.assignmentAt(t.offset(w.At), varName)
 }
 
-func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, lines []string, pos textpos.Position, file *parser.FileNode) (ResolvedType, bool) {
-	if rt, ok := r.documentedAssignment(varName, t, v, pos, file); ok {
+func (r *Resolver) assignedType(varName string, t *syntaxTree, a assignment, lines []string, pos textpos.Position, file *parser.FileNode) (ResolvedType, bool) {
+	v := t.reduce(a.value)
+	if rt, ok := r.documentedAssignment(varName, t, a, v, pos, file); ok {
 		return rt, true
 	}
 	ctx := ExprContext{Lines: lines, Pos: pos, File: file}
@@ -144,12 +140,13 @@ func (r *Resolver) assignedNewType(t *syntaxTree, n *ast.New, ctx ExprContext) (
 }
 
 // documentedAssignment returns the type an assignment declares: the closure
-// return type it was reduced from, or the @var of its statement's doc comment.
-func (r *Resolver) documentedAssignment(varName string, t *syntaxTree, v assignedValue, pos textpos.Position, file *parser.FileNode) (ResolvedType, bool) {
+// return type its value v was reduced from, or the @var of its statement's
+// doc comment.
+func (r *Resolver) documentedAssignment(varName string, t *syntaxTree, a assignment, v assignedValue, pos textpos.Position, file *parser.FileNode) (ResolvedType, bool) {
 	if v.declared != nil {
 		return r.resolveDocType(t.text(v.declared), file), true
 	}
-	if declared := t.statementVarDoc(v.expr.Bounds().Start, varName); declared != "" {
+	if declared := r.docVarType(t, a.doc, varName, true); declared != "" {
 		if rt := r.declaredVarType(declared, pos, file); !rt.IsEmpty() {
 			return rt, true
 		}

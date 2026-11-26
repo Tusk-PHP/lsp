@@ -5,7 +5,6 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
-	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -29,7 +28,7 @@ func (r *Resolver) varAssertion(varName string, pos textpos.Position, file *pars
 			}
 			if span.Start > after && !t.assignsTo(stmt, varName) || declaresGlobal(stmt, after) {
 				for _, doc := range t.docsBetween(prevEnd, span.Start) {
-					if d := t.docVarType(doc.Doc, varName, false); d != "" {
+					if d := r.docVarType(t, doc.Doc, varName, false); d != "" {
 						declared = d
 					}
 				}
@@ -75,31 +74,9 @@ func (t *syntaxTree) assignsTo(stmt ast.Node, varName string) bool {
 	}
 }
 
-// docVarType returns the type doc gives varName with `@var Type $name`, or,
-// when bare is set, with a bare `@var Type`.
-func (t *syntaxTree) docVarType(doc ast.Span, varName string, bare bool) string {
-	for _, v := range parser.ParseDocBlock(t.text(doc)).Vars {
-		if v.Name == varName || bare && v.Name == "" {
-			return v.Type
-		}
-	}
-	return ""
-}
-
-// docBetween returns the last doc comment between from and to: the one of a
-// statement that starts at to when from is where the one before it ends,
-// also across a `?>` that ends the PHP code the doc comment is in.
-func (t *syntaxTree) docBetween(from, to uint32) (ast.Span, bool) {
-	d, ok := ast.LastDoc(t.root.Docs, to)
-	if !ok || d.Doc.Start < from {
-		return ast.Span{}, false
-	}
-	return d.Doc, true
-}
-
 // docsBetween returns the doc comments between from and to, in order: those
 // of a statement that starts at to when from is where the one before it ends,
-// as a Blade view's header declares each variable in a doc comment of its own.
+// also across a `?>` that ends the PHP code they are in.
 func (t *syntaxTree) docsBetween(from, to uint32) []ast.DocComment {
 	docs := t.root.Docs
 	end := sort.Search(len(docs), func(i int) bool { return docs[i].Next > to })
@@ -108,54 +85,6 @@ func (t *syntaxTree) docsBetween(from, to uint32) []ast.DocComment {
 		start--
 	}
 	return docs[start:end]
-}
-
-// statementDoc returns the doc comment of the innermost statement that holds
-// off: the one between it and the statement before it.
-func (t *syntaxTree) statementDoc(off uint32) (ast.Span, bool) {
-	var doc ast.Span
-	found := false
-	path := t.path(off)
-	for i, node := range path[:len(path)-1] {
-		stmts, ok := statementsOf(node)
-		if !ok {
-			continue
-		}
-		prevEnd := node.Bounds().Start
-		for _, stmt := range stmts {
-			if ast.Node(stmt) == path[i+1] {
-				doc, found = t.docBetween(prevEnd, stmt.Bounds().Start)
-				break
-			}
-			prevEnd = stmt.Bounds().End
-		}
-	}
-	return doc, found
-}
-
-// statementVarDoc returns the type the doc comment of the statement holding
-// off gives varName, with `@var Type $name` or a bare `@var Type`.
-func (t *syntaxTree) statementVarDoc(off uint32, varName string) string {
-	doc, ok := t.statementDoc(off)
-	if !ok {
-		return ""
-	}
-	return t.docVarType(doc, varName, true)
-}
-
-// closureDoc returns the doc comment written on a closure, or else the one of
-// the statement the closure is in.
-func (r *Resolver) closureDoc(param *scope.Binding, lines []string, file *parser.FileNode) *parser.DocBlock {
-	t := r.syntaxTree(lines, file)
-	off := t.offset(param.Scope.Range.Start)
-	doc, ok := t.root.DocBefore(off)
-	if !ok {
-		doc, ok = t.statementDoc(off)
-	}
-	if !ok {
-		return nil
-	}
-	return parser.ParseDocBlock(t.text(doc))
 }
 
 // declaredVarType resolves the type a `@var` docblock declares, with the

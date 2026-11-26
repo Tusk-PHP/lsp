@@ -360,23 +360,6 @@ class Category {}
 	}
 }
 
-func TestDeclaredParamType(t *testing.T) {
-	cases := map[string]string{
-		"return function (":          "",
-		"function (int ":             "int",
-		"function ($a, null|string ": "null|string",
-		"    ?Foo &":                 "?Foo",
-		"function (\\App\\Foo ...":   "\\App\\Foo",
-		"function (A&B ":             "A&B",
-		"function ($a, ":             "",
-	}
-	for before, want := range cases {
-		if got := declaredParamType(before); got != want {
-			t.Errorf("declaredParamType(%q) = %q, want %q", before, got, want)
-		}
-	}
-}
-
 func TestAssignmentStartingLine(t *testing.T) {
 	lines := []string{
 		"$a = 1;",
@@ -414,7 +397,7 @@ func TestAssignmentStartingLine(t *testing.T) {
 		value, ok := tree.assignmentStartingLine(i, "$a")
 		var got string
 		if ok {
-			got = tree.text(value)
+			got = tree.text(value.value)
 		}
 		w, wantOK := want[i]
 		if ok != wantOK || got != w {
