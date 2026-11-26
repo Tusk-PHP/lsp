@@ -844,9 +844,6 @@ func (p *structParser) peek() Token {
 }
 
 func (p *structParser) lastLine() int {
-	if p.pos == 0 {
-		return 0
-	}
 	return p.tokens[p.pos-1].Line
 }
 

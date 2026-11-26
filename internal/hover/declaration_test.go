@@ -49,3 +49,21 @@ function filter(array $items): array { return $items; }
 		}
 	}
 }
+
+func TestHoverOnAGlobalDeclaration(t *testing.T) {
+	src := "<?php\nfunction weigh(array $items): float { return 0.0; }\n"
+	pos := protocol.Position{Line: 1, Character: len("function we")}
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	p := NewProvider(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"), "none")
+
+	if h := p.GetHover("file:///weigh.php", src, pos); h != nil {
+		t.Errorf("a declaration the index doesn't have yet shows nothing, got:\n%s", h.Contents.Value)
+	}
+
+	idx.IndexFile("file:///weigh.php", src)
+	h := p.GetHover("file:///weigh.php", src, pos)
+	if h == nil || !strings.Contains(h.Contents.Value, "**weigh**") || !strings.Contains(h.Contents.Value, "function weigh(array $items): float") {
+		t.Errorf("hover on a global function's declaration shows it, got %+v", h)
+	}
+}
