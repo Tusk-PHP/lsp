@@ -445,31 +445,6 @@ func resolveStaticOrClassName(r *Resolver, name, staticFQN string, file *parser.
 	}
 }
 
-// inferArgType resolves the type of a constructor/method argument expression.
-// It handles variables, array literals, and chain expressions.
-func (r *Resolver) inferArgType(argStr string, lines []string, pos protocol.Position, file *parser.FileNode, assignLine int) ResolvedType {
-	argStr = strings.TrimSpace(argStr)
-	// First arg only (split by comma, take first)
-	if commaIdx := IndexOutsideBrackets(argStr, ','); commaIdx >= 0 {
-		argStr = strings.TrimSpace(argStr[:commaIdx])
-	}
-	if argStr == "" {
-		return ResolvedType{}
-	}
-
-	// Array literal
-	if strings.HasPrefix(argStr, "[") {
-		return InferArrayLiteralType(argStr)
-	}
-
-	// Variable reference
-	if strings.HasPrefix(argStr, "$") {
-		return r.ResolveVariableTypeTyped(argStr, lines, pos, file)
-	}
-
-	return ResolvedType{}
-}
-
 func (r *Resolver) resolveDocType(raw string, file *parser.FileNode) ResolvedType {
 	return r.applyEnv(ParseGenericType(raw), typeEnv{file: file, fileFirst: true})
 }
@@ -529,58 +504,6 @@ func resolveDocParam(doc *parser.DocBlock, varName string) string {
 		}
 	}
 	return ""
-}
-
-func extractLeadingVariable(expr string) string {
-	if !strings.HasPrefix(expr, "$") {
-		return ""
-	}
-	end := 1
-	for end < len(expr) {
-		c := expr[end]
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
-			break
-		}
-		end++
-	}
-	if end == 1 {
-		return ""
-	}
-	return expr[:end]
-}
-
-// extractFunctionCallName returns the function name as written, qualification
-// included, if expr starts with a (optionally namespace-qualified) identifier
-// followed by `(`, otherwise "".
-// e.g. "get_class($x)" → "get_class", "\Some\ns\fn($x)" → "\Some\ns\fn".
-func extractFunctionCallName(expr string) string {
-	if expr == "" {
-		return ""
-	}
-	start := 0
-	if expr[0] == '\\' {
-		start = 1
-	}
-	if start >= len(expr) {
-		return ""
-	}
-	c := expr[start]
-	if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
-		return ""
-	}
-	end := start
-	for end < len(expr) {
-		ch := expr[end]
-		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '\\' {
-			end++
-			continue
-		}
-		break
-	}
-	if end >= len(expr) || expr[end] != '(' {
-		return ""
-	}
-	return expr[:end]
 }
 
 func (r *Resolver) resolveMethodParamTypeTyped(method *parser.MethodNode, varName string, file *parser.FileNode) ResolvedType {
@@ -662,34 +585,6 @@ func (r *Resolver) inferConstructorGenerics(classFQN string, argType ResolvedTyp
 	return ResolvedType{FQN: classFQN, Params: params}
 }
 
-// indexOutsideBrackets finds the first occurrence of ch outside nested brackets/parens.
-func IndexOutsideBrackets(s string, ch byte) int {
-	depth := 0
-	inString := byte(0)
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if inString != 0 {
-			if c == inString && (i == 0 || s[i-1] != '\\') {
-				inString = 0
-			}
-			continue
-		}
-		switch c {
-		case '\'', '"':
-			inString = c
-		case '(', '[':
-			depth++
-		case ')', ']':
-			depth--
-		default:
-			if c == ch && depth == 0 {
-				return i
-			}
-		}
-	}
-	return -1
-}
-
 // MemberType returns the resolved type of a member symbol (property type or method return type).
 // Falls back to @return/@var docblock annotations when no type hint is present.
 func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) string {
@@ -759,7 +654,7 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	if rt, ok := r.reachingType(varName, lines, pos, file, vs); ok {
 		return rt
 	}
-	key, memo := r.varMemoKeyAt(vs, varName, lines, pos)
+	key, memo := r.varMemoKeyAt(vs, varName, lines, pos, file)
 	// An answer a guard against cycles cut short isn't kept. Guards tripped
 	// by other requests at the same time only cost a missed cache entry.
 	cutsBefore := r.cuts

@@ -184,7 +184,7 @@ function run(bool $c, int $n, array $xs, $untyped): void {
 		{"$h", "own rhs", `App\Foo`},
 		{"$u", "inline write", `App\Foo|App\Bar`},
 		{"$y", "case writes", `App\Foo|App\Bar`},
-		{"$s", "short circuit", ``},
+		{"$s", "short circuit", `App\Foo|App\Bar`},
 		{"$m", "second statement on its line", `App\Bar`},
 		{"$word", "self in loop, no class", `string`},
 		{"$q", "coalescing assignment", `App\Foo|App\Bar`},

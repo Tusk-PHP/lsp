@@ -10,17 +10,6 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func TestForwardsCallingClass(t *testing.T) {
-	for before, want := range map[string]bool{
-		"parent::": true, "  self :: ": true, "return STATIC::": true,
-		"Base::": false, "$this->": false, "$parent::": false, "": false,
-	} {
-		if got := ForwardsCallingClass(before); got != want {
-			t.Errorf("ForwardsCallingClass(%q) = %v, want %v", before, got, want)
-		}
-	}
-}
-
 const chainSource = `<?php
 namespace App;
 
@@ -156,25 +145,9 @@ func TestChainTypeWired(t *testing.T) {
 	if got := r.ChainType("$p->logger()", chainSource, pos, file).FQN; got != `App\Logger` {
 		t.Errorf("ChainType = %q", got)
 	}
-	// A slice, not a map: the order of the calls is checked below.
-	for _, tc := range []struct {
-		line string
-		ws   int
-	}{{"$p->info", 4}, {"$p?->info", 5}, {"Person :: make", 10}} {
-		if got := r.AccessOwnerType(tc.line, tc.ws, chainSource, pos, file).FQN; got != `App\Logger` {
-			t.Errorf("AccessOwnerType(%q) = %q", tc.line, got)
-		}
-	}
-	if got := r.AccessOwnerType("info", 0, chainSource, pos, file); !got.IsEmpty() {
-		t.Errorf("AccessOwnerType without an operator = %v", got)
-	}
-	want := []string{"$p->logger()", "$p", "$p", "Person "}
+	want := []string{"$p->logger()"}
 	if strings.Join(asked, ",") != strings.Join(want, ",") {
 		t.Errorf("asked %q, want %q", asked, want)
-	}
-	r.TypedChainResolver = nil
-	if got := r.AccessOwnerType("$p->logger", 4, chainSource, pos, file).FQN; got != `App\Person` {
-		t.Errorf("own AccessOwnerType = %q", got)
 	}
 }
 
@@ -222,33 +195,7 @@ func TestResolveClassNameLooseFindsOnlyClasses(t *testing.T) {
 	}
 }
 
-func TestExtractNewClassAndArgs(t *testing.T) {
-	for in, want := range map[string][2]string{
-		"new Foo()":       {"Foo", ""},
-		"(new Foo(1, 2))": {"Foo", "1, 2"},
-		"new Foo":         {"Foo", ""},
-		"(new Foo)":       {"Foo", ""},
-		"(new Foo((1)))":  {"Foo", "(1)"},
-		"foo()":           {"", ""},
-	} {
-		if got := ExtractNewClass(in); got != want[0] {
-			t.Errorf("ExtractNewClass(%q) = %q, want %q", in, got, want[0])
-		}
-		if got := extractNewArgs(in); got != want[1] {
-			t.Errorf("extractNewArgs(%q) = %q, want %q", in, got, want[1])
-		}
-	}
-}
-
-func TestChainOriginClassName(t *testing.T) {
-	r, file, _ := chainFixture(t)
-	if got := r.ChainOriginClassName("Person::make", 0, "Person", file); got != `App\Person` {
-		t.Errorf("origin = %q", got)
-	}
-	// A word after -> or :: is a member, never a class.
-	if got := r.ChainOriginClassName("$x->Person", 4, "Person", file); got != "" {
-		t.Errorf("member = %q", got)
-	}
+func TestClassKeyword(t *testing.T) {
 	if got := ClassKeyword("Self"); got != "self" {
 		t.Errorf("ClassKeyword = %q", got)
 	}

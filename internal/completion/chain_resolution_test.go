@@ -109,9 +109,9 @@ func TestChainReturnTypeResolution(t *testing.T) {
 	})
 
 	t.Run("full chain: query->with->get->map", func(t *testing.T) {
-		// Collection::map() returns static → Collection
+		// Eloquent's Collection::map() gives a base collection, as Laravel declares it.
 		typ := resolve("Category::query()->with(['products'])->get(['id'])->map(fn($x) => $x)", preamble)
-		if typ != "Illuminate\\Database\\Eloquent\\Collection" {
+		if typ != "Illuminate\\Support\\Collection" {
 			t.Errorf("expected Collection, got %q", typ)
 		}
 	})

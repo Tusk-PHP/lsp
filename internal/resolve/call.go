@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -14,47 +15,8 @@ type CallArg struct {
 	Name   string // the parameter a named argument is for, without $
 	Expr   string
 	Spread bool // ...$args
-}
-
-// ParseCallArgs splits the text between a call's parentheses into its
-// arguments.
-func ParseCallArgs(argStr string) []CallArg {
-	parts := splitArgList(argStr)
-	args := make([]CallArg, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		arg := CallArg{Expr: p}
-		if strings.HasPrefix(p, "...") {
-			arg.Spread = true
-			arg.Expr = strings.TrimSpace(p[3:])
-		} else if name, rest, ok := namedArg(p); ok {
-			arg.Name, arg.Expr = name, rest
-		}
-		args = append(args, arg)
-	}
-	return args
-}
-
-// namedArg splits `name: expr`, leaving `Foo::bar` and ternaries alone.
-func namedArg(p string) (name, rest string, ok bool) {
-	i := 0
-	for i < len(p) && (isIdentByte(p[i]) || (i > 0 && p[i] >= '0' && p[i] <= '9')) {
-		i++
-	}
-	if i == 0 {
-		return "", "", false
-	}
-	j := i
-	for j < len(p) && (p[j] == ' ' || p[j] == '\t') {
-		j++
-	}
-	if j >= len(p) || p[j] != ':' || (j+1 < len(p) && p[j+1] == ':') {
-		return "", "", false
-	}
-	return p[:i], strings.TrimSpace(p[j+1:]), true
+	node   ast.Expr
+	tree   *syntaxTree
 }
 
 func isIdentByte(c byte) bool {
@@ -66,7 +28,7 @@ func isIdentByte(c byte) bool {
 // to a callable(User): T parameter uses it to type its own parameters.
 type CallSite struct {
 	Args    []CallArg
-	ArgType func(expr string, expected *ResolvedType) ResolvedType
+	ArgType func(arg CallArg, expected *ResolvedType) ResolvedType
 }
 
 // paramPattern is a parameter's declared type, as written in its PHPDoc or
@@ -193,7 +155,7 @@ func (r *Resolver) bindCallTemplates(params []paramPattern, call *CallSite, name
 		}
 		expected := r.applyEnv(p.pattern, typeEnv{subst: fixed, owner: owner, file: file})
 		for _, a := range byParam[i] {
-			actual := call.ArgType(a.Expr, &expected)
+			actual := call.ArgType(a, &expected)
 			if actual.IsEmpty() && !actual.Nullable {
 				continue
 			}
@@ -409,7 +371,7 @@ func (r *Resolver) decideConditionals(rt ResolvedType, params []paramPattern, ca
 				if call.ArgType == nil {
 					return ResolvedType{}, false
 				}
-				t := call.ArgType(byParam[i][0].Expr, nil)
+				t := call.ArgType(byParam[i][0], nil)
 				return t, !t.IsEmpty() || t.Nullable
 			}
 			if p.def != "" {

@@ -229,12 +229,12 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 
 	t.Run("argument and constructor helpers infer generic arrays", func(t *testing.T) {
 		pos := protocol.Position{Line: lineContaining(t, lines, "$collection =")}
-		argRT := r.inferArgType(`$numbers, $ignored`, lines, pos, file, 0)
+		argRT := r.ExpressionType(`$numbers`, ExprContext{Lines: lines, Pos: pos, File: file})
 		if argRT.String() != "array<int, int>" {
 			t.Fatalf("got %q", argRT.String())
 		}
 
-		literalRT := r.inferArgType(`[1, 2], $ignored`, lines, pos, file, 0)
+		literalRT := r.ExpressionType(`[1, 2]`, ExprContext{Lines: lines, Pos: pos, File: file})
 		if literalRT.String() != "array<int, int>" {
 			t.Fatalf("got %q", literalRT.String())
 		}
@@ -245,15 +245,9 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 		}
 	})
 
-	t.Run("misc helpers cover raw member return type and comma scan", func(t *testing.T) {
+	t.Run("misc helpers cover raw member return type", func(t *testing.T) {
 		if got := r.rawMemberReturnType(repoAll); got != "Collection<int, TModel>|null" {
 			t.Fatalf("got %q", got)
-		}
-
-		input := `foo([1, 2], "a,b"), $rest`
-		idx := IndexOutsideBrackets(input, ',')
-		if idx < 0 || input[idx:] != ", $rest" {
-			t.Fatalf("unexpected index %d for %q", idx, input)
 		}
 	})
 }
