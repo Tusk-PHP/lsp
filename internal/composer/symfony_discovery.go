@@ -3,14 +3,13 @@ package composer
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
-)
+	"strings"
 
-// bundleClassRe matches PHP class constant expressions used as array keys in
-// config/bundles.php, e.g. "Symfony\Bundle\FrameworkBundle\FrameworkBundle::class".
-// Both fully-qualified forms (with or without a leading backslash) are accepted.
-var bundleClassRe = regexp.MustCompile(`\\?[A-Za-z0-9_\\]+::class`)
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+)
 
 // SymfonyBundlePackages reads config/bundles.php at rootPath and returns the
 // Composer package names that own the registered Symfony bundle classes.
@@ -39,30 +38,14 @@ func SymfonyBundlePackages(rootPath string) []string {
 		return nil
 	}
 
-	// Extract every ::class key expression from the file.  A regex/string scan
-	// is intentional here (mirrors laravel_discovery.go) — we deliberately avoid
-	// a full PHP parse dependency for these discovery helpers.
-	matches := bundleClassRe.FindAllString(string(data), -1)
-	if len(matches) == 0 {
-		return nil
-	}
-
-	// Strip the trailing ::class suffix to obtain the bare FQN.
-	fqns := make([]string, 0, len(matches))
-	for _, m := range matches {
-		fqn := m[:len(m)-len("::class")]
-		if fqn != "" {
-			fqns = append(fqns, fqn)
-		}
-	}
-
+	fqns := bundleClasses(string(data))
 	if len(fqns) == 0 {
 		return nil
 	}
 
 	resolve := NewPackageResolver(rootPath)
 
-	seen := make(map[string]struct{})
+	seen := make(map[string]struct{}, len(fqns))
 	for _, fqn := range fqns {
 		pkg, _, ok := resolve(fqn)
 		if !ok || pkg == "" {
@@ -81,4 +64,24 @@ func SymfonyBundlePackages(rootPath string) []string {
 	}
 	sort.Strings(pkgs)
 	return pkgs
+}
+
+func bundleClasses(src string) []string {
+	bundles := phpparser.Parse(src, token.Latest).ReturnedArray()
+	if bundles == nil {
+		return nil
+	}
+	fqns := make([]string, 0, len(bundles.Items))
+	for _, item := range bundles.Items {
+		fetch, ok := item.Key.(*ast.ClassConstFetch)
+		if !ok {
+			continue
+		}
+		class, ok := fetch.Class.(*ast.ConstFetch)
+		if !ok || !strings.EqualFold(fetch.Name.Bounds().Text(src), "class") {
+			continue
+		}
+		fqns = append(fqns, strings.TrimPrefix(class.Name.Text(src), `\`))
+	}
+	return fqns
 }
