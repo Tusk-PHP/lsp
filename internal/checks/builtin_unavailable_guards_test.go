@@ -55,3 +55,14 @@ func TestBuiltinUnavailableFollowsVersionChecksAndReportsOnce(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// Symfony's cache adapters test `$connection instanceof \Redis` without
+// ext-redis: the test is just false where PHP has no Redis class, so it is
+// never reported. Static access and `new` still are.
+func TestBuiltinUnavailableSkipsTheClassAnInstanceofTests(t *testing.T) {
+	src := "<?php\nfunction is_redis($c) {\n    return $c instanceof \\Redis || $c instanceof Redis;\n}\nfunction make() { return new \\Redis(); }\n"
+	got := unavailableAndUnknown(t, src, "8.4")
+	if len(got) != 1 || !strings.Contains(got[0], "Class 'Redis' requires ext-redis") {
+		t.Errorf("only the `new` is reported, got %q", got)
+	}
+}

@@ -67,7 +67,31 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 	}
 	// Code that checks for an extension or symbol first runs only where it
 	// exists, so it is fine on a profile without it.
-	return dropGuarded(findings, lines, findExtensionGuards(source))
+	return dropInstanceofTargets(dropGuarded(findings, lines, findExtensionGuards(source)), parser.Tokenize(source))
+}
+
+// dropInstanceofTargets drops findings on the class an instanceof tests: PHP
+// doesn't need that class to exist, the test is just false without it.
+func dropInstanceofTargets(findings []Finding, tokens []parser.Token) []Finding {
+	targets := make(map[[2]int]bool)
+	for i, tok := range tokens {
+		if tok.Kind != parser.TokenIdentifier || !strings.EqualFold(tok.Value, "instanceof") {
+			continue
+		}
+		if next := parser.NextSignificant(tokens, i+1); next >= 0 {
+			targets[[2]int{tokens[next].Line, tokens[next].Column}] = true
+		}
+	}
+	if len(targets) == 0 {
+		return findings
+	}
+	kept := findings[:0]
+	for _, f := range findings {
+		if !targets[[2]int{f.StartLine, f.StartCol}] {
+			kept = append(kept, f)
+		}
+	}
+	return kept
 }
 
 func (r *BuiltinUnavailableRule) checkFunctions(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
