@@ -19,7 +19,7 @@ func TestOptionalExtensionSymbols(t *testing.T) {
 	}{
 		{"imagick", "Imagick", "readImage", []ParamInfo{{Name: "$filename", Type: "string"}}, "bool"},
 		{"redis", "Redis", "get", []ParamInfo{{Name: "$key", Type: "string"}}, "mixed"},
-		{"memcached", "Memcached", "set", []ParamInfo{{Name: "$key", Type: "string"}, {Name: "$value", Type: "mixed"}, {Name: "$expiration", Type: "int", DefaultValue: "0"}}, "bool"},
+		{"memcached", "Memcached", "set", []ParamInfo{{Name: "$key", Type: "string"}, {Name: "$value", Type: "mixed"}, {Name: "$expiration", Type: "int", DefaultValue: "0", DefaultType: "0"}}, "bool"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.extension, func(t *testing.T) {

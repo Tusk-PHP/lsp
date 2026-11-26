@@ -197,9 +197,11 @@ func (b *fileNodeBuilder) globalConstants(c *ast.Const) {
 
 func (b *fileNodeBuilder) constant(item *ast.ConstItem, doc ast.Span, typ ast.Type, visibility string, attrs []*ast.AttributeGroup) ConstantNode {
 	line, col := b.position(item.Name.Start)
+	value := b.compact(item.Value)
 	return ConstantNode{
 		Name:       b.text(item.Name),
-		Value:      b.compact(item.Value),
+		Value:      value,
+		ValueType:  b.literalType(item.Value, value),
 		Type:       TypeNode{Name: b.typeText(typ)},
 		Visibility: visibility,
 		Attributes: b.attributes(attrs),
@@ -261,11 +263,13 @@ func (b *fileNodeBuilder) params(params []*ast.Param) []ParamNode {
 		if p.Var == nil {
 			continue
 		}
+		def := b.compact(p.Default)
 		nodes = append(nodes, ParamNode{
 			Name:         b.text(p.Var),
 			Attributes:   b.attributes(p.Attrs),
 			Type:         TypeNode{Name: b.typeText(p.Type)},
-			DefaultValue: b.compact(p.Default),
+			DefaultValue: def,
+			DefaultType:  b.literalType(p.Default, def),
 			IsVariadic:   p.Variadic,
 			IsReference:  p.ByRef,
 			DocComment:   b.doc(p.Doc),
@@ -698,6 +702,17 @@ func (b *fileNodeBuilder) scalar(e ast.Expr) string {
 		return b.text(e)
 	}
 	return ""
+}
+
+func (b *fileNodeBuilder) literalType(e ast.Expr, compact string) string {
+	if e == nil {
+		return ""
+	}
+	t := LiteralExprType(e, b.src)
+	if t == compact {
+		return compact
+	}
+	return strings.Clone(t)
 }
 
 func (b *fileNodeBuilder) compact(n ast.Node) string {
