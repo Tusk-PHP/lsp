@@ -232,3 +232,15 @@ func TestArrowFunctionRunsToTheEndOfTheFile(t *testing.T) {
 		t.Errorf("arrow function ends at %+v, want %+v", s.Range.End, want)
 	}
 }
+
+func TestAFunctionLeftOpenRunsToTheEndOfTheFile(t *testing.T) {
+	source := "<?php\nfunction f() {\n    $c = 1;\n    if ($c) {\n        $c['\n}\n"
+	doc := Collect(source)
+	s := doc.ScopeAt(at(t, source, "$c['"))
+	if s == nil || s.Kind != ScopeFunction || s.Name != "f" {
+		t.Fatalf("scope at the cursor = %+v, want function f", s)
+	}
+	if b := doc.BindingAt(at(t, source, "$c = 1")); b == nil || b.Scope != s {
+		t.Errorf("$c = %+v, want a binding of f", b)
+	}
+}
