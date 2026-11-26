@@ -5,6 +5,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
@@ -169,5 +172,139 @@ func TestRefreshReadsComposersAutoloadMapAgain(t *testing.T) {
 	}
 	if _, ok := ws.ClassLoader().Load(`Acme\Widget`); !ok {
 		t.Error("the class loader finds a package Composer installed after startup")
+	}
+}
+
+func TestWatchGlobsCoverWhatARefreshReads(t *testing.T) {
+	globs := WatchGlobs()
+	for _, want := range []string{"**/*.php", "**/*.phtml", "**/composer.json", "**/composer.lock", "**/vendor/composer/installed.json", "**/" + config.FileName} {
+		if !slices.Contains(globs, want) {
+			t.Errorf("the watchers cover %s: %v", want, globs)
+		}
+	}
+}
+
+func TestRefreshFollowsDirectoriesCreatedAndDeleted(t *testing.T) {
+	ws, root := newRefreshWorkspace(t, nil, map[string]string{
+		"app/Billing/Invoice.php":  "<?php\nnamespace App;\nclass Invoice {}\n",
+		"app/Billing/Tax/Rate.php": "<?php\nnamespace App;\nclass Rate {}\n",
+	})
+	if err := os.Rename(filepath.Join(root, "app/Billing"), filepath.Join(root, "app/Finance")); err != nil {
+		t.Fatal(err)
+	}
+	writeFiles(t, root, map[string]string{"vendor/acme/lib/Lib.php": "<?php\nclass VendorLib {}\n"})
+
+	out := refreshPaths(t, ws, root, "app/Billing", "app/Finance", "vendor/acme/lib")
+	if len(out.Files) != 4 {
+		t.Errorf("two files left the old directory and two arrived in the new one: %v", out.Files)
+	}
+	for class, file := range map[string]string{`App\Invoice`: "app/Finance/Invoice.php", `App\Rate`: "app/Finance/Tax/Rate.php"} {
+		if sym := ws.Index.Lookup(class); sym == nil || sym.URI != "file://"+filepath.Join(root, file) {
+			t.Errorf("%s is declared at the new place: %+v", class, sym)
+		}
+	}
+	if ws.Index.Lookup("VendorLib") != nil {
+		t.Error("a directory under excludePaths stays out")
+	}
+}
+
+func TestRefreshReportsWhatItCannotReadAndIndexesTheRest(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("file permissions don't stop this user from reading")
+	}
+	ws, root := newRefreshWorkspace(t, nil, map[string]string{"app/Kept.php": "<?php\nclass Kept {}\n"})
+	writeFiles(t, root, map[string]string{
+		"app/Locked.php":            "<?php\nclass Locked {}\n",
+		"app/Sealed/Inner/Deep.php": "<?php\nclass Deep {}\n",
+		"app/Mixed/Ok.php":          "<?php\nclass Ok {}\n",
+		"app/Mixed/Shut/Hidden.php": "<?php\nclass Hidden {}\n",
+	})
+	for _, name := range []string{"app/Locked.php", "app/Sealed", "app/Mixed/Shut"} {
+		path := filepath.Join(root, name)
+		if err := os.Chmod(path, 0); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(path, 0o755) })
+	}
+
+	_, err := ws.Refresh(Refresh{Paths: []string{
+		filepath.Join(root, "app/Locked.php"),
+		filepath.Join(root, "app/Sealed/Inner"),
+		filepath.Join(root, "app/Mixed"),
+	}})
+	if err == nil {
+		t.Fatal("a file and a directory that can't be read are reported")
+	}
+	for _, want := range []string{"re-index " + filepath.Join(root, "app/Locked.php"), "look at " + filepath.Join(root, "app/Sealed/Inner")} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error says %q: %v", want, err)
+		}
+	}
+	if ws.Index.Lookup("Ok") == nil {
+		t.Error("the readable file of a directory with an unreadable subdirectory is indexed")
+	}
+	if ws.Index.Lookup("Locked") != nil || ws.Index.Lookup("Hidden") != nil {
+		t.Error("nothing unreadable is indexed")
+	}
+}
+
+func TestRefreshDuringTheFirstWalkSharesItsFileLimit(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{"a.php": "<?php\nclass A {}\n", "b.php": "<?php\nclass B {}\n"})
+	cfg := config.DefaultConfig()
+	cfg.MaxIndexFiles = 1
+	ws := New(Options{RootPath: root, Framework: "none", Config: cfg, Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+
+	refreshPaths(t, ws, root, "a.php", "b.php")
+	if ws.Index.Lookup("A") == nil || ws.Index.Lookup("B") != nil {
+		t.Error("before the walk ends, a refresh admits files up to maxIndexFiles")
+	}
+	if err := os.Remove(filepath.Join(root, "a.php")); err != nil {
+		t.Fatal(err)
+	}
+	refreshPaths(t, ws, root, "a.php")
+	refreshPaths(t, ws, root, "b.php")
+	if ws.Index.Lookup("A") != nil || ws.Index.Lookup("B") == nil {
+		t.Error("a file deleted before the walk ends frees its place")
+	}
+}
+
+func TestRefreshKeepsLaravelsViewsRoutesAndIDEHelperCurrent(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"composer.json":  `{"name": "app/app"}`,
+		"routes/web.php": "<?php\nRoute::get('/', fn () => 1)->name('home');\n",
+	})
+	ws := New(Options{RootPath: root, Framework: "laravel", Config: config.DefaultConfig(), Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+	ws.IndexWorkspace()
+	if err := ws.ScanRoutes(); err != nil {
+		t.Fatal(err)
+	}
+	if ws.RouteIndex.Find("home") == nil {
+		t.Fatal("the route file is read at startup")
+	}
+
+	writeFiles(t, root, map[string]string{
+		"routes/web.php":                    "<?php\nRoute::get('/', fn () => 1)->name('dashboard');\n",
+		"resources/views/welcome.blade.php": "<h1>{{ $title }}</h1>\n",
+		"_ide_helper.php":                   "<?php\nnamespace Illuminate\\Support\\Facades {\nclass Route {}\n}\n",
+	})
+	refreshPaths(t, ws, root, "routes/web.php", "resources/views/welcome.blade.php", "_ide_helper.php")
+	if ws.RouteIndex.Find("home") != nil || ws.RouteIndex.Find("dashboard") == nil {
+		t.Error("a renamed route is found under its new name only")
+	}
+	if !ws.Index.HasFile("file://" + filepath.Join(root, "resources/views/welcome.blade.php")) {
+		t.Error("a new Blade view is listed for references and rename")
+	}
+	if sym := ws.Index.Lookup(`Illuminate\Support\Facades\Route`); sym == nil || sym.URI != "file://"+filepath.Join(root, "_ide_helper.php") {
+		t.Errorf("the IDE helper's classes are read: %+v", sym)
+	}
+
+	if err := os.Remove(filepath.Join(root, "routes/web.php")); err != nil {
+		t.Fatal(err)
+	}
+	refreshPaths(t, ws, root, "routes/web.php")
+	if ws.RouteIndex.Find("dashboard") != nil {
+		t.Error("a deleted route file's routes leave")
 	}
 }

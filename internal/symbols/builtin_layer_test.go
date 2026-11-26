@@ -106,6 +106,9 @@ func TestRemoveFileForgetsTheFile(t *testing.T) {
 	idx.IndexFile(uri, "<?php\nnamespace App;\nclass Gone { public function run(): void {} }\nfunction helper() {}\n")
 	view := "file:///resources/views/gone.blade.php"
 	idx.AddTemplateFile(view)
+	if !idx.HasFile(uri) || !idx.HasFile(view) {
+		t.Fatal("the index lists the PHP file and the template it was given")
+	}
 
 	idx.RemoveFile(uri)
 	idx.RemoveFile(view)
@@ -174,5 +177,32 @@ func TestFileTreeListsWindowsWorkspaceFilesUnderADirectory(t *testing.T) {
 	}
 	if got := tree.under(`C:\proj`); len(got) != 1 {
 		t.Errorf("the sibling directory stays: %v", got)
+	}
+}
+
+func TestBuiltinProfilesAreEqualWhateverTheirExtensionsSpelling(t *testing.T) {
+	a := BuiltinProfile{PHPVersion: "8.3", Extensions: []string{"Redis", "ext-intl", "redis"}}
+	if b := (BuiltinProfile{PHPVersion: "8.3", Extensions: []string{"intl", "redis"}}); !a.Equal(b) {
+		t.Errorf("%+v and %+v name the same builtins", a, b)
+	}
+	for _, b := range []BuiltinProfile{{PHPVersion: "8.2", Extensions: []string{"intl", "redis"}}, {PHPVersion: "8.3", Extensions: []string{"intl"}}} {
+		if a.Equal(b) {
+			t.Errorf("%+v and %+v differ", a, b)
+		}
+	}
+}
+
+func TestBuiltinsRegisteredAfterTheProjectStayUnderItsDeclarations(t *testing.T) {
+	idx := NewIndex()
+	app := "file:///app/ArrayObject.php"
+	idx.IndexFile(app, "<?php\nclass ArrayObject { public function mine(): void {} }\n")
+	idx.RegisterBuiltinsForProfile(BuiltinProfile{PHPVersion: "8.3"})
+
+	if sym := idx.Lookup("ArrayObject"); sym == nil || sym.URI != app {
+		t.Errorf("the project's ArrayObject is found, not the builtin registered after it: %+v", sym)
+	}
+	idx.RemoveFile(app)
+	if sym := idx.Lookup("ArrayObject"); sym == nil || sym.Source != SourceBuiltin {
+		t.Errorf("with the project's class gone, the builtin ArrayObject is found: %+v", sym)
 	}
 }
