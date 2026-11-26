@@ -28,6 +28,7 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 		// can serve them. We never PHP-parse or diagnose them.
 		return
 	}
+	s.docIndex.reopened(uri)
 	s.indexDocumentMaybeAsync(uri, text)
 	if s.cfg.DiagnosticsEnabled {
 		s.publishDiagnostics(uri, text)
@@ -85,12 +86,14 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 	if s.workspace == nil || !isPHPDocument(uri) {
 		return
 	}
-	if symbols.PathToURI(path) != uri {
-		s.workspace.RemoveFile(uri)
-	}
-	if unsaved {
-		s.queueRefresh([]string{path}, false)
-	}
+	s.docIndex.afterClose(uri, func() {
+		if symbols.PathToURI(path) != uri {
+			s.workspace.RemoveFile(uri)
+		}
+		if unsaved {
+			s.queueRefresh([]string{path}, false)
+		}
+	})
 }
 
 func (s *Server) handleDidSave(msg *jsonRPCMessage) {
