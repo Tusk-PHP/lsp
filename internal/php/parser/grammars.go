@@ -59,21 +59,17 @@ func (r GrammarRange) ParseCode(src string) *ast.File {
 	return r.pick(src, ParseCode)
 }
 
-func clean(tree *ast.File) bool {
-	return len(tree.Errors) == 0 && len(tree.Warnings) == 0
-}
-
 func (r GrammarRange) pick(src string, parse func(string, token.Version) *ast.File) *ast.File {
 	if r.hasChosen {
 		return r.keepChosen(src, parse)
 	}
 	newest := parse(src, r.Newest())
-	if clean(newest) {
+	if newest.Clean() {
 		return newest
 	}
 	for version := r.Newest(); version > r.oldest; {
 		version--
-		if tree := parse(src, version); clean(tree) {
+		if tree := parse(src, version); tree.Clean() {
 			return tree
 		}
 	}
@@ -82,10 +78,10 @@ func (r GrammarRange) pick(src string, parse func(string, token.Version) *ast.Fi
 
 func (r GrammarRange) keepChosen(src string, parse func(string, token.Version) *ast.File) *ast.File {
 	tree := parse(src, r.chosen)
-	if clean(tree) || r.chosen == r.Newest() {
+	if tree.Clean() || r.chosen == r.Newest() {
 		return tree
 	}
-	if newest := parse(src, r.Newest()); clean(newest) {
+	if newest := parse(src, r.Newest()); newest.Clean() {
 		return newest
 	}
 	return tree

@@ -12,6 +12,12 @@ func (ws *Bootstrapped) IndexFile(uri, source string) {
 		ws.Index.IndexIDEHelperFile(uri, source)
 	} else {
 		ws.Index.IndexFile(uri, source)
+	}
+	ws.updateFromTree(uri, source)
+}
+
+func (ws *Bootstrapped) updateFromTree(uri, source string) {
+	if !IsIDEHelperFile(symbols.URIToPath(uri)) {
 		ws.UpdateFile(uri, source)
 	}
 	if ws.RouteIndex != nil {

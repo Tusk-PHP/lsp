@@ -60,7 +60,7 @@ func TestRefreshFollowsProjectFilesOnDisk(t *testing.T) {
 		"app/notes.txt":          "not PHP",
 	})
 	out := refreshPaths(t, ws, root, "app/Old.php", "app/Fresh.php", "app/Changed.php", "app/Changed.php", "vendor/acme/Vendor.php", "app/notes.txt", "app/Gone.php")
-	if len(out.Files) != 3 || out.Composer || out.ProfileChanged {
+	if len(out.Files) != 3 || out.Composer || out.ProfileChange != ProfileKept {
 		t.Errorf("three project files changed: %+v", out)
 	}
 	if ws.Index.Lookup(`App\Old`) != nil || ws.Index.Lookup(`App\Changed`) != nil {
@@ -134,13 +134,18 @@ func TestRefreshResolvesTheProfileAgain(t *testing.T) {
 	if _, err := ws.SetProfile(symbols.BuiltinProfile{PHPVersion: "8.1", Extensions: []string{"redis"}, Grammars: phpparser.GrammarsBetween(token.PHP81, token.Latest)}); err != nil {
 		t.Fatal(err)
 	}
-	if out := refreshPaths(t, ws, root, "composer.json"); out.ProfileChanged || !out.Composer {
+	if out := refreshPaths(t, ws, root, "composer.json"); out.ProfileChange != ProfileKept || !out.Composer {
 		t.Errorf("an unchanged platform leaves the builtins alone: %+v", out)
+	}
+
+	writeFiles(t, root, map[string]string{"composer.json": `{"require": {"php": "^8.1"}}`})
+	if out := refreshPaths(t, ws, root, "composer.json"); out.ProfileChange != BuiltinsChanged || ws.Index.Lookup("Redis") != nil {
+		t.Errorf("dropping an extension changes the builtins and keeps the grammars: %+v", out)
 	}
 
 	writeFiles(t, root, map[string]string{"composer.json": `{"require": {"php": "^7.4"}}`})
 	out := refreshPaths(t, ws, root, "composer.json")
-	if !out.ProfileChanged || out.Profile.PHPVersion != "7.4" || out.ProfileSource != "composer" || ws.Profile().PHPVersion != "7.4" {
+	if out.ProfileChange != GrammarsChanged || out.Profile.PHPVersion != "7.4" || out.ProfileSource != "composer" || ws.Profile().PHPVersion != "7.4" {
 		t.Fatalf("composer.json's new PHP version is the profile's: %+v", out)
 	}
 	if ws.Index.Lookup("str_contains") != nil || ws.Index.Lookup("Redis") != nil {

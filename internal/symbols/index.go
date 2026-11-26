@@ -141,6 +141,7 @@ type ParamInfo struct {
 
 type Index struct {
 	grammars          phpparser.GrammarRange
+	grammarEpoch      uint64
 	attributedSymbols atomic.Bool
 	// generation counts changes to the index, so caches built from it can
 	// tell when they're out of date.
@@ -272,10 +273,13 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 	}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
+	idx.indexIDEHelperParsedLocked(uri, source, file)
+}
 
+func (idx *Index) indexIDEHelperParsedLocked(uri, source string, file *parser.FileNode) {
 	// Remove any previously indexed symbols from this URI (for re-indexing)
 	idx.removeFileSymbols(uri)
-	idx.fileSource[uri] = indexedText{text: source, ideHelper: true, grammar: file.Grammar}
+	idx.fileSource[uri] = indexedText{text: source, ideHelper: true, grammar: file.Grammar, clean: file.Clean}
 	if _, ok := idx.fileSymbols[uri]; !ok {
 		idx.fileSymbols[uri] = nil
 		idx.files.add(uri)
@@ -375,6 +379,7 @@ type indexedText struct {
 	from      SymbolSource
 	ideHelper bool
 	grammar   token.Version
+	clean     bool
 }
 
 func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSource) {
@@ -392,12 +397,15 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 	if file == nil {
 		return
 	}
-	indexed := indexedText{text: source, from: src, grammar: file.Grammar}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
+	idx.replaceParsedLocked(uri, source, src, file)
+}
+
+func (idx *Index) replaceParsedLocked(uri, source string, src SymbolSource, file *parser.FileNode) {
 	foreign := idx.foreignMembersLocked(uri)
 	idx.removeFileSymbols(uri)
-	idx.fileSource[uri] = indexed
+	idx.fileSource[uri] = indexedText{text: source, from: src, grammar: file.Grammar, clean: file.Clean}
 	idx.indexParsedLocked(uri, file, src)
 	idx.reattachForeignMembersLocked(foreign)
 }

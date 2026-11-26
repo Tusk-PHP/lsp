@@ -126,15 +126,39 @@ func (ws *Bootstrapped) Profile() symbols.BuiltinProfile {
 	return *ws.profile.Load()
 }
 
-func (ws *Bootstrapped) SetProfile(profile symbols.BuiltinProfile) (bool, error) {
+type ProfileChange int
+
+const (
+	ProfileKept ProfileChange = iota
+	BuiltinsChanged
+	GrammarsChanged
+)
+
+func (ws *Bootstrapped) SetProfile(profile symbols.BuiltinProfile) (ProfileChange, error) {
 	ws.profileMu.Lock()
 	defer ws.profileMu.Unlock()
-	if ws.Profile().Equal(profile) {
-		return false, nil
+	previous := ws.Profile()
+	if previous.Equal(profile) {
+		return ProfileKept, nil
 	}
 	if err := ws.Index.ReplaceBuiltins(profile); err != nil {
-		return false, fmt.Errorf("replace the builtins for PHP %s %v: %w", profile.PHPVersion, profile.Extensions, err)
+		return ProfileKept, fmt.Errorf("replace the builtins for PHP %s %v: %w", profile.PHPVersion, profile.Extensions, err)
 	}
 	ws.profile.Store(&profile)
-	return true, nil
+	if previous.Grammars != profile.Grammars {
+		return GrammarsChanged, nil
+	}
+	return BuiltinsChanged, nil
+}
+
+func (ws *Bootstrapped) ReparseForGrammars() int {
+	reparsed := 0
+	ws.Index.ReparseForGrammars(func(uri, source string) {
+		ws.updateFromTree(uri, source)
+		reparsed++
+	})
+	if reparsed > 0 {
+		ws.Container.Analyze()
+	}
+	return reparsed
 }

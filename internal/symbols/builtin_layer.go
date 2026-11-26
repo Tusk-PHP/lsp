@@ -31,7 +31,10 @@ func (idx *Index) ReplaceBuiltins(profile BuiltinProfile) error {
 	}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-	idx.grammars = profile.Grammars
+	if idx.grammars != profile.Grammars {
+		idx.grammars = profile.Grammars
+		idx.grammarEpoch++
+	}
 	for uri := range idx.fileSymbols {
 		if isBuiltinURI(uri) {
 			idx.removeFileSymbols(uri)
@@ -43,7 +46,7 @@ func (idx *Index) ReplaceBuiltins(profile BuiltinProfile) error {
 			continue
 		}
 		uri := "builtin://" + entry.Path
-		idx.fileSource[uri] = indexedText{text: entry.Content, from: SourceBuiltin, grammar: files[i].Grammar}
+		idx.fileSource[uri] = indexedText{text: entry.Content, from: SourceBuiltin, grammar: files[i].Grammar, clean: files[i].Clean}
 		idx.indexParsedLocked(uri, files[i], SourceBuiltin)
 	}
 	return nil

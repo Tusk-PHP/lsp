@@ -183,6 +183,7 @@ type FileNode struct {
 	Functions        []FunctionNode
 	Constants        []ConstantNode
 	Errors           []ParseError
+	Clean            bool
 }
 
 type DocParam struct {

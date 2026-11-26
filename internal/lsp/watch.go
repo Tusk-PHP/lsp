@@ -127,8 +127,11 @@ func (s *Server) refreshWorkspace() {
 			"message": "PHP LSP: some changed files could not be re-indexed: " + err.Error(),
 		})
 	}
-	if result.ProfileChanged {
+	if result.ProfileChange != workspace.ProfileKept {
 		s.logInfo(fmt.Sprintf("PHP LSP: PHP %s (source: %s)", result.Profile.PHPVersion, result.ProfileSource))
+	}
+	if result.ProfileChange == workspace.GrammarsChanged {
+		s.goSafe("workspace.ReparseForGrammars", s.reparseForGrammars)
 	}
 	s.handBackToEditor(result.EditorOpened)
 	for _, uri := range result.Files {
@@ -137,7 +140,13 @@ func (s *Server) refreshWorkspace() {
 			break
 		}
 	}
-	if len(result.Files) > 0 || result.Composer || result.ProfileChanged {
+	if len(result.Files) > 0 || result.Composer || result.ProfileChange != workspace.ProfileKept {
+		s.republishOpenDocuments()
+	}
+}
+
+func (s *Server) reparseForGrammars() {
+	if s.workspace.ReparseForGrammars() > 0 {
 		s.republishOpenDocuments()
 	}
 }

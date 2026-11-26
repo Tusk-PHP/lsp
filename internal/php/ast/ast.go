@@ -74,6 +74,10 @@ type File struct {
 	Version  token.Version
 }
 
+func (f *File) Clean() bool {
+	return len(f.Errors) == 0 && len(f.Warnings) == 0
+}
+
 type Error struct {
 	Span
 	Message string

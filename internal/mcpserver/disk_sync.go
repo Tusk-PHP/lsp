@@ -106,8 +106,11 @@ func (s *Service) syncWithDisk(ctx context.Context) error {
 		return nil
 	}
 	result, err := ws.Refresh(workspace.Refresh{Paths: changed, Config: s.loadConfig})
-	if result.ProfileChanged {
+	if result.ProfileChange != workspace.ProfileKept {
 		s.profileSource.Store(&result.ProfileSource)
+	}
+	if result.ProfileChange == workspace.GrammarsChanged {
+		ws.ReparseForGrammars()
 	}
 	if configErr := (*workspace.ConfigError)(nil); errors.As(err, &configErr) {
 		return fmt.Errorf("re-read the project configuration: %w", configErr)

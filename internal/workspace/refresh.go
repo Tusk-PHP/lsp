@@ -21,13 +21,13 @@ type Refresh struct {
 }
 
 type Refreshed struct {
-	Files          []string
-	EditorOpened   []string
-	Failed         []string
-	Composer       bool
-	ProfileChanged bool
-	Profile        symbols.BuiltinProfile
-	ProfileSource  string
+	Files         []string
+	EditorOpened  []string
+	Failed        []string
+	Composer      bool
+	ProfileChange ProfileChange
+	Profile       symbols.BuiltinProfile
+	ProfileSource string
 }
 
 type ConfigError struct {
@@ -149,7 +149,7 @@ func (ws *Bootstrapped) refreshProfile(load func() (*config.Config, error), out 
 	}
 	timeout := time.Duration(cfg.PHPDetectTimeoutMs) * time.Millisecond
 	out.Profile, out.ProfileSource = ResolveBuiltinProfileWithConfig(ws.RootPath, cfg.PHPBinary, timeout, cfg, nil)
-	out.ProfileChanged, err = ws.SetProfile(out.Profile)
+	out.ProfileChange, err = ws.SetProfile(out.Profile)
 	return err
 }
 

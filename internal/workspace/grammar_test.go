@@ -1,6 +1,8 @@
 package workspace
 
 import (
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -206,7 +208,7 @@ func TestARefreshedProfileBringsItsGrammars(t *testing.T) {
 
 	writeTestFile(t, filepath.Join(dir, "composer.json"), `{"require":{"php":"^7.4 || ^8.0"}}`)
 	out := refreshPaths(t, ws, dir, "composer.json")
-	if !out.ProfileChanged || out.Profile.PHPVersion != "7.4" {
+	if out.ProfileChange != GrammarsChanged || out.Profile.PHPVersion != "7.4" {
 		t.Fatalf("a constraint that admits PHP 8 as well changes the profile: %+v", out)
 	}
 	if got := ws.Index.Grammars().String(); got != "7.4-8.6" {
@@ -232,5 +234,64 @@ func TestAVersionThePHPOnPathReportsButNoGrammarReadsIsIgnored(t *testing.T) {
 		return strings.HasPrefix(line, "PHP LSP: ignoring the version of the php on PATH") && strings.Contains(line, "999.1")
 	}) {
 		t.Errorf("the ignored version is logged: %q", logs)
+	}
+}
+
+func TestFilesIndexedBeforeAPHPVersionChangeAreReadAgainUnderTheNewGrammars(t *testing.T) {
+	const enumFile = "<?php\nenum Suit: string { case Hearts = 'h'; }\n"
+	cases := []struct {
+		name, from, to string
+		files          map[string]string
+		reparsed       int
+		want           []string
+	}{
+		{
+			name: "PHP 8.0 to 8.1 brings enums", from: "~8.0.0", to: "~8.1.0",
+			files:    map[string]string{"app/Suit.php": enumFile, "_ide_helper.php": "<?php\nclass HelperCard { public function __construct(public readonly int $n) {} }\n"},
+			reparsed: 2, want: []string{"Suit", "Suit::Hearts", "HelperCard"},
+		},
+		{
+			name: "a range that already reads enums keeps the files", from: "^8.0", to: "^8.1",
+			files:    map[string]string{"app/Suit.php": enumFile},
+			reparsed: 0, want: []string{"Suit", "Suit::Hearts"},
+		},
+		{
+			name: "PHP 8 to 7.4 frees the name match", from: "^8.0", to: "^7.4",
+			files:    map[string]string{"app/match.php": "<?php\nfunction match($value) { return $value; }\n"},
+			reparsed: 1, want: []string{"match"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := map[string]string{"composer.json": `{"require":{"php":"` + tc.from + `"}}`}
+			for name, source := range tc.files {
+				files[name] = source
+			}
+			root := t.TempDir()
+			writeFiles(t, root, files)
+			profile, _ := ResolveBuiltinProfileWithConfig(root, "", time.Second, nil, nil)
+			ws := New(Options{RootPath: root, Framework: "none", Logger: log.New(io.Discard, "", 0), BuiltinProfile: profile})
+			ws.IndexWorkspace()
+
+			writeFiles(t, root, map[string]string{"composer.json": `{"require":{"php":"` + tc.to + `"}}`})
+			out := refreshPaths(t, ws, root, "composer.json")
+			if out.ProfileChange != GrammarsChanged || len(out.Files) != 0 {
+				t.Fatalf("only composer.json changed, and with it the grammars: %+v", out)
+			}
+			if got := ws.ReparseForGrammars(); got != tc.reparsed {
+				t.Errorf("re-read %d files, want %d", got, tc.reparsed)
+			}
+			for _, fqn := range tc.want {
+				if ws.Index.Lookup(fqn) == nil {
+					t.Errorf("%s is declared under PHP %s", fqn, tc.to)
+				}
+			}
+			for name := range tc.files {
+				uri := symbols.PathToURI(filepath.Join(root, name))
+				if tree := ws.Index.GrammarOf(uri).Parse(ws.Index.GetFileSource(uri)); len(tree.Errors) > 0 {
+					t.Errorf("%s keeps a tree with syntax errors: %v", name, tree.Errors)
+				}
+			}
+		})
 	}
 }
