@@ -125,7 +125,7 @@ func discoverConfigRoutes(index *symbols.Index) []Route {
 			if _, err := os.Stat(path); err != nil {
 				continue
 			}
-			routes = append(routes, discoverRoutesFromConfigPath(path, "", "", visited, index.Grammars())...)
+			routes = append(routes, discoverRoutesFromConfigPath(path, "", "", visited, index)...)
 		}
 	}
 
@@ -174,7 +174,7 @@ func discoverSymfonyRoots(index *symbols.Index) []string {
 	return roots
 }
 
-func discoverRoutesFromConfigPath(path, pathPrefix, namePrefix string, visited map[string]bool, grammars phpparser.GrammarRange) []Route {
+func discoverRoutesFromConfigPath(path, pathPrefix, namePrefix string, visited map[string]bool, index *symbols.Index) []Route {
 	cleanPath := filepath.Clean(path)
 	if visited[cleanPath] {
 		return nil
@@ -204,7 +204,7 @@ func discoverRoutesFromConfigPath(path, pathPrefix, namePrefix string, visited m
 
 		if entry.IsImport {
 			resourcePath := filepath.Clean(filepath.Join(baseDir, entry.Resource))
-			routes = append(routes, discoverRoutesFromResource(resourcePath, entry.Type, entryPathPrefix, entryNamePrefix, visited, grammars)...)
+			routes = append(routes, discoverRoutesFromResource(resourcePath, entry.Type, entryPathPrefix, entryNamePrefix, visited, index)...)
 			continue
 		}
 
@@ -220,7 +220,7 @@ func discoverRoutesFromConfigPath(path, pathPrefix, namePrefix string, visited m
 	return routes
 }
 
-func discoverRoutesFromResource(path, resourceType, pathPrefix, namePrefix string, visited map[string]bool, grammars phpparser.GrammarRange) []Route {
+func discoverRoutesFromResource(path, resourceType, pathPrefix, namePrefix string, visited map[string]bool, index *symbols.Index) []Route {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil
@@ -230,36 +230,36 @@ func discoverRoutesFromResource(path, resourceType, pathPrefix, namePrefix strin
 		if resourceType != "attribute" && resourceType != "" {
 			return nil
 		}
-		return discoverRoutesFromAttributeDir(path, pathPrefix, namePrefix, grammars)
+		return discoverRoutesFromAttributeDir(path, pathPrefix, namePrefix, index)
 	}
 
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".yaml", ".yml", ".xml":
-		return discoverRoutesFromConfigPath(path, pathPrefix, namePrefix, visited, grammars)
+		return discoverRoutesFromConfigPath(path, pathPrefix, namePrefix, visited, index)
 	case ".php":
 		if resourceType != "attribute" && resourceType != "" {
 			return nil
 		}
-		return discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix, grammars)
+		return discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix, index)
 	default:
 		return nil
 	}
 }
 
-func discoverRoutesFromAttributeDir(root, pathPrefix, namePrefix string, grammars phpparser.GrammarRange) []Route {
+func discoverRoutesFromAttributeDir(root, pathPrefix, namePrefix string, index *symbols.Index) []Route {
 	var routes []Route
 	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info == nil || info.IsDir() || filepath.Ext(path) != ".php" {
 			return nil
 		}
-		routes = append(routes, discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix, grammars)...)
+		routes = append(routes, discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix, index)...)
 		return nil
 	})
 	return routes
 }
 
-func discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix string, grammars phpparser.GrammarRange) []Route {
+func discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix string, index *symbols.Index) []Route {
 	source, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -267,10 +267,10 @@ func discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix string, gramma
 
 	uri := path
 	if abs, err := filepath.Abs(path); err == nil {
-		uri = "file://" + filepath.ToSlash(abs)
+		uri = symbols.PathToURI(abs)
 	}
 
-	routes := discoverRoutesInFile(uri, string(source), grammars)
+	routes := discoverRoutesInFile(uri, string(source), index.GrammarOf(uri))
 	for i := range routes {
 		routes[i].Name = namePrefix + routes[i].Name
 		routes[i].Path = joinRoutePath(pathPrefix, routes[i].Path)

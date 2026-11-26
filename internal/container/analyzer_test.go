@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/symbols/symboltest"
 )
 
 func TestNewContainerAnalyzer(t *testing.T) {
@@ -307,5 +308,46 @@ func TestSymfonyClassesInSrcAreBoundWithTheirInterfaces(t *testing.T) {
 		if b := ca.LookupBinding(service); b == nil || b.Concrete != `App\Service\Mailer` {
 			t.Errorf("%s is bound to the class in src/: %+v", service, b)
 		}
+	}
+}
+
+func TestSymfonyFilesAreReadWithTheIndexsGrammar(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		filepath.Join(dir, "config", "services.php"): `<?php
+namespace App\Config;
+
+#[Pinned] function pinned() {} use App\Billing\Notifier;
+
+return static function ($container): void {
+    $container->services()->set('app.notifier', Notifier::class);
+};
+`,
+		filepath.Join(dir, "src", "Service", "Mailer.php"): `<?php
+namespace App\Service;
+
+#[Pinned] function pinned() {} use App\Contract\SendsMail;
+
+class Mailer implements SendsMail {}
+`,
+	}
+	idx := symbols.NewIndex()
+	for path, source := range files {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		symboltest.PinToPHP74(t, idx, symbols.PathToURI(path), source)
+	}
+	ca := NewContainerAnalyzer(idx, dir, "symfony")
+	ca.Analyze()
+
+	if b := ca.LookupBinding("app.notifier"); b == nil || b.Concrete != `App\Config\Notifier` {
+		t.Errorf("app.notifier is bound to %+v, want the class PHP 7.4 reads, where the import is a comment", b)
+	}
+	if b := ca.LookupBinding(`App\Service\SendsMail`); b == nil || b.Concrete != `App\Service\Mailer` {
+		t.Errorf("Mailer's interface is bound as %+v, want the name PHP 7.4 reads, where the import is a comment", b)
 	}
 }

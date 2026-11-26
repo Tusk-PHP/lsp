@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/symbols/symboltest"
 )
 
 func TestGetCodeActionsImplementMissingMethodsFromInterface(t *testing.T) {
@@ -202,4 +203,54 @@ interface Readable {
 			t.Errorf("the stub implements %q from the interface or one it extends:\n%s", want, text)
 		}
 	}
+}
+
+func TestImplementMissingMethodsResolvesNamesWithTheIndexsGrammar(t *testing.T) {
+	const uri = "file:///test.php"
+	source := `<?php
+namespace App;
+
+#[Pinned] function pinned() {} use Other\RepositoryInterface;
+
+class UserRepository implements RepositoryInterface {
+}
+`
+	a, _ := setupRenameAnalyzer(map[string]string{
+		"file:///repo.php": `<?php
+namespace App;
+
+interface RepositoryInterface {
+    public function find(string $id): void;
+}
+`,
+		"file:///other.php": `<?php
+namespace Other;
+
+interface RepositoryInterface {
+    public function purge(): void;
+}
+`,
+	})
+	symboltest.PinToPHP74(t, a.index, uri, source)
+
+	actions := a.GetCodeActions(uri, source, protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 5, Character: 0},
+			End:   protocol.Position{Line: 5, Character: 52},
+		},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
+	})
+
+	for _, action := range actions {
+		if action.Title != "Implement missing methods" || action.Edit == nil {
+			continue
+		}
+		text := action.Edit.Changes[uri][0].NewText
+		if !strings.Contains(text, "public function find(string $id): void") || strings.Contains(text, "purge") {
+			t.Errorf("the methods come from the interface PHP 7.4 reads, where the import is a comment:\n%s", text)
+		}
+		return
+	}
+	t.Fatalf("expected implement missing methods action, got %#v", actions)
 }

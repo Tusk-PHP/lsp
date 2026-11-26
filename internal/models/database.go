@@ -269,18 +269,18 @@ func injectSymfonySchemaProperties(index *symbols.Index, schema *Schema, rootPat
 		if err != nil {
 			continue
 		}
-		injectDoctrineSchemaSource(index, schema, content)
+		injectDoctrineSchemaSource(index, schema, uri, content)
 	}
 }
 
 // injectDoctrineSchemaSource adds the schema's columns to the Doctrine
 // entities declared in source, one file's text.
-func injectDoctrineSchemaSource(index *symbols.Index, schema *Schema, content string) {
+func injectDoctrineSchemaSource(index *symbols.Index, schema *Schema, uri, content string) {
 	if !strings.Contains(content, "ORM\\Entity") {
 		return
 	}
 
-	file := parser.ParseFileIn(content, index.Grammars())
+	file := parser.ParseFileIn(content, index.GrammarOf(uri))
 	if file == nil {
 		return
 	}

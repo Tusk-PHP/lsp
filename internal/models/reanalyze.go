@@ -19,9 +19,9 @@ func AnalyzeModelFile(index *symbols.Index, rootPath, framework, uri, source str
 	case "laravel":
 		analyzeEloquentFile(index, uri, source, schema, migrationColumns)
 	case "symfony":
-		analyzeDoctrineSource(index, rootPath, source)
+		analyzeDoctrineSource(index, rootPath, uri, source)
 		if schema != nil {
-			injectDoctrineSchemaSource(index, schema, source)
+			injectDoctrineSchemaSource(index, schema, uri, source)
 		}
 	}
 }

@@ -1,9 +1,12 @@
 package models
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/symbols/symboltest"
 )
 
 const reanalyzeBaseModel = `<?php
@@ -137,5 +140,56 @@ class User
 	AnalyzeModelFile(idx, "/", "symfony", uri, src, schema, nil)
 	if !hasMember(idx, `App\Entity\User`, "$legacy_flag") {
 		t.Error("User has no $legacy_flag from the users table")
+	}
+}
+
+const pinnedDoctrineUser = `<?php
+namespace App\Entity;
+
+use Doctrine\ORM\Mapping as ORM;
+
+#[Pinned] function pinned() {} /*
+#[ORM\Entity]
+#[ORM\Table(name: 'users')]
+class User
+{
+    #[ORM\Column(type: 'boolean')]
+    private $active;
+}
+// */
+`
+
+func legacyUsersSchema() *Schema {
+	return &Schema{Source: SchemaSourceLive, Tables: []SchemaTable{{Name: "users", Columns: []SchemaColumn{{Name: "legacy_flag", DataType: "tinyint"}}}}}
+}
+
+func TestAnalyzeModelFileReadsADoctrineEntityWithTheIndexsGrammar(t *testing.T) {
+	const uri = "file:///src/Entity/User.php"
+	idx := symbols.NewIndex()
+	symboltest.PinToPHP74(t, idx, uri, pinnedDoctrineUser)
+	AnalyzeModelFile(idx, "/", "symfony", uri, pinnedDoctrineUser, legacyUsersSchema(), nil)
+
+	if sym := idx.Lookup(`App\Entity\User::$active`); sym == nil || sym.Type != "bool" {
+		t.Errorf("$active is %+v, want the boolean column of the class PHP 7.4 reads, where it is code and not a comment", sym)
+	}
+	if !hasMember(idx, `App\Entity\User`, "$legacy_flag") {
+		t.Error("User has no $legacy_flag from the users table of the class PHP 7.4 reads")
+	}
+}
+
+func TestSymfonySchemaColumnsReachTheEntityTheIndexsGrammarReads(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "src", "Entity", "User.php")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(pinnedDoctrineUser), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx := symbols.NewIndex()
+	symboltest.PinToPHP74(t, idx, symbols.PathToURI(path), pinnedDoctrineUser)
+	injectSymfonySchemaProperties(idx, legacyUsersSchema(), filepath.Dir(path))
+
+	if !hasMember(idx, `App\Entity\User`, "$legacy_flag") {
+		t.Error("User has no $legacy_flag from the users table of the class PHP 7.4 reads")
 	}
 }

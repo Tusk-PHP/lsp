@@ -89,19 +89,19 @@ func AnalyzeDoctrineEntities(index *symbols.Index, rootPath string) {
 		if err != nil {
 			continue
 		}
-		analyzeDoctrineSource(index, rootPath, string(content))
+		analyzeDoctrineSource(index, rootPath, uri, string(content))
 	}
 }
 
 // analyzeDoctrineSource injects the members of the Doctrine entities declared
 // in source, one file's text.
-func analyzeDoctrineSource(index *symbols.Index, rootPath, source string) {
+func analyzeDoctrineSource(index *symbols.Index, rootPath, uri, source string) {
 	// Quick check: does this file mention ORM\Entity?
 	if !strings.Contains(source, "ORM\\Entity") && !strings.Contains(source, "ORM\\Column") {
 		return
 	}
 
-	file := parser.ParseFileIn(source, index.Grammars())
+	file := parser.ParseFileIn(source, index.GrammarOf(uri))
 	if file == nil {
 		return
 	}
