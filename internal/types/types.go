@@ -1,6 +1,9 @@
 package types
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 type TypeKind int
 
@@ -188,6 +191,17 @@ func ParseArrayShape(typeStr string) []ShapeField {
 	}
 
 	return parseShapeFields(inner)
+}
+
+func FieldsAt(fields []ShapeField, path []string) []ShapeField {
+	for _, key := range path {
+		i := slices.IndexFunc(fields, func(f ShapeField) bool { return f.Key == key })
+		if i < 0 {
+			return nil
+		}
+		fields = ParseArrayShape(fields[i].Type)
+	}
+	return fields
 }
 
 // parseShapeFields splits "name: string, age?: int" into fields,

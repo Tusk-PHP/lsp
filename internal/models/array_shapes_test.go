@@ -52,7 +52,7 @@ func TestLaravelConfigTopLevelKeys(t *testing.T) {
 	r := NewFrameworkArrayResolver(idx, dir, "laravel")
 
 	// config('app') should return top-level keys from config/app.php
-	fields := r.ResolveCallReturnKeys("config('app')", "")
+	fields := r.ConfigKeys("app")
 	if len(fields) == 0 {
 		t.Fatal("expected keys from config/app.php")
 	}
@@ -81,7 +81,7 @@ func TestLaravelConfigNestedKeys(t *testing.T) {
 	r := NewFrameworkArrayResolver(idx, dir, "laravel")
 
 	// config('app.database') should drill into the nested array
-	fields := r.ResolveCallReturnKeys("config('app.database')", "")
+	fields := r.ConfigKeys("app.database")
 	if len(fields) == 0 {
 		t.Fatal("expected nested keys from config/app.php database section")
 	}
@@ -326,7 +326,7 @@ return [
 	r := NewFrameworkArrayResolver(idx, dir, "laravel")
 
 	// config('sanctum.middleware') should drill into vendor config
-	fields := r.ResolveCallReturnKeys("config('sanctum.middleware')", "")
+	fields := r.ConfigKeys("sanctum.middleware")
 	if len(fields) == 0 {
 		t.Fatal("expected nested keys from vendor sanctum.middleware")
 	}
@@ -397,11 +397,11 @@ return ['key' => 'val'];
 
 func TestNonLaravelReturnsNil(t *testing.T) {
 	dir, idx := setupTestProject(t)
+	idx.IndexFileWithSource("file:///user.php", "<?php\nnamespace App\\Models;\nclass User { public string $name; }\n", symbols.SourceProject)
 	r := NewFrameworkArrayResolver(idx, dir, "none")
 
-	fields := r.ResolveCallReturnKeys("config('app')", "")
-	if fields != nil {
-		t.Error("expected nil for non-laravel framework")
+	if fields := r.ResolveMethodReturnKeys("App\\Models\\User", "toArray"); fields != nil {
+		t.Errorf("expected nil for non-laravel framework, got %v", fields)
 	}
 }
 

@@ -105,7 +105,7 @@ return [
 	})
 
 	t.Run("nested connection keys", func(t *testing.T) {
-		fields := r.ResolveCallReturnKeys("config('database.connections')", "")
+		fields := r.ConfigKeys("database.connections")
 		if len(fields) == 0 {
 			t.Fatal("expected connection keys")
 		}
@@ -124,7 +124,7 @@ return [
 	})
 
 	t.Run("deep nested mysql keys", func(t *testing.T) {
-		fields := r.ResolveCallReturnKeys("config('database.connections.mysql')", "")
+		fields := r.ConfigKeys("database.connections.mysql")
 		if len(fields) == 0 {
 			t.Fatal("expected mysql connection keys")
 		}
@@ -153,7 +153,7 @@ return [
 
 	t.Run("line comment section parsed", func(t *testing.T) {
 		// 'redis' section is preceded by a // comment, should still be parsed
-		fields := r.ResolveCallReturnKeys("config('database.redis')", "")
+		fields := r.ConfigKeys("database.redis")
 		if len(fields) == 0 {
 			t.Fatal("expected redis keys")
 		}
