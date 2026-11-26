@@ -437,3 +437,56 @@ func TestArgumentCountWhenEveryDeclarationRejectsDifferently(t *testing.T) {
 		t.Errorf("too many for one declaration and too few for the other: %+v", got)
 	}
 }
+
+func TestArgumentCountFindsTheReceiverOnTheSyntaxTree(t *testing.T) {
+	idx := indexWithFunctions(`<?php
+namespace App;
+class Mailer {
+    public function send(string $to, string $subject): bool { return true; }
+    public function list(string $to, string $subject): void {}
+    public function mailer(): Mailer { return $this; }
+    public static function make(string $to): Mailer { return new Mailer(); }
+}
+function pair($a, $b) {}
+`)
+	types := map[string]string{"$this": `App\Mailer`, "$this->mailer": `App\Mailer`, "$this->mailer()": `App\Mailer`, "$this->all[0]": `App\Mailer`, "$mailer": `App\Mailer`, "new Mailer()": `App\Mailer`}
+	checker := &ArgumentCountRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string { return types[expr] }}
+	source := `<?php
+namespace App;
+$mailer /* the mailer */ ->send('a');
+$mailer->list('a');
+$this->send('a');
+$f = function () {
+    $this->send('a');
+    $this->mailer->send('a');
+    $this->mailer()->send('a');
+    $this->all[0]->send('a');
+    (new Mailer())->send('a');
+};
+$g = fn () => $this->send('a');
+$mailer
+    ->send('a');
+static::make();
+$mailer::make();
+Unknown::make();
+Mailer::make(...);
+Mailer::make(?);
+$this->send('a');
+pair(pair(1)
+`
+	var got []string
+	for _, f := range checker.Check(parser.ParseFile(source, token.Latest), source, idx) {
+		got = append(got, f.Message)
+	}
+	want := []string{
+		"Too few arguments to send(): 1 passed, at least 2 required",
+		"Too few arguments to list(): 1 passed, at least 2 required",
+		"Too few arguments to send(): 1 passed, at least 2 required",
+		"Too few arguments to send(): 1 passed, at least 2 required",
+		"Too few arguments to send(): 1 passed, at least 2 required",
+		"Too few arguments to pair(): 1 passed, at least 2 required",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("a comment before -> and a method named like a keyword are checked; $this in a closure, a chain split over lines, static::, a variable class, a placeholder and an unclosed call aren't, though a closed call in it is:\ngot  %q\nwant %q", got, want)
+	}
+}

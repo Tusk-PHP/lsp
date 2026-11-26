@@ -150,3 +150,37 @@ STALE();
 		t.Errorf("PHP calls a function whatever the case it is written in, got %q", got)
 	}
 }
+
+func TestAttributeRulesFindTheReceiverOnTheSyntaxTree(t *testing.T) {
+	src := `<?php
+namespace App;
+
+use Lib\Svc;
+
+function run(Svc $svc): void {
+    $svc /* the service */ ->with();
+    $svc->legacy;
+    $svc
+        ->with();
+    $other->with();
+    $svc->missing();
+}
+`
+	want := []string{"unused-result: The result of 'with' should be used: the copy is the result"}
+	if got := attributeFindings(t, src); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("a comment before -> doesn't hide the receiver; a property named like a method and a chain split over lines aren't uses:\ngot  %q\nwant %q", got, want)
+	}
+}
+
+func TestAttributeRulesWithoutATypeResolverReadOnlyClassNames(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///vendor/lib.php", attributedVendor)
+	src := "<?php\nuse Lib\\Svc;\n$svc->with();\nSvc::legacy();\n"
+	var got []string
+	for _, f := range (&DeprecatedUsageRule{}).Check(parser.ParseFile(src, token.Latest), src, idx) {
+		got = append(got, f.Message)
+	}
+	if want := []string{"'legacy' is deprecated"}; strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

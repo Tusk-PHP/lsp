@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 )
 
 // Code behind a version check is written for several versions of PHP or of a
@@ -12,15 +13,12 @@ import (
 // later and without one before. Rules that compare code against the installed
 // signatures can't tell which branch runs, so they stay quiet in all of them.
 
-// tokenSpan is a range of token indexes, both ends included.
-type tokenSpan struct{ start, end int }
-
 // versionGatedSpans returns the if/elseif/else chains in which any condition
 // checks a version: version_compare(), the PHP_VERSION constants, a class's
 // VERSION or *_VERSION constant (Symfony's Kernel::VERSION_ID), or Composer's
 // InstalledVersions. Each span covers the whole chain, every branch of it.
-func versionGatedSpans(tokens []parser.Token) []tokenSpan {
-	var spans []tokenSpan
+func versionGatedSpans(tokens []parser.Token) []ast.Span {
+	var spans []ast.Span
 	for i := 0; i < len(tokens); i++ {
 		if !isKeywordToken(tokens[i], "if") {
 			continue
@@ -31,17 +29,16 @@ func versionGatedSpans(tokens []parser.Token) []tokenSpan {
 		}
 		end, gated := ifChainEnd(tokens, i)
 		if gated && end > i {
-			spans = append(spans, tokenSpan{i, end})
+			spans = append(spans, ast.Span{Start: uint32(tokens[i].Offset), End: uint32(tokens[end].Offset + len(tokens[end].Value))})
 			i = end
 		}
 	}
 	return spans
 }
 
-// inTokenSpans reports whether token index i lies inside one of the spans.
-func inTokenSpans(spans []tokenSpan, i int) bool {
+func inSpans(spans []ast.Span, offset uint32) bool {
 	for _, s := range spans {
-		if i >= s.start && i <= s.end {
+		if s.Start <= offset && offset < s.End {
 			return true
 		}
 	}
