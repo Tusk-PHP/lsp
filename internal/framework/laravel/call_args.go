@@ -18,7 +18,11 @@ var (
 	translationFacadeMethods = []string{"get", "choice"}
 )
 
-const translationFacade = "Lang"
+const (
+	translationFacade = "Lang"
+	appHelper         = "app"
+	translatorBinding = "translator"
+)
 
 type ConfigCall struct {
 	Repository bool
@@ -62,9 +66,19 @@ func TranslationKeyArg(arg ast.CallArg) (*TranslationStringContext, bool) {
 	if arg.Index != 0 || arg.InArray || arg.Value != ast.ArgString {
 		return nil, false
 	}
-	if !slices.Contains(translationFunctions, arg.Function) &&
-		!(arg.Static && ast.LastSegment(arg.Class) == translationFacade && slices.Contains(translationFacadeMethods, arg.Method)) {
+	if !slices.Contains(translationFunctions, arg.Function) && !isTranslatorCall(arg) {
 		return nil, false
 	}
 	return &TranslationStringContext{Key: arg.Text, Partial: arg.Partial, Quote: arg.Quote}, true
+}
+
+func isTranslatorCall(arg ast.CallArg) bool {
+	if !slices.Contains(translationFacadeMethods, arg.Method) {
+		return false
+	}
+	if arg.Static {
+		return ast.LastSegment(arg.Class) == translationFacade
+	}
+	function, binding, ok := arg.ReceiverCall()
+	return ok && function == appHelper && binding == translatorBinding
 }
