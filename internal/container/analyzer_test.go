@@ -309,3 +309,13 @@ func TestSymfonyClassesInSrcAreBoundWithTheirInterfaces(t *testing.T) {
 		}
 	}
 }
+
+func TestSymfonyClassesBindTheirImportedInterfaces(t *testing.T) {
+	ca := NewContainerAnalyzer(symbols.NewIndex(), "/tmp", "symfony")
+	ca.parseSymfonyAttributes("/app/src/Mailer.php", "<?php\nnamespace App;\nuse Vendor\\Contracts\\MailerInterface;\nclass Mailer implements MailerInterface, Local {}\n")
+	for abstract, concrete := range map[string]string{`Vendor\Contracts\MailerInterface`: `App\Mailer`, `App\Local`: `App\Mailer`} {
+		if b := ca.bindings[abstract]; b == nil || b.Concrete != concrete {
+			t.Errorf("%s: %+v", abstract, b)
+		}
+	}
+}

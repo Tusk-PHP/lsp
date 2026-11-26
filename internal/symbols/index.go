@@ -1744,22 +1744,7 @@ func resolveTypeName(name string, currentNs string, uses []parser.UseNode) strin
 	if phpBuiltinTypes[strings.ToLower(name)] {
 		return prefix + name
 	}
-	if strings.HasPrefix(name, "\\") {
-		return prefix + strings.TrimPrefix(name, "\\")
-	}
-	parts := strings.SplitN(name, "\\", 2)
-	for _, u := range uses {
-		if u.Alias == parts[0] {
-			if len(parts) > 1 {
-				return prefix + u.FullName + "\\" + parts[1]
-			}
-			return prefix + u.FullName
-		}
-	}
-	if currentNs != "" {
-		return prefix + currentNs + "\\" + name
-	}
-	return prefix + name
+	return prefix + parser.ResolveImportedName(name, currentNs, uses, "class")
 }
 
 func splitTypeExpr(name string) []string {
