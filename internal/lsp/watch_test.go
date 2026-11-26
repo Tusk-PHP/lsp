@@ -590,3 +590,62 @@ func TestAnOpenDocumentUnderAPathWithASpaceKeepsTheEditorsText(t *testing.T) {
 		})
 	}
 }
+
+func diagnosticsPublishedFor(h *lspHarness, uri string, quiet time.Duration) int {
+	published := 0
+	for {
+		select {
+		case msg := <-h.notes:
+			if params, _ := msg["params"].(map[string]interface{}); msg["method"] == "textDocument/publishDiagnostics" && params["uri"] == uri {
+				published++
+			}
+		case <-time.After(quiet):
+			return published
+		}
+	}
+}
+
+func TestClosingADocumentReadsTheDiskBackOnlyWhenItHadUnsavedChanges(t *testing.T) {
+	const invoice = "<?php\nnamespace App;\nclass Invoice {}\n"
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json":    `{"require": {"php": "^8.1"}}`,
+		"app/Invoice.php":  invoice,
+		"app/Checkout.php": "<?php\nnamespace App;\nfunction checkout() { return new Invoice(); }\n",
+	}, map[string]interface{}{}, nil)
+	<-h.server.indexed
+	other := symbols.PathToURI(filepath.Join(root, "app", "Checkout.php"))
+	openDocument(h, other, "<?php\nnamespace App;\nfunction checkout() { return new Invoice(); }\n")
+	diagnosticsPublishedFor(h, other, 3*watchedFilesDelay)
+
+	uri := symbols.PathToURI(filepath.Join(root, "app", "Invoice.php"))
+	close := func() {
+		h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": uri}})
+	}
+	openDocument(h, uri, invoice)
+	close()
+	if n := diagnosticsPublishedFor(h, other, 3*watchedFilesDelay); n != 0 {
+		t.Errorf("closing a document with no unsaved changes re-diagnoses the open documents %d times", n)
+	}
+
+	openDocument(h, uri, invoice)
+	h.notify("textDocument/didChange", map[string]interface{}{
+		"textDocument":   map[string]interface{}{"uri": uri, "version": 2},
+		"contentChanges": []map[string]interface{}{{"text": invoice + "class Draft {}\n"}},
+	})
+	h.notify("textDocument/didSave", map[string]interface{}{"textDocument": map[string]interface{}{"uri": uri}})
+	close()
+	if n := diagnosticsPublishedFor(h, other, 3*watchedFilesDelay); n != 0 {
+		t.Errorf("closing a document right after saving it re-diagnoses the open documents %d times", n)
+	}
+
+	openDocument(h, uri, invoice)
+	h.notify("textDocument/didChange", map[string]interface{}{
+		"textDocument":   map[string]interface{}{"uri": uri, "version": 2},
+		"contentChanges": []map[string]interface{}{{"text": invoice + "class Draft {}\n"}},
+	})
+	close()
+	waitForSymbols(t, h, "Draft", func(names []string) bool { return len(names) == 0 })
+	if n := diagnosticsPublishedFor(h, other, 3*watchedFilesDelay); n == 0 {
+		t.Error("closing a document with unsaved changes re-diagnoses the open documents against the disk text")
+	}
+}
