@@ -47,7 +47,7 @@ func (s *Server) handleDidChangeWatchedFiles(msg *jsonRPCMessage) {
 	}
 	paths := make([]string, 0, len(params.Changes))
 	for _, change := range params.Changes {
-		if path := symbols.URIToPath(change.URI); path != "" {
+		if path, err := symbols.URIToPath(change.URI); err == nil {
 			paths = append(paths, path)
 		}
 	}

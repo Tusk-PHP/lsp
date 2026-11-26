@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -131,6 +133,77 @@ func TestClosingADocumentOpenedUnderAnotherSpellingLeavesOnlyTheDiskText(t *test
 	}
 	if len(indexed) != 1 || indexed[0] != canonical {
 		t.Errorf("the closed file is indexed once, under its canonical URI %s: %v", canonical, indexed)
+	}
+}
+
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf strings.Builder
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func TestAFileURIThatDoesNotParseIsIndexedUnderTheClientsURIUntilClosed(t *testing.T) {
+	h, _ := startWatchedProject(t, map[string]string{"composer.json": `{"require": {"php": "^8.1"}}`}, map[string]interface{}{}, nil)
+	<-h.server.indexed
+	var logged syncBuffer
+	h.server.logger.SetOutput(&logged)
+	uri := "file:///Scratch%zz.php"
+	indexedUnder := func(name string) []string {
+		t.Helper()
+		raw, _ := json.Marshal(h.readResponse(h.send("workspace/symbol", map[string]interface{}{"query": name}))["result"])
+		var found []struct{ Location struct{ URI string } }
+		if err := json.Unmarshal(raw, &found); err != nil {
+			t.Fatal(err)
+		}
+		var uris []string
+		for _, f := range found {
+			uris = append(uris, f.Location.URI)
+		}
+		return uris
+	}
+
+	openDocument(h, uri, "<?php\nclass Scratchpad {}\n")
+	waitForSymbols(t, h, "Scratchpad", func(names []string) bool { return len(names) == 1 })
+	if got := indexedUnder("Scratchpad"); len(got) != 1 || got[0] != uri {
+		t.Errorf("the opened document is indexed under the client's URI %s: %v", uri, got)
+	}
+
+	h.notify("textDocument/didChange", map[string]interface{}{
+		"textDocument":   map[string]interface{}{"uri": uri, "version": 2},
+		"contentChanges": []map[string]interface{}{{"text": "<?php\nclass ScratchEdited {}\n"}},
+	})
+	waitForSymbols(t, h, "ScratchEdited", func(names []string) bool { return len(names) == 1 })
+	if got := indexedUnder("ScratchEdited"); len(got) != 1 || got[0] != uri {
+		t.Errorf("the edited document stays under the client's URI %s: %v", uri, got)
+	}
+	var scratch []string
+	for _, indexed := range h.server.index.GetAllFileURIs() {
+		if strings.Contains(indexed, "Scratch") {
+			scratch = append(scratch, indexed)
+		}
+	}
+	if !slices.Equal(scratch, []string{uri}) {
+		t.Errorf("the index holds the client's URI and no respelling of it: %v", scratch)
+	}
+
+	h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": uri}})
+	waitForSymbols(t, h, "ScratchEdited", func(names []string) bool { return len(names) == 0 })
+	if got := h.server.index.GetAllFileURIs(); slices.Contains(got, uri) {
+		t.Errorf("closing the document drops it from the index: %v", got)
+	}
+	if n := strings.Count(logged.String(), "kept under the client's URI"); n != 1 || !strings.Contains(logged.String(), uri) {
+		t.Errorf("opening the document is logged once, naming its URI: %q", logged.String())
 	}
 }
 

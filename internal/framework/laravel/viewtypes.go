@@ -1,7 +1,6 @@
 package laravel
 
 import (
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -372,7 +371,7 @@ func (t *ViewTypes) source(uri string) string {
 			return src
 		}
 	}
-	data, err := os.ReadFile(symbols.URIToPath(uri))
+	data, err := symbols.ReadURI(uri)
 	if err != nil {
 		return ""
 	}

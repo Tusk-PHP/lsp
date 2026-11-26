@@ -145,3 +145,17 @@ func TestEditorFeaturesShareTheSessionsResolvers(t *testing.T) {
 		t.Errorf("typedExpression = %q, want Foo", got.FullString())
 	}
 }
+
+func TestSourceFilesListsIndexedFilesAndViewsButNoDocumentThatIsNotAFile(t *testing.T) {
+	root := t.TempDir()
+	class := filepath.Join(root, "app", "Order.php")
+	view := filepath.Join(root, "resources", "views", "order.blade.php")
+	ws := workspace.New(workspace.Options{RootPath: root, Framework: "none"})
+	ws.Index.IndexFile(symbols.PathToURI(class), "<?php\n")
+	ws.Index.IndexFile("untitled:Scratch.php", "<?php\n")
+	ws.Index.AddTemplateFile(symbols.PathToURI(view))
+	ws.Index.AddTemplateFile("untitled:scratch.blade.php")
+	if got, want := New(ws, Options{}).SourceFiles(), []string{class, view}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}

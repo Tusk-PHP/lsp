@@ -3,7 +3,6 @@ package models
 import (
 	"fmt"
 	"log"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -264,12 +263,11 @@ func injectLaravelSchemaProperties(index *symbols.Index, schema *Schema, rootPat
 func injectSymfonySchemaProperties(index *symbols.Index, schema *Schema, rootPath string) {
 	uris := index.GetAllFileURIs()
 	for _, uri := range uris {
-		path := symbols.URIToPath(uri)
-		content, err := readFileQuick(path)
+		content, err := symbols.ReadURI(uri)
 		if err != nil {
 			continue
 		}
-		injectDoctrineSchemaSource(index, schema, content)
+		injectDoctrineSchemaSource(index, schema, string(content))
 	}
 }
 
@@ -344,12 +342,8 @@ func ResolveModelTableName(index *symbols.Index, model *symbols.Symbol, rootPath
 	}
 
 	// Read source file and look for $table = 'name'
-	path := symbols.URIToPath(model.URI)
-	content, err := readFileQuick(path)
-	if err != nil {
-		content = ""
-	}
-	return modelTableName(model, content)
+	content, _ := symbols.ReadURI(model.URI)
+	return modelTableName(model, string(content))
 }
 
 // modelTableName is the table of model, given the source of the file that
@@ -414,12 +408,4 @@ func isVowel(b byte) bool {
 		return true
 	}
 	return false
-}
-
-func readFileQuick(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
 }

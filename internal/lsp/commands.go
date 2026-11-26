@@ -28,8 +28,13 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 		if !ok {
 			return
 		}
+		path, err := symbols.URIToPath(uri)
+		if err != nil {
+			s.sendError(msg.ID, codeInvalidParams, err.Error())
+			return
+		}
 		autoload := composer.GetAutoloadPaths(s.rootPath)
-		s.sendResponse(msg.ID, composer.PathToNamespace(symbols.URIToPath(uri), autoload))
+		s.sendResponse(msg.ID, composer.PathToNamespace(path, autoload))
 	case protocol.CommandMoveToNamespace:
 		uri, ok := s.commandURI(msg, params, 0)
 		if !ok {

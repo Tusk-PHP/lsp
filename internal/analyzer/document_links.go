@@ -23,7 +23,7 @@ var memberOrDeclarationPrefixes = map[parser.TokenKind]bool{parser.TokenArrow: t
 func (a *Analyzer) DocumentLinks(uri, source, root string, exists func(path string) bool) []protocol.DocumentLink {
 	links := make([]protocol.DocumentLink, 0)
 	tokens := parser.Tokenize(source)
-	file := symbols.URIToPath(uri)
+	file, _ := symbols.URIToPath(uri)
 	laravel := a.framework == "laravel" && root != ""
 	for i, tok := range tokens {
 		switch {
@@ -157,9 +157,9 @@ func (e *pathExpr) term() (string, bool) {
 		value, ok := e.concat()
 		return value, ok && e.expect(parser.TokenCloseParen)
 	case tok.Kind == parser.TokenIdentifier && strings.EqualFold(tok.Value, "__DIR__"):
-		return filepath.Dir(e.file), true
+		return filepath.Dir(e.file), e.file != ""
 	case tok.Kind == parser.TokenIdentifier && strings.EqualFold(tok.Value, "__FILE__"):
-		return e.file, true
+		return e.file, e.file != ""
 	case tok.Kind == parser.TokenIdentifier:
 		return e.globalName(tok.Value)
 	case tok.Kind == parser.TokenBackslash && e.i < len(e.tokens) && e.tokens[e.i].Kind == parser.TokenIdentifier:

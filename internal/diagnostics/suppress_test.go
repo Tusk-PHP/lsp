@@ -87,6 +87,9 @@ func TestIgnoreRulesDropFindingsByPathCodeAndMessage(t *testing.T) {
 	if diags := p.Analyze("file:///elsewhere/app/Legacy/Old.php", source); len(diags) == 0 {
 		t.Error("a path rule only applies inside the project root")
 	}
+	if diags := p.Analyze("untitled:/project/app/Legacy/Old.php", source); len(diags) == 0 {
+		t.Error("a path rule never applies to a document that is not a file")
+	}
 }
 
 func TestInlineSuppressionInBladeView(t *testing.T) {

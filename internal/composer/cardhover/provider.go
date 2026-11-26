@@ -47,13 +47,13 @@ func (p *Provider) SetEnabled(v bool) { p.enabled = v }
 // for the cursor's package. Off by default.
 func (p *Provider) SetOpenOnDefinition(v bool) { p.openOnDefinition = v }
 
-// IsComposerJSON reports whether the given URI/path refers to a
+// IsComposerJSON reports whether the given file URI refers to a
 // composer.json file the provider should answer for. Vendor composer.json
 // files are accepted — they get the same treatment as the workspace's own
 // file, per the design (see .claude/plans/composer-hover.md §1).
 func IsComposerJSON(uri string) bool {
-	path := symbols.URIToPath(uri)
-	return filepath.Base(path) == "composer.json"
+	path, err := symbols.URIToPath(uri)
+	return err == nil && filepath.Base(path) == "composer.json"
 }
 
 // Hover renders the package card for the cursor's position, or nil when

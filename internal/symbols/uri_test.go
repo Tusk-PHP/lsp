@@ -1,8 +1,9 @@
 package symbols
 
 import (
-	"net/url"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -20,8 +21,8 @@ func TestPathToURIEncodesWhatAURIPathCannotHold(t *testing.T) {
 		if got != want {
 			t.Errorf("%s: got %s, want %s", path, got, want)
 		}
-		if back := URIToPath(got); back != filepath.Clean("/"+trimSlash(path)) {
-			t.Errorf("%s does not round-trip: %s", got, back)
+		if back, err := URIToPath(got); err != nil || back != filepath.Clean("/"+trimSlash(path)) {
+			t.Errorf("%s does not round-trip: %s, %v", got, back, err)
 		}
 	}
 }
@@ -36,15 +37,15 @@ func TestURIToPathReadsWindowsURIsWithOneDriveLetterCase(t *testing.T) {
 		"file:///d:/proj/caf%C3%A9/Order.php": "D:/proj/café/Order.php",
 		"file:///srv/app/Order.php":           "/srv/app/Order.php",
 	} {
-		if got := uriSlashPath(uri, true); got != want {
-			t.Errorf("%s: got %s, want %s", uri, got, want)
+		if got, err := uriSlashPath(uri, true); err != nil || got != want {
+			t.Errorf("%s: got %s, %v, want %s", uri, got, err, want)
 		}
 	}
-	if got := uriSlashPath("file:///c:/proj/x.php", false); got != "/c:/proj/x.php" {
-		t.Errorf("outside Windows a drive-like segment is an ordinary directory: %s", got)
+	if got, err := uriSlashPath("file:///c:/proj/x.php", false); err != nil || got != "/c:/proj/x.php" {
+		t.Errorf("outside Windows a drive-like segment is an ordinary directory: %s, %v", got, err)
 	}
-	if got := uriSlashPath(`file://C:\proj\a.php`, false); got == "C:/proj/a.php" {
-		t.Errorf("a backslash is part of a file name outside Windows: %s", got)
+	if got, err := uriSlashPath(`file://C:\proj\a.php`, false); err == nil {
+		t.Errorf("outside Windows a backslash path in the authority is no file URI: %s", got)
 	}
 }
 
@@ -58,8 +59,8 @@ func TestPathToURIWritesWindowsPathsWithOneDriveLetterCase(t *testing.T) {
 		if uri != want {
 			t.Errorf("%s: got %s, want %s", path, uri, want)
 		}
-		if back := uriSlashPath(uri, true); back != slashPath(path, true) {
-			t.Errorf("%s does not round-trip: %s", uri, back)
+		if back, err := uriSlashPath(uri, true); err != nil || back != slashPath(path, true) {
+			t.Errorf("%s does not round-trip: %s, %v", uri, back, err)
 		}
 	}
 }
@@ -107,6 +108,38 @@ func TestCanonicalURIIsTheURIPathToURIBuilds(t *testing.T) {
 	}
 }
 
+func TestAURIThatNamesNoReadableFileIsNotAFileURI(t *testing.T) {
+	for _, uri := range []string{"file:///a%zz", "file:", "file:Order.php", "file://host", "untitled:Untitled-1", "builtin", "/already/a/path", ""} {
+		for _, windows := range []bool{false, true} {
+			if got := canonicalURI(uri, windows); got != uri {
+				t.Errorf("%q (windows %v) is kept as the client spelled it, got %q", uri, windows, got)
+			}
+		}
+		if path, err := URIToPath(uri); err == nil || path != "" || !strings.Contains(err.Error(), strconv.Quote(uri)) {
+			t.Errorf("%q has no path: got %q, %v", uri, path, err)
+		}
+		if _, err := ReadURI(uri); err == nil {
+			t.Errorf("%q is not read from disk", uri)
+		}
+	}
+	if _, err := URIToPath("file:///a%zz"); !strings.Contains(err.Error(), "invalid URL escape") {
+		t.Errorf("the error says why the URI does not parse: %v", err)
+	}
+}
+
+func TestReadURIReadsTheFileAFileURINames(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "my app", "Order.php")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("<?php\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := ReadURI(PathToURI(path)); err != nil || string(data) != "<?php\n" {
+		t.Errorf("got %q, %v", data, err)
+	}
+}
+
 func FuzzCanonicalFileURIIsThePathToURIOfItsPath(f *testing.F) {
 	for _, uri := range []string{
 		"file:///srv/app/Order.php",
@@ -117,19 +150,26 @@ func FuzzCanonicalFileURIIsThePathToURIOfItsPath(f *testing.F) {
 		"file:/../a%3A",
 		"file:///srv/../../x",
 		"file://host/share/x.php",
+		"file:///a%zz",
+		`file://C:\proj\a.php`,
+		"untitled:Untitled-1",
 	} {
 		f.Add(uri, false)
 		f.Add(uri, true)
 	}
 	f.Fuzz(func(t *testing.T, uri string, windows bool) {
-		if !IsFileURI(uri) {
-			return
-		}
-		if _, err := url.Parse(uri); err != nil {
-			return
-		}
 		canonical := canonicalURI(uri, windows)
-		if rebuilt := slashPathToURI(slashPath(uriSlashPath(canonical, windows), windows)); rebuilt != canonical {
+		if _, err := uriSlashPath(uri, windows); err != nil {
+			if canonical != uri {
+				t.Errorf("%q (windows %v) is not a file URI (%v), but is respelled %q", uri, windows, err, canonical)
+			}
+			return
+		}
+		path, err := uriSlashPath(canonical, windows)
+		if err != nil {
+			t.Fatalf("%q (windows %v): its canonical %q is not a file URI: %v", uri, windows, canonical, err)
+		}
+		if rebuilt := slashPathToURI(slashPath(path, windows)); rebuilt != canonical {
 			t.Errorf("%s (windows %v): canonical %s, but the URI of its path is %s", uri, windows, canonical, rebuilt)
 		}
 	})

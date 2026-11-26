@@ -51,7 +51,11 @@ func (p *Provider) ignoreRulesFor(uri string) []config.IgnoreRule {
 }
 
 func (p *Provider) relativePath(uri string) (string, bool) {
-	rel, err := filepath.Rel(p.rootPath, symbols.URIToPath(uri))
+	path, err := symbols.URIToPath(uri)
+	if err != nil {
+		return "", false
+	}
+	rel, err := filepath.Rel(p.rootPath, path)
 	if err != nil {
 		return "", false
 	}

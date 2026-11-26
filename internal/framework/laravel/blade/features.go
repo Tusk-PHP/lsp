@@ -301,8 +301,16 @@ func baseName(uri string) string {
 	return uri[strings.LastIndexByte(uri, '/')+1:]
 }
 
+func displayPath(uri string) string {
+	path, err := symbols.URIToPath(uri)
+	if err != nil {
+		return uri
+	}
+	return filepath.ToSlash(path)
+}
+
 func relativeViewPath(uri string) string {
-	path := filepath.ToSlash(symbols.URIToPath(uri))
+	path := displayPath(uri)
 	if k := strings.Index(path, "/resources/views/"); k >= 0 {
 		return "`" + path[k+1:] + "`"
 	}
@@ -344,7 +352,7 @@ func customInfos(c *Custom) []DirectiveInfo {
 // projectPath shortens a file's path to where it sits in the project, from
 // its app/ or vendor/ directory.
 func projectPath(uri string) string {
-	path := filepath.ToSlash(symbols.URIToPath(uri))
+	path := displayPath(uri)
 	for _, dir := range []string{"/vendor/", "/app/", "/resources/", "/src/"} {
 		if k := strings.LastIndex(path, dir); k >= 0 {
 			return path[k+1:]

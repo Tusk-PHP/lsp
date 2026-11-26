@@ -277,7 +277,11 @@ func (d *ViewData) ViewName(uri string) string {
 	if d == nil {
 		return ""
 	}
-	path := filepath.ToSlash(symbols.URIToPath(uri))
+	path, err := symbols.URIToPath(uri)
+	if err != nil {
+		return ""
+	}
+	path = filepath.ToSlash(path)
 	for _, dir := range d.viewDirs {
 		prefix := filepath.ToSlash(dir) + "/"
 		if strings.HasPrefix(path, prefix) {

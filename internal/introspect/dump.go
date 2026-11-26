@@ -239,11 +239,13 @@ type Dump struct {
 func Document(in Input) *Dump {
 	d := &Dump{
 		URI:           in.URI,
-		FilePath:      symbols.URIToPath(in.URI),
 		BufferState:   in.BufferState,
 		ServerVersion: in.ServerVersion,
 		Profile:       in.Profile,
 		Framework:     in.Framework,
+	}
+	if path, err := symbols.URIToPath(in.URI); err == nil {
+		d.FilePath = path
 	}
 
 	// Determine dump source annotation.

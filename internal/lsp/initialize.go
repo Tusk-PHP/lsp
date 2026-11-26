@@ -20,9 +20,9 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	s.rootPath = symbols.URIToPath(params.RootURI)
-	if s.rootPath == "" || s.rootPath == "." {
-		s.rootPath = params.RootPath
+	s.rootPath = params.RootPath
+	if root, err := symbols.URIToPath(params.RootURI); err == nil {
+		s.rootPath = root
 	}
 	s.logger.Printf("Initializing for workspace: %s", s.rootPath)
 	s.initOptions = params.InitializationOptions.settings()

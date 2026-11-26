@@ -139,8 +139,8 @@ func discoverSymfonyRoots(index *symbols.Index) []string {
 		if strings.Contains(uri, "/vendor/") {
 			continue
 		}
-		path := symbols.URIToPath(uri)
-		if path == "" {
+		path, err := symbols.URIToPath(uri)
+		if err != nil {
 			continue
 		}
 

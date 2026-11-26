@@ -158,6 +158,24 @@ func TestFilesUnderListsTheIndexedFilesOfADirectory(t *testing.T) {
 	}
 }
 
+func TestFilesUnderLeavesOutDocumentsThatAreNotFiles(t *testing.T) {
+	idx := NewIndex()
+	for _, uri := range []string{"file:///p/A.php", "untitled:Scratch.php", "file:///p/a%zz.php"} {
+		idx.IndexFile(uri, "<?php\n")
+	}
+	if got := idx.FilesUnder("/"); !slices.Equal(got, []string{"file:///p/A.php"}) {
+		t.Errorf("only file URIs sit in a directory: %v", got)
+	}
+	if got := idx.FilesUnder("."); len(got) != 0 {
+		t.Errorf("a document that is not a file has no directory: %v", got)
+	}
+	idx.RemoveFile("untitled:Scratch.php")
+	idx.RemoveFile("file:///p/a%zz.php")
+	if got := idx.GetAllFileURIs(); !slices.Equal(got, []string{"file:///p/A.php"}) {
+		t.Errorf("documents that are not files leave the index: %v", got)
+	}
+}
+
 func TestFileTreeListsWindowsWorkspaceFilesUnderADirectory(t *testing.T) {
 	tree := fileTree{windows: true}
 	for _, uri := range []string{`file://C:\proj\app\Billing\Invoice.php`, `file://C:\proj\app\Billing\Tax\Rate.php`, `file://C:\proj\app\BillingKept\Receipt.php`, "file:///C:/proj/app/Billing/Open.php"} {

@@ -74,7 +74,12 @@ func (s *Server) handleFileCoverage(msg *jsonRPCMessage) {
 		return
 	}
 	s.coverage.RefreshAsync()
-	file, stale := s.coverage.File(symbols.URIToPath(params.TextDocument.URI))
+	path, err := symbols.URIToPath(params.TextDocument.URI)
+	if err != nil {
+		s.sendResponse(msg.ID, nil)
+		return
+	}
+	file, stale := s.coverage.File(path)
 	if file == nil {
 		s.sendResponse(msg.ID, nil)
 		return

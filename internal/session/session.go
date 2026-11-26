@@ -202,13 +202,13 @@ func (s *Session) NativeFindings(source string) []checks.Finding {
 func (s *Session) SourceFiles() []string {
 	var paths []string
 	for _, uri := range s.ws.Index.GetAllFileURIs() {
-		if path := symbols.URIToPath(uri); path != "" && workspace.IsPHPSource(path) {
+		if path, err := symbols.URIToPath(uri); err == nil && workspace.IsPHPSource(path) {
 			paths = append(paths, path)
 		}
 	}
 	// Blade views declare no symbols, but they are checked like the rest.
 	for _, uri := range s.ws.Index.TemplateFileURIs() {
-		if path := symbols.URIToPath(uri); path != "" && workspace.IsBlade(path) {
+		if path, err := symbols.URIToPath(uri); err == nil && workspace.IsBlade(path) {
 			paths = append(paths, path)
 		}
 	}

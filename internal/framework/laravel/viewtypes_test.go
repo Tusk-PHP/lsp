@@ -1,7 +1,6 @@
 package laravel
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -17,7 +16,7 @@ func TestAnonymousComponentPropsAreTypedFromTheirView(t *testing.T) {
 	types := &ViewTypes{
 		Data: NewViewData(root),
 		Read: func(uri string) string {
-			data, _ := os.ReadFile(symbols.URIToPath(uri))
+			data, _ := symbols.ReadURI(uri)
 			return string(data)
 		},
 	}

@@ -9,7 +9,10 @@ type fileTree struct {
 }
 
 func (t *fileTree) add(uri string) {
-	dir := t.dirOf(uri)
+	dir, ok := t.dirOf(uri)
+	if !ok {
+		return
+	}
 	if t.files == nil {
 		t.files = make(map[string]map[string]struct{})
 		t.children = make(map[string]map[string]struct{})
@@ -30,8 +33,8 @@ func (t *fileTree) add(uri string) {
 }
 
 func (t *fileTree) remove(uri string) {
-	dir := t.dirOf(uri)
-	if t.files[dir] == nil {
+	dir, ok := t.dirOf(uri)
+	if !ok || t.files[dir] == nil {
 		return
 	}
 	delete(t.files[dir], uri)
@@ -58,6 +61,10 @@ func (t *fileTree) under(dir string) []string {
 	return out
 }
 
-func (t *fileTree) dirOf(uri string) string {
-	return path.Dir(uriSlashPath(uri, t.windows))
+func (t *fileTree) dirOf(uri string) (string, bool) {
+	p, err := uriSlashPath(uri, t.windows)
+	if err != nil {
+		return "", false
+	}
+	return path.Dir(p), true
 }

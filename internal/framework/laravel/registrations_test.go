@@ -1,7 +1,6 @@
 package laravel
 
 import (
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -92,7 +91,7 @@ func TestProviderRegistrations(t *testing.T) {
 func TestNamespacedComponentsAndViews(t *testing.T) {
 	root, p := providersFixture(t)
 	read := func(uri string) string {
-		data, _ := os.ReadFile(symbols.URIToPath(uri))
+		data, _ := symbols.ReadURI(uri)
 		return string(data)
 	}
 	c := NewComponents(root, nil, p, read)

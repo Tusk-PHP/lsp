@@ -1,8 +1,6 @@
 package lsp
 
 import (
-	"os"
-
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -20,6 +18,9 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 	s.documents[uri] = text
 	s.unsaved[uri] = unsaved
 	s.docMu.Unlock()
+	if _, err := symbols.URIToPath(uri); err != nil {
+		s.logger.Printf("Opened a document that is not a file, kept under the client's URI: %v", err)
+	}
 	if !isPHPDocument(uri) {
 		// Non-PHP documents (composer.json, tsconfig.json, …) are only
 		// stored so providers that read source — e.g. composer-hover —
@@ -84,12 +85,13 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 		return
 	}
 	s.docIndex.afterClose(uri, func() {
-		if !symbols.IsFileURI(uri) {
+		path, err := symbols.URIToPath(uri)
+		if err != nil {
 			s.workspace.RemoveFile(uri)
 			return
 		}
 		if unsaved {
-			s.queueRefresh([]string{symbols.URIToPath(uri)}, false)
+			s.queueRefresh([]string{path}, false)
 		}
 	})
 }
@@ -120,10 +122,9 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 	s.goSafe("container.Analyze", s.container.Analyze)
 	if s.cfg.DiagnosticsEnabled {
 		s.goSafe("diagnostics.RunTools", func() {
-			filePath := symbols.URIToPath(uri)
 			// PHPStan and Pint run on .php files only: Pint would reformat a
 			// template, and PHPStan doesn't analyse .phtml unless configured to.
-			if !workspace.IsTemplate(uri) {
+			if filePath, err := symbols.URIToPath(uri); err == nil && !workspace.IsTemplate(uri) {
 				s.analysis.RunTools(uri, filePath)
 			}
 			source := s.getDocument(uri)
@@ -144,8 +145,7 @@ func (s *Server) getDocumentReader() func(string) string {
 			return source
 		}
 		// Fall back to reading from disk
-		path := symbols.URIToPath(uri)
-		content, err := os.ReadFile(path)
+		content, err := symbols.ReadURI(uri)
 		if err != nil {
 			return ""
 		}

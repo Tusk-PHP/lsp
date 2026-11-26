@@ -116,7 +116,11 @@ func sortKey(i int) string {
 // affectsComponents reports whether a saved file can change which Blade
 // components exist: a provider, a component class or an anonymous component.
 func affectsComponents(root, uri string) bool {
-	path := filepath.ToSlash(symbols.URIToPath(uri))
+	path, err := symbols.URIToPath(uri)
+	if err != nil {
+		return false
+	}
+	path = filepath.ToSlash(path)
 	root = strings.TrimSuffix(filepath.ToSlash(root), "/") + "/"
 	if !strings.HasPrefix(path, root) {
 		return false

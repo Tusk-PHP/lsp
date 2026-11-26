@@ -39,7 +39,11 @@ func buildCreateObjectEdit(dirURI, kind, name string, autoload []composer.Autolo
 		return nil
 	}
 
-	filePath := filepath.Join(symbols.URIToPath(dirURI), name+".php")
+	dir, err := symbols.URIToPath(dirURI)
+	if err != nil {
+		return nil
+	}
+	filePath := filepath.Join(dir, name+".php")
 	newFileURI := symbols.PathToURI(filePath)
 	if _, err := os.Stat(filePath); err == nil {
 		return nil

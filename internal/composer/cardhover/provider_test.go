@@ -182,8 +182,9 @@ func TestIsComposerJSON(t *testing.T) {
 		"file:///workspace/composer.json":                true,
 		"file:///workspace/vendor/foo/bar/composer.json": true,
 		"file:///workspace/package.json":                 false,
-		"/some/path/composer.json":                       true,
-		"/some/path/notcomposer.json":                    false,
+		"/some/path/composer.json":                       false,
+		"untitled:composer.json":                         false,
+		"file:///a%zz/composer.json":                     false,
 	}
 	for uri, want := range cases {
 		if got := IsComposerJSON(uri); got != want {

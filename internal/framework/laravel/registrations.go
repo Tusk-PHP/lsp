@@ -161,7 +161,12 @@ func (p *Providers) read() *Registrations {
 			r.UnknownComponents = true
 			continue
 		}
-		files = append(files, symbols.URIToPath(sym.URI))
+		path, err := symbols.URIToPath(sym.URI)
+		if err != nil {
+			r.UnknownComponents = true
+			continue
+		}
+		files = append(files, path)
 	}
 	// Livewire 4's component locations are anonymous component paths.
 	dirs, known := livewireLocations(p.rootPath)

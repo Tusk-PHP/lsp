@@ -150,11 +150,7 @@ func (ca *ContainerAnalyzer) extractFacadeAccessor(classFQN string) string {
 		if m.Name != "getFacadeAccessor" {
 			continue
 		}
-		if m.URI == "" || m.URI == "builtin" {
-			continue
-		}
-		path := symbols.URIToPath(m.URI)
-		content, err := os.ReadFile(path)
+		content, err := symbols.ReadURI(m.URI)
 		if err != nil {
 			continue
 		}
@@ -225,9 +221,8 @@ func (ca *ContainerAnalyzer) AnalyzeConstructorInjection(classFQN string) []Inje
 	// The Autowire list is indexed by parameter position (0-based) so it is
 	// independent of whether the AST parser correctly captures param names.
 	var autowireList []autowireAttr
-	if ca.framework == "symfony" && sym.URI != "" && sym.URI != "builtin" {
-		path := symbols.URIToPath(sym.URI)
-		if data, err := os.ReadFile(path); err == nil {
+	if ca.framework == "symfony" {
+		if data, err := symbols.ReadURI(sym.URI); err == nil {
 			autowireList = parseConstructorAutowireAttrsByPosition(string(data))
 		}
 	}

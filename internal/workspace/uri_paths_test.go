@@ -1,7 +1,6 @@
 package workspace
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -35,7 +34,7 @@ func TestFilesUnderPathsWithSpecialCharactersAreIndexedOnceUnderTheEditorsURI(t 
 			if order == nil || order.URI != editorURI {
 				t.Fatalf("App\\Order is declared at %s: %+v", editorURI, order)
 			}
-			if _, err := os.Stat(symbols.URIToPath(order.URI)); err != nil {
+			if _, err := symbols.ReadURI(order.URI); err != nil {
 				t.Errorf("the declaration's URI leads back to the file: %v", err)
 			}
 		})

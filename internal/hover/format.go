@@ -206,7 +206,11 @@ func (p *Provider) formatCoverage(sym *symbols.Symbol) string {
 	}
 	p.coverage.RefreshAsync()
 
-	m, stale := p.coverage.Method(symbols.URIToPath(sym.URI), sym.Name, sym.Range.Start.Line+1)
+	path, err := symbols.URIToPath(sym.URI)
+	if err != nil {
+		return ""
+	}
+	m, stale := p.coverage.Method(path, sym.Name, sym.Range.Start.Line+1)
 	if m == nil {
 		return ""
 	}

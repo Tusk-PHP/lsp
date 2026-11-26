@@ -244,7 +244,10 @@ func (s *session) grade(c Case, raw json.RawMessage, res *CaseResult, src string
 			return
 		}
 		for _, l := range locs {
-			p := symbols.URIToPath(l.URI)
+			p, err := symbols.URIToPath(l.URI)
+			if err != nil {
+				continue
+			}
 			if c.Expect.TargetFile != "" && !strings.HasSuffix(filepath.ToSlash(p), c.Expect.TargetFile) {
 				continue
 			}
@@ -331,7 +334,7 @@ func (s *session) grade(c Case, raw json.RawMessage, res *CaseResult, src string
 		for _, want := range c.Expect.Files {
 			found := false
 			for _, l := range locs {
-				if strings.HasSuffix(filepath.ToSlash(symbols.URIToPath(l.URI)), want) {
+				if p, err := symbols.URIToPath(l.URI); err == nil && strings.HasSuffix(filepath.ToSlash(p), want) {
 					found = true
 					break
 				}
@@ -555,8 +558,10 @@ func summarizeLocations(locs []location, root string, max int) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, l := range locs {
-		p := symbols.URIToPath(l.URI)
-		if rel, err := filepath.Rel(root, p); err == nil && !strings.HasPrefix(rel, "..") {
+		p, err := symbols.URIToPath(l.URI)
+		if err != nil {
+			p = l.URI
+		} else if rel, err := filepath.Rel(root, p); err == nil && !strings.HasPrefix(rel, "..") {
 			p = rel
 		}
 		key := fmt.Sprintf("%s:%d", filepath.ToSlash(p), l.Range.Start.Line+1)

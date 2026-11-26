@@ -163,6 +163,27 @@ class StoreUserRequest {
 	}
 }
 
+func TestLaravelFormRequestKeysFromAParentsRules(t *testing.T) {
+	dir, idx := setupTestProject(t)
+	for name, src := range map[string]string{
+		"BaseRequest.php":      "<?php\nnamespace App\\Http\\Requests;\nclass BaseRequest {\n    public function rules(): array {\n        return [\n            'email' => 'required',\n        ];\n    }\n}\n",
+		"StoreUserRequest.php": "<?php\nnamespace App\\Http\\Requests;\nclass StoreUserRequest extends BaseRequest {}\n",
+	} {
+		path := filepath.Join(dir, "app", "Http", "Requests", name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		idx.IndexFileWithSource(symbols.PathToURI(path), src, symbols.SourceProject)
+	}
+	fields := NewFrameworkArrayResolver(idx, dir, "laravel").ResolveMethodReturnKeys(`App\Http\Requests\StoreUserRequest`, "validated")
+	if len(fields) != 1 || fields[0].Key != "email" {
+		t.Errorf("the keys come from the parent's rules(): %+v", fields)
+	}
+}
+
 func TestLaravelModelToArrayKeys(t *testing.T) {
 	dir, idx := setupTestProject(t)
 

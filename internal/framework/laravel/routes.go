@@ -481,7 +481,11 @@ func resolveRouteClassName(name string, file *parser.FileNode) string {
 }
 
 func isLaravelRouteFile(uri string) bool {
-	path := filepath.ToSlash(symbols.URIToPath(uri))
+	path, err := symbols.URIToPath(uri)
+	if err != nil {
+		return false
+	}
+	path = filepath.ToSlash(path)
 	return strings.HasSuffix(path, ".php") && strings.Contains(path, "/routes/")
 }
 
