@@ -63,13 +63,24 @@ func (a *Analyzer) occurrencesIn(r *resolve.Resolver, target referenceTarget, ur
 func mentions(source string, target *symbols.Symbol) bool {
 	found := false
 	parser.ScanTokens(source, func(tok parser.Token) bool {
-		found = spelledLike(tok, target)
-		if !found && tok.Kind == parser.TokenDocComment && target.Kind.IsClassLike() {
-			docNamesSpelledLike(tok, target.Name, func(string, protocol.Range) { found = true })
-		}
+		found = mentionedBy(tok, target)
 		return !found
 	})
 	return found
+}
+
+func mentionedBy(tok parser.Token, target *symbols.Symbol) bool {
+	switch {
+	case spelledLike(tok, target):
+		return true
+	case tok.Kind == parser.TokenDocComment && target.Kind.IsClassLike():
+		found := false
+		docNamesSpelledLike(tok, target.Name, func(string, protocol.Range) { found = true })
+		return found
+	case tok.Kind == parser.TokenStringLiteral && mayMention(tok.Value, target):
+		return slices.ContainsFunc(parser.InterpolatedTokens(tok), func(inner parser.Token) bool { return mentionedBy(inner, target) })
+	}
+	return false
 }
 
 func docNamesSpelledLike(tok parser.Token, name string, fn func(written string, last protocol.Range)) {
@@ -93,37 +104,46 @@ func offsetIn(tok parser.Token, offset int) protocol.Position {
 
 func (a *Analyzer) occurrencesInDocument(r *resolve.Resolver, target referenceTarget, doc *sourcectx.Document, source string) []protocol.Range {
 	decls := target.declarationsIn(doc.URI())
-	tokens := doc.Tokens()
 	var ranges []protocol.Range
 	var bindings *scope.Document
-	for i, tok := range tokens {
-		if tok.Kind == parser.TokenDocComment && target.sym.Kind.IsClassLike() {
-			docNamesSpelledLike(tok, target.sym.Name, func(written string, last protocol.Range) {
-				if strings.EqualFold(r.ResolveClassName(written, doc.File()), target.sym.FQN) {
-					ranges = append(ranges, last)
+	var scan func(tokens []parser.Token)
+	scan = func(tokens []parser.Token) {
+		for i, tok := range tokens {
+			switch {
+			case tok.Kind == parser.TokenDocComment && target.sym.Kind.IsClassLike():
+				docNamesSpelledLike(tok, target.sym.Name, func(written string, last protocol.Range) {
+					if strings.EqualFold(r.ResolveClassName(written, doc.File()), target.sym.FQN) {
+						ranges = append(ranges, last)
+					}
+				})
+				continue
+			case tok.Kind == parser.TokenStringLiteral:
+				if mayMention(tok.Value, target.sym) {
+					scan(parser.InterpolatedTokens(tok))
 				}
-			})
-			continue
-		}
-		if !mayName(tokens, i, target.sym) {
-			continue
-		}
-		rng := tokenRange(tok)
-		if tok.Kind == parser.TokenVariable && !follows(tokens, i, parser.TokenDoubleColon) {
-			if !slices.Contains(decls, rng) {
 				continue
 			}
-			if bindings == nil {
-				bindings = scope.Collect(source)
-			}
-			if param := bindings.BindingAt(rng.Start); param != nil && param.Kind == scope.BindingParameter {
-				ranges = append(ranges, bindings.Occurrences(param)...)
+			if !mayName(tokens, i, target.sym) {
 				continue
 			}
-		} else if !target.is(a.resolveSymbolAt(r, doc.NameAt(rng.Start), source)) {
-			continue
+			rng := tokenRange(tok)
+			if tok.Kind == parser.TokenVariable && !follows(tokens, i, parser.TokenDoubleColon) {
+				if !slices.Contains(decls, rng) {
+					continue
+				}
+				if bindings == nil {
+					bindings = scope.Collect(source)
+				}
+				if param := bindings.BindingAt(rng.Start); param != nil && param.Kind == scope.BindingParameter {
+					ranges = append(ranges, bindings.Occurrences(param)...)
+					continue
+				}
+			} else if !target.is(a.resolveSymbolAt(r, doc.NameAt(rng.Start), source)) {
+				continue
+			}
+			ranges = append(ranges, rng)
 		}
-		ranges = append(ranges, rng)
 	}
+	scan(doc.Tokens())
 	return ranges
 }

@@ -77,8 +77,8 @@ func mayMention(src string, sym *symbols.Symbol) bool {
 	}
 	fold := foldsCase(sym.Kind)
 	first := name[:1]
-	if fold && first[0] < 0x80 {
-		first = strings.ToLower(first) + strings.ToUpper(first)
+	if fold {
+		first = firstByteCases(name)
 	}
 	for offset := 0; ; {
 		i := strings.IndexAny(src[offset:], first)
@@ -98,6 +98,17 @@ func mayMention(src string, sym *symbols.Symbol) bool {
 			return true
 		}
 	}
+}
+
+const asciiLetterCases = "aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ"
+
+func firstByteCases(name string) string {
+	lower := name[0] | 0x20
+	if lower < 'a' || lower > 'z' {
+		return name[:1]
+	}
+	i := int(lower-'a') * 2
+	return asciiLetterCases[i : i+2]
 }
 
 func continuesName(ch byte) bool {

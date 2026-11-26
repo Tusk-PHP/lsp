@@ -57,9 +57,9 @@ func referencesAt(t *testing.T, uri, needle string) []string {
 
 func TestReferencesOfAMethodAreOnlyItsResolvedUses(t *testing.T) {
 	got := referencesAt(t, "file:///use.php", "area() +")
-	want := []string{"Room.php:6:20", "use.php:5:16", "use.php:6:51"}
+	want := []string{"Room.php:6:20", "use.php:5:16", "use.php:6:26", "use.php:6:51"}
 	if !slices.Equal(got, want) {
-		t.Errorf("Room::area's declaration and its calls on a Room; never Shape::area, the properties, the comment, the string or the constant:\n got %v\nwant %v", got, want)
+		t.Errorf("Room::area's declaration and its calls on a Room, the one inside the string included; never Shape::area, the properties, the comment or the constant:\n got %v\nwant %v", got, want)
 	}
 }
 
@@ -91,8 +91,8 @@ func TestRenameEditsOnlyTheResolvedUses(t *testing.T) {
 		}
 		count += len(edits)
 	}
-	if count != 3 {
-		t.Errorf("the declaration and the two calls are renamed, got %d edits: %+v", count, edit.Changes)
+	if count != 4 {
+		t.Errorf("the declaration and the three calls are renamed, got %d edits: %+v", count, edit.Changes)
 	}
 }
 
@@ -126,6 +126,8 @@ func TestMayMentionNeedsTheNameAsAWord(t *testing.T) {
 		{"$r->are", method, false},
 		{"class {", &symbols.Symbol{Kind: symbols.KindClass}, false},
 		{"$r->area", &symbols.Symbol{Name: "$", Kind: symbols.KindProperty}, false},
+		{"$r->_SIZE()", &symbols.Symbol{Name: "_size", Kind: symbols.KindMethod}, true},
+		{"$r->_SIZES()", &symbols.Symbol{Name: "_size", Kind: symbols.KindMethod}, false},
 	} {
 		if got := mayMention(c.src, c.sym); got != c.want {
 			t.Errorf("mayMention(%q, %s) = %v, want %v", c.src, c.sym.Name, got, c.want)
@@ -391,5 +393,50 @@ func TestRenameRefusesAMethodAnAliasOverrides(t *testing.T) {
 	}
 	if got := a.Rename("file:///C.php", src, pos, "say", read); got != nil {
 		t.Errorf("rename of Speaker::speak: %+v", got)
+	}
+}
+
+func TestReferencesInsideInterpolatedStrings(t *testing.T) {
+	sources := map[string]string{
+		"file:///Room.php": referencesRoom,
+		"file:///str.php": "<?php\nnamespace App;\nfunction label(Room $room, ?Room $maybe): string {\n" +
+			"    return \"$room->area {$room->area()} $maybe?->area {$room->area}\" . <<<EOT\n" +
+			"        {$maybe\n            ?->area()} ${room} {$room->size()}\n        EOT;\n}\n",
+	}
+	a, read := setupRenameAnalyzer(sources)
+	cases := map[string][]string{
+		"area(): float": {"Room.php:6:20", "str.php:3:32", "str.php:5:15"},
+		"$area = 0.0":   {"Room.php:4:17", "Room.php:7:22", "str.php:3:19", "str.php:3:49", "str.php:3:62"},
+	}
+	for needle, want := range cases {
+		var got []string
+		for _, l := range a.FindAllReferences("file:///Room.php", referencesRoom, positionOf(t, referencesRoom, needle), read) {
+			got = append(got, fmt.Sprintf("%s:%d:%d", strings.TrimPrefix(l.URI, "file:///"), l.Range.Start.Line, l.Range.Start.Character))
+		}
+		slices.Sort(got)
+		if !slices.Equal(got, want) {
+			t.Errorf("references of %q, the method's calls and the property's reads inside double quotes and a heredoc:\n got %v\nwant %v", needle, got, want)
+		}
+	}
+}
+
+func TestMentionsReadsDocTypesAndInterpolatedCode(t *testing.T) {
+	room := &symbols.Symbol{Name: "Room", Kind: symbols.KindClass}
+	method := &symbols.Symbol{Name: "area", Kind: symbols.KindMethod}
+	for _, c := range []struct {
+		src  string
+		sym  *symbols.Symbol
+		want bool
+	}{
+		{"<?php\n/** @var Room $r */\n$r = f();\n", room, true},
+		{"<?php\n/** @var Rooms $r */\n$r = f();\n", room, false},
+		{"<?php\necho \"{$r->area()}\";\n", method, true},
+		{"<?php\necho \"area {$r->size()}\";\n", method, false},
+		{"<?php\necho \"size {$r->size()}\";\n", method, false},
+		{"<?php\necho 'area';\n", method, false},
+	} {
+		if got := mentions(c.src, c.sym); got != c.want {
+			t.Errorf("mentions(%q, %s) = %v, want %v", c.src, c.sym.Name, got, c.want)
+		}
 	}
 }
