@@ -108,3 +108,46 @@ func TestComposerChangesInQuickSuccessionReindexOnce(t *testing.T) {
 		}
 	}
 }
+
+func TestAVendorFileClosedWithUnsavedEditsIsIndexedFromDiskAgain(t *testing.T) {
+	h, root := startComposerProject(t)
+	waitForLog(t, h, "PHP LSP: Indexed 3 vendor files")
+	index := h.server.index
+	widget := symbols.PathToURI(filepath.Join(root, "vendor/acme/lib/src/Widget.php"))
+
+	openDocument(h, widget, "<?php\nnamespace Acme;\nclass Widget {}\n")
+	h.notify("textDocument/didChange", map[string]interface{}{
+		"textDocument":   map[string]interface{}{"uri": widget, "version": 2},
+		"contentChanges": []map[string]interface{}{{"text": "<?php\nnamespace Acme;\nclass Widget {}\nclass EditedWidget {}\n"}},
+	})
+	waitFor(t, "the editor's text to be indexed", func() bool { return index.Lookup(`Acme\EditedWidget`) != nil })
+
+	h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": widget}})
+	waitFor(t, "the closed vendor file to be indexed from disk", func() bool {
+		class := index.Lookup(`Acme\Widget`)
+		return class != nil && class.Source == symbols.SourceVendor && index.Lookup(`Acme\EditedWidget`) == nil
+	})
+	later := "<?php\n// written after indexing\n"
+	writeProjectFiles(t, root, map[string]string{"vendor/acme/lib/src/Widget.php": later})
+	if got := index.GetFileSource(widget); got != later {
+		t.Errorf("the closed vendor file's text is read from disk instead of kept: %q", got)
+	}
+}
+
+func TestASavedVendorFileClosedInTheEditorIsAVendorFileAgain(t *testing.T) {
+	h, root := startComposerProject(t)
+	waitForLog(t, h, "PHP LSP: Indexed 3 vendor files")
+	index := h.server.index
+	widget := symbols.PathToURI(filepath.Join(root, "vendor/acme/lib/src/Widget.php"))
+
+	openDocument(h, widget, "<?php\nnamespace Acme;\nclass Widget {}\n")
+	waitFor(t, "the open file to be indexed as the editor's", func() bool {
+		class := index.Lookup(`Acme\Widget`)
+		return class != nil && class.Source == symbols.SourceProject
+	})
+	h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": widget}})
+	waitFor(t, "the closed vendor file to be a vendor file again", func() bool {
+		class := index.Lookup(`Acme\Widget`)
+		return class != nil && class.Source == symbols.SourceVendor
+	})
+}

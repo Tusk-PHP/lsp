@@ -60,6 +60,7 @@ type Bootstrapped struct {
 	autoloadRead    bool
 	autoloadEntries []composer.AutoloadEntry
 	projectFiles    *projectFiles
+	vendorFiles     atomic.Pointer[map[string]struct{}]
 
 	// modelMu guards what model analysis read, for re-analysing one file
 	// later: Schema once AnalyzeModels has set it, and the following.
@@ -289,9 +290,19 @@ func (ws *Bootstrapped) indexComposerDependencies(editorOwns func(path string) b
 		}
 	}
 	removed := ws.Index.RemoveVendorFilesExcept(vendorFiles)
+	ws.vendorFiles.Store(&vendorFiles)
 
 	ws.logf("Indexed %d vendor PHP files from Composer dependencies, removed %d that are no longer installed", len(vendorFiles), removed)
 	return len(vendorFiles)
+}
+
+func (ws *Bootstrapped) IsVendorFile(uri string) bool {
+	files := ws.vendorFiles.Load()
+	if files == nil {
+		return false
+	}
+	_, vendor := (*files)[uri]
+	return vendor
 }
 
 func (ws *Bootstrapped) ScanRoutes() error {

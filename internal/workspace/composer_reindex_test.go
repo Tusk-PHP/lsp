@@ -96,7 +96,6 @@ func TestAVendorFileChangedOnDiskIsReindexedFromDisk(t *testing.T) {
 		"vendor/acme/lib/src/Gone.php":   "<?php\nnamespace Acme;\nclass Gone {}\n",
 		"vendor/acme/lib/README.php":     "<?php\nclass NotAutoloaded {}\n",
 	})
-	widget := symbols.PathToURI(filepath.Join(root, "vendor/acme/lib/src/Widget.php"))
 	patched := "<?php\nnamespace Acme;\n\nclass Widget { public function patched() {} }\n"
 	writeFiles(t, root, map[string]string{"vendor/acme/lib/src/Widget.php": patched})
 	if err := os.Remove(filepath.Join(root, "vendor/acme/lib/src/Gone.php")); err != nil {
@@ -110,7 +109,7 @@ func TestAVendorFileChangedOnDiskIsReindexedFromDisk(t *testing.T) {
 	if class == nil || class.Source != symbols.SourceVendor || class.Range.Start.Line != 3 {
 		t.Errorf("the class is the vendor file's new text, read from disk: %+v", class)
 	}
-	if !ws.Index.OnDisk(widget) || ws.Index.GetFileSource(widget) != patched {
+	if !textIsReadFromDisk(t, ws, root, "vendor/acme/lib/src/Widget.php") {
 		t.Error("the re-indexed vendor file's text stays on disk")
 	}
 	if ws.Index.Lookup(`Acme\Gone`) != nil {
@@ -118,5 +117,53 @@ func TestAVendorFileChangedOnDiskIsReindexedFromDisk(t *testing.T) {
 	}
 	if ws.Index.Lookup("NotAutoloaded") != nil {
 		t.Error("a vendor file Composer doesn't load stays out of the index")
+	}
+}
+
+func textIsReadFromDisk(t *testing.T, ws *Bootstrapped, root, name string) bool {
+	t.Helper()
+	later := "<?php\n// written after indexing\n"
+	writeFiles(t, root, map[string]string{name: later})
+	return ws.Index.GetFileSource(symbols.PathToURI(filepath.Join(root, name))) == later
+}
+
+func TestAVendorFileTheEditorReleasesIsReindexedFromDisk(t *testing.T) {
+	ws, root := newRefreshWorkspace(t, nil, map[string]string{
+		"vendor/composer/installed.json": `{"packages": [{"name": "acme/lib", "install-path": "../acme/lib", "autoload": {"psr-4": {"Acme\\": "src/"}}}]}`,
+		"vendor/acme/lib/src/Widget.php": "<?php\nnamespace Acme;\nclass Widget {}\n",
+	})
+	widget := symbols.PathToURI(filepath.Join(root, "vendor/acme/lib/src/Widget.php"))
+	ws.IndexFile(widget, "<?php\nnamespace Acme;\nclass Widget {}\nclass EditedWidget {}\n")
+	if class := ws.Index.Lookup(`Acme\Widget`); class == nil || class.Source != symbols.SourceProject {
+		t.Fatalf("the editor's text is indexed as a project file while it is open: %+v", class)
+	}
+
+	if out := refreshPaths(t, ws, root, "vendor/acme/lib/src/Widget.php"); len(out.Files) != 1 {
+		t.Errorf("the released vendor file is re-indexed: %v", out.Files)
+	}
+	if class := ws.Index.Lookup(`Acme\Widget`); class == nil || class.Source != symbols.SourceVendor {
+		t.Errorf("the class is a vendor class again: %+v", class)
+	}
+	if ws.Index.Lookup(`Acme\EditedWidget`) != nil {
+		t.Error("the editor's unsaved text leaves the index")
+	}
+	if !textIsReadFromDisk(t, ws, root, "vendor/acme/lib/src/Widget.php") {
+		t.Error("the vendor file's text is read from disk again instead of kept")
+	}
+}
+
+func TestAVendorFileGoneFromDiskAndIndexIsNotRemovedAgain(t *testing.T) {
+	ws, root := newRefreshWorkspace(t, nil, map[string]string{
+		"vendor/composer/installed.json": `{"packages": [{"name": "acme/lib", "install-path": "../acme/lib", "autoload": {"psr-4": {"Acme\\": "src/"}}}]}`,
+		"vendor/acme/lib/src/Gone.php":   "<?php\nnamespace Acme;\nclass Gone {}\n",
+	})
+	if err := os.Remove(filepath.Join(root, "vendor/acme/lib/src/Gone.php")); err != nil {
+		t.Fatal(err)
+	}
+	if out := refreshPaths(t, ws, root, "vendor/acme/lib/src/Gone.php"); len(out.Files) != 1 {
+		t.Fatalf("the deleted vendor file leaves the index: %v", out.Files)
+	}
+	if out := refreshPaths(t, ws, root, "vendor/acme/lib/src/Gone.php"); len(out.Files) != 0 {
+		t.Errorf("a second event for the deleted file changes nothing: %v", out.Files)
 	}
 }

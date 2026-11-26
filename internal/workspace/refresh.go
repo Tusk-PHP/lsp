@@ -167,7 +167,7 @@ func (r Refresh) editorOwns(path string) bool {
 
 func (ws *Bootstrapped) sourcesAt(path string) ([]string, error) {
 	if IsPHPSource(path) {
-		if !ws.walkerReaches(path) && !ws.Index.OnDisk(symbols.PathToURI(path)) {
+		if !ws.walkerReaches(path) && !ws.IsVendorFile(symbols.PathToURI(path)) {
 			return nil, nil
 		}
 		return []string{path}, nil
@@ -198,37 +198,29 @@ func (ws *Bootstrapped) sourcesAt(path string) ([]string, error) {
 }
 
 func (ws *Bootstrapped) refreshFile(path, uri string) (bool, error) {
-	if ws.Index.OnDisk(uri) {
-		return ws.refreshVendorFile(path, uri)
-	}
+	vendor := ws.IsVendorFile(uri)
 	content, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		if !ws.Index.HasFile(uri) {
 			return false, nil
 		}
 		ws.RemoveFile(uri)
-		ws.projectFiles.release(path)
+		if !vendor {
+			ws.projectFiles.release(path)
+		}
 		return true, nil
 	}
 	if err != nil {
 		return false, fmt.Errorf("re-index %s: %w", path, err)
+	}
+	if vendor {
+		ws.Index.IndexFileWithSource(uri, string(content), symbols.SourceVendor)
+		ws.forgetProjectFile(uri)
+		return true, nil
 	}
 	if !ws.Index.HasFile(uri) && !ws.projectFiles.admitCreated(path) {
 		return false, nil
 	}
 	ws.IndexFile(uri, string(content))
-	return true, nil
-}
-
-func (ws *Bootstrapped) refreshVendorFile(path, uri string) (bool, error) {
-	content, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		ws.RemoveFile(uri)
-		return true, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("re-index %s: %w", path, err)
-	}
-	ws.Index.IndexFileWithSource(uri, string(content), symbols.SourceVendor)
 	return true, nil
 }
