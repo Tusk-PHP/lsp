@@ -1081,11 +1081,12 @@ func (a *Analyzer) GetWorkspaceSymbols(query string) []protocol.SymbolInformatio
 }
 
 func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *protocol.SignatureHelp {
-	callee, activeParam, ok := sourcectx.CallAt(uri, source, pos, a.index.GrammarOf(uri))
+	call, ok := sourcectx.CallAt(a.index, uri, source, pos)
 	if !ok {
 		return nil
 	}
-	sym := a.symbolTarget(a.engine.Resolver(), uri, source, callee).sym
+	activeParam := call.Argument
+	sym := a.calledSymbol(uri, source, call)
 	if sym == nil {
 		return nil
 	}
@@ -1106,6 +1107,14 @@ func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *
 		activeParam = maxParam
 	}
 	return &protocol.SignatureHelp{Signatures: []protocol.SignatureInformation{sig}, ActiveParameter: activeParam}
+}
+
+func (a *Analyzer) calledSymbol(uri, source string, call sourcectx.Call) *symbols.Symbol {
+	r := a.engine.Resolver()
+	if !call.Function {
+		return a.symbolTarget(r, uri, source, sourcectx.Analyze(uri, source, call.Position, a.index.GrammarOf(uri))).sym
+	}
+	return r.CalledFunction(call.Name, call.Namespace.View(&parser.FileNode{}))
 }
 
 // formatParams returns the parenthesized parameter list for a symbol, e.g.
