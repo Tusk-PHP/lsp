@@ -72,6 +72,21 @@ func (r *Resolver) CalledFunction(name string, file *parser.FileNode) *symbols.S
 	return nil
 }
 
+func (r *Resolver) typedFunction(name string, file *parser.FileNode) *symbols.Symbol {
+	fqns, _ := FunctionNames(name, file)
+	for _, fqn := range fqns {
+		if fn := r.Index.LookupFold(fqn, isFunction); fn != nil {
+			return fn
+		}
+		for i := range file.Functions {
+			if strings.EqualFold(file.Functions[i].FullName, fqn) {
+				return symbols.FunctionSymbol("", file, &file.Functions[i])
+			}
+		}
+	}
+	return nil
+}
+
 func isFunction(sym *symbols.Symbol) bool {
 	return sym.Kind == symbols.KindFunction
 }

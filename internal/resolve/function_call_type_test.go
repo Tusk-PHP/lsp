@@ -153,3 +153,34 @@ function run($checked, $unchecked): void {
 		}
 	}
 }
+
+func TestForeachOverAFunctionDeclaredInTheUnindexedFile(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///item.php", `<?php
+namespace App\Models;
+class Item {}
+`)
+	src := `<?php
+namespace App;
+use App\Models\Item;
+
+/** @return Item[] */
+function items(): array {}
+
+foreach (items() as $item) {
+    echo $item;
+}
+foreach (items() ?: [] as $fallback) {
+    echo $fallback;
+}
+`
+	file := parser.ParseFile(src)
+	lines := SplitLines(src)
+	r := NewResolver(idx)
+	for _, variable := range []string{"$item", "$fallback"} {
+		pos := protocol.Position{Line: lineContaining(t, lines, "echo "+variable)}
+		if got := r.ResolveVariableTypeTyped(variable, lines, pos, file).FullString(); got != `App\Models\Item` {
+			t.Errorf("foreach %s = %q, want App\\Models\\Item", variable, got)
+		}
+	}
+}
