@@ -1,6 +1,7 @@
 package completion
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -294,97 +295,53 @@ func (p *Provider) resolveBuilderModel(r *resolve.Resolver, prefix, method, sour
 	// Get the expression before the method call
 	beforeMethod := trimmed[:bestIdx]
 
-	// Resolve the type of the expression before the method call
-	var typeFQN string
-	if bestOp == "::" {
-		// Static call: Category::where( — resolve the class directly
-		// Extract the class name right before ::
-		end := len(beforeMethod)
-		i := end - 1
-		for i >= 0 && (resolve.IsWordChar(beforeMethod[i]) || beforeMethod[i] == '\\') {
-			i--
-		}
-		className := beforeMethod[i+1 : end]
-		if className == "" {
-			return ""
-		}
-		typeFQN = r.ResolveClassNameLoose(className, file)
-	} else {
-		// Instance/chain call: Category::query()->where( or $query->where(
-		// Use resolveAccessChain to walk the chain
-		// We need to create a dummy line that ends at the -> before our method
-		chainLine := beforeMethod + "->__dummy__"
-		wordStart := len(beforeMethod) + 2
-		typeFQN = p.resolveAccessChain(r, chainLine, wordStart, source, pos, file)
+	if bestOp == "->" {
+		return p.queriedModel(r.ChainType(beforeMethod, source, pos, file))
 	}
 
-	if typeFQN == "" {
+	end := len(beforeMethod)
+	i := end - 1
+	for i >= 0 && (resolve.IsWordChar(beforeMethod[i]) || beforeMethod[i] == '\\') {
+		i--
+	}
+	className := beforeMethod[i+1 : end]
+	if className == "" {
 		return ""
 	}
-
-	// If the type is already a Model subclass, use it directly
-	if p.isEloquentModel(typeFQN) {
-		return typeFQN
+	if fqn := r.ResolveClassNameLoose(className, file); p.isEloquentModel(fqn) {
+		return fqn
 	}
+	return ""
+}
 
-	// If the type is Builder, try to find the model from the chain origin
-	// For now, walk the chain backward looking for a Model class
-	if typeFQN == "Illuminate\\Database\\Eloquent\\Builder" {
-		// Try resolving the full chain to find the originating model
-		// The static call origin (e.g., Category::query()) tells us the model
-		if bestOp == "->" {
-			return p.findModelInChain(r, beforeMethod, source, pos, file)
-		}
+const (
+	eloquentModelFQN    = "Illuminate\\Database\\Eloquent\\Model"
+	eloquentBuilderFQN  = "Illuminate\\Database\\Eloquent\\Builder"
+	eloquentRelationFQN = "Illuminate\\Database\\Eloquent\\Relations\\Relation"
+)
+
+func (p *Provider) queriedModel(rt resolve.ResolvedType) string {
+	base := rt.BaseFQN()
+	if p.isEloquentModel(base) {
+		return base
 	}
-
+	if len(rt.Params) == 0 || !p.isOrExtends(base, eloquentBuilderFQN, eloquentRelationFQN) {
+		return ""
+	}
+	if model := rt.Params[0].BaseFQN(); p.isEloquentModel(model) {
+		return model
+	}
 	return ""
 }
 
 // isEloquentModel checks if the FQN is an Eloquent Model subclass.
 func (p *Provider) isEloquentModel(fqn string) bool {
-	chain := p.index.GetInheritanceChain(fqn)
-	for _, parent := range chain {
-		if parent == "Illuminate\\Database\\Eloquent\\Model" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.index.GetInheritanceChain(fqn), eloquentModelFQN)
 }
 
-// findModelInChain walks backward through a chain expression to find
-// the originating Model class. For "Category::query()" it returns
-// the FQN for Category.
-func (p *Provider) findModelInChain(r *resolve.Resolver, expr, source string, pos protocol.Position, file *parser.FileNode) string {
-	trimmed := strings.TrimSpace(expr)
-
-	// Look for ClassName:: pattern at the start of the chain
-	if idx := strings.Index(trimmed, "::"); idx > 0 {
-		className := trimmed[:idx]
-		// Strip any prefix before the class name (e.g., whitespace, assignment)
-		for i := len(className) - 1; i >= 0; i-- {
-			if !resolve.IsWordChar(className[i]) && className[i] != '\\' {
-				className = className[i+1:]
-				break
-			}
-		}
-		if className != "" {
-			fqn := r.ResolveClassNameLoose(className, file)
-			if p.isEloquentModel(fqn) {
-				return fqn
-			}
-		}
-	}
-
-	// Try resolving variables: $query = Category::query()
-	// The chain resolver handles this via variable type resolution
-	if strings.HasPrefix(trimmed, "$") || strings.Contains(trimmed, "->") {
-		resolved := p.resolveExpressionType(r, trimmed, source, pos, file)
-		if resolved != "" && p.isEloquentModel(resolved) {
-			return resolved
-		}
-	}
-
-	return ""
+func (p *Provider) isOrExtends(fqn string, classes ...string) bool {
+	isOne := func(c string) bool { return slices.Contains(classes, c) }
+	return isOne(fqn) || slices.ContainsFunc(p.index.GetInheritanceChain(fqn), isOne)
 }
 
 // isDBColumn returns true if the symbol represents an actual database column

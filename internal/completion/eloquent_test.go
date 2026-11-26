@@ -13,7 +13,7 @@ import (
 
 // setupEloquentCompletionTest creates a minimal Laravel-like environment
 // with model files, migrations, and Eloquent stubs for testing completions.
-func setupEloquentCompletionTest(t *testing.T) (*Provider, string) {
+func setupEloquentCompletionTest(t testing.TB) (*Provider, string) {
 	t.Helper()
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
@@ -149,7 +149,7 @@ return new class extends Migration {
 	return p, tmpDir
 }
 
-func writeProjectFile(t *testing.T, root, relPath, content string) {
+func writeProjectFile(t testing.TB, root, relPath, content string) {
 	t.Helper()
 	fullPath := filepath.Join(root, relPath)
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
