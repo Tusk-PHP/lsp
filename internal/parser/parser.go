@@ -358,6 +358,11 @@ func nextOpenTag(source string, from int) (int, int) {
 	return len(source), 0
 }
 
+// IsIdentByte reports whether b can be part of a PHP name (a label: an
+// identifier or a variable name after `$`). It follows PHP's lexer rule
+// `[a-zA-Z0-9_\x80-\xff]`: ASCII letters, digits, `_`, and every byte at or
+// above 0x80, so a UTF-8 encoded name is whole whatever its characters are.
+// Whether a name may start with the byte (not a digit) is up to the caller.
 func IsIdentByte(b byte) bool {
 	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b >= 0x80
 }
