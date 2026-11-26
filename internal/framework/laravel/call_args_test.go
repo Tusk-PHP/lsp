@@ -13,8 +13,14 @@ import (
 func callArgAt(t *testing.T, code string) (sourcectx.CallArg, bool) {
 	t.Helper()
 	source := "<?php\n" + code
-	lines := strings.Split(source, "\n")
-	pos := protocol.Position{Line: len(lines) - 1, Character: len(lines[len(lines)-1])}
+	at := strings.Index(source, "|")
+	if at < 0 {
+		at = len(source)
+	} else {
+		source = source[:at] + source[at+1:]
+	}
+	before := source[:at]
+	pos := protocol.Position{Line: strings.Count(before, "\n"), Character: at - strings.LastIndex(before, "\n") - 1}
 	ctx := sourcectx.Analyze("file:///a.php", source, pos, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatalf("no cursor context in %q", source)
@@ -60,13 +66,18 @@ func TestViewNameArg(t *testing.T) {
 		code     string
 		wantOK   bool
 		wantPart string
+		wantName string
 	}{
-		{"view helper", "view('admin.da", true, "admin.da"},
-		{"view helper on the next line", "return view(\n    'admin.da", true, "admin.da"},
-		{"route view", "Route::view('/home', 'ho", true, "ho"},
-		{"route view first argument is the URI", "Route::view('/ho", false, ""},
-		{"no quote", "view(", false, ""},
-		{"data argument", "view('home', ['a' => '", false, ""},
+		{"view helper", "view('admin.da", true, "admin.da", "admin.da"},
+		{"view helper on the next line", "return view(\n    'admin.da", true, "admin.da", "admin.da"},
+		{"route view", "Route::view('/home', 'ho", true, "ho", "ho"},
+		{"inside a closed name", "return view(\n    'admin.da|shboard',\n    $data\n);", true, "admin.da", "admin.dashboard"},
+		{"route view first argument is the URI", "Route::view('/ho", false, "", ""},
+		{"no quote", "view(", false, "", ""},
+		{"data argument", "view('home', ['a' => '", false, "", ""},
+		{"in a comment", "// view('ho", false, "", ""},
+		{"a longer non-ASCII name", "préview('ho", false, "", ""},
+		{"after a non-ASCII variable", "$größe = view('ho", true, "ho", "ho"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -78,8 +89,47 @@ func TestViewNameArg(t *testing.T) {
 			if ok != tt.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
 			}
-			if ok && (view.Partial != tt.wantPart || view.Quote != "'") {
+			if ok && (view.Partial != tt.wantPart || view.Quote != "'" || view.Name != tt.wantName) {
 				t.Fatalf("view = %#v, want partial %q", view, tt.wantPart)
+			}
+		})
+	}
+}
+
+func TestTranslationKeyArg(t *testing.T) {
+	tests := []struct {
+		name    string
+		code    string
+		ok      bool
+		key     string
+		partial string
+	}{
+		{name: "helper", code: "__('messages.we|lcome')", ok: true, key: "messages.welcome", partial: "messages.we"},
+		{name: "helper unclosed", code: "{{ __('messages.we", ok: true, key: "messages.we", partial: "messages.we"},
+		{name: "trans", code: "trans(\"auth.fa|", ok: true, key: "auth.fa", partial: "auth.fa"},
+		{name: "trans choice", code: "trans_choice('messages.count|', $count)", ok: true, key: "messages.count", partial: "messages.count"},
+		{name: "key on the next line", code: "trans_choice(\n    'messages.co|unt',\n    $count\n)", ok: true, key: "messages.count", partial: "messages.co"},
+		{name: "facade", code: "Lang::get('messages.w|')", ok: true, key: "messages.w", partial: "messages.w"},
+		{name: "qualified facade", code: "\\Illuminate\\Support\\Facades\\Lang::choice('a|')", ok: true, key: "a", partial: "a"},
+		{name: "second argument", code: "__('a', ['x' => '|"},
+		{name: "other static call", code: "Cache::get('a|"},
+		{name: "a method named get", code: "$lang->get('a|"},
+		{name: "other function", code: "config('a|"},
+		{name: "a bare name", code: "__(FOO|"},
+		{name: "in a comment", code: "// __('a|"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			arg, ok := callArgAt(t, tt.code)
+			var tx *TranslationStringContext
+			if ok {
+				tx, ok = TranslationKeyArg(arg)
+			}
+			if ok != tt.ok {
+				t.Fatalf("ok = %v, want %v (%#v)", ok, tt.ok, arg)
+			}
+			if ok && (tx.Key != tt.key || tx.Partial != tt.partial) {
+				t.Fatalf("got %#v, want key %q partial %q", tx, tt.key, tt.partial)
 			}
 		})
 	}

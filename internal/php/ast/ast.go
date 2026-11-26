@@ -448,6 +448,7 @@ type Match struct {
 type BadExpr struct {
 	expr
 	Span
+	Attrs []*AttributeGroup
 }
 
 type InlineHTML struct {

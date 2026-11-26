@@ -25,20 +25,6 @@ func TestLaravelTranslationDefinitionFromPHPHelper(t *testing.T) {
 	}
 }
 
-func TestLaravelTranslationDefinitionFromBladeDirective(t *testing.T) {
-	a := setupTranslationAnalyzer(t)
-
-	source := "@lang('Welcome')"
-	pos := charPosOf(t, source, "Welcome", "@lang('Welcome')")
-	loc := a.FindDefinition("file:///test.blade.php", source, pos)
-	if loc == nil {
-		t.Fatal("expected definition")
-	}
-	if !strings.Contains(loc.URI, "/lang/es.json") {
-		t.Fatalf("expected es json definition, got %s", loc.URI)
-	}
-}
-
 func setupTranslationAnalyzer(t *testing.T) *Analyzer {
 	t.Helper()
 

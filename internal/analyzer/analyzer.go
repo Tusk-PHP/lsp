@@ -184,23 +184,6 @@ type definitionTarget struct {
 
 // resolveDefinitionSymbol resolves the symbol at the cursor position.
 func (a *Analyzer) resolveDefinitionSymbol(r *resolve.Resolver, uri, source string, pos protocol.Position) definitionTarget {
-	if a.framework == "symfony" {
-		if routeName, _, ok := frameworksymfony.RouteNameAtPosition(source, pos); ok {
-			if route := frameworksymfony.FindRoute(a.index, routeName); route != nil {
-				return definitionTarget{loc: &protocol.Location{URI: route.URI, Range: route.DeclRange}}
-			}
-		}
-		if a.symfonyCommands != nil {
-			if l := a.definitionForSymfonyCommand(r, uri, source, pos); l != nil {
-				return definitionTarget{loc: l}
-			}
-		}
-		if a.symfonyTranslations != nil {
-			if l := a.definitionForSymfonyTranslationKey(source, pos); l != nil {
-				return definitionTarget{loc: l}
-			}
-		}
-	}
 	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	if ctx == nil {
 		return definitionTarget{}
@@ -213,18 +196,13 @@ func (a *Analyzer) resolveDefinitionSymbol(r *resolve.Resolver, uri, source stri
 
 func (a *Analyzer) frameworkDefinition(r *resolve.Resolver, source string, ctx *sourcectx.CursorContext) *protocol.Location {
 	line, pos := ctx.Line, ctx.Position
+	if arg, ok := ctx.CallArg(); ok {
+		if l := a.definitionForCallArg(r, arg, ctx.File); l != nil {
+			return l
+		}
+	}
 	if a.container != nil {
 		if l := a.definitionForContainerArg(r, line, pos, source, ctx.File, false); l != nil {
-			return l
-		}
-	}
-	if a.framework == "laravel" && a.views != nil {
-		if l := a.definitionForLaravelView(line, pos.Character); l != nil {
-			return l
-		}
-	}
-	if a.translations != nil {
-		if l := a.definitionForTranslationKey(line, pos.Character); l != nil {
 			return l
 		}
 	}
@@ -317,14 +295,6 @@ func (a *Analyzer) symbolTarget(r *resolve.Resolver, uri, source string, ctx *so
 	return definitionTarget{sym: best, loc: symbolLocation(best)}
 }
 
-func (a *Analyzer) definitionForTranslationKey(line string, character int) *protocol.Location {
-	ctx := frameworklaravel.DetectTranslationContext(line, character)
-	if ctx == nil {
-		return nil
-	}
-	return a.translations.Definition(ctx.Key)
-}
-
 func (a *Analyzer) definitionForRouteName(line string, character int) *protocol.Location {
 	name, ok := frameworklaravel.FindRouteNameReference(line, character)
 	if !ok {
@@ -337,80 +307,45 @@ func (a *Analyzer) definitionForRouteName(line string, character int) *protocol.
 	return &protocol.Location{URI: route.URI, Range: route.Range}
 }
 
-func (a *Analyzer) definitionForLaravelView(line string, character int) *protocol.Location {
-	ctx, ok := frameworklaravel.ExtractViewDefinitionContext(line, character)
-	if !ok {
+func (a *Analyzer) definitionForCallArg(r *resolve.Resolver, arg sourcectx.CallArg, file *parser.FileNode) *protocol.Location {
+	if arg.Value != sourcectx.ArgString || arg.Text == "" {
 		return nil
 	}
-	view := a.views.Find(ctx.Name)
-	if view == nil {
-		return nil
-	}
-	return &protocol.Location{
-		URI: view.URI,
-		Range: protocol.Range{
-			Start: protocol.Position{Line: 0, Character: 0},
-			End:   protocol.Position{Line: 0, Character: 0},
-		},
-	}
-}
-
-// definitionForSymfonyTranslationKey resolves a translation key to its source file
-// when the cursor is inside a Symfony translation call.
-// definitionForSymfonyCommand returns the command a console application's
-// find(), get() or has() names at pos.
-func (a *Analyzer) definitionForSymfonyCommand(r *resolve.Resolver, uri, source string, pos protocol.Position) *protocol.Location {
-	line, ok := sourceLine(source, pos.Line)
-	if !ok || a.engine.ChainResolver == nil {
-		return nil
-	}
-	receiver, name, ok := frameworksymfony.CommandNameAt(line, pos.Character)
-	if !ok {
-		return nil
-	}
-	cmd := a.symfonyCommands.Find(name)
-	if cmd == nil {
-		return nil
-	}
-	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
-	if !frameworksymfony.IsConsoleApplication(a.index, a.engine.ChainResolver(r, receiver, source, pos, file)) {
-		return nil
-	}
-	return &protocol.Location{URI: cmd.URI, Range: cmd.Range}
-}
-
-// sourceLine returns line n of source without splitting the whole text.
-func sourceLine(source string, n int) (string, bool) {
-	if n < 0 {
-		return "", false
-	}
-	for ; n > 0; n-- {
-		i := strings.IndexByte(source, '\n')
-		if i < 0 {
-			return "", false
+	if ctx, ok := frameworklaravel.ViewNameArg(arg); ok && a.framework == "laravel" && a.views != nil {
+		if view := a.views.Find(ctx.Name); view != nil {
+			return &protocol.Location{URI: view.URI}
 		}
-		source = source[i+1:]
 	}
-	if i := strings.IndexByte(source, '\n'); i >= 0 {
-		source = source[:i]
+	if ctx, ok := frameworklaravel.TranslationKeyArg(arg); ok && a.translations != nil {
+		if l := a.translations.Definition(ctx.Key); l != nil {
+			return l
+		}
 	}
-	return strings.TrimSuffix(source, "\r"), true
+	if a.framework == "symfony" {
+		return a.symfonyCallArgDefinition(r, arg, file)
+	}
+	return nil
 }
 
-func (a *Analyzer) definitionForSymfonyTranslationKey(source string, pos protocol.Position) *protocol.Location {
-	lines := strings.Split(source, "\n")
-	if pos.Line < 0 || pos.Line >= len(lines) {
-		return nil
+func (a *Analyzer) symfonyCallArgDefinition(r *resolve.Resolver, arg sourcectx.CallArg, file *parser.FileNode) *protocol.Location {
+	if frameworksymfony.IsRouteNameArg(arg) {
+		if route := frameworksymfony.FindRoute(a.index, arg.Text); route != nil {
+			return &protocol.Location{URI: route.URI, Range: route.DeclRange}
+		}
 	}
-	line := lines[pos.Line]
-	ctx := frameworksymfony.DetectSymfonyTranslationContext(line, pos.Character)
-	if ctx == nil {
-		return nil
+	if a.symfonyCommands != nil && frameworksymfony.IsCommandNameArg(arg) {
+		if cmd := a.symfonyCommands.Find(arg.Text); cmd != nil &&
+			frameworksymfony.IsConsoleApplication(a.index, resolve.PlainTypeName(r.NodeType(file, arg.Receiver))) {
+			return &protocol.Location{URI: cmd.URI, Range: cmd.Range}
+		}
 	}
-	if ctx.Domain != "" {
-		return a.symfonyTranslations.DefinitionInDomain(ctx.Key, ctx.Domain)
+	if ctx, ok := frameworksymfony.TranslationKeyArg(arg); ok && a.symfonyTranslations != nil {
+		if ctx.Domain != "" {
+			return a.symfonyTranslations.DefinitionInDomain(ctx.Key, ctx.Domain)
+		}
+		return a.symfonyTranslations.Definition(ctx.Key)
 	}
-	return a.symfonyTranslations.Definition(ctx.Key)
+	return nil
 }
 
 // definitionForVariable resolves a $variable to its type's definition.

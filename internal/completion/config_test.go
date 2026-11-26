@@ -298,7 +298,11 @@ func TestConfigResultContext(t *testing.T) {
 	} {
 		source := "<?php\n" + code
 		ctx := sourcectx.Analyze("file:///test.php", source, protocol.Position{Line: 1, Character: len(code)}, phpparser.OnlyGrammar(token.Latest))
-		if got := configResultContext(ctx); !reflect.DeepEqual(got, want) {
+		var got *configResultArrayContext
+		if dim, ok := ctx.StringDim(); ok {
+			got = configResultContext(ctx.File.Source, dim)
+		}
+		if !reflect.DeepEqual(got, want) {
 			t.Errorf("%q: got %#v, want %#v", code, got, want)
 		}
 	}

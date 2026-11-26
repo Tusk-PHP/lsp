@@ -876,7 +876,7 @@ func (p *parser) attributedClosure(start uint32, attrs []*ast.AttributeGroup) as
 		return p.closure(start, attrs, static)
 	}
 	p.unexpected("expected a closure after attributes")
-	return &ast.BadExpr{Span: p.span(start)}
+	return &ast.BadExpr{Span: p.span(start), Attrs: attrs}
 }
 
 func (p *parser) closure(start uint32, attrs []*ast.AttributeGroup, static bool) ast.Expr {

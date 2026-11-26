@@ -146,8 +146,6 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 	if pos.Character <= len(line) {
 		prefix = line[:pos.Character]
 	}
-	trimmed := strings.TrimSpace(prefix)
-
 	ctx := sourcectx.Analyze(uri, source, pos, p.index.GrammarOf(uri))
 	if ctx == nil {
 		return nil
@@ -169,30 +167,30 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		items := p.completeMemberAccess(r, source, pos, file, ctx.Member.Call)
 		return sanitizeCompletions(filterByPrefix(items, ctx.Member.Filter))
 	}
-	if strings.HasSuffix(trimmed, "|>") {
-		return sanitizeCompletions(p.completePipe(rk))
-	}
-	if strings.Contains(trimmed, "#[") && !strings.Contains(trimmed, "]") {
-		return sanitizeCompletions(p.completeAttribute(attributeNamePrefix(trimmed), source, rk, file))
-	}
-	words := strings.Fields(trimmed)
-	if len(words) >= 1 && (words[len(words)-1] == "new" || (len(words) >= 2 && words[len(words)-2] == "new")) {
-		return sanitizeCompletions(p.completeNew(prefix, source, rk, file))
-	}
-	if len(words) >= 1 && words[0] == "use" {
-		return sanitizeCompletions(p.completeUse(prefix, rk))
+	if slot, ok := ctx.NameSlot(); ok {
+		switch slot.Kind {
+		case sourcectx.NamePipe:
+			return sanitizeCompletions(p.completePipe(rk))
+		case sourcectx.NameAttribute:
+			return sanitizeCompletions(p.completeAttribute(slot.Partial, source, rk, file))
+		case sourcectx.NameNew:
+			return sanitizeCompletions(p.completeNew(slot.Partial, source, rk, file))
+		case sourcectx.NameUse:
+			return sanitizeCompletions(p.completeUse(slot.Partial, rk))
+		}
 	}
 	if inArg && isBuilderArg(arg) {
 		if items := p.completeBuilderArg(r, arg, source, file); items != nil {
 			return sanitizeCompletions(items)
 		}
 	}
-	// Array key completion: $var['partial or $var['key1']['partial (nested)
-	if ctx := parseArrayKeyContext(prefix); ctx != nil {
-		return sanitizeCompletions(p.completeArrayKeys(source, pos, ctx, file))
-	}
-	if configCtx := configResultContext(ctx); configCtx != nil {
-		return sanitizeCompletions(p.completeConfigResultKeys(configCtx))
+	if dim, ok := ctx.StringDim(); ok {
+		if keys, ok := arrayKeyContextOf(ctx.File.Source, dim); ok {
+			return sanitizeCompletions(p.completeArrayKeys(source, pos, keys, file))
+		}
+		if configCtx := configResultContext(ctx.File.Source, dim); configCtx != nil {
+			return sanitizeCompletions(p.completeConfigResultKeys(configCtx))
+		}
 	}
 	if inArg {
 		if configPath, partial, quote, ok := configArgContext(arg); ok {
@@ -201,22 +199,22 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		if p.framework == "laravel" && p.routes != nil && frameworklaravel.IsRouteNameArg(arg) {
 			return sanitizeCompletions(p.completeLaravelRouteNames(arg.Partial, arg.Quote))
 		}
-	}
-	if p.framework == "laravel" && p.translations != nil {
-		if txCtx := frameworklaravel.DetectTranslationContext(line, pos.Character); txCtx != nil {
-			return sanitizeCompletions(p.translations.Complete(txCtx))
+		if p.framework == "laravel" && p.translations != nil {
+			if txCtx, ok := frameworklaravel.TranslationKeyArg(arg); ok {
+				return sanitizeCompletions(p.translations.Complete(txCtx))
+			}
 		}
 	}
-	if p.framework == "symfony" {
-		if inArg && frameworksymfony.IsRouteNameArg(arg) {
+	if p.framework == "symfony" && inArg {
+		if frameworksymfony.IsRouteNameArg(arg) {
 			return sanitizeCompletions(p.completeSymfonyRouteNames(arg.Partial, arg.Quote))
 		}
-		if inArg && p.symfonyCommands != nil && frameworksymfony.IsCommandNameArg(arg) &&
+		if p.symfonyCommands != nil && frameworksymfony.IsCommandNameArg(arg) &&
 			frameworksymfony.IsConsoleApplication(p.index, resolve.PlainTypeName(r.NodeType(file, arg.Receiver))) {
 			return sanitizeCompletions(p.completeSymfonyCommandNames(arg.Partial, arg.Quote))
 		}
 		if p.symfonyTranslations != nil {
-			if txCtx := frameworksymfony.DetectSymfonyTranslationContext(line, pos.Character); txCtx != nil {
+			if txCtx, ok := frameworksymfony.TranslationKeyArg(arg); ok {
 				return sanitizeCompletions(p.symfonyTranslations.Complete(txCtx))
 			}
 		}
@@ -564,16 +562,8 @@ func (p *Provider) completeStaticAccess(r *resolve.Resolver, source string, pos 
 	return items
 }
 
-func (p *Provider) completeNew(prefix, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {
+func (p *Provider) completeNew(search, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {
 	var items []protocol.CompletionItem
-	words := strings.Fields(prefix)
-	search := ""
-	if len(words) > 1 {
-		search = words[len(words)-1]
-		if search == "new" {
-			search = ""
-		}
-	}
 	imports := p.newImportPlanner(source, file)
 	for _, sym := range p.index.SearchByPrefix(search) {
 		if sym.Kind != symbols.KindClass {
@@ -587,12 +577,7 @@ func (p *Provider) completeNew(prefix, source string, rk nameRanker, file *parse
 	return items
 }
 
-func (p *Provider) completeUse(prefix string, rk nameRanker) []protocol.CompletionItem {
-	parts := strings.Fields(prefix)
-	search := ""
-	if len(parts) > 1 {
-		search = parts[len(parts)-1]
-	}
+func (p *Provider) completeUse(search string, rk nameRanker) []protocol.CompletionItem {
 	// If typing a namespace path, use namespace-aware completion
 	if strings.Contains(search, "\\") {
 		return p.completeNamespacePath(search, rk)
@@ -629,22 +614,6 @@ func (p *Provider) completePipe(rk nameRanker) []protocol.CompletionItem {
 		}
 	}
 	return items
-}
-
-// attributeNamePrefix extracts the partial attribute class name the user is
-// typing after the last `#[` on the line, e.g. `#[Ch` -> "Ch" and
-// `#[Unique(...), Ro` -> "Ro". Returns "" when no name has been started yet.
-func attributeNamePrefix(trimmed string) string {
-	idx := strings.LastIndex(trimmed, "#[")
-	if idx < 0 {
-		return ""
-	}
-	tail := trimmed[idx+2:]
-	// A new attribute starts after the last top-level comma in the group.
-	if comma := strings.LastIndex(tail, ","); comma >= 0 {
-		tail = tail[comma+1:]
-	}
-	return strings.TrimSpace(tail)
 }
 
 func (p *Provider) completeAttribute(prefix, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {

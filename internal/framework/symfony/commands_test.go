@@ -280,43 +280,6 @@ class PositionalCommand extends Command {}
 	}
 }
 
-func TestCommandNameCall(t *testing.T) {
-	for _, tt := range []struct {
-		prefix, receiver, partial, quote string
-		ok                               bool
-	}{
-		{"$application->find('app:sy", "$application", "app:sy", "'", true},
-		{`    $this->application->get("`, "$this->application", "", `"`, true},
-		{"$kernel->getApplication()->has(", "$kernel->getApplication()", "", "", true},
-		{"$app?->find('a", "$app", "a", "'", true},
-		{"$application->find('done')", "", "", "", false},
-		{"$application->find($name", "", "", "", false},
-		{"$application->run('x", "", "", "", false},
-		{"find('x", "", "", "", false},
-	} {
-		receiver, partial, quote, ok := CommandNameCall(tt.prefix)
-		if ok != tt.ok || receiver != tt.receiver || partial != tt.partial || quote != tt.quote {
-			t.Errorf("CommandNameCall(%q) = %q, %q, %q, %v; want %q, %q, %q, %v",
-				tt.prefix, receiver, partial, quote, ok, tt.receiver, tt.partial, tt.quote, tt.ok)
-		}
-	}
-}
-
-func TestCommandNameAt(t *testing.T) {
-	line := `$tester = new CommandTester($application->find('app:sync-products'));`
-	at := strings.Index(line, "sync")
-	receiver, name, ok := CommandNameAt(line, at)
-	if !ok || receiver != "$application" || name != "app:sync-products" {
-		t.Errorf("got %q, %q, %v", receiver, name, ok)
-	}
-	if _, _, ok := CommandNameAt(line, strings.Index(line, "CommandTester")); ok {
-		t.Error("cursor outside the argument")
-	}
-	if _, _, ok := CommandNameAt(line, len(line)+1); ok {
-		t.Error("cursor past the line")
-	}
-}
-
 func TestIsConsoleApplication(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///vendor/FrameworkApplication.php", `<?php
