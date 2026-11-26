@@ -354,6 +354,7 @@ func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext
 			return rt
 		}
 	}
+	access := MemberAccessOf(st.call, st.op == "::", st.name)
 	name := st.name
 	if st.op == "::" && !st.call && strings.HasPrefix(name, "$") {
 		name = name[1:]
@@ -361,11 +362,11 @@ func (r *Resolver) chainStepType(cur ResolvedType, st chainStep, ctx ExprContext
 	if st.op == "::" {
 		cur = ClassStringTarget(cur)
 	}
-	if fwd, ok := r.ForwardedReceiver(cur, name, st.call); ok {
+	if fwd, ok := r.ForwardedReceiver(cur, name, access); ok {
 		// Category::where() runs on Builder<Category>.
 		cur = fwd
 	}
-	member, owner := r.FindMemberOn(cur, name, st.call)
+	member, owner := r.FindMemberOn(cur, name, access)
 	if member != nil && owner.FQN != cur.FQN {
 		// Through @mixin: a fluent method of the mixin gives back the object
 		// it was called on, as forwarding through __call does.
@@ -431,7 +432,7 @@ func (r *Resolver) OffsetType(rt ResolvedType, key string) ResolvedType {
 		if args, ok := r.AncestorTypeArgs(rt.FQN, rt.Params, "ArrayAccess"); ok && len(args) == 2 {
 			return args[1]
 		}
-		if m := r.FindAccessedMember(rt.FQN, "offsetGet", true); m != nil {
+		if m := r.FindAccessedMember(rt.FQN, "offsetGet", CallAccess); m != nil {
 			return r.MemberTypeForCall(m, nil, rt.FQN, rt.Params, nil)
 		}
 	}

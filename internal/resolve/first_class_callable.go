@@ -86,7 +86,7 @@ func (r *Resolver) CallableOf(rt ResolvedType) ResolvedType {
 	// A Closure without a signature stays one: its stubbed __invoke(mixed
 	// ...$args) says nothing more.
 	if rt.FQN != "" && rt.FQN != "Closure" && !IsBuiltinTypeName(rt.FQN) && r.Index != nil {
-		if m := r.FindAccessedMember(rt.FQN, "__invoke", true); m != nil {
+		if m := r.FindAccessedMember(rt.FQN, "__invoke", CallAccess); m != nil {
 			return r.MemberCallableType(m, nil, rt.FQN, rt.Params)
 		}
 	}

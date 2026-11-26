@@ -74,6 +74,10 @@ func (c *CursorContext) Name() *NameContext {
 	return &c.NameContext
 }
 
+func (c *NameContext) MemberAccess() resolve.MemberAccess {
+	return resolve.MemberAccessOf(c.Called, c.AccessKind == AccessStatic, c.SymbolText)
+}
+
 type MemberContext struct {
 	Prefix     string
 	Filter     string

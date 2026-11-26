@@ -111,7 +111,7 @@ func declaredInSource(r *resolve.Resolver, owner resolve.ResolvedType, word stri
 	if member.Kind != symbols.KindProperty || member.Range != (protocol.Range{}) {
 		return member
 	}
-	if method := r.FindAccessedMember(owner.BaseFQN(), word, true); method != nil && method.Kind == symbols.KindMethod {
+	if method := r.FindAccessedMember(owner.BaseFQN(), word, resolve.CallAccess); method != nil && method.Kind == symbols.KindMethod {
 		return method
 	}
 	return member
@@ -264,7 +264,7 @@ func (a *Analyzer) symbolTarget(r *resolve.Resolver, uri, source string, ctx *so
 		if classFQN == "" {
 			return definitionTarget{}
 		}
-		if member := r.AccessedMemberOn(owner, word, ctx.Called); member != nil {
+		if member := r.AccessedMemberOn(owner, word, ctx.MemberAccess()); member != nil {
 			member = declaredInSource(r, owner, word, member)
 			// Owner is the *declaring* class (member.ParentFQN), not the
 			// receiver — that's how php.net documents methods/properties:
@@ -747,7 +747,7 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 		if owner.BaseFQN() == "" {
 			return nil
 		}
-		return r.AccessedMemberOn(owner, word, ctx.Called)
+		return r.AccessedMemberOn(owner, word, ctx.MemberAccess())
 	}
 	if ctx.FunctionCall {
 		return r.CalledFunction(word, file)

@@ -732,17 +732,17 @@ func (r *Resolver) IterableTypes(rt ResolvedType) (key, value ResolvedType, ok b
 			return ResolvedType{}, ResolvedType{}, false
 		}
 		defer exit()
-		if m := r.FindAccessedMember(rt.FQN, "getIterator", true); m != nil && m.ParentFQN != "IteratorAggregate" {
+		if m := r.FindAccessedMember(rt.FQN, "getIterator", CallAccess); m != nil && m.ParentFQN != "IteratorAggregate" {
 			if it := r.MemberTypeForCall(m, nil, rt.FQN, rt.Params, nil); !it.IsEmpty() && it.FQN != rt.FQN {
 				if k, v, ok := r.IterableTypes(it); ok {
 					return k, v, true
 				}
 			}
 		}
-		if m := r.FindAccessedMember(rt.FQN, "current", true); m != nil && m.ParentFQN != "Iterator" {
+		if m := r.FindAccessedMember(rt.FQN, "current", CallAccess); m != nil && m.ParentFQN != "Iterator" {
 			if v := r.MemberTypeForCall(m, nil, rt.FQN, rt.Params, nil); !v.IsEmpty() && v.FQN != "mixed" {
 				k := ResolvedType{FQN: "mixed"}
-				if km := r.FindAccessedMember(rt.FQN, "key", true); km != nil && km.ParentFQN != "Iterator" {
+				if km := r.FindAccessedMember(rt.FQN, "key", CallAccess); km != nil && km.ParentFQN != "Iterator" {
 					if kt := r.MemberTypeForCall(km, nil, rt.FQN, rt.Params, nil); !kt.IsEmpty() {
 						k = kt
 					}

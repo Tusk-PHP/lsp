@@ -267,16 +267,45 @@ func (r *Resolver) FindMember(classFQN, memberName string) *symbols.Symbol {
 	return nil
 }
 
-// FindAccessedMember looks up a member the way it is used: a call finds a
-// method before a property of the same name, as with a `$timezone` property
-// and a `timezone()` method, and a plain access finds the property first.
-func (r *Resolver) FindAccessedMember(classFQN, memberName string, call bool) *symbols.Symbol {
+type MemberAccess uint8
+
+const (
+	PropertyAccess MemberAccess = iota
+	ConstantAccess
+	CallAccess
+)
+
+func MemberAccessOf(called, static bool, name string) MemberAccess {
+	switch {
+	case called:
+		return CallAccess
+	case static && !strings.HasPrefix(name, "$"):
+		return ConstantAccess
+	}
+	return PropertyAccess
+}
+
+func (a MemberAccess) names(m *symbols.Symbol) bool {
+	switch a {
+	case CallAccess:
+		return m.Kind == symbols.KindMethod
+	case ConstantAccess:
+		return m.Kind == symbols.KindConstant || m.Kind == symbols.KindEnumCase
+	}
+	return m.Kind == symbols.KindProperty
+}
+
+func (a MemberAccess) reachesMagic() bool {
+	return a != ConstantAccess
+}
+
+func (r *Resolver) FindAccessedMember(classFQN, memberName string, access MemberAccess) *symbols.Symbol {
 	var fallback *symbols.Symbol
 	for _, m := range r.Index.ClassMembersNamed(classFQN, memberName) {
-		if (m.Kind == symbols.KindMethod) == call {
+		if access.names(m) {
 			return m
 		}
-		if fallback == nil {
+		if fallback == nil && access.reachesMagic() {
 			fallback = m
 		}
 	}

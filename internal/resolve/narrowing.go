@@ -343,7 +343,7 @@ func (r *Resolver) statementCalleeWith(stmt string, lines []string, pos protocol
 	if last.op == "::" {
 		recvType = ClassStringTarget(recvType)
 	}
-	m, owner := r.FindMemberOn(recvType, last.name, true)
+	m, owner := r.FindMemberOn(recvType, last.name, CallAccess)
 	if m == nil {
 		return callee, "", nil, false
 	}
