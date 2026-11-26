@@ -7,6 +7,8 @@ package inlayhint
 import (
 	"sort"
 
+	"github.com/Tusk-PHP/lsp/internal/container"
+
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
@@ -22,9 +24,10 @@ type Provider struct {
 	engine *resolve.Engine
 }
 
-// NewProvider creates a Provider backed by the shared symbol index.
-func NewProvider(index *symbols.Index) *Provider {
-	return &Provider{index: index, engine: resolve.NewEngine(index)}
+// NewProvider creates a Provider backed by the shared symbol index, typing
+// container calls through ca when it is set.
+func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer) *Provider {
+	return &Provider{index: index, engine: container.NewEngine(index, ca)}
 }
 
 // GetInlayHints returns all inlay hints for the given source file, filtered by

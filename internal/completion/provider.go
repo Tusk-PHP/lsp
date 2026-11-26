@@ -37,12 +37,8 @@ type Provider struct {
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
-	p := &Provider{index: index, container: ca, engine: resolve.NewEngine(index), framework: framework}
-	// Wire up chain resolution so ResolveVariableType can handle $var = Class::method()->chain()
+	p := &Provider{index: index, container: ca, engine: container.NewEngine(index, ca), framework: framework}
 	p.engine.ChainResolver = p.resolveExpressionType
-	if ca != nil {
-		p.engine.ContainerCall = p.resolveContainerCallType
-	}
 	return p
 }
 

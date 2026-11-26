@@ -56,7 +56,7 @@ func setupProvider(t testing.TB, extras ...string) *Provider {
 		idx.IndexFile(extras[i], extras[i+1])
 	}
 
-	return NewProvider(idx)
+	return NewProvider(idx, nil)
 }
 
 // allCfg returns a fully enabled InlayHintsConfig.

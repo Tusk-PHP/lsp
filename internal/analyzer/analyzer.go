@@ -52,11 +52,7 @@ func NewAnalyzer(index *symbols.Index, ca *container.ContainerAnalyzer) *Analyze
 	if ca != nil {
 		framework = ca.Framework()
 	}
-	a := &Analyzer{index: index, container: ca, engine: resolve.NewEngine(index), framework: framework}
-	if ca != nil {
-		a.engine.ContainerCall = a.resolveContainerCallType
-	}
-	return a
+	return &Analyzer{index: index, container: ca, engine: container.NewEngine(index, ca), framework: framework}
 }
 
 func (a *Analyzer) SetChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) string) {
@@ -434,26 +430,6 @@ func (a *Analyzer) definitionForContainerArg(r *resolve.Resolver, line string, p
 		return symbolLocation(sym)
 	}
 	return nil
-}
-
-// resolveContainerCallType resolves a container call expression to a concrete FQN.
-// Uses the shared ExtractContainerCallArg helper from the resolve package.
-func (a *Analyzer) resolveContainerCallType(r *resolve.Resolver, expr string, source string, file *parser.FileNode) string {
-	arg := resolve.ExtractContainerCallArg(expr)
-	if arg == "" {
-		return ""
-	}
-	if strings.HasSuffix(arg, "::class") {
-		className := strings.TrimSuffix(arg, "::class")
-		arg = r.ResolveClassName(className, file)
-	}
-	if binding := a.container.ResolveDependency(arg); binding != nil {
-		return binding.Concrete
-	}
-	if a.index.Lookup(arg) != nil {
-		return arg
-	}
-	return ""
 }
 
 func symbolLocation(sym *symbols.Symbol) *protocol.Location {

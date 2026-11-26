@@ -97,7 +97,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.completion.SetTranslationResolver(translationResolver)
 	s.completion.SetSymfonyTranslationResolver(symfonyTranslations)
 	s.completion.SetSymfonyCommands(s.workspace.SymfonyCommands)
-	s.inlayHint = inlayhint.NewProvider(s.index)
+	s.inlayHint = inlayhint.NewProvider(s.index, s.container)
 	s.hover = hover.NewProvider(s.index, s.container, s.framework)
 	s.hover.SetArrayResolver(arrayResolver)
 	s.hover.SetConfig(s.cfg)

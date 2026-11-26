@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -39,10 +40,11 @@ type Engine struct {
 	// preserving generic parameters. Used for variable type inference that
 	// needs to carry generic context through assignments.
 	TypedChainResolver func(r *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType
-	// ContainerCall, when set, gives the class a container call such as
-	// app('request') or $container->get(Foo::class) resolves to, "-" for one
-	// that gives a value rather than an object, or "" when it isn't one.
-	ContainerCall func(r *Resolver, callExpr, source string, file *parser.FileNode) string
+	// ContainerCall, when set, types a call the project's container answers,
+	// such as app('request') or $container->get(Foo::class); src is the
+	// source call's offsets are in. ok is false when it isn't such a call; an
+	// empty type with ok set is one that gives a value rather than an object.
+	ContainerCall func(r *Resolver, src string, file *parser.FileNode, call ast.Expr) (rt ResolvedType, ok bool)
 
 	// The last source's scopes, since one request asks about many variables.
 	scopeMu     sync.Mutex
@@ -965,49 +967,6 @@ func WordAt(lines []string, pos protocol.Position) string {
 // GetWordAt extracts the word at the given position, including $ prefix for variables.
 func GetWordAt(source string, pos protocol.Position) string {
 	return WordAt(SplitLines(source), pos)
-}
-
-// ExtractContainerCallArg extracts the string/class argument from a container
-// resolution expression like app('request'), app(Request::class), resolve('cache').
-// Returns the cleaned argument or empty string if not a container call.
-func ExtractContainerCallArg(expr string) string {
-	t := strings.TrimSpace(expr)
-	if !strings.HasSuffix(t, ")") {
-		return ""
-	}
-	depth := 0
-	openIdx := -1
-	for i := len(t) - 1; i >= 0; i-- {
-		if t[i] == ')' {
-			depth++
-		} else if t[i] == '(' {
-			depth--
-			if depth == 0 {
-				openIdx = i
-				break
-			}
-		}
-	}
-	if openIdx < 0 {
-		return ""
-	}
-	funcPart := strings.TrimSpace(t[:openIdx])
-	isContainerCall := false
-	for _, suffix := range []string{"app", "resolve", "->get", "->make"} {
-		if strings.HasSuffix(funcPart, suffix) {
-			isContainerCall = true
-			break
-		}
-	}
-	if !isContainerCall {
-		return ""
-	}
-	arg := strings.TrimSpace(t[openIdx+1 : len(t)-1])
-	if commaIdx := strings.Index(arg, ","); commaIdx >= 0 {
-		arg = strings.TrimSpace(arg[:commaIdx])
-	}
-	arg = strings.Trim(arg, "'\"")
-	return arg
 }
 
 // ParamDocSummary returns the summary of the doc comment written on the

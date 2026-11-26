@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -113,14 +114,14 @@ func TestChainTypeWithoutFile(t *testing.T) {
 // A container call answers through the ContainerCall hook.
 func TestChainTypeContainerCall(t *testing.T) {
 	r, file, pos := chainFixture(t)
-	r.ContainerCall = func(_ *Resolver, callExpr, source string, file *parser.FileNode) string {
-		switch callExpr {
+	r.ContainerCall = func(_ *Resolver, src string, _ *parser.FileNode, call ast.Expr) (ResolvedType, bool) {
+		switch call.Bounds().Text(src) {
 		case "app('log')":
-			return `App\Logger`
+			return ResolvedType{FQN: `App\Logger`}, true
 		case "config('a')":
-			return "-"
+			return ResolvedType{}, true
 		}
-		return ""
+		return ResolvedType{}, false
 	}
 	for expr, want := range map[string]string{
 		"app('log')":       `App\Logger`,
