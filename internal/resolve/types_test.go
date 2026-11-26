@@ -289,6 +289,13 @@ func TestFullStringParenthesisesCallablesInUnions(t *testing.T) {
 	}
 }
 
+func TestAnUntypedCallableParameterIsWrittenAsMixed(t *testing.T) {
+	closure := ResolvedType{FQN: "Closure", Callable: &CallableType{Params: []ResolvedType{{}, {FQN: "int"}}}}
+	if got, want := closure.String(), "Closure(mixed, int)"; got != want {
+		t.Errorf("String = %q, want %q", got, want)
+	}
+}
+
 func TestAClassWithGenericsIsNeverTypedFromTheFallbacks(t *testing.T) {
 	r := fallbackResolver()
 	r.Index.IndexFile("file:///Collection.php", "<?php\nnamespace Illuminate\\Database\\Eloquent;\n/**\n * @template TKey\n * @template TModel\n */\nclass Collection {\n    public function first() {}\n}\n")
