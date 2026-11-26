@@ -6,6 +6,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
@@ -122,6 +123,59 @@ func TestTranslationKeyArg(t *testing.T) {
 			}
 			if ok && (tx.Key != tt.key || tx.Partial != tt.partial) {
 				t.Fatalf("got %#v, want key %q partial %q", tx, tt.key, tt.partial)
+			}
+		})
+	}
+}
+
+func TestParseConfigCall(t *testing.T) {
+	tests := []struct {
+		code string
+		ok   bool
+		want ConfigCall
+	}{
+		{code: "config()", ok: true, want: ConfigCall{Repository: true}},
+		{code: "config('app.name')", ok: true, want: ConfigCall{Key: "app.name"}},
+		{code: "\\config(\"app\", 'fallback')", ok: true, want: ConfigCall{Key: "app"}},
+		{code: "config($key)", ok: true},
+		{code: "$this->config('app')"},
+		{code: "Config::get('app')"},
+		{code: "configure('app')"},
+		{code: "$config"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.code, func(t *testing.T) {
+			src := "<?php\n" + tt.code + ";\n"
+			tree := phpparser.Parse(src, token.Latest)
+			stmt, ok := tree.Stmts[0].(*ast.ExprStmt)
+			if !ok {
+				t.Fatalf("%q is not an expression statement", tt.code)
+			}
+			got, ok := ParseConfigCall(src, stmt.Expr)
+			if ok != tt.ok || got != tt.want {
+				t.Fatalf("got %#v, %v; want %#v, %v", got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
+func TestIsConfigKeyArg(t *testing.T) {
+	tests := []struct {
+		code string
+		want bool
+	}{
+		{code: "config('app.na|", want: true},
+		{code: "\\config(\n    'app|'\n)", want: true},
+		{code: "config('app', '|"},
+		{code: "config(['app.name' => '|"},
+		{code: "$this->config('|"},
+		{code: "route('|"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.code, func(t *testing.T) {
+			arg, ok := callArgAt(tt.code)
+			if got := ok && IsConfigKeyArg(arg); got != tt.want {
+				t.Fatalf("IsConfigKeyArg = %v, want %v (%#v)", got, tt.want, arg)
 			}
 		})
 	}

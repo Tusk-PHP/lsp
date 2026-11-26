@@ -3,7 +3,7 @@ package completion
 import (
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/models"
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/types"
@@ -17,15 +17,11 @@ type configResultArrayContext struct {
 }
 
 func configResultContext(src string, dim ast.StringDim) *configResultArrayContext {
-	call, ok := dim.Base.(*ast.Call)
-	if !ok || ast.FunctionName(src, call) != models.ConfigHelper || len(call.Args.Args) == 0 {
+	cfg, ok := laravel.ParseConfigCall(src, dim.Base)
+	if !ok || cfg.Key == "" {
 		return nil
 	}
-	configArg, ok := ast.StringValue(src, call.Args.Args[0].Value)
-	if !ok || configArg == "" {
-		return nil
-	}
-	return &configResultArrayContext{ConfigArg: configArg, AccessKeys: dim.Keys, Partial: dim.Partial, Quote: dim.Quote}
+	return &configResultArrayContext{ConfigArg: cfg.Key, AccessKeys: dim.Keys, Partial: dim.Partial, Quote: dim.Quote}
 }
 
 func (p *Provider) completeConfigResultKeys(ctx *configResultArrayContext) []protocol.CompletionItem {
@@ -68,7 +64,7 @@ func (p *Provider) completeConfigResultKeys(ctx *configResultArrayContext) []pro
 }
 
 func configArgContext(arg ast.CallArg) (configPath, partial, quote string, ok bool) {
-	if arg.Function != models.ConfigHelper || arg.Index != 0 || arg.InArray {
+	if !laravel.IsConfigKeyArg(arg) {
 		return "", "", "", false
 	}
 	lastDot := strings.LastIndex(arg.Partial, ".")

@@ -9,6 +9,8 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/models"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -437,5 +439,60 @@ config("database.
 
 	if !labels["connections"] {
 		t.Error("expected 'connections' with double quotes")
+	}
+}
+
+func assignedValue(t *testing.T, src string) (*parser.FileNode, ast.Expr) {
+	t.Helper()
+	file := parser.ParseFile(src, token.Latest)
+	var value ast.Expr
+	ast.Walk(file.Tree, func(n ast.Node) bool {
+		if assign, ok := n.(*ast.Assign); ok && value == nil {
+			value = assign.Value
+		}
+		return value == nil
+	})
+	if value == nil {
+		t.Fatalf("no assignment in %q", src)
+	}
+	return file, value
+}
+
+func TestCompletionAndContainerAgreeOnConfigCalls(t *testing.T) {
+	p, dir := setupConfigProvider(t)
+	ca := container.NewContainerAnalyzer(p.index, dir, "laravel")
+	ca.Analyze()
+	r := container.NewEngine(p.index, ca).Resolver()
+	tests := []struct {
+		call     string
+		isConfig bool
+		key      string
+	}{
+		{call: "config('app')", isConfig: true, key: "name"},
+		{call: `\config("app")`, isConfig: true, key: "name"},
+		{call: "config()", isConfig: true, key: "app"},
+		{call: "$this->config('app')"},
+		{call: "Config::get('app')"},
+		{call: "configure('app')"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.call, func(t *testing.T) {
+			src := "<?php\nfunction f() {\n    $c = " + tt.call + ";\n    $c['‸\n}\n"
+			file, value := assignedValue(t, strings.Replace(src, "‸", "", 1))
+			rt, typed := ca.CallType(r, file.Source, file, value)
+			if typed != tt.isConfig {
+				t.Fatalf("container typed %q: %v (%q), want %v", tt.call, typed, rt.FQN, tt.isConfig)
+			}
+			if want := tt.call == "config()"; typed && (rt.FQN == `Illuminate\Config\Repository`) != want {
+				t.Fatalf("container typed %q as %q", tt.call, rt.FQN)
+			}
+			labels := completeMarked(p, src)
+			if tt.isConfig != labels[tt.key] && tt.key != "" {
+				t.Fatalf("completion of %q offers %q: %v, want %v (%v)", tt.call, tt.key, labels[tt.key], tt.isConfig, mapKeys(labels, 10))
+			}
+			if !tt.isConfig && (labels["name"] || labels["app"]) {
+				t.Fatalf("completion of %q offers config keys: %v", tt.call, mapKeys(labels, 10))
+			}
+		})
 	}
 }

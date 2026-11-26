@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
@@ -16,7 +17,6 @@ var (
 )
 
 const (
-	configHelper     = "config"
 	configBinding    = "config"
 	configRepository = `Illuminate\Config\Repository`
 )
@@ -35,8 +35,8 @@ func NewEngine(index *symbols.Index, ca *ContainerAnalyzer) *resolve.Engine {
 }
 
 func (ca *ContainerAnalyzer) CallType(r *resolve.Resolver, src string, file *parser.FileNode, call ast.Expr) (resolve.ResolvedType, bool) {
-	if c, ok := call.(*ast.Call); ok && ast.FunctionName(src, c) == configHelper {
-		return ca.configType(c.Args)
+	if cfg, ok := laravel.ParseConfigCall(src, call); ok {
+		return ca.configType(cfg)
 	}
 	args := ResolvingArgs(src, call)
 	if args == nil || len(args.Args) == 0 {
@@ -77,8 +77,8 @@ func (ca *ContainerAnalyzer) isClass(name string) bool {
 	return sym != nil && sym.IsClassLike()
 }
 
-func (ca *ContainerAnalyzer) configType(args *ast.ArgList) (resolve.ResolvedType, bool) {
-	if len(args.Args) > 0 {
+func (ca *ContainerAnalyzer) configType(cfg laravel.ConfigCall) (resolve.ResolvedType, bool) {
+	if !cfg.Repository {
 		return resolve.ResolvedType{}, true
 	}
 	if binding := ca.ResolveDependency(configBinding); binding != nil {
