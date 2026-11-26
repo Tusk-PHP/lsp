@@ -44,7 +44,7 @@ func benchmarkServer(b *testing.B, source string) (*Server, string) {
 	}
 	s.handleMessage(message("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}}))
 	uri := symbols.PathToURI(root + "/Big.php")
-	s.docs.Open(uri, 1, source)
+	s.openDocument(uri, 1, source)
 	s.index.IndexFile(uri, source)
 	s.index.MarkReady()
 	return s, uri

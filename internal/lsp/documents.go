@@ -17,13 +17,7 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 	}
 	uri := params.TextDocument.URI
 	text := params.TextDocument.Text
-	path := symbols.URIToPath(uri)
-	unsaved := s.index.GetFileSource(symbols.PathToURI(path)) != text
-	doc := s.docs.Open(uri, params.TextDocument.Version, text)
-	s.docMu.Lock()
-	s.openPaths[path] = uri
-	s.unsaved[uri] = unsaved
-	s.docMu.Unlock()
+	doc := s.openDocument(uri, params.TextDocument.Version, text)
 	if !isPHPDocument(uri) {
 		// Non-PHP documents (composer.json, tsconfig.json, …) are only
 		// stored so providers that read source — e.g. composer-hover —
@@ -35,6 +29,12 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 	if s.cfg.DiagnosticsEnabled {
 		s.publishDiagnostics(doc)
 	}
+}
+
+func (s *Server) openDocument(uri string, version int, text string) document.Snapshot {
+	path := symbols.URIToPath(uri)
+	unsaved := s.index.GetFileSource(symbols.PathToURI(path)) != text
+	return s.docs.Open(uri, path, version, text, unsaved)
 }
 
 func (s *Server) handleDidChange(msg *jsonRPCMessage) {
@@ -59,9 +59,6 @@ func (s *Server) handleDidChange(msg *jsonRPCMessage) {
 		s.showDivergedFromDisk(uri)
 		return
 	}
-	s.docMu.Lock()
-	s.unsaved[uri] = true
-	s.docMu.Unlock()
 	s.documentChanged(doc)
 }
 
@@ -101,14 +98,7 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 	}
 	uri := params.TextDocument.URI
 	path := symbols.URIToPath(uri)
-	s.docs.Close(uri)
-	s.docMu.Lock()
-	if s.openPaths[path] == uri {
-		delete(s.openPaths, path)
-	}
-	unsaved := s.unsaved[uri]
-	delete(s.unsaved, uri)
-	s.docMu.Unlock()
+	unsaved := s.docs.Close(uri)
 	s.blade.forget(uri)
 	s.cancelDiagnostics(uri)
 	if s.analysis != nil {
@@ -133,11 +123,6 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 		return
 	}
 	uri := params.TextDocument.URI
-	if _, open := s.docs.Get(uri); open {
-		s.docMu.Lock()
-		s.unsaved[uri] = false
-		s.docMu.Unlock()
-	}
 	if text, ok := s.savedText(uri, params.Text); ok {
 		if !s.docs.Save(uri, text) {
 			s.logger.Printf("didSave: %s is not open, so its saved text is not kept as an open document", uri)
@@ -145,6 +130,8 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 		if isPHPDocument(uri) {
 			s.indexDocumentMaybeAsync(uri, text)
 		}
+	} else {
+		s.docs.MarkSaved(uri)
 	}
 	if !isPHPDocument(uri) {
 		return

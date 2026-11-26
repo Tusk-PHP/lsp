@@ -44,7 +44,7 @@ func BenchmarkDidChangeLargeFile(b *testing.B) {
 			s := NewServer(strings.NewReader(""), io.Discard, log.New(io.Discard, "", 0))
 			b.ReportAllocs()
 			for b.Loop() {
-				s.docs.Open(uri, 1, text)
+				s.openDocument(uri, 1, text)
 				var msg jsonRPCMessage
 				if err := json.Unmarshal(body, &msg); err != nil {
 					b.Fatal(err)

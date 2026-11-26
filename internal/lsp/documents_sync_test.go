@@ -105,7 +105,7 @@ func TestDiagnosticsArePublishedOnlyForTheCurrentVersion(t *testing.T) {
 	s.analysis = session.New(s.workspace, session.Options{})
 	uri := "file:///a.php"
 	text := "<?php\necho $a;\n"
-	stale := s.docs.Open(uri, 1, text)
+	stale := s.openDocument(uri, 1, text)
 	change := func(version int, to string) {
 		t.Helper()
 		if _, err := s.docs.Change(uri, version, document.UTF16, []document.Change{{Text: to}}); err != nil {
@@ -130,7 +130,7 @@ func TestDiagnosticsArePublishedOnlyForTheCurrentVersion(t *testing.T) {
 	if out.Len() != 0 {
 		t.Fatalf("published diagnostics for a closed document: %s", out.String())
 	}
-	reopened := s.docs.Open(uri, 3, text)
+	reopened := s.openDocument(uri, 3, text)
 	s.publishDiagnostics(current)
 	if out.Len() != 0 {
 		t.Fatalf("published diagnostics from before the document was closed and reopened with the same version and text: %s", out.String())
@@ -152,7 +152,7 @@ func TestSavedTextOfADocumentThatIsNotOpenIsNotKept(t *testing.T) {
 		t.Errorf("the ignored save was not logged: %q", logs.String())
 	}
 
-	s.docs.Open("file:///open.json", 4, "{}")
+	s.openDocument("file:///open.json", 4, "{}")
 	before, _ := s.docs.Get("file:///open.json")
 	s.handleMessage(saveMessage(t, "file:///open.json", "{}"))
 	if after, _ := s.docs.Get("file:///open.json"); !s.docs.Current(before) || after.Version != 4 {
@@ -189,7 +189,7 @@ func TestARejectedChangeReadsTheFileFromDiskUntilTheFullTextArrives(t *testing.T
 		t.Fatal(err)
 	}
 	uri := symbols.PathToURI(path)
-	s.docs.Open(uri, 1, "{\n}\n")
+	s.openDocument(uri, 1, "{\n}\n")
 	text := func() string {
 		t.Helper()
 		doc, _ := s.docs.Get(uri)
@@ -219,7 +219,7 @@ func TestSavingADivergedDocumentReadsItBackFromDisk(t *testing.T) {
 	s := NewServer(strings.NewReader(""), io.Discard, log.New(io.Discard, "", 0))
 	path := filepath.Join(t.TempDir(), "a.json")
 	uri := symbols.PathToURI(path)
-	s.docs.Open(uri, 1, "{}\n")
+	s.openDocument(uri, 1, "{}\n")
 	s.handleMessage(changeMessage(t, uri, 2, map[string]any{"range": lspRange(-1, 0, 0, 0), "text": "x"}))
 	if err := os.WriteFile(path, []byte("{\"saved\": 1}\n"), 0o644); err != nil {
 		t.Fatal(err)

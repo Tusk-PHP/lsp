@@ -25,16 +25,28 @@ var ErrDiverged = errors.New("the document's text diverged from the editor's; wa
 type Store struct {
 	mu       sync.RWMutex
 	docs     map[string]Snapshot
+	files    map[string]openFile
+	uris     map[string]string
 	revision uint64
 }
 
-func NewStore() *Store {
-	return &Store{docs: make(map[string]Snapshot)}
+type openFile struct {
+	path    string
+	unsaved bool
 }
 
-func (s *Store) Open(uri string, version int, text string) Snapshot {
+func NewStore() *Store {
+	return &Store{docs: make(map[string]Snapshot), files: make(map[string]openFile), uris: make(map[string]string)}
+}
+
+func (s *Store) Open(uri, path string, version int, text string, unsaved bool) Snapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if old, open := s.files[uri]; open && old.path != path && s.uris[old.path] == uri {
+		delete(s.uris, old.path)
+	}
+	s.files[uri] = openFile{path: path, unsaved: unsaved}
+	s.uris[path] = uri
 	return s.putLocked(Snapshot{URI: uri, Version: version, Text: text})
 }
 
@@ -61,6 +73,9 @@ func (s *Store) Change(uri string, version int, enc Encoding, changes []Change) 
 		s.putLocked(latest)
 		return Snapshot{}, fmt.Errorf("change to %s, version %d: %w", uri, version, err)
 	}
+	file := s.files[uri]
+	file.unsaved = true
+	s.files[uri] = file
 	return s.putLocked(Snapshot{URI: uri, Version: version, Text: text}), nil
 }
 
@@ -75,13 +90,19 @@ func (s *Store) ShowDiverged(uri, text string) (Snapshot, bool) {
 	return s.putLocked(doc), true
 }
 
+func (s *Store) MarkSaved(uri string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.markSavedLocked(uri)
+}
+
 func (s *Store) Save(uri, text string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	doc, open := s.docs[uri]
-	if !open {
+	if !s.markSavedLocked(uri) {
 		return false
 	}
+	doc := s.docs[uri]
 	if doc.Text != text || doc.diverged {
 		doc.Text = text
 		doc.diverged = false
@@ -97,10 +118,33 @@ func (s *Store) Current(doc Snapshot) bool {
 	return open && latest.revision == doc.revision
 }
 
-func (s *Store) Close(uri string) {
+func (s *Store) markSavedLocked(uri string) bool {
+	file, open := s.files[uri]
+	if !open {
+		return false
+	}
+	file.unsaved = false
+	s.files[uri] = file
+	return true
+}
+
+func (s *Store) Close(uri string) (unsaved bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	file := s.files[uri]
+	if s.uris[file.path] == uri {
+		delete(s.uris, file.path)
+	}
+	delete(s.files, uri)
 	delete(s.docs, uri)
+	return file.unsaved
+}
+
+func (s *Store) URIAt(path string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	uri, open := s.uris[path]
+	return uri, open
 }
 
 func (s *Store) Get(uri string) (Snapshot, bool) {

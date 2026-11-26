@@ -144,20 +144,13 @@ func (s *Server) refreshWorkspace() {
 
 func (s *Server) handBackToEditor(uris []string) {
 	for _, uri := range uris {
-		if editorURI, open := s.editorURIAt(symbols.URIToPath(uri)); open {
+		if editorURI, open := s.docs.URIAt(symbols.URIToPath(uri)); open {
 			s.reindexOpenDocument(editorURI)
 		}
 	}
 }
 
 func (s *Server) isOpenAt(path string) bool {
-	_, open := s.editorURIAt(path)
+	_, open := s.docs.URIAt(path)
 	return open
-}
-
-func (s *Server) editorURIAt(path string) (string, bool) {
-	s.docMu.RLock()
-	defer s.docMu.RUnlock()
-	uri, open := s.openPaths[path]
-	return uri, open
 }
