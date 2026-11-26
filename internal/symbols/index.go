@@ -248,13 +248,9 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 		idx.files.add(uri)
 	}
 
-	ns := file.Namespace
-	resolve := func(name string) string {
-		return resolveTypeName(name, ns, file.Uses)
-	}
-
 	for _, c := range file.Classes {
-		fqn := buildFQN(ns, c.Name)
+		fqn := c.FullName
+		resolve, uses := namespaceResolver(c.Namespace), c.Namespace.Uses
 		existing := idx.symbols[fqn]
 		if existing != nil {
 			// Class already exists — only inject virtual members from this file's docblock
@@ -312,7 +308,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 			}
 		} else {
 			// Class doesn't exist yet — index it normally
-			sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, file.Uses),
+			sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, uses),
 				IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly, IsConditional: c.Conditional,
 				Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve), traitRules: newTraitRules(fqn, c.TraitRules, resolve),
 				Range: symRange(c.StartLine, c.StartCol, len(c.Name))}
@@ -325,13 +321,13 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 				ps := &Symbol{Name: prop.Name, FQN: fqn + "::" + prop.Name, Kind: KindProperty, URI: uri,
 					Visibility: prop.Visibility, SetVisibility: prop.SetVisibility,
 					IsStatic: prop.IsStatic, Type: resolve(prop.Type.Name),
-					DocComment: qualifyDocTypes(prop.DocComment, file.Uses), ParentFQN: fqn,
+					DocComment: qualifyDocTypes(prop.DocComment, uses), ParentFQN: fqn,
 					Hooks: append([]parser.PropertyHook(nil), prop.Hooks...),
 					Range: symRange(prop.StartLine, prop.StartCol, len(prop.Name))}
 				sym.Children = append(sym.Children, ps)
 				idx.addSymbolWithSource(uri, ps, SourceProject)
 			}
-			idx.indexMethods(uri, sym, fqn, c.Methods, SourceProject, resolve, file.Uses)
+			idx.indexMethods(uri, sym, fqn, c.Methods, SourceProject, resolve, uses)
 			idx.indexVirtualMembers(uri, sym, SourceProject, resolve)
 		}
 	}
@@ -420,11 +416,6 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		idx.fileSymbols[uri] = nil
 		idx.files.add(uri)
 	}
-	ns := file.Namespace
-
-	resolve := func(name string) string {
-		return resolveTypeName(name, ns, file.Uses)
-	}
 
 	// Anonymous classes are indexed like declared ones, under their file-unique
 	// FullName, so their members and parents resolve; addSymbol keeps them out
@@ -434,11 +425,9 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		classes = append(append(make([]parser.ClassNode, 0, len(file.Classes)+len(file.AnonymousClasses)), file.Classes...), file.AnonymousClasses...)
 	}
 	for _, c := range classes {
-		fqn := buildFQN(ns, c.Name)
-		if c.Name == parser.AnonymousClassName {
-			fqn = c.FullName
-		}
-		sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, file.Uses),
+		fqn := c.FullName
+		resolve, uses := namespaceResolver(c.Namespace), c.Namespace.Uses
+		sym := &Symbol{Name: c.Name, FQN: fqn, Kind: KindClass, URI: uri, DocComment: qualifyDocTypes(c.DocComment, uses),
 			IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, IsReadonly: c.IsReadonly, IsConditional: c.Conditional,
 			Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve), traitRules: newTraitRules(fqn, c.TraitRules, resolve),
 			Attributes: indexAttributes(c.Attributes, resolve),
@@ -451,11 +440,11 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 			sym.Extends = resolve(c.Extends)
 		}
 		idx.addSymbolWithSource(uri, sym, src)
-		idx.indexProperties(uri, sym, fqn, c.Properties, src, resolve, file.Uses)
-		idx.indexMethods(uri, sym, fqn, c.Methods, src, resolve, file.Uses)
-		idx.indexConstants(uri, sym, fqn, c.Constants, file.Uses, src, resolve)
+		idx.indexProperties(uri, sym, fqn, c.Properties, src, resolve, uses)
+		idx.indexMethods(uri, sym, fqn, c.Methods, src, resolve, uses)
+		idx.indexConstants(uri, sym, fqn, c.Constants, uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
-		sym.Supertypes = append(sym.Supertypes, traitUseSupertypes(c.TraitUseDoc, file.Uses, resolve)...)
+		sym.Supertypes = append(sym.Supertypes, traitUseSupertypes(c.TraitUseDoc, uses, resolve)...)
 		if src == SourceBuiltin {
 			mergeEarlierLayer(sym, previous)
 		}
@@ -463,35 +452,38 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 	}
 
 	for _, iface := range file.Interfaces {
-		fqn := buildFQN(ns, iface.Name)
-		sym := &Symbol{Name: iface.Name, FQN: fqn, Kind: KindInterface, URI: uri, DocComment: qualifyDocTypes(iface.DocComment, file.Uses),
+		fqn := iface.FullName
+		resolve, uses := namespaceResolver(iface.Namespace), iface.Namespace.Uses
+		sym := &Symbol{Name: iface.Name, FQN: fqn, Kind: KindInterface, URI: uri, DocComment: qualifyDocTypes(iface.DocComment, uses),
 			Implements: resolveNames(iface.Extends, resolve), Attributes: indexAttributes(iface.Attributes, resolve),
 			Range: symRange(iface.StartLine, iface.StartCol, len(iface.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
 		idx.linkTypeLocked(sym)
-		idx.indexProperties(uri, sym, fqn, iface.Properties, src, resolve, file.Uses)
-		idx.indexMethods(uri, sym, fqn, iface.Methods, src, resolve, file.Uses)
-		idx.indexConstants(uri, sym, fqn, iface.Constants, file.Uses, src, resolve)
+		idx.indexProperties(uri, sym, fqn, iface.Properties, src, resolve, uses)
+		idx.indexMethods(uri, sym, fqn, iface.Methods, src, resolve, uses)
+		idx.indexConstants(uri, sym, fqn, iface.Constants, uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 	}
 
 	for _, tr := range file.Traits {
-		fqn := buildFQN(ns, tr.Name)
-		sym := &Symbol{Name: tr.Name, FQN: fqn, Kind: KindTrait, URI: uri, DocComment: qualifyDocTypes(tr.DocComment, file.Uses),
+		fqn := tr.FullName
+		resolve, uses := namespaceResolver(tr.Namespace), tr.Namespace.Uses
+		sym := &Symbol{Name: tr.Name, FQN: fqn, Kind: KindTrait, URI: uri, DocComment: qualifyDocTypes(tr.DocComment, uses),
 			Traits: resolveNames(tr.Traits, resolve), traitRules: newTraitRules(fqn, tr.TraitRules, resolve),
 			Range: symRange(tr.StartLine, tr.StartCol, len(tr.Name))}
 		idx.addSymbolWithSource(uri, sym, src)
 		idx.linkTypeLocked(sym)
-		idx.indexProperties(uri, sym, fqn, tr.Properties, src, resolve, file.Uses)
-		idx.indexMethods(uri, sym, fqn, tr.Methods, src, resolve, file.Uses)
-		idx.indexConstants(uri, sym, fqn, tr.Constants, file.Uses, src, resolve)
+		idx.indexProperties(uri, sym, fqn, tr.Properties, src, resolve, uses)
+		idx.indexMethods(uri, sym, fqn, tr.Methods, src, resolve, uses)
+		idx.indexConstants(uri, sym, fqn, tr.Constants, uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
-		sym.Supertypes = append(sym.Supertypes, traitUseSupertypes(tr.TraitUseDoc, file.Uses, resolve)...)
+		sym.Supertypes = append(sym.Supertypes, traitUseSupertypes(tr.TraitUseDoc, uses, resolve)...)
 	}
 
 	for _, en := range file.Enums {
-		fqn := buildFQN(ns, en.Name)
-		sym := &Symbol{Name: en.Name, FQN: fqn, Kind: KindEnum, URI: uri, DocComment: qualifyDocTypes(en.DocComment, file.Uses),
+		fqn := en.FullName
+		resolve, uses := namespaceResolver(en.Namespace), en.Namespace.Uses
+		sym := &Symbol{Name: en.Name, FQN: fqn, Kind: KindEnum, URI: uri, DocComment: qualifyDocTypes(en.DocComment, uses),
 			BackedType: en.BackedType, Implements: resolveNames(en.Implements, resolve), Traits: resolveNames(en.Traits, resolve),
 			traitRules: newTraitRules(fqn, en.TraitRules, resolve),
 			Attributes: indexAttributes(en.Attributes, resolve),
@@ -505,28 +497,26 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 			sym.Children = append(sym.Children, cs)
 			idx.addSymbolWithSource(uri, cs, src)
 		}
-		idx.indexProperties(uri, sym, fqn, en.Properties, src, resolve, file.Uses)
-		idx.indexMethods(uri, sym, fqn, en.Methods, src, resolve, file.Uses)
-		idx.indexConstants(uri, sym, fqn, en.Constants, file.Uses, src, resolve)
+		idx.indexProperties(uri, sym, fqn, en.Properties, src, resolve, uses)
+		idx.indexMethods(uri, sym, fqn, en.Methods, src, resolve, uses)
+		idx.indexConstants(uri, sym, fqn, en.Constants, uses, src, resolve)
 		idx.indexEnumMembers(uri, sym, src)
 	}
 
-	idx.indexConstants(uri, nil, ns, file.Constants, file.Uses, src, resolve)
+	idx.indexGlobalConstants(uri, file.Constants, src)
 
 	for i := range file.Functions {
-		idx.addSymbolWithSource(uri, FunctionSymbol(uri, file, &file.Functions[i]), src)
+		idx.addSymbolWithSource(uri, FunctionSymbol(uri, &file.Functions[i]), src)
 	}
 }
 
 // FunctionSymbol is the symbol the index keeps for a function declared in
 // file, with its names resolved against that file's namespace and imports.
-func FunctionSymbol(uri string, file *parser.FileNode, fn *parser.FunctionNode) *Symbol {
-	resolve := func(name string) string {
-		return resolveTypeName(name, file.Namespace, file.Uses)
-	}
-	sym := &Symbol{Name: fn.Name, FQN: buildFQN(file.Namespace, fn.Name), Kind: KindFunction, URI: uri, ReturnType: resolve(fn.ReturnType.Name),
+func FunctionSymbol(uri string, fn *parser.FunctionNode) *Symbol {
+	resolve := namespaceResolver(fn.Namespace)
+	sym := &Symbol{Name: fn.Name, FQN: fn.FullName, Kind: KindFunction, URI: uri, ReturnType: resolve(fn.ReturnType.Name),
 		Attributes: indexAttributes(fn.Attributes, resolve),
-		DocComment: qualifyDocTypes(fn.DocComment, file.Uses), Range: symRange(fn.StartLine, fn.StartCol, len(fn.Name))}
+		DocComment: qualifyDocTypes(fn.DocComment, fn.Namespace.Uses), Range: symRange(fn.StartLine, fn.StartCol, len(fn.Name))}
 	sym.Templates = docTemplates(sym.DocComment, resolve)
 	if len(fn.Params) > 0 {
 		sym.Params = make([]ParamInfo, 0, len(fn.Params))

@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/types"
@@ -9,6 +10,11 @@ import (
 // Compatibility types kept for older callers that still expect the previous AST shape.
 type TypeNode struct {
 	Name string
+}
+
+type NamespaceNode struct {
+	Name string
+	Uses []UseNode
 }
 
 type UseNode struct {
@@ -60,6 +66,7 @@ type MethodNode struct {
 
 type ConstantNode struct {
 	Name       string
+	Namespace  *NamespaceNode
 	Value      string
 	Type       TypeNode
 	Visibility string
@@ -73,6 +80,7 @@ type ClassNode struct {
 	Attributes []AttributeDef
 	Name       string
 	FullName   string
+	Namespace  *NamespaceNode
 	Extends    string
 	Implements []string
 	Traits     []string
@@ -101,6 +109,7 @@ type InterfaceNode struct {
 	Attributes []AttributeDef
 	Name       string
 	FullName   string
+	Namespace  *NamespaceNode
 	Extends    []string
 	Methods    []MethodNode
 	Properties []PropertyNode
@@ -116,6 +125,7 @@ type TraitNode struct {
 	Constants  []ConstantNode
 	Name       string
 	FullName   string
+	Namespace  *NamespaceNode
 	Properties []PropertyNode
 	Methods    []MethodNode
 	Traits     []string
@@ -141,6 +151,7 @@ type EnumCaseNode struct {
 type EnumNode struct {
 	Name       string
 	FullName   string
+	Namespace  *NamespaceNode
 	BackedType string
 	Cases      []EnumCaseNode
 	Methods    []MethodNode
@@ -161,6 +172,7 @@ type FunctionNode struct {
 	EndLine    int
 	Name       string
 	FullName   string
+	Namespace  *NamespaceNode
 	Params     []ParamNode
 	ReturnType TypeNode
 	StartLine  int
@@ -545,13 +557,12 @@ func toFileNode(result *ParseResult) *FileNode {
 		Errors:    append([]ParseError(nil), result.Errors...),
 	}
 
-	for _, useStmt := range result.Uses {
-		file.Uses = append(file.Uses, UseNode{
-			FullName:  useStmt.FullName,
-			Alias:     useStmt.Alias,
-			Kind:      useStmt.Kind,
-			StartLine: useStmt.Line,
-		})
+	for _, namespace := range result.Namespaces {
+		if file.Uses == nil {
+			file.Uses = slices.Clip(namespace.Uses)
+			continue
+		}
+		file.Uses = append(file.Uses, namespace.Uses...)
 	}
 
 	for _, classDef := range result.Classes {
@@ -566,6 +577,7 @@ func toFileNode(result *ParseResult) *FileNode {
 			Attributes: interfaceDef.Attributes,
 			Name:       interfaceDef.Name,
 			FullName:   interfaceDef.FullName,
+			Namespace:  interfaceDef.Namespace,
 			Extends:    append([]string(nil), interfaceDef.Extends...),
 			DocComment: interfaceDef.DocComment,
 			StartLine:  interfaceDef.Line,
@@ -589,6 +601,7 @@ func toFileNode(result *ParseResult) *FileNode {
 			Attributes:  traitDef.Attributes,
 			Name:        traitDef.Name,
 			FullName:    traitDef.FullName,
+			Namespace:   traitDef.Namespace,
 			Traits:      append([]string(nil), traitDef.Traits...),
 			TraitUseDoc: traitDef.TraitUseDoc,
 			TraitRules:  traitDef.TraitRules,
@@ -613,6 +626,7 @@ func toFileNode(result *ParseResult) *FileNode {
 		enumNode := EnumNode{
 			Name:       enumDef.Name,
 			FullName:   enumDef.FullName,
+			Namespace:  enumDef.Namespace,
 			BackedType: enumDef.BackedType,
 			Implements: append([]string(nil), enumDef.Implements...),
 			Traits:     append([]string(nil), enumDef.Traits...),
@@ -651,6 +665,7 @@ func toFileNode(result *ParseResult) *FileNode {
 			EndLine:    functionDef.EndLine,
 			Name:       functionDef.Name,
 			FullName:   functionDef.FullName,
+			Namespace:  functionDef.Namespace,
 			ReturnType: TypeNode{Name: functionDef.ReturnType},
 			StartLine:  functionDef.Line,
 			StartCol:   startColumnForDeclaration(result, functionDef.Name, functionDef.Line, TokenFunction),
@@ -722,6 +737,7 @@ func toParamNode(paramDef ParamDef) ParamNode {
 func toConstantNode(result *ParseResult, constantDef ConstantDef) ConstantNode {
 	return ConstantNode{
 		Name:       constantDef.Name,
+		Namespace:  constantDef.Namespace,
 		Value:      constantDef.Value,
 		Type:       TypeNode{Name: constantDef.Type},
 		Visibility: constantDef.Visibility,
@@ -778,6 +794,7 @@ func toClassNode(result *ParseResult, classDef ClassDef) ClassNode {
 		Attributes:  classDef.Attributes,
 		Name:        classDef.Name,
 		FullName:    classDef.FullName,
+		Namespace:   classDef.Namespace,
 		Extends:     classDef.Extends,
 		Implements:  append([]string(nil), classDef.Implements...),
 		Traits:      append([]string(nil), classDef.Traits...),

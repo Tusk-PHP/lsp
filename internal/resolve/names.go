@@ -80,7 +80,7 @@ func (r *Resolver) typedFunction(name string, file *parser.FileNode) *symbols.Sy
 		}
 		for i := range file.Functions {
 			if strings.EqualFold(file.Functions[i].FullName, fqn) {
-				return symbols.FunctionSymbol("", file, &file.Functions[i])
+				return symbols.FunctionSymbol("", &file.Functions[i])
 			}
 		}
 	}

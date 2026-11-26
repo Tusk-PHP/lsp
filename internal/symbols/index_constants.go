@@ -22,3 +22,21 @@ func (idx *Index) indexConstants(uri string, parent *Symbol, parentFQN string, c
 		idx.addSymbolWithSource(uri, cs, src)
 	}
 }
+
+func (idx *Index) indexGlobalConstants(uri string, consts []parser.ConstantNode, src SymbolSource) {
+	for start := 0; start < len(consts); {
+		ns := consts[start].Namespace
+		end := start + 1
+		for end < len(consts) && consts[end].Namespace == ns {
+			end++
+		}
+		idx.indexConstants(uri, nil, ns.Name, consts[start:end], ns.Uses, src, namespaceResolver(ns))
+		start = end
+	}
+}
+
+func namespaceResolver(ns *parser.NamespaceNode) func(string) string {
+	return func(name string) string {
+		return resolveTypeName(name, ns.Name, ns.Uses)
+	}
+}
