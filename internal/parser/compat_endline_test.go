@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -162,5 +163,38 @@ function helper(): void
 		if c.node <= c.startAt {
 			t.Errorf("%s: EndLine %d should be after StartLine %d", c.name, c.node, c.startAt)
 		}
+	}
+}
+
+func TestDeclarationsEndOnTheirClosingLine(t *testing.T) {
+	source := `<?php
+class One { private $x; }
+class Two { public function f() { return 1; }
+
+    abstract public function g();
+
+
+}
+interface Shape { public function area(): float; }
+
+trait Named { }
+
+enum Suit { case Hearts; }
+
+function helper() { }
+
+$after = new class { };
+
+`
+	file := ParseFile(source)
+	result := New().Parse(source)
+	got := []int{
+		file.Classes[0].EndLine, file.Classes[1].EndLine, file.Classes[1].Methods[0].EndLine, file.Classes[1].Methods[1].EndLine,
+		file.Interfaces[0].EndLine, file.Traits[0].EndLine, file.Enums[0].EndLine, file.Functions[0].EndLine,
+		result.AnonymousClasses[0].EndLine,
+	}
+	want := []int{1, 7, 2, 4, 8, 10, 12, 14, 16}
+	if !slices.Equal(got, want) {
+		t.Errorf("end lines = %v, want %v", got, want)
 	}
 }
