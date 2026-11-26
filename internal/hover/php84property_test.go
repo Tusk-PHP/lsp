@@ -40,7 +40,7 @@ func TestFormatHoverPropertyAsymmetricVisibility(t *testing.T) {
 		Type:          "string",
 	}
 
-	decl := p.formatHoverDeclaration(sym)
+	decl := p.formatHoverDeclaration(sym, nil)
 
 	if !strings.Contains(decl, "private(set)") {
 		t.Errorf("expected asymmetric visibility in declaration, got: %s", decl)
@@ -76,7 +76,7 @@ func TestFormatHoverPropertyHooks(t *testing.T) {
 		},
 	}
 
-	decl := p.formatHoverDeclaration(sym)
+	decl := p.formatHoverDeclaration(sym, nil)
 
 	if !strings.Contains(decl, "{ get; set; }") {
 		t.Errorf("expected hook block in declaration, got: %s", decl)
@@ -102,7 +102,7 @@ func TestFormatHoverPropertyGetHookOnly(t *testing.T) {
 		},
 	}
 
-	decl := p.formatHoverDeclaration(sym)
+	decl := p.formatHoverDeclaration(sym, nil)
 
 	if !strings.Contains(decl, "{ get; }") {
 		t.Errorf("expected get-only hook block in declaration, got: %s", decl)
@@ -123,7 +123,7 @@ func TestFormatHoverPropertyPlainUnchanged(t *testing.T) {
 		Type:       "string",
 	}
 
-	decl := p.formatHoverDeclaration(sym)
+	decl := p.formatHoverDeclaration(sym, nil)
 	want := "public string $plain"
 
 	if decl != want {
@@ -150,7 +150,7 @@ func TestFormatHoverPropertyAsymmetricAndHooks(t *testing.T) {
 		},
 	}
 
-	decl := p.formatHoverDeclaration(sym)
+	decl := p.formatHoverDeclaration(sym, nil)
 
 	if !strings.Contains(decl, "protected(set)") {
 		t.Errorf("expected protected(set) in declaration, got: %s", decl)
