@@ -94,6 +94,13 @@ func (r *Resolver) ReceiverTypeAt(source string, pos protocol.Position, file *pa
 	return recv.Type
 }
 
+func (r *Resolver) NodeType(file *parser.FileNode, e ast.Expr) ResolvedType {
+	lines := r.Lines(file.Source)
+	t := r.syntaxTree(lines, file)
+	line, col := t.lines.Position(e.Bounds().Start)
+	return r.typeOf(t, e, nil, ExprContext{Lines: lines, Pos: protocol.Position{Line: line, Character: col}, File: file})
+}
+
 func (r *Resolver) delegatedType(t *syntaxTree, e ast.Expr, ctx ExprContext) ResolvedType {
 	if r.TypedChainResolver != nil && ctx.File != nil {
 		return r.TypedChainResolver(r, t.text(e), r.JoinLines(ctx.Lines), ctx.Pos, ctx.File)
