@@ -1348,11 +1348,6 @@ func writtenName(line string, start int, name string) string {
 	return name
 }
 
-func localClassLikeExists(fqn string, file *parser.FileNode) bool {
-	_, ok := localClassLikeFQN(fqn, file)
-	return ok
-}
-
 // localClassLikeFQN finds a class-like declared in this file, ignoring case as
 // PHP does, and returns its name as declared.
 func localClassLikeFQN(fqn string, file *parser.FileNode) (string, bool) {
