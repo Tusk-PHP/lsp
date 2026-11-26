@@ -31,13 +31,54 @@ function platformConstants(): array
 }
 
 /**
- * Constants PHP's grammar handles itself, which are never looked up by name.
+ * Extensions bundled with PHP that wrap no outside library, so the constants
+ * they define depend on the PHP version alone. In every official image from
+ * 7.4 to 8.6 each of their constants, once added, stays, and the additions
+ * match PHP's changelogs (T_MATCH 8.0, MHASH_XXH3 8.1, DATE_ISO8601_EXPANDED
+ * 8.2, PHP_SBINDIR 8.4, ...). Extensions around a library (curl, openssl,
+ * sodium, libxml, posix, sockets, ...) gain constants with the library's
+ * version or the platform, which the images also changed.
  */
+function versionOnlyExtensions(): array
+{
+    return ['core', 'standard', 'date', 'json', 'pcre', 'spl', 'tokenizer', 'hash', 'filter', 'random', 'reflection', 'session'];
+}
+
+/**
+ * Constants of those extensions defined only when the C library or the build
+ * provides them: the nl_langinfo() and localeconv() items, which first appear
+ * in the 8.2 images (built on a newer C library) although PHP knew them long
+ * before, and PHP_BUILD_PROVIDER, set only when the build names a provider.
+ */
+function platformConditionalConstants(): array
+{
+    return [
+        'CURRENCY_SYMBOL', 'DECIMAL_POINT', 'ERA_YEAR', 'FRAC_DIGITS', 'GROUPING', 'INT_CURR_SYMBOL',
+        'INT_FRAC_DIGITS', 'MON_DECIMAL_POINT', 'MON_GROUPING', 'MON_THOUSANDS_SEP', 'NEGATIVE_SIGN',
+        'NOSTR', 'N_CS_PRECEDES', 'N_SEP_BY_SPACE', 'N_SIGN_POSN', 'POSITIVE_SIGN', 'P_CS_PRECEDES',
+        'P_SEP_BY_SPACE', 'P_SIGN_POSN', 'THOUSANDS_SEP', 'YESSTR', 'PHP_BUILD_PROVIDER',
+    ];
+}
+
+/**
+ * Whether builtin-unavailable may report the constant on an older PHP: its
+ * presence depends on the PHP version alone.
+ */
+function isVersionOnly(string $name, string $extension): bool
+{
+    return in_array($extension, versionOnlyExtensions(), true)
+        && !in_array($name, platformConditionalConstants(), true)
+        && !in_array($name, platformConstants(), true);
+}
+
 function isBuildDependent(string $name): bool
 {
     return in_array($name, platformConstants(), true) || str_contains($name, 'VERSION');
 }
 
+/**
+ * Constants PHP's grammar handles itself, which are never looked up by name.
+ */
 function languageConstants(): array
 {
     return ['TRUE', 'FALSE', 'NULL'];
@@ -88,10 +129,11 @@ function generateGoConstants(array $dumps): string
         $since = sinceVersion($name, $occurrences, $dumps, $baseline);
         $gate = isset($peclExtensions[$extension]) ? $extension : '';
         $lines[] = sprintf(
-            "	{Name: %s, Type: %s, Value: %s, BuiltinAvailability: BuiltinAvailability{Since: %s, Extension: %s}},",
+            "\t{Name: %s, Type: %s, Value: %s, Warnable: %s, BuiltinAvailability: BuiltinAvailability{Since: %s, Extension: %s}},",
             renderGoString($name),
             renderGoString($type),
             renderGoValue($value),
+            isVersionOnly($name, $extension) ? 'true' : 'false',
             renderGoString($since),
             renderGoString($gate)
         );
