@@ -108,7 +108,7 @@ func analyzeModel(index *symbols.Index, model *symbols.Symbol) {
 		return
 	}
 	source := string(content)
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, index.GrammarOf(model.URI))
 	if file == nil {
 		return
 	}

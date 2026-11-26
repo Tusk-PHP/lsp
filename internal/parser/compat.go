@@ -3,6 +3,7 @@ package parser
 import (
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
@@ -169,6 +170,7 @@ type FunctionNode struct {
 }
 
 type FileNode struct {
+	Grammar   token.Version
 	Namespace string
 	Uses      []UseNode
 	Classes   []ClassNode

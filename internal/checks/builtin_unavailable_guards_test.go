@@ -5,12 +5,13 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func unavailableAndUnknown(t *testing.T, src, version string) []string {
 	t.Helper()
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: version})
 	var got []string

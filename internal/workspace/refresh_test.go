@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -129,7 +131,7 @@ func TestRefreshRespectsMaxIndexFiles(t *testing.T) {
 
 func TestRefreshResolvesTheProfileAgain(t *testing.T) {
 	ws, root := newRefreshWorkspace(t, nil, map[string]string{"composer.json": `{"require": {"php": "^8.1", "ext-redis": "*"}}`})
-	if _, err := ws.SetProfile(symbols.BuiltinProfile{PHPVersion: "8.1", Extensions: []string{"redis"}}); err != nil {
+	if _, err := ws.SetProfile(symbols.BuiltinProfile{PHPVersion: "8.1", Extensions: []string{"redis"}, Grammars: phpparser.GrammarsBetween(token.PHP81, token.Latest)}); err != nil {
 		t.Fatal(err)
 	}
 	if out := refreshPaths(t, ws, root, "composer.json"); out.ProfileChanged || !out.Composer {

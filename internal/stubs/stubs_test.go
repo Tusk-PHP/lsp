@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 func TestBuiltinPHPReturnsDeterministicEntries(t *testing.T) {
@@ -41,9 +42,9 @@ func TestBuiltinPHPEntriesAreParseable(t *testing.T) {
 	}
 
 	for _, entry := range entries {
-		file := parser.ParseFile(entry.Content)
+		file := parser.ParseFile(entry.Content, token.Latest)
 		if file == nil {
-			t.Fatalf("ParseFile(%q) returned nil", entry.Path)
+			t.Fatalf("ParseFile(%q, token.Latest) returned nil", entry.Path)
 		}
 	}
 }

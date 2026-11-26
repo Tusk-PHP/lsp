@@ -101,7 +101,7 @@ func analyzeDoctrineSource(index *symbols.Index, rootPath, source string) {
 		return
 	}
 
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, index.Grammars())
 	if file == nil {
 		return
 	}

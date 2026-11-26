@@ -13,8 +13,8 @@ func TestGetPlatformMissingComposer(t *testing.T) {
 	if got.HasComposer {
 		t.Fatal("expected HasComposer to be false")
 	}
-	if got.PHPVersion != "" {
-		t.Fatalf("expected empty PHPVersion, got %q", got.PHPVersion)
+	if got.PHP != nil {
+		t.Fatalf("expected no PHP constraint, got %+v", got.PHP)
 	}
 	if len(got.Extensions) != 0 {
 		t.Fatalf("expected no extensions, got %v", got.Extensions)
@@ -36,8 +36,8 @@ func TestGetPlatformIncludesSuggestedExtensions(t *testing.T) {
 		"config": {"platform": {"ext-redis": "6.0", "ext-ssh2": "1.4"}}
 	}`)
 	got := GetPlatform(root)
-	if got.PHPVersion != "7.4" {
-		t.Fatalf("suggest changed PHP target: %q", got.PHPVersion)
+	if got.PHP == nil || got.PHP.Oldest.String() != "7.4" {
+		t.Fatalf("suggest changed PHP target: %+v", got.PHP)
 	}
 	want := []string{"apcu", "imagick", "redis", "ssh2"}
 	if !reflect.DeepEqual(got.Extensions, want) {
@@ -67,8 +67,8 @@ func TestGetPlatformUsesConfigPlatformPHPOverRequire(t *testing.T) {
 	if !got.HasComposer {
 		t.Fatal("expected HasComposer to be true")
 	}
-	if got.PHPVersion != "8.1" {
-		t.Fatalf("expected PHPVersion 8.1, got %q", got.PHPVersion)
+	if got.PHP == nil || got.PHP.Oldest.String() != "8.1" {
+		t.Fatalf("expected PHPVersion 8.1, got %+v", got.PHP)
 	}
 
 	wantExtensions := []string{"ctype", "json", "mbstring"}
@@ -88,8 +88,8 @@ func TestGetPlatformFallsBackToRequirePHP(t *testing.T) {
 
 	got := GetPlatform(root)
 
-	if got.PHPVersion != "7.4" {
-		t.Fatalf("expected PHPVersion 7.4, got %q", got.PHPVersion)
+	if got.PHP == nil || got.PHP.Oldest.String() != "7.4" {
+		t.Fatalf("expected PHPVersion 7.4, got %+v", got.PHP)
 	}
 	wantExtensions := []string{"zlib"}
 	if !reflect.DeepEqual(got.Extensions, wantExtensions) {
@@ -127,5 +127,47 @@ func writeComposerJSON(t *testing.T, root, content string) {
 	path := filepath.Join(root, "composer.json")
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("write composer.json: %v", err)
+	}
+}
+
+func TestParsePHPConstraint(t *testing.T) {
+	tests := []struct {
+		constraint string
+		oldest     string
+		grammars   string
+	}{
+		{"^7.4", "7.4", "7.4"},
+		{"~7.4.0", "7.4", "7.4"},
+		{"~7.4", "7.4", "7.4"},
+		{"7.4.*", "7.4", "7.4"},
+		{">=7.4", "7.4", "7.4-8.6"},
+		{"^7.4 || ^8.0", "7.4", "7.4-8.6"},
+		{"^7.4|^8.0", "7.4", "7.4-8.6"},
+		{">=8.1", "8.1", "8.1-8.6"},
+		{"8.1.0", "8.1", "8.1"},
+		{">=7.2.24", "7.2", "7.4-8.6"},
+		{">=7.4 <8.2", "7.4", "7.4-8.1"},
+		{">=7.4, <=8.2.5", "7.4", "7.4-8.2"},
+		{">= 8.0 < 8.3.1", "8.0", "8.0-8.3"},
+		{"^8.2", "8.2", "8.2-8.6"},
+		{"~8.2.0", "8.2", "8.2"},
+		{"8.1 - 8.3", "8.1", "8.1-8.3"},
+		{"8.1 - 8.3.0", "8.1", "8.1-8.3"},
+		{"^7.4@dev", "7.4", "7.4"},
+		{"*", "0.0", "7.4-8.6"},
+		{"^9.0", "9.0", "8.6"},
+		{"^7.4 || >=8.3 <8.1", "7.4", "7.4"},
+		{">=8.1 <8.3 || >=8.5", "8.1", "8.1-8.6"},
+	}
+	for _, tt := range tests {
+		got, ok := ParsePHPConstraint(tt.constraint)
+		if !ok || got.Oldest.String() != tt.oldest || got.Grammars.String() != tt.grammars {
+			t.Errorf("ParsePHPConstraint(%q) = %+v, %v; want oldest %s, grammars %s", tt.constraint, got, ok, tt.oldest, tt.grammars)
+		}
+	}
+	for _, constraint := range []string{"", "dev-main", "~", ">=x", ">=8.2 <8.0"} {
+		if got, ok := ParsePHPConstraint(constraint); ok {
+			t.Errorf("ParsePHPConstraint(%q) = %+v, want no version", constraint, got)
+		}
 	}
 }
