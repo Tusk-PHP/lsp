@@ -142,6 +142,7 @@ return new class extends Migration {
 
 	// Run the analysis pipeline (same order as server init)
 	idx.SetCallForwards(laravel.CallForwards()) // as workspace.New does for Laravel
+	idx.SetTemplateMappings(laravel.TemplateMappings())
 	models.AnalyzeEloquentModels(idx, tmpDir)
 	models.AnalyzeMigrations(idx, tmpDir)
 

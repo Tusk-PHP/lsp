@@ -328,14 +328,14 @@ func (r *Resolver) qualifyDocName(name, owner string, file *parser.FileNode) str
 }
 
 // templatesOf returns a class's template parameters, from its PHPDoc or, for
-// the classes it knows, the built-in registry.
+// the classes a framework maps, the index's template mappings.
 func (r *Resolver) templatesOf(classFQN string) []symbols.TemplateParam {
 	if r.Index != nil {
 		if sym := r.Index.Lookup(classFQN); sym != nil && len(sym.Templates) > 0 {
 			return sym.Templates
 		}
 	}
-	if tmpl, ok := knownTemplates[classFQN]; ok {
+	if tmpl, ok := r.templateMapping(classFQN); ok {
 		out := make([]symbols.TemplateParam, len(tmpl.Params))
 		for i, name := range tmpl.Params {
 			out[i] = symbols.TemplateParam{Name: name}

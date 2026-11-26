@@ -62,6 +62,7 @@ func setupLaravelE2E(t *testing.T) *Provider {
 
 	// Run Eloquent model analysis
 	idx.SetCallForwards(laravel.CallForwards()) // as workspace.New does for Laravel
+	idx.SetTemplateMappings(laravel.TemplateMappings())
 	idx.SetScopeConventions(laravel.ScopeConventions())
 	models.AnalyzeEloquentModels(idx, root)
 
