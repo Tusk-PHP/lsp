@@ -8,6 +8,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/scope"
 )
 
 func (vs variableScope) assignedValue(t *syntaxTree, line int, varName string) (ast.Expr, bool) {
@@ -24,6 +25,20 @@ func (vs variableScope) assignedValue(t *syntaxTree, line int, varName string) (
 		return nil, false
 	}
 	return a.value, true
+}
+
+func (r *Resolver) AssignedValue(file *parser.FileNode, v *ast.Variable) (ast.Expr, bool) {
+	lines := r.Lines(file.Source)
+	t := r.syntaxTree(lines, file)
+	name := t.text(v)
+	line, col := t.lines.Position(v.Start)
+	vs := r.variableScopeAt(name, lines, protocol.Position{Line: line, Character: col})
+	b, reach := vs.binding, vs.reach
+	if b == nil || reach.OnWrite || !reach.Single() || reach.Latest == scope.NoWrite {
+		return nil, false
+	}
+	site := b.Site(reach.Latest)
+	return writeScope(b, reach.Latest, &site).assignedValue(t, site.At.Line, name)
 }
 
 func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, lines []string, pos protocol.Position, file *parser.FileNode, line int) (ResolvedType, bool) {

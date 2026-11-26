@@ -36,47 +36,7 @@ func (p *Provider) completeConfigResultKeys(ctx *configResultArrayContext) []pro
 		return nil
 	}
 
-	parts := strings.Split(ctx.ConfigArg, ".")
-	configFile := parts[0]
-	keys := p.arrayResolver.ParseConfigFile(configFile)
-	if keys == nil {
-		return nil
-	}
-
-	for _, segment := range parts[1:] {
-		var nestedType string
-		for _, f := range keys {
-			if f.Key == segment {
-				nestedType = f.Type
-				break
-			}
-		}
-		if nestedType == "" {
-			return nil
-		}
-		keys = types.ParseArrayShape(nestedType)
-		if keys == nil {
-			return nil
-		}
-	}
-
-	for _, accessKey := range ctx.AccessKeys {
-		var nestedType string
-		for _, f := range keys {
-			if f.Key == accessKey {
-				nestedType = f.Type
-				break
-			}
-		}
-		if nestedType == "" {
-			return nil
-		}
-		keys = types.ParseArrayShape(nestedType)
-		if keys == nil {
-			return nil
-		}
-	}
-
+	keys := types.FieldsAt(p.arrayResolver.ConfigKeys(ctx.ConfigArg), ctx.AccessKeys)
 	if len(keys) == 0 {
 		return nil
 	}
@@ -126,34 +86,7 @@ func (p *Provider) completeConfigKeys(configPath, partial, quote string) []proto
 		return nil
 	}
 
-	var keys []types.ShapeField
-	if configPath == "" {
-		keys = p.arrayResolver.ListConfigFiles()
-	} else {
-		parts := strings.Split(configPath, ".")
-		configFile := parts[0]
-		keys = p.arrayResolver.ParseConfigFile(configFile)
-		if keys == nil {
-			return nil
-		}
-		for _, segment := range parts[1:] {
-			var nestedType string
-			for _, f := range keys {
-				if f.Key == segment {
-					nestedType = f.Type
-					break
-				}
-			}
-			if nestedType == "" {
-				return nil
-			}
-			keys = types.ParseArrayShape(nestedType)
-			if keys == nil {
-				return nil
-			}
-		}
-	}
-
+	keys := p.arrayResolver.ConfigKeys(configPath)
 	if len(keys) == 0 {
 		return nil
 	}

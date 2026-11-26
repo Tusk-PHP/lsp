@@ -8,14 +8,18 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func arrayKeyContextAt(t *testing.T, marked string) (*arrayKeyContext, bool) {
+func arrayKeyContextAt(t *testing.T, marked string) (keys *arrayKeyContext, varName string, ok bool) {
 	t.Helper()
 	ctx := cursorContextAt(t, marked)
 	dim, ok := ctx.StringDim()
 	if !ok {
-		return nil, false
+		return nil, "", false
 	}
-	return arrayKeyContextOf(ctx.File.Source, dim)
+	keys, ok = arrayKeyContextOf(dim)
+	if ok {
+		varName = keys.Var.Bounds().Text(ctx.File.Source)
+	}
+	return keys, varName, ok
 }
 
 func TestArrayKeyContext(t *testing.T) {
@@ -46,14 +50,14 @@ func TestArrayKeyContext(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, ok := arrayKeyContextAt(t, "<?php\n"+tt.code)
+			ctx, varName, ok := arrayKeyContextAt(t, "<?php\n"+tt.code)
 			if ok != tt.wantOk {
 				t.Fatalf("ok = %v, want %v (%#v)", ok, tt.wantOk, ctx)
 			}
 			if !ok {
 				return
 			}
-			if ctx.VarName != tt.wantVar || ctx.Partial != tt.wantPart || ctx.Quote != tt.wantQuote || !slices.Equal(ctx.AccessKeys, tt.wantAccess) {
+			if varName != tt.wantVar || ctx.Partial != tt.wantPart || ctx.Quote != tt.wantQuote || !slices.Equal(ctx.AccessKeys, tt.wantAccess) {
 				t.Fatalf("got %#v", ctx)
 			}
 		})
