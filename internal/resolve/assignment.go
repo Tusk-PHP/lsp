@@ -17,7 +17,7 @@ func (vs variableScope) assignedValue(t *syntaxTree, line int, varName string) (
 	}
 	off := t.offset(w.At)
 	a, ok := t.assignmentAt(off, varName)
-	if !ok || !a.statement && !t.startsLine(off) {
+	if !ok {
 		return nil, false
 	}
 	return a.value, true
@@ -30,7 +30,7 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 	ctx := ExprContext{Lines: lines, Pos: pos, File: file}
 	text := t.text(v.expr)
 	if v.called {
-		rt := r.InvokeType(r.ExpressionType(text, ctx))
+		rt := r.InvokeType(r.typeOf(t, v.expr, nil, ctx))
 		return rt, !rt.IsEmpty()
 	}
 	switch n := v.expr.(type) {
@@ -51,7 +51,7 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 		return rt, !rt.IsEmpty()
 	case *ast.ClassConstFetch:
 		if strings.EqualFold(t.text(n.Name), "class") {
-			if rt := r.ExpressionType(text, ctx); !rt.IsEmpty() {
+			if rt := r.typeOf(t, n, nil, ctx); !rt.IsEmpty() {
 				return rt, true
 			}
 		}
@@ -62,7 +62,7 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 			}
 		}
 		if n.Short {
-			if rt := InferArrayLiteralType(text); !rt.IsEmpty() {
+			if rt := literalArrayType(t, n); !rt.IsEmpty() {
 				return rt, true
 			}
 		}
@@ -85,16 +85,16 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 			}
 		}
 	case *ast.Closure, *ast.ArrowFunction:
-		return r.ExpressionType(text, ctx), true
+		return r.typeOf(t, n, nil, ctx), true
 	case *ast.Call:
 		if name, ok := n.Callee.(*ast.ConstFetch); ok && r.Index != nil {
-			if rt := r.functionCallType(t.text(name), t.argsText(n.Args), isCallableArgList(n.Args), t.callArgList(n.Args), ctx); !rt.IsEmpty() {
+			if rt := r.functionCallType(t.text(name), t.callArgList(n.Args), ctx); !rt.IsEmpty() {
 				return rt, true
 			}
 		}
 	}
 	if callee, ok := invokedVariable(t, v.expr); ok && callee != varName {
-		if rt := r.ExpressionType(text, ctx); !rt.IsEmpty() {
+		if rt := r.typeOf(t, v.expr, nil, ctx); !rt.IsEmpty() {
 			return rt, true
 		}
 	}
@@ -104,7 +104,7 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 	if rt := r.ChainType(text, r.JoinLines(lines), pos, file); !rt.IsEmpty() {
 		return rt, true
 	}
-	if rt := r.syntaxType(t, v.expr, ctx); !rt.IsEmpty() {
+	if rt := r.typeOf(t, v.expr, nil, ctx); !rt.IsEmpty() {
 		return rt, true
 	}
 	if r.ChainResolver != nil {
@@ -122,7 +122,7 @@ func (r *Resolver) assignedNewType(t *syntaxTree, n *ast.New, ctx ExprContext) (
 	className := t.text(n.Class)
 	args := t.callArgList(n.Args)
 	if _, named := n.Class.(*ast.ConstFetch); !named {
-		rt := r.newExpressionType(className, args, ctx)
+		rt := r.newType(t, n, ctx)
 		return rt, !rt.IsEmpty()
 	}
 	classFQN, isKeyword := r.ClassKeywordFQN(className, ctx.Pos, ctx.File)
@@ -158,8 +158,7 @@ func (r *Resolver) documentedAssignment(varName string, t *syntaxTree, v assigne
 }
 
 func (r *Resolver) assignedPlainType(t *syntaxTree, v assignedValue) (string, bool) {
-	text := t.text(v.expr)
-	if typ := InferLiteralType(text); typ != "" {
+	if typ := literalNodeType(t, v.expr); typ != "" {
 		return typ, true
 	}
 	_, ternary := v.expr.(*ast.Ternary)
@@ -237,5 +236,5 @@ func (r *Resolver) valueType(t *syntaxTree, e ast.Expr, ctx ExprContext) Resolve
 			return rt
 		}
 	}
-	return r.syntaxType(t, e, ctx)
+	return r.typeOf(t, e, nil, ctx)
 }

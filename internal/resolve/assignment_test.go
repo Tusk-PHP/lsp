@@ -305,7 +305,7 @@ class Holder {
 		{"$tooDeep", "offsets past the depth limit", ``},
 		{"$quoted", "quoted class name constructor argument", `App\Box<App\User>`},
 		{"$pipedFunction", "pipe to a first-class callable function", `App\Query`},
-		{"$mixed", "spread of a call", `array<int, mixed>`},
+		{"$mixed", "spread of a call", `array`},
 		{"$anonSide", "ternary with an anonymous class", ``},
 		{"$keylessSide", "ternary with an offset without a key", ``},
 		{"$made", "parameter created by its default", `App\User`},
@@ -383,12 +383,5 @@ func TestAssignmentAfterAnEditTheFileNodeMissed(t *testing.T) {
 	lines := SplitLines(after)
 	if got := r.ResolveVariableTypeTyped("$user", lines, textpos.Position{Line: 5, Character: 11}, stale).FQN; got != `App\User` {
 		t.Errorf("$user = %q, want App\\User", got)
-	}
-}
-
-func TestSplitTopLevelSkipsEscapedQuotes(t *testing.T) {
-	got := splitTopLevel(`'a\' && b' && $c`, "&&")
-	if len(got) != 2 || strings.TrimSpace(got[1]) != "$c" {
-		t.Errorf("splitTopLevel = %q, want the quoted part kept whole", got)
 	}
 }

@@ -1,9 +1,11 @@
 package resolve
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
@@ -17,125 +19,66 @@ import (
 
 // closureCallSite is the call a closure is an argument of.
 type closureCallSite struct {
-	receiver   string // the expression before -> or ::, or the class after new
-	op         string // "->", "::", "new" or "" for a function call
-	name       string // the method or function called
-	argIndex   int    // which positional argument the closure is
-	argName    string // the parameter a named argument is for
-	argsBefore string // the arguments written before the closure
+	tree       *syntaxTree
+	receiver   ast.Expr // what's before -> or ::
+	op         string   // "->", "::", "new" or "" for a function call
+	name       string   // the method, function or class called
+	argIndex   int      // which positional argument the closure is
+	argName    string   // the parameter a named argument is for
+	argsBefore []CallArg
 	at         textpos.Position
 }
 
-// maxCallLookback bounds how many lines above a closure its call is looked for.
-const maxCallLookback = 40
-
-// findClosureCall finds the call whose argument list the closure starting
-// at start is in. ok is false when the closure isn't a call argument.
-func findClosureCall(lines []string, start textpos.Position) (closureCallSite, bool) {
-	if start.Line < 0 || start.Line >= len(lines) {
+func (r *Resolver) closureCall(lines []string, file *parser.FileNode, start textpos.Position) (closureCallSite, bool) {
+	if file == nil {
 		return closureCallSite{}, false
 	}
-	first := start.Line - maxCallLookback
-	if first < 0 {
-		first = 0
-	}
-	var sb strings.Builder
-	lineStarts := make([]int, 0, start.Line-first+1)
-	for i := first; i < start.Line; i++ {
-		lineStarts = append(lineStarts, sb.Len())
-		sb.WriteString(lines[i])
-		sb.WriteByte(' ')
-	}
-	lineStarts = append(lineStarts, sb.Len())
-	cur := lines[start.Line]
-	if start.Character > len(cur) {
-		return closureCallSite{}, false
-	}
-	sb.WriteString(cur[:start.Character])
-	text := sb.String()
-
-	// Walk back to the unmatched ( that opens the argument list.
-	depth := 0
-	open := -1
-	for i := len(text) - 1; i >= 0 && open < 0; i-- {
-		switch text[i] {
-		case ')', ']', '}':
-			depth++
-		case '(':
-			if depth == 0 {
-				open = i
-			} else {
-				depth--
-			}
-		case '[', '{':
-			if depth == 0 {
-				return closureCallSite{}, false
-			}
-			depth--
-		case ';':
-			if depth == 0 {
-				return closureCallSite{}, false
-			}
-		}
-	}
-	if open <= 0 {
-		return closureCallSite{}, false
-	}
-	site := closureCallSite{}
-	before := strings.TrimSpace(text[open+1:])
-	// A named argument: callback: function (…)
-	if strings.HasSuffix(before, ":") && !strings.HasSuffix(before, "::") {
-		k := len(before) - 1
-		j := k
-		for j > 0 && isIdentByte(before[j-1]) || j > 0 && before[j-1] >= '0' && before[j-1] <= '9' {
-			j--
-		}
-		site.argName = before[j:k]
-		before = strings.TrimSpace(before[:j])
-	}
-	before = strings.TrimSpace(strings.TrimSuffix(before, ","))
-	site.argsBefore = before
-	if before != "" {
-		site.argIndex = len(splitArgList(before))
-	}
-
-	// The callee before the (.
-	callee := strings.TrimRight(text[:open], " \t")
-	end := len(callee)
-	k := end
-	for k > 0 && (isIdentByte(callee[k-1]) || callee[k-1] >= '0' && callee[k-1] <= '9' || callee[k-1] == '\\') {
-		k--
-	}
-	if k == end {
-		return closureCallSite{}, false
-	}
-	site.name = callee[k:end]
-	rest := strings.TrimRight(callee[:k], " \t")
-	switch {
-	case strings.HasSuffix(rest, "->"):
-		site.op = "->"
-		site.receiver = strings.TrimSuffix(strings.TrimSuffix(rest, "->"), "?")
-	case strings.HasSuffix(rest, "::"):
-		site.op = "::"
-		site.receiver = strings.TrimSuffix(rest, "::")
-	case strings.HasSuffix(rest, "new"):
-		site.op = "new"
-		site.receiver = site.name
-	default:
-		if strings.HasSuffix(rest, "$") {
-			return closureCallSite{}, false // $fn(function () {…})
-		}
-		site.op = ""
-	}
-	// Where the receiver is read: just before the call, in the enclosing scope.
-	at := start
-	for li := len(lineStarts) - 1; li >= 0; li-- {
-		if open >= lineStarts[li] {
-			at = textpos.Position{Line: first + li, Character: open - lineStarts[li]}
+	t := r.syntaxTree(lines, file)
+	path := t.path(t.offset(start))
+	i := len(path) - 1
+	for i >= 0 {
+		if _, ok := path[i].(*ast.Closure); ok {
 			break
 		}
+		if _, ok := path[i].(*ast.ArrowFunction); ok {
+			break
+		}
+		i--
 	}
-	site.at = at
+	if i < 3 {
+		return closureCallSite{}, false
+	}
+	arg, isArg := path[i-1].(*ast.Arg)
+	list, isList := path[i-2].(*ast.ArgList)
+	if !isArg || !isList {
+		return closureCallSite{}, false
+	}
+	k := slices.Index(list.Args, arg)
+	line, col := t.lines.Position(list.Start)
+	site := closureCallSite{tree: t, argIndex: k, argsBefore: t.callArgList(&ast.ArgList{Args: list.Args[:k]}), at: textpos.Position{Line: line, Character: col}}
+	if arg.Name != nil {
+		site.argName = t.text(arg.Name)
+	}
+	switch call := path[i-3].(type) {
+	case *ast.MethodCall:
+		site.receiver, site.op, site.name = call.Object, "->", t.text(call.Name)
+	case *ast.StaticCall:
+		site.receiver, site.op, site.name = call.Class, "::", t.text(call.Name)
+	case *ast.New:
+		name, named := call.Class.(*ast.ConstFetch)
+		if !named {
+			return closureCallSite{}, false
+		}
+		site.op, site.name = "new", t.text(name)
+	case *ast.Call:
+		name, named := call.Callee.(*ast.ConstFetch)
+		if !named {
+			return closureCallSite{}, false
+		}
+		site.name = t.text(name)
+	default:
+		return closureCallSite{}, false
+	}
 	return site, true
 }
 
@@ -145,16 +88,12 @@ func (r *Resolver) calleeForClosure(site closureCallSite, lines []string, file *
 	if r.Index == nil {
 		return nil, ResolvedType{}, false
 	}
-	ctx := ExprContext{Lines: lines, Pos: site.at, File: file}
 	switch site.op {
 	case "->", "::":
-		recv := strings.TrimSpace(site.receiver)
-		var rt ResolvedType
-		if file != nil {
-			rt = r.ChainType(recv, r.JoinLines(lines), site.at, file)
-		}
+		ctx := ExprContext{Lines: lines, Pos: site.at, File: file}
+		rt := r.delegatedType(site.tree, site.receiver, ctx)
 		if rt.IsEmpty() {
-			rt = r.ExpressionType(lastExpression(recv), ctx)
+			rt = r.typeOf(site.tree, site.receiver, nil, ctx)
 		}
 		if rt.IsEmpty() {
 			return nil, ResolvedType{}, false
@@ -181,39 +120,6 @@ func (r *Resolver) calleeForClosure(site closureCallSite, lines []string, file *
 		}
 		return fn, ResolvedType{}, true
 	}
-}
-
-// lastExpression returns the trailing expression of text, as far back as a
-// chain of variables, names, calls and accesses goes.
-func lastExpression(text string) string {
-	text = strings.TrimSpace(text)
-	i := len(text)
-	depth := 0
-	for i > 0 {
-		c := text[i-1]
-		switch {
-		case c == ')' || c == ']':
-			depth++
-		case c == '(' || c == '[':
-			if depth == 0 {
-				return strings.TrimSpace(text[i:])
-			}
-			depth--
-		case depth > 0:
-		case isIdentByte(c) || c >= '0' && c <= '9' || c == '$' || c == '\\' || c == '>' || c == ':' || c == '?':
-			if c == '>' && (i < 2 || text[i-2] != '-') {
-				return strings.TrimSpace(text[i:])
-			}
-		case c == '-':
-			if i >= len(text) || text[i] != '>' {
-				return strings.TrimSpace(text[i:])
-			}
-		default:
-			return strings.TrimSpace(text[i:])
-		}
-		i--
-	}
-	return text
 }
 
 // closureParamFromCall returns the expected type of a closure's parameter,
@@ -267,7 +173,7 @@ func (r *Resolver) computeClosureExpectations(closure *scope.Scope, lines []stri
 	}
 	defer exit()
 
-	site, found := findClosureCall(lines, closure.Range.Start)
+	site, found := r.closureCall(lines, file, closure.Range.Start)
 	if !found {
 		return ResolvedType{}, ResolvedType{}, false
 	}
@@ -306,9 +212,9 @@ func (r *Resolver) computeClosureExpectations(closure *scope.Scope, lines []stri
 		staticFQN := r.ReceiverFor(receiver, member)
 		subst = r.classSubst(member.ParentFQN, staticFQN, receiver.Params)
 	}
-	if len(member.Templates) > 0 && site.argsBefore != "" {
+	if len(member.Templates) > 0 && len(site.argsBefore) > 0 {
 		ctx := ExprContext{Lines: lines, Pos: site.at, File: file}
-		bound := r.bindCallTemplates(append([]paramPattern(nil), params...), r.CallSiteFor(site.argsBefore, ctx), templateNames(member.Templates), subst, owner, file)
+		bound := r.bindCallTemplates(append([]paramPattern(nil), params...), r.callSite(site.argsBefore, ctx), templateNames(member.Templates), subst, owner, file)
 		if subst == nil {
 			subst = make(map[string]ResolvedType, len(bound))
 		}

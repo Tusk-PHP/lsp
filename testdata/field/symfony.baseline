@@ -99,8 +99,6 @@ src/Symfony/Bridge/PhpUnit/SymfonyExtension.php	unknown-class	Unknown class 'Tes
 src/Symfony/Bridge/PhpUnit/TextUI/Command.php	unknown-class	Unknown class 'PHPUnit\Runner\Version'
 src/Symfony/Bridge/PhpUnit/bootstrap.php	undefined-variable	Undefined variable $fileIdentifier
 src/Symfony/Bridge/Twig/Form/TwigRendererEngine.php	argument-count-mismatch	Too few arguments to unwrap(): 0 passed, at least 1 required
-src/Symfony/Bridge/Twig/Form/TwigRendererEngine.php	unknown-member	Unknown member 'vars' on 'AbstractRendererEngine'
-src/Symfony/Bridge/Twig/Form/TwigRendererEngine.php	unknown-member	Unknown member 'vars' on 'AbstractRendererEngine'
 src/Symfony/Bundle/FrameworkBundle/Command/AboutCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
 src/Symfony/Bundle/FrameworkBundle/Command/AbstractConfigCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
 src/Symfony/Bundle/FrameworkBundle/Command/AbstractConfigCommand.php	unknown-member	Unknown member 'getKernel' on 'Application'
@@ -296,15 +294,6 @@ src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-pr
 src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatLogMessage' is never used
 src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::isVendorExceptionClass' is never used
 src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::showExceptionProperties' is never used
-src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
-src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
-src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
-src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
-src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
-src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
-src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
-src/Symfony/Component/Form/Extension/Core/Type/FormType.php	unknown-member	Unknown member 'vars' on 'BaseType'
-src/Symfony/Component/Form/Extension/Core/Type/FormType.php	unknown-member	Unknown member 'vars' on 'BaseType'
 src/Symfony/Component/Form/Test/FormIntegrationTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-member	Unknown member 'method' on 'ValidatorInterface'
 src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-member	Unknown member 'method' on 'ValidatorInterface'
@@ -478,7 +467,6 @@ src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-cl
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unused-variable	Variable $error is assigned but never read
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unused-variable	Variable $error is assigned but never read
 src/Symfony/Component/Messenger/Test/Middleware/MiddlewareTestCase.php	unknown-class	Unknown class 'TestCase'
-src/Symfony/Component/Messenger/Transport/Serialization/Normalizer/MessageStampNormalizer.php	unknown-member	Unknown member 'getMessage' on 'ChainStamp'
 src/Symfony/Component/Mime/Test/Constraint/EmailAddressContains.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/Mime/Test/Constraint/EmailAddressContains.php	unknown-member	Unknown member 'getHeaders' on 'RawMessage'
 src/Symfony/Component/Mime/Test/Constraint/EmailAddressContains.php	unknown-member	Unknown member 'getHeaders' on 'RawMessage'

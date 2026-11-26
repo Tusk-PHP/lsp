@@ -87,20 +87,3 @@ func TestFirstClassCallableVariable(t *testing.T) {
 		t.Errorf("plain type of $len = %q, want Closure", got)
 	}
 }
-
-func TestIsFirstClassCallable(t *testing.T) {
-	for expr, want := range map[string]bool{
-		"strlen(...)":           true,
-		"$this->format( ... );": true,
-		"Foo::bar(...)":         true,
-		"f(...$args)":           false,
-		"f($a, ...)":            false,
-		"f(g(...))":             false,
-		"f()":                   false,
-		"...":                   false,
-	} {
-		if got := IsFirstClassCallable(expr); got != want {
-			t.Errorf("IsFirstClassCallable(%q) = %v, want %v", expr, got, want)
-		}
-	}
-}

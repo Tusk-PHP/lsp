@@ -259,7 +259,7 @@ func (a *Analyzer) symbolTarget(r *resolve.Resolver, uri, source string, ctx *so
 
 	// Check for -> or :: access (method/property on a class)
 	if ctx.AccessKind != sourcectx.AccessNone {
-		owner := r.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		owner := r.ReceiverTypeAt(source, pos, file)
 		classFQN := owner.BaseFQN()
 		if classFQN == "" {
 			return definitionTarget{}
@@ -576,7 +576,7 @@ func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position)
 	}
 
 	if ctx.AccessKind != sourcectx.AccessNone {
-		classFQN := r.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file).BaseFQN()
+		classFQN := r.ReceiverTypeAt(source, pos, file).BaseFQN()
 		if classFQN == "" {
 			return nil
 		}
@@ -760,7 +760,7 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 	// the member, return nil — do not fall through to name-based lookups that
 	// would match unrelated symbols across the project.
 	if ctx.AccessKind != sourcectx.AccessNone {
-		owner := r.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		owner := r.ReceiverTypeAt(source, pos, file)
 		if owner.BaseFQN() == "" {
 			return nil
 		}
