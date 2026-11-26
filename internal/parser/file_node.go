@@ -159,21 +159,28 @@ func (b *fileNodeBuilder) visit(n ast.Node, scope declScope) {
 }
 
 func (b *fileNodeBuilder) uses(u *ast.Use) {
+	b.file.Uses = append(b.file.Uses, UseNodes(b.src, b.lines, u)...)
+}
+
+func UseNodes(src string, lines ast.Lines, u *ast.Use) []UseNode {
 	prefix := ""
 	if u.Prefix != nil {
-		prefix = b.text(u.Prefix) + "\\"
+		prefix = u.Prefix.Text(src) + "\\"
 	}
+	nodes := make([]UseNode, 0, len(u.Items))
 	for _, item := range u.Items {
 		if item.Name == nil {
 			continue
 		}
-		fullName := strings.TrimPrefix(prefix+b.text(item.Name), "\\")
+		fullName := strings.TrimPrefix(prefix+item.Name.Text(src), "\\")
 		alias := fullName[strings.LastIndexByte(fullName, '\\')+1:]
 		if item.Alias != nil {
-			alias = b.text(item.Alias)
+			alias = item.Alias.Text(src)
 		}
-		b.file.Uses = append(b.file.Uses, UseNode{FullName: fullName, Alias: alias, Kind: useKind(item.Kind), StartLine: b.line(item.Name.Start)})
+		line, _ := lines.Position(item.Name.Start)
+		nodes = append(nodes, UseNode{FullName: fullName, Alias: alias, Kind: useKind(item.Kind), StartLine: line})
 	}
+	return nodes
 }
 
 func useKind(k token.Kind) string {

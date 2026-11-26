@@ -14,6 +14,9 @@ func ResolveImportedName(name, namespace string, uses []UseNode, kind string) st
 		return fqn
 	}
 	first, rest, qualified := strings.Cut(name, "\\")
+	if qualified && strings.EqualFold(first, "namespace") {
+		return inNamespace(namespace, rest)
+	}
 	for _, u := range uses {
 		if u.Kind != kind || !strings.EqualFold(u.Alias, first) {
 			continue
@@ -23,10 +26,14 @@ func ResolveImportedName(name, namespace string, uses []UseNode, kind string) st
 		}
 		return u.FullName
 	}
-	if namespace != "" {
-		return namespace + "\\" + name
+	return inNamespace(namespace, name)
+}
+
+func inNamespace(namespace, name string) string {
+	if namespace == "" {
+		return name
 	}
-	return name
+	return namespace + "\\" + name
 }
 
 func (f *FileNode) ResolveClassName(name string) string {
