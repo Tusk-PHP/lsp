@@ -200,7 +200,7 @@ class NotAnEntity {}
 `, token.Latest)
 	var got []string
 	for _, entity := range doctrineEntities(file) {
-		got = append(got, entity.fqn+" "+entity.tableName()+" "+entity.repositoryClass())
+		got = append(got, entity.fqn+" "+entity.tableName()+" "+entity.repository)
 	}
 	want := []string{"App\\Entity\\Person people ", "App\\Entity\\OrderLine order_line ", "App\\Entity\\Thing thing App\\Entity\\ThingRepository"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {

@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -38,20 +37,15 @@ var doctrineTypeMap = map[string]string{
 	"guid":               "string",
 }
 
-var (
-	ormEntityAnnotRe = regexp.MustCompile(`@ORM\\Entity\b(?:\(([^)]*)\))?`)
-	repoClassRe      = regexp.MustCompile(`repositoryClass\s*[:=]\s*([A-Za-z_\\]+)::class`)
-)
-
 const doctrineMapping = `Doctrine\ORM\Mapping\`
 
 var doctrineRelationKinds = []string{"OneToOne", "OneToMany", "ManyToOne", "ManyToMany"}
 
 type doctrineEntity struct {
-	class   *parser.ClassNode
-	fqn     string
-	resolve func(string) string
-	entity  *parser.AttributeDef
+	class      *parser.ClassNode
+	fqn        string
+	resolve    func(string) string
+	repository string
 }
 
 func doctrineEntities(file *parser.FileNode) []doctrineEntity {
@@ -62,10 +56,14 @@ func doctrineEntities(file *parser.FileNode) []doctrineEntity {
 	for i := range file.Classes {
 		cls := &file.Classes[i]
 		entity := doctrineEntity{class: cls, fqn: cls.FullName, resolve: resolve}
-		entity.entity = entity.attribute(cls.Attributes, "Entity")
-		if entity.entity != nil || ormEntityAnnotRe.MatchString(cls.DocComment) {
-			entities = append(entities, entity)
+		if attr := entity.attribute(cls.Attributes, "Entity"); attr != nil {
+			entity.repository = entity.classArgument(attr.Args, "repositoryClass", 0)
+		} else if args, ok := entity.annotation(cls.DocComment, "Entity"); ok {
+			entity.repository = entity.classArgument(args, "repositoryClass", -1)
+		} else {
+			continue
 		}
+		entities = append(entities, entity)
 	}
 	return entities
 }
@@ -79,11 +77,15 @@ func (e doctrineEntity) attribute(attrs []parser.AttributeDef, kind string) *par
 	return nil
 }
 
-func (e doctrineEntity) classArgument(attr *parser.AttributeDef, name string, position int) string {
-	if attr == nil {
-		return ""
-	}
-	value, _ := attr.Args.Get(name, position)
+func (e doctrineEntity) annotation(doc, kind string) (parser.AttributeArgs, bool) {
+	return findDocAnnotation(doc, func(name string) bool {
+		short := name[strings.LastIndexByte(name, '\\')+1:]
+		return strings.EqualFold(short, kind) && strings.EqualFold(e.resolve(name), doctrineMapping+kind)
+	})
+}
+
+func (e doctrineEntity) classArgument(args parser.AttributeArgs, name string, position int) string {
+	value, _ := args.Get(name, position)
 	class, ok := strings.CutSuffix(value, "::class")
 	if !ok || class == "" {
 		return ""
@@ -100,22 +102,10 @@ type doctrineRelationProperty struct {
 func (e doctrineEntity) relation(prop parser.PropertyNode) (doctrineRelationProperty, bool) {
 	for _, kind := range doctrineRelationKinds {
 		if attr := e.attribute(prop.Attributes, kind); attr != nil {
-			return doctrineRelationProperty{name: prop.Name, kind: kind, target: e.classArgument(attr, "targetEntity", -1)}, true
+			return doctrineRelationProperty{name: prop.Name, kind: kind, target: e.classArgument(attr.Args, "targetEntity", -1)}, true
 		}
 	}
 	return doctrineRelationProperty{}, false
-}
-
-func (e doctrineEntity) repositoryClass() string {
-	if repo := e.classArgument(e.entity, "repositoryClass", 0); repo != "" {
-		return repo
-	}
-	if m := ormEntityAnnotRe.FindStringSubmatch(e.class.DocComment); m != nil && m[1] != "" {
-		if rm := repoClassRe.FindStringSubmatch(m[1]); rm != nil {
-			return e.resolve(rm[1])
-		}
-	}
-	return ""
 }
 
 func (e doctrineEntity) tableName() string {
@@ -174,7 +164,7 @@ func analyzeDoctrineSource(index *symbols.Index, rootPath, source string) {
 		if !analyzeDoctrineAttributes(index, sym, entity) {
 			analyzeDoctrineXML(index, sym, rootPath, entity.fqn, entity.class, entity.resolve)
 		}
-		if repoFQN := entity.repositoryClass(); repoFQN != "" {
+		if repoFQN := entity.repository; repoFQN != "" {
 			injectRepositoryMagicMethods(index, repoFQN, entity.fqn, sym)
 		}
 	}
