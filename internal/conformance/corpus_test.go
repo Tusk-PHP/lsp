@@ -77,6 +77,7 @@ func TestConformance(t *testing.T) {
 			addPtr(checkParserNeverNil(entry))
 			addPtr(checkParserDeterministic(entry))
 			add(checkParserErrorPositions(entry)...)
+			addPtr(checkNamespaceBlocksFromTokens(entry))
 
 			// Index invariants.
 			addPtr(checkIndexNoPanic(entry, idx))

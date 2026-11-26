@@ -97,6 +97,7 @@ func (b *fileNodeBuilder) visit(n ast.Node, scope declScope) {
 	switch n := n.(type) {
 	case *ast.Namespace:
 		b.file.Namespace = b.nameText(n.Name)
+		b.importsReach(namespaceHeaderEnd(n))
 		for _, stmt := range n.Stmts {
 			b.visit(stmt, scope)
 		}
@@ -160,6 +161,18 @@ func (b *fileNodeBuilder) visit(n ast.Node, scope declScope) {
 
 func (b *fileNodeBuilder) uses(u *ast.Use) {
 	b.file.Uses = append(b.file.Uses, UseNodes(b.src, b.lines, u)...)
+	b.importsReach(u.End)
+}
+
+func (b *fileNodeBuilder) importsReach(end uint32) {
+	b.file.ImportsEnd = max(b.file.ImportsEnd, end)
+}
+
+func namespaceHeaderEnd(n *ast.Namespace) uint32 {
+	if n.Braced && len(n.Stmts) > 0 {
+		return n.Stmts[0].Bounds().Start
+	}
+	return n.End
 }
 
 func UseNodes(src string, lines ast.Lines, u *ast.Use) []UseNode {
@@ -172,15 +185,22 @@ func UseNodes(src string, lines ast.Lines, u *ast.Use) []UseNode {
 		if item.Name == nil {
 			continue
 		}
-		fullName := strings.TrimPrefix(prefix+item.Name.Text(src), "\\")
-		alias := fullName[strings.LastIndexByte(fullName, '\\')+1:]
+		alias := ""
 		if item.Alias != nil {
 			alias = item.Alias.Text(src)
 		}
 		line, _ := lines.Position(item.Name.Start)
-		nodes = append(nodes, UseNode{FullName: fullName, Alias: alias, Kind: useKind(item.Kind), StartLine: line})
+		nodes = append(nodes, NewUseNode(prefix+item.Name.Text(src), alias, item.Kind, line))
 	}
 	return nodes
+}
+
+func NewUseNode(written, alias string, kind token.Kind, line int) UseNode {
+	fullName := strings.TrimPrefix(written, "\\")
+	if alias == "" {
+		alias = fullName[strings.LastIndexByte(fullName, '\\')+1:]
+	}
+	return UseNode{FullName: fullName, Alias: alias, Kind: useKind(kind), StartLine: line}
 }
 
 func useKind(k token.Kind) string {

@@ -13,20 +13,26 @@ import (
 )
 
 type Namespaces struct {
-	src     string
-	lines   ast.Lines
-	version token.Version
-	blocks  []namespaceBlock
+	src    string
+	lines  ast.Lines
+	blocks []namespaceBlock
 }
 
 type namespaceBlock struct {
-	start     uint32
-	name      string
-	braced    *ast.Namespace
-	uses      []parser.UseNode
-	useStarts []uint32
-	header    uint32
-	lastUse   uint32
+	start   uint32
+	name    string
+	nameAt  ast.Span
+	braced  bool
+	brace   uint32
+	uses    []parser.UseNode
+	imports []importSite
+	header  uint32
+	lastUse uint32
+}
+
+type importSite struct {
+	stmt    ast.Span
+	nameEnd uint32
 }
 
 type Namespace struct {
@@ -40,7 +46,7 @@ type UseSite struct {
 }
 
 func NamespacesOf(src string, lines ast.Lines, tree *ast.File) *Namespaces {
-	n := &Namespaces{src: src, lines: lines, version: tree.Version}
+	n := &Namespaces{src: src, lines: lines}
 	cur := namespaceBlock{header: openTagOf(tree)}
 	leading := true
 	for _, stmt := range tree.Stmts {
@@ -48,11 +54,16 @@ func NamespacesOf(src string, lines ast.Lines, tree *ast.File) *Namespaces {
 		case *ast.Namespace:
 			n.blocks = append(n.blocks, cur)
 			leading = false
+			block := namespaceBlock{start: s.Start}
+			if s.Name != nil {
+				block.name, block.nameAt = s.Name.Text(src), s.Name.Span
+			}
 			if !s.Braced {
-				cur = namespaceBlock{start: s.Start, name: nameText(src, s.Name), header: s.End - 1}
+				block.header = s.End - 1
+				cur = block
 				continue
 			}
-			block := namespaceBlock{start: s.Start, name: nameText(src, s.Name), braced: s}
+			block.braced, block.brace = true, openBrace(src, tree.Version, s)
 			for _, inner := range s.Stmts {
 				if use, ok := inner.(*ast.Use); ok {
 					block.addUse(src, lines, use)
@@ -78,24 +89,29 @@ func NamespacesOf(src string, lines ast.Lines, tree *ast.File) *Namespaces {
 
 func openTagOf(tree *ast.File) uint32 {
 	if len(tree.Stmts) > 0 {
-		if html, ok := tree.Stmts[0].(*ast.InlineHTML); ok {
+		if html, ok := tree.Stmts[0].(*ast.InlineHTML); ok && html.Start <= tree.Shebang.End {
 			return html.End
 		}
 	}
 	return tree.Shebang.End
 }
 
-func nameText(src string, name *ast.Name) string {
-	if name == nil {
-		return ""
+func openBrace(src string, version token.Version, ns *ast.Namespace) uint32 {
+	end := ns.End
+	if len(ns.Stmts) > 0 {
+		end = ns.Stmts[0].Bounds().Start
 	}
-	return name.Text(src)
+	tokens := lexer.LexCode(src[ns.Start:end], version)
+	brace := slices.IndexFunc(tokens, func(tok lexer.Token) bool { return tok.Kind == token.LeftBrace })
+	return ns.Start + tokens[brace].Start
 }
 
 func (b *namespaceBlock) addUse(src string, lines ast.Lines, use *ast.Use) {
-	for _, node := range parser.UseNodes(src, lines, use) {
-		b.uses = append(b.uses, node)
-		b.useStarts = append(b.useStarts, use.Start)
+	b.uses = append(b.uses, parser.UseNodes(src, lines, use)...)
+	for _, item := range use.Items {
+		if item.Name != nil {
+			b.imports = append(b.imports, importSite{stmt: use.Span, nameEnd: item.Name.End})
+		}
 	}
 	b.lastUse = use.End
 }
@@ -110,9 +126,16 @@ func (n *Namespaces) block(offset uint32) *namespaceBlock {
 }
 
 func (n *Namespaces) At(offset uint32) Namespace {
-	b := n.block(offset)
-	k := sort.Search(len(b.useStarts), func(i int) bool { return b.useStarts[i] > offset })
+	return n.block(offset).at(offset)
+}
+
+func (b *namespaceBlock) at(offset uint32) Namespace {
+	k := b.importsBefore(offset)
 	return Namespace{Name: b.name, Uses: b.uses[:k:k]}
+}
+
+func (b *namespaceBlock) importsBefore(offset uint32) int {
+	return sort.Search(len(b.imports), func(i int) bool { return b.imports[i].stmt.Start > offset })
 }
 
 func (n *Namespaces) UseSiteAt(offset uint32) UseSite {
@@ -121,21 +144,11 @@ func (n *Namespaces) UseSiteAt(offset uint32) UseSite {
 		return UseSite{Line: n.line(b.lastUse-1) + 1}
 	}
 	anchor := b.header
-	if b.braced != nil {
-		anchor = n.openBrace(b.braced)
+	if b.braced {
+		anchor = b.brace
 	}
 	line := n.line(anchor) + 1
 	return UseSite{Line: line, separate: line < len(n.lines) && !n.blank(line)}
-}
-
-func (n *Namespaces) openBrace(ns *ast.Namespace) uint32 {
-	end := ns.End
-	if len(ns.Stmts) > 0 {
-		end = ns.Stmts[0].Bounds().Start
-	}
-	tokens := lexer.LexCode(n.src[ns.Start:end], n.version)
-	brace := slices.IndexFunc(tokens, func(tok lexer.Token) bool { return tok.Kind == token.LeftBrace })
-	return ns.Start + tokens[brace].Start
 }
 
 func (n *Namespaces) line(offset uint32) int {
@@ -166,14 +179,13 @@ func (ns Namespace) View(file *parser.FileNode) *parser.FileNode {
 	return &view
 }
 
-func (ns Namespace) ResolveClass(src string, name *ast.Name) string {
-	text := name.Text(src)
-	switch name.Kind {
+func (ns Namespace) resolveClass(written string, kind token.Kind) string {
+	switch kind {
 	case token.NameFullyQualified:
-		return text[1:]
+		return written[1:]
 	case token.NameRelative:
-		_, rest, _ := strings.Cut(text, "\\")
+		_, rest, _ := strings.Cut(written, "\\")
 		return parser.ResolveImportedName(rest, ns.Name, nil, "class")
 	}
-	return parser.ResolveImportedName(text, ns.Name, ns.Uses, "class")
+	return parser.ResolveImportedName(written, ns.Name, ns.Uses, "class")
 }

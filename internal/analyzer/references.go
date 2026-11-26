@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
-	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
@@ -64,44 +62,58 @@ func (a *Analyzer) findSymbolOccurrences(sym *symbols.Symbol, readDocument func(
 }
 
 func (a *Analyzer) symbolOccurrencesIn(sym *symbols.Symbol, fileURI, source string) []protocol.Location {
-	locs := wordOccurrencesIn(sym, fileURI, source)
-	if !sym.IsClassLike() || len(locs) == 0 {
-		return locs
+	if sym.IsClassLike() {
+		return a.classOccurrencesIn(sym, fileURI, source)
 	}
-	return a.classReferencesAmong(sym, fileURI, source, locs)
+	return wordOccurrencesIn(sym, fileURI, source)
 }
 
-func (a *Analyzer) classReferencesAmong(sym *symbols.Symbol, fileURI, source string, candidates []protocol.Location) []protocol.Location {
-	lines := ast.NewLines(source)
-	names := sourcectx.ClassNamesEndingIn(source, lines, parser.ParseTreeIn(source, a.index.GrammarOf(fileURI)), sym.Name)
-	kept := candidates[:0]
-	for _, loc := range candidates {
-		fqn, isName := names[lines[loc.Range.Start.Line]+uint32(loc.Range.Start.Character)]
-		if !isName || strings.EqualFold(fqn, sym.FQN) {
-			kept = append(kept, loc)
+func (a *Analyzer) classOccurrencesIn(sym *symbols.Symbol, fileURI, source string) []protocol.Location {
+	var locs []protocol.Location
+	var namespaces *sourcectx.Namespaces
+	eachLine(source, func(line string, lineNum int, lineStart uint32) {
+		candidates := append(findWordLocations(fileURI, line, lineNum, sym.Name), findAccessLocations(fileURI, line, lineNum, "\\"+sym.Name, 1, sym.Name)...)
+		for _, loc := range candidates {
+			if namespaces == nil {
+				namespaces = a.namespacesBefore(fileURI, source, uint32(len(source)))
+			}
+			fqn, isName := namespaces.ClassNameAt(line, lineStart, loc.Range.Start.Character, len(sym.Name))
+			if !isName || strings.EqualFold(fqn, sym.FQN) {
+				locs = append(locs, loc)
+			}
 		}
+	})
+	return locs
+}
+
+func (a *Analyzer) namespacesBefore(uri, source string, offset uint32) *sourcectx.Namespaces {
+	end, ok := a.index.ImportsEnd(uri, source, offset)
+	if !ok {
+		end = offset
 	}
-	return kept
+	return sourcectx.LexNamespaces(source[:end])
+}
+
+func eachLine(source string, visit func(line string, lineNum int, lineStart uint32)) {
+	start := 0
+	for lineNum := 0; ; lineNum++ {
+		nl := strings.IndexByte(source[start:], '\n')
+		if nl < 0 {
+			visit(source[start:], lineNum, uint32(start))
+			return
+		}
+		visit(source[start:start+nl], lineNum, uint32(start))
+		start += nl + 1
+	}
 }
 
 func wordOccurrencesIn(sym *symbols.Symbol, fileURI, source string) []protocol.Location {
 	var locs []protocol.Location
 	name := sym.Name
 	bareName := strings.TrimPrefix(name, "$")
-	lineNum := 0
-	for rest := source; ; lineNum++ {
-		line := rest
-		nl := strings.IndexByte(rest, '\n')
-		if nl >= 0 {
-			line = rest[:nl]
-		}
+	eachLine(source, func(line string, lineNum int, _ uint32) {
 		switch sym.Kind {
-		case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
-			locs = append(locs, findWordLocations(fileURI, line, lineNum, name)...)
-			// Also find as last segment of FQN (e.g. \Cacheable in use App\Contracts\Cacheable)
-			locs = append(locs, findAccessLocations(fileURI, line, lineNum, "\\"+name, 1, name)...)
-
-		case symbols.KindMethod:
+		case symbols.KindMethod, symbols.KindFunction, symbols.KindConstant, symbols.KindEnumCase:
 			locs = append(locs, findWordLocations(fileURI, line, lineNum, name)...)
 
 		case symbols.KindProperty:
@@ -109,18 +121,8 @@ func wordOccurrencesIn(sym *symbols.Symbol, fileURI, source string) []protocol.L
 			locs = append(locs, findWordLocations(fileURI, line, lineNum, "$"+bareName)...)
 			// Access form: ->name
 			locs = append(locs, findAccessLocations(fileURI, line, lineNum, "->"+bareName, 2, bareName)...)
-
-		case symbols.KindFunction:
-			locs = append(locs, findWordLocations(fileURI, line, lineNum, name)...)
-
-		case symbols.KindConstant, symbols.KindEnumCase:
-			locs = append(locs, findWordLocations(fileURI, line, lineNum, name)...)
 		}
-		if nl < 0 {
-			break
-		}
-		rest = rest[nl+1:]
-	}
+	})
 	return locs
 }
 

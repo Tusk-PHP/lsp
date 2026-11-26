@@ -326,3 +326,26 @@ class C {}
 		}
 	}
 }
+
+func TestImportsEndIsWhereTheLastNamespaceOrUseStatementEnds(t *testing.T) {
+	for _, tc := range []struct {
+		name, src, upTo string
+	}{
+		{"no namespace", "<?php\nfoo();\n", ""},
+		{"unbraced", "<?php\nnamespace A;\nuse X;\nclass C {}\n", "use X;"},
+		{"late use", "<?php\nnamespace A;\nclass C {}\nuse X;\nfoo();\n", "use X;"},
+		{"braced without imports", "<?php\nnamespace A {\nclass C {}\n}\n", "namespace A {\n"},
+		{"braced with an import", "<?php\nnamespace A {\nuse X;\nclass C {}\n}\n", "use X;"},
+		{"empty braced", "<?php\nnamespace A {}\nfoo();\n", "namespace A {}"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			want := uint32(0)
+			if tc.upTo != "" {
+				want = uint32(strings.Index(tc.src, tc.upTo) + len(tc.upTo))
+			}
+			if got := ParseFile(tc.src, token.Latest).ImportsEnd; got != want {
+				t.Errorf("ImportsEnd = %d, want %d", got, want)
+			}
+		})
+	}
+}
