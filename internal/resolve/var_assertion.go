@@ -29,7 +29,7 @@ func (r *Resolver) varAssertion(varName string, pos textpos.Position, file *pars
 			}
 			if span.Start > after && !t.assignsTo(stmt, varName) || declaresGlobal(stmt, after) {
 				for _, doc := range t.docsBetween(prevEnd, span.Start) {
-					if d := t.docVarType(doc.Comment, varName, false); d != "" {
+					if d := t.docVarType(doc.Doc, varName, false); d != "" {
 						declared = d
 					}
 				}
@@ -94,22 +94,21 @@ func (t *syntaxTree) docVarType(doc ast.Span, varName string, bare bool) string 
 // statement that starts at to when from is where the one before it ends,
 // also across a `?>` that ends the PHP code the doc comment is in.
 func (t *syntaxTree) docBetween(from, to uint32) (ast.Span, bool) {
-	docs := t.root.Docs
-	i := sort.Search(len(docs), func(i int) bool { return docs[i].Comment.End > to }) - 1
-	if i < 0 || docs[i].Comment.Start < from {
+	d, ok := ast.LastDoc(t.root.Docs, to)
+	if !ok || d.Doc.Start < from {
 		return ast.Span{}, false
 	}
-	return docs[i].Comment, true
+	return d.Doc, true
 }
 
 // docsBetween returns the doc comments between from and to, in order: those
 // of a statement that starts at to when from is where the one before it ends,
 // as a Blade view's header declares each variable in a doc comment of its own.
-func (t *syntaxTree) docsBetween(from, to uint32) []ast.Doc {
+func (t *syntaxTree) docsBetween(from, to uint32) []ast.DocComment {
 	docs := t.root.Docs
-	end := sort.Search(len(docs), func(i int) bool { return docs[i].Comment.End > to })
+	end := sort.Search(len(docs), func(i int) bool { return docs[i].Next > to })
 	start := end
-	for start > 0 && docs[start-1].Comment.Start >= from {
+	for start > 0 && docs[start-1].Doc.Start >= from {
 		start--
 	}
 	return docs[start:end]

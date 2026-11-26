@@ -18,7 +18,7 @@ type parser struct {
 	src       string
 	version   token.Version
 	toks      []lexer.Token
-	docs      []tokenDoc
+	docs      []ast.DocComment
 	pos       int
 	prevEnd   uint32
 	emptyAt   uint32
@@ -54,7 +54,7 @@ func parse(src string, version token.Version, all []lexer.Token) *ast.File {
 	file := &ast.File{Span: ast.Span{End: uint32(len(src))}, Version: version}
 	all, file.Shebang = skipShebang(src, all)
 	p := &parser{src: src, version: version, toks: all[:0]}
-	var doc ast.Span
+	pending := 0
 	for _, tok := range all {
 		switch tok.Kind {
 		case token.Whitespace, token.OpenTag:
@@ -62,24 +62,20 @@ func parse(src string, version token.Version, all []lexer.Token) *ast.File {
 			p.unterminated(tok)
 		case token.DocComment:
 			p.unterminated(tok)
-			doc = ast.Span{Start: tok.Start, End: tok.End}
-			file.Docs = append(file.Docs, ast.Doc{Comment: doc})
+			p.docs = append(p.docs, ast.DocComment{Doc: ast.Span{Start: tok.Start, End: tok.End}})
 		default:
-			if doc != (ast.Span{}) {
-				p.docs = append(p.docs, tokenDoc{tok: len(p.toks), doc: doc})
-				for i := len(file.Docs) - 1; i >= 0 && file.Docs[i].Token == 0; i-- {
-					file.Docs[i].Token = tok.Start
-				}
-				doc = ast.Span{}
+			for ; pending < len(p.docs); pending++ {
+				p.docs[pending].Next = tok.Start
 			}
 			p.toks = append(p.toks, tok)
 		}
 	}
-	for i := len(file.Docs) - 1; i >= 0 && file.Docs[i].Token == 0; i-- {
-		file.Docs[i].Token = uint32(len(src))
+	for ; pending < len(p.docs); pending++ {
+		p.docs[pending].Next = uint32(len(src))
 	}
 	p.guard(func() { p.file(file) })
 	slices.SortStableFunc(p.errors, func(a, b ast.Error) int { return cmp.Compare(a.Start, b.Start) })
+	file.Docs = p.docs
 	file.Errors = p.errors
 	file.Warnings = p.warnings
 	return file
@@ -188,20 +184,15 @@ func (p *parser) doc() ast.Span {
 	return p.docSince(p.pos)
 }
 
-type tokenDoc struct {
-	tok int
-	doc ast.Span
-}
-
 func (p *parser) docSince(from int) ast.Span {
-	i, found := slices.BinarySearchFunc(p.docs, p.pos, func(d tokenDoc, pos int) int { return cmp.Compare(d.tok, pos) })
-	if !found {
-		i--
-	}
-	if i < 0 || p.docs[i].tok < from {
+	if from >= len(p.toks) {
 		return ast.Span{}
 	}
-	return p.docs[i].doc
+	d, ok := ast.LastDoc(p.docs, p.tok().Start)
+	if !ok || d.Next < p.toks[from].Start {
+		return ast.Span{}
+	}
+	return d.Doc
 }
 
 func (p *parser) next() lexer.Token {
