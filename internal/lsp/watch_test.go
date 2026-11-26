@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -441,5 +442,104 @@ func TestADocumentOpenedWhileItsDiskTextIsIndexedGetsTheEditorsTextBack(t *testi
 	waitForSymbols(t, h, "EditedInEditor", func(names []string) bool { return len(names) == 1 })
 	if names := symbolNames(t, h, "WrittenOnDisk"); len(names) != 0 {
 		t.Errorf("the disk text a refresh indexed under an open document is replaced: %v", names)
+	}
+}
+
+func TestMalformedOrEmptyChangeNotificationsChangeNothing(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json": `{"name": "app/app"}`,
+	}, map[string]interface{}{}, map[string]interface{}{"phpVersion": "8.2"})
+	<-h.server.indexed
+	writeProjectFiles(t, root, map[string]string{"app/Unseen.php": "<?php\nnamespace App;\nclass Unseen {}\n"})
+
+	h.notify("workspace/didChangeWatchedFiles", map[string]interface{}{"changes": "app/Unseen.php"})
+	h.notify("workspace/didChangeWatchedFiles", map[string]interface{}{"changes": []interface{}{}})
+	h.notify("workspace/didChangeConfiguration", "phpVersion=7.4")
+	time.Sleep(3 * watchedFilesDelay)
+
+	if names := symbolNames(t, h, "Unseen"); len(names) != 0 {
+		t.Errorf("no valid notification named the new file, so it isn't indexed yet: %v", names)
+	}
+	if version := h.server.loadConfig().PHPVersion; version != "8.2" {
+		t.Errorf("malformed settings leave the configuration alone, got PHP %s", version)
+	}
+	notifyWatched(h, root, "app/Unseen.php")
+	waitForSymbols(t, h, "Unseen", func(names []string) bool { return slices.Contains(names, "Unseen") })
+}
+
+func TestSettingsOfTheWrongTypeAreReportedAndIgnored(t *testing.T) {
+	h, _ := startWatchedProject(t, map[string]string{
+		"composer.json": `{"name": "app/app"}`,
+	}, map[string]interface{}{}, map[string]interface{}{"phpVersion": "8.2"})
+
+	h.notify("workspace/didChangeConfiguration", map[string]interface{}{"settings": map[string]interface{}{"phpVersion": 7.4}})
+	waitForShowMessage(t, h, "Tusk PHP ignored the new settings")
+	if version := h.server.loadConfig().PHPVersion; version != "8.2" {
+		t.Errorf("settings that can't be read leave the previous ones in place, got PHP %s", version)
+	}
+}
+
+func TestAFileThatCannotBeReadIsReportedAndTheRestIndexed(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("file permissions don't stop this user from reading the file")
+	}
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json": `{"name": "app/app"}`,
+	}, map[string]interface{}{}, nil)
+	writeProjectFiles(t, root, map[string]string{
+		"app/Locked.php":   "<?php\nnamespace App;\nclass Locked {}\n",
+		"app/Readable.php": "<?php\nnamespace App;\nclass Readable {}\n",
+	})
+	locked := filepath.Join(root, "app/Locked.php")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o644) })
+
+	notifyWatched(h, root, "app/Locked.php", "app/Readable.php")
+	deadline := time.After(10 * time.Second)
+	for {
+		select {
+		case msg := <-h.notes:
+			params, _ := msg["params"].(map[string]interface{})
+			text, _ := params["message"].(string)
+			if msg["method"] != "window/logMessage" || !strings.HasPrefix(text, "PHP LSP: some changed files could not be re-indexed") {
+				continue
+			}
+			if !strings.Contains(text, locked) {
+				t.Errorf("the warning names the file: %q", text)
+			}
+			waitForSymbols(t, h, "Readable", func(names []string) bool { return slices.Contains(names, "Readable") })
+			return
+		case <-deadline:
+			t.Fatal("no warning about the file that could not be read")
+		}
+	}
+}
+
+func TestANewAnonymousComponentIsOfferedAfterItIsWrittenOnDisk(t *testing.T) {
+	h, root, uri := componentsWorkspace(t, "<x-\n")
+	defer h.close()
+	names := func() string {
+		var items []testCompletionItem
+		request(t, h, "textDocument/completion", uri, map[string]interface{}{"line": 0, "character": 3}, nil, &items)
+		labels := make([]string, len(items))
+		for i, it := range items {
+			labels[i] = it.Label
+		}
+		return strings.Join(labels, " ")
+	}
+	if got := names(); got != "alert card" {
+		t.Fatalf("component names before: %q", got)
+	}
+
+	writeProjectFiles(t, root, map[string]string{"resources/views/components/badge.blade.php": "<span>{{ $slot }}</span>\n"})
+	notifyWatched(h, root, "resources/views/components/badge.blade.php")
+	deadline := time.Now().Add(10 * time.Second)
+	for names() != "alert badge card" {
+		if time.Now().After(deadline) {
+			t.Fatalf("the new component is offered: %q", names())
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
