@@ -1318,10 +1318,10 @@ func ensureArrowCapture(doc *Document, scope *Scope, origin *Binding, ref protoc
 }
 
 func buildAssignment(tokens []parser.Token, variableIdx, equalsIdx, relativeBraceDepth int) *Assignment {
-	stmtStart := findStatementStart(tokens, variableIdx)
+	stmtStart := parser.StatementStart(tokens, variableIdx)
 	stmtEnd := findStatementEnd(tokens, equalsIdx+1)
 	exprStart := parser.NextSignificant(tokens, equalsIdx+1)
-	if stmtStart < 0 || stmtEnd < 0 || exprStart < 0 {
+	if stmtEnd < 0 || exprStart < 0 {
 		return nil
 	}
 
@@ -1337,40 +1337,6 @@ func buildAssignment(tokens []parser.Token, variableIdx, equalsIdx, relativeBrac
 		RelativeBraceDepth: relativeBraceDepth,
 		DirectStatement:    stmtStart == variableIdx && tokens[stmtEnd].Kind == parser.TokenSemicolon,
 	}
-}
-
-func findStatementStart(tokens []parser.Token, first int) int {
-	depthParen := 0
-	depthBracket := 0
-	for i := first - 1; i >= 0; i-- {
-		tok := tokens[i]
-		if tok.Kind.IsComment() {
-			continue
-		}
-		switch tok.Kind {
-		case parser.TokenCloseParen:
-			depthParen++
-		case parser.TokenOpenParen:
-			if depthParen > 0 {
-				depthParen--
-				continue
-			}
-		case parser.TokenCloseBracket:
-			depthBracket++
-		case parser.TokenOpenBracket:
-			if depthBracket > 0 {
-				depthBracket--
-				continue
-			}
-		}
-		if depthParen == 0 && depthBracket == 0 {
-			switch tok.Kind {
-			case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace:
-				return parser.NextSignificant(tokens, i+1)
-			}
-		}
-	}
-	return parser.NextSignificant(tokens, 0)
 }
 
 func findStatementEnd(tokens []parser.Token, start int) int {

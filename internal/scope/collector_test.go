@@ -1,6 +1,7 @@
 package scope
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -505,5 +506,22 @@ func TestScopesLeftOpenRunToTheEndOfTheFile(t *testing.T) {
 				t.Errorf("$post at the cursor = %+v, want test()'s parameter", b)
 			}
 		})
+	}
+}
+
+func TestFirstStatementStartsAfterTheOpenTag(t *testing.T) {
+	for _, source := range []string{"<?php $total = 40 + 2;", "<?php\n$total = 40 + 2;"} {
+		doc := Collect(source)
+		lines := strings.Split(source, "\n")
+		line := len(lines) - 1
+		at := protocol.Position{Line: line, Character: strings.Index(lines[line], "$total")}
+		b := doc.BindingAt(at)
+		if b == nil || len(b.Assignments) != 1 {
+			t.Fatalf("%q: $total = %+v, want one assignment", source, b)
+		}
+		a := b.Assignments[0]
+		if a.Statement.Start != at || !a.DirectStatement {
+			t.Errorf("%q: statement starts at %+v (direct %v), want %+v and a direct statement", source, a.Statement.Start, a.DirectStatement, at)
+		}
 	}
 }
