@@ -1,6 +1,10 @@
 package lsp
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +12,7 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -296,4 +301,70 @@ func (c *positionsCase) checkCompletionAfterChange() {
 		}
 	}
 	c.t.Errorf("completion after non-ASCII text does not offer total: %v", items)
+}
+
+func TestDefinitionInComposerJSONReadsTheClientColumn(t *testing.T) {
+	h := initHarnessWithOpts(t,
+		map[string]interface{}{"window": map[string]interface{}{"showDocument": map[string]interface{}{"support": true}}},
+		map[string]interface{}{"composer": map[string]interface{}{"openOnDefinition": true}})
+	defer h.close()
+	const uri = "file:///tmp/positions/composer.json"
+	const source = `{"description": "Größe 😀 漢字", "require": {"monolog/monolog": "^3"}}` + "\n"
+	h.notify("textDocument/didOpen", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri, "languageId": "json", "version": 1, "text": source},
+	})
+	c := &positionsCase{t: t, enc: "utf-16"}
+
+	defID := h.send("textDocument/definition", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 0, "character": c.col(source, 0, "monolog/")},
+	})
+	defResp, showDoc := drainMessages(h, defID, 5*time.Second)
+	if defResp == nil {
+		t.Fatal("timed out waiting for the definition response")
+	}
+	if showDoc == nil {
+		t.Fatal("definition on a package name after non-ASCII text sent no window/showDocument")
+	}
+	params, _ := showDoc["params"].(map[string]interface{})
+	if got, want := params["uri"], "https://packagist.org/packages/monolog/monolog"; got != want {
+		t.Errorf("window/showDocument uri = %v, want %s", got, want)
+	}
+}
+
+func TestPositionsOfAFileWithoutTextAreSentAsBytes(t *testing.T) {
+	var logged strings.Builder
+	s := NewServer(strings.NewReader(""), io.Discard, log.New(&logged, "", 0))
+	uri := symbols.PathToURI(filepath.Join(t.TempDir(), "missing.php"))
+
+	pos := protocol.Position{Line: 2, Character: 7}
+	if got := s.positions().posOut(uri, pos); got != pos {
+		t.Errorf("posOut on a file with no text = %+v, want the byte position %+v", got, pos)
+	}
+	if !strings.Contains(logged.String(), uri) {
+		t.Errorf("no log line names the file without text; logged %q", logged.String())
+	}
+}
+
+func TestCopyReferenceCommandConversion(t *testing.T) {
+	command := func(arg string) *protocol.Command {
+		return &protocol.Command{Command: protocol.CommandCopyReference, Arguments: []json.RawMessage{json.RawMessage(`"App\\Foo"`), json.RawMessage(arg)}}
+	}
+
+	t.Run("a position before any non-ASCII text is kept", func(t *testing.T) {
+		in := command(`{"line":0,"character":3}`)
+		got, converted := copyPositions().convertCommand(copyURI, in)
+		if converted || got != in {
+			t.Errorf("convertCommand = %+v, %v; want the same command, not converted", got, converted)
+		}
+	})
+
+	t.Run("an argument that is not a position panics", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), "copyReference argument is not a position") {
+				t.Errorf("recovered %v, want a panic naming the copyReference argument", r)
+			}
+		}()
+		copyPositions().convertCommand(copyURI, command(`"not a position"`))
+	})
 }

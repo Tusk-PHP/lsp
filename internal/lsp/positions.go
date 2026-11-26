@@ -131,11 +131,6 @@ func (p *positions) hoverOut(uri string, h *protocol.Hover) *protocol.Hover {
 	return &out
 }
 
-func (p *positions) textEditsOut(uri string, edits []protocol.TextEdit) []protocol.TextEdit {
-	out, _ := p.convertTextEdits(uri, edits)
-	return out
-}
-
 func (p *positions) convertTextEdits(uri string, edits []protocol.TextEdit) ([]protocol.TextEdit, bool) {
 	return convertEach(edits, func(e *protocol.TextEdit) bool { return p.convertRange(uri, &e.Range) })
 }
