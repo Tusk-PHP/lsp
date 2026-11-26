@@ -103,3 +103,19 @@ func TestPromotedDeclarationKeepsItsNamesIndexed(t *testing.T) {
 		})
 	}
 }
+
+func TestPromotionLeavesOtherRemovedMembersOfTheSameNameUnindexed(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///a.php", "<?php namespace App; interface Foo { function a(); }")
+	idx.IndexFile("file:///b.php", "<?php namespace App; class Bar { function a() {} } if (true) { class Foo { function a() {} } } else { class Foo { function c() {} } }")
+
+	idx.IndexFile("file:///b.php", "<?php\n")
+	if got, want := symbolFQNs(idx.LookupByName("a")), []string{"App\\Foo::a"}; !slices.Equal(got, want) {
+		t.Fatalf("LookupByName(a) after emptying b.php = %v, want %v", got, want)
+	}
+
+	idx.IndexFile("file:///c.php", "<?php namespace App; class Bar { function a() {} }")
+	if got, want := symbolFQNs(idx.LookupByName("a")), []string{"App\\Foo::a", "App\\Bar::a"}; !slices.Equal(got, want) {
+		t.Fatalf("LookupByName(a) after declaring Bar again = %v, want %v", got, want)
+	}
+}
