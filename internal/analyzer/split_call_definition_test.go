@@ -65,3 +65,56 @@ func TestDefinitionOfNamesInACallSplitOverLines(t *testing.T) {
 		}
 	})
 }
+
+func TestDefinitionOfAContainerArgumentReadsTheCall(t *testing.T) {
+	a := setupLaravelAnalyzer(t)
+	for _, src := range []string{
+		"<?php\napp(\n    'request'\n);\n",
+		"<?php\napp(/* ) */ 'request');\n",
+		"<?php\n$this->app->make(\n    // the request\n    'request',\n    [],\n);\n",
+	} {
+		loc := a.FindDefinition("file:///test.php", src, posOf(t, src, "quest'"))
+		if loc == nil || !strings.HasSuffix(loc.URI, "/Http/Request.php") {
+			t.Errorf("%q: got %+v", src, loc)
+		}
+		if locs := a.FindTypeDefinition("file:///test.php", src, posOf(t, src, "quest'")); len(locs) != 1 || !strings.HasSuffix(locs[0].URI, "/Http/Request.php") {
+			t.Errorf("%q: type definition %+v", src, locs)
+		}
+	}
+	for _, src := range []string{
+		"<?php\napp('db', 'request');\n",
+		"<?php\n// app('request');\n",
+		"<?php\nfoo('app(', 'request');\n",
+	} {
+		if loc := a.FindDefinition("file:///test.php", src, posOf(t, src, "quest'")); loc != nil && strings.HasSuffix(loc.URI, "/Http/Request.php") {
+			t.Errorf("%q is not a container argument: got %+v", src, loc)
+		}
+	}
+	src := "<?php\napp($request);\n"
+	if loc := a.FindDefinition("file:///test.php", src, posOf(t, src, "quest)")); loc != nil && strings.HasSuffix(loc.URI, "/Http/Request.php") {
+		t.Errorf("a variable argument: got %+v", loc)
+	}
+}
+
+func TestDefinitionOfALaravelRouteNameReadsTheCall(t *testing.T) {
+	a := setupLaravelRouteAnalyzer(t)
+	for _, src := range []string{
+		"<?php\nreturn route(\n    'dashboard'\n);\n",
+		"<?php\nreturn route(/* ) */ 'dashboard');\n",
+		"<?php\nreturn to_route(\n    'dashboard', // home\n    [],\n);\n",
+	} {
+		loc := a.FindDefinition("file:///test.php", src, posOf(t, src, "board"))
+		if loc == nil || !strings.Contains(loc.URI, "/routes/web.php") {
+			t.Errorf("%q: got %+v", src, loc)
+		}
+	}
+	for _, src := range []string{
+		"<?php\n// route('dashboard');\n",
+		"<?php\necho \"route(\" . e('dashboard');\n",
+		"<?php\nreturn route('home', ['dashboard']);\n",
+	} {
+		if loc := a.FindDefinition("file:///test.php", src, posOf(t, src, "board")); loc != nil {
+			t.Errorf("%q is not a route name: got %+v", src, loc)
+		}
+	}
+}
