@@ -128,6 +128,16 @@ func TestColumnsAnswerTheSameInAnyOrder(t *testing.T) {
 	}
 }
 
+func TestColumnsFromClientGoesBackOnTheSameLine(t *testing.T) {
+	cols := NewColumns("$a = 'Größe'; $b;", UTF16)
+	if got := cols.FromClient(0, 15); got != 17 {
+		t.Fatalf("FromClient(0, 15) = %d, want 17", got)
+	}
+	if got := cols.FromClient(0, 10); got != 12 {
+		t.Errorf("FromClient(0, 10) after a later column = %d, want 12", got)
+	}
+}
+
 func TestColumnsLongLine(t *testing.T) {
 	line := "é" + strings.Repeat("$a = 'x'; ", 1000)
 	cols := NewColumns(line, UTF16)
