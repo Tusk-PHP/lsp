@@ -654,6 +654,7 @@ type Const struct {
 	stmt
 	Span
 	Attrs []*AttributeGroup
+	Doc   Span
 	Items []*ConstItem
 }
 

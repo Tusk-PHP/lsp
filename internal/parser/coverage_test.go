@@ -299,14 +299,14 @@ func TestParseFileGroupAndCommaImports(t *testing.T) {
 namespace App;
 use Foo\A, Bar\B as BB;
 use Lib\{C, D as E, function f, const K,};
-use function Fn\{g, h};
+use function Fns\{g, h};
 use \Lib\{Deep\X};
 $f = function () use ($x) {};
 `)
 	want := []string{
 		`class Foo\A A`, `class Bar\B BB`,
 		`class Lib\C C`, `class Lib\D E`, `function Lib\f f`, `const Lib\K K`,
-		`function Fn\g g`, `function Fn\h h`,
+		`function Fns\g g`, `function Fns\h h`,
 		`class Lib\Deep\X X`,
 	}
 	var got []string

@@ -460,7 +460,6 @@ app/code/Magento/ReviewGraphQl/Mapper/ReviewDataMapper.php	unused-import	Unused 
 app/code/Magento/Rule/Model/Condition/Sql/Builder.php	unused-import	Unused import 'Magento\Catalog\Model\Product'
 app/code/Magento/Rule/Model/Condition/Sql/Builder.php	unused-import	Unused import 'Magento\Framework\Exception\NoSuchEntityException'
 app/code/Magento/Sales/Block/Adminhtml/Order/Invoice/Totals.php	unused-import	Unused import 'Magento\Framework\DataObject'
-app/code/Magento/Sales/Block/Adminhtml/Order/Totals/Item.php	unknown-class	Unknown class 'Magento\Sales\Block\Adminhtml\Order\Totals'
 app/code/Magento/Sales/Block/Order/Item/Renderer/DefaultRenderer.php	unused-import	Unused import 'Magento\Sales\Model\Order\Creditmemo\Item'
 app/code/Magento/Sales/Controller/Adminhtml/Creditmemo/AbstractCreditmemo/Index.php	unknown-member	Unknown member 'addBreadcrumb' on 'Page'
 app/code/Magento/Sales/Controller/Adminhtml/Creditmemo/AbstractCreditmemo/Index.php	unknown-member	Unknown member 'addBreadcrumb' on 'Page'
