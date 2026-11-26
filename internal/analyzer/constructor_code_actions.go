@@ -154,7 +154,7 @@ func constructorInsertPosition(lines []string, classDef parser.ClassDef, _ parse
 
 func renderGeneratedConstructor(classDef parser.ClassDef, props []parser.PropertyDef, memberIndent, indentUnit string, closingOnClassLine bool) string {
 	var b strings.Builder
-	if closingOnClassLine || len(classDef.Properties)+len(classDef.Methods)+len(classDef.Constants)+len(classDef.Traits) > 0 {
+	if closingOnClassLine || len(classDef.Properties)+len(classDef.Methods)+len(classDef.Traits) > 0 {
 		b.WriteByte('\n')
 	}
 

@@ -23,7 +23,6 @@ type ParseResult struct {
 	Traits           []TraitDef
 	Enums            []EnumDef
 	Functions        []FunctionDef
-	Constants        []ConstantDef
 	Variables        []VariableDef
 	Tokens           []Token
 	Errors           []ParseError
@@ -55,7 +54,6 @@ type ClassDef struct {
 	Traits      []string
 	Properties  []PropertyDef
 	Methods     []MethodDef
-	Constants   []ConstantDef
 	IsAbstract  bool
 	IsFinal     bool
 	IsReadonly  bool
@@ -78,7 +76,6 @@ type InterfaceDef struct {
 	Extends    []string
 	Methods    []MethodDef
 	Properties []PropertyDef
-	Constants  []ConstantDef
 	DocComment string
 	Line       int
 	EndLine    int
@@ -90,7 +87,6 @@ type TraitDef struct {
 	Properties  []PropertyDef
 	Methods     []MethodDef
 	Traits      []string
-	Constants   []ConstantDef
 	TraitUseDoc string // docblocks above the trait `use` statements in the body
 	TraitRules  TraitAdaptations
 	DocComment  string
@@ -105,7 +101,6 @@ type EnumDef struct {
 	Cases       []EnumCase
 	Methods     []MethodDef
 	Properties  []PropertyDef
-	Constants   []ConstantDef
 	Traits      []string
 	Implements  []string
 	DocComment  string
@@ -179,15 +174,6 @@ type ParamDef struct {
 	Hooks         []PropertyHook
 	DocComment    string
 	Line          int
-}
-
-type ConstantDef struct {
-	Name       string
-	Value      string
-	Type       string
-	Visibility string
-	DocComment string
-	Line       int
 }
 
 type VariableDef struct {
@@ -809,10 +795,10 @@ func (p *structParser) inBlock() bool {
 // parseClassBodyWithTraitUses parses a class-like body and also returns the
 // docblocks written above its trait `use` statements, joined, and the rules
 // of their adaptation blocks.
-func (p *structParser) parseClassBodyWithTraitUses() (methods []MethodDef, props []PropertyDef, consts []ConstantDef, traits []string, traitDoc string, traitRules TraitAdaptations) {
+func (p *structParser) parseClassBodyWithTraitUses() (methods []MethodDef, props []PropertyDef, traits []string, traitDoc string, traitRules TraitAdaptations) {
 	savedDocs, savedRules := p.traitUseDocs, p.traitRules
 	p.traitUseDocs, p.traitRules = nil, TraitAdaptations{}
-	methods, props, consts, traits = p.parseClassBody()
+	methods, props, traits = p.parseClassBody()
 	traitDoc = strings.Join(p.traitUseDocs, "\n")
 	traitRules = p.traitRules
 	p.traitUseDocs, p.traitRules = savedDocs, savedRules
@@ -949,7 +935,7 @@ func (p *structParser) parse() {
 		case TokenFunction:
 			p.parseFunction(lastDocComment)
 		case TokenConst:
-			p.parseConst(lastDocComment)
+			p.skipConst()
 		case TokenOpenBrace:
 			p.blocks = append(p.blocks, false)
 			p.advance()
@@ -1163,7 +1149,7 @@ afterMod:
 	if _, ok := p.expect(TokenOpenBrace); !ok {
 		return
 	}
-	cls.Methods, cls.Properties, cls.Constants, cls.Traits, cls.TraitUseDoc, cls.TraitRules = p.parseClassBodyWithTraitUses()
+	cls.Methods, cls.Properties, cls.Traits, cls.TraitUseDoc, cls.TraitRules = p.parseClassBodyWithTraitUses()
 	if cls.IsReadonly {
 		for i := range cls.Properties {
 			cls.Properties[i].IsReadonly = true
@@ -1204,7 +1190,7 @@ func (p *structParser) parseInterface(docComment string) {
 	if _, ok := p.expect(TokenOpenBrace); !ok {
 		return
 	}
-	iface.Methods, iface.Properties, iface.Constants, _ = p.parseClassBody()
+	iface.Methods, iface.Properties, _ = p.parseClassBody()
 	iface.EndLine = p.peek().Line
 	p.result.Interfaces = append(p.result.Interfaces, iface)
 }
@@ -1224,7 +1210,7 @@ func (p *structParser) parseTrait(docComment string) {
 	if _, ok := p.expect(TokenOpenBrace); !ok {
 		return
 	}
-	trait.Methods, trait.Properties, trait.Constants, trait.Traits, trait.TraitUseDoc, trait.TraitRules = p.parseClassBodyWithTraitUses()
+	trait.Methods, trait.Properties, trait.Traits, trait.TraitUseDoc, trait.TraitRules = p.parseClassBodyWithTraitUses()
 	trait.EndLine = p.peek().Line
 	p.result.Traits = append(p.result.Traits, trait)
 }
@@ -1264,7 +1250,7 @@ func (p *structParser) parseEnum(docComment string) {
 		return
 	}
 	p.enumCases = &e.Cases
-	e.Methods, e.Properties, e.Constants, e.Traits, e.TraitUseDoc, e.TraitRules = p.parseClassBodyWithTraitUses()
+	e.Methods, e.Properties, e.Traits, e.TraitUseDoc, e.TraitRules = p.parseClassBodyWithTraitUses()
 	p.enumCases = nil
 	e.EndLine = p.peek().Line
 	p.result.Enums = append(p.result.Enums, e)
@@ -1348,22 +1334,17 @@ func (p *structParser) collectNestedFunctions(start, end int) {
 	}
 }
 
-func (p *structParser) parseConst(docComment string) {
+func (p *structParser) skipConst() {
 	p.advance()
-	c := ConstantDef{DocComment: docComment, Line: p.peek().Line}
-	if t, ok := p.expect(TokenIdentifier); ok {
-		c.Name = t.Value
-	}
+	p.expect(TokenIdentifier)
 	if p.peek().Kind == TokenEquals {
 		p.advance()
-		c.Value = p.peek().Value
 		p.advance()
 	}
 	p.expect(TokenSemicolon)
-	p.result.Constants = append(p.result.Constants, c)
 }
 
-func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDef, consts []ConstantDef, traits []string) {
+func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDef, traits []string) {
 	depth := 1
 	var docComment string
 	enumCases := p.enumCases
@@ -1530,7 +1511,7 @@ func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDe
 
 		case TokenConst:
 			p.advance()
-			consts = append(consts, p.parseClassConstants(visibility, docComment)...)
+			p.skipClassConstants()
 
 		case TokenVariable:
 			prop := PropertyDef{
@@ -1601,36 +1582,22 @@ func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDe
 	return
 }
 
-// parseClassConstants reads the rest of a `const` statement, which may give a
-// PHP 8.3 type and declare several constants: `const string A = 'a', B = 'b';`.
-func (p *structParser) parseClassConstants(visibility string, docComment string) []ConstantDef {
-	typeName := ""
+func (p *structParser) skipClassConstants() {
 	if !isNameToken(p.peek()) || (p.pos+1 < len(p.tokens) && p.tokens[p.pos+1].Kind != TokenEquals) {
-		typeName = p.readTypeName()
+		p.readTypeName()
 	}
-	var consts []ConstantDef
 	for isNameToken(p.peek()) {
-		c := ConstantDef{Name: p.peek().Value, Type: typeName, Visibility: visibility, DocComment: docComment, Line: p.peek().Line}
 		p.advance()
 		if p.peek().Kind == TokenEquals {
 			p.advance()
-			// Record the immediate value token for simple constants.
-			if p.peek().Kind != TokenSemicolon && p.peek().Kind != TokenEOF {
-				c.Value = p.peek().Value
-			}
-			// Consume the full value expression, including PHP 8.3 dynamic const
-			// fetches like Colors::{$name} where '{' must not escape to the outer
-			// class-body depth counter.
 			p.skipConstantValue()
 		}
-		consts = append(consts, c)
 		if p.peek().Kind != TokenComma {
 			break
 		}
 		p.advance()
 	}
 	p.expect(TokenSemicolon)
-	return consts
 }
 
 // skipConstantValue stops at the `,` or `;` ending a constant's value.
