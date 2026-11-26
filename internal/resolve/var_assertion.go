@@ -14,6 +14,36 @@ import (
 // holds or comes before the read at off, in a block the read is in. The last
 // of them wins.
 func (r *Resolver) varAssertion(varName string, pos textpos.Position, file *parser.FileNode, t *syntaxTree, after, off uint32) (ResolvedType, bool) {
+	declared := r.inlineVarDoc(varName, t, after, off, false)
+	if declared == "" {
+		return ResolvedType{}, false
+	}
+	rt := r.declaredVarType(declared, pos, file)
+	return rt, !rt.IsEmpty()
+}
+
+// VarDocType returns the type a `@var Type $name` doc comment declares for
+// varName at pos, as written, in the variable's own scope: on the statement
+// that assigns it or on one before the read.
+func (r *Resolver) VarDocType(varName string, lines []string, pos textpos.Position, file *parser.FileNode) string {
+	if file == nil {
+		return ""
+	}
+	vs := r.variableScopeAt(varName, lines, pos)
+	t := r.syntaxTree(lines, file)
+	from, okFrom := t.offset(textpos.Position{Line: vs.firstLine})
+	off, okOff := t.offset(pos)
+	if !okFrom || !okOff {
+		return ""
+	}
+	return r.inlineVarDoc(varName, t, from, off, true)
+}
+
+// inlineVarDoc returns the type of the last `@var Type $name` naming varName
+// on a statement that starts after after and holds or comes before off, in a
+// block off is in; statements that assign varName count only when
+// assignments is set.
+func (r *Resolver) inlineVarDoc(varName string, t *syntaxTree, after, off uint32, assignments bool) string {
 	declared := ""
 	for _, node := range t.path(off) {
 		stmts, ok := statementsOf(node)
@@ -26,7 +56,7 @@ func (r *Resolver) varAssertion(varName string, pos textpos.Position, file *pars
 			if span.Start > off {
 				break
 			}
-			if span.Start > after && !t.assignsTo(stmt, varName) || declaresGlobal(stmt, after) {
+			if span.Start > after && (assignments || !t.assignsTo(stmt, varName)) || declaresGlobal(stmt, after) {
 				for _, doc := range t.docsBetween(prevEnd, span.Start) {
 					if d := r.docVarType(t, doc.Doc, varName, false); d != "" {
 						declared = d
@@ -36,11 +66,7 @@ func (r *Resolver) varAssertion(varName string, pos textpos.Position, file *pars
 			prevEnd = span.End
 		}
 	}
-	if declared == "" {
-		return ResolvedType{}, false
-	}
-	rt := r.declaredVarType(declared, pos, file)
-	return rt, !rt.IsEmpty()
+	return declared
 }
 
 // declaresGlobal reports whether stmt is the `global` statement that holds

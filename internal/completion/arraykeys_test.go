@@ -1,6 +1,7 @@
 package completion
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -419,6 +420,74 @@ function test() {
 			if item.InsertText != "" && item.InsertText[0] != '\'' {
 				t.Errorf("expected quote-wrapped key, got InsertText %q", item.InsertText)
 			}
+		}
+	}
+}
+
+func TestCompleteArrayKeysTakeOnlyTheVariablesOwnVarDoc(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+	}{
+		{"var doc in a string", `<?php
+function test() {
+    $doc = '/** @var array{id: int} $post */';
+    $post = getPost();
+    $post['CURSOR'];
+}
+`},
+		{"var in a plain comment", `<?php
+function test() {
+    /* @var array{id: int} $post */
+    $post = getPost();
+    $post['CURSOR'];
+}
+`},
+		{"var doc in another function", `<?php
+function other() {
+    /** @var array{id: int} $post */
+    $post = getPost();
+}
+function test() {
+    $post = getPost();
+    $post['CURSOR'];
+}
+`},
+		{"var doc of a longer name", `<?php
+function test() {
+    /** @var array{id: int} $posts */
+    $posts = getPosts();
+    $post = getPost();
+    $post['CURSOR'];
+}
+`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewProvider(symbols.NewIndex(), nil, "")
+			source, pos := cursorIn(tt.source)
+			for _, item := range p.GetCompletions("file:///test.php", source, pos) {
+				if item.Label == "id" {
+					t.Fatalf("offered key %q from a @var that doesn't declare this $post", item.Label)
+				}
+			}
+		})
+	}
+}
+
+func cursorIn(src string) (string, protocol.Position) {
+	before := src[:strings.Index(src, "CURSOR")]
+	line := strings.Count(before, "\n")
+	return strings.Replace(src, "CURSOR", "", 1), protocol.Position{Line: line, Character: len(before) - strings.LastIndex(before, "\n") - 1}
+}
+
+func BenchmarkCompleteArrayKeysFromVarDoc(b *testing.B) {
+	p, src, _ := benchProvider(b)
+	source, pos := cursorIn(strings.Replace(src, "CURSOR", "/** @var array{id: int, title: string} $post */\n        $post = load();\n        $post['CURSOR", 1))
+	b.ReportAllocs()
+	for b.Loop() {
+		if len(p.GetCompletions("file:///s.php", source, pos)) != 2 {
+			b.Fatal("the two keys of the @var shape")
 		}
 	}
 }

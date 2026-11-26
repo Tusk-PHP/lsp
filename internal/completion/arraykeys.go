@@ -117,7 +117,7 @@ func parseArrayKeyContext(prefix string) *arrayKeyContext {
 }
 
 func (p *Provider) completeArrayKeys(source string, pos protocol.Position, ctx *arrayKeyContext, file *parser.FileNode) []protocol.CompletionItem {
-	keys := p.resolveArrayKeysFromType(source, pos, ctx.VarName, file)
+	keys := p.resolveArrayKeysFromType(p.engine.Resolver(), source, pos, ctx.VarName, file)
 	if len(keys) == 0 {
 		keys = scanLiteralArrayKeys(source, pos, ctx.VarName)
 	}
@@ -183,7 +183,7 @@ func (p *Provider) completeArrayKeys(source string, pos protocol.Position, ctx *
 	return items
 }
 
-func (p *Provider) resolveArrayKeysFromType(source string, pos protocol.Position, varName string, file *parser.FileNode) []types.ShapeField {
+func (p *Provider) resolveArrayKeysFromType(r *resolve.Resolver, source string, pos protocol.Position, varName string, file *parser.FileNode) []types.ShapeField {
 	if file == nil {
 		return nil
 	}
@@ -225,22 +225,9 @@ func (p *Provider) resolveArrayKeysFromType(source string, pos protocol.Position
 		}
 	}
 
-	lines := strings.Split(source, "\n")
-	for i := pos.Line; i >= 0 && i >= pos.Line-10; i-- {
-		if i >= len(lines) {
-			continue
-		}
-		line := strings.TrimSpace(lines[i])
-		if strings.Contains(line, "@var") && strings.Contains(line, varName) {
-			varIdx := strings.Index(line, "@var ")
-			if varIdx >= 0 {
-				rest := strings.TrimSpace(line[varIdx+5:])
-				typeStr, _ := types.ExtractDocTypeString(rest)
-				if fields := types.ParseArrayShape(typeStr); len(fields) > 0 {
-					return fields
-				}
-			}
-		}
+	lines := r.Lines(source)
+	if fields := types.ParseArrayShape(r.VarDocType(varName, lines, pos, file)); len(fields) > 0 {
+		return fields
 	}
 
 	for i := pos.Line; i >= 0 && i >= pos.Line-200; i-- {
