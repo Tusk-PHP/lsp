@@ -20,6 +20,7 @@ type docIndexQueue struct {
 	mu      sync.Mutex
 	pending map[string]string // URI → newest source waiting to be indexed
 	running map[string]bool   // URI → a background indexer is working on it
+	closed  map[string]func() // URI → closed meanwhile: what to do once its indexer is done
 }
 
 // indexDocumentMaybeAsync indexes source synchronously for small documents
@@ -67,36 +68,54 @@ func (q *docIndexQueue) queueLocked(uri, source string) bool {
 // drainDocIndex indexes the newest pending version of uri until none is left.
 func (s *Server) drainDocIndex(uri string) {
 	q := &s.docIndex
-	finished := false
-	defer func() {
-		if finished {
-			return
-		}
-		// Indexing panicked: hand the versions still waiting to a new indexer
-		// rather than leave the document stuck behind this one.
-		q.mu.Lock()
-		_, more := q.pending[uri]
-		if !more {
-			delete(q.running, uri)
-		}
-		q.mu.Unlock()
-		if more {
-			s.goSafe("indexFileByURI:"+uri, func() { s.drainDocIndex(uri) })
-		}
-	}()
 	for {
 		q.mu.Lock()
 		source, ok := q.pending[uri]
 		if !ok {
-			delete(q.running, uri)
+			closed := q.doneLocked(uri)
 			q.mu.Unlock()
-			finished = true
+			if closed != nil {
+				closed()
+			}
 			return
 		}
 		delete(q.pending, uri)
 		q.mu.Unlock()
-		s.workspace.IndexFile(uri, source)
+		s.indexDocumentVersion(uri, source)
 	}
+}
+
+func (s *Server) indexDocumentVersion(uri, source string) {
+	defer s.recoverPanic("indexFileByURI:" + uri)
+	s.workspace.IndexFile(uri, source)
+}
+
+func (q *docIndexQueue) doneLocked(uri string) func() {
+	delete(q.running, uri)
+	closed := q.closed[uri]
+	delete(q.closed, uri)
+	return closed
+}
+
+func (q *docIndexQueue) afterClose(uri string, then func()) {
+	q.mu.Lock()
+	delete(q.pending, uri)
+	if q.running[uri] {
+		if q.closed == nil {
+			q.closed = make(map[string]func())
+		}
+		q.closed[uri] = then
+		q.mu.Unlock()
+		return
+	}
+	q.mu.Unlock()
+	then()
+}
+
+func (q *docIndexQueue) reopened(uri string) {
+	q.mu.Lock()
+	delete(q.closed, uri)
+	q.mu.Unlock()
 }
 
 // docIndexIdle reports whether no background indexing of uri is running or

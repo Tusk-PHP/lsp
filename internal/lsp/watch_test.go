@@ -649,3 +649,50 @@ func TestClosingADocumentReadsTheDiskBackOnlyWhenItHadUnsavedChanges(t *testing.
 		t.Error("closing a document with unsaved changes re-diagnoses the open documents against the disk text")
 	}
 }
+
+func TestClosingADocumentWhileItIsIndexedInTheBackgroundLetsTheDiskTextLandLast(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json": `{"require": {"php": "^8.1"}}`,
+		"app/Big.php":   "<?php\nnamespace App;\nclass OnDisk {}\n",
+	}, map[string]interface{}{}, nil)
+	<-h.server.indexed
+	uri := symbols.PathToURI(filepath.Join(root, "app", "Big.php"))
+	inFlight := func(uri, source string) {
+		q := &h.server.docIndex
+		q.mu.Lock()
+		q.queueLocked(uri, source)
+		q.mu.Unlock()
+	}
+	closeDoc := func(uri string) {
+		h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": uri}})
+	}
+
+	openDocument(h, uri, "<?php\nnamespace App;\nclass InEditor {}\n")
+	waitForSymbols(t, h, "InEditor", func(names []string) bool { return len(names) == 1 })
+	inFlight(uri, "<?php\nnamespace App;\nclass LaterEdit {}\n")
+	closeDoc(uri)
+	time.Sleep(3 * watchedFilesDelay)
+	if names := symbolNames(t, h, "OnDisk"); len(names) != 0 {
+		t.Errorf("the disk text waits for the background index that is still running: %v", names)
+	}
+	h.server.drainDocIndex(uri)
+	waitForSymbols(t, h, "OnDisk", func(names []string) bool { return len(names) == 1 })
+	for _, gone := range []string{"InEditor", "LaterEdit"} {
+		if names := symbolNames(t, h, gone); len(names) != 0 {
+			t.Errorf("an edit waiting to be indexed when the document closed doesn't land: %s %v", gone, names)
+		}
+	}
+
+	alias := "file://" + filepath.Join(root, "app") + "/./Big.php"
+	reopened := "<?php\nnamespace App;\nclass Reopened {}\n"
+	openDocument(h, alias, reopened)
+	inFlight(alias, reopened)
+	closeDoc(alias)
+	openDocument(h, alias, reopened)
+	symbolNames(t, h, "Reopened")
+	h.server.drainDocIndex(alias)
+	time.Sleep(3 * watchedFilesDelay)
+	if names := symbolNames(t, h, "Reopened"); len(names) != 1 {
+		t.Errorf("a document opened again before its background index finished keeps the editor's text: %v", names)
+	}
+}
