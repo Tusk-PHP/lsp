@@ -800,9 +800,6 @@ func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos 
 	return ""
 }
 
-// InferLiteralType returns the PHP type for a literal expression value.
-var classConstantRe = regexp.MustCompile(`^\\?[A-Za-z_][A-Za-z0-9_\\]*::class$`)
-
 // ClassKeywordFQN resolves self, static and parent (any letter case) to the
 // class they stand for at pos. ok is false when name isn't one of them; fqn is
 // empty when there is no enclosing class or, for parent, no parent class.
@@ -819,65 +816,6 @@ func (r *Resolver) ClassKeywordFQN(name string, pos textpos.Position, file *pars
 		return "", true
 	}
 	return "", false
-}
-
-func InferLiteralType(expr string) string {
-	if expr == "" {
-		return ""
-	}
-	if expr[0] == '\'' || expr[0] == '"' {
-		return "string"
-	}
-	if t := castType(expr); t != "" {
-		return t
-	}
-	lower := strings.ToLower(expr)
-	if lower == "true" || lower == "false" {
-		return "bool"
-	}
-	if lower == "null" {
-		return "null"
-	}
-	if expr[0] == '[' || strings.HasPrefix(lower, "array(") {
-		return "array"
-	}
-	// Foo::class, self::class, static::class are class-name strings.
-	if strings.HasSuffix(lower, "::class") && classConstantRe.MatchString(expr) {
-		return "string"
-	}
-	if expr[0] >= '0' && expr[0] <= '9' || expr[0] == '-' {
-		if strings.ContainsAny(expr, ".eE") {
-			return "float"
-		}
-		return "int"
-	}
-	return ""
-}
-
-// castType returns the type an expression like `(int) $x` is cast to.
-func castType(expr string) string {
-	if expr[0] != '(' {
-		return ""
-	}
-	end := strings.IndexByte(expr, ')')
-	if end < 0 {
-		return ""
-	}
-	switch strings.ToLower(strings.TrimSpace(expr[1:end])) {
-	case "int", "integer":
-		return "int"
-	case "float", "double":
-		return "float"
-	case "string":
-		return "string"
-	case "bool", "boolean":
-		return "bool"
-	case "array":
-		return "array"
-	case "object":
-		return "object"
-	}
-	return ""
 }
 
 // BuildFQN combines a namespace and name into a fully qualified name.

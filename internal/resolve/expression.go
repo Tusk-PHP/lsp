@@ -108,7 +108,7 @@ func (r *Resolver) typeOf(t *syntaxTree, e ast.Expr, expected *ResolvedType, ctx
 			return literalType(t, lit)
 		}
 	case *ast.Cast:
-		return castResult(n.Kind)
+		return ResolvedType{FQN: parser.CastType(n.Kind)}
 	case *ast.ConstFetch:
 		if lit := constantLiteral(t.text(n)); !lit.IsEmpty() {
 			return lit
@@ -192,26 +192,6 @@ func constantLiteral(name string) ResolvedType {
 	case "true", "false":
 		return ResolvedType{FQN: "bool", Literal: lower}
 	case "null":
-		return ResolvedType{FQN: "null"}
-	}
-	return ResolvedType{}
-}
-
-func castResult(kind token.Kind) ResolvedType {
-	switch kind {
-	case token.IntCast:
-		return ResolvedType{FQN: "int"}
-	case token.FloatCast:
-		return ResolvedType{FQN: "float"}
-	case token.StringCast:
-		return ResolvedType{FQN: "string"}
-	case token.BoolCast:
-		return ResolvedType{FQN: "bool"}
-	case token.ArrayCast:
-		return ResolvedType{FQN: "array"}
-	case token.ObjectCast:
-		return ResolvedType{FQN: "object"}
-	case token.UnsetCast:
 		return ResolvedType{FQN: "null"}
 	}
 	return ResolvedType{}
@@ -439,7 +419,7 @@ func forwardsCallingClass(t *syntaxTree, class ast.Expr) bool {
 // arrayType types an array literal. A list of values that aren't plain
 // literals, such as [$user, new User], gets the union of their types.
 func (r *Resolver) arrayType(t *syntaxTree, n *ast.Array, ctx ExprContext) ResolvedType {
-	rt := literalArrayType(t, n)
+	rt := r.literalArrayType(t, n)
 	if len(n.Items) == 0 {
 		return rt
 	}
@@ -493,93 +473,8 @@ func (r *Resolver) arrayType(t *syntaxTree, n *ast.Array, ctx ExprContext) Resol
 	return ResolvedType{FQN: "array", Params: []ResolvedType{{FQN: "int"}, MakeUnion(parts, false)}}
 }
 
-func literalArrayType(t *syntaxTree, n *ast.Array) ResolvedType {
-	var fields []string
-	keyed := false
-	for _, item := range n.Items {
-		if item == nil || item.Key == nil {
-			continue
-		}
-		keyed = true
-		fields = append(fields, arrayKey(t, item.Key)+": "+literalValueType(t, item.Value))
-	}
-	if keyed {
-		return attachShapeFields(ResolvedType{FQN: "array", Shape: "array{" + strings.Join(fields, ", ") + "}"})
-	}
-	common, sameShape := "", true
-	for i, item := range n.Items {
-		if item == nil {
-			continue
-		}
-		vt := "mixed"
-		if !item.Unpack {
-			vt = literalValueType(t, item.Value)
-		}
-		if _, nested := item.Value.(*ast.Array); !nested || !strings.HasPrefix(vt, "array{") {
-			sameShape = false
-		}
-		if i > 0 && vt != common {
-			return ResolvedType{FQN: "array"}
-		}
-		common = vt
-	}
-	switch {
-	case common == "":
-		return ResolvedType{FQN: "array"}
-	case sameShape:
-		return attachShapeFields(ResolvedType{FQN: "array", Params: []ResolvedType{{FQN: "int"}, {FQN: "array", Shape: common}}})
-	case common == "mixed":
-		return ResolvedType{FQN: "array"}
-	}
-	return ResolvedType{FQN: "array", Params: []ResolvedType{{FQN: "int"}, {FQN: common}}}
-}
-
-func arrayKey(t *syntaxTree, key ast.Expr) string {
-	text := t.text(key)
-	if lit, ok := key.(*ast.Literal); ok && lit.Kind == token.ConstantString {
-		return text[1 : len(text)-1]
-	}
-	return text
-}
-
-func literalValueType(t *syntaxTree, e ast.Expr) string {
-	switch n := e.(type) {
-	case *ast.Array:
-		rt := literalArrayType(t, n)
-		if rt.Shape != "" {
-			return rt.Shape
-		}
-		return "array"
-	case *ast.Literal, *ast.InterpolatedString, *ast.ConstFetch, *ast.Unary:
-		if rt := literalNodeType(t, e); rt != "" {
-			return rt
-		}
-	}
-	return "mixed"
-}
-
-func literalNodeType(t *syntaxTree, e ast.Expr) string {
-	switch n := e.(type) {
-	case *ast.Literal:
-		return literalType(t, n).FQN
-	case *ast.InterpolatedString:
-		return "string"
-	case *ast.ConstFetch:
-		return constantLiteral(t.text(n)).FQN
-	case *ast.Unary:
-		if lit, ok := n.Operand.(*ast.Literal); ok && (n.Op == token.Minus || n.Op == token.Plus) {
-			return literalType(t, lit).FQN
-		}
-	case *ast.Array:
-		return "array"
-	case *ast.Cast:
-		return castResult(n.Kind).FQN
-	case *ast.ClassConstFetch:
-		if _, named := n.Class.(*ast.ConstFetch); named && strings.EqualFold(t.text(n.Name), "class") {
-			return "string"
-		}
-	}
-	return ""
+func (r *Resolver) literalArrayType(t *syntaxTree, n *ast.Array) ResolvedType {
+	return r.parseType(parser.LiteralExprType(n, t.src))
 }
 
 // ReceiverFor returns which class of a union or intersection receiver a

@@ -340,34 +340,6 @@ echo $providerClass;
 	})
 }
 
-func TestInferLiteralType(t *testing.T) {
-	tests := []struct {
-		expr, want string
-	}{
-		{"'hello'", "string"},
-		{`"hello"`, "string"},
-		{"true", "bool"},
-		{"false", "bool"},
-		{"null", "null"},
-		{"[1, 2]", "array"},
-		{"array(1)", "array"},
-		{"42", "int"},
-		{"-5", "int"},
-		{"3.14", "float"},
-		{"1e10", "float"},
-		{"", ""},
-		{"$var", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.expr, func(t *testing.T) {
-			if got := InferLiteralType(tt.expr); got != tt.want {
-				t.Errorf("InferLiteralType(%q) = %q, want %q", tt.expr, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestJoinChainLines(t *testing.T) {
 	t.Run("single line no-op", func(t *testing.T) {
 		lines := []string{"Category::query()->get()"}
@@ -527,17 +499,6 @@ func TestGetWordAt(t *testing.T) {
 	w := GetWordAt(source, textpos.Position{Line: 0, Character: 0})
 	if w != "$user" {
 		t.Errorf("got %q", w)
-	}
-}
-
-func TestInferLiteralTypeClassConstant(t *testing.T) {
-	for expr, want := range map[string]string{
-		"self::class": "string", "static::class": "string", "parent::class": "string",
-		"Foo::class": "string", "\\App\\Foo::class": "string", "Foo::CLASS_NAME": "",
-	} {
-		if got := InferLiteralType(expr); got != want {
-			t.Errorf("InferLiteralType(%q) = %q, want %q", expr, got, want)
-		}
 	}
 }
 

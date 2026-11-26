@@ -65,7 +65,7 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 			}
 		}
 		if n.Short {
-			if rt := literalArrayType(t, n); !rt.IsEmpty() {
+			if rt := r.literalArrayType(t, n); !rt.IsEmpty() {
 				return rt, true
 			}
 		}
@@ -153,7 +153,7 @@ func (r *Resolver) firstArgType(t *syntaxTree, arg ast.Expr, ctx ExprContext) Re
 	switch n := arg.(type) {
 	case *ast.Array:
 		if n.Short {
-			return literalArrayType(t, n)
+			return r.literalArrayType(t, n)
 		}
 	case *ast.Variable:
 		return r.ResolveVariableTypeTyped(t.text(n), ctx.Lines, ctx.Pos, ctx.File)
@@ -214,7 +214,7 @@ func (r *Resolver) assignedPlainType(varName string, t *syntaxTree, v assignedVa
 			}
 		}
 	}
-	if typ := literalNodeType(t, v.expr); typ != "" {
+	if typ := parser.LiteralValueType(v.expr, t.src); typ != "" {
 		return typ, true
 	}
 	if r.ChainResolver == nil || !isMemberChain(v.expr) {

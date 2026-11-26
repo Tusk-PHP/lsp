@@ -34,10 +34,11 @@ type CallSite struct {
 // paramPattern is a parameter's declared type, as written in its PHPDoc or
 // signature, before templates are substituted.
 type paramPattern struct {
-	name     string // with $
-	pattern  ResolvedType
-	variadic bool
-	def      string
+	name       string // with $
+	pattern    ResolvedType
+	variadic   bool
+	hasDefault bool
+	def        ResolvedType
 }
 
 // paramPatterns returns the declared types of a method's or function's
@@ -55,7 +56,7 @@ func (r *Resolver) paramPatterns(sym *symbols.Symbol, doc *parser.DocBlock) []pa
 		if raw == "" {
 			raw = p.Type
 		}
-		pp := paramPattern{name: p.Name, variadic: p.IsVariadic, def: p.DefaultValue}
+		pp := paramPattern{name: p.Name, variadic: p.IsVariadic, hasDefault: p.DefaultValue != "", def: r.indexedValueType(p.DefaultType)}
 		if raw != "" {
 			pp.pattern = r.parseType(r.expandTypeAliases(raw, ownerScopeFQN(sym, positionZero, nil), nil))
 		}
@@ -143,10 +144,8 @@ func (r *Resolver) bindCallTemplates(params []paramPattern, call *CallSite, name
 		if len(byParam[i]) == 0 {
 			// Not passed: a template only this parameter names takes the type
 			// of its default value, as `$default = null` makes it null.
-			if p.def != "" && !p.variadic {
-				if dt := literalExprType(p.def); !dt.IsEmpty() {
-					r.bindTemplates(p.pattern, dt, names, bound, 0)
-				}
+			if !p.def.IsEmpty() && !p.variadic {
+				r.bindTemplates(p.pattern, p.def, names, bound, 0)
 			}
 			continue
 		}
@@ -368,8 +367,8 @@ func (r *Resolver) decideConditionals(rt ResolvedType, params []paramPattern, ca
 				t := call.ArgType(byParam[i][0], nil)
 				return t, !t.IsEmpty() || t.Nullable
 			}
-			if p.def != "" {
-				return literalExprType(p.def), true
+			if p.hasDefault {
+				return p.def, true
 			}
 			return ResolvedType{}, false
 		}
@@ -553,36 +552,11 @@ func (r *Resolver) typeMatches(subject, target ResolvedType) matchVerdict {
 	return matchNo
 }
 
-// literalExprType is the type of a literal written in PHP code, keeping the
-// value of true, false, numbers and strings so conditional types can test it.
-func literalExprType(expr string) ResolvedType {
-	expr = strings.TrimSpace(expr)
-	if expr == "" {
-		return ResolvedType{}
-	}
-	lower := strings.ToLower(expr)
-	switch lower {
-	case "true", "false":
-		return ResolvedType{FQN: "bool", Literal: lower}
-	case "null":
+func (r *Resolver) indexedValueType(raw string) ResolvedType {
+	if raw == "null" {
 		return ResolvedType{FQN: "null"}
 	}
-	switch t := InferLiteralType(expr); t {
-	case "string":
-		if expr[0] == '\'' || expr[0] == '"' {
-			return ResolvedType{FQN: "string", Literal: expr}
-		}
-		return ResolvedType{FQN: "string"}
-	case "int", "float":
-		if expr[0] >= '0' && expr[0] <= '9' || expr[0] == '-' {
-			return ResolvedType{FQN: t, Literal: expr}
-		}
-		return ResolvedType{FQN: t}
-	case "":
-		return ResolvedType{}
-	default:
-		return ResolvedType{FQN: t}
-	}
+	return r.parseType(raw)
 }
 
 var positionZero = textpos.Position{}
