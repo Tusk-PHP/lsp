@@ -6,17 +6,20 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func (a *Analyzer) unknownClassCodeActions(uri, source string, file *parser.FileNode, params protocol.CodeActionParams) []protocol.CodeAction {
+func (a *Analyzer) unknownClassCodeActions(uri, source string, tree *ast.File, file *parser.FileNode, params protocol.CodeActionParams) []protocol.CodeAction {
 	if !protocol.CodeActionQuickFix.In(params.Context.Only) {
 		return nil
 	}
 
 	var actions []protocol.CodeAction
+	var namespaces *sourcectx.Namespaces
 	seen := make(map[string]bool)
 
 	for _, diag := range params.Context.Diagnostics {
@@ -31,9 +34,14 @@ func (a *Analyzer) unknownClassCodeActions(uri, source string, file *parser.File
 
 		candidates := a.lookupUnknownClassCandidates(refText)
 		preferred := len(candidates) == 1
+		if namespaces == nil {
+			namespaces = sourcectx.NamespacesOf(source, ast.NewLines(source), tree)
+		}
+		offset := namespaces.Offset(diag.Range.Start)
+		view, site := namespaces.At(offset).View(file), namespaces.UseSiteAt(offset)
 
 		for _, candidate := range candidates {
-			action, ok := buildUnknownClassImportAction(uri, source, file, diag, refText, replaceRange, candidate, preferred)
+			action, ok := buildUnknownClassImportAction(uri, view, site, diag, refText, replaceRange, candidate, preferred)
 			if !ok {
 				continue
 			}
@@ -100,7 +108,7 @@ func (a *Analyzer) lookupUnknownClassCandidates(refText string) []*symbols.Symbo
 	return deduped
 }
 
-func buildUnknownClassImportAction(uri, source string, file *parser.FileNode, diag protocol.Diagnostic, refText string, replaceRange protocol.Range, candidate *symbols.Symbol, preferred bool) (protocol.CodeAction, bool) {
+func buildUnknownClassImportAction(uri string, file *parser.FileNode, site sourcectx.UseSite, diag protocol.Diagnostic, refText string, replaceRange protocol.Range, candidate *symbols.Symbol, preferred bool) (protocol.CodeAction, bool) {
 	if file == nil || candidate == nil || candidate.FQN == "" || candidate.Name == "" {
 		return protocol.CodeAction{}, false
 	}
@@ -108,12 +116,7 @@ func buildUnknownClassImportAction(uri, source string, file *parser.FileNode, di
 		return protocol.CodeAction{}, false
 	}
 
-	importEdit, ok := buildUseImportEdit(source, file, candidate.FQN)
-	if !ok {
-		return protocol.CodeAction{}, false
-	}
-
-	edits := []protocol.TextEdit{importEdit}
+	edits := []protocol.TextEdit{site.Insert("use " + candidate.FQN + ";\n")}
 	if shouldShortenUnknownClassReference(file, refText, candidate.Name, candidate.FQN) {
 		edits = append(edits, protocol.TextEdit{
 			Range:   replaceRange,
@@ -203,71 +206,6 @@ func shouldShortenUnknownClassReference(file *parser.FileNode, refText, shortNam
 		return false
 	}
 	return canImportClassName(file, shortName, fqn)
-}
-
-func buildUseImportEdit(source string, file *parser.FileNode, fqn string) (protocol.TextEdit, bool) {
-	lines := strings.Split(source, "\n")
-	if len(file.Uses) > 0 {
-		lastUse := file.Uses[0].StartLine
-		for _, useStmt := range file.Uses[1:] {
-			if useStmt.StartLine > lastUse {
-				lastUse = useStmt.StartLine
-			}
-		}
-		insertLine := lastUse + 1
-		return protocol.TextEdit{
-			Range: protocol.Range{
-				Start: protocol.Position{Line: insertLine, Character: 0},
-				End:   protocol.Position{Line: insertLine, Character: 0},
-			},
-			NewText: "use " + fqn + ";\n",
-		}, true
-	}
-
-	insertLine := importHeaderInsertLine(lines)
-	if insertLine < 0 {
-		return protocol.TextEdit{}, false
-	}
-
-	newText := "use " + fqn + ";\n"
-	if insertLine < len(lines) && strings.TrimSpace(lines[insertLine]) != "" {
-		newText += "\n"
-	}
-
-	return protocol.TextEdit{
-		Range: protocol.Range{
-			Start: protocol.Position{Line: insertLine, Character: 0},
-			End:   protocol.Position{Line: insertLine, Character: 0},
-		},
-		NewText: newText,
-	}, true
-}
-
-func importHeaderInsertLine(lines []string) int {
-	namespaceLine := -1
-	declareLine := -1
-	phpLine := -1
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(trimmed, "<?php"):
-			phpLine = i
-		case strings.HasPrefix(trimmed, "declare("):
-			declareLine = i
-		case strings.HasPrefix(trimmed, "namespace ") && strings.Contains(trimmed, ";"):
-			namespaceLine = i
-			return namespaceLine + 1
-		}
-	}
-
-	if declareLine >= 0 {
-		return declareLine + 1
-	}
-	if phpLine >= 0 {
-		return phpLine + 1
-	}
-	return 0
 }
 
 func classLikeNodeFQN(namespace, fullName, name string) string {
