@@ -29,7 +29,7 @@
 
 |   |   |
 |---|---|
-| ⚡ **Ready in under a third of a second** | On a 9,700-file Laravel app, Tusk PHP answers its first cross-file request in 283 ms using 162 MB. Intelephense needs 2.2 s and 686 MB. [See the benchmarks](#benchmarks). |
+| ⚡ **Ready in under a third of a second** | On the 23,800-file Filament demo app, Tusk PHP answers its first cross-file request in 258 ms and peaks at 529 MB. Intelephense needs 2.0 s and 1,062 MB. [See the benchmarks](#benchmarks). |
 | 🧠 **Understands your container** | `app('request')->`, `$container->get(...)`, `#[Autowire]` and interface bindings resolve to the concrete class, for completion, hover and go-to-definition. |
 | 🌍 **Works where you work** | Local projects, **Remote SSH** in VS Code and Zed, **vscode.dev** (in the browser, through WebAssembly), and any editor that speaks LSP. |
 | 🤖 **Talks to your AI agent** | `tusk-php mcp` gives Claude Code, Codex and Cursor the same index your editor uses: symbols, diagnostics, routes, models, test coverage and your database schema. |
@@ -99,25 +99,25 @@ PHPDoc generics are read the way [PHPStan](https://phpstan.org/blog/generics-in-
 
 ## Benchmarks
 
-Every server gets the same LSP requests at the same cursor positions in the same workspaces, over stdio, with a cold cache and one server at a time. Tusk PHP 0.15.0, Intelephense 1.18.5, Phpactor 2026.06.23.0, php-lsp 0.33.0 and PHPantom 1.1.0.
+Every server gets the same LSP requests at the same cursor positions in the same workspaces, over stdio, with a cold cache and one server at a time. Tusk PHP 0.16.0, Intelephense 1.18.5, Phpactor 2026.11.22.0, php-lsp 0.33.0 and PHPantom 1.1.0. The large workspace is the [Filament demo app](https://github.com/filamentphp/demo): Filament 5, Laravel 13 and Livewire, with its full `vendor/`.
 
 **Time until the first correct cross-file answer, and peak memory**
 
 | Workspace | Tusk PHP | Intelephense | Phpactor | php-lsp | PHPantom |
 |---|---|---|---|---|---|
-| Laravel (9.7k files) | **285 ms · 180 MB** | 3321 ms · 698 MB | 5299 ms · 203 MB | 387 ms · 484 MB | 376 ms · 110 MB |
-| Symfony (1.1k files) | **282 ms · 58 MB** | 709 ms · 359 MB | 3736 ms · 111 MB | 336 ms · 385 MB | 311 ms · 74 MB |
-| Small project (6 files) | **34 ms · 28 MB** | 300 ms · 293 MB | 3849 ms · 168 MB | 181 ms · 128 MB | 36 ms · 51 MB |
+| Filament demo (23.8k files) | **258 ms** · 529 MB | 1957 ms · 1062 MB | 3624 ms · 1336 MB | 425 ms · 962 MB | 836 ms · **522 MB** |
+| Symfony (1.1k files) | **34 ms · 44 MB** | 725 ms · 359 MB | 2212 ms · 505 MB | 274 ms · 169 MB | 315 ms · 68 MB |
+| Small project (6 files) | **38 ms · 29 MB** | 185 ms · 247 MB | 2126 ms · 553 MB | 297 ms · 99 MB | 108 ms · 39 MB |
 
 **Correct answers** (completion, definition, hover, references, signature help, symbols and diagnostics)
 
 | Workspace | Tusk PHP | Intelephense | Phpactor | php-lsp | PHPantom |
 |---|---|---|---|---|---|
-| Laravel | **19/19** | 12/19 | 14/19 | 14/19 | 19/19 |
+| Filament demo | 27/33 | 14/33 | 20/33 | 23/33 | **28/33** |
 | Symfony | 11/11 | 11/11 | 11/11 | 11/11 | 11/11 |
 | Diagnostics | 6/6 | 6/6 | 5/6 | 6/6 | 6/6 |
 
-Tusk PHP is among the fastest and lightest servers, and answers in well under a millisecond for completion, hover and definition. It answers every Laravel and Symfony question, including completion and hover on Eloquent's static calls (`Category::where()`), and passes all six diagnostics cases. Run `make bench-install && make bench` to reproduce the numbers; [bench/README.md](bench/README.md) explains the method and how answers are graded.
+Tusk PHP is the first to answer correctly in every workspace, has the lowest peak memory on Symfony and the small project (PHPantom's is 7 MB lower on Filament), and answers completion, hover and definition in under a millisecond at the median. On the Filament demo it follows `static` builder chains through Filament's traits, closures that Filament fills in by parameter name, panel providers and Eloquent's static calls, and it reports nothing wrong in the demo's clean files. PHPantom answers one Filament question Tusk PHP misses: hover on `$this` in a Livewire view. Four Blade definition cases (`<x-filament::button>`, `<x-filament-widgets::widget>`, a widget's `$view` and `$this` in its view) aren't answered by any server yet, and only php-lsp follows `wire:submit` to its method. Tusk PHP's PHPStan and Pint integrations are turned off for these runs, since no other server starts external tools. Run `make filament-workspace && make bench-install && make bench` to reproduce the numbers; [bench/README.md](bench/README.md) explains the method and how answers are graded.
 
 ## Contributing
 
