@@ -76,10 +76,8 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 				return rt, true
 			}
 		}
-		if n.Short {
-			if rt := literalArrayType(t, n); !rt.IsEmpty() {
-				return rt, true
-			}
+		if rt := literalArrayType(t, n); !rt.IsEmpty() {
+			return rt, true
 		}
 	case *ast.New:
 		return r.assignedNewType(t, n, ctx)
