@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
-	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 // tokenSpan is a range of tokens [start, end).
@@ -13,17 +13,17 @@ type tokenSpan struct{ start, end int }
 
 // splitTokenArgs splits the arguments of the call whose `(` is toks[open],
 // returning them and the index of its `)`, or -1 when it isn't closed.
-func splitTokenArgs(toks []parser.Token, open int) ([]tokenSpan, int) {
-	if open >= len(toks) || toks[open].Kind != parser.TokenOpenParen {
+func splitTokenArgs(toks []phpToken, open int) ([]tokenSpan, int) {
+	if open >= len(toks) || toks[open].Kind != token.LeftParen {
 		return nil, -1
 	}
 	var args []tokenSpan
 	depth, start := 0, open+1
 	for k := open; k < len(toks); k++ {
 		switch toks[k].Kind {
-		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
+		case token.LeftParen, token.LeftBracket, token.LeftBrace, token.Attribute:
 			depth++
-		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
+		case token.RightParen, token.RightBracket, token.RightBrace:
 			depth--
 			if depth == 0 {
 				if k > start {
@@ -31,19 +31,17 @@ func splitTokenArgs(toks []parser.Token, open int) ([]tokenSpan, int) {
 				}
 				return args, k
 			}
-		case parser.TokenComma:
+		case token.Comma:
 			if depth == 1 {
 				args = append(args, tokenSpan{start, k})
 				start = k + 1
 			}
-		case parser.TokenSemicolon:
+		case token.Semicolon:
 			// A statement ends inside a closure's body, never in the
 			// arguments themselves.
 			if depth <= 1 {
 				return nil, -1
 			}
-		case parser.TokenEOF:
-			return nil, -1
 		}
 	}
 	return nil, -1
@@ -51,8 +49,8 @@ func splitTokenArgs(toks []parser.Token, open int) ([]tokenSpan, int) {
 
 // literalString returns the value of a span that is one string literal with
 // nothing interpolated.
-func literalString(toks []parser.Token, s tokenSpan) (string, bool) {
-	if s.end-s.start != 1 || toks[s.start].Kind != parser.TokenStringLiteral {
+func literalString(toks []phpToken, s tokenSpan) (string, bool) {
+	if s.end-s.start != 1 || toks[s.start].Kind != token.ConstantString {
 		return "", false
 	}
 	v := toks[s.start].Value
@@ -64,17 +62,17 @@ func literalString(toks []parser.Token, s tokenSpan) (string, bool) {
 
 // readData reads a render's data argument: an array literal, compact(), or
 // a variable assigned an array literal earlier in the same function.
-func readData(uri, source string, toks []parser.Token, s tokenSpan, call int) ([]ViewVar, bool) {
+func readData(uri, source string, toks []phpToken, s tokenSpan, call int) ([]ViewVar, bool) {
 	if s.end <= s.start {
 		return nil, false
 	}
 	first := toks[s.start]
 	switch {
-	case first.Kind == parser.TokenOpenBracket && parser.MatchingClose(toks, s.start) == s.end-1:
+	case first.Kind == token.LeftBracket && matchingClose(toks, s.start) == s.end-1:
 		return readArray(source, toks, tokenSpan{s.start + 1, s.end - 1})
-	case first.Kind == parser.TokenIdentifier && strings.EqualFold(first.Value, "compact") && s.end-s.start >= 3:
+	case first.Kind == token.Identifier && strings.EqualFold(first.Value, "compact") && s.end-s.start >= 3:
 		return readCompact(toks, s)
-	case first.Kind == parser.TokenVariable && s.end-s.start == 1:
+	case first.Kind == token.Variable && s.end-s.start == 1:
 		return readAssignedArray(source, toks, first.Value, call)
 	}
 	return nil, true
@@ -82,7 +80,7 @@ func readData(uri, source string, toks []parser.Token, s tokenSpan, call int) ([
 
 // readWith reads a `->with()` call: with('key', $value), with([...]) or
 // withKey($value).
-func readWith(uri, source string, toks []parser.Token, method string, args []tokenSpan, call int) ([]ViewVar, bool) {
+func readWith(uri, source string, toks []phpToken, method string, args []tokenSpan, call int) ([]ViewVar, bool) {
 	if method != "with" {
 		if len(args) != 1 || len(method) <= 4 {
 			return nil, true
@@ -111,13 +109,13 @@ func readWith(uri, source string, toks []parser.Token, method string, args []tok
 
 // readArray reads `'key' => expr` items; any other item makes the data
 // opaque.
-func readArray(source string, toks []parser.Token, inner tokenSpan) ([]ViewVar, bool) {
+func readArray(source string, toks []phpToken, inner tokenSpan) ([]ViewVar, bool) {
 	var vars []ViewVar
 	opaque := false
 	for _, item := range splitItems(toks, inner) {
 		arrow := -1
 		for k := item.start; k < item.end; k++ {
-			if toks[k].Kind == parser.TokenDoubleArrow {
+			if toks[k].Kind == token.DoubleArrow {
 				arrow = k
 				break
 			}
@@ -139,7 +137,7 @@ func readArray(source string, toks []parser.Token, inner tokenSpan) ([]ViewVar, 
 	return vars, opaque
 }
 
-func readCompact(toks []parser.Token, s tokenSpan) ([]ViewVar, bool) {
+func readCompact(toks []phpToken, s tokenSpan) ([]ViewVar, bool) {
 	args, close := splitTokenArgs(toks, s.start+1)
 	if close != s.end-1 {
 		return nil, true
@@ -163,14 +161,14 @@ func readCompact(toks []parser.Token, s tokenSpan) ([]ViewVar, bool) {
 
 // readAssignedArray reads `$data = [...]` assigned before the call in the
 // same function, and the `$data['key'] = expr;` that follow it.
-func readAssignedArray(source string, toks []parser.Token, name string, call int) ([]ViewVar, bool) {
+func readAssignedArray(source string, toks []phpToken, name string, call int) ([]ViewVar, bool) {
 	start := -1
 	for k := call - 1; k >= 0; k-- {
-		if toks[k].Kind == parser.TokenFunction {
+		if toks[k].Kind == token.Function {
 			break
 		}
-		if toks[k].Kind == parser.TokenVariable && toks[k].Value == name && k+2 < len(toks) &&
-			toks[k+1].Kind == parser.TokenEquals && toks[k+2].Kind == parser.TokenOpenBracket {
+		if toks[k].Kind == token.Variable && toks[k].Value == name && k+2 < len(toks) &&
+			toks[k+1].Kind == token.Equals && toks[k+2].Kind == token.LeftBracket {
 			start = k
 			break
 		}
@@ -178,24 +176,24 @@ func readAssignedArray(source string, toks []parser.Token, name string, call int
 	if start < 0 {
 		return nil, true
 	}
-	close := parser.MatchingClose(toks, start+2)
+	close := matchingClose(toks, start+2)
 	if close < 0 || close > call {
 		return nil, true
 	}
 	vars, opaque := readArray(source, toks, tokenSpan{start + 3, close})
 	// $data['key'] = expr; between the assignment and the call.
 	for k := close; k < call; k++ {
-		if toks[k].Kind != parser.TokenVariable || toks[k].Value != name {
+		if toks[k].Kind != token.Variable || toks[k].Value != name {
 			continue
 		}
-		if k+4 < call && toks[k+1].Kind == parser.TokenOpenBracket && toks[k+3].Kind == parser.TokenCloseBracket && toks[k+4].Kind == parser.TokenEquals {
+		if k+4 < call && toks[k+1].Kind == token.LeftBracket && toks[k+3].Kind == token.RightBracket && toks[k+4].Kind == token.Equals {
 			key, ok := literalString(toks, tokenSpan{k + 2, k + 3})
 			if !ok || !isVarName(key) {
 				opaque = true
 				continue
 			}
 			end := k + 5
-			for end < call && toks[end].Kind != parser.TokenSemicolon {
+			for end < call && toks[end].Kind != token.Semicolon {
 				end++
 			}
 			v := exprVar(source, toks, key, tokenSpan{k + 5, end})
@@ -204,7 +202,7 @@ func readAssignedArray(source string, toks []parser.Token, name string, call int
 			vars = append(vars, v)
 			continue
 		}
-		if k+1 < call && toks[k+1].Kind != parser.TokenOpenBracket && toks[k+1].Kind != parser.TokenComma && toks[k+1].Kind != parser.TokenCloseParen {
+		if k+1 < call && toks[k+1].Kind != token.LeftBracket && toks[k+1].Kind != token.Comma && toks[k+1].Kind != token.RightParen {
 			// Something else is done with the array: it may change.
 			opaque = true
 		}
@@ -213,16 +211,16 @@ func readAssignedArray(source string, toks []parser.Token, name string, call int
 }
 
 // splitItems splits array items at top-level commas.
-func splitItems(toks []parser.Token, s tokenSpan) []tokenSpan {
+func splitItems(toks []phpToken, s tokenSpan) []tokenSpan {
 	var items []tokenSpan
 	depth, start := 0, s.start
 	for k := s.start; k < s.end; k++ {
 		switch toks[k].Kind {
-		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
+		case token.LeftParen, token.LeftBracket, token.LeftBrace, token.Attribute:
 			depth++
-		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
+		case token.RightParen, token.RightBracket, token.RightBrace:
 			depth--
-		case parser.TokenComma:
+		case token.Comma:
 			if depth == 0 {
 				if k > start {
 					items = append(items, tokenSpan{start, k})
@@ -238,7 +236,7 @@ func splitItems(toks []parser.Token, s tokenSpan) []tokenSpan {
 }
 
 // exprVar is a variable whose value is the expression in s.
-func exprVar(source string, toks []parser.Token, name string, s tokenSpan) ViewVar {
+func exprVar(source string, toks []phpToken, name string, s tokenSpan) ViewVar {
 	v := ViewVar{Name: name}
 	if s.end <= s.start {
 		return v
