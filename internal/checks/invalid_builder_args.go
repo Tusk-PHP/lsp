@@ -306,7 +306,8 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 	}
 
 	// Resolve the model from the line up to the method call
-	modelFQN := r.ModelResolver(call.prefix, method, source, call.line, file).FQN
+	model := r.ModelResolver(call.prefix, method, source, call.line, file)
+	modelFQN := model.FQN
 	if modelFQN == "" {
 		return nil
 	}
@@ -333,6 +334,9 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 	}
 
 	if msg == "" {
+		return nil
+	}
+	if !isRelMethod && model.OtherTables {
 		return nil
 	}
 

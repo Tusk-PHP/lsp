@@ -144,6 +144,17 @@ func TestBuilderArgsOnARelationCheckTheRelatedModel(t *testing.T) {
 	)
 }
 
+func TestBuilderArgsOnARelationThatJoinsAnotherTableLeaveColumnsAlone(t *testing.T) {
+	assertBuilderArgs(t, `    $tag->products()->where('weight', 1);
+    $tag->posts()->where('taggable_type', Post::class);
+    $country->posts()->where('country_id', 1);
+    $country->latestPost()->where('country_id', 1);
+    $tag->products()->with('missingRelation');
+`,
+		"Unknown relation 'missingRelation' on model 'Product'",
+	)
+}
+
 func TestBuilderArgsOnAUnionOfModelsAreNotChecked(t *testing.T) {
 	assertBuilderArgs(t, `    $comment->commentable()->where('duration', 1);
     $comment->commentable()->with('clips');

@@ -13,8 +13,17 @@ const (
 	EloquentRelation = `Illuminate\Database\Eloquent\Relations\Relation`
 )
 
+var tableJoiningRelations = []string{
+	`Illuminate\Database\Eloquent\Relations\BelongsToMany`,
+	`Illuminate\Database\Eloquent\Relations\MorphToMany`,
+	`Illuminate\Database\Eloquent\Relations\HasOneOrManyThrough`,
+	`Illuminate\Database\Eloquent\Relations\HasManyThrough`,
+	`Illuminate\Database\Eloquent\Relations\HasOneThrough`,
+}
+
 type QueriedModel struct {
-	FQN string
+	FQN         string
+	OtherTables bool
 }
 
 func IsModel(index *symbols.Index, fqn string) bool {
@@ -36,7 +45,7 @@ func ModelQueriedBy(index *symbols.Index, rt resolve.ResolvedType) QueriedModel 
 	if !IsModel(index, model) {
 		return QueriedModel{}
 	}
-	return QueriedModel{FQN: model}
+	return QueriedModel{FQN: model, OtherTables: isOrExtends(index, base, tableJoiningRelations...)}
 }
 
 func singleClass(rt resolve.ResolvedType) bool {
