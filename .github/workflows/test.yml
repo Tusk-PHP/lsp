@@ -33,6 +33,15 @@ jobs:
           composer install --working-dir testdata/laravel --no-interaction --no-progress --prefer-dist --no-scripts
           composer install --working-dir testdata/symfony --no-interaction --no-progress --prefer-dist --no-scripts
 
+      - name: Cache Composer downloads for the Filament workspace
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-filament-${{ hashFiles('scripts/fetch-filament.sh') }}
+
+      - name: Fetch the Filament workspace
+        run: bash scripts/fetch-filament.sh
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:

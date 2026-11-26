@@ -13,6 +13,7 @@ plans/
 *.wasm
 testdata/corpus/_repos/
 testdata/field/_repos/
+testdata/filament/
 
 # benchmark harness artifacts
 bench/.tools/
