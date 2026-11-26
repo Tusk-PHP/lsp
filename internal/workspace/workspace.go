@@ -174,10 +174,10 @@ func (ws *Bootstrapped) IndexWorkspace() IndexedFiles {
 		// Blade views declare no symbols; only their place is kept, for
 		// references and rename, and their PHP is read when it's needed.
 		if IsBlade(path) {
-			ws.Index.AddTemplateFile("file://" + path)
+			ws.Index.AddTemplateFile(symbols.PathToURI(path))
 			if ws.ViewData != nil {
 				if content, err := os.ReadFile(path); err == nil {
-					ws.ViewData.IndexFile("file://"+path, string(content))
+					ws.ViewData.IndexFile(symbols.PathToURI(path), string(content))
 				}
 			}
 			return nil
@@ -192,15 +192,15 @@ func (ws *Bootstrapped) IndexWorkspace() IndexedFiles {
 			return nil
 		}
 		if content, err := os.ReadFile(path); err == nil {
-			ws.Index.IndexFileWithSource("file://"+path, string(content), symbols.SourceProject)
-			ws.ViewData.IndexFile("file://"+path, string(content))
+			ws.Index.IndexFileWithSource(symbols.PathToURI(path), string(content), symbols.SourceProject)
+			ws.ViewData.IndexFile(symbols.PathToURI(path), string(content))
 		}
 		return nil
 	})
 
 	for _, path := range ideHelperFiles {
 		if content, err := os.ReadFile(path); err == nil {
-			ws.Index.IndexIDEHelperFile("file://"+path, string(content))
+			ws.Index.IndexIDEHelperFile(symbols.PathToURI(path), string(content))
 			ws.logf("Indexed IDE helper: %s", filepath.Base(path))
 		}
 	}
@@ -259,7 +259,7 @@ func (ws *Bootstrapped) IndexComposerDependencies() int {
 
 		if entry.IsFile {
 			if content, err := os.ReadFile(entry.Path); err == nil {
-				ws.Index.IndexFileWithSource("file://"+entry.Path, string(content), src)
+				ws.Index.IndexFileWithSource(symbols.PathToURI(entry.Path), string(content), src)
 				if entry.IsVendor {
 					vendorCount++
 				}
@@ -282,7 +282,7 @@ func (ws *Bootstrapped) IndexComposerDependencies() int {
 				return nil
 			}
 			if content, err := os.ReadFile(path); err == nil {
-				ws.Index.IndexFileWithSource("file://"+path, string(content), symbols.SourceVendor)
+				ws.Index.IndexFileWithSource(symbols.PathToURI(path), string(content), symbols.SourceVendor)
 				vendorCount++
 			}
 			return nil

@@ -117,7 +117,7 @@ func (s *Server) refreshWorkspace() {
 		Paths:      paths,
 		Profile:    profile,
 		Config:     s.loadConfig,
-		EditorOwns: s.isOpen,
+		EditorOwns: s.isOpenAt,
 	})
 	if err != nil {
 		s.logger.Printf("workspace refresh: %v", err)
@@ -129,9 +129,7 @@ func (s *Server) refreshWorkspace() {
 	if result.ProfileChanged {
 		s.logInfo(fmt.Sprintf("PHP LSP: PHP %s (source: %s)", result.Profile.PHPVersion, result.ProfileSource))
 	}
-	for _, uri := range result.EditorOpened {
-		s.reindexOpenDocument(uri)
-	}
+	s.handBackToEditor(result.EditorOpened)
 	for _, uri := range result.Files {
 		if affectsComponents(s.rootPath, uri) {
 			s.components.Invalidate()
@@ -143,9 +141,24 @@ func (s *Server) refreshWorkspace() {
 	}
 }
 
-func (s *Server) isOpen(uri string) bool {
-	_, open := s.openDocument(uri)
+func (s *Server) handBackToEditor(uris []string) {
+	for _, uri := range uris {
+		if editorURI, open := s.editorURIAt(symbols.URIToPath(uri)); open {
+			s.reindexOpenDocument(editorURI)
+		}
+	}
+}
+
+func (s *Server) isOpenAt(path string) bool {
+	_, open := s.editorURIAt(path)
 	return open
+}
+
+func (s *Server) editorURIAt(path string) (string, bool) {
+	s.docMu.RLock()
+	defer s.docMu.RUnlock()
+	uri, open := s.openPaths[path]
+	return uri, open
 }
 
 func (s *Server) openDocument(uri string) (string, bool) {
