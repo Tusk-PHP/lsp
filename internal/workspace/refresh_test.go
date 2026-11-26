@@ -72,6 +72,19 @@ func TestRefreshFollowsProjectFilesOnDisk(t *testing.T) {
 	}
 }
 
+func TestRefreshReadsALoneCRAsALineBreak(t *testing.T) {
+	ws, root := newRefreshWorkspace(t, nil, map[string]string{"app/Order.php": "<?php\nclass Order {}\n"})
+	writeFiles(t, root, map[string]string{"app/Order.php": "<?php\rnamespace App;\rclass Order {}\r"})
+	refreshPaths(t, ws, root, "app/Order.php")
+	uri := symbols.PathToURI(filepath.Join(root, "app/Order.php"))
+	if got := ws.Index.GetFileSource(uri); got != "<?php\nnamespace App;\nclass Order {}\n" {
+		t.Errorf("the re-read file's lines are the editor's: %q", got)
+	}
+	if ws.Index.Lookup(`App\Order`) == nil {
+		t.Error("the namespace after a lone CR applies to the class")
+	}
+}
+
 func TestRefreshSkipsDocumentsTheEditorOwns(t *testing.T) {
 	ws, root := newRefreshWorkspace(t, nil, map[string]string{"app/Open.php": "<?php\nclass Open {}\n"})
 	writeFiles(t, root, map[string]string{"app/Open.php": "<?php\nclass FromDisk {}\n"})

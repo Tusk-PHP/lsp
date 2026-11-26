@@ -9,6 +9,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/Tusk-PHP/lsp/internal/textpos"
+
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -190,7 +192,7 @@ func (ws *Bootstrapped) sourcesAt(path string) ([]string, error) {
 }
 
 func (ws *Bootstrapped) refreshFile(path, uri string) (bool, error) {
-	content, err := os.ReadFile(path)
+	content, err := textpos.ReadText(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		if !ws.Index.HasFile(uri) {
 			return false, nil
@@ -205,6 +207,6 @@ func (ws *Bootstrapped) refreshFile(path, uri string) (bool, error) {
 	if !ws.Index.HasFile(uri) && !ws.projectFiles.admitCreated(path) {
 		return false, nil
 	}
-	ws.IndexFile(uri, string(content))
+	ws.IndexFile(uri, content)
 	return true, nil
 }
