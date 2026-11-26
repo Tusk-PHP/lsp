@@ -35,12 +35,12 @@ func (r *Resolver) ForwardTypes(rt ResolvedType) []ResolvedType {
 // when rt's class doesn't have the member, nor any @mixin it names, but
 // forwards it: Builder<Category> for Category::where(). ok is false when rt
 // has the member itself or nothing it forwards to does.
-func (r *Resolver) ForwardedReceiver(rt ResolvedType, name string, call bool) (ResolvedType, bool) {
-	if m, _ := r.FindMemberOn(rt, name, call); m != nil {
+func (r *Resolver) ForwardedReceiver(rt ResolvedType, name string, access MemberAccess) (ResolvedType, bool) {
+	if m, _ := r.FindMemberOn(rt, name, access); m != nil {
 		// A #[Scope] method is declared on the model under the name it's
 		// called by, but it's protected: Category::active() still goes
 		// through the builder.
-		if call {
+		if access == CallAccess {
 			for _, fwd := range r.ForwardTypes(rt) {
 				if r.ScopeMethod(fwd, name) == m {
 					return fwd, true
@@ -50,10 +50,10 @@ func (r *Resolver) ForwardedReceiver(rt ResolvedType, name string, call bool) (R
 		return ResolvedType{}, false
 	}
 	for _, fwd := range r.ForwardTypes(rt) {
-		if m, _ := r.FindMemberOn(fwd, name, call); m != nil {
+		if m, _ := r.FindMemberOn(fwd, name, access); m != nil {
 			return fwd, true
 		}
-		if call && r.ScopeMethod(fwd, name) != nil {
+		if access == CallAccess && r.ScopeMethod(fwd, name) != nil {
 			return fwd, true
 		}
 	}
@@ -63,20 +63,20 @@ func (r *Resolver) ForwardedReceiver(rt ResolvedType, name string, call bool) (R
 // LookupMember finds the member name for a reader such as hover or go to
 // definition: on rt's class, then the @mixin types it names, then the types
 // it forwards calls to. owner is the type it was found on.
-func (r *Resolver) LookupMember(rt ResolvedType, name string, call bool) (*symbols.Symbol, ResolvedType) {
-	if m, owner := r.FindMemberOn(rt, name, call); m != nil {
+func (r *Resolver) LookupMember(rt ResolvedType, name string, access MemberAccess) (*symbols.Symbol, ResolvedType) {
+	if m, owner := r.FindMemberOn(rt, name, access); m != nil {
 		return m, owner
 	}
-	if call {
+	if access == CallAccess {
 		if m := r.ScopeMethod(rt, name); m != nil {
 			return m, rt
 		}
 	}
 	for _, fwd := range r.ForwardTypes(rt) {
-		if m, owner := r.FindMemberOn(fwd, name, call); m != nil {
+		if m, owner := r.FindMemberOn(fwd, name, access); m != nil {
 			return m, owner
 		}
-		if call {
+		if access == CallAccess {
 			if m := r.ScopeMethod(fwd, name); m != nil {
 				return m, fwd
 			}
@@ -95,10 +95,11 @@ func (r *Resolver) FindMemberAnywhere(classFQN, name string) *symbols.Symbol {
 }
 
 // AccessedMemberOn finds the member an access names on its receiver: the
-// method for a call and the property otherwise, then the same name through
-// the class's mixins and forwards, with the receiver's type arguments.
-func (r *Resolver) AccessedMemberOn(owner ResolvedType, name string, call bool) *symbols.Symbol {
-	if m := r.FindAccessedMember(owner.BaseFQN(), name, call); m != nil {
+// method for a call, the constant or enum case for X::NAME and the property
+// otherwise, then for a call or a property the same name through the class's
+// mixins and forwards, with the receiver's type arguments.
+func (r *Resolver) AccessedMemberOn(owner ResolvedType, name string, access MemberAccess) *symbols.Symbol {
+	if m := r.FindAccessedMember(owner.BaseFQN(), name, access); m != nil || !access.reachesMagic() {
 		return m
 	}
 	if m := r.FindMemberAnywhere(owner.BaseFQN(), name); m != nil {
@@ -118,10 +119,10 @@ func (r *Resolver) FindMemberAnywhereOn(rt ResolvedType, name string) *symbols.S
 	if r.Index == nil || rt.FQN == "" {
 		return nil
 	}
-	if m, _ := r.LookupMember(rt, name, true); m != nil {
+	if m, _ := r.LookupMember(rt, name, CallAccess); m != nil {
 		return m
 	}
-	m, _ := r.LookupMember(rt, name, false)
+	m, _ := r.LookupMember(rt, name, PropertyAccess)
 	return m
 }
 
@@ -138,12 +139,12 @@ func (r *Resolver) ScopeMethod(rt ResolvedType, name string) *symbols.Symbol {
 		return nil
 	}
 	if conv.Prefix != "" {
-		if m := r.FindAccessedMember(model, conv.Prefix+strings.ToUpper(name[:1])+name[1:], true); isScope(m, conv, true) {
+		if m := r.FindAccessedMember(model, conv.Prefix+strings.ToUpper(name[:1])+name[1:], CallAccess); isScope(m, conv, true) {
 			return m
 		}
 	}
 	if conv.Attribute != "" {
-		if m := r.FindAccessedMember(model, name, true); isScope(m, conv, false) {
+		if m := r.FindAccessedMember(model, name, CallAccess); isScope(m, conv, false) {
 			return m
 		}
 	}

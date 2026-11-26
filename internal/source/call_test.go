@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 )
 
 func TestFunctionCallMarksOnlyANameCalledAsAFunction(t *testing.T) {
@@ -117,6 +118,25 @@ func TestCalledMarksAnyNameFollowedByItsArguments(t *testing.T) {
 		pos := protocol.Position{Line: strings.Count(full[:offset], "\n"), Character: offset - strings.LastIndex(full[:offset], "\n") - 1}
 		if got := Analyze("file:///a.php", full, pos).Called; got != want {
 			t.Errorf("%s: Called = %v, want %v", src, got, want)
+		}
+	}
+}
+
+func TestMemberAccessReadsTheFormOfTheAccess(t *testing.T) {
+	for src, want := range map[string]resolve.MemberAccess{
+		"Room::SI|ZE;":    resolve.ConstantAccess,
+		"Room::$SI|ZE;":   resolve.PropertyAccess,
+		"Room::si|ze();":  resolve.CallAccess,
+		"$room->si|ze;":   resolve.PropertyAccess,
+		"$room->si|ze();": resolve.CallAccess,
+		"$room?->si|ze;":  resolve.PropertyAccess,
+	} {
+		full := "<?php\n" + src + "\n"
+		offset := strings.Index(full, "|")
+		full = full[:offset] + full[offset+1:]
+		pos := protocol.Position{Line: strings.Count(full[:offset], "\n"), Character: offset - strings.LastIndex(full[:offset], "\n") - 1}
+		if got := Analyze("file:///a.php", full, pos).MemberAccess(); got != want {
+			t.Errorf("%s: MemberAccess = %v, want %v", src, got, want)
 		}
 	}
 }

@@ -245,13 +245,15 @@ func (r *Resolver) accessOwnerType(line string, wordStart int, source string, po
 		}
 	}
 	ownerFQN := ownerResolved.BaseFQN()
-	if strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
+	static := strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::")
+	if static {
 		ownerResolved = ClassStringTarget(ownerResolved) // $class::create()
 	}
-	if fwd, ok := r.ForwardedReceiver(ownerResolved, target, parenEnd > 0); ok {
+	access := MemberAccessOf(parenEnd > 0, static, target)
+	if fwd, ok := r.ForwardedReceiver(ownerResolved, target, access); ok {
 		ownerResolved = fwd // Category::where() runs on Builder<Category>
 	}
-	member, foundOn := r.FindMemberOn(ownerResolved, target, parenEnd > 0)
+	member, foundOn := r.FindMemberOn(ownerResolved, target, access)
 	firstClass := parenEnd > 0 && IsCallableArgs(callArgStr)
 	if member != nil && foundOn.FQN != ownerResolved.FQN {
 		// A member a @mixin brings in. A fluent one gives back the object it

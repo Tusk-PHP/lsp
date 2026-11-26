@@ -141,7 +141,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		if classFQN == "" {
 			return nil
 		}
-		sym := r.AccessedMemberOn(owner, word, ctx.Called)
+		sym := r.AccessedMemberOn(owner, word, ctx.MemberAccess())
 		// For Laravel facades, also look up the member on the concrete class
 		if sym == nil && p.container != nil && p.framework == "laravel" {
 			if concrete := p.container.ResolveFacade(classFQN); concrete != "" {

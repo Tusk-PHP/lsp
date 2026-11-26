@@ -550,10 +550,10 @@ trait Frequencies { /** @return $this */ public function timezone($tz) { return 
 class Event { use Frequencies; /** @var \DateTimeZone|string */ public $timezone; }
 `)
 	r := NewResolver(idx)
-	if m := r.FindAccessedMember("Event", "timezone", true); m == nil || m.Kind != symbols.KindMethod {
+	if m := r.FindAccessedMember("Event", "timezone", CallAccess); m == nil || m.Kind != symbols.KindMethod {
 		t.Errorf("call: got %#v, want the method", m)
 	}
-	if m := r.FindAccessedMember("Event", "timezone", false); m == nil || m.Kind != symbols.KindProperty {
+	if m := r.FindAccessedMember("Event", "timezone", PropertyAccess); m == nil || m.Kind != symbols.KindProperty {
 		t.Errorf("access: got %#v, want the property", m)
 	}
 }
@@ -655,23 +655,23 @@ class Category { public $status; public function status() {} public function sco
 		name   string
 		owner  ResolvedType
 		member string
-		call   bool
+		access MemberAccess
 		want   string
 		kind   symbols.SymbolKind
 	}{
-		{"a call finds the method", category, "status", true, "Category::status", symbols.KindMethod},
-		{"an access finds the property", category, "status", false, "Category::$status", symbols.KindProperty},
-		{"a member of a @mixin", category, "where", true, "Builder::where", symbols.KindMethod},
-		{"a scope through the builder's type argument", builder, "active", true, "Category::scopeActive", symbols.KindMethod},
+		{"a call finds the method", category, "status", CallAccess, "Category::status", symbols.KindMethod},
+		{"an access finds the property", category, "status", PropertyAccess, "Category::$status", symbols.KindProperty},
+		{"a member of a @mixin", category, "where", CallAccess, "Builder::where", symbols.KindMethod},
+		{"a scope through the builder's type argument", builder, "active", CallAccess, "Category::scopeActive", symbols.KindMethod},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			m := r.AccessedMemberOn(tc.owner, tc.member, tc.call)
+			m := r.AccessedMemberOn(tc.owner, tc.member, tc.access)
 			if m == nil || m.FQN != tc.want || m.Kind != tc.kind {
-				t.Errorf("AccessedMemberOn(%s, %q, %v) = %#v, want %s (%v)", tc.owner.FQN, tc.member, tc.call, m, tc.want, tc.kind)
+				t.Errorf("AccessedMemberOn(%s, %q, %v) = %#v, want %s (%v)", tc.owner.FQN, tc.member, tc.access, m, tc.want, tc.kind)
 			}
 		})
 	}
-	if m := r.AccessedMemberOn(builder, "missing", true); m != nil {
+	if m := r.AccessedMemberOn(builder, "missing", CallAccess); m != nil {
 		t.Errorf("AccessedMemberOn(Builder, missing) = %s, want nil", m.FQN)
 	}
 }

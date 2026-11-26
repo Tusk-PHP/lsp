@@ -788,15 +788,16 @@ func (p *Provider) resolveAccessChain(r *resolve.Resolver, line string, wordStar
 	if ownerFQN == "" {
 		return ""
 	}
-	member := r.FindAccessedMember(ownerFQN, target, parenEnd > 0)
+	access := resolve.MemberAccessOf(parenEnd > 0, strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::"), target)
+	member := r.FindAccessedMember(ownerFQN, target, access)
 	if member == nil {
 		// Category::where() runs on Builder<Category>, and a fluent builder
 		// method gives back the builder.
-		fwd, ok := r.ForwardedReceiver(resolve.ResolvedType{FQN: ownerFQN}, target, parenEnd > 0)
+		fwd, ok := r.ForwardedReceiver(resolve.ResolvedType{FQN: ownerFQN}, target, access)
 		if !ok {
 			return ""
 		}
-		member, _ = r.FindMemberOn(fwd, target, parenEnd > 0)
+		member, _ = r.FindMemberOn(fwd, target, access)
 		if member == nil {
 			if parenEnd > 0 && r.ScopeMethod(fwd, target) != nil {
 				return fwd.BaseFQN() // Category::active() is the builder

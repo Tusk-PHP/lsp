@@ -42,22 +42,22 @@ func (r *Resolver) MixinTypes(rt ResolvedType) []ResolvedType {
 // FindMemberOn looks a member up on a value of type rt: on its classes
 // first, then on what its @mixin tags bring in. owner is the type the member
 // was found on, which is rt or one of its mixins.
-func (r *Resolver) FindMemberOn(rt ResolvedType, name string, call bool) (member *symbols.Symbol, owner ResolvedType) {
-	if m := r.FindAccessedMember(rt.MemberOwner(), name, call); m != nil {
+func (r *Resolver) FindMemberOn(rt ResolvedType, name string, access MemberAccess) (member *symbols.Symbol, owner ResolvedType) {
+	if m := r.FindAccessedMember(rt.MemberOwner(), name, access); m != nil {
 		return m, rt
 	}
-	return r.findMixinMember(rt, name, call, 0)
+	return r.findMixinMember(rt, name, access, 0)
 }
 
-func (r *Resolver) findMixinMember(rt ResolvedType, name string, call bool, depth int) (*symbols.Symbol, ResolvedType) {
+func (r *Resolver) findMixinMember(rt ResolvedType, name string, access MemberAccess, depth int) (*symbols.Symbol, ResolvedType) {
 	if depth >= maxMixinDepth {
 		return nil, ResolvedType{}
 	}
 	for _, mixin := range r.MixinTypes(rt) {
-		if m := r.FindAccessedMember(mixin.MemberOwner(), name, call); m != nil {
+		if m := r.FindAccessedMember(mixin.MemberOwner(), name, access); m != nil {
 			return m, mixin
 		}
-		if m, owner := r.findMixinMember(mixin, name, call, depth+1); m != nil {
+		if m, owner := r.findMixinMember(mixin, name, access, depth+1); m != nil {
 			return m, owner
 		}
 	}
