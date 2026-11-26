@@ -9,6 +9,16 @@ import (
 )
 
 func BenchmarkSignatureHelp(b *testing.B) {
+	source := signatureHelpBenchSource()
+	benchSignatureHelp(b, source, source)
+}
+
+func BenchmarkSignatureHelpAfterAnEditAboveTheCall(b *testing.B) {
+	source := signatureHelpBenchSource()
+	benchSignatureHelp(b, strings.Replace(source, "class Handler", "class Handle", 1), source)
+}
+
+func signatureHelpBenchSource() string {
 	var src strings.Builder
 	src.WriteString("<?php\nnamespace App\\Services;\n\nuse App\\Models\\User;\n\nclass Handler\n{\n")
 	for i := range 300 {
@@ -22,10 +32,13 @@ func BenchmarkSignatureHelp(b *testing.B) {
 		}
 	}
 	src.WriteString("}\n")
-	source := src.String()
+	return src.String()
+}
+
+func benchSignatureHelp(b *testing.B, indexed, source string) {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///helpers.php", "<?php\nnamespace App\\Services;\nfunction format(string $text, int $width): string {}\n")
-	idx.IndexFile("file:///handler.php", source)
+	idx.IndexFile("file:///handler.php", indexed)
 	a := NewAnalyzer(idx, nil)
 	pos := protocol.Position{Line: 7 + 150*6 + 3, Character: len("        return format($fn('a'), ")}
 	if help := a.GetSignatureHelp("file:///handler.php", source, pos); help == nil || help.ActiveParameter != 1 {

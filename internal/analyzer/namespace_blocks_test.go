@@ -259,3 +259,41 @@ func TestSignatureHelpOfAMemberCallLooksTheMemberUp(t *testing.T) {
 		t.Errorf("signature help = %+v, want handle(string $name)", help)
 	}
 }
+
+func TestSignatureHelpInAnIndexedFileLexesFromTheDeclarationBeforeTheCall(t *testing.T) {
+	src := "<?php\nnamespace A;\nfunction foo(int $a) {}\nclass Room {\n    public function size(string $unit, int $scale) {\n        return foo(new class { public function inner() {} }, 2);\n    }\n    public function area() {\n        return foo(1, 2) + $this->size('m', 3);\n    }\n}\n"
+	indexed := symbols.NewIndex()
+	indexed.IndexFile("file:///room.php", src)
+	fresh := symbols.NewIndex()
+	fresh.IndexFile("file:///functions.php", "<?php\nnamespace A;\nfunction foo(int $a) {}\nclass Room {\n    public function size(string $unit, int $scale) {}\n}\n")
+	for _, tc := range []struct {
+		name, source, marker, label string
+		argument                    int
+	}{
+		{"a function call in a method", src, "1, 2", "foo(int $a): mixed", 0},
+		{"a method call in a method", src, "'m', 3", "size(string $unit, int $scale): mixed", 1},
+		{"a call around a declaration", src, "}, 2", "foo(int $a): mixed", 0},
+		{"a declaration's own parameters", src, " int $scale", "size(string $unit, int $scale): mixed", 1},
+		{"after an edit above the call", strings.Replace(src, "Room", "Rooms", 1), "1, 2", "foo(int $a): mixed", 0},
+		{"after the call closed", src, "}, 2);", "", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pos := markerPosition(t, tc.source, tc.marker)
+			for name, idx := range map[string]*symbols.Index{"indexed": indexed, "not indexed": fresh} {
+				help := NewAnalyzer(idx, nil).GetSignatureHelp("file:///room.php", tc.source, pos)
+				if tc.label == "" {
+					if help != nil {
+						t.Errorf("%s: signature help = %+v, want none", name, help)
+					}
+					continue
+				}
+				if help == nil || len(help.Signatures) != 1 {
+					t.Fatalf("%s: signature help = %+v, want %s", name, help, tc.label)
+				}
+				if help.Signatures[0].Label != tc.label || help.ActiveParameter != tc.argument {
+					t.Errorf("%s: %q argument %d, want %q argument %d", name, help.Signatures[0].Label, help.ActiveParameter, tc.label, tc.argument)
+				}
+			}
+		})
+	}
+}

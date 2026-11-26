@@ -86,22 +86,35 @@ type MemberContext struct {
 }
 
 type Document struct {
-	uri    string
-	source string
-	lines  []string
-	result *parser.ParseResult
-	tree   *ast.File
-	file   *parser.FileNode
+	uri        string
+	source     string
+	lines      []string
+	offsets    ast.Lines
+	tree       *ast.File
+	file       *parser.FileNode
+	namespaces *Namespaces
+	tokens     []parser.Token
 }
 
 func NewDocument(uri, source string, grammars phpparser.GrammarRange) *Document {
-	result := parser.New().Parse(source)
 	tree := parser.ParseTreeIn(source, grammars)
-	return &Document{uri: uri, source: source, lines: result.Lines, result: result, tree: tree, file: parser.FileNodeOf(source, tree)}
+	offsets := ast.NewLines(source)
+	return &Document{
+		uri:        uri,
+		source:     source,
+		lines:      strings.Split(source, "\n"),
+		offsets:    offsets,
+		tree:       tree,
+		file:       parser.FileNodeOf(source, tree),
+		namespaces: NamespacesOf(source, offsets, tree),
+	}
 }
 
 func (d *Document) Tokens() []parser.Token {
-	return d.result.Tokens
+	if d.tokens == nil {
+		d.tokens = parser.Tokenize(d.source)
+	}
+	return d.tokens
 }
 
 func (d *Document) File() *parser.FileNode {
@@ -133,8 +146,7 @@ func (d *Document) nameAt(pos protocol.Position) (*NameContext, cursorDeclaratio
 	word, wordRange := wordAtLine(line, pos)
 	joinedLine, joinedWordStart := resolve.JoinChainLines(d.lines, pos.Line, wordRange.Start.Character)
 	accessKind, subjectExpr := detectAccess(joinedLine, joinedWordStart)
-	called := isCalled(d.result.Tokens, wordRange)
-	at := declarationsAt(d.source, d.tree, d.file, pos)
+	at := d.declarationsAt(pos, wordRange)
 	return &NameContext{
 		URI:             d.uri,
 		Position:        pos,
@@ -148,8 +160,8 @@ func (d *Document) nameAt(pos protocol.Position) (*NameContext, cursorDeclaratio
 		JoinedLine:      joinedLine,
 		JoinedWordStart: joinedWordStart,
 		File:            at.namespace.View(d.file),
-		Called:          called,
-		FunctionCall:    called && accessKind == AccessNone,
+		Called:          at.called,
+		FunctionCall:    at.called && accessKind == AccessNone,
 	}, at
 }
 
@@ -263,18 +275,27 @@ type cursorDeclarations struct {
 	pos       protocol.Position
 	lines     ast.Lines
 	offset    uint32
+	wordEnd   uint32
 	namespace Namespace
 	newUse    UseSite
 	classFQN  string
 	scope     *Scope
+	called    bool
 }
 
-func declarationsAt(src string, tree *ast.File, file *parser.FileNode, pos protocol.Position) cursorDeclarations {
-	lines := ast.NewLines(src)
-	offset := offsetOf(src, lines, pos)
-	namespaces := NamespacesOf(src, lines, tree)
-	at := cursorDeclarations{src: src, file: file, pos: pos, lines: lines, offset: offset, namespace: namespaces.At(offset), newUse: namespaces.UseSiteAt(offset)}
-	for _, stmt := range tree.Stmts {
+func (d *Document) declarationsAt(pos protocol.Position, word protocol.Range) cursorDeclarations {
+	offset := offsetOf(d.source, d.offsets, pos)
+	at := cursorDeclarations{
+		src:       d.source,
+		file:      d.file,
+		pos:       pos,
+		lines:     d.offsets,
+		offset:    offset,
+		wordEnd:   offsetOf(d.source, d.offsets, word.End),
+		namespace: d.namespaces.At(offset),
+		newUse:    d.namespaces.UseSiteAt(offset),
+	}
+	for _, stmt := range d.tree.Stmts {
 		if stmt.Bounds().Start > at.offset {
 			break
 		}
@@ -309,9 +330,24 @@ func (at *cursorDeclarations) enclose(stmt ast.Stmt) {
 			at.scope = &Scope{Kind: ScopeFunction, Name: n.Name.Text(at.src), StartLine: at.line(n.Name.Start), EndLine: at.endLine(span)}
 		case *ast.Closure, *ast.ArrowFunction:
 			at.scope = &Scope{Kind: ScopeClosure, ClassFQN: at.classFQN, StartLine: at.line(span.Start), EndLine: at.endLine(span)}
+		case *ast.Call:
+			at.calls(n.Callee)
+		case *ast.MethodCall:
+			at.calls(n.Name)
+		case *ast.StaticCall:
+			at.calls(n.Name)
 		}
 		return true
 	})
+}
+
+func (at *cursorDeclarations) calls(callee ast.Expr) {
+	switch callee := callee.(type) {
+	case *ast.ConstFetch:
+		at.called = at.called || callee.Name.End == at.wordEnd
+	case *ast.IdentifierExpr:
+		at.called = at.called || callee.End == at.wordEnd
+	}
 }
 
 func (at *cursorDeclarations) enterClass(name *ast.Identifier) {
