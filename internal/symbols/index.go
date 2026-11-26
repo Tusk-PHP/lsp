@@ -275,7 +275,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 
 	// Remove any previously indexed symbols from this URI (for re-indexing)
 	idx.removeFileSymbols(uri)
-	idx.fileSource[uri] = indexedText{text: source, ideHelper: true, grammar: file.Grammar}
+	idx.fileSource[uri] = indexedText{text: source, ideHelper: true, grammar: file.Grammar, importsEnd: file.ImportsEnd}
 	if _, ok := idx.fileSymbols[uri]; !ok {
 		idx.fileSymbols[uri] = nil
 		idx.files.add(uri)
@@ -362,10 +362,11 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 }
 
 type indexedText struct {
-	text      string
-	from      SymbolSource
-	ideHelper bool
-	grammar   token.Version
+	text       string
+	from       SymbolSource
+	ideHelper  bool
+	grammar    token.Version
+	importsEnd uint32
 }
 
 func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSource) {
@@ -383,7 +384,7 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 	if file == nil {
 		return
 	}
-	indexed := indexedText{text: source, from: src, grammar: file.Grammar}
+	indexed := indexedText{text: source, from: src, grammar: file.Grammar, importsEnd: file.ImportsEnd}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	foreign := idx.foreignMembersLocked(uri)
@@ -1889,6 +1890,16 @@ func (idx *Index) GetFileSource(uri string) string {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.fileSource[uri].text
+}
+
+func (idx *Index) ImportsEnd(uri, source string, upTo uint32) (uint32, bool) {
+	idx.mu.RLock()
+	indexed, ok := idx.fileSource[uri]
+	idx.mu.RUnlock()
+	if !ok || uint32(len(indexed.text)) < upTo || indexed.text[:upTo] != source[:upTo] {
+		return 0, false
+	}
+	return min(indexed.importsEnd, upTo), true
 }
 
 // Ready reports whether at least one full workspace + composer indexing pass

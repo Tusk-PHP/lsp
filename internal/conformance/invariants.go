@@ -5,10 +5,15 @@ package conformance
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -116,6 +121,26 @@ func checkParserErrorPositions(entry corpusEntry) []violation {
 		}
 	}
 	return vs
+}
+
+func checkNamespaceBlocksFromTokens(entry corpusEntry) *violation {
+	if !parser.HasOpenTag(entry.source) {
+		return nil
+	}
+	tree := parser.ParseTreeIn(entry.source, entry.grammars())
+	fromTree := sourcectx.NamespacesOf(entry.source, ast.NewLines(entry.source), tree)
+	fromTokens := sourcectx.LexNamespaces(entry.source[:parser.FileNodeOf(entry.source, tree).ImportsEnd])
+	for _, tok := range lexer.Lex(entry.source, token.Latest) {
+		if tok.Kind.IsTrivia() {
+			continue
+		}
+		got, want := fromTokens.At(tok.Start), fromTree.At(tok.Start)
+		if got.Name != want.Name || !slices.Equal(got.Uses, want.Uses) {
+			v := fileViolation(entry.path, fmt.Sprintf("at offset %d the lexer's namespace block is %+v, the syntax tree's %+v", tok.Start, got, want))
+			return &v
+		}
+	}
+	return nil
 }
 
 // --- Index invariants ---

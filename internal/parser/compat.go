@@ -298,6 +298,7 @@ type FileNode struct {
 	Functions        []FunctionNode
 	Constants        []ConstantNode
 	Errors           []ParseError
+	ImportsEnd       uint32
 }
 
 type DocParam struct {

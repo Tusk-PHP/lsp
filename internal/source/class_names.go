@@ -1,100 +1,58 @@
 package sourcectx
 
 import (
-	"strings"
+	"sort"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
-func ClassNamesEndingIn(src string, lines ast.Lines, tree *ast.File, short string) map[uint32]string {
-	c := classNames{src: src, short: short, namespaces: NamespacesOf(src, lines, tree), names: map[uint32]string{}, classPositions: map[*ast.ConstFetch]bool{}}
-	ast.Walk(tree, c.visit)
-	return c.names
-}
-
-type classNames struct {
-	src            string
-	short          string
-	namespaces     *Namespaces
-	names          map[uint32]string
-	classPositions map[*ast.ConstFetch]bool
-	declaration    *ast.Name
-}
-
-func (c *classNames) visit(n ast.Node) bool {
-	switch n := n.(type) {
-	case *ast.Namespace:
-		c.declaration = n.Name
-	case *ast.Use:
-		c.imports(n)
-		return false
-	case *ast.New:
-		c.inClassPosition(n.Class)
-	case *ast.ClassConstFetch:
-		c.inClassPosition(n.Class)
-	case *ast.StaticCall:
-		c.inClassPosition(n.Class)
-	case *ast.StaticPropertyFetch:
-		c.inClassPosition(n.Class)
-	case *ast.InstanceOf:
-		c.inClassPosition(n.Class)
-	case *ast.ConstFetch:
-		return c.classPositions[n]
-	case *ast.ClassDecl:
-		c.declared(n.Name)
-	case *ast.InterfaceDecl:
-		c.declared(n.Name)
-	case *ast.TraitDecl:
-		c.declared(n.Name)
-	case *ast.EnumDecl:
-		c.declared(n.Name)
-	case *ast.Name:
-		if n != c.declaration {
-			c.record(n.Span, c.namespaces.At(n.Start).ResolveClass(c.src, n))
+func (n *Namespaces) ClassNameAt(line string, lineStart uint32, col, length int) (fqn string, isName bool) {
+	start := lineStart + uint32(col)
+	end := start + uint32(length)
+	b := n.block(start)
+	if b.nameAt.Start <= start && end <= b.nameAt.End {
+		return "", true
+	}
+	if fqn, inImport := b.importAt(start, end); inImport {
+		return fqn, true
+	}
+	written, kind := line[col:col+length], token.Identifier
+	if col > 0 && line[col-1] == '\\' || col+length < len(line) && line[col+length] == '\\' {
+		tok, ok := nameTokenAt(line, col)
+		if !ok {
+			return "", false
 		}
+		if int(tok.End) != col+length {
+			return "", true
+		}
+		written, kind = tok.Text(line), tok.Kind
 	}
-	return true
+	return b.at(start).resolveClass(written, kind), true
 }
 
-func (c *classNames) inClassPosition(class ast.Expr) {
-	if fetch, ok := class.(*ast.ConstFetch); ok {
-		c.classPositions[fetch] = true
-	}
-}
-
-func (c *classNames) declared(name *ast.Identifier) {
-	if name != nil {
-		c.record(name.Span, parser.ResolveImportedName(name.Text(c.src), c.namespaces.At(name.Start).Name, nil, "class"))
-	}
-}
-
-func (c *classNames) imports(use *ast.Use) {
-	prefix := ""
-	if use.Prefix != nil {
-		prefix = use.Prefix.Text(c.src) + "\\"
-	}
-	for _, item := range use.Items {
-		if item.Name == nil {
+func (b *namespaceBlock) importAt(start, end uint32) (string, bool) {
+	k := b.importsBefore(start)
+	inImport := false
+	for i := k - 1; i >= 0 && b.imports[i].stmt.End > start; i-- {
+		inImport = true
+		if b.imports[i].nameEnd != end {
 			continue
 		}
-		fqn := ""
-		if item.Kind == token.Use {
-			fqn = strings.TrimPrefix(prefix+item.Name.Text(c.src), "\\")
+		if b.uses[i].Kind != "class" {
+			return "", true
 		}
-		c.record(item.Name.Span, fqn)
+		return b.uses[i].FullName, true
 	}
+	return "", inImport
 }
 
-func (c *classNames) record(span ast.Span, fqn string) {
-	text := span.Text(c.src)
-	if len(text) < len(c.short) {
-		return
+func nameTokenAt(line string, col int) (lexer.Token, bool) {
+	tokens := lexer.LexCode(line, token.Latest)
+	i := sort.Search(len(tokens), func(i int) bool { return int(tokens[i].End) > col })
+	switch tok := tokens[i]; tok.Kind {
+	case token.Identifier, token.NameQualified, token.NameFullyQualified, token.NameRelative:
+		return tok, true
 	}
-	last := len(text) - len(c.short)
-	if !strings.EqualFold(text[last:], c.short) || last > 0 && text[last-1] != '\\' {
-		return
-	}
-	c.names[span.Start+uint32(last)] = fqn
+	return lexer.Token{}, false
 }
