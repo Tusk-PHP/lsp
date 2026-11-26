@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -197,47 +199,39 @@ var supportedRouteMethods = map[string]bool{
 }
 
 func parseRouteDefinitions(uri, source string) []RouteName {
-	result := parser.New().Parse(source)
+	toks := phpTokens(source)
 	file := parser.ParseFile(source)
 	var routes []RouteName
-
-	for i := 0; i < len(result.Tokens); i++ {
-		if result.Tokens[i].Kind != parser.TokenIdentifier || result.Tokens[i].Value != "Route" {
+	for i := 0; i+2 < len(toks); i++ {
+		if !isName(toks[i].Kind) || lastNameSegment(toks[i].Value) != "Route" || toks[i+1].Kind != token.DoubleColon {
 			continue
 		}
-		doubleColon := parser.NextSignificant(result.Tokens, i+1)
-		if doubleColon < 0 || result.Tokens[doubleColon].Kind != parser.TokenDoubleColon {
+		method := toks[i+2]
+		if !method.Kind.IsSemiReserved() || !supportedRouteMethods[method.Value] {
 			continue
 		}
-		methodTok := parser.NextSignificant(result.Tokens, doubleColon+1)
-		if methodTok < 0 || result.Tokens[methodTok].Kind != parser.TokenIdentifier {
-			continue
+		if route, ok := parseRouteDefinition(toks, uri, i+2, method.Value, file); ok {
+			routes = append(routes, route)
 		}
-		method := result.Tokens[methodTok].Value
-		if !supportedRouteMethods[method] {
-			continue
-		}
-		route, _, ok := parseRouteDefinition(result.Tokens, uri, methodTok, method, file)
-		if !ok {
-			continue
-		}
-		routes = append(routes, route)
 	}
-
 	return routes
 }
 
-func parseRouteDefinition(tokens []parser.Token, uri string, methodTok int, method string, file *parser.FileNode) (RouteName, int, bool) {
-	openTok := parser.NextSignificant(tokens, methodTok+1)
-	if openTok < 0 || tokens[openTok].Kind != parser.TokenOpenParen {
-		return RouteName{}, -1, false
+func lastNameSegment(name string) string {
+	return name[strings.LastIndexByte(name, '\\')+1:]
+}
+
+func parseRouteDefinition(toks []phpToken, uri string, methodTok int, method string, file *parser.FileNode) (RouteName, bool) {
+	openTok := methodTok + 1
+	if openTok >= len(toks) || toks[openTok].Kind != token.LeftParen {
+		return RouteName{}, false
 	}
-	closeTok := parser.MatchingClose(tokens, openTok)
+	closeTok := matchingClose(toks, openTok)
 	if closeTok < 0 {
-		return RouteName{}, -1, false
+		return RouteName{}, false
 	}
 
-	args := splitTopLevelArgs(tokens, openTok+1, closeTok)
+	args := splitTopLevelArgs(toks, openTok+1, closeTok)
 	route := RouteName{URI: uri}
 	if len(args) > 0 {
 		if path, ok := firstStringLiteral(args[0]); ok {
@@ -246,144 +240,74 @@ func parseRouteDefinition(tokens []parser.Token, uri string, methodTok int, meth
 	}
 	route.TargetKind, route.Target, route.HandlerFQN, route.HandlerMethod = parseRouteTarget(method, args, file)
 
-	end := closeTok
-	for i := closeTok + 1; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenSemicolon:
-			end = i
-			return route, end, route.Name != ""
-		case parser.TokenArrow:
-			nameTok := parser.NextSignificant(tokens, i+1)
-			if nameTok < 0 || tokens[nameTok].Kind != parser.TokenIdentifier {
-				continue
-			}
-			if tokens[nameTok].Value != "name" {
-				continue
-			}
-			nameOpen := parser.NextSignificant(tokens, nameTok+1)
-			if nameOpen < 0 || tokens[nameOpen].Kind != parser.TokenOpenParen {
-				continue
-			}
-			valueTok := parser.NextSignificant(tokens, nameOpen+1)
-			if valueTok < 0 || tokens[valueTok].Kind != parser.TokenStringLiteral {
-				continue
-			}
-			raw := tokens[valueTok].Value
-			name := trimQuotedLiteral(raw)
-			if name == "" {
-				continue
-			}
-			startCol := tokens[valueTok].Column
-			endCol := startCol + len(raw)
-			if len(raw) >= 2 {
-				startCol++
-				endCol--
-			}
-			route.Name = name
-			route.Range = textpos.Range{
-				Start: textpos.Position{Line: tokens[valueTok].Line, Character: startCol},
-				End:   textpos.Position{Line: tokens[valueTok].Line, Character: endCol},
-			}
+	for i := closeTok + 1; i < len(toks) && toks[i].Kind != token.Semicolon; i++ {
+		if !isArrow(toks[i].Kind) || i+3 >= len(toks) {
+			continue
+		}
+		nameTok, nameOpen, value := toks[i+1], toks[i+2], toks[i+3]
+		if nameTok.Kind != token.Identifier || nameTok.Value != "name" || nameOpen.Kind != token.LeftParen || value.Kind != token.ConstantString {
+			continue
+		}
+		name, ok := lexer.Unquote(value.Value)
+		if !ok || name == "" {
+			continue
+		}
+		route.Name = name
+		route.Range = textpos.Range{
+			Start: textpos.Position{Line: value.Line, Character: value.Column + 1},
+			End:   textpos.Position{Line: value.Line, Character: value.Column + len(value.Value) - 1},
 		}
 	}
-
-	return route, end, route.Name != ""
+	return route, route.Name != ""
 }
 
-func trimQuotedLiteral(raw string) string {
-	if len(raw) >= 2 && (raw[0] == '\'' || raw[0] == '"') && raw[len(raw)-1] == raw[0] {
-		return raw[1 : len(raw)-1]
-	}
-	return raw
-}
-
-func splitTopLevelArgs(tokens []parser.Token, start, end int) [][]parser.Token {
-	var args [][]parser.Token
+func splitTopLevelArgs(toks []phpToken, start, end int) [][]phpToken {
+	var args [][]phpToken
 	argStart := start
-	parenDepth, bracketDepth, braceDepth := 0, 0, 0
+	depth := 0
 	for i := start; i < end; i++ {
-		switch tokens[i].Kind {
-		case parser.TokenOpenParen:
-			parenDepth++
-		case parser.TokenCloseParen:
-			parenDepth--
-		case parser.TokenOpenBracket:
-			bracketDepth++
-		case parser.TokenCloseBracket:
-			bracketDepth--
-		case parser.TokenOpenBrace:
-			braceDepth++
-		case parser.TokenCloseBrace:
-			braceDepth--
-		case parser.TokenComma:
-			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
-				args = append(args, trimInsignificantTokens(tokens[argStart:i]))
+		switch toks[i].Kind {
+		case token.LeftParen, token.LeftBracket, token.Attribute, token.LeftBrace:
+			depth++
+		case token.RightParen, token.RightBracket, token.RightBrace:
+			depth--
+		case token.Comma:
+			if depth == 0 {
+				args = append(args, toks[argStart:i])
 				argStart = i + 1
 			}
 		}
 	}
-	if argStart <= end {
-		args = append(args, trimInsignificantTokens(tokens[argStart:end]))
-	}
-	return args
+	return append(args, toks[argStart:end])
 }
 
-func trimInsignificantTokens(tokens []parser.Token) []parser.Token {
-	start := 0
-	for start < len(tokens) && tokens[start].Kind.IsComment() {
-		start++
-	}
-	end := len(tokens)
-	for end > start && tokens[end-1].Kind.IsComment() {
-		end--
-	}
-	return tokens[start:end]
-}
-
-func firstStringLiteral(tokens []parser.Token) (string, bool) {
-	tokens = trimInsignificantTokens(tokens)
-	if len(tokens) == 0 || tokens[0].Kind != parser.TokenStringLiteral {
+func firstStringLiteral(toks []phpToken) (string, bool) {
+	if len(toks) == 0 || toks[0].Kind != token.ConstantString {
 		return "", false
 	}
-	return trimQuotedLiteral(tokens[0].Value), true
+	return lexer.Unquote(toks[0].Value)
 }
 
-func parseRouteTarget(method string, args [][]parser.Token, file *parser.FileNode) (kind, target, handlerFQN, handlerMethod string) {
+func parseRouteTarget(method string, args [][]phpToken, file *parser.FileNode) (kind, target, handlerFQN, handlerMethod string) {
 	switch method {
-	case "view":
+	case "view", "livewire", "redirect":
 		if len(args) > 1 {
 			if value, ok := firstStringLiteral(args[1]); ok {
-				return "view", value, "", ""
+				return method, value, "", ""
 			}
 		}
-		return "view", "", "", ""
-	case "livewire":
-		if len(args) > 1 {
-			if value, ok := firstStringLiteral(args[1]); ok {
-				return "livewire", value, "", ""
-			}
-		}
-		return "livewire", "", "", ""
-	case "redirect":
-		if len(args) > 1 {
-			if value, ok := firstStringLiteral(args[1]); ok {
-				return "redirect", value, "", ""
-			}
-		}
-		return "redirect", "", "", ""
+		return method, "", "", ""
 	default:
 		if len(args) < 2 {
 			return "route", "", "", ""
 		}
-		action := trimInsignificantTokens(args[1])
+		action := args[1]
 		if className, methodName, ok := parseControllerArrayAction(action, file); ok {
 			return "controller", className + "@" + methodName, className, methodName
 		}
 		if value, ok := firstStringLiteral(action); ok {
-			if strings.Contains(value, "@") {
-				parts := strings.SplitN(value, "@", 2)
-				className := resolveRouteClassName(parts[0], file)
-				methodName := parts[1]
+			if className, methodName, ok := strings.Cut(value, "@"); ok {
+				className = resolveRouteClassName(className, file)
 				return "controller", className + "@" + methodName, className, methodName
 			}
 			return "string", value, "", ""
@@ -395,61 +319,38 @@ func parseRouteTarget(method string, args [][]parser.Token, file *parser.FileNod
 	}
 }
 
-func parseControllerArrayAction(tokens []parser.Token, file *parser.FileNode) (className, methodName string, ok bool) {
-	tokens = trimInsignificantTokens(tokens)
-	if len(tokens) < 5 || tokens[0].Kind != parser.TokenOpenBracket || tokens[len(tokens)-1].Kind != parser.TokenCloseBracket {
+func parseControllerArrayAction(toks []phpToken, file *parser.FileNode) (className, methodName string, ok bool) {
+	if len(toks) < 5 || toks[0].Kind != token.LeftBracket || matchingClose(toks, 0) != len(toks)-1 {
 		return "", "", false
 	}
-	body := trimInsignificantTokens(tokens[1 : len(tokens)-1])
-	commaIdx := -1
-	depth := 0
-	for i, tok := range body {
-		switch tok.Kind {
-		case parser.TokenOpenBracket, parser.TokenOpenParen, parser.TokenOpenBrace:
-			depth++
-		case parser.TokenCloseBracket, parser.TokenCloseParen, parser.TokenCloseBrace:
-			depth--
-		case parser.TokenComma:
-			if depth == 0 {
-				commaIdx = i
-				break
-			}
-		}
+	items := splitTopLevelArgs(toks, 1, len(toks)-1)
+	if len(items) == 3 && len(items[2]) == 0 {
+		items = items[:2]
 	}
-	if commaIdx < 0 {
+	if len(items) != 2 {
 		return "", "", false
 	}
-	classTokens := trimInsignificantTokens(body[:commaIdx])
-	methodTokens := trimInsignificantTokens(body[commaIdx+1:])
-	className, ok = parseClassConstExpr(classTokens, file)
+	className, ok = parseClassConstExpr(items[0], file)
 	if !ok {
 		return "", "", false
 	}
-	methodName, ok = firstStringLiteral(methodTokens)
+	methodName, ok = firstStringLiteral(items[1])
 	if !ok || methodName == "" {
 		return "", "", false
 	}
 	return className, methodName, true
 }
 
-func parseClassConstExpr(tokens []parser.Token, file *parser.FileNode) (string, bool) {
-	tokens = trimInsignificantTokens(tokens)
-	if len(tokens) < 3 || tokens[len(tokens)-2].Kind != parser.TokenDoubleColon || tokens[len(tokens)-1].Kind != parser.TokenClass {
+func parseClassConstExpr(toks []phpToken, file *parser.FileNode) (string, bool) {
+	if len(toks) < 3 || toks[len(toks)-2].Kind != token.DoubleColon || toks[len(toks)-1].Kind != token.Class {
 		return "", false
 	}
-	classRef := tokenText(tokens[:len(tokens)-2])
-	if classRef == "" {
-		return "", false
-	}
-	return resolveRouteClassName(classRef, file), true
+	return resolveRouteClassName(tokenText(toks[:len(toks)-2]), file), true
 }
 
-func tokenText(tokens []parser.Token) string {
+func tokenText(toks []phpToken) string {
 	var b strings.Builder
-	for _, tok := range tokens {
-		if tok.Kind.IsComment() {
-			continue
-		}
+	for _, tok := range toks {
 		b.WriteString(tok.Value)
 	}
 	return b.String()

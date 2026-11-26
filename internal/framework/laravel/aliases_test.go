@@ -134,3 +134,28 @@ return [
 		}
 	}
 }
+
+func TestConfigAliasesUnterminated(t *testing.T) {
+	got := configAliases("<?php\nreturn ['aliases' => ['Str' => 'Illuminate\\Support\\Str'")
+	if len(got) != 1 || got["Str"] != `Illuminate\Support\Str` {
+		t.Fatalf("configAliases = %v", got)
+	}
+}
+
+func TestConfigAliasesReadsTheLexer(t *testing.T) {
+	got := configAliases(`<?php
+return [
+    'name' => 'aliases',
+    "aliases" => Facade::defaultAliases()->merge([
+        'Str' => 'Illuminate\Support\Str',
+        'Mix' => 'A' . 'B',
+        'Arr' => \Illuminate\Support\Arr::class,
+        'Bad' =>
+    ])->toArray(),
+];
+`)
+	want := map[string]string{"Str": `Illuminate\Support\Str`, "Arr": `Illuminate\Support\Arr`}
+	if len(got) != len(want) || got["Str"] != want["Str"] || got["Arr"] != want["Arr"] {
+		t.Fatalf("configAliases = %v, want %v", got, want)
+	}
+}
