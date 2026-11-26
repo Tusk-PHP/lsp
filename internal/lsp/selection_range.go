@@ -3,6 +3,7 @@ package lsp
 import (
 	"cmp"
 	"slices"
+	"sort"
 	"unicode/utf8"
 
 	oldparser "github.com/Tusk-PHP/lsp/internal/parser"
@@ -34,129 +35,106 @@ func (s *Server) handleSelectionRange(msg *jsonRPCMessage) {
 	s.sendResponse(msg.ID, chains)
 }
 
-type lineSpan struct {
-	start, end int
+type selectionCursors struct {
+	offsets []uint32
+	spans   [][]ast.Span
+}
+
+func (c selectionCursors) attach(span ast.Span) {
+	k, _ := slices.BinarySearch(c.offsets, span.Start)
+	for ; k < len(c.offsets) && c.offsets[k] <= span.End; k++ {
+		c.spans[k] = append(c.spans[k], span)
+	}
 }
 
 func buildSelectionChains(source string, positions []protocol.Position) []protocol.SelectionRange {
 	lines := ast.NewLines(source)
-	structures := make([][]ast.Span, len(positions))
-	file := parser.ParseSeeingTokens(source, token.Latest, func(toks []lexer.Token) {
-		for i, pos := range positions {
-			structures[i] = append(make([]ast.Span, 0, 4), ast.Span{End: uint32(len(source))})
-			if pos.Line >= len(lines) {
-				continue
-			}
-			if bracket, ok := innermostBracket(toks, lineOffset(source, lines, pos)); ok {
-				structures[i] = append(structures[i], bracket)
-			}
-		}
-	})
-	var classes, callables []lineSpan
-	for _, d := range declarationsOf(source, file) {
-		switch {
-		case d.isClassLike():
-			classes = append(classes, declarationLines(lines, d))
-		case d.isCallable():
-			callables = append(callables, declarationLines(lines, d))
+	offsets := make([]uint32, len(positions))
+	order := make([]int, 0, len(positions))
+	for i, pos := range positions {
+		if pos.Line < len(lines) {
+			offsets[i] = lineOffset(source, lines, pos)
+			order = append(order, i)
 		}
 	}
-	chains := make([]protocol.SelectionRange, len(positions))
-	for i, pos := range positions {
-		structure := structures[i]
-		for _, spans := range [][]lineSpan{classes, callables} {
-			if s, ok := innermostLines(spans, pos.Line); ok {
-				structure = append(structure, ast.Span{Start: lines[s.start], End: lineEnd(source, lines, s.end)})
-			}
+	slices.SortStableFunc(order, func(a, b int) int { return cmp.Compare(offsets[a], offsets[b]) })
+	cursors := selectionCursors{offsets: make([]uint32, len(order)), spans: make([][]ast.Span, len(order))}
+	for k, i := range order {
+		cursors.offsets[k] = offsets[i]
+	}
+	file := parser.ParseSeeingTokens(source, token.Latest, func(toks []lexer.Token) {
+		for k, off := range cursors.offsets {
+			cursors.spans[k] = cursorSpans(source, toks, off)
 		}
-		chains[i] = buildSelectionChain(source, lines, pos, structure)
+		attachLexicalSpans(source, toks, cursors)
+	})
+
+	whole := protocol.SelectionRange{Range: spanRange(lines, file.Span)}
+	chains := make([]protocol.SelectionRange, len(positions))
+	for i := range chains {
+		chains[i] = whole
+	}
+	for k, i := range order {
+		spans := appendSyntaxSpans(cursors.spans[k], source, lines, file)
+		chains[i] = nestedChain(lines, spans)
 	}
 	return chains
 }
 
-func declarationLines(lines ast.Lines, d declaration) lineSpan {
-	start, _ := lines.Position(d.name.Start)
-	end, _ := lines.Position(max(d.node.End, d.node.Start+1) - 1)
-	return lineSpan{start: start, end: end}
-}
-
-func buildSelectionChain(source string, lines ast.Lines, pos protocol.Position, structure []ast.Span) protocol.SelectionRange {
-	slices.SortStableFunc(structure, func(a, b ast.Span) int {
-		return cmp.Or(cmp.Compare(a.Start, b.Start), cmp.Compare(b.End, a.End))
-	})
-	candidates := make([]protocol.Range, 0, len(structure)+1)
-	for _, span := range structure {
-		candidates = append(candidates, protocol.Range{Start: spanPosition(lines, span.Start), End: spanPosition(lines, span.End)})
-	}
-	if pos.Line < len(lines) {
-		candidates = append(candidates, findWordRange(source, lines, pos))
-	}
-
-	nodes := make([]protocol.SelectionRange, 0, len(candidates))
-	for _, r := range candidates {
-		if len(nodes) == 0 || r != nodes[len(nodes)-1].Range {
-			nodes = append(nodes, protocol.SelectionRange{Range: r})
+func cursorSpans(source string, toks []lexer.Token, off uint32) []ast.Span {
+	at := sort.Search(len(toks), func(i int) bool { return toks[i].End > off })
+	for _, i := range [2]int{at, at - 1} {
+		if i < 0 || i >= len(toks) || off > toks[i].End {
+			continue
+		}
+		if word := wordAround(source, toks[i], off); word.Start < word.End {
+			return append(make([]ast.Span, 0, 16), word, tokenSpan(toks[i]))
 		}
 	}
-	for i := 1; i < len(nodes); i++ {
-		nodes[i].Parent = &nodes[i-1]
+	spans := append(make([]ast.Span, 0, 16), ast.Span{Start: off, End: off})
+	if at < len(toks) && toks[at].Kind != token.Whitespace {
+		spans = append(spans, tokenSpan(toks[at]))
 	}
-	return nodes[len(nodes)-1]
+	return spans
 }
 
-func innermostLines(spans []lineSpan, line int) (lineSpan, bool) {
-	var best lineSpan
-	found := false
-	for _, s := range spans {
-		if s.start <= line && line <= s.end && (!found || s.end-s.start < best.end-best.start) {
-			best, found = s, true
-		}
-	}
-	return best, found
-}
-
-func findWordRange(source string, lines ast.Lines, pos protocol.Position) protocol.Range {
-	line := source[lines[pos.Line]:lineEnd(source, lines, pos.Line)]
-	ch := min(pos.Character, len(line))
-
+func wordAround(source string, tok lexer.Token, off uint32) ast.Span {
 	isWordChar := func(r rune) bool {
 		return r == '$' || oldparser.IsIdentByte(string(r)[0])
 	}
-
-	start := ch
-	for start > 0 {
-		r, size := utf8.DecodeLastRuneInString(line[:start])
+	start := off
+	for start > tok.Start {
+		r, size := utf8.DecodeLastRuneInString(source[tok.Start:start])
 		if !isWordChar(r) {
 			break
 		}
-		start -= size
+		start -= uint32(size)
 	}
-	end := ch
-	for end < len(line) {
-		r, size := utf8.DecodeRuneInString(line[end:])
+	end := off
+	for end < tok.End {
+		r, size := utf8.DecodeRuneInString(source[end:tok.End])
 		if !isWordChar(r) {
 			break
 		}
-		end += size
+		end += uint32(size)
 	}
-
-	if start == end {
-		return protocol.Range{Start: pos, End: pos}
-	}
-	return protocol.Range{
-		Start: protocol.Position{Line: pos.Line, Character: start},
-		End:   protocol.Position{Line: pos.Line, Character: end},
-	}
+	return ast.Span{Start: start, End: end}
 }
 
-func innermostBracket(toks []lexer.Token, offset uint32) (ast.Span, bool) {
+func attachLexicalSpans(source string, toks []lexer.Token, cursors selectionCursors) {
 	opens := make([]lexer.Token, 0, 16)
-	var best ast.Span
-	found := false
 	for i := 0; i < len(toks); i++ {
 		tok := toks[i]
+		if tok.Kind == token.ConstantString {
+			cursors.attach(quotedContents(source, tok))
+			continue
+		}
 		if lexer.OpensLiteral(tok.Kind) {
-			i = lexer.LiteralEnd(toks, i)
+			end := lexer.LiteralEnd(toks, i)
+			if closer := toks[end]; end > i && (closer.Kind == tok.Kind || closer.Kind == token.EndHeredoc) {
+				cursors.attach(ast.Span{Start: tok.End, End: closer.Start})
+			}
+			i = end
 			continue
 		}
 		var opener token.Kind
@@ -187,13 +165,70 @@ func innermostBracket(toks []lexer.Token, offset uint32) (ast.Span, bool) {
 		if at < 0 {
 			continue
 		}
-		pair := ast.Span{Start: opens[at].Start, End: tok.End}
+		cursors.attach(ast.Span{Start: opens[at].Start, End: tok.End})
+		cursors.attach(ast.Span{Start: opens[at].End, End: tok.Start})
 		opens = slices.Delete(opens, at, at+1)
-		if pair.Start <= offset && offset <= pair.End && (!found || pair.End-pair.Start < best.End-best.Start) {
-			best, found = pair, true
+	}
+}
+
+func quotedContents(source string, tok lexer.Token) ast.Span {
+	start := tok.Start + 1
+	if source[tok.Start] == 'b' || source[tok.Start] == 'B' {
+		start++
+	}
+	return ast.Span{Start: start, End: tok.End - 1}
+}
+
+func appendSyntaxSpans(spans []ast.Span, source string, lines ast.Lines, file *ast.File) []ast.Span {
+	inner := spans[0]
+	ast.Walk(file, func(n ast.Node) bool {
+		span := n.Bounds()
+		if !spanContains(span, inner) {
+			return false
+		}
+		spans = append(spans, span)
+		switch n.(type) {
+		case *ast.ClassDecl, *ast.InterfaceDecl, *ast.TraitDecl, *ast.EnumDecl, *ast.Method, *ast.FunctionDecl:
+			spans = append(spans, wholeLines(source, lines, span))
+		}
+		return true
+	})
+	return spans
+}
+
+func nestedChain(lines ast.Lines, spans []ast.Span) protocol.SelectionRange {
+	outer := spans[1:]
+	slices.SortFunc(outer, func(a, b ast.Span) int {
+		return cmp.Or(cmp.Compare(a.End-a.Start, b.End-b.Start), cmp.Compare(a.Start, b.Start))
+	})
+	chain := spans[:1]
+	for _, s := range outer {
+		if last := chain[len(chain)-1]; s != last && spanContains(s, last) {
+			chain = append(chain, s)
 		}
 	}
-	return best, found
+	nodes := make([]protocol.SelectionRange, len(chain))
+	for i := range nodes {
+		nodes[i].Range = spanRange(lines, chain[len(chain)-1-i])
+		if i > 0 {
+			nodes[i].Parent = &nodes[i-1]
+		}
+	}
+	return nodes[len(nodes)-1]
+}
+
+func spanContains(outer, inner ast.Span) bool {
+	return outer.Start <= inner.Start && inner.End <= outer.End
+}
+
+func tokenSpan(tok lexer.Token) ast.Span {
+	return ast.Span{Start: tok.Start, End: tok.End}
+}
+
+func wholeLines(source string, lines ast.Lines, span ast.Span) ast.Span {
+	first, _ := lines.Position(span.Start)
+	last, _ := lines.Position(max(span.End, span.Start+1) - 1)
+	return ast.Span{Start: lines[first], End: lineEnd(source, lines, last)}
 }
 
 func lineEnd(source string, lines ast.Lines, line int) uint32 {
@@ -205,6 +240,10 @@ func lineEnd(source string, lines ast.Lines, line int) uint32 {
 
 func lineOffset(source string, lines ast.Lines, pos protocol.Position) uint32 {
 	return min(lines[pos.Line]+uint32(pos.Character), lineEnd(source, lines, pos.Line))
+}
+
+func spanRange(lines ast.Lines, span ast.Span) protocol.Range {
+	return protocol.Range{Start: spanPosition(lines, span.Start), End: spanPosition(lines, span.End)}
 }
 
 func spanPosition(lines ast.Lines, offset uint32) protocol.Position {
