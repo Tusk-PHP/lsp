@@ -444,11 +444,11 @@ func TestADocumentOpenedWhileItsDiskTextIsIndexedGetsTheEditorsTextBack(t *testi
 	}, map[string]interface{}{}, nil)
 	waitForSymbols(t, h, "WrittenOnDisk", func(names []string) bool { return len(names) == 1 })
 
-	uri := "file://" + filepath.Join(root, "app/Invoice.php")
+	uri := symbols.PathToURI(filepath.Join(root, "app/Invoice.php"))
 	openDocument(h, uri, "<?php\nnamespace App;\nclass Invoice {}\nclass EditedInEditor {}\n")
 	waitForSymbols(t, h, "EditedInEditor", func(names []string) bool { return len(names) == 1 })
 	h.server.workspace.IndexFile(uri, "<?php\nnamespace App;\nclass Invoice {}\nclass WrittenOnDisk {}\n")
-	h.server.reindexOpenDocument(uri)
+	h.server.handBackToEditor([]string{uri, symbols.PathToURI(filepath.Join(root, "app/Closed.php"))})
 	waitForSymbols(t, h, "EditedInEditor", func(names []string) bool { return len(names) == 1 })
 	if names := symbolNames(t, h, "WrittenOnDisk"); len(names) != 0 {
 		t.Errorf("the disk text a refresh indexed under an open document is replaced: %v", names)
@@ -744,5 +744,35 @@ func TestAConfigurationProblemIsShownOnceUntilItChanges(t *testing.T) {
 	settleRefreshes(t, h, root, "AfterBreakingAgain")
 	if n := showMessagesStarting(h, skipped, watchedFilesDelay); n != 1 {
 		t.Errorf("a problem that comes back after being fixed is shown again, got %d", n)
+	}
+}
+
+func TestClosingADocumentTheEditorSavedWithItsTextKeepsThatText(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json":    `{"require": {"php": "^8.1"}}`,
+		"app/Invoice.php":  "<?php\nnamespace App;\nclass Invoice {}\n",
+		"app/Checkout.php": "<?php\nnamespace App;\nfunction checkout() { return new Invoice(); }\n",
+	}, map[string]interface{}{}, nil)
+	<-h.server.indexed
+	other := symbols.PathToURI(filepath.Join(root, "app", "Checkout.php"))
+	openDocument(h, other, "<?php\nnamespace App;\nfunction checkout() { return new Invoice(); }\n")
+	diagnosticsPublishedFor(h, other, 3*watchedFilesDelay)
+
+	uri := symbols.PathToURI(filepath.Join(root, "app", "Invoice.php"))
+	saved := "<?php\nnamespace App;\nclass Invoice {}\nclass Saved {}\n"
+	openDocument(h, uri, "<?php\nnamespace App;\nclass Invoice {}\n")
+	h.notify("textDocument/didSave", map[string]interface{}{"textDocument": map[string]interface{}{"uri": uri}, "text": saved})
+	waitForSymbols(t, h, "Saved", func(names []string) bool { return len(names) == 1 })
+	h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": uri}})
+
+	manifest := symbols.PathToURI(filepath.Join(root, "composer.json"))
+	h.notify("textDocument/didOpen", map[string]interface{}{"textDocument": map[string]interface{}{"uri": manifest, "languageId": "json", "version": 1, "text": `{"require": {"php": "^8.2"}}`}})
+	h.notify("textDocument/didClose", map[string]interface{}{"textDocument": map[string]interface{}{"uri": manifest}})
+
+	if n := diagnosticsPublishedFor(h, other, 3*watchedFilesDelay); n != 0 {
+		t.Errorf("closing a document saved with its text, or one that isn't PHP, re-diagnoses the open documents %d times", n)
+	}
+	if names := symbolNames(t, h, "Saved"); len(names) != 1 {
+		t.Errorf("the text the editor saved stays indexed: %v", names)
 	}
 }

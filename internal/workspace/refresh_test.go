@@ -328,3 +328,14 @@ func TestRefreshUnderAPathWithASpaceKeepsOneURIPerFile(t *testing.T) {
 		t.Error("the open file's disk text isn't indexed")
 	}
 }
+
+func TestIDEHelperUnderAPathWithASpaceIsIndexedUnderItsFileURI(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "my app")
+	writeFiles(t, root, map[string]string{"_ide_helper.php": "<?php\nnamespace Illuminate\\Support\\Facades {\nclass Route {}\n}\n"})
+	ws := New(Options{RootPath: root, Framework: "none", Config: config.DefaultConfig(), Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+	ws.IndexWorkspace()
+	want := symbols.PathToURI(filepath.Join(root, "_ide_helper.php"))
+	if route := ws.Index.Lookup(`Illuminate\Support\Facades\Route`); route == nil || route.URI != want {
+		t.Errorf("the IDE helper's class is declared at %s: %+v", want, route)
+	}
+}
