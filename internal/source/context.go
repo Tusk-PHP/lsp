@@ -64,7 +64,8 @@ type NameContext struct {
 
 type CursorContext struct {
 	NameContext
-	Scope *Scope
+	Scope  *Scope
+	NewUse UseSite
 }
 
 func (c *CursorContext) Name() *NameContext {
@@ -116,7 +117,7 @@ func (d *Document) At(pos protocol.Position) *CursorContext {
 	if name == nil {
 		return nil
 	}
-	return &CursorContext{NameContext: *name, Scope: at.scope}
+	return &CursorContext{NameContext: *name, Scope: at.scope, NewUse: at.newUse}
 }
 
 func (d *Document) NameAt(pos protocol.Position) *NameContext {
@@ -146,7 +147,7 @@ func (d *Document) nameAt(pos protocol.Position) (*NameContext, cursorDeclaratio
 		Line:            line,
 		JoinedLine:      joinedLine,
 		JoinedWordStart: joinedWordStart,
-		File:            at.fileView(),
+		File:            at.namespace.View(d.file),
 		Called:          called,
 		FunctionCall:    called && accessKind == AccessNone,
 	}, at
@@ -262,52 +263,24 @@ type cursorDeclarations struct {
 	pos       protocol.Position
 	lines     ast.Lines
 	offset    uint32
-	namespace string
-	uses      []parser.UseNode
+	namespace Namespace
+	newUse    UseSite
 	classFQN  string
 	scope     *Scope
 }
 
 func declarationsAt(src string, tree *ast.File, file *parser.FileNode, pos protocol.Position) cursorDeclarations {
 	lines := ast.NewLines(src)
-	at := cursorDeclarations{src: src, file: file, pos: pos, lines: lines, offset: offsetOf(src, lines, pos)}
+	offset := offsetOf(src, lines, pos)
+	namespaces := NamespacesOf(src, lines, tree)
+	at := cursorDeclarations{src: src, file: file, pos: pos, lines: lines, offset: offset, namespace: namespaces.At(offset), newUse: namespaces.UseSiteAt(offset)}
 	for _, stmt := range tree.Stmts {
 		if stmt.Bounds().Start > at.offset {
 			break
 		}
-		switch s := stmt.(type) {
-		case *ast.Namespace:
-			at.enterNamespace(s)
-		case *ast.Use:
-			at.uses = append(at.uses, parser.UseNodes(src, lines, s)...)
-		}
 		at.enclose(stmt)
 	}
 	return at
-}
-
-func (at *cursorDeclarations) fileView() *parser.FileNode {
-	view := *at.file
-	view.Namespace, view.Uses = at.namespace, at.uses
-	return &view
-}
-
-func (at *cursorDeclarations) enterNamespace(ns *ast.Namespace) {
-	at.namespace, at.uses = "", nil
-	if ns.Braced && at.offset > ns.End {
-		return
-	}
-	if ns.Name != nil {
-		at.namespace = ns.Name.Text(at.src)
-	}
-	for _, stmt := range ns.Stmts {
-		if stmt.Bounds().Start > at.offset {
-			return
-		}
-		if use, ok := stmt.(*ast.Use); ok {
-			at.uses = append(at.uses, parser.UseNodes(at.src, at.lines, use)...)
-		}
-	}
 }
 
 func (at *cursorDeclarations) enclose(stmt ast.Stmt) {
@@ -346,8 +319,8 @@ func (at *cursorDeclarations) enterClass(name *ast.Identifier) {
 		return
 	}
 	at.classFQN = name.Text(at.src)
-	if at.namespace != "" {
-		at.classFQN = at.namespace + "\\" + at.classFQN
+	if at.namespace.Name != "" {
+		at.classFQN = at.namespace.Name + "\\" + at.classFQN
 	}
 	at.scope = nil
 }
