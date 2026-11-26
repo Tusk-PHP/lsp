@@ -153,3 +153,12 @@ func BenchmarkDocumentHighlights(b *testing.B) {
 		}
 	}
 }
+
+func TestHighlightsNeedANameUnderTheCursor(t *testing.T) {
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///rooms.php": highlightRooms})
+	for _, pos := range []protocol.Position{{Line: 2, Character: 0}, {Line: 500, Character: 0}} {
+		if got := a.GetDocumentHighlights("file:///rooms.php", highlightRooms, pos); got != nil {
+			t.Errorf("at %v there is no name to highlight, got %v", pos, got)
+		}
+	}
+}
