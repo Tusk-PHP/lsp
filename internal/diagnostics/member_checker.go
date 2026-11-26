@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/checks"
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -45,7 +46,7 @@ func (c *indexMemberChecker) KnowsColumns(modelFQN string) bool {
 // methods, so a relation method missing from the index is really missing.
 func (c *indexMemberChecker) KnowsRelations(modelFQN string) bool {
 	classes := append([]string{modelFQN}, c.index.GetInheritanceChain(modelFQN)...)
-	if classes[len(classes)-1] != eloquentBaseModel {
+	if classes[len(classes)-1] != frameworklaravel.EloquentModel {
 		return false // an ancestor isn't indexed
 	}
 	seen := map[string]bool{}
@@ -56,7 +57,7 @@ func (c *indexMemberChecker) KnowsRelations(modelFQN string) bool {
 			continue
 		}
 		seen[fqn] = true
-		if fqn == eloquentBaseModel {
+		if fqn == frameworklaravel.EloquentModel {
 			continue
 		}
 		if c.index.Lookup(fqn) == nil || c.index.Lookup(fqn+"::__call") != nil {
@@ -66,8 +67,6 @@ func (c *indexMemberChecker) KnowsRelations(modelFQN string) bool {
 	}
 	return true
 }
-
-const eloquentBaseModel = "Illuminate\\Database\\Eloquent\\Model"
 
 func (c *indexMemberChecker) IsColumn(modelFQN, name string) bool {
 	for _, m := range c.index.GetClassMembers(modelFQN) {

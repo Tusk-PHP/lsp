@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -96,8 +97,8 @@ func TestModelClasses_Laravel(t *testing.T) {
 	}
 
 	// Must NOT contain the base Eloquent Model itself.
-	if found[eloquentModelFQN] {
-		t.Errorf("ModelClasses must not include base %q", eloquentModelFQN)
+	if found[frameworklaravel.EloquentModel] {
+		t.Errorf("ModelClasses must not include base %q", frameworklaravel.EloquentModel)
 	}
 }
 

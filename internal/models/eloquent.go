@@ -6,12 +6,11 @@ import (
 	"strings"
 	"unicode"
 
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
-
-const eloquentModelFQN = "Illuminate\\Database\\Eloquent\\Model"
 
 // Eloquent relation types grouped by cardinality.
 var singularRelations = map[string]bool{
@@ -56,14 +55,14 @@ var eloquentStaticForwards = []struct {
 	returnType string
 	params     []symbols.ParamInfo
 }{
-	{"withTrashed", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", nil},
-	{"onlyTrashed", "Illuminate\\Database\\Eloquent\\Builder<{MODEL}>", nil},
+	{"withTrashed", frameworklaravel.EloquentBuilder + "<{MODEL}>", nil},
+	{"onlyTrashed", frameworklaravel.EloquentBuilder + "<{MODEL}>", nil},
 }
 
 // AnalyzeEloquentModels scans all classes extending Eloquent Model and injects
 // virtual properties for relations and accessors/mutators.
 func AnalyzeEloquentModels(index *symbols.Index, rootPath string) {
-	models := index.GetDescendants(eloquentModelFQN)
+	models := index.GetDescendants(frameworklaravel.EloquentModel)
 	for _, model := range models {
 		injectEloquentStaticMethods(index, model)
 		analyzeModel(index, model)

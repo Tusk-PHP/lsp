@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -244,7 +245,7 @@ func (s *Schema) TableNames() []string {
 
 // injectLaravelSchemaProperties resolves table names for Laravel models and injects columns.
 func injectLaravelSchemaProperties(index *symbols.Index, schema *Schema, rootPath string) {
-	models := index.GetDescendants("Illuminate\\Database\\Eloquent\\Model")
+	models := index.GetDescendants(frameworklaravel.EloquentModel)
 	for _, model := range models {
 		tableName := ResolveModelTableName(index, model, rootPath)
 		if tableName == "" {

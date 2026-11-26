@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -58,10 +59,10 @@ func ModelRelations(index *symbols.Index, rootPath, framework string) []Relation
 // --- Laravel / Eloquent ---
 
 func laravelModelClasses(index *symbols.Index) []*symbols.Symbol {
-	raw := index.GetDescendants(eloquentModelFQN)
+	raw := index.GetDescendants(frameworklaravel.EloquentModel)
 	result := make([]*symbols.Symbol, 0, len(raw))
 	for _, sym := range raw {
-		if sym.FQN == eloquentModelFQN {
+		if sym.FQN == frameworklaravel.EloquentModel {
 			continue
 		}
 		result = append(result, sym)

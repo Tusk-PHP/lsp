@@ -10,7 +10,7 @@ import "github.com/Tusk-PHP/lsp/internal/symbols"
 // base query builder's methods.
 func CallForwards() map[string][]string {
 	return map[string][]string{
-		"Illuminate\\Database\\Eloquent\\Model": {"\\Illuminate\\Database\\Eloquent\\Builder<static>"},
+		EloquentModel: {`\` + EloquentBuilder + "<static>"},
 	}
 }
 
@@ -20,7 +20,7 @@ func CallForwards() map[string][]string {
 // Builder<Model>, and as Model::active() through the call forward above.
 func ScopeConventions() map[string]symbols.ScopeConvention {
 	return map[string]symbols.ScopeConvention{
-		"Illuminate\\Database\\Eloquent\\Builder": {
+		EloquentBuilder: {
 			Prefix:    "scope",
 			Attribute: "Illuminate\\Database\\Eloquent\\Attributes\\Scope",
 		},

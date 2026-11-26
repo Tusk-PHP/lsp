@@ -1,9 +1,9 @@
 package completion
 
 import (
-	"slices"
 	"strings"
 
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
@@ -243,7 +243,7 @@ func extractStringAtEnd(inner string) (string, string, bool) {
 
 // completeBuilderArg dispatches to column or relation completion based on the method.
 func (p *Provider) completeBuilderArg(r *resolve.Resolver, method, partial, quote, prefix, source string, pos protocol.Position, file *parser.FileNode) []protocol.CompletionItem {
-	modelFQN := p.resolveBuilderModel(r, prefix, method, source, pos, file)
+	modelFQN := p.resolveBuilderModel(r, prefix, method, source, pos, file).FQN
 	if modelFQN == "" {
 		return nil
 	}
@@ -259,16 +259,15 @@ func (p *Provider) completeBuilderArg(r *resolve.Resolver, method, partial, quot
 
 // ResolveBuilderModel returns the Eloquent model a builder call on line is
 // made on, for the unknown-column and unknown-relation diagnostics: prefix is
-// the line up to the call, method the called method. It returns "" when the
-// model can't be worked out.
-func (p *Provider) ResolveBuilderModel(prefix, method, source string, line int, file *parser.FileNode) string {
+// the line up to the call, method the called method.
+func (p *Provider) ResolveBuilderModel(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
 	return p.resolveBuilderModel(p.engine.Resolver(), prefix, method, source, protocol.Position{Line: line, Character: len(prefix)}, file)
 }
 
 // resolveBuilderModel finds the Eloquent model FQN from the expression before
 // the Builder method call. Works for both static calls (Category::where) and
 // chained calls (Category::query()->where, $query->where).
-func (p *Provider) resolveBuilderModel(r *resolve.Resolver, prefix, method, source string, pos protocol.Position, file *parser.FileNode) string {
+func (p *Provider) resolveBuilderModel(r *resolve.Resolver, prefix, method, source string, pos protocol.Position, file *parser.FileNode) frameworklaravel.QueriedModel {
 	// Find the method call in the prefix to get everything before it
 	// We need to find ->method( or ::method( and resolve the chain before it
 	trimmed := strings.TrimSpace(prefix)
@@ -289,14 +288,14 @@ func (p *Provider) resolveBuilderModel(r *resolve.Resolver, prefix, method, sour
 		}
 	}
 	if bestIdx < 0 {
-		return ""
+		return frameworklaravel.QueriedModel{}
 	}
 
 	// Get the expression before the method call
 	beforeMethod := trimmed[:bestIdx]
 
 	if bestOp == "->" {
-		return p.queriedModel(r.ChainType(beforeMethod, source, pos, file))
+		return frameworklaravel.ModelQueriedBy(p.index, r.ChainType(beforeMethod, source, pos, file))
 	}
 
 	end := len(beforeMethod)
@@ -306,42 +305,12 @@ func (p *Provider) resolveBuilderModel(r *resolve.Resolver, prefix, method, sour
 	}
 	className := beforeMethod[i+1 : end]
 	if className == "" {
-		return ""
+		return frameworklaravel.QueriedModel{}
 	}
-	if fqn := r.ResolveClassNameLoose(className, file); p.isEloquentModel(fqn) {
-		return fqn
+	if fqn := r.ResolveClassNameLoose(className, file); frameworklaravel.IsModel(p.index, fqn) {
+		return frameworklaravel.QueriedModel{FQN: fqn}
 	}
-	return ""
-}
-
-const (
-	eloquentModelFQN    = "Illuminate\\Database\\Eloquent\\Model"
-	eloquentBuilderFQN  = "Illuminate\\Database\\Eloquent\\Builder"
-	eloquentRelationFQN = "Illuminate\\Database\\Eloquent\\Relations\\Relation"
-)
-
-func (p *Provider) queriedModel(rt resolve.ResolvedType) string {
-	base := rt.BaseFQN()
-	if p.isEloquentModel(base) {
-		return base
-	}
-	if len(rt.Params) == 0 || !p.isOrExtends(base, eloquentBuilderFQN, eloquentRelationFQN) {
-		return ""
-	}
-	if model := rt.Params[0].BaseFQN(); p.isEloquentModel(model) {
-		return model
-	}
-	return ""
-}
-
-// isEloquentModel checks if the FQN is an Eloquent Model subclass.
-func (p *Provider) isEloquentModel(fqn string) bool {
-	return slices.Contains(p.index.GetInheritanceChain(fqn), eloquentModelFQN)
-}
-
-func (p *Provider) isOrExtends(fqn string, classes ...string) bool {
-	isOne := func(c string) bool { return slices.Contains(classes, c) }
-	return isOne(fqn) || slices.ContainsFunc(p.index.GetInheritanceChain(fqn), isOne)
+	return frameworklaravel.QueriedModel{}
 }
 
 // isDBColumn returns true if the symbol represents an actual database column

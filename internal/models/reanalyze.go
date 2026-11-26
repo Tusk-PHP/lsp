@@ -3,6 +3,7 @@ package models
 import (
 	"strings"
 
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -63,7 +64,7 @@ func analyzeEloquentFile(index *symbols.Index, uri, source string, schema *Schem
 
 func isEloquentModel(index *symbols.Index, fqn string) bool {
 	for _, parent := range index.GetInheritanceChain(fqn) {
-		if parent == eloquentModelFQN {
+		if parent == frameworklaravel.EloquentModel {
 			return true
 		}
 	}

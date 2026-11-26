@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
@@ -76,14 +77,14 @@ func setupBuilderArgRule() *InvalidBuilderArgRule {
 		},
 	}
 
-	resolver := func(prefix, method, source string, line int, file *parser.FileNode) string {
+	resolver := func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
 		if strings.Contains(prefix, "Category") {
-			return "App\\Models\\Category"
+			return frameworklaravel.QueriedModel{FQN: "App\\Models\\Category"}
 		}
 		if strings.Contains(prefix, "Product") {
-			return "App\\Models\\Product"
+			return frameworklaravel.QueriedModel{FQN: "App\\Models\\Product"}
 		}
-		return ""
+		return frameworklaravel.QueriedModel{}
 	}
 
 	return &InvalidBuilderArgRule{
@@ -309,14 +310,14 @@ func TestInvalidBuilderArgRuleStaysQuietWhenUnsure(t *testing.T) {
 	checker := setupBuilderArgRule()
 	checker.Members.(*mockMemberChecker).columns["App\\Models\\Draft"] = map[string]bool{"id": true}
 	checker.Members.(*mockMemberChecker).partial = map[string]bool{"App\\Models\\Draft": true}
-	checker.ModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) string {
+	checker.ModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
 		switch {
 		case strings.Contains(prefix, "Draft"):
-			return "App\\Models\\Draft"
+			return frameworklaravel.QueriedModel{FQN: "App\\Models\\Draft"}
 		case strings.Contains(prefix, "Category"):
-			return "App\\Models\\Category"
+			return frameworklaravel.QueriedModel{FQN: "App\\Models\\Category"}
 		}
-		return ""
+		return frameworklaravel.QueriedModel{}
 	}
 	source := `<?php
 use App\Models\Category;
@@ -344,9 +345,9 @@ Draft::with('fromAnUnindexedTrait');
 func TestInvalidBuilderArgRulePassesCallPrefix(t *testing.T) {
 	checker := setupBuilderArgRule()
 	var prefixes []string
-	checker.ModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) string {
+	checker.ModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
 		prefixes = append(prefixes, prefix)
-		return ""
+		return frameworklaravel.QueriedModel{}
 	}
 	source := `<?php
 Category::query()->where('name', 1)->with('products');
