@@ -94,6 +94,7 @@ type Server struct {
 	initOptions                *protocol.InitializationOptions
 	clientSettings             atomic.Pointer[protocol.InitializationOptions]
 	fileConfig                 atomic.Pointer[config.Config]
+	configProblems             reportedProblems
 	indexed                    chan struct{}
 	watch                      watchedFiles
 	coverageNotifications      bool

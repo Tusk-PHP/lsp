@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -20,7 +21,7 @@ func (s *Server) readConfigFile() *config.Config {
 	if err != nil {
 		return s.lastGoodConfigFile(err)
 	}
-	for _, problem := range cfg.Problems() {
+	for _, problem := range s.configProblems.unreported(cfg.Problems()) {
 		s.logger.Printf("Config problem: %v", problem)
 		s.sendNotification("window/showMessage", map[string]interface{}{
 			"type":    protocol.MessageTypeWarning,
@@ -29,6 +30,27 @@ func (s *Server) readConfigFile() *config.Config {
 	}
 	s.fileConfig.Store(cfg)
 	return cfg
+}
+
+type reportedProblems struct {
+	mu    sync.Mutex
+	shown map[string]bool
+}
+
+func (r *reportedProblems) unreported(problems []error) []error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	current := make(map[string]bool, len(problems))
+	var fresh []error
+	for _, problem := range problems {
+		message := problem.Error()
+		current[message] = true
+		if !r.shown[message] {
+			fresh = append(fresh, problem)
+		}
+	}
+	r.shown = current
+	return fresh
 }
 
 func (s *Server) lastGoodConfigFile(err error) *config.Config {
