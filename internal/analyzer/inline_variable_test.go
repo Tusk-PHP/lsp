@@ -131,3 +131,17 @@ func assertNoInlineVariableAction(t *testing.T, source string, pos protocol.Posi
 		}
 	}
 }
+
+func TestGetCodeActionsInlineVariableRejectsFileScope(t *testing.T) {
+	t.Run("on the open tag's line", func(t *testing.T) {
+		assertNoInlineVariableAction(t, "<?php $a = 1; echo $a;\n", protocol.Position{Line: 0, Character: 20})
+	})
+	t.Run("after the open tag on its own line", func(t *testing.T) {
+		assertNoInlineVariableAction(t, "<?php\n$label = 'x' . 'y';\necho $label;\n", protocol.Position{Line: 2, Character: 7})
+	})
+}
+
+func TestGetCodeActionsInlineVariableRejectsArrowFunctionBody(t *testing.T) {
+	source := "<?php\nfunction run() {\n    return fn() => ($sum = 1) + $sum;\n}\n"
+	assertNoInlineVariableAction(t, source, protocol.Position{Line: 2, Character: 34})
+}
