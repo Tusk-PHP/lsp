@@ -1245,3 +1245,24 @@ func TestAShebangLineIsNotInlineHTML(t *testing.T) {
 		}
 	}
 }
+
+func TestAMissingArgumentKeepsTheArgumentsAfterIt(t *testing.T) {
+	src := "<?php f(/* none yet */, $b, c: $c);"
+	file := Parse(src, token.Latest)
+	args := file.Stmts[0].(*ast.ExprStmt).Expr.(*ast.Call).Args.Args
+	if len(args) != 3 {
+		t.Fatalf("got %d arguments, want 3", len(args))
+	}
+	if missing, ok := args[0].Value.(*ast.BadExpr); !ok || missing.Start != missing.End {
+		t.Errorf("first argument = %#v, want an empty bad expression", args[0].Value)
+	}
+	if got := args[1].Text(src); got != "$b" {
+		t.Errorf("second argument = %q, want $b", got)
+	}
+	if got := args[2].Text(src); got != "c: $c" {
+		t.Errorf("third argument = %q, want c: $c", got)
+	}
+	if len(file.Errors) != 1 || file.Errors[0].Message != "syntax error, unexpected ',', expected an expression" {
+		t.Errorf("errors = %v, want only the missing argument", file.Errors)
+	}
+}
