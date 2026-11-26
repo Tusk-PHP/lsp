@@ -900,42 +900,17 @@ func parseGlobalOrStaticBindings(tokens []parser.Token, start int, scope *Scope,
 	return decls
 }
 
-// addInterpolatedReferences records the `$name` and `{$name` reads inside a
-// double-quoted string. `${name}` isn't recorded, because a reference's range
-// includes the dollar sign, which renaming would put in the wrong place.
 func addInterpolatedReferences(tok parser.Token, active []scopeFrame) {
-	if !parser.Interpolates(tok.Value) {
-		return
-	}
-	line, col := tok.Line, tok.Column
-	for i := 0; i < len(tok.Value); i++ {
-		switch ch := tok.Value[i]; {
-		case ch == '\\':
-			i++
-			col++
-		case ch == '\n':
-			line++
-			col = -1
-		case ch == '$':
-			end := i + 1
-			for end < len(tok.Value) && isVariableChar(tok.Value[end], end == i+1) {
-				end++
+	for _, inner := range parser.InterpolatedTokens(tok) {
+		switch inner.Kind {
+		case parser.TokenVariable:
+			if binding := resolveVariable(active, inner.Value); binding != nil {
+				binding.References = append(binding.References, tokenRange(inner))
 			}
-			if end > i+1 {
-				if binding := resolveVariable(active, tok.Value[i:end]); binding != nil {
-					binding.References = append(binding.References, textpos.Range{
-						Start: textpos.Position{Line: line, Character: col},
-						End:   textpos.Position{Line: line, Character: col + end - i},
-					})
-				}
-			}
+		case parser.TokenStringLiteral:
+			addInterpolatedReferences(inner, active)
 		}
-		col++
 	}
-}
-
-func isVariableChar(ch byte, first bool) bool {
-	return ch == '_' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch >= 0x80 || (!first && ch >= '0' && ch <= '9')
 }
 
 // isSubscriptWrite matches `$a[] = 1` and `$a['b'][$c] = 1`, which create $a.
