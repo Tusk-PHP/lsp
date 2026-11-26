@@ -15,46 +15,21 @@ type phpToken struct {
 }
 
 func phpTokens(src string) []phpToken {
-	all := lexer.Significant(lexer.Lex(src, token.Latest))
+	all := lexer.WholeLiterals(lexer.Significant(lexer.Lex(src, token.Latest)))
 	lines := ast.NewLines(src)
 	toks := make([]phpToken, 0, len(all))
-	for i := 0; i < len(all); i++ {
-		t := all[i]
-		kind, end := t.Kind, t.End
+	for _, t := range all {
+		kind := t.Kind
 		switch kind {
 		case token.InlineHTML:
 			continue
 		case token.CloseTag:
 			kind = token.Semicolon
-		case token.DoubleQuote, token.StartHeredoc, token.Backtick:
-			i = stringEnd(all, i)
-			end = all[i].End
 		}
 		line, col := lines.Position(t.Start)
-		toks = append(toks, phpToken{Kind: kind, Value: src[t.Start:end], Line: line, Column: col, Offset: int(t.Start)})
+		toks = append(toks, phpToken{Kind: kind, Value: t.Text(src), Line: line, Column: col, Offset: int(t.Start)})
 	}
 	return toks
-}
-
-func stringEnd(all []lexer.Token, open int) int {
-	closer := all[open].Kind
-	if closer == token.StartHeredoc {
-		closer = token.EndHeredoc
-	}
-	depth := 0
-	for i := open + 1; i < len(all); i++ {
-		switch kind := all[i].Kind; {
-		case depth == 0 && kind == closer:
-			return i
-		case kind == token.CurlyOpen || kind == token.DollarOpenCurlyBraces || kind == token.LeftBrace:
-			depth++
-		case kind == token.RightBrace:
-			depth--
-		case depth > 0 && (kind == token.DoubleQuote || kind == token.StartHeredoc || kind == token.Backtick):
-			i = stringEnd(all, i)
-		}
-	}
-	return len(all) - 1
 }
 
 func isArrow(kind token.Kind) bool {

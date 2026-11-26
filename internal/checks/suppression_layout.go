@@ -78,6 +78,7 @@ func PHPLayout(source string) Layout {
 func phpLayout(source string, tokens []lexer.Token) Layout {
 	l := newLayout(source)
 	regionStart := -1
+	tokens = lexer.WholeLiterals(tokens)
 	for i := 0; i < len(tokens); i++ {
 		tok := tokens[i]
 		span := Span{int(tok.Start), int(tok.End)}
@@ -96,10 +97,7 @@ func phpLayout(source string, tokens []lexer.Token) Layout {
 		case token.Attribute:
 			l.addAttribute(Span{span.Start, int(tokens[matchingBracket(tokens, i)].End)})
 			continue
-		case token.DoubleQuote, token.StartHeredoc, token.Backtick:
-			i = literalEnd(tokens, i)
-			span.End = int(tokens[i].End)
-		case token.ConstantString:
+		case token.ConstantString, token.DoubleQuote, token.StartHeredoc, token.Backtick:
 		default:
 			continue
 		}
@@ -124,31 +122,6 @@ func matchingBracket(tokens []lexer.Token, open int) int {
 			if depth == 0 {
 				return i
 			}
-		}
-	}
-	return len(tokens) - 1
-}
-
-var literalClosers = map[token.Kind]token.Kind{
-	token.DoubleQuote:  token.DoubleQuote,
-	token.StartHeredoc: token.EndHeredoc,
-	token.Backtick:     token.Backtick,
-}
-
-func literalEnd(tokens []lexer.Token, open int) int {
-	closer := literalClosers[tokens[open].Kind]
-	depth := 0
-	for i := open + 1; i < len(tokens); i++ {
-		kind := tokens[i].Kind
-		switch {
-		case kind == token.CurlyOpen || kind == token.DollarOpenCurlyBraces || kind == token.LeftBrace:
-			depth++
-		case kind == token.RightBrace:
-			depth--
-		case depth > 0 && literalClosers[kind] != 0:
-			i = literalEnd(tokens, i)
-		case depth == 0 && kind == closer:
-			return i
 		}
 	}
 	return len(tokens) - 1
