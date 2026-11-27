@@ -1085,50 +1085,72 @@ func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *
 	if !ok {
 		return nil
 	}
-	activeParam := call.Argument
 	sym := a.calledSymbol(uri, source, call)
 	if sym == nil {
 		return nil
 	}
-	sig := protocol.SignatureInformation{Label: sym.Name + formatParamLabel(sym)}
-	for _, p := range sym.Params {
-		l := ""
-		if p.Type != "" {
-			l = p.Type + " "
+	label, params := sym.Name+formatParamLabel(sym), sym.Params
+	if sym.Kind == symbols.KindClass {
+		label, params = sym.Name+"()", nil
+		if ctor := a.engine.Resolver().FindAccessedMember(sym.FQN, "__construct", resolve.CallAccess); ctor != nil {
+			label, params = sym.Name+formatParams(ctor), ctor.Params
 		}
-		l += p.Name
-		sig.Parameters = append(sig.Parameters, protocol.ParameterInformation{Label: l})
 	}
-	// Clamp activeParam so it never exceeds the last valid parameter index.
-	// e.g. a 2-parameter function must have activeParameter in [0, 1].
-	if maxParam := len(sym.Params) - 1; maxParam < 0 {
-		activeParam = 0
-	} else if activeParam > maxParam {
-		activeParam = maxParam
+	sig := protocol.SignatureInformation{Label: label, Parameters: make([]protocol.ParameterInformation, 0, len(params))}
+	for _, p := range params {
+		sig.Parameters = append(sig.Parameters, protocol.ParameterInformation{Label: paramLabel(p)})
 	}
-	return &protocol.SignatureHelp{Signatures: []protocol.SignatureInformation{sig}, ActiveParameter: activeParam}
+	return &protocol.SignatureHelp{Signatures: []protocol.SignatureInformation{sig}, ActiveParameter: activeParameter(params, call)}
 }
 
 func (a *Analyzer) calledSymbol(uri, source string, call sourcectx.Call) *symbols.Symbol {
 	r := a.engine.Resolver()
-	if !call.Function {
-		return a.symbolTarget(r, uri, source, sourcectx.Analyze(uri, source, call.Position, a.index.GrammarOf(uri))).sym
+	switch call.Callee {
+	case sourcectx.CalleeFunction:
+		return r.CalledFunction(call.Name, call.Namespace.View(&parser.FileNode{}))
+	case sourcectx.CalleeAnonymousClass:
+		ctx := sourcectx.Analyze(uri, source, call.Position, a.index.GrammarOf(uri))
+		class := ctx.File.AnonymousClassDeclaredAt(call.Position.Line, call.Position.Character)
+		if class == nil {
+			return nil
+		}
+		return a.index.Lookup(class.FullName)
 	}
-	return r.CalledFunction(call.Name, call.Namespace.View(&parser.FileNode{}))
+	return a.symbolTarget(r, uri, source, sourcectx.Analyze(uri, source, call.Position, a.index.GrammarOf(uri))).sym
+}
+
+func activeParameter(params []symbols.ParamInfo, call sourcectx.Call) int {
+	last := len(params) - 1
+	if last < 0 {
+		return 0
+	}
+	if call.Named != "" {
+		for i, p := range params {
+			if p.Name == "$"+call.Named {
+				return i
+			}
+		}
+		if params[last].IsVariadic {
+			return last
+		}
+	}
+	return min(call.Argument, last)
+}
+
+func paramLabel(p symbols.ParamInfo) string {
+	if p.Type == "" {
+		return p.Name
+	}
+	return p.Type + " " + p.Name
 }
 
 // formatParams returns the parenthesized parameter list for a symbol, e.g.
 // "(Type $a, $b)". Each parameter is rendered as "Type $name" when a type is
 // present, or just "$name" otherwise. The return type is not included.
 func formatParams(sym *symbols.Symbol) string {
-	var ps []string
+	ps := make([]string, 0, len(sym.Params))
 	for _, p := range sym.Params {
-		s := ""
-		if p.Type != "" {
-			s = p.Type + " "
-		}
-		s += p.Name
-		ps = append(ps, s)
+		ps = append(ps, paramLabel(p))
 	}
 	return "(" + strings.Join(ps, ", ") + ")"
 }
