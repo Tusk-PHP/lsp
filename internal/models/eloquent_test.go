@@ -127,8 +127,8 @@ class Profile extends Model {}
 		if !sym.IsVirtual {
 			t.Error("expected IsVirtual")
 		}
-		if sym.Type != "Illuminate\\Database\\Eloquent\\Collection" {
-			t.Errorf("expected Collection type, got %q", sym.Type)
+		if sym.Type != "Illuminate\\Database\\Eloquent\\Collection<int, App\\Models\\Post>" {
+			t.Errorf("expected Collection<int, Post> type, got %q", sym.Type)
 		}
 	})
 
@@ -270,8 +270,8 @@ class Comment extends Model {}
 		if sym == nil {
 			t.Fatal("expected virtual property '$comments'")
 		}
-		if sym.Type != "Illuminate\\Database\\Eloquent\\Collection" {
-			t.Errorf("expected Collection type, got %q", sym.Type)
+		if sym.Type != "Illuminate\\Database\\Eloquent\\Collection<int, App\\Models\\Comment>" {
+			t.Errorf("expected Collection<int, Comment> type, got %q", sym.Type)
 		}
 	})
 }
@@ -329,8 +329,8 @@ class Author extends Model
 	model := idx.Lookup(`App\Models\Author`)
 	analyzeModelSource(idx, model, newModelSource(src, phpparser.OnlyGrammar(token.Latest)))
 	for prop, want := range map[string]string{
-		"$posts":     `Illuminate\Database\Eloquent\Collection`,
-		"$comments":  `Illuminate\Database\Eloquent\Collection`,
+		"$posts":     `Illuminate\Database\Eloquent\Collection<int, App\Models\Post>`,
+		"$comments":  `Illuminate\Database\Eloquent\Collection<int, App\Models\Comment>`,
 		"$team":      `?App\Models\Team`,
 		"$dynamic":   "mixed",
 		"$full_name": "string",
@@ -357,4 +357,46 @@ class Author extends Model
 		t.Errorf("a missing file: %v", got)
 	}
 	analyzeModel(idx, &symbols.Symbol{FQN: `App\Models\Author`, URI: "file://" + filepath.Join(dir, "gone.php")})
+}
+
+func TestEloquentToManyRelationsCarryTheRelatedModel(t *testing.T) {
+	src := `<?php
+namespace App\Models;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
+/**
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, Featured> $featured
+ */
+class Category extends Model
+{
+    public function tags(): BelongsToMany { return $this->belongsToMany(Tag::class); }
+    public function comments(): MorphMany { return $this->morphMany(Comment::class, 'commentable'); }
+    public function labels(): MorphToMany { return $this->morphToMany(Label::class, 'labelable'); }
+    public function followers() { return $this->morphedByMany(Follower::class, 'followable'); }
+    public function orders(): HasManyThrough { return $this->hasManyThrough(Order::class, Product::class); }
+    public function featured(): BelongsToMany { return $this->belongsToMany(Product::class); }
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "Category.php")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx := symbols.NewIndex()
+	idx.IndexFile("file://"+path, src)
+	analyzeModelSource(idx, idx.Lookup(`App\Models\Category`), newModelSource(src, phpparser.OnlyGrammar(token.Latest)))
+	for prop, want := range map[string]string{
+		"$tags":      `Illuminate\Database\Eloquent\Collection<int, App\Models\Tag>`,
+		"$comments":  `Illuminate\Database\Eloquent\Collection<int, App\Models\Comment>`,
+		"$labels":    `Illuminate\Database\Eloquent\Collection<int, App\Models\Label>`,
+		"$followers": `Illuminate\Database\Eloquent\Collection<int, App\Models\Follower>`,
+		"$orders":    `Illuminate\Database\Eloquent\Collection<int, App\Models\Order>`,
+		"$featured":  `Illuminate\Database\Eloquent\Collection<int, Featured>`,
+	} {
+		if sym := idx.Lookup(`App\Models\Category::` + prop); sym == nil || sym.Type != want {
+			t.Errorf("%s: %+v, want type %s", prop, sym, want)
+		}
+	}
 }

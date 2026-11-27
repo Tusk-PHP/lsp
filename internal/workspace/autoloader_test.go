@@ -54,7 +54,7 @@ func TestClassLoaderLoadsFromComposerAndAnalysesProjectModels(t *testing.T) {
 	if model := ws.Index.Lookup(`Illuminate\Database\Eloquent\Model`); model == nil || model.Source != symbols.SourceVendor {
 		t.Errorf("the vendor parent loads as vendor code, though vendor/ is excluded from the workspace walk: %+v", model)
 	}
-	if relation := ws.Index.Lookup(`App\Models\Post::$comments`); relation == nil || relation.Type != `Illuminate\Database\Eloquent\Collection` {
+	if relation := ws.Index.Lookup(`App\Models\Post::$comments`); relation == nil || relation.Type != `Illuminate\Database\Eloquent\Collection<int, App\Models\Comment>` {
 		t.Errorf("a model loaded on demand gets its relation property straight away: %+v", relation)
 	}
 	if ws.Index.Lookup(`App\Models\Missing`) != nil {

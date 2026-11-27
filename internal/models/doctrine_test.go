@@ -362,7 +362,7 @@ class Product
 		if sym == nil {
 			t.Fatal("expected virtual property '$reviews'")
 		}
-		if sym.Type != "Doctrine\\Common\\Collections\\Collection" {
+		if sym.Type != "Doctrine\\Common\\Collections\\Collection<int, App\\Entity\\Review>" {
 			t.Errorf("expected Collection type, got %q", sym.Type)
 		}
 	})
@@ -452,5 +452,38 @@ class Tag
 	}
 	if members != 1 {
 		t.Errorf("the property is listed once: %d", members)
+	}
+}
+
+func TestDoctrineToManyPropertiesCarryTheTargetEntity(t *testing.T) {
+	idx, root := setupDoctrineIndex(t, `<?php
+namespace App\Entity;
+
+use Doctrine\Common\Collections\Collection;
+use Doctrine\ORM\Mapping as ORM;
+
+#[ORM\Entity]
+class Post
+{
+    #[ORM\OneToMany(targetEntity: Comment::class, mappedBy: 'post')]
+    private Collection $comments;
+    #[ORM\ManyToMany(targetEntity: Tag::class)]
+    private $tags;
+    #[ORM\ManyToMany(targetEntity: Tag::class)]
+    private iterable $iterableTags;
+    #[ORM\OneToMany(mappedBy: 'post')]
+    private Collection $untargeted;
+}
+`)
+	AnalyzeDoctrineEntities(idx, root)
+	for prop, want := range map[string]string{
+		"$comments":     `Doctrine\Common\Collections\Collection<int, App\Entity\Comment>`,
+		"$tags":         `Doctrine\Common\Collections\Collection<int, App\Entity\Tag>`,
+		"$iterableTags": "iterable",
+		"$untargeted":   `Doctrine\Common\Collections\Collection`,
+	} {
+		if sym := idx.Lookup(`App\Entity\Post::` + prop); sym == nil || sym.Type != want {
+			t.Errorf("%s: %+v, want type %s", prop, sym, want)
+		}
 	}
 }
