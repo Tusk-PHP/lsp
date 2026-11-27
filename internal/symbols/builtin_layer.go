@@ -25,9 +25,13 @@ func (idx *Index) ReplaceBuiltins(profile BuiltinProfile) error {
 	if err != nil {
 		return err
 	}
-	files := make([]*parser.FileNode, len(entries))
+	uris := make([]string, len(entries))
+	decls := make([][]*Symbol, len(entries))
 	for i, entry := range entries {
-		files[i] = parser.ParseFile(entry.Content)
+		uris[i] = "builtin://" + entry.Path
+		if file := parser.ParseFile(entry.Content); file != nil {
+			decls[i] = fileDeclarations(uris[i], file)
+		}
 	}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -38,12 +42,11 @@ func (idx *Index) ReplaceBuiltins(profile BuiltinProfile) error {
 	}
 	idx.registerBuiltinRegistryLocked(profile)
 	for i, entry := range entries {
-		if files[i] == nil {
+		if decls[i] == nil {
 			continue
 		}
-		uri := "builtin://" + entry.Path
-		idx.fileSource[uri] = indexedText{text: entry.Content, from: SourceBuiltin}
-		idx.indexParsedLocked(uri, files[i], SourceBuiltin)
+		idx.fileSource[uris[i]] = indexedText{text: entry.Content, from: SourceBuiltin}
+		idx.addDeclarationsLocked(uris[i], decls[i], SourceBuiltin)
 	}
 	return nil
 }

@@ -60,6 +60,8 @@ func (idx *Index) ensureGenerated(fqn string) bool {
 	if file == nil {
 		return false
 	}
+	uri := generatedScheme + fqn
+	decls := fileDeclarations(uri, file)
 
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -70,10 +72,9 @@ func (idx *Index) ensureGenerated(fqn string) bool {
 	if origin == nil {
 		return false // the source class went away meanwhile
 	}
-	uri := generatedScheme + fqn
 	idx.removeFileSymbols(uri)
 	idx.generatedURIs[uri] = true
-	idx.indexParsedLocked(uri, file, SourceGenerated)
+	idx.addDeclarationsLocked(uri, decls, SourceGenerated)
 	// The generated file doesn't exist on disk: go-to-definition leads to the
 	// class it's generated from.
 	for _, sym := range idx.fileSymbols[uri] {
