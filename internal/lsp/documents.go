@@ -110,6 +110,10 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 		s.documents[uri] = *params.Text
 	}
 	s.docMu.Unlock()
+	if s.workspace != nil {
+		saved := []string{symbols.URIToPath(uri)}
+		s.goSafe("workspace.NamesChanged", func() { s.workspace.NamesChanged(saved) })
+	}
 	if params.Text != nil && isPHPDocument(uri) {
 		s.indexDocumentMaybeAsync(uri, *params.Text)
 	}

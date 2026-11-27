@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/phparray"
@@ -14,15 +16,17 @@ import (
 // FrameworkArrayResolver provides array key suggestions for framework-specific
 // patterns like Laravel config(), $request->validated(), $model->toArray().
 type FrameworkArrayResolver struct {
-	index         *symbols.Index
-	rootPath      string
-	framework     string
-	vendorConfigs map[string]string // config key → absolute file path (cached)
+	index     *symbols.Index
+	rootPath  string
+	framework string
+	vendor    atomic.Pointer[func() map[string]string]
 }
 
 // NewFrameworkArrayResolver creates a resolver for the given framework.
 func NewFrameworkArrayResolver(index *symbols.Index, rootPath, framework string) *FrameworkArrayResolver {
-	return &FrameworkArrayResolver{index: index, rootPath: rootPath, framework: framework}
+	r := &FrameworkArrayResolver{index: index, rootPath: rootPath, framework: framework}
+	r.InvalidateVendorConfigs()
+	return r
 }
 
 // ResolveCallReturnKeys resolves array keys for a call expression result.
@@ -120,8 +124,7 @@ func (r *FrameworkArrayResolver) ListConfigFiles() []types.ShapeField {
 	}
 
 	// 2. Vendor package configs
-	r.ensureVendorConfigs()
-	for key := range r.vendorConfigs {
+	for key := range r.vendorConfigs() {
 		if !seen[key] {
 			seen[key] = true
 			fields = append(fields, types.ShapeField{Key: key, Type: "array"})
@@ -136,24 +139,25 @@ func (r *FrameworkArrayResolver) ListConfigFiles() []types.ShapeField {
 func (r *FrameworkArrayResolver) ParseConfigFile(name string) []types.ShapeField {
 	// 1. Try project config
 	configPath := filepath.Join(r.rootPath, "config", name+".php")
-	if fields := parseConfigFileAt(configPath); fields != nil {
+	if fields, read := parseConfigFileAt(configPath); read {
 		return fields
 	}
 
 	// 2. Fall back to vendor config
-	r.ensureVendorConfigs()
-	if vendorPath, ok := r.vendorConfigs[name]; ok {
-		return parseConfigFileAt(vendorPath)
+	if vendorPath, ok := r.vendorConfigs()[name]; ok {
+		fields, _ := parseConfigFileAt(vendorPath)
+		return fields
 	}
 
 	return nil
 }
 
-// parseConfigFileAt parses a single PHP config file that returns an array.
-func parseConfigFileAt(configPath string) []types.ShapeField {
+// parseConfigFileAt parses a single PHP config file that returns an array,
+// and reports whether the file could be read.
+func parseConfigFileAt(configPath string) ([]types.ShapeField, bool) {
 	content, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil
+		return nil, false
 	}
 
 	source := string(content)
@@ -163,11 +167,11 @@ func parseConfigFileAt(configPath string) []types.ShapeField {
 		if strings.HasPrefix(trimmed, "return ") || strings.HasPrefix(trimmed, "return[") {
 			arrayText := phparray.CollectReturnArray(lines, i)
 			if arrayText != "" {
-				return phparray.ParseLiteralToShape(arrayText)
+				return phparray.ParseLiteralToShape(arrayText), true
 			}
 		}
 	}
-	return nil
+	return nil, true
 }
 
 func (r *FrameworkArrayResolver) resolveLaravelMethodKeys(classFQN, methodName string) []types.ShapeField {
@@ -261,31 +265,37 @@ func (r *FrameworkArrayResolver) resolveSymfonyCall(expr, source string) []types
 
 // --- Vendor Config Discovery ---
 
-// ensureVendorConfigs lazily discovers vendor package configs and caches them.
-func (r *FrameworkArrayResolver) ensureVendorConfigs() {
-	if r.vendorConfigs != nil {
-		return
-	}
-	r.vendorConfigs = make(map[string]string)
+func (r *FrameworkArrayResolver) vendorConfigs() map[string]string {
+	return (*r.vendor.Load())()
+}
 
-	vendorDir := filepath.Join(r.rootPath, "vendor")
+// InvalidateVendorConfigs forgets the installed packages' config files,
+// after the installed packages changed. They are found again on next use.
+func (r *FrameworkArrayResolver) InvalidateVendorConfigs() {
+	load := sync.OnceValue(func() map[string]string { return discoverVendorConfigs(filepath.Join(r.rootPath, "vendor")) })
+	r.vendor.Store(&load)
+}
+
+func discoverVendorConfigs(vendorDir string) map[string]string {
+	found := make(map[string]string)
 	if _, err := os.Stat(vendorDir); err != nil {
-		return
+		return found
 	}
 
 	// Strategy 1: Parse ServiceProvider files for mergeConfigFrom() calls.
 	// This is the most accurate approach — packages declare their config key explicitly.
-	r.discoverFromServiceProviders(vendorDir)
+	discoverFromServiceProviders(vendorDir, found)
 
 	// Strategy 2: Scan common config file locations in vendor packages.
 	// Catches packages that don't use mergeConfigFrom or that we missed.
-	r.discoverFromConfigDirs(vendorDir)
+	discoverFromConfigDirs(vendorDir, found)
+	return found
 }
 
 // discoverFromServiceProviders finds mergeConfigFrom() calls in vendor service providers.
 // Pattern: $this->mergeConfigFrom(__DIR__.'/../config/sanctum.php', 'sanctum')
 // Pattern: $this->mergeConfigFrom(path, 'key')
-func (r *FrameworkArrayResolver) discoverFromServiceProviders(vendorDir string) {
+func discoverFromServiceProviders(vendorDir string, found map[string]string) {
 	// Walk vendor looking for *ServiceProvider.php files
 	filepath.Walk(vendorDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
@@ -302,13 +312,13 @@ func (r *FrameworkArrayResolver) discoverFromServiceProviders(vendorDir string) 
 		if err != nil {
 			return nil
 		}
-		r.parseMergeConfigFrom(string(content), filepath.Dir(path))
+		parseMergeConfigFrom(string(content), filepath.Dir(path), found)
 		return nil
 	})
 }
 
 // parseMergeConfigFrom extracts config key and file path from mergeConfigFrom() calls.
-func (r *FrameworkArrayResolver) parseMergeConfigFrom(source, providerDir string) {
+func parseMergeConfigFrom(source, providerDir string, found map[string]string) {
 	lines := strings.Split(source, "\n")
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -340,14 +350,8 @@ func (r *FrameworkArrayResolver) parseMergeConfigFrom(source, providerDir string
 			continue
 		}
 
-		// Already have a project config for this key — skip
-		projectPath := filepath.Join(r.rootPath, "config", configKey+".php")
-		if _, err := os.Stat(projectPath); err == nil {
-			continue
-		}
-
 		// Already discovered — skip
-		if _, ok := r.vendorConfigs[configKey]; ok {
+		if _, ok := found[configKey]; ok {
 			continue
 		}
 
@@ -355,14 +359,14 @@ func (r *FrameworkArrayResolver) parseMergeConfigFrom(source, providerDir string
 		configFile := resolveConfigPath(pathArg, providerDir)
 		if configFile != "" {
 			if _, err := os.Stat(configFile); err == nil {
-				r.vendorConfigs[configKey] = configFile
+				found[configKey] = configFile
 			}
 		}
 	}
 }
 
 // discoverFromConfigDirs scans common config directories in vendor packages.
-func (r *FrameworkArrayResolver) discoverFromConfigDirs(vendorDir string) {
+func discoverFromConfigDirs(vendorDir string, found map[string]string) {
 	// Scan vendor/{org}/{package}/config/*.php
 	orgDirs, _ := os.ReadDir(vendorDir)
 	for _, orgDir := range orgDirs {
@@ -387,24 +391,14 @@ func (r *FrameworkArrayResolver) discoverFromConfigDirs(vendorDir string) {
 						continue
 					}
 					key := strings.TrimSuffix(entry.Name(), ".php")
-					// Don't override project configs or already-discovered keys
-					projectPath := filepath.Join(r.rootPath, "config", key+".php")
-					if _, err := os.Stat(projectPath); err == nil {
+					if _, ok := found[key]; ok {
 						continue
 					}
-					if _, ok := r.vendorConfigs[key]; ok {
-						continue
-					}
-					r.vendorConfigs[key] = filepath.Join(configDir, entry.Name())
+					found[key] = filepath.Join(configDir, entry.Name())
 				}
 			}
 		}
 	}
-}
-
-// InvalidateVendorCache clears the cached vendor configs, forcing re-discovery.
-func (r *FrameworkArrayResolver) InvalidateVendorCache() {
-	r.vendorConfigs = nil
 }
 
 // resolveConfigPath resolves a PHP path expression like __DIR__.'/../config/foo.php'

@@ -711,19 +711,16 @@ func (s *Service) projectSummaryMarkdown() string {
 func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt := &serviceRuntime{Workspace: ws}
 
-	arrayResolver := models.NewFrameworkArrayResolver(ws.Index, s.RootPath, s.Framework)
-	viewResolver := frameworklaravel.NewViews(s.RootPath)
-	translationResolver := frameworklaravel.NewTranslationResolver(s.RootPath)
 	symfonyTranslations := frameworksymfony.NewTranslationResolver(s.RootPath)
 
 	rt.Completion = completion.NewProvider(ws.Index, ws.Container, s.Framework)
-	rt.Completion.SetArrayResolver(arrayResolver)
+	rt.Completion.SetArrayResolver(ws.ArrayKeys)
 	rt.Completion.SetAutoImportAliasStyle(ws.Config.AutoImport.AliasStyle)
 	if ws.RouteIndex != nil {
 		rt.Completion.SetLaravelRouteIndex(ws.RouteIndex)
 	}
-	rt.Completion.SetViewResolver(viewResolver)
-	rt.Completion.SetTranslationResolver(translationResolver)
+	rt.Completion.SetViewResolver(ws.Views)
+	rt.Completion.SetTranslationResolver(ws.Translations)
 	rt.Completion.SetSymfonyTranslationResolver(symfonyTranslations)
 	rt.Completion.SetSymfonyCommands(ws.SymfonyCommands)
 
@@ -733,7 +730,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	})
 
 	rt.Hover = hover.NewProvider(ws.Index, ws.Container, s.Framework)
-	rt.Hover.SetArrayResolver(arrayResolver)
+	rt.Hover.SetArrayResolver(ws.ArrayKeys)
 	rt.Hover.SetConfig(ws.Config)
 	rt.Hover.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 		return rt.Completion.ResolveExpressionTypeTyped(expr, source, pos, file)
@@ -745,8 +742,8 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	}
 	rt.Analyzer.SetChainResolver(rt.Completion.ResolveExpressionType)
 	rt.Analyzer.SetTypedChainResolver(rt.Completion.ResolveExpressionTypeTyped)
-	rt.Analyzer.SetViewResolver(viewResolver)
-	rt.Analyzer.SetTranslationResolver(translationResolver)
+	rt.Analyzer.SetViewResolver(ws.Views)
+	rt.Analyzer.SetTranslationResolver(ws.Translations)
 	rt.Analyzer.SetSymfonyTranslationResolver(symfonyTranslations)
 	rt.Analyzer.SetSymfonyCommands(ws.SymfonyCommands)
 
@@ -768,9 +765,9 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 		}
 	}
 	providers := frameworklaravel.NewProviders(s.RootPath, ws.Index)
-	viewResolver.SetProviders(providers)
+	ws.Views.SetProviders(providers)
 	rt.Diagnostics.Blade = &blade.Features{
-		Views:      viewResolver,
+		Views:      ws.Views,
 		Components: frameworklaravel.NewComponents(s.RootPath, ws.Index, providers, readFile),
 		Read:       readFile,
 		Custom:     providers.Custom,

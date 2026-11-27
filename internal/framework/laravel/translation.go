@@ -7,12 +7,23 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
+// TranslationResolver completes and finds the translation keys of a Laravel
+// app, from lang/ and resources/lang/. The keys are read once and kept until
+// FilesChanged reports a change to them.
 type TranslationResolver struct {
 	rootPath string
+	entries  atomic.Pointer[func() translations]
+}
+
+type translations struct {
+	entries []TranslationEntry
+	byKey   map[string]int
 }
 
 type TranslationEntry struct {
@@ -30,7 +41,44 @@ type TranslationStringContext struct {
 }
 
 func NewTranslationResolver(rootPath string) *TranslationResolver {
-	return &TranslationResolver{rootPath: rootPath}
+	r := &TranslationResolver{rootPath: rootPath}
+	r.invalidate()
+	return r
+}
+
+// WatchGlobs are the files besides PHP sources that the Laravel features
+// read and a client should report changes to: JSON translations.
+func WatchGlobs() []string {
+	return []string{"**/lang/*.json"}
+}
+
+func translationDirs(rootPath string) []string {
+	return []string{filepath.Join(rootPath, "lang"), filepath.Join(rootPath, "resources", "lang")}
+}
+
+// FilesChanged forgets the keys read when one of paths, created, changed or
+// deleted, is a translation file or config/app.php, which sets the
+// preferred locale.
+func (r *TranslationResolver) FilesChanged(paths []string) {
+	if r == nil || r.rootPath == "" {
+		return
+	}
+	watched := append(translationDirs(r.rootPath), r.appConfigPath())
+	for _, path := range paths {
+		if touchesAny(path, watched) {
+			r.invalidate()
+			return
+		}
+	}
+}
+
+func (r *TranslationResolver) invalidate() {
+	load := sync.OnceValue(r.read)
+	r.entries.Store(&load)
+}
+
+func (r *TranslationResolver) translations() translations {
+	return (*r.entries.Load())()
 }
 
 func DetectTranslationContext(line string, cursor int) *TranslationStringContext {
@@ -118,7 +166,7 @@ func (r *TranslationResolver) Complete(ctx *TranslationStringContext) []protocol
 		return nil
 	}
 
-	entries := r.uniqueEntries()
+	entries := r.translations().entries
 	if len(entries) == 0 {
 		return nil
 	}
@@ -150,18 +198,19 @@ func (r *TranslationResolver) Definition(key string) *protocol.Location {
 		return nil
 	}
 
-	for _, entry := range r.uniqueEntries() {
-		if entry.Key == key {
-			return &protocol.Location{URI: entry.URI, Range: entry.Range}
-		}
+	t := r.translations()
+	i, ok := t.byKey[key]
+	if !ok {
+		return nil
 	}
-	return nil
+	entry := t.entries[i]
+	return &protocol.Location{URI: entry.URI, Range: entry.Range}
 }
 
-func (r *TranslationResolver) uniqueEntries() []TranslationEntry {
+func (r *TranslationResolver) read() translations {
 	entries := r.discoverEntries()
 	if len(entries) == 0 {
-		return nil
+		return translations{}
 	}
 
 	preferredLocale := r.defaultLocale()
@@ -182,15 +231,15 @@ func (r *TranslationResolver) uniqueEntries() []TranslationEntry {
 	})
 
 	uniq := make([]TranslationEntry, 0, len(entries))
-	seen := make(map[string]bool)
+	byKey := make(map[string]int, len(entries))
 	for _, entry := range entries {
-		if seen[entry.Key] {
+		if _, seen := byKey[entry.Key]; seen {
 			continue
 		}
-		seen[entry.Key] = true
+		byKey[entry.Key] = len(uniq)
 		uniq = append(uniq, entry)
 	}
-	return uniq
+	return translations{entries: uniq, byKey: byKey}
 }
 
 func localeRank(locale, preferred string) int {
@@ -205,8 +254,7 @@ func localeRank(locale, preferred string) int {
 }
 
 func (r *TranslationResolver) defaultLocale() string {
-	appConfig := filepath.Join(r.rootPath, "config", "app.php")
-	data, err := os.ReadFile(appConfig)
+	data, err := os.ReadFile(r.appConfigPath())
 	if err != nil {
 		return "en"
 	}
@@ -221,6 +269,10 @@ func (r *TranslationResolver) defaultLocale() string {
 		}
 	}
 	return "en"
+}
+
+func (r *TranslationResolver) appConfigPath() string {
+	return filepath.Join(r.rootPath, "config", "app.php")
 }
 
 func parseQuotedValueAfterArrow(line string) string {
@@ -250,10 +302,7 @@ func (r *TranslationResolver) discoverEntries() []TranslationEntry {
 	}
 
 	var entries []TranslationEntry
-	for _, baseDir := range []string{
-		filepath.Join(r.rootPath, "lang"),
-		filepath.Join(r.rootPath, "resources", "lang"),
-	} {
+	for _, baseDir := range translationDirs(r.rootPath) {
 		dirEntries, err := os.ReadDir(baseDir)
 		if err != nil {
 			continue
