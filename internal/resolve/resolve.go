@@ -841,7 +841,7 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 		if !ok {
 			continue
 		}
-		if rt, ok := r.assignedType(varName, tree, tree.reduce(value), lines, pos, file, i); ok {
+		if rt, ok := r.assignedType(varName, tree, tree.reduce(value), lines, pos, file); ok {
 			return rt
 		}
 		break
@@ -953,23 +953,14 @@ func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos 
 		}
 	}
 
-	// 4. Check @var annotations: /** @var ClassName $var */
-	for i := pos.Line; i >= 0 && i >= pos.Line-5; i-- {
-		if i >= len(lines) {
-			continue
-		}
-		line := lines[i]
-		varIdx := strings.Index(line, "@var ")
-		if varIdx < 0 {
-			continue
-		}
-		rest := strings.TrimSpace(line[varIdx+5:])
-		fields := strings.Fields(rest)
-		if len(fields) >= 2 && fields[1] == varPrefix {
-			return r.ResolveClassName(fields[0], file)
+	// 4. An inline `@var Type $var` on a statement before the read.
+	from, okFrom := tree.offset(textpos.Position{Line: vs.firstLine})
+	off, okOff := tree.offset(pos)
+	if okFrom && okOff {
+		if rt, ok := r.varAssertion(varName, pos, file, tree, from, off); ok {
+			return rt.String()
 		}
 	}
-
 	return ""
 }
 

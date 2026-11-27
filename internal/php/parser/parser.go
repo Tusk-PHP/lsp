@@ -63,14 +63,20 @@ func parse(src string, version token.Version, all []lexer.Token) *ast.File {
 		case token.DocComment:
 			p.unterminated(tok)
 			doc = ast.Span{Start: tok.Start, End: tok.End}
+			file.Docs = append(file.Docs, ast.Doc{Comment: doc})
 		default:
 			if doc != (ast.Span{}) {
 				p.docs = append(p.docs, tokenDoc{tok: len(p.toks), doc: doc})
-				file.Docs = append(file.Docs, ast.Doc{Comment: doc, Token: tok.Start})
+				for i := len(file.Docs) - 1; i >= 0 && file.Docs[i].Token == 0; i-- {
+					file.Docs[i].Token = tok.Start
+				}
 				doc = ast.Span{}
 			}
 			p.toks = append(p.toks, tok)
 		}
+	}
+	for i := len(file.Docs) - 1; i >= 0 && file.Docs[i].Token == 0; i-- {
+		file.Docs[i].Token = uint32(len(src))
 	}
 	p.guard(func() { p.file(file) })
 	slices.SortStableFunc(p.errors, func(a, b ast.Error) int { return cmp.Compare(a.Start, b.Start) })

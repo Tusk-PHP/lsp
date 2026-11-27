@@ -80,8 +80,9 @@ type File struct {
 	Docs     []Doc
 }
 
-// Doc is a doc comment and the start of the token it documents; File.Docs
-// holds them in source order.
+// Doc is a doc comment and the start of the token after it; File.Docs holds
+// every one in source order, several of them when several come before one
+// token, the last of which documents it.
 type Doc struct {
 	Comment Span
 	Token   uint32
@@ -90,11 +91,11 @@ type Doc struct {
 // DocBefore returns the doc comment that documents the token starting at
 // offset.
 func (f *File) DocBefore(offset uint32) (Span, bool) {
-	i, found := slices.BinarySearchFunc(f.Docs, offset, func(d Doc, offset uint32) int { return cmp.Compare(d.Token, offset) })
-	if !found {
+	i, _ := slices.BinarySearchFunc(f.Docs, offset+1, func(d Doc, offset uint32) int { return cmp.Compare(d.Token, offset) })
+	if i == 0 || f.Docs[i-1].Token != offset {
 		return Span{}, false
 	}
-	return f.Docs[i].Comment, true
+	return f.Docs[i-1].Comment, true
 }
 
 type Error struct {
