@@ -47,6 +47,22 @@ class Post extends Model
     public function getExcerptAttribute(): string { return substr($this->body, 0, 100); }
 }
 `
+	casted := `<?php
+namespace App\Models;
+
+use App\OrderStatus;
+use Illuminate\Database\Eloquent\Model;
+
+class Order extends Model
+{
+    protected $casts = ['paid_at' => 'datetime', 'options' => 'array', 'status' => OrderStatus::class];
+
+    protected function casts(): array
+    {
+        return ['total' => 'decimal:2', 'shipped_at' => 'immutable_datetime', 'secret' => 'encrypted:array'];
+    }
+}
+`
 	plain := `<?php
 namespace App\Support;
 
@@ -60,8 +76,10 @@ class Helper
 	cfg.DatabaseEnabled = &off
 	ws := New(Options{RootPath: root, Framework: "laravel", Config: cfg, Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
 	ws.Index.IndexFile("file:///vendor/Model.php", "<?php\nnamespace Illuminate\\Database\\Eloquent;\nabstract class Model {}\n")
-	const modelURI, plainURI = "file:///app/Models/Post.php", "file:///app/Support/Helper.php"
+	const modelURI, castedURI, plainURI = "file:///app/Models/Post.php", "file:///app/Models/Order.php", "file:///app/Support/Helper.php"
+	ws.Index.IndexFile("file:///app/OrderStatus.php", "<?php\nnamespace App;\nenum OrderStatus: string { case Paid = 'paid'; }\n")
 	ws.Index.IndexFile(modelURI, model)
+	ws.Index.IndexFile(castedURI, casted)
 	ws.Index.IndexFile(plainURI, plain)
 	ws.AnalyzeModels()
 
@@ -71,6 +89,7 @@ class Helper
 	}{
 		{"model/reindex", modelURI, model, false},
 		{"model/reindex+UpdateFile", modelURI, model, true},
+		{"casts/reindex+UpdateFile", castedURI, casted, true},
 		{"plain/reindex", plainURI, plain, false},
 		{"plain/reindex+UpdateFile", plainURI, plain, true},
 	} {

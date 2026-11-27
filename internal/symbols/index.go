@@ -1631,6 +1631,19 @@ func (idx *Index) RefineProperty(fqn, fallbackType string, readonly bool) bool {
 	return true
 }
 
+// SetPropertyType replaces the type of the property fqn.
+func (idx *Index) SetPropertyType(fqn, typ string) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	existing := idx.symbols[fqn]
+	if existing == nil || existing.Kind != KindProperty || existing.Type == typ {
+		return
+	}
+	refined := *existing
+	refined.Type = typ
+	idx.replaceSymbolLocked(existing, &refined)
+}
+
 // RefineMethodReturnType sets the return type of the method fqn when it
 // declares none.
 func (idx *Index) RefineMethodReturnType(fqn, returnType string) {

@@ -123,34 +123,12 @@ func InjectMigrationColumns(index *symbols.Index, tableColumns map[string]map[st
 // injectMigrationColumnsInto adds columns to model as virtual properties,
 // leaving any property the model already has.
 func injectMigrationColumnsInto(index *symbols.Index, modelSym *symbols.Symbol, columns map[string]*MigrationColumn) {
-	modelFQN := modelSym.FQN
 	for _, col := range columns {
-		propName := "$" + col.Name
-		// Skip if already discovered from another source
-		if index.Lookup(modelFQN+"::"+propName) != nil {
-			continue
-		}
-
-		phpType := col.Type
-		if col.Nullable && phpType != "mixed" {
-			phpType = "?" + phpType
-		}
-
 		docComment := "From migration"
 		if col.Default != "" {
 			docComment += ", default: " + col.Default
 		}
-
-		index.AddVirtualMember(modelFQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        modelFQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        modelSym.URI,
-			Visibility: "public",
-			Type:       phpType,
-			IsVirtual:  true,
-			DocComment: docComment,
-		})
+		injectColumn(index, modelSym, col.Name, col.Type, col.Nullable, docComment)
 	}
 }
 
