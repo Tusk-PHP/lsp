@@ -14,10 +14,11 @@ import (
 
 // violation is a single invariant failure.
 type violation struct {
-	file string
-	line int
-	col  int
-	msg  string
+	file  string
+	line  int
+	col   int
+	msg   string
+	fatal bool
 }
 
 func (v violation) String() string {
@@ -31,6 +32,10 @@ func fileViolation(file, msg string) violation {
 	return violation{file: file, line: -1, col: -1, msg: msg}
 }
 
+func fatalViolation(file, msg string) violation {
+	return violation{file: file, line: -1, col: -1, msg: msg, fatal: true}
+}
+
 func posViolation(file string, line, col int, msg string) violation {
 	return violation{file: file, line: line, col: col, msg: msg}
 }
@@ -42,7 +47,7 @@ func checkParserNeverNil(entry corpusEntry) *violation {
 	var result *parser.FileNode
 	func() {
 		defer func() { recover() }()
-		result = parser.ParseFile(entry.source)
+		result = parser.ParseFileIn(entry.source, entry.grammars())
 	}()
 	if result == nil {
 		v := fileViolation(entry.path, "ParseFile returned nil")
@@ -60,7 +65,7 @@ func checkParserNoPanic(entry corpusEntry) *violation {
 				panicked = true
 			}
 		}()
-		parser.ParseFile(entry.source)
+		parser.ParseFileIn(entry.source, entry.grammars())
 	}()
 	if panicked {
 		v := fileViolation(entry.path, "ParseFile panicked")
@@ -72,8 +77,8 @@ func checkParserNoPanic(entry corpusEntry) *violation {
 // checkParserDeterministic verifies that parsing the same source twice gives
 // identical structure (same number of classes, interfaces, traits, enums, functions).
 func checkParserDeterministic(entry corpusEntry) *violation {
-	file1 := parser.ParseFile(entry.source)
-	file2 := parser.ParseFile(entry.source)
+	file1 := parser.ParseFileIn(entry.source, entry.grammars())
+	file2 := parser.ParseFileIn(entry.source, entry.grammars())
 	if file1 == nil && file2 == nil {
 		return nil
 	}
@@ -96,7 +101,7 @@ func checkParserDeterministic(entry corpusEntry) *violation {
 
 // checkParserErrorPositions verifies all parse error positions are non-negative.
 func checkParserErrorPositions(entry corpusEntry) []violation {
-	file := parser.ParseFile(entry.source)
+	file := parser.ParseFileIn(entry.source, entry.grammars())
 	if file == nil {
 		return nil
 	}
@@ -122,7 +127,7 @@ func checkParserErrorPositions(entry corpusEntry) []violation {
 
 // checkIndexNoPanic verifies IndexFile does not panic.
 func checkIndexNoPanic(entry corpusEntry, idx *symbols.Index) *violation {
-	freshIdx := symbols.NewIndex()
+	freshIdx := symbols.NewIndexFor(entry.grammars())
 	panicked := false
 	func() {
 		defer func() {
@@ -144,7 +149,7 @@ func checkIndexNoPanic(entry corpusEntry, idx *symbols.Index) *violation {
 // set of symbols (same names and FQNs, no duplication).
 func checkIndexIdempotent(entry corpusEntry) *violation {
 	// First indexing.
-	idx1 := symbols.NewIndex()
+	idx1 := symbols.NewIndexFor(entry.grammars())
 	idx1.IndexFile(entry.uri, entry.source)
 	syms1 := idx1.GetFileSymbols(entry.uri)
 
@@ -173,11 +178,11 @@ func checkSymbolValidity(entry corpusEntry, idx *symbols.Index, lineCount int) [
 			continue
 		}
 		if sym.Name == "" {
-			vs = append(vs, fileViolation(entry.path,
+			vs = append(vs, fatalViolation(entry.path,
 				fmt.Sprintf("Symbol with FQN %q has empty Name", sym.FQN)))
 		}
 		if sym.FQN == "" {
-			vs = append(vs, fileViolation(entry.path,
+			vs = append(vs, fatalViolation(entry.path,
 				fmt.Sprintf("Symbol %q has empty FQN", sym.Name)))
 		}
 		if sym.URI == "" {
@@ -372,7 +377,7 @@ func checkDocumentSymbolsInvariant(entry corpusEntry, syms []protocol.DocumentSy
 			return // guard against pathological nesting
 		}
 		if s.Name == "" {
-			vs = append(vs, fileViolation(entry.path, "GetDocumentSymbols: symbol with empty name"))
+			vs = append(vs, fatalViolation(entry.path, "GetDocumentSymbols: symbol with empty name"))
 		}
 		r := s.Range
 		sr := s.SelectionRange
@@ -519,7 +524,7 @@ func checkDeterminism(entry corpusEntry, prov *providers, pos protocol.Position,
 // checkUseImportSpotCheck verifies that a `use Foo\Bar;` import resolves via
 // FindDefinition on Bar to a symbol whose short name is Bar (when in corpus).
 func checkUseImportSpotCheck(entry corpusEntry, idx *symbols.Index, prov *providers) []violation {
-	file := parser.ParseFile(entry.source)
+	file := parser.ParseFileIn(entry.source, entry.grammars())
 	if file == nil {
 		return nil
 	}

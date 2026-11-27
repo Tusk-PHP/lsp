@@ -66,7 +66,7 @@ var blueprintTypeMap = map[string]string{
 // AnalyzeMigrations scans Laravel migration files and injects virtual properties
 // for columns that don't already have a source from DB, IDE helper, or docblocks.
 func AnalyzeMigrations(index *symbols.Index, rootPath string) {
-	InjectMigrationColumns(index, rootPath, ScanMigrationColumns(rootPath))
+	InjectMigrationColumns(index, ScanMigrationColumns(rootPath))
 }
 
 // ScanMigrationColumns reads the columns of each table from the Laravel
@@ -102,12 +102,12 @@ func ScanMigrationColumns(rootPath string) map[string]map[string]*MigrationColum
 
 // InjectMigrationColumns adds the columns migrations give each model's table
 // as virtual properties of the model.
-func InjectMigrationColumns(index *symbols.Index, rootPath string, tableColumns map[string]map[string]*MigrationColumn) {
+func InjectMigrationColumns(index *symbols.Index, tableColumns map[string]map[string]*MigrationColumn) {
 	if len(tableColumns) == 0 {
 		return
 	}
 	// Map tables to models and inject virtual properties
-	modelsByTable := buildModelTableMap(index, rootPath)
+	modelsByTable := buildModelTableMap(index)
 
 	for tableName, columns := range tableColumns {
 		modelFQN, ok := modelsByTable[tableName]
@@ -221,11 +221,11 @@ func ScanMigrationSchema(rootPath string) *Schema {
 }
 
 // buildModelTableMap creates a mapping from table names to model FQNs.
-func buildModelTableMap(index *symbols.Index, rootPath string) map[string]string {
+func buildModelTableMap(index *symbols.Index) map[string]string {
 	result := make(map[string]string)
 	models := index.GetDescendants(frameworklaravel.EloquentModel)
 	for _, model := range models {
-		tableName := ResolveModelTableName(index, model, rootPath)
+		tableName := ResolveModelTableName(index, model)
 		if tableName != "" {
 			result[tableName] = model.FQN
 		}

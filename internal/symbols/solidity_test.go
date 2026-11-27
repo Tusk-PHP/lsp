@@ -13,6 +13,7 @@ func TestSearchByFQNPrefixNoEmptyNames(t *testing.T) {
 namespace App;
 class Service {}
 class Controller {}
+class {}
 `)
 	idx.IndexFile("file:///deep.php", `<?php
 namespace App\Http;
@@ -147,11 +148,11 @@ class Old {}
 	// Re-index with different content
 	idx.IndexFile(uri, `<?php
 namespace NS;
-class New {}
+class Fresh {}
 `)
 	syms, _ = idx.SearchByFQNPrefix("NS\\")
-	if len(syms) != 1 || syms[0].Name != "New" {
-		t.Errorf("after reindex: expected [New], got names=%v", namesOf(syms))
+	if len(syms) != 1 || syms[0].Name != "Fresh" {
+		t.Errorf("after reindex: expected [Fresh], got names=%v", namesOf(syms))
 	}
 }
 

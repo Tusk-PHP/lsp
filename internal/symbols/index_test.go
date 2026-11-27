@@ -790,3 +790,17 @@ class Assert {
 		t.Fatal("a removed method should no longer narrow")
 	}
 }
+
+func TestIndexFileKeepsNamelessDeclarationsOut(t *testing.T) {
+	idx := NewIndex()
+	uri := "file:///typing.php"
+	idx.IndexFile(uri, "<?php\nclass {\n    public function () {}\n    public function kept() {}\n}\n<div class=\"dark\"></div>\n")
+	for _, sym := range idx.GetFileSymbols(uri) {
+		if sym.Name == "" || sym.FQN == "" {
+			t.Errorf("nameless symbol indexed: %+v", sym)
+		}
+	}
+	if idx.Lookup("") != nil {
+		t.Error("the index has an entry under the empty name")
+	}
+}

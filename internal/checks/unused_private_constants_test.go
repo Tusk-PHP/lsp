@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -13,7 +14,7 @@ import (
 func privateConstantFindings(t *testing.T, src string, idx *symbols.Index) []string {
 	t.Helper()
 	var got []string
-	for _, f := range (&UnusedPrivateRule{}).Check(parser.ParseFile(src), src, idx) {
+	for _, f := range (&UnusedPrivateRule{}).Check(parser.ParseFile(src, token.Latest), src, idx) {
 		if f.Code == rule.UnusedPrivateConstant {
 			if f.Severity != rule.SeverityHint || !slices.Equal(f.Tags, []Tag{TagUnnecessary}) {
 				t.Errorf("finding %+v", f)
@@ -128,7 +129,7 @@ class A {
 
 func TestUnusedPrivateConstantReadsTokensOnlyForClassesWithPrivateConstants(t *testing.T) {
 	src := "<?php\nclass A {\n    public const X = 1;\n    private int $p = 0;\n}\n"
-	cls := parser.ParseFile(src).Classes[0]
+	cls := parser.ParseFile(src, token.Latest).Classes[0]
 	tokens := func() []parser.Token {
 		t.Fatal("tokens fetched for a class without private constants")
 		return nil
@@ -149,7 +150,7 @@ class Lonely {
 	r := &UnusedPrivateRule{}
 	declared := r.Codes()
 	seen := map[rule.Code]bool{}
-	for _, f := range r.Check(parser.ParseFile(src), src, nil) {
+	for _, f := range r.Check(parser.ParseFile(src, token.Latest), src, nil) {
 		if !slices.Contains(declared, f.Code) {
 			t.Errorf("reported %s without declaring it in %v", f.Code, declared)
 		}

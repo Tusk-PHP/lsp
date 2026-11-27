@@ -9,6 +9,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -75,7 +76,7 @@ func TestE2EGenericChainResolution(t *testing.T) {
 	p := setupLaravelE2E(t)
 
 	resolveTyped := func(expr, source string, line int) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
@@ -140,7 +141,7 @@ func TestE2EVariableGenericPropagation(t *testing.T) {
 	p := setupLaravelE2E(t)
 
 	resolveTyped := func(expr, source string, line int) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
@@ -282,7 +283,7 @@ func TestE2EMultiLineChainGenerics(t *testing.T) {
 
 	t.Run("single-line variable assignment preserves generics", func(t *testing.T) {
 		source := "<?php\nuse App\\Models\\Category;\n$categories = Category::query()->get()->all();\n$first = $categories[0];\n"
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 
 		rt := p.ResolveExpressionTypeTyped("$categories", source, protocol.Position{Line: 3}, file)
 		if rt.String() != "array<int, App\\Models\\Category>" {
