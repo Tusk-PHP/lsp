@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -50,7 +51,7 @@ func TestPhpFeaturesParseClean(t *testing.T) {
 						t.Errorf("ParseFile panicked on %s: %v", name, r)
 					}
 				}()
-				fileNode = ParseFile(sourceStr)
+				fileNode = ParseFile(sourceStr, token.Latest)
 			}()
 			if fileNode == nil {
 				t.Errorf("ParseFile returned nil for %s", name)
@@ -118,7 +119,7 @@ func TestTempestFixtureParseNoPanic(t *testing.T) {
 						t.Errorf("ParseFile panicked on %s: %v", rel, r)
 					}
 				}()
-				fileNode = ParseFile(sourceStr)
+				fileNode = ParseFile(sourceStr, token.Latest)
 			}()
 			if fileNode == nil {
 				t.Errorf("ParseFile returned nil for %s", rel)

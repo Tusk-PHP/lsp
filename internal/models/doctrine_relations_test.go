@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -93,7 +95,7 @@ class Helper
 	}
 
 	// An entity whose file is gone has no relations to read.
-	if got := extractDoctrineRelations(&symbols.Symbol{FQN: "App\\Entity\\Gone", URI: "file://" + filepath.Join(dir, "Gone.php")}); got != nil {
+	if got := extractDoctrineRelations(&symbols.Symbol{FQN: "App\\Entity\\Gone", URI: "file://" + filepath.Join(dir, "Gone.php")}, phpparser.OnlyGrammar(token.Latest)); got != nil {
 		t.Errorf("missing file gave %v", got)
 	}
 }
