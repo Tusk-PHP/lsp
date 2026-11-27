@@ -439,6 +439,51 @@ func TestBuilderColumnCompletionOnABuilderOrRelationHeldElsewhere(t *testing.T) 
 	}
 }
 
+func TestBuilderArgCompletionThroughStaticPropertiesArrayElementsAndUseFunction(t *testing.T) {
+	p, _ := setupEloquentCompletionTest(t)
+	p.index.IndexFile("file:///app/Support/Holder.php", `<?php
+namespace App\Support;
+use App\Models\Category;
+use Illuminate\Database\Eloquent\Builder;
+class Holder {
+    /** @var Builder<Category> */
+    public static $shared;
+    /** @var array<string, Builder<Category>> */
+    public array $builders;
+    public static function own(): void {
+        self::$shared->where('');
+    }
+}
+/** @return Builder<Category> */
+function categoryQuery() {}
+`)
+	prefix := "<?php\nnamespace App\\Http;\nuse App\\Support\\Holder;\nuse function App\\Support\\categoryQuery;\nfunction run(Holder $holder): void {\n    "
+	for _, receiver := range []string{
+		"Holder::$shared",
+		"$holder->builders['x']",
+		"categoryQuery()",
+	} {
+		for _, tc := range []struct{ call, want string }{
+			{"where('", "slug"},
+			{"orderBy('", "name"},
+			{"with('", "products"},
+		} {
+			source := prefix + receiver + "->" + tc.call
+			lines := strings.Split(source, "\n")
+			last := len(lines) - 1
+			if labels := collectLabels(p.GetCompletions("file:///run.php", source, protocol.Position{Line: last, Character: len(lines[last])})); !labels[tc.want] {
+				t.Errorf("%s->%s offers Category's %s, got %v", receiver, tc.call, tc.want, labels)
+			}
+		}
+	}
+	holder := p.index.GetFileSource("file:///app/Support/Holder.php")
+	end := strings.Index(holder, "where('") + len("where('")
+	pos := protocol.Position{Line: strings.Count(holder[:end], "\n"), Character: end - strings.LastIndex(holder[:end], "\n") - 1}
+	if labels := collectLabels(p.GetCompletions("file:///app/Support/Holder.php", holder, pos)); !labels["slug"] {
+		t.Errorf("self::$shared->where(' offers Category's slug, got %v", labels)
+	}
+}
+
 func BenchmarkBuilderColumnCompletion(b *testing.B) {
 	p, _ := setupEloquentCompletionTest(b)
 	for _, source := range []string{
