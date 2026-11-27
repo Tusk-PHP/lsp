@@ -10,12 +10,16 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
-func (r *FrameworkArrayResolver) VariableKeys(res *resolve.Resolver, file *parser.FileNode, v *ast.Variable) []types.ShapeField {
-	if keys := shapeFields(res.NodeType(file, v)); len(keys) > 0 {
+func (r *FrameworkArrayResolver) Keys(res *resolve.Resolver, file *parser.FileNode, e ast.Expr) []types.ShapeField {
+	if keys := shapeFields(res.NodeType(file, e)); len(keys) > 0 {
 		return keys
 	}
+	v, ok := e.(*ast.Variable)
+	if !ok {
+		return r.valueKeys(res, file, e)
+	}
 	if value, ok := res.AssignedValue(file, v); ok {
-		if keys := r.assignedKeys(res, file, value); len(keys) > 0 {
+		if keys := r.valueKeys(res, file, value); len(keys) > 0 {
 			return keys
 		}
 	}
@@ -30,7 +34,7 @@ func shapeFields(rt resolve.ResolvedType) []types.ShapeField {
 	return fields
 }
 
-func (r *FrameworkArrayResolver) assignedKeys(res *resolve.Resolver, file *parser.FileNode, value ast.Expr) []types.ShapeField {
+func (r *FrameworkArrayResolver) valueKeys(res *resolve.Resolver, file *parser.FileNode, value ast.Expr) []types.ShapeField {
 	if r == nil {
 		return nil
 	}

@@ -14,29 +14,29 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func variableKeysAt(r *FrameworkArrayResolver, idx *symbols.Index, marked string) []string {
+func keysAt(r *FrameworkArrayResolver, idx *symbols.Index, marked string) []string {
 	before, after, _ := strings.Cut(marked, "‸")
 	src := before + after
 	off := uint32(len(before))
 	file := parser.ParseFile(src, token.Latest)
-	var v *ast.Variable
+	var e ast.Expr
 	ast.Walk(file.Tree, func(n ast.Node) bool {
-		if found, ok := n.(*ast.Variable); ok && found.Start == off {
-			v = found
+		if dim, ok := n.(*ast.ArrayDimFetch); ok && dim.Array.Bounds().Start == off {
+			e = dim.Array
 		}
 		return true
 	})
-	if v == nil {
+	if e == nil {
 		return nil
 	}
 	var keys []string
-	for _, f := range r.VariableKeys(resolve.NewResolver(idx), file, v) {
+	for _, f := range r.Keys(resolve.NewResolver(idx), file, e) {
 		keys = append(keys, f.Key)
 	}
 	return keys
 }
 
-func TestVariableKeys(t *testing.T) {
+func TestKeys(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "config"), 0o755); err != nil {
 		t.Fatal(err)
@@ -45,7 +45,7 @@ func TestVariableKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	requestPath := filepath.Join(dir, "StoreRequest.php")
-	request := "<?php\nnamespace App;\nclass StoreRequest {\n    public function rules(): array {\n        return ['title' => 'required'];\n    }\n    public function validated(): array { return []; }\n}\n"
+	request := "<?php\nnamespace App;\nclass StoreRequest {\n    public function rules(): array {\n        return ['title' => 'required'];\n    }\n    public function validated(): array { return []; }\n    /** @var array{page: int, size: int} */\n    public array $paging;\n    public array $loose;\n}\n"
 	if err := os.WriteFile(requestPath, []byte(request), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -70,6 +70,12 @@ func TestVariableKeys(t *testing.T) {
 		{"config outside Laravel", other, "<?php\nfunction f() {\n    $c = config('app');\n    ‸$c[''];\n}\n", nil},
 		{"config without a resolver", nil, "<?php\nfunction f() {\n    $c = config('app');\n    ‸$c[''];\n}\n", nil},
 		{"a method's keys", laravel, "<?php\nfunction f(\\App\\StoreRequest $r) {\n    $d = $r->validated();\n    ‸$d[''];\n}\n", []string{"title"}},
+		{"a shape-typed property", nil, "<?php\nfunction f(\\App\\StoreRequest $r) {\n    ‸$r->paging[''];\n}\n", []string{"page", "size"}},
+		{"an untyped array property", laravel, "<?php\nfunction f(\\App\\StoreRequest $r) {\n    ‸$r->loose[''];\n}\n", nil},
+		{"a method's keys read directly", laravel, "<?php\nfunction f(\\App\\StoreRequest $r) {\n    ‸$r->validated()[''];\n}\n", []string{"title"}},
+		{"a config file read directly", laravel, "<?php\n‸config('app')[''];\n", []string{"name", "db"}},
+		{"every config file read directly", laravel, "<?php\n‸config()[''];\n", []string{"app"}},
+		{"config read directly outside Laravel", other, "<?php\n‸config('app')[''];\n", nil},
 		{"another value", laravel, "<?php\nfunction f($x) {\n    $d = $x;\n    ‸$d[''];\n}\n", nil},
 		{
 			"keys written one by one",
@@ -80,7 +86,7 @@ func TestVariableKeys(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := variableKeysAt(tt.resolver, idx, tt.code); !slices.Equal(got, tt.want) {
+			if got := keysAt(tt.resolver, idx, tt.code); !slices.Equal(got, tt.want) {
 				t.Errorf("keys = %v, want %v", got, tt.want)
 			}
 		})

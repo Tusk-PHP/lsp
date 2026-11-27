@@ -164,12 +164,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 	}
 	if dim, ok := ctx.StringDim(); ok {
-		if keys, ok := arrayKeyContextOf(dim); ok {
-			return sanitizeCompletions(p.completeArrayKeys(r, file, keys))
-		}
-		if configCtx := configResultContext(ctx.File.Source, dim); configCtx != nil {
-			return sanitizeCompletions(p.completeConfigResultKeys(configCtx))
-		}
+		return sanitizeCompletions(p.completeArrayKeys(r, file, dim))
 	}
 	if inArg {
 		if configPath, partial, quote, ok := configArgContext(arg); ok {

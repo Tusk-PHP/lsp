@@ -3,7 +3,6 @@ package completion
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -11,10 +10,8 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
-	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -287,26 +284,12 @@ config('database.
 	t.Error("'connections' not found")
 }
 
-func TestConfigResultContext(t *testing.T) {
-	for code, want := range map[string]*configResultArrayContext{
-		"config('database')['connections']['my": {ConfigArg: "database", AccessKeys: []string{"connections"}, Partial: "my", Quote: "'"},
-		"config('database')[":                   {ConfigArg: "database"},
-		"config('database')[$k]['":              nil,
-		"config($key)['":                        nil,
-		"config('')['":                          nil,
-		"config()['":                            nil,
-		"other('database')['":                   nil,
-		"$config['":                             nil,
-	} {
-		source := "<?php\n" + code
-		ctx := sourcectx.Analyze("file:///test.php", source, protocol.Position{Line: 1, Character: len(code)}, phpparser.OnlyGrammar(token.Latest))
-		var got *configResultArrayContext
-		if dim, ok := ctx.StringDim(); ok {
-			got = configResultContext(ctx.File.Source, dim)
-		}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("%q: got %#v, want %#v", code, got, want)
-		}
+func TestConfigResultKeysOfTheRepository(t *testing.T) {
+	p, _ := setupConfigProvider(t)
+	source := "<?php\nconfig()['"
+	labels := collectLabels(p.GetCompletions("file:///test.php", source, protocol.Position{Line: 1, Character: len("config()['")}))
+	if !labels["database"] {
+		t.Errorf("config()[' offers the config files, got %v", labels)
 	}
 }
 

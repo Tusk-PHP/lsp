@@ -4,41 +4,25 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
-type arrayKeyContext struct {
-	Var        *ast.Variable
-	AccessKeys []string
-	Partial    string
-	Quote      string
-}
-
-func arrayKeyContextOf(dim sourcectx.StringDim) (*arrayKeyContext, bool) {
-	v, ok := dim.Base.(*ast.Variable)
-	if !ok {
-		return nil, false
-	}
-	return &arrayKeyContext{Var: v, AccessKeys: dim.Keys, Partial: dim.Partial, Quote: dim.Quote}, true
-}
-
-func (p *Provider) completeArrayKeys(r *resolve.Resolver, file *parser.FileNode, ctx *arrayKeyContext) []protocol.CompletionItem {
-	keys := types.FieldsAt(p.arrayResolver.VariableKeys(r, file, ctx.Var), ctx.AccessKeys)
+func (p *Provider) completeArrayKeys(r *resolve.Resolver, file *parser.FileNode, dim sourcectx.StringDim) []protocol.CompletionItem {
+	keys := types.FieldsAt(p.arrayResolver.Keys(r, file, dim.Base), dim.Keys)
 	if len(keys) == 0 {
 		return nil
 	}
 
 	q := "'"
-	if ctx.Quote == "\"" {
+	if dim.Quote == "\"" {
 		q = "\""
 	}
 
 	var items []protocol.CompletionItem
-	lpartial := strings.ToLower(ctx.Partial)
+	lpartial := strings.ToLower(dim.Partial)
 	for _, k := range keys {
 		if k.Key == "" {
 			continue
@@ -52,7 +36,7 @@ func (p *Provider) completeArrayKeys(r *resolve.Resolver, file *parser.FileNode,
 		}
 
 		insertText := k.Key
-		if ctx.Quote == "" {
+		if dim.Quote == "" {
 			insertText = q + k.Key + q
 		}
 

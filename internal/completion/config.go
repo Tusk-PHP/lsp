@@ -10,60 +10,6 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
-type configResultArrayContext struct {
-	ConfigArg  string
-	AccessKeys []string
-	Partial    string
-	Quote      string
-}
-
-func configResultContext(src string, dim sourcectx.StringDim) *configResultArrayContext {
-	cfg, ok := laravel.ParseConfigCall(src, dim.Base)
-	if !ok || cfg.Key == "" {
-		return nil
-	}
-	return &configResultArrayContext{ConfigArg: cfg.Key, AccessKeys: dim.Keys, Partial: dim.Partial, Quote: dim.Quote}
-}
-
-func (p *Provider) completeConfigResultKeys(ctx *configResultArrayContext) []protocol.CompletionItem {
-	if p.arrayResolver == nil {
-		return nil
-	}
-
-	keys := types.FieldsAt(p.arrayResolver.ConfigKeys(ctx.ConfigArg), ctx.AccessKeys)
-	if len(keys) == 0 {
-		return nil
-	}
-
-	q := "'"
-	if ctx.Quote == "\"" {
-		q = "\""
-	}
-
-	var items []protocol.CompletionItem
-	lpartial := strings.ToLower(ctx.Partial)
-	for _, k := range keys {
-		if k.Key == "" {
-			continue
-		}
-		if lpartial != "" && !strings.HasPrefix(strings.ToLower(k.Key), lpartial) {
-			continue
-		}
-		insertText := k.Key
-		if ctx.Quote == "" {
-			insertText = q + k.Key + q
-		}
-		items = append(items, protocol.CompletionItem{
-			Label:      k.Key,
-			Kind:       protocol.CompletionItemKindProperty,
-			Detail:     k.Type,
-			InsertText: insertText,
-			SortText:   "0" + k.Key,
-		})
-	}
-	return items
-}
-
 func configArgContext(arg sourcectx.CallArg) (configPath, partial, quote string, ok bool) {
 	if !laravel.IsConfigKeyArg(arg) {
 		return "", "", "", false
