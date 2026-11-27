@@ -11,7 +11,8 @@ const (
 	EloquentModel      = `Illuminate\Database\Eloquent\Model`
 	EloquentBuilder    = `Illuminate\Database\Eloquent\Builder`
 	EloquentCollection = `Illuminate\Database\Eloquent\Collection`
-	EloquentRelation   = `Illuminate\Database\Eloquent\Relations\Relation`
+	EloquentRelations  = `Illuminate\Database\Eloquent\Relations\`
+	EloquentRelation   = EloquentRelations + `Relation`
 )
 
 var tableJoiningRelations = []string{
