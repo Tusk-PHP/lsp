@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/rule"
@@ -129,8 +131,6 @@ type DBConfig struct {
 }
 
 type AIConfig struct {
-	MCP          *bool    `json:"mcp,omitempty"`
-	WriteTools   string   `json:"writeTools,omitempty"`
 	AllowedRoots []string `json:"allowedRoots,omitempty"`
 	DenyPaths    []string `json:"denyPaths,omitempty"`
 }
@@ -148,11 +148,9 @@ type Config struct {
 	// or set via initializationOptions, distinguishing it from the default
 	// "8.6" so the resolution chain can skip the default correctly.
 	phpVersionExplicitlySet bool
+	unknownKeys             []error
 	Framework               string          `json:"framework"`
-	ComposerPath            string          `json:"composerPath"`
-	IncludePaths            []string        `json:"includePaths"`
 	ExcludePaths            []string        `json:"excludePaths"`
-	ContainerAware          bool            `json:"containerAware"`
 	DiagnosticsEnabled      bool            `json:"diagnosticsEnabled"`
 	PHPBinary               string          `json:"phpBinary,omitempty"`
 	PHPDetectTimeoutMs      int             `json:"phpDetectTimeoutMs,omitempty"`
@@ -171,9 +169,6 @@ type Config struct {
 	// MaxIndexFiles caps how many workspace PHP files are indexed; 0 means no
 	// limit (the native default). Composer dependencies aren't counted.
 	MaxIndexFiles             int                 `json:"maxIndexFiles"`
-	StubsPath                 string              `json:"stubsPath"`
-	LogLevel                  string              `json:"logLevel"`
-	LogFile                   string              `json:"logFile"`
 	InlayHints                InlayHintsConfig    `json:"inlayHints"`
 	AutoImport                AutoImportConfig    `json:"autoImport"`
 	PHPManualLocale           string              `json:"php_manual_locale,omitempty"`
@@ -196,7 +191,7 @@ func (c *Config) SetDiagnosticRulesJSON(raw string) error {
 }
 
 func (c *Config) Problems() []error {
-	return c.DiagnosticIgnore.Invalid
+	return append(slices.Clone(c.DiagnosticIgnore.Invalid), c.unknownKeys...)
 }
 
 // IsPHPVersionExplicitlySet reports whether PHPVersion was supplied by a
@@ -239,13 +234,9 @@ func DefaultConfig() *Config {
 	return &Config{
 		PHPVersion:         "8.6",
 		Framework:          "auto",
-		IncludePaths:       []string{"src", "app", "lib"},
 		ExcludePaths:       []string{"vendor", "node_modules", ".git", "storage", "var/cache"},
-		ContainerAware:     true,
 		DiagnosticsEnabled: true,
 		MaxIndexFiles:      defaultMaxIndexFiles,
-		LogLevel:           "info",
-		LogFile:            "",
 		InlayHints: InlayHintsConfig{
 			Enabled:             true,
 			VariableTypes:       true,
@@ -264,8 +255,7 @@ func DefaultConfig() *Config {
 			Mode: "schema_only",
 		},
 		AI: AIConfig{
-			WriteTools: "disabled",
-			DenyPaths:  []string{".env", "vendor", "storage"},
+			DenyPaths: []string{".env", "vendor", "storage"},
 		},
 		Introspection: IntrospectionConfig{
 			Verbosity: "compact",
@@ -287,6 +277,7 @@ func LoadFromFile(path string) (*Config, error) {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+	cfg.unknownKeys = unknownKeys(data, reflect.TypeFor[Config](), "")
 	// Detect which keys were explicitly present in the file so the profile
 	// resolution chain can distinguish "file-set" from "default" values.
 	var keys map[string]json.RawMessage
@@ -319,9 +310,6 @@ func (c *Config) mergeClientOptions(opts *ClientOptions) {
 	}
 	if opts.Framework != "" {
 		c.Framework = opts.Framework
-	}
-	if opts.ContainerAware != nil {
-		c.ContainerAware = *opts.ContainerAware
 	}
 	if opts.DiagnosticsEnabled != nil {
 		c.DiagnosticsEnabled = *opts.DiagnosticsEnabled

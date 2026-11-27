@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -20,9 +21,6 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if !cfg.DiagnosticsEnabled {
 		t.Error("DiagnosticsEnabled should default to true")
-	}
-	if !cfg.ContainerAware {
-		t.Error("ContainerAware should default to true")
 	}
 	if cfg.MaxIndexFiles != defaultMaxIndexFiles {
 		t.Errorf("MaxIndexFiles = %d", cfg.MaxIndexFiles)
@@ -81,7 +79,6 @@ func TestWithClientOptions(t *testing.T) {
 	opts := &ClientOptions{
 		PHPVersion:         "8.2",
 		Framework:          "symfony",
-		ContainerAware:     &boolFalse,
 		DiagnosticsEnabled: &boolTrue,
 		PHPStanEnabled:     &boolTrue,
 		PHPStanPath:        "/usr/bin/phpstan",
@@ -105,9 +102,6 @@ func TestWithClientOptions(t *testing.T) {
 	}
 	if cfg.Framework != "symfony" {
 		t.Errorf("Framework = %q", cfg.Framework)
-	}
-	if cfg.ContainerAware {
-		t.Error("ContainerAware should be false")
 	}
 	if cfg.MaxIndexFiles != 5000 {
 		t.Errorf("MaxIndexFiles = %d", cfg.MaxIndexFiles)
@@ -334,9 +328,6 @@ func TestDefaultConfigAISafety(t *testing.T) {
 	cfg := DefaultConfig()
 	if cfg.DB.Mode != "schema_only" {
 		t.Fatalf("expected schema_only DB mode, got %q", cfg.DB.Mode)
-	}
-	if cfg.AI.WriteTools != "disabled" {
-		t.Fatalf("expected disabled write tools, got %q", cfg.AI.WriteTools)
 	}
 	if len(cfg.AI.DenyPaths) == 0 {
 		t.Fatal("expected non-empty deny paths")
@@ -672,5 +663,54 @@ func TestLoadFromFileReportsUnreadableFile(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := LoadFromFile(dir); err == nil || !strings.Contains(err.Error(), "reading "+dir) {
 		t.Errorf("got %v", err)
+	}
+}
+
+func TestUnknownAndRemovedSettingsAreReportedByName(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".tusk-php.json")
+	if err := os.WriteFile(path, []byte(`{
+  "phpVersion": "8.3",
+  "logFile": "/tmp/tusk.log",
+  "containerAware": false,
+  "inlayHints": {"enabled": false, "typeHints": true},
+  "ai": {"denyPaths": [".env"], "writeTools": "enabled"},
+  "diagnosticRules": {"unknown-class": "off"},
+  "diagnosticIgnore": [{"code": "unknown-member"}]
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, problem := range cfg.Problems() {
+		got = append(got, problem.Error())
+	}
+	want := []string{
+		`unknown setting "ai.writeTools" is ignored`,
+		`unknown setting "containerAware" is ignored`,
+		`unknown setting "inlayHints.typeHints" is ignored`,
+		`unknown setting "logFile" is ignored`,
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("problems:\n got %q\nwant %q", got, want)
+	}
+	if cfg.PHPVersion != "8.3" || cfg.InlayHints.Enabled || len(cfg.AI.DenyPaths) != 1 {
+		t.Errorf("the known settings still apply: %+v", cfg)
+	}
+}
+
+func TestKnownSettingsReportNothing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".tusk-php.json")
+	if err := os.WriteFile(path, []byte(`{"PHPVersion": "8.2", "composer": {"hover": {"enable": false}}, "db": {"mode": "live"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if problems := cfg.Problems(); len(problems) != 0 {
+		t.Errorf("settings the config reads, in any case, are not reported: %v", problems)
 	}
 }

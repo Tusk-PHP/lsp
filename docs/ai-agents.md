@@ -79,3 +79,21 @@ Every `range` in a tool result (references, diagnostics, routes, symbols) is zer
 Answers follow the files on disk without a restart or `tusk_reindex`. Before each tool call and resource read, the server compares the size and modification time of the project's PHP files (outside `excludePaths`), `composer.json`, `composer.lock`, `vendor/composer/installed.json` and `.tusk-php.json` with what it last indexed. Changed, new and deleted PHP files are re-indexed, a changed PHP version or extension list in `composer.json` or `.tusk-php.json` swaps the builtins, and after `composer install`, `update`, `require` or `remove` the whole snapshot is rebuilt. A `.tusk-php.json` that can't be read fails the call with the reason. A PHP file that can't be read (for example one without read permission) doesn't: the call answers from everything else, the server logs the file, and tries it again on the next call.
 
 The server also exposes the same data as readable JSON resources: `project-summary`, `php-symbols`, and `db-schema-compact`, plus `laravel-routes` / `laravel-models` or `symfony-routes` depending on the detected framework.
+
+## Limiting what the agent reads
+
+`php_find_references` and `php_diagnostics` read your source files. Two settings in `.tusk-php.json` decide which files they may read. Both take paths relative to the project root:
+
+```json
+{
+  "ai": {
+    "denyPaths": [".env", "vendor", "storage"],
+    "allowedRoots": ["app", "src"]
+  }
+}
+```
+
+- `ai.denyPaths` lists files and directories the tools never read. The default is `[".env", "vendor", "storage"]`, and setting it replaces the default.
+- `ai.allowedRoots`, when set, limits the tools to files under these directories. It is empty by default, which allows the whole project except `denyPaths`.
+
+A reference to a symbol declared in a denied file, or a diagnostics request for one, gets an error saying the path is outside the allowed roots or inside a denied path.
