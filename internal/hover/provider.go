@@ -59,8 +59,8 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 
 	file := ctx.File
 
-	if v, path, key, ok := arrayKeyAt(ctx); ok {
-		return p.hoverArrayKey(r, file, v, path, key)
+	if base, path, key, ok := arrayKeyAt(ctx); ok {
+		return p.hoverArrayKey(r, file, base, path, key)
 	}
 
 	// Check for config key hover: config('database.connections.mysql')
@@ -420,8 +420,8 @@ func (p *Provider) getEffectiveDocBlock(sym *symbols.Symbol) *parser.DocBlock {
 	return nil
 }
 
-func (p *Provider) hoverArrayKey(r *resolve.Resolver, file *parser.FileNode, v *ast.Variable, path []string, key string) *protocol.Hover {
-	for _, f := range types.FieldsAt(p.arrayResolver.VariableKeys(r, file, v), path) {
+func (p *Provider) hoverArrayKey(r *resolve.Resolver, file *parser.FileNode, base ast.Expr, path []string, key string) *protocol.Hover {
+	for _, f := range types.FieldsAt(p.arrayResolver.Keys(r, file, base), path) {
 		if f.Key != key {
 			continue
 		}
@@ -441,12 +441,8 @@ func (p *Provider) hoverArrayKey(r *resolve.Resolver, file *parser.FileNode, v *
 	return nil
 }
 
-func arrayKeyAt(ctx *sourcectx.CursorContext) (*ast.Variable, []string, string, bool) {
+func arrayKeyAt(ctx *sourcectx.CursorContext) (ast.Expr, []string, string, bool) {
 	dim, ok := ctx.StringDim()
-	if !ok {
-		return nil, nil, "", false
-	}
-	v, ok := dim.Base.(*ast.Variable)
 	if !ok {
 		return nil, nil, "", false
 	}
@@ -454,7 +450,7 @@ func arrayKeyAt(ctx *sourcectx.CursorContext) (*ast.Variable, []string, string, 
 	if !ok || ctx.Offset < dim.Fetch.Dim.Bounds().Start {
 		return nil, nil, "", false
 	}
-	return v, dim.Keys, key, true
+	return dim.Base, dim.Keys, key, true
 }
 
 // hoverConfigKey provides hover for config key strings inside config('key.path').

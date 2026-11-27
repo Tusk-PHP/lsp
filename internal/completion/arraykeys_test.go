@@ -4,61 +4,61 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func arrayKeyContextAt(t *testing.T, marked string) (keys *arrayKeyContext, varName string, ok bool) {
+func stringDimAt(t *testing.T, marked string) (dim ast.StringDim, base string, ok bool) {
 	t.Helper()
 	ctx := cursorContextAt(t, marked)
-	dim, ok := ctx.StringDim()
-	if !ok {
-		return nil, "", false
-	}
-	keys, ok = arrayKeyContextOf(dim)
+	dim, ok = ctx.StringDim()
 	if ok {
-		varName = keys.Var.Bounds().Text(ctx.File.Source)
+		base = dim.Base.Bounds().Text(ctx.File.Source)
 	}
-	return keys, varName, ok
+	return dim, base, ok
 }
 
-func TestArrayKeyContext(t *testing.T) {
+func TestArrayKeyStringDim(t *testing.T) {
 	tests := []struct {
 		name       string
 		code       string
-		wantVar    string
+		wantBase   string
 		wantAccess []string
 		wantPart   string
 		wantQuote  string
 		wantOk     bool
 	}{
-		{name: "single quote start", code: "$config['", wantVar: "$config", wantQuote: "'", wantOk: true},
-		{name: "double quote start", code: `$config["`, wantVar: "$config", wantQuote: "\"", wantOk: true},
-		{name: "partial key", code: "$config['da", wantVar: "$config", wantPart: "da", wantQuote: "'", wantOk: true},
-		{name: "bracket only", code: "$config[", wantVar: "$config", wantOk: true},
-		{name: "nested in call", code: "foo($config['k", wantVar: "$config", wantPart: "k", wantQuote: "'", wantOk: true},
-		{name: "two levels", code: "$config['database']['", wantVar: "$config", wantAccess: []string{"database"}, wantQuote: "'", wantOk: true},
-		{name: "three levels", code: "$config['database']['replicas']['", wantVar: "$config", wantAccess: []string{"database", "replicas"}, wantQuote: "'", wantOk: true},
-		{name: "a level on the next line", code: "$config['database']\n    ['repl", wantVar: "$config", wantAccess: []string{"database"}, wantPart: "repl", wantQuote: "'", wantOk: true},
-		{name: "inside a closed key", code: "$config['da|ta'];", wantVar: "$config", wantPart: "da", wantQuote: "'", wantOk: true},
+		{name: "single quote start", code: "$config['", wantBase: "$config", wantQuote: "'", wantOk: true},
+		{name: "double quote start", code: `$config["`, wantBase: "$config", wantQuote: "\"", wantOk: true},
+		{name: "partial key", code: "$config['da", wantBase: "$config", wantPart: "da", wantQuote: "'", wantOk: true},
+		{name: "bracket only", code: "$config[", wantBase: "$config", wantOk: true},
+		{name: "nested in call", code: "foo($config['k", wantBase: "$config", wantPart: "k", wantQuote: "'", wantOk: true},
+		{name: "two levels", code: "$config['database']['", wantBase: "$config", wantAccess: []string{"database"}, wantQuote: "'", wantOk: true},
+		{name: "three levels", code: "$config['database']['replicas']['", wantBase: "$config", wantAccess: []string{"database", "replicas"}, wantQuote: "'", wantOk: true},
+		{name: "a level on the next line", code: "$config['database']\n    ['repl", wantBase: "$config", wantAccess: []string{"database"}, wantPart: "repl", wantQuote: "'", wantOk: true},
+		{name: "inside a closed key", code: "$config['da|ta'];", wantBase: "$config", wantPart: "da", wantQuote: "'", wantOk: true},
 		{name: "not array access", code: "foo('bar"},
-		{name: "no variable", code: "['key"},
-		{name: "method call not var", code: "$this->method('"},
-		{name: "a property", code: "$this->data['"},
+		{name: "an array literal", code: "['key"},
+		{name: "a call argument", code: "$this->method('"},
+		{name: "a property", code: "$this->data['", wantBase: "$this->data", wantQuote: "'", wantOk: true},
+		{name: "a static property", code: "Holder::$data['k", wantBase: "Holder::$data", wantPart: "k", wantQuote: "'", wantOk: true},
+		{name: "a method call", code: "$this->load()['", wantBase: "$this->load()", wantQuote: "'", wantOk: true},
+		{name: "a property two levels down", code: "$this->data['meta']['", wantBase: "$this->data", wantAccess: []string{"meta"}, wantQuote: "'", wantOk: true},
 		{name: "a level that is not a string", code: "$config[$k]['"},
 		{name: "in a comment", code: "// $config['"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, varName, ok := arrayKeyContextAt(t, "<?php\n"+tt.code)
+			dim, base, ok := stringDimAt(t, "<?php\n"+tt.code)
 			if ok != tt.wantOk {
-				t.Fatalf("ok = %v, want %v (%#v)", ok, tt.wantOk, ctx)
+				t.Fatalf("ok = %v, want %v (base %q)", ok, tt.wantOk, base)
 			}
 			if !ok {
 				return
 			}
-			if varName != tt.wantVar || ctx.Partial != tt.wantPart || ctx.Quote != tt.wantQuote || !slices.Equal(ctx.AccessKeys, tt.wantAccess) {
-				t.Fatalf("got %#v", ctx)
+			if base != tt.wantBase || dim.Partial != tt.wantPart || dim.Quote != tt.wantQuote || !slices.Equal(dim.Keys, tt.wantAccess) {
+				t.Fatalf("got base %q, partial %q, quote %q, keys %v", base, dim.Partial, dim.Quote, dim.Keys)
 			}
 		})
 	}

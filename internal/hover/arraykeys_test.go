@@ -288,3 +288,42 @@ function test() {
 		}
 	}
 }
+
+func TestHoverArrayKeyOnAShapeTypedReceiver(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	idx.IndexFile("file:///app/Post.php", `<?php
+namespace App;
+/** @property array{id: int, author: array{name: string, email?: string}} $meta */
+class Post {
+    /** @var array{hits: int} */
+    public static array $stats;
+    /** @return array{total: float} */
+    public function summary(): array { return []; }
+}
+/** @return array{code: int} */
+function status(): array { return []; }
+`)
+	p := NewProvider(idx, nil, "none")
+	prefix := "<?php\nnamespace App;\nfunction f(Post $p) {\n    "
+	for code, want := range map[string]string{
+		"$p->meta['i‸d'];":                "(array key) int $id",
+		"$p->meta['author']['em‸ail'];":   "(array key) string $email (optional)",
+		"Post::$stats['hi‸ts'];":          "(array key) int $hits",
+		"$p->summary()['to‸tal'];":        "(array key) float $total",
+		"status()['co‸de'];":              "(array key) int $code",
+		"$p->meta['author']['miss‸ing'];": "",
+	} {
+		got := hoverMarked(p, prefix+code+"\n}\n")
+		if want == "" && strings.Contains(got, "array key") || !strings.Contains(got, want) {
+			t.Errorf("%s: hover = %q, want %q", code, got, want)
+		}
+	}
+}
+
+func TestHoverArrayKeyReadDirectlyFromAConfigCall(t *testing.T) {
+	p := setupConfigHoverProvider(t)
+	if got := hoverMarked(p, "<?php\nconfig('database.connections')['mysql']['p‸ort'];\n"); !strings.Contains(got, "(array key) int $port") {
+		t.Errorf("hover = %q, want the port key of the config file", got)
+	}
+}
