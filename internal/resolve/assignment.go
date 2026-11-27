@@ -31,8 +31,7 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 		return r.resolveDocType(t.text(v.declared), file), true
 	}
 	if declared := varDocAbove(lines, line, varName); declared != "" {
-		owner := FindEnclosingClass(file, pos)
-		if rt := r.resolveDocTypeIn(r.expandTypeAliases(declared, owner, file), owner, file); !rt.IsEmpty() {
+		if rt := r.declaredVarType(declared, pos, file); !rt.IsEmpty() {
 			return rt, true
 		}
 	}

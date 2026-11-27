@@ -10,6 +10,7 @@ import (
 )
 
 type syntaxTree struct {
+	root    *ast.File
 	src     string
 	grammar token.Version
 	lines   ast.Lines
@@ -23,7 +24,7 @@ type assignment struct {
 }
 
 func newSyntaxTree(src string, tree *ast.File) *syntaxTree {
-	t := &syntaxTree{src: src, grammar: tree.Version, lines: ast.NewLines(src), assigns: make(map[uint32]assignment)}
+	t := &syntaxTree{root: tree, src: src, grammar: tree.Version, lines: ast.NewLines(src), assigns: make(map[uint32]assignment)}
 	ast.Walk(tree, t.collect)
 	return t
 }

@@ -1,6 +1,11 @@
 package ast
 
-import "github.com/Tusk-PHP/lsp/internal/php/token"
+import (
+	"cmp"
+	"slices"
+
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+)
 
 //go:generate go run ./gen
 
@@ -72,6 +77,24 @@ type File struct {
 	Errors   []Error
 	Warnings []Error
 	Version  token.Version
+	Docs     []Doc
+}
+
+// Doc is a doc comment and the start of the token it documents; File.Docs
+// holds them in source order.
+type Doc struct {
+	Comment Span
+	Token   uint32
+}
+
+// DocBefore returns the doc comment that documents the token starting at
+// offset.
+func (f *File) DocBefore(offset uint32) (Span, bool) {
+	i, found := slices.BinarySearchFunc(f.Docs, offset, func(d Doc, offset uint32) int { return cmp.Compare(d.Token, offset) })
+	if !found {
+		return Span{}, false
+	}
+	return f.Docs[i].Comment, true
 }
 
 type Error struct {
