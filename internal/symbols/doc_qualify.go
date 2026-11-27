@@ -26,40 +26,24 @@ func qualifyDocTypes(doc string, uses []parser.UseNode) string {
 	}
 	var b strings.Builder
 	last := 0
-	i := 0
-	for {
-		k := strings.IndexByte(doc[i:], '@')
-		if k < 0 {
-			break
-		}
-		at := i + k
-		j := at + 1
-		for j < len(doc) && (isDocNameByte(doc[j]) || doc[j] == '-') {
-			j++
-		}
-		i = j
-		lineEnd := strings.IndexByte(doc[j:], '\n')
-		if lineEnd < 0 {
-			lineEnd = len(doc)
-		} else {
-			lineEnd += j
-		}
-		value := doc[j:lineEnd]
-		if !namesImport(value, uses) {
+	for tag := range parser.DocTags(doc) {
+		if !namesImport(tag.Value, uses) {
 			continue
 		}
-		parser.ForEachDocTagType(doc[at+1:j], value, func(start int, typ string) {
-			ts := j + start
+		parser.ForEachDocTagType(tag.Name, tag.Value, func(ts int, typ string) {
 			forEachImportedName(typ, uses, func(start, end int, fqn string) {
+				at := tag.Offset(ts + start)
+				if at < last {
+					return
+				}
 				if b.Len() == 0 {
 					b.Grow(len(doc) + 64)
 				}
-				b.WriteString(doc[last : ts+start])
+				b.WriteString(doc[last:at])
 				b.WriteByte('\\')
 				b.WriteString(fqn)
-				last = ts + end
+				last = at + end - start
 			})
-			i = max(i, ts+len(typ))
 		})
 	}
 	if last == 0 {

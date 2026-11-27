@@ -51,6 +51,10 @@ func TestQualifyDocTypes(t *testing.T) {
 		{"covariant template and call-site variance", "/**\n * @template-covariant T of Product\n * @param Collection<covariant Product> $c\n */",
 			"/**\n * @template-covariant T of \\Magento\\Catalog\\Model\\Product\n * @param \\Illuminate\\Support\\Collection<covariant \\Magento\\Catalog\\Model\\Product> $c\n */"},
 		{"description naming an import stays", "/** @param int $n the Product count */", "/** @param int $n the Product count */"},
+		{"type over several lines", "/**\n * @return array{\n *     p: Product,\n *     c: Collection<int, Product>,\n * } Product rows\n * Product description\n */",
+			"/**\n * @return array{\n *     p: \\Magento\\Catalog\\Model\\Product,\n *     c: \\Illuminate\\Support\\Collection<int, \\Magento\\Catalog\\Model\\Product>,\n * } Product rows\n * Product description\n */"},
+		{"method parameters over several lines", "/**\n * @method Product find(\n *     Collection $items,\n * )\n */",
+			"/**\n * @method \\Magento\\Catalog\\Model\\Product find(\n *     \\Illuminate\\Support\\Collection $items,\n * )\n */"},
 		{"other tags stay", "/** @see Product\n * Product description */", "/** @see Product\n * Product description */"},
 	}
 	for _, tt := range tests {
