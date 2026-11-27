@@ -387,99 +387,47 @@ func parseDoctrineXMLMapping(index *symbols.Index, entitySym *symbols.Symbol, en
 	}
 
 	entity := mapping.Entity
-
-	// Process ID fields
 	for _, field := range entity.Id {
-		phpType := "mixed"
-		if t, ok := doctrineTypeMap[field.Type]; ok {
-			phpType = t
-		}
-		propName := "$" + field.Name
-		index.AddVirtualMember(entityFQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        entityFQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        entitySym.URI,
-			Visibility: "private",
-			Type:       phpType,
-			IsVirtual:  true,
-			IsReadonly: true,
-			DocComment: "Doctrine ID column",
-		})
+		mapDoctrineXMLProperty(index, entitySym, field.Name, doctrineXMLFieldType(field), "Doctrine ID column", true)
 	}
-
-	// Process regular fields
 	for _, field := range entity.Fields {
-		phpType := "mixed"
-		if t, ok := doctrineTypeMap[field.Type]; ok {
-			phpType = t
-		}
-		propName := "$" + field.Name
-		index.AddVirtualMember(entityFQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        entityFQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        entitySym.URI,
-			Visibility: "private",
-			Type:       phpType,
-			IsVirtual:  true,
-			DocComment: "Doctrine column",
-		})
+		mapDoctrineXMLProperty(index, entitySym, field.Name, doctrineXMLFieldType(field), "Doctrine column", false)
 	}
-
-	// Process relations
 	for _, rel := range entity.OneToOne {
-		target := resolve(rel.TargetEntity)
-		propName := "$" + rel.Field
-		index.AddVirtualMember(entityFQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        entityFQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        entitySym.URI,
-			Visibility: "private",
-			Type:       "?" + target,
-			IsVirtual:  true,
-			DocComment: "OneToOne relation",
-		})
+		mapDoctrineXMLProperty(index, entitySym, rel.Field, "?"+resolve(rel.TargetEntity), "OneToOne relation", false)
 	}
 	for _, rel := range entity.ManyToOne {
-		target := resolve(rel.TargetEntity)
-		propName := "$" + rel.Field
-		index.AddVirtualMember(entityFQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        entityFQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        entitySym.URI,
-			Visibility: "private",
-			Type:       "?" + target,
-			IsVirtual:  true,
-			DocComment: "ManyToOne relation",
-		})
+		mapDoctrineXMLProperty(index, entitySym, rel.Field, "?"+resolve(rel.TargetEntity), "ManyToOne relation", false)
 	}
 	for _, rel := range entity.OneToMany {
-		propName := "$" + rel.Field
-		index.AddVirtualMember(entityFQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        entityFQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        entitySym.URI,
-			Visibility: "private",
-			Type:       doctrineToManyType(resolve(rel.TargetEntity)),
-			IsVirtual:  true,
-			DocComment: "OneToMany relation",
-		})
+		mapDoctrineXMLProperty(index, entitySym, rel.Field, doctrineToManyType(resolve(rel.TargetEntity)), "OneToMany relation", false)
 	}
 	for _, rel := range entity.ManyToMany {
-		propName := "$" + rel.Field
-		index.AddVirtualMember(entityFQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        entityFQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        entitySym.URI,
-			Visibility: "private",
-			Type:       doctrineToManyType(resolve(rel.TargetEntity)),
-			IsVirtual:  true,
-			DocComment: "ManyToMany relation",
-		})
+		mapDoctrineXMLProperty(index, entitySym, rel.Field, doctrineToManyType(resolve(rel.TargetEntity)), "ManyToMany relation", false)
 	}
+}
+
+func doctrineXMLFieldType(field doctrineFieldXML) string {
+	if phpType, ok := doctrineTypeMap[field.Type]; ok {
+		return phpType
+	}
+	return "mixed"
+}
+
+func mapDoctrineXMLProperty(index *symbols.Index, entitySym *symbols.Symbol, field, phpType, doc string, readonly bool) {
+	propName := "$" + field
+	if index.RefineProperty(entitySym.FQN+"::"+propName, phpType, readonly) {
+		return
+	}
+	index.AddVirtualMember(entitySym.FQN, &symbols.Symbol{
+		Name:       propName,
+		FQN:        entitySym.FQN + "::" + propName,
+		Kind:       symbols.KindProperty,
+		URI:        entitySym.URI,
+		Visibility: "private",
+		Type:       phpType,
+		IsVirtual:  true,
+		IsReadonly: readonly,
+		DocComment: doc,
+	})
 }
