@@ -395,6 +395,9 @@ func (r *Resolver) ancestorArgs(classFQN string, args []ResolvedType, ancestor s
 			}
 			break
 		}
+		if parentArgs == nil && len(sym.Templates) == 0 && parent == sym.Extends {
+			parentArgs = args
+		}
 		if strings.EqualFold(parent, ancestor) {
 			return parentArgs, true
 		}
