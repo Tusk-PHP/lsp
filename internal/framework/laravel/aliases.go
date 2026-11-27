@@ -8,6 +8,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -218,4 +219,51 @@ func valueEnd(toks []phpToken, start int) int {
 		}
 	}
 	return len(toks)
+}
+
+func firstStringLiteral(toks []phpToken) (string, bool) {
+	if len(toks) == 0 || toks[0].Kind != token.ConstantString {
+		return "", false
+	}
+	return lexer.Unquote(toks[0].Value)
+}
+
+func parseClassConstExpr(toks []phpToken, file *parser.FileNode) (string, bool) {
+	if len(toks) < 3 || toks[len(toks)-2].Kind != token.DoubleColon || toks[len(toks)-1].Kind != token.Class {
+		return "", false
+	}
+	return resolveImportedClassName(tokenText(toks[:len(toks)-2]), file), true
+}
+
+func tokenText(toks []phpToken) string {
+	var b strings.Builder
+	for _, tok := range toks {
+		b.WriteString(tok.Value)
+	}
+	return b.String()
+}
+
+func resolveImportedClassName(name string, file *parser.FileNode) string {
+	name = strings.TrimSpace(name)
+	name = strings.TrimPrefix(name, `\`)
+	if name == "" {
+		return ""
+	}
+	if strings.Contains(name, `\`) {
+		return name
+	}
+	if file != nil {
+		for _, use := range file.Uses {
+			if use.Alias == name {
+				return use.FullName
+			}
+			if last := filepath.Base(strings.ReplaceAll(use.FullName, `\`, `/`)); last == name {
+				return use.FullName
+			}
+		}
+		if file.Namespace != "" {
+			return file.Namespace + `\` + name
+		}
+	}
+	return name
 }

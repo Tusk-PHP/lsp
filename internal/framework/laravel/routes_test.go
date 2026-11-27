@@ -184,17 +184,17 @@ Route::get('/z'
 	for name, want := range map[string][2]string{
 		"a": {"controller", `App\Http\Controllers\HomeController@index`},
 		"b": {"controller", `App\Http\Controllers\HomeController@show`},
-		"c": {"route", "fn()=>1"},
+		"c": {"route", "fn () => 1"},
 		"d": {"livewire", "counter"},
 		"e": {"redirect", "/f"},
 		"v": {"view", ""},
 		"g": {"route", `"Home{$x}@show"`},
 		"i": {"route", ""},
-		"j": {"controller", `Controllers\Some@__invoke`},
+		"j": {"controller", `App\Controllers\Some@__invoke`},
 		"k": {"route", "[HomeController::class]"},
-		"l": {"route", "[HomeController::class,'m','x']"},
-		"m": {"route", "[HomeController::class,'']"},
-		"n": {"route", "[HomeController::class,'x']+[]"},
+		"l": {"route", "[HomeController::class, 'm', 'x']"},
+		"m": {"route", "[HomeController::class, '']"},
+		"n": {"route", "[HomeController::class, 'x'] + []"},
 	} {
 		r, ok := routes[name]
 		if !ok {
