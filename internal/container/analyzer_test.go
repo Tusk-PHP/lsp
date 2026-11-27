@@ -17,7 +17,7 @@ func TestNewContainerAnalyzer(t *testing.T) {
 	if ca.framework != "laravel" {
 		t.Errorf("framework = %q", ca.framework)
 	}
-	if ca.bindings == nil {
+	if ca.GetBindings() == nil {
 		t.Error("bindings should be initialized")
 	}
 }
@@ -25,8 +25,10 @@ func TestNewContainerAnalyzer(t *testing.T) {
 func TestResolveDependency(t *testing.T) {
 	idx := symbols.NewIndex()
 	ca := NewContainerAnalyzer(idx, "/tmp", "none")
-	ca.bindings["cache"] = &ServiceBinding{Abstract: "cache", Concrete: "Illuminate\\Cache\\CacheManager", Singleton: true}
-	ca.aliases["my-cache"] = "cache"
+	ca.view.Store(applied(
+		providerBindings{{Abstract: "cache", Concrete: "Illuminate\\Cache\\CacheManager", Singleton: true}},
+		serviceDefinitions{{id: "my-cache", alias: "cache"}},
+	))
 
 	t.Run("direct binding", func(t *testing.T) {
 		b := ca.ResolveDependency("cache")
@@ -52,7 +54,7 @@ func TestResolveDependency(t *testing.T) {
 func TestGetBindings(t *testing.T) {
 	idx := symbols.NewIndex()
 	ca := NewContainerAnalyzer(idx, "/tmp", "none")
-	ca.bindings["x"] = &ServiceBinding{Abstract: "x", Concrete: "X"}
+	seed(ca, ServiceBinding{Abstract: "x", Concrete: "X"})
 
 	bindings := ca.GetBindings()
 	if len(bindings) != 1 {
@@ -64,7 +66,7 @@ func TestGetBindings(t *testing.T) {
 
 	// Verify it's a copy
 	bindings["y"] = &ServiceBinding{}
-	if len(ca.bindings) != 1 {
+	if len(ca.GetBindings()) != 1 {
 		t.Error("GetBindings should return a copy")
 	}
 }
@@ -110,15 +112,15 @@ class AppServiceProvider {
     }
 }
 `
-	ca.parseLaravelProvider("AppServiceProvider.php", content)
+	set := applied(ca.parseLaravelProvider("AppServiceProvider.php", content))
 
-	if b := ca.ResolveDependency("payment"); b == nil {
+	if b := set.resolve("payment", map[string]bool{}); b == nil {
 		t.Error("expected payment binding")
 	} else if b.Singleton {
 		t.Error("payment should not be singleton")
 	}
 
-	if b := ca.ResolveDependency("mailer"); b == nil {
+	if b := set.resolve("mailer", map[string]bool{}); b == nil {
 		t.Error("expected mailer binding")
 	} else if !b.Singleton {
 		t.Error("mailer should be singleton")
@@ -140,8 +142,8 @@ func TestParseSymfonyServicesYAML(t *testing.T) {
 	os.WriteFile(filepath.Join(configDir, "services.yaml"), []byte(yaml), 0644)
 
 	idx := symbols.NewIndex()
-	ca := NewContainerAnalyzer(idx, dir, "none")
-	ca.parseSymfonyServicesYAML()
+	ca := NewContainerAnalyzer(idx, dir, "symfony")
+	ca.Analyze()
 
 	if b := ca.LookupBinding("app.payment"); b == nil {
 		t.Error("expected app.payment binding")
@@ -199,9 +201,8 @@ return static function (ContainerConfigurator $container): void {
 	}
 
 	idx := symbols.NewIndex()
-	ca := NewContainerAnalyzer(idx, dir, "none")
-	ca.parseSymfonyServicesPHP()
-	ca.resolveSymfonyAliases()
+	ca := NewContainerAnalyzer(idx, dir, "symfony")
+	ca.Analyze()
 
 	if b := ca.ResolveDependency("app.php_notifier"); b == nil {
 		t.Fatal("expected app.php_notifier alias binding")
@@ -219,21 +220,6 @@ return static function (ContainerConfigurator $container): void {
 		t.Fatal("expected package php binding")
 	} else if b.Concrete != "App\\Service\\PaymentProcessor" {
 		t.Fatalf("package concrete = %q", b.Concrete)
-	}
-}
-
-func TestCleanPHPString(t *testing.T) {
-	tests := []struct{ input, want string }{
-		{"'hello'", "hello"},
-		{`"world"`, "world"},
-		{"  'trimmed'  ", "trimmed"},
-		{"ClassName::class", "ClassName"},
-		{"noQuotes", "noQuotes"},
-	}
-	for _, tt := range tests {
-		if got := cleanPHPString(tt.input); got != tt.want {
-			t.Errorf("cleanPHPString(%q) = %q, want %q", tt.input, got, tt.want)
-		}
 	}
 }
 
@@ -266,27 +252,100 @@ class Controller {
 	}
 }
 
-func TestParseComposerAutoload(t *testing.T) {
+func TestSymfonyClassesInSrcAreBoundWithTheirInterfaces(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "composer.json"), []byte(`{
-		"autoload": {
-			"psr-4": {
-				"App\\": "src/"
-			}
-		}
-	}`), 0644)
-
-	result := ParseComposerAutoload(dir)
-	if result == nil || len(result.PSR4) == 0 {
-		t.Error("expected PSR-4 mappings")
+	path := filepath.Join(dir, "src", "Service", "Mailer.php")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if result.PSR4["App\\"] != "src/" {
-		t.Errorf("PSR4 = %v", result.PSR4)
+	if err := os.WriteFile(path, []byte("<?php\nnamespace App\\Service;\nuse App\\Contract\\SendsMail;\nclass Mailer implements SendsMail {}\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
+	ca := NewContainerAnalyzer(symbols.NewIndex(), dir, "symfony")
+	ca.Analyze()
 
-	t.Run("missing composer.json", func(t *testing.T) {
-		if ParseComposerAutoload("/nonexistent") != nil {
-			t.Error("expected nil for missing file")
+	for _, service := range []string{`App\Service\Mailer`, `App\Contract\SendsMail`} {
+		if b := ca.LookupBinding(service); b == nil || b.Concrete != `App\Service\Mailer` {
+			t.Errorf("%s is bound to the class in src/: %+v", service, b)
 		}
-	})
+	}
+}
+
+func TestSymfonyClassesBindTheirImportedInterfaces(t *testing.T) {
+	ca := NewContainerAnalyzer(symbols.NewIndex(), "/tmp", "symfony")
+	set := applied(ca.parseSymfonyClasses("/app/src/Mailer.php", "<?php\nnamespace App;\nuse Vendor\\Contracts\\MailerInterface;\nclass Mailer implements MailerInterface, Local {}\n"))
+	for abstract, concrete := range map[string]string{`Vendor\Contracts\MailerInterface`: `App\Mailer`, `App\Local`: `App\Mailer`} {
+		if b := set.bindings[abstract]; b == nil || b.Concrete != concrete {
+			t.Errorf("%s: %+v", abstract, b)
+		}
+	}
+}
+
+func TestLaravelProviderBindingsFromTheTree(t *testing.T) {
+	ca := NewContainerAnalyzer(symbols.NewIndex(), "/tmp", "laravel")
+	set := applied(ca.parseLaravelProvider("/app/Providers/AppServiceProvider.php", `<?php
+namespace App\Providers;
+use App\Contracts\Mailer;
+use App\Services\SmtpMailer;
+class AppServiceProvider {
+    public function register(): void {
+        $this->app->bind(Mailer::class, SmtpMailer::class);
+        $this->app
+            ->singleton('payments', \App\Services\Stripe::class);
+        $this->app->bind("reports", function ($app) { return new Reports(); });
+        $other->bind('ignored', Foo::class);
+        $this->app->bind($dynamic, Foo::class);
+        $this->app->bind('lonely');
+        $this -> app -> bind('spaced', SmtpMailer::class);
+        $this->app->{$method}('dynamic', SmtpMailer::class);
+        $this->app->bind(?, SmtpMailer::class);
+        $this->app->bind($thing::class, SmtpMailer::class);
+    }
+}
+`))
+	want := map[string]ServiceBinding{
+		`App\Contracts\Mailer`: {Abstract: `App\Contracts\Mailer`, Concrete: `App\Services\SmtpMailer`},
+		"payments":             {Abstract: "payments", Concrete: `App\Services\Stripe`, Singleton: true},
+		"reports":              {Abstract: "reports", Concrete: "reports"},
+		"spaced":               {Abstract: "spaced", Concrete: `App\Services\SmtpMailer`},
+	}
+	for abstract, w := range want {
+		b := set.bindings[abstract]
+		if b == nil || b.Concrete != w.Concrete || b.Singleton != w.Singleton {
+			t.Errorf("%s: %+v", abstract, b)
+		}
+	}
+	for _, abstract := range []string{"ignored", "lonely", "dynamic"} {
+		if set.bindings[abstract] != nil {
+			t.Errorf("%s should not be bound", abstract)
+		}
+	}
+}
+
+func TestSymfonyPHPConfigFromTheTree(t *testing.T) {
+	ca := NewContainerAnalyzer(symbols.NewIndex(), "/tmp", "symfony")
+	set := applied(ca.parseSymfonyPHPConfigFile("/app/config/services.php", `<?php
+use App\Mailer;
+return static function ($c) {
+    $s = $c->services();
+    $s->set('app.mailer', Mailer::class);
+    $s->set(Mailer::class);
+    $s->alias('mailer', 'app.mailer');
+    $s->alias('broken', $dynamic);
+    $s->set($dynamic);
+    $s->set();
+};
+`))
+	if b := set.bindings["app.mailer"]; b == nil || b.Concrete != `App\Mailer` || b.Definition.Start.Line != 4 {
+		t.Errorf("app.mailer: %+v", b)
+	}
+	if b := set.bindings[`App\Mailer`]; b == nil || b.Concrete != `App\Mailer` {
+		t.Errorf("Mailer: %+v", b)
+	}
+	if b := set.bindings["mailer"]; b == nil || b.Alias != "app.mailer" || set.aliases["mailer"] != "app.mailer" {
+		t.Errorf("mailer: %+v", b)
+	}
+	if set.bindings["broken"] != nil {
+		t.Error("an alias with no readable target is skipped")
+	}
 }

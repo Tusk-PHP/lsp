@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/phparray"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/types"
@@ -199,26 +200,7 @@ func (r *FrameworkArrayResolver) resolveFormRequestKeys(classFQN string) []types
 			if err != nil {
 				continue
 			}
-			return extractRulesKeys(string(content))
-		}
-	}
-
-	// Walk inheritance chain
-	chain := r.index.GetInheritanceChain(classFQN)
-	for _, parent := range chain {
-		members := r.index.GetClassMembers(parent)
-		for _, m := range members {
-			if m.Name == "rules" && m.Kind == symbols.KindMethod {
-				if m.URI == "" || m.URI == "builtin" {
-					continue
-				}
-				path := symbols.URIToPath(m.URI)
-				content, err := os.ReadFile(path)
-				if err != nil {
-					continue
-				}
-				return extractRulesKeys(string(content))
-			}
+			return extractRulesKeys(string(content), r.index.GrammarOf(m.URI))
 		}
 	}
 	return nil
@@ -490,8 +472,8 @@ func extractFirstStringArg(expr string) string {
 
 // extractRulesKeys parses a FormRequest class source and extracts field names
 // from the rules() method's return array.
-func extractRulesKeys(source string) []types.ShapeField {
-	file := parser.ParseFile(source)
+func extractRulesKeys(source string, grammars phpparser.GrammarRange) []types.ShapeField {
+	file := parser.ParseFileIn(source, grammars)
 	if file == nil {
 		return nil
 	}
