@@ -27,7 +27,7 @@ func benchmarkSearchAfterEdit(b *testing.B, edit func(i int) string) {
 	if err != nil {
 		b.Fatalf("Build() error = %v", err)
 	}
-	uri := "file://" + filepath.Join(root, "app", "Http", "Controllers", "CategoryController.php")
+	uri := symbols.PathToURI(filepath.Join(root, "app", "Http", "Controllers", "CategoryController.php"))
 	i := 0
 	for b.Loop() {
 		ws.Index.IndexFile(uri, edit(i))
