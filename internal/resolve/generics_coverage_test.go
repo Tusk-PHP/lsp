@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 	internaltypes "github.com/Tusk-PHP/lsp/internal/types"
@@ -59,7 +60,7 @@ class Service {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///coverage.php", source)
 
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}
@@ -228,12 +229,12 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 
 	t.Run("argument and constructor helpers infer generic arrays", func(t *testing.T) {
 		pos := textpos.Position{Line: lineContaining(t, lines, "$collection =")}
-		argRT := r.inferArgType(`$numbers, $ignored`, lines, pos, file, 0)
+		argRT := r.ExpressionType(`$numbers`, ExprContext{Lines: lines, Pos: pos, File: file})
 		if argRT.String() != "array<int, int>" {
 			t.Fatalf("got %q", argRT.String())
 		}
 
-		literalRT := r.inferArgType(`[1, 2], $ignored`, lines, pos, file, 0)
+		literalRT := r.ExpressionType(`[1, 2]`, ExprContext{Lines: lines, Pos: pos, File: file})
 		if literalRT.String() != "array<int, int>" {
 			t.Fatalf("got %q", literalRT.String())
 		}
@@ -244,15 +245,9 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 		}
 	})
 
-	t.Run("misc helpers cover raw member return type and comma scan", func(t *testing.T) {
+	t.Run("misc helpers cover raw member return type", func(t *testing.T) {
 		if got := r.rawMemberReturnType(repoAll); got != "Collection<int, TModel>|null" {
 			t.Fatalf("got %q", got)
-		}
-
-		input := `foo([1, 2], "a,b"), $rest`
-		idx := IndexOutsideBrackets(input, ',')
-		if idx < 0 || input[idx:] != ", $rest" {
-			t.Fatalf("unexpected index %d for %q", idx, input)
 		}
 	})
 }
@@ -318,7 +313,7 @@ class Service {
 	idx.IndexFile("file:///this.php", source)
 
 	r := NewResolver(idx)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}
@@ -362,7 +357,7 @@ class Category {}
 	idx.IndexFile("file:///controller.php", source)
 
 	r := NewResolver(idx)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}
@@ -395,7 +390,7 @@ func TestDeclaredParamType(t *testing.T) {
 	}
 }
 
-func TestAssignmentValue(t *testing.T) {
+func TestAssignmentStartingLine(t *testing.T) {
 	lines := []string{
 		"$a = 1;",
 		"$a ??= 2;",
@@ -422,14 +417,18 @@ func TestAssignmentValue(t *testing.T) {
 		"    return 1;",
 		"};",
 	}
-	// A closure passed to a call is read through, so the chain after it
-	// counts; one assigned to the variable is not.
 	want := map[int]string{
-		0: "1;", 1: "2;", 6: "$b->c()->d()?->e();", 9: "f($g,)->h();", 12: "i(function () {return 1;});", 15: "$b",
-		17: "j(function () {return 1;})->k();", 21: "function () {",
+		0: "1", 1: "2", 6: "$b->c()\n    ->d()\n    ?->e()", 9: "f(\n    $g,\n)->h()", 12: "i(function () {\n    return 1;\n})", 15: "$b\n    ?? 1",
+		17: "j(function () {\n    return 1;\n})\n    ->k()", 21: "function () {\n    return 1;\n}",
 	}
+	src := strings.Join(lines, "\n")
+	tree := newSyntaxTree(src, parser.ParseTree(src, token.Latest))
 	for i := range lines {
-		got, _, ok := assignmentValue(lines, i, "$a")
+		value, ok := tree.assignmentStartingLine(i, "$a")
+		var got string
+		if ok {
+			got = tree.text(value)
+		}
 		w, wantOK := want[i]
 		if ok != wantOK || got != w {
 			t.Errorf("line %d: got %q, %v; want %q, %v", i, got, ok, w, wantOK)

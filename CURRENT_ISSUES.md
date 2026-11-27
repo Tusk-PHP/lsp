@@ -69,10 +69,10 @@ _None open._
 ### L50 — `completion/provider.go` and `resolve/resolve.go` are well past the 800-line guideline
 - **Where:** `internal/completion/provider.go` (1,269 lines, down from 1,564 since the generic-aware chain walker moved to `resolve/chain.go`), `internal/resolve/resolve.go` (1,527 lines), `internal/scope/collector.go` (1,539 lines).
 - **What:** All three were already over the guideline in root `AGENTS.md` before the false-warning fixes, which added only call-site lines to them (new logic went to `scope/flow.go`, `scope/reach.go`, `resolve/reaching.go`, `resolve/concat.go`). Every new typing rule lands in the same two functions (`accessOwnerType` in `resolve/chain.go`, `resolveVariableTypeTypedBase`).
-- **Fix:** Split within the package before the next feature there: the remaining plain walker (`resolve.AccessChainClass`) goes with L52, the assignment branches of `resolveVariableTypeTypedBase` into one file per right-hand-side form.
+- **Fix:** Split within the package before the next feature there: the assignment branches of `resolveVariableTypeTypedBase` into one file per right-hand-side form.
 
 ### ~~L49~~ — Hover's and the analyzer's fallback chain walkers read `f(...)` as a call — **RESOLVED**
-- The two fallback walkers are gone. Completion's generic-aware walker moved into `resolve` (`ChainType`, `AccessOwnerType`), and hover, the analyzer, inlay hints and the resolver itself call it, so `f(...)` is a `Closure` everywhere. The plain string walker moved into `resolve` too (`AccessChainClass`, `ExpressionClass`), so diagnostics no longer borrow completion's; it remains, as a second walker, until L52.
+- The two fallback walkers are gone. Completion's generic-aware walker moved into `resolve` (`ChainType`, `AccessOwnerType`), and hover, the analyzer, inlay hints and the resolver itself call it, so `f(...)` is a `Closure` everywhere. The plain string walker that moved into `resolve` (`AccessChainClass`) is gone too: `ExpressionClass` gives the class names of `ChainType`'s result, which types the expression from the syntax tree.
 
 ### L48 — `unknown-member` stays quiet on a receiver typed `Closure(…): T`
 - **Where:** `internal/checks/unknown_symbols.go` (`collectClassLikes`, line 706).

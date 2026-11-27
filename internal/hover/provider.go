@@ -63,7 +63,7 @@ func (p *Provider) SetConfig(cfg *config.Config) {
 }
 
 func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol.Hover {
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, p.index.GrammarOf(uri))
 	if ctx == nil {
 		return nil
 	}
@@ -136,7 +136,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 
 	// Check for -> or :: access context
 	if ctx.AccessKind != sourcectx.AccessNone {
-		owner := r.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		owner := r.ReceiverTypeAt(source, pos, file)
 		classFQN := owner.BaseFQN()
 		if classFQN == "" {
 			return nil
@@ -153,15 +153,8 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 
 			// Enhance with generic return type if available
 			if sym.Kind == symbols.KindMethod {
-				// Build the full expression up to and including the method call
-				hoverPrefix := ctx.JoinedLine[:ctx.JoinedWordStart]
-				trimmedPrefix := strings.TrimSpace(hoverPrefix)
-				if strings.HasSuffix(trimmedPrefix, "->") || strings.HasSuffix(trimmedPrefix, "::") {
-					expr := trimmedPrefix + word + "()"
-					rt := r.ChainType(expr, source, pos, file)
-					if rt.IsGeneric() || (rt.Nullable && rt.FQN != "") {
-						content = replaceReturnType(content, rt.String())
-					}
+				if rt := r.CallTypeAt(source, pos, file); rt.IsGeneric() || (rt.Nullable && rt.FQN != "") {
+					content = replaceReturnType(content, rt.String())
 				}
 			}
 

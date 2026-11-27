@@ -78,8 +78,6 @@ app/code/Magento/Catalog/Model/ResourceModel/Product/Collection.php	unknown-memb
 app/code/Magento/Catalog/Model/ResourceModel/Product/Collection.php	unknown-member	Unknown member 'getAttributeForSelect' on 'AbstractEntity'
 app/code/Magento/Catalog/Model/ResourceModel/Product/Collection.php	unknown-member	Unknown member 'getAttributeSortColumn' on 'AbstractEntity'
 app/code/Magento/Catalog/Model/ResourceModel/Product/Collection.php	unknown-member	Unknown member 'getFlatTableName' on 'AbstractEntity'
-app/code/Magento/Catalog/Model/ResourceModel/Product/Compare/Item/Collection.php	unknown-function	Unknown function 'from'
-app/code/Magento/Catalog/Model/ResourceModel/Product/Compare/Item/Collection.php	unknown-function	Unknown function 'from'
 app/code/Magento/Catalog/Model/ResourceModel/Product/Indexer/Eav/AbstractEav.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
 app/code/Magento/Catalog/Model/ResourceModel/Product/Price/SpecialPrice.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
 app/code/Magento/Catalog/Plugin/CategoryManagementPerformanceOptimizer.php	unused-import	Unused import 'Magento\Catalog\Api\Data\CategoryTreeInterface'
@@ -422,7 +420,6 @@ app/code/Magento/RelatedProductGraphQl/Model/Resolver/Batch/CrossSellProducts.ph
 app/code/Magento/RelatedProductGraphQl/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Config\Element\Field'
 app/code/Magento/RelatedProductGraphQl/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Query\Resolver\BatchResponse'
 app/code/Magento/RelatedProductGraphQl/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Query\Resolver\ContextInterface'
-app/code/Magento/RemoteStorage/Model/File/Uploader.php	unknown-member	Unknown member 'getDirectoryWrite' on 'FileSystem'
 app/code/Magento/Reports/Controller/Report/Product/View.php	unused-private-property	Private property 'View::$context' is never used
 app/code/Magento/Reports/Model/Config.php	unknown-member	Unknown member 'getBaseUrl' on 'StoreManagerInterface'
 app/code/Magento/Reports/Setup/Patch/Data/InitializeReportEntityTypesAndPages.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
@@ -460,7 +457,6 @@ app/code/Magento/ReviewGraphQl/Mapper/ReviewDataMapper.php	unused-import	Unused 
 app/code/Magento/Rule/Model/Condition/Sql/Builder.php	unused-import	Unused import 'Magento\Catalog\Model\Product'
 app/code/Magento/Rule/Model/Condition/Sql/Builder.php	unused-import	Unused import 'Magento\Framework\Exception\NoSuchEntityException'
 app/code/Magento/Sales/Block/Adminhtml/Order/Invoice/Totals.php	unused-import	Unused import 'Magento\Framework\DataObject'
-app/code/Magento/Sales/Block/Adminhtml/Order/Totals/Item.php	unknown-class	Unknown class 'Magento\Sales\Block\Adminhtml\Order\Totals'
 app/code/Magento/Sales/Block/Order/Item/Renderer/DefaultRenderer.php	unused-import	Unused import 'Magento\Sales\Model\Order\Creditmemo\Item'
 app/code/Magento/Sales/Controller/Adminhtml/Creditmemo/AbstractCreditmemo/Index.php	unknown-member	Unknown member 'addBreadcrumb' on 'Page'
 app/code/Magento/Sales/Controller/Adminhtml/Creditmemo/AbstractCreditmemo/Index.php	unknown-member	Unknown member 'addBreadcrumb' on 'Page'
@@ -521,8 +517,6 @@ app/code/Magento/SalesRule/Model/ResourceModel/Report/Rule/Createdat.php	unused-
 app/code/Magento/SalesRule/Model/ResourceModel/Report/Rule/Createdat.php	unused-private-property	Private property 'Createdat::$logger' is never used
 app/code/Magento/SalesRule/Model/ResourceModel/Report/Rule/Createdat.php	unused-private-property	Private property 'Createdat::$reportsFlagFactory' is never used
 app/code/Magento/SalesRule/Model/ResourceModel/Report/Rule/Createdat.php	unused-private-property	Private property 'Createdat::$timezoneValidator' is never used
-app/code/Magento/SalesRule/Model/Rule/Action/Discount/CartFixed.php	unknown-function	Unknown function 'getShippingDiscountAmount'
-app/code/Magento/SalesRule/Model/Validator.php	unknown-function	Unknown function 'getShippingDiscountAmount'
 app/code/Magento/Search/Model/ResourceModel/Query.php	unused-import	Unused import 'Magento\Framework\DB\Select'
 app/code/Magento/Search/Ui/Component/Listing/Column/StoreView.php	unused-import	Unused import 'Magento\Framework\Escaper'
 app/code/Magento/Search/Ui/Component/Listing/Column/Website.php	unused-import	Unused import 'Magento\Framework\Escaper'
@@ -750,7 +744,6 @@ lib/internal/Magento/Framework/Setup/Declaration/Schema/Db/MySQL/DbSchemaWriter.
 lib/internal/Magento/Framework/Setup/Declaration/Schema/Db/MySQL/Definition/Columns/Comment.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Columns\ColumnNullableAwareInterface'
 lib/internal/Magento/Framework/Setup/Declaration/Schema/Db/MySQL/Definition/Constraints/Internal.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Column'
 lib/internal/Magento/Framework/Setup/Declaration/Schema/Db/MySQL/Definition/Index.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Column'
-lib/internal/Magento/Framework/Setup/Declaration/Schema/Declaration/ValidationRules/IncosistentReferenceDefinition.php	unknown-member	Unknown member 'getLength' on 'Column'
 lib/internal/Magento/Framework/Setup/Declaration/Schema/Diff/Diff.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Constraints\Reference'
 lib/internal/Magento/Framework/Setup/Declaration/Schema/Dto/Factories/Index.php	unused-import	Unused import 'Magento\Framework\DB\Adapter\AdapterInterface'
 lib/internal/Magento/Framework/Setup/Declaration/Schema/Operations/DropElement.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Db\AdapterMediator'

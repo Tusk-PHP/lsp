@@ -1,12 +1,14 @@
 package completion
 
 import (
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"strings"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
+
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -19,7 +21,7 @@ func TestChainReturnTypeResolution(t *testing.T) {
 	p, _ := setupEloquentCompletionTest(t)
 
 	resolve := func(expr, source string) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		return p.ResolveExpressionType(expr, source, protocol.Position{Line: 5}, file)
 	}
 
@@ -108,9 +110,9 @@ func TestChainReturnTypeResolution(t *testing.T) {
 	})
 
 	t.Run("full chain: query->with->get->map", func(t *testing.T) {
-		// Collection::map() returns static → Collection
+		// Eloquent's Collection::map() gives a base collection, as Laravel declares it.
 		typ := resolve("Category::query()->with(['products'])->get(['id'])->map(fn($x) => $x)", preamble)
-		if typ != "Illuminate\\Database\\Eloquent\\Collection" {
+		if typ != "Illuminate\\Support\\Collection" {
 			t.Errorf("expected Collection, got %q", typ)
 		}
 	})
@@ -249,7 +251,7 @@ func TestRealisticChainResolution(t *testing.T) {
 	p := setupRealisticEloquentTest(t)
 
 	resolve := func(expr, source string) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		return p.ResolveExpressionType(expr, source, protocol.Position{Line: 5}, file)
 	}
 
@@ -350,7 +352,7 @@ func TestMultiLineChainResolution(t *testing.T) {
 
 	t.Run("multi-line: query->with->get resolves type via joined line", func(t *testing.T) {
 		source := "<?php\nuse App\\Models\\Category;\nCategory::query()\n    ->with('rel')\n    ->get()\n    ->all()"
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		// ResolveExpressionType works with single-line expressions, so join first
 		typ := p.ResolveExpressionType("Category::query()->with('rel')->get()", source, protocol.Position{Line: 4}, file)
 		if typ != "Illuminate\\Database\\Eloquent\\Collection" {

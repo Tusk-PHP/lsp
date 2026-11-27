@@ -75,7 +75,6 @@ func (p *structParser) parseAnonymousClasses() {
 			cls.FullName = name
 		}
 		p.pos = j + 1
-		p.attributes = nil
 		if p.peek().Kind == TokenOpenParen {
 			p.skipParens()
 		}
