@@ -7,6 +7,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/coverage"
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/phparray"
@@ -23,6 +24,7 @@ type Provider struct {
 	engine        *resolve.Engine
 	framework     string
 	arrayResolver *models.FrameworkArrayResolver
+	envKeys       *frameworklaravel.EnvKeys
 	cfg           *config.Config
 	coverage      *coverage.Store
 }
@@ -55,6 +57,10 @@ func (p *Provider) SetArrayResolver(resolver *models.FrameworkArrayResolver) {
 	p.arrayResolver = resolver
 }
 
+func (p *Provider) SetEnvKeys(keys *frameworklaravel.EnvKeys) {
+	p.envKeys = keys
+}
+
 // SetConfig stores the server config so hover can read live settings (e.g.
 // PHPManualLocale) at request time rather than at construction time, which
 // allows config reloads to take effect without rebuilding the provider.
@@ -63,9 +69,15 @@ func (p *Provider) SetConfig(cfg *config.Config) {
 }
 
 func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol.Hover {
-	ctx := sourcectx.Analyze(uri, source, pos)
+	doc := sourcectx.NewDocument(uri, source)
+	ctx := doc.At(pos)
 	if ctx == nil {
 		return nil
+	}
+	if p.framework == "laravel" && p.envKeys != nil {
+		if arg, ok := frameworklaravel.EnvKeyAt(p.index, doc, pos); ok {
+			return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: p.envKeys.Hover(arg)}, Range: &arg.Range}
+		}
 	}
 	r := p.engine.Resolver()
 	lines := strings.Split(source, "\n")

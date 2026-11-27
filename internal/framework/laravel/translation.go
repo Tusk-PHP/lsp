@@ -46,12 +46,6 @@ func NewTranslationResolver(rootPath string) *TranslationResolver {
 	return r
 }
 
-// WatchGlobs are the files besides PHP sources that the Laravel features
-// read and a client should report changes to: JSON translations.
-func WatchGlobs() []string {
-	return []string{"**/lang/*.json"}
-}
-
 func translationDirs(rootPath string) []string {
 	return []string{filepath.Join(rootPath, "lang"), filepath.Join(rootPath, "resources", "lang")}
 }

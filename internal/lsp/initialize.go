@@ -86,6 +86,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		s.completion.SetAutoImportAliasStyle(s.cfg.AutoImport.AliasStyle)
 	}
 	s.completion.SetArrayResolver(s.workspace.ArrayKeys)
+	s.completion.SetEnvKeys(s.workspace.EnvKeys)
 	if s.routeIndex != nil {
 		s.completion.SetLaravelRouteIndex(s.routeIndex)
 	}
@@ -99,6 +100,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	})
 	s.hover = hover.NewProvider(s.index, s.container, s.framework)
 	s.hover.SetArrayResolver(s.workspace.ArrayKeys)
+	s.hover.SetEnvKeys(s.workspace.EnvKeys)
 	s.hover.SetConfig(s.cfg)
 	s.coverage = coverage.NewStore(s.rootPath, s.cfg.CoverageReportPath, s.logger)
 	s.hover.SetCoverage(s.coverage)
@@ -154,6 +156,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	}
 	s.analyzer.SetViewResolver(s.workspace.Views)
 	s.analyzer.SetTranslationResolver(s.workspace.Translations)
+	s.analyzer.SetEnvKeys(s.workspace.EnvKeys)
 	s.analyzer.SetSymfonyTranslationResolver(symfonyTranslations)
 	s.analyzer.SetSymfonyCommands(s.workspace.SymfonyCommands)
 	s.sendResponse(msg.ID, protocol.InitializeResult{
