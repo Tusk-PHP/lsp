@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -45,7 +46,7 @@ class Invoice extends \Fw\Notification {}
 				},
 				ConventionMethod: convention,
 			}
-			got := unknownMemberMessages(checker.Check(parser.ParseFile(source), source, idx))
+			got := unknownMemberMessages(checker.Check(parser.ParseFile(source, token.Latest), source, idx))
 			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
 				t.Errorf("got %v, want %v", got, tc.want)
 			}

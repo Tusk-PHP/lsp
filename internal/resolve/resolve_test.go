@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -53,7 +54,7 @@ func TestResolveClassName(t *testing.T) {
 namespace App;
 use Monolog\Logger;
 class Foo {}
-`)
+`, token.Latest)
 
 	tests := []struct {
 		name, input, want string
@@ -88,7 +89,7 @@ class Foo {
     public function bar() {}
 }
 class Baz {}
-`)
+`, token.Latest)
 
 	t.Run("inside class", func(t *testing.T) {
 		fqn := FindEnclosingClass(file, textpos.Position{Line: 3})
@@ -119,7 +120,7 @@ class Foo {
     }
     public function baz() {}
 }
-`)
+`, token.Latest)
 
 	t.Run("inside method", func(t *testing.T) {
 		m := FindEnclosingMethod(file, textpos.Position{Line: 3})
@@ -178,7 +179,7 @@ func TestMemberType(t *testing.T) {
 	file := parser.ParseFile(`<?php
 namespace App;
 use Monolog\Logger;
-`)
+`, token.Latest)
 
 	t.Run("return type from hint", func(t *testing.T) {
 		m := r.FindMember("App\\Service", "run")
@@ -253,7 +254,7 @@ namespace App;
 class Service {
     public function foo() { $this->bar(); }
 }
-`)
+`, token.Latest)
 		lines := SplitLines(`<?php
 namespace App;
 class Service {
@@ -276,7 +277,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		lines := SplitLines(source)
 		typ := r.ResolveVariableType("$log", lines, textpos.Position{Line: 5}, file)
 		if typ != "Monolog\\Logger" {
@@ -290,7 +291,7 @@ use Monolog\Logger;
 $x = new Logger();
 $x->info("test");
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		lines := SplitLines(source)
 		typ := r.ResolveVariableType("$x", lines, textpos.Position{Line: 3}, file)
 		if typ != "Monolog\\Logger" {
@@ -313,7 +314,7 @@ $provider = new stdClass();
 $providerClass = get_class($provider);
 echo $providerClass;
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		lines := SplitLines(source)
 		typ := r2.ResolveVariableType("$providerClass", lines, textpos.Position{Line: 3}, file)
 		if typ != "string" {
@@ -330,7 +331,7 @@ $provider = new stdClass();
 $providerClass = get_class($provider);
 echo $providerClass;
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		lines := SplitLines(source)
 		rt := r2.ResolveVariableTypeTyped("$providerClass", lines, textpos.Position{Line: 3}, file)
 		if rt.FQN != "string" {
@@ -584,7 +585,7 @@ class Product {}
 	caller := parser.ParseFile(`<?php
 namespace App\Http;
 use App\Product;
-`)
+`, token.Latest)
 	for _, name := range []string{"initialize", "$current"} {
 		m := r.FindMember("Magento\\Catalog\\Helper\\Helper", name)
 		if m == nil {
@@ -624,7 +625,7 @@ function run(): void {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///a.php", src)
 	r := NewResolver(idx)
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	lines := SplitLines(src)
 	at := func(v string, line int) string {
 		return r.ResolveVariableTypeTyped(v, lines, textpos.Position{Line: line, Character: 9}, file).String()

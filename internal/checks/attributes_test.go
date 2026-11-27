@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -47,7 +48,7 @@ func attributeFindings(t *testing.T, src string) []string {
 	t.Helper()
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///vendor/lib.php", attributedVendor)
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	uses := &MemberUseCache{}
 	var got []string
 	for _, f := range (&DeprecatedUsageRule{TypeResolver: typeOf, Uses: uses}).Check(file, src, idx) {
@@ -112,7 +113,7 @@ plain();
 	// An index with no attributed symbols finds nothing without parsing.
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///plain.php", "<?php\nfunction plain() {}\n")
-	file := parser.ParseFile("<?php\nplain();\n")
+	file := parser.ParseFile("<?php\nplain();\n", token.Latest)
 	if got := (&DeprecatedUsageRule{}).Check(file, "<?php\nplain();\n", idx); len(got) != 0 {
 		t.Errorf("got %v", got)
 	}
@@ -120,13 +121,14 @@ plain();
 
 func TestAttributeMessage(t *testing.T) {
 	for _, c := range []struct {
-		args []string
+		args parser.AttributeArgs
 		want string
 	}{
-		{[]string{`'first'`}, "first"},
-		{[]string{`message: "named"`}, "named"},
-		{[]string{`since: '2.0'`, `message: 'later'`}, "later"},
-		{[]string{`since: '2.0'`}, ""},
+		{parser.AttributeArgs{{Value: `'first'`}}, "first"},
+		{parser.AttributeArgs{{Name: "message", Value: `"named"`}}, "named"},
+		{parser.AttributeArgs{{Name: "since", Value: `'2.0'`}, {Name: "message", Value: `'later'`}}, "later"},
+		{parser.AttributeArgs{{Name: "since", Value: `'2.0'`}}, ""},
+		{parser.AttributeArgs{{Value: `'a'`}, {Value: `'b'`}}, "a"},
 		{nil, ""},
 	} {
 		if got := attributeMessage(&symbols.Attribute{Args: c.args}); got != c.want {

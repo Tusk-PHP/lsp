@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -82,9 +84,9 @@ func (s *Symbol) IsDeprecated() bool {
 
 // Attribute is a PHP 8 attribute on a symbol.
 type Attribute struct {
-	Name string   // as written
-	FQN  string   // what the name resolves to
-	Args []string // each argument as written
+	Name string // as written
+	FQN  string // what the name resolves to
+	Args parser.AttributeArgs
 }
 
 // Attribute returns the attribute with this fully qualified name, if it has one.
@@ -138,6 +140,7 @@ type ParamInfo struct {
 }
 
 type Index struct {
+	grammars          phpparser.GrammarRange
 	attributedSymbols atomic.Bool
 	// generation counts changes to the index, so caches built from it can
 	// tell when they're out of date.
@@ -206,7 +209,12 @@ func (idx *Index) MayNarrow(name string) bool {
 }
 
 func NewIndex() *Index {
+	return NewIndexFor(phpparser.AnyGrammar())
+}
+
+func NewIndexFor(grammars phpparser.GrammarRange) *Index {
 	return &Index{
+		grammars:             grammars,
 		symbols:              make(map[string]*Symbol),
 		nameIndex:            make(map[string][]string),
 		foldIndex:            make(map[string][]string),
@@ -225,6 +233,31 @@ func NewIndex() *Index {
 	}
 }
 
+var builtinGrammars = phpparser.OnlyGrammar(token.Latest)
+
+func (idx *Index) Grammars() phpparser.GrammarRange {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.grammars
+}
+
+func (idx *Index) GrammarOf(uri string) phpparser.GrammarRange {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	indexed, ok := idx.fileSource[uri]
+	if !ok {
+		return idx.grammars
+	}
+	return idx.grammarsForLocked(indexed.from).After(indexed.grammar)
+}
+
+func (idx *Index) grammarsForLocked(src SymbolSource) phpparser.GrammarRange {
+	if src == SourceBuiltin {
+		return builtinGrammars
+	}
+	return idx.grammars
+}
+
 func (idx *Index) IndexFile(uri string, source string) {
 	idx.IndexFileWithSource(uri, source, SourceProject)
 }
@@ -233,7 +266,7 @@ func (idx *Index) IndexFile(uri string, source string) {
 // merging virtual members from @property/@method docblocks into existing class symbols.
 // Classes that don't already exist in the index are indexed normally.
 func (idx *Index) IndexIDEHelperFile(uri string, source string) {
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, idx.GrammarOf(uri))
 	if file == nil {
 		return
 	}
@@ -242,7 +275,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 
 	// Remove any previously indexed symbols from this URI (for re-indexing)
 	idx.removeFileSymbols(uri)
-	idx.fileSource[uri] = indexedText{text: source, ideHelper: true}
+	idx.fileSource[uri] = indexedText{text: source, ideHelper: true, grammar: file.Grammar}
 	if _, ok := idx.fileSymbols[uri]; !ok {
 		idx.fileSymbols[uri] = nil
 		idx.files.add(uri)
@@ -321,16 +354,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 			}
 			idx.addSymbolWithSource(uri, sym, SourceProject)
 			idx.linkTypeLocked(sym)
-			for _, prop := range c.Properties {
-				ps := &Symbol{Name: prop.Name, FQN: fqn + "::" + prop.Name, Kind: KindProperty, URI: uri,
-					Visibility: prop.Visibility, SetVisibility: prop.SetVisibility,
-					IsStatic: prop.IsStatic, Type: resolve(prop.Type.Name),
-					DocComment: qualifyDocTypes(prop.DocComment, file.Uses), ParentFQN: fqn,
-					Hooks: append([]parser.PropertyHook(nil), prop.Hooks...),
-					Range: symRange(prop.StartLine, prop.StartCol, len(prop.Name))}
-				sym.Children = append(sym.Children, ps)
-				idx.addSymbolWithSource(uri, ps, SourceProject)
-			}
+			idx.indexProperties(uri, sym, fqn, c.Properties, SourceProject, resolve, file.Uses)
 			idx.indexMethods(uri, sym, fqn, c.Methods, SourceProject, resolve, file.Uses)
 			idx.indexVirtualMembers(uri, sym, SourceProject, resolve)
 		}
@@ -341,20 +365,25 @@ type indexedText struct {
 	text      string
 	from      SymbolSource
 	ideHelper bool
+	grammar   token.Version
 }
 
 func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSource) {
-	indexed := indexedText{text: source, from: src}
 	idx.mu.RLock()
 	previous, indexedBefore := idx.fileSource[uri]
+	grammars := idx.grammarsForLocked(src)
 	idx.mu.RUnlock()
-	if indexedBefore && previous == indexed {
+	if indexedBefore && previous.text == source && previous.from == src && !previous.ideHelper {
 		return
 	}
-	file := parser.ParseFile(source)
+	if indexedBefore {
+		grammars = grammars.After(previous.grammar)
+	}
+	file := parser.ParseFileIn(source, grammars)
 	if file == nil {
 		return
 	}
+	indexed := indexedText{text: source, from: src, grammar: file.Grammar}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	foreign := idx.foreignMembersLocked(uri)
@@ -453,7 +482,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		idx.addSymbolWithSource(uri, sym, src)
 		idx.indexProperties(uri, sym, fqn, c.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, c.Methods, src, resolve, file.Uses)
-		idx.indexConstants(uri, sym, fqn, c.Constants, file.Uses, src, resolve)
+		idx.indexConstants(uri, sym, c.Constants, file.Uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 		sym.Supertypes = append(sym.Supertypes, traitUseSupertypes(c.TraitUseDoc, file.Uses, resolve)...)
 		if src == SourceBuiltin {
@@ -471,7 +500,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		idx.linkTypeLocked(sym)
 		idx.indexProperties(uri, sym, fqn, iface.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, iface.Methods, src, resolve, file.Uses)
-		idx.indexConstants(uri, sym, fqn, iface.Constants, file.Uses, src, resolve)
+		idx.indexConstants(uri, sym, iface.Constants, file.Uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 	}
 
@@ -484,7 +513,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		idx.linkTypeLocked(sym)
 		idx.indexProperties(uri, sym, fqn, tr.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, tr.Methods, src, resolve, file.Uses)
-		idx.indexConstants(uri, sym, fqn, tr.Constants, file.Uses, src, resolve)
+		idx.indexConstants(uri, sym, tr.Constants, file.Uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 		sym.Supertypes = append(sym.Supertypes, traitUseSupertypes(tr.TraitUseDoc, file.Uses, resolve)...)
 	}
@@ -507,11 +536,12 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		}
 		idx.indexProperties(uri, sym, fqn, en.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, en.Methods, src, resolve, file.Uses)
-		idx.indexConstants(uri, sym, fqn, en.Constants, file.Uses, src, resolve)
+		idx.indexConstants(uri, sym, en.Constants, file.Uses, src, resolve)
 		idx.indexEnumMembers(uri, sym, src)
 	}
 
-	idx.indexConstants(uri, nil, ns, file.Constants, file.Uses, src, resolve)
+	idx.indexConstants(uri, nil, file.Constants, file.Uses, src, resolve)
+	idx.indexConstants(uri, nil, file.Defines, file.Uses, src, resolve)
 
 	for i := range file.Functions {
 		idx.addSymbolWithSource(uri, FunctionSymbol(uri, file, &file.Functions[i]), src)
@@ -836,7 +866,7 @@ func (idx *Index) indexProperties(uri string, parent *Symbol, parentFQN string, 
 	for _, prop := range props {
 		ps := &Symbol{Name: prop.Name, FQN: parentFQN + "::" + prop.Name, Kind: KindProperty, URI: uri,
 			Visibility: prop.Visibility, SetVisibility: prop.SetVisibility,
-			IsStatic: prop.IsStatic, IsReadonly: prop.IsReadonly, Type: resolve(prop.Type.Name),
+			IsStatic: prop.IsStatic, IsReadonly: prop.IsReadonly, Type: resolve(prop.Type.Name), Value: prop.DefaultValue,
 			DocComment: qualifyDocTypes(prop.DocComment, uses), ParentFQN: parentFQN, Attributes: indexAttributes(prop.Attributes, resolve),
 			Hooks: append([]parser.PropertyHook(nil), prop.Hooks...),
 			Range: symRange(prop.StartLine, prop.StartCol, len(prop.Name))}
@@ -1715,22 +1745,7 @@ func resolveTypeName(name string, currentNs string, uses []parser.UseNode) strin
 	if phpBuiltinTypes[strings.ToLower(name)] {
 		return prefix + name
 	}
-	if strings.HasPrefix(name, "\\") {
-		return prefix + strings.TrimPrefix(name, "\\")
-	}
-	parts := strings.SplitN(name, "\\", 2)
-	for _, u := range uses {
-		if u.Alias == parts[0] {
-			if len(parts) > 1 {
-				return prefix + u.FullName + "\\" + parts[1]
-			}
-			return prefix + u.FullName
-		}
-	}
-	if currentNs != "" {
-		return prefix + currentNs + "\\" + name
-	}
-	return prefix + name
+	return prefix + parser.ResolveImportedName(name, currentNs, uses, "class")
 }
 
 func splitTypeExpr(name string) []string {

@@ -42,3 +42,23 @@ func TestIntrospectReportsTheProjectsPHPProfile(t *testing.T) {
 		t.Errorf("introspect reports the project's PHP version:\n%s", out)
 	}
 }
+
+func TestIntrospectReadsTheFileWithTheProjectsPHPVersion(t *testing.T) {
+	const source = "<?php\nfunction match($v) { return $v; }\necho match(1);\n"
+	for _, tc := range []struct {
+		php         string
+		syntaxError bool
+	}{
+		{"^7.4", false},
+		{"^8.0", true},
+	} {
+		root := writeProject(t, map[string]string{
+			"composer.json": `{"require": {"php": "` + tc.php + `"}}`,
+			"a.php":         source,
+		})
+		out := introspectOutput(t, filepath.Join(root, "a.php"))
+		if got := strings.Contains(out, "syntax-error"); got != tc.syntaxError {
+			t.Errorf("PHP %s: a function named match is a syntax error = %v, want %v\n%s", tc.php, got, tc.syntaxError, out)
+		}
+	}
+}

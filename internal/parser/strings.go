@@ -5,8 +5,14 @@ import "strings"
 var doubleQuotedEscapes = map[byte]byte{'\\': '\\', '"': '"', '$': '$', 'n': '\n', 't': '\t', 'r': '\r', 'v': '\v', 'f': '\f', 'e': 0x1b}
 
 func ConstantString(tok Token) (string, bool) {
-	v := tok.Value
-	if tok.Kind != TokenStringLiteral || len(v) < 2 || (v[0] != '\'' && v[0] != '"') || v[len(v)-1] != v[0] {
+	if tok.Kind != TokenStringLiteral {
+		return "", false
+	}
+	return unquote(tok.Value)
+}
+
+func unquote(v string) (string, bool) {
+	if len(v) < 2 || (v[0] != '\'' && v[0] != '"') || v[len(v)-1] != v[0] {
 		return "", false
 	}
 	body := v[1 : len(v)-1]
@@ -28,12 +34,16 @@ func ConstantString(tok Token) (string, bool) {
 			out.WriteByte(c)
 			continue
 		}
-		decoded, ok := doubleQuotedEscapes[body[i+1]]
-		if !ok {
+		next := body[i+1]
+		if decoded, ok := doubleQuotedEscapes[next]; ok {
+			out.WriteByte(decoded)
+			i++
+			continue
+		}
+		if next == 'x' || next == 'u' || next >= '0' && next <= '7' {
 			return "", false
 		}
-		out.WriteByte(decoded)
-		i++
+		out.WriteByte(c)
 	}
 	return out.String(), true
 }
