@@ -2,9 +2,11 @@ package sourcectx
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -55,11 +57,18 @@ func TestIndexedDocumentAnswersAsAFreshParse(t *testing.T) {
 		{"an edit the index hasn't read", []string{indexedRoom}, edited, false},
 		{"an edit indexed again", []string{indexedRoom, edited}, edited, true},
 		{"a file the index doesn't have", nil, indexedRoom, false},
+		{"the indexed text after its parse was forgotten", []string{indexedRoom, "forget"}, indexedRoom, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			idx := symbols.NewIndex()
 			for _, text := range tc.indexed {
+				if text == "forget" {
+					for i := range 8 {
+						idx.IndexFile("file:///other"+strconv.Itoa(i)+".php", "<?php\n")
+					}
+					continue
+				}
 				idx.IndexFile("file:///room.php", text)
 			}
 			if _, _, ok := idx.IndexedParse("file:///room.php", tc.source); ok != tc.reused {
@@ -70,6 +79,10 @@ func TestIndexedDocumentAnswersAsAFreshParse(t *testing.T) {
 			if !reflect.DeepEqual(indexed.File(), fresh.File()) {
 				t.Fatal("the indexed document's declarations differ from a fresh parse")
 			}
+			_, _, kept := idx.IndexedParse("file:///room.php", tc.source)
+			if indexedNow := len(tc.indexed) > 0 && tc.indexed[0] == tc.source || len(tc.indexed) > 1 && tc.indexed[1] == tc.source; kept != (tc.reused || indexedNow) {
+				t.Errorf("after the request, the parse is kept = %v", kept)
+			}
 			for _, pos := range positionsOf(tc.source) {
 				if got, want := indexed.At(pos), fresh.At(pos); !reflect.DeepEqual(got, want) {
 					t.Fatalf("at %v: %+v, a fresh parse gives %+v", pos, got, want)
@@ -77,4 +90,8 @@ func TestIndexedDocumentAnswersAsAFreshParse(t *testing.T) {
 			}
 		})
 	}
+}
+
+func analyzeText(uri, source string, pos protocol.Position, grammars phpparser.GrammarRange) *CursorContext {
+	return NewDocument(uri, source, grammars).At(pos)
 }

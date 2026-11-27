@@ -38,10 +38,10 @@ func (p *indexedParses) remove(uri string) {
 	}
 }
 
-// IndexedParse returns the syntax tree and declarations the index read from
-// uri when its indexed text is source, so a request on the text just indexed
-// doesn't parse it again. The index keeps the last few files it parsed; both
-// results are shared and read-only.
+// IndexedParse returns the syntax tree and declarations of uri when its
+// indexed text is source, so a request on the text just indexed doesn't parse
+// it again. The index keeps the last few files it or a request parsed (see
+// KeepParse); both results are shared and read-only.
 func (idx *Index) IndexedParse(uri, source string) (phpparser.Parsed, *parser.FileNode, bool) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
@@ -54,4 +54,16 @@ func (idx *Index) IndexedParse(uri, source string) (phpparser.Parsed, *parser.Fi
 		}
 	}
 	return phpparser.Parsed{}, nil, false
+}
+
+// KeepParse keeps a request's parse of uri for IndexedParse when source is
+// still uri's indexed text, parsed with GrammarOf(uri), so the next request
+// on an unedited file reuses it.
+func (idx *Index) KeepParse(uri, source string, parsed phpparser.Parsed, file *parser.FileNode) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	if indexed, ok := idx.fileSource[uri]; !ok || indexed.text != source || indexed.ideHelper {
+		return
+	}
+	idx.parses.put(indexedParse{uri: uri, text: source, parsed: parsed, file: file})
 }

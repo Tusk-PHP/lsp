@@ -201,7 +201,7 @@ func (a *Analyzer) resolveDefinitionSymbol(r *resolve.Resolver, uri, source stri
 			}
 		}
 	}
-	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
 	if ctx == nil {
 		return definitionTarget{}
 	}
@@ -551,7 +551,7 @@ func singleLocation(loc *protocol.Location) []protocol.Location {
 
 func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position) []protocol.Location {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
 	if ctx == nil {
 		return nil
 	}
@@ -600,7 +600,7 @@ func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position)
 
 func (a *Analyzer) FindImplementation(uri, source string, pos protocol.Position) []protocol.Location {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
 	if ctx == nil || ctx.SymbolText == "" {
 		return nil
 	}
@@ -703,7 +703,7 @@ func (a *Analyzer) FindReferences(uri, source string, pos protocol.Position) []p
 // to reading from the index's stored file URIs via disk.
 func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, readDocument func(string) string) []protocol.Location {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
 	if ctx == nil || ctx.SymbolText == "" {
 		return nil
 	}
@@ -932,10 +932,7 @@ func sameRange(a, b protocol.Range) bool {
 }
 
 func (a *Analyzer) GetDocumentSymbols(uri, source string) []protocol.DocumentSymbol {
-	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
-	if file == nil {
-		return nil
-	}
+	file := sourcectx.IndexedFile(a.index, uri, source)
 	var ds []protocol.DocumentSymbol
 	for _, cls := range file.Classes {
 		if cls.Name == "" {
@@ -1109,13 +1106,13 @@ func (a *Analyzer) calledSymbol(uri, source string, call sourcectx.Call) *symbol
 	case sourcectx.CalleeFunction:
 		return r.CalledFunction(call.Name, call.Namespace.View(&parser.FileNode{}))
 	case sourcectx.CalleeAnonymousClass:
-		class := sourcectx.IndexedDocument(a.index, uri, source).File().AnonymousClassDeclaredAt(call.Position.Line, call.Position.Character)
+		class := sourcectx.IndexedFile(a.index, uri, source).AnonymousClassDeclaredAt(call.Position.Line, call.Position.Character)
 		if class == nil {
 			return nil
 		}
 		return a.index.Lookup(class.FullName)
 	}
-	return a.symbolTarget(r, uri, source, sourcectx.IndexedDocument(a.index, uri, source).At(call.Position)).sym
+	return a.symbolTarget(r, uri, source, sourcectx.Analyze(a.index, uri, source, call.Position)).sym
 }
 
 func activeParameter(params []symbols.ParamInfo, call sourcectx.Call) int {
@@ -1174,7 +1171,7 @@ type ReferenceVariant struct {
 // resolvable named symbol.
 func (a *Analyzer) CopyReference(uri, source string, pos protocol.Position) []ReferenceVariant {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
 	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 	if sym == nil {
 		return nil
@@ -1271,7 +1268,7 @@ func getWordRangeAt(source string, pos protocol.Position) (string, protocol.Rang
 // the range and current name as a placeholder.
 func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *protocol.PrepareRenameResult {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
 	if ctx == nil {
 		return nil
 	}
@@ -1381,7 +1378,7 @@ func isPrepareRenameVariableBindingSupported(binding *scope.Binding, word string
 // readDocument is used to read file contents for files not open in the editor.
 func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName string, readDocument func(string) string) *protocol.WorkspaceEdit {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
 	if ctx == nil {
 		return nil
 	}
