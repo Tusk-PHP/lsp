@@ -213,11 +213,6 @@ src/wp-includes/rss.php	unknown-function	Unknown function 'debug'
 src/wp-includes/rss.php	unknown-member	Unknown member 'etag' on 'MagpieRSS'
 src/wp-includes/rss.php	unknown-member	Unknown member 'last_modified' on 'MagpieRSS'
 src/wp-includes/shortcodes.php	unused-variable	Variable $shortcode_tags is assigned but never read
-src/wp-includes/sodium_compat/src/Core32/Poly1305/State.php	unknown-member	Unknown member 'mulInt64' on 'ParagonIE_Sodium_Core32_Int32'
-src/wp-includes/sodium_compat/src/Core32/Poly1305/State.php	unknown-member	Unknown member 'mulInt64' on 'ParagonIE_Sodium_Core32_Int32'
-src/wp-includes/sodium_compat/src/Core32/Poly1305/State.php	unknown-member	Unknown member 'mulInt64' on 'ParagonIE_Sodium_Core32_Int32'
-src/wp-includes/sodium_compat/src/Core32/Poly1305/State.php	unknown-member	Unknown member 'mulInt64' on 'ParagonIE_Sodium_Core32_Int32'
-src/wp-includes/sodium_compat/src/Core32/Poly1305/State.php	unknown-member	Unknown member 'mulInt64' on 'ParagonIE_Sodium_Core32_Int32'
 src/wp-includes/sodium_compat/src/Core32/Poly1305/State.php	unused-variable	Variable $b is assigned but never read
 src/wp-includes/vars.php	unused-variable	Variable $is_IE is assigned but never read
 src/wp-includes/vars.php	unused-variable	Variable $is_NS4 is assigned but never read
