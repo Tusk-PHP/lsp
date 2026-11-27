@@ -1,6 +1,9 @@
 package parser
 
-import "testing"
+import (
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+	"testing"
+)
 
 func TestParseAnonymousClasses(t *testing.T) {
 	file := ParseFile(`<?php
@@ -23,7 +26,7 @@ class AsCollection implements Castable
         };
     }
 }
-`)
+`, token.Latest)
 	if len(file.Classes) != 1 || file.Classes[0].Name != "AsCollection" {
 		t.Fatalf("declared classes = %+v", file.Classes)
 	}

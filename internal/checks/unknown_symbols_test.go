@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -38,7 +39,7 @@ class User
 {
 }
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 
 	fnFindings := (&UnknownFunctionRule{}).Check(file, source, idx)
 	for _, f := range fnFindings {
@@ -60,7 +61,7 @@ class Foo {
     public function bar(): void {}
 }
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.3"})
 
@@ -113,7 +114,7 @@ class Holder {
     }
 }
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.3"})
 
@@ -155,12 +156,12 @@ class B {
     }
 }
 `
-	if findings := (&UnknownFunctionRule{}).Check(parser.ParseFile(source), source, symbols.NewIndex()); len(findings) != 0 {
+	if findings := (&UnknownFunctionRule{}).Check(parser.ParseFile(source, token.Latest), source, symbols.NewIndex()); len(findings) != 0 {
 		t.Errorf("unexpected findings: %+v", findings)
 	}
 
 	source = "<?php\nmissing_function(1);\n"
-	findings := (&UnknownFunctionRule{}).Check(parser.ParseFile(source), source, symbols.NewIndex())
+	findings := (&UnknownFunctionRule{}).Check(parser.ParseFile(source, token.Latest), source, symbols.NewIndex())
 	if len(findings) != 1 {
 		t.Errorf("want missing_function reported, got %+v", findings)
 	}
@@ -183,7 +184,7 @@ func checkUnknownMembers(t *testing.T, vars map[string]string, sources ...string
 	checker := &UnknownMemberRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string {
 		return vars[expr]
 	}}
-	return checker.Check(parser.ParseFile(source), source, idx)
+	return checker.Check(parser.ParseFile(source, token.Latest), source, idx)
 }
 
 func unknownMemberMessages(findings []Finding) []string {
@@ -309,7 +310,7 @@ func TestUnknownMemberBuiltinWithoutMembersIsNotFlagged(t *testing.T) {
 	if sym := idx.Lookup("ZipArchive"); sym == nil || len(sym.Children) != 0 {
 		t.Skip("ZipArchive now has its members listed")
 	}
-	if got := checker.Check(parser.ParseFile(source), source, idx); len(got) != 0 {
+	if got := checker.Check(parser.ParseFile(source, token.Latest), source, idx); len(got) != 0 {
 		t.Errorf("got %v", unknownMemberMessages(got))
 	}
 }
@@ -349,13 +350,13 @@ class C
 }
 function &byRef(array &$a) { return $a; }
 `
-	if findings := (&UnknownFunctionRule{}).Check(parser.ParseFile(source), source, symbols.NewIndex()); len(findings) != 0 {
+	if findings := (&UnknownFunctionRule{}).Check(parser.ParseFile(source, token.Latest), source, symbols.NewIndex()); len(findings) != 0 {
 		t.Errorf("unexpected findings: %+v", findings)
 	}
 
 	// The names are still checked when they are real calls.
 	source = "<?php\n$a = set(1);\n$b = from(2) + get(3);\n$c = yielded_from(4);\n"
-	findings := (&UnknownFunctionRule{}).Check(parser.ParseFile(source), source, symbols.NewIndex())
+	findings := (&UnknownFunctionRule{}).Check(parser.ParseFile(source, token.Latest), source, symbols.NewIndex())
 	var names []string
 	for _, f := range findings {
 		names = append(names, f.Message)
@@ -404,7 +405,7 @@ $t = DateTime::createFromTimestamp(1);
 		checker := &UnknownMemberRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string {
 			return vars[expr]
 		}}
-		return unknownMemberMessages(checker.Check(parser.ParseFile(source), source, idx))
+		return unknownMemberMessages(checker.Check(parser.ParseFile(source, token.Latest), source, idx))
 	}
 	if got := check("8.4"); len(got) != 0 {
 		t.Errorf("PHP 8.4: got %v", got)
@@ -419,7 +420,7 @@ func TestUnknownFunctionWindowsBuiltins(t *testing.T) {
 	source := "<?php\nsapi_windows_vt100_support(STDOUT, true);\nsapi_windows_set_ctrl_handler(null);\nsapi_windows_cp_get();\n"
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if got := (&UnknownFunctionRule{}).Check(file, source, idx); len(got) != 0 {
 		t.Errorf("got %v", unknownMemberMessages(got))
 	}
@@ -448,7 +449,7 @@ class Consumer implements Contract
     }
 }
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	for _, f := range (&UnknownClassRule{}).Check(file, source, idx) {
 		t.Errorf("unexpected unknown-class finding: %q at line %d", f.Message, f.StartLine)
 	}
@@ -478,7 +479,7 @@ function run(array $rows) {
     return(count($rows));
 }
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	for _, f := range (&UnknownFunctionRule{}).Check(file, source, idx) {
 		t.Errorf("unexpected unknown-function finding: %q at line %d", f.Message, f.StartLine)
 	}
@@ -494,7 +495,7 @@ class Manager {
 trait Pipes { public function use($value, ...$rest) { return [$value, $rest]; } }
 enum Mode: string { case A = 'a'; public function use(int $n): int { return $n; } }
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	for _, f := range (&UndefinedVariableRule{}).Check(file, source, symbols.NewIndex()) {
 		t.Errorf("unexpected undefined-variable finding: %q at line %d", f.Message, f.StartLine)
 	}
@@ -522,7 +523,7 @@ use Vendor\Lib\Gamma, Vendor\Other\Delta;
 
 function make() { return [new Alpha(), new B(), new Gamma(), new Delta()]; }
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	for _, f := range (&UnknownClassRule{}).Check(file, source, idx) {
 		t.Errorf("unexpected unknown-class finding: %q", f.Message)
 	}
@@ -532,7 +533,7 @@ function make() { return [new Alpha(), new B(), new Gamma(), new Delta()]; }
 }
 
 func TestResolveClassLikeNameReadsParentAsTheDeclaredParent(t *testing.T) {
-	file := parser.ParseFile("<?php\nnamespace App;\nuse Lib\\Base as Root;\nclass Child extends Root {\n    public function f() { parent::f(); }\n}\nclass Orphan {\n    public function f() { parent::f(); }\n}\n")
+	file := parser.ParseFile("<?php\nnamespace App;\nuse Lib\\Base as Root;\nclass Child extends Root {\n    public function f() { parent::f(); }\n}\nclass Orphan {\n    public function f() { parent::f(); }\n}\n", token.Latest)
 	if got, ok := resolveClassLikeName("parent", 4, file); !ok || got != `Lib\Base` {
 		t.Errorf("parent in Child = %q, %v; want the imported Lib\\Base", got, ok)
 	}

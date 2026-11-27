@@ -23,6 +23,7 @@ type parser struct {
 	prevEnd   uint32
 	emptyAt   uint32
 	errors    []ast.Error
+	warnings  []ast.Error
 	truncated bool
 
 	depth   int
@@ -50,7 +51,7 @@ func ParseCode(src string, version token.Version) *ast.File {
 }
 
 func parse(src string, version token.Version, all []lexer.Token) *ast.File {
-	file := &ast.File{Span: ast.Span{End: uint32(len(src))}}
+	file := &ast.File{Span: ast.Span{End: uint32(len(src))}, Version: version}
 	all, file.Shebang = skipShebang(src, all)
 	p := &parser{src: src, version: version, toks: all[:0]}
 	var doc ast.Span
@@ -73,6 +74,7 @@ func parse(src string, version token.Version, all []lexer.Token) *ast.File {
 	p.guard(func() { p.file(file) })
 	slices.SortStableFunc(p.errors, func(a, b ast.Error) int { return cmp.Compare(a.Start, b.Start) })
 	file.Errors = p.errors
+	file.Warnings = p.warnings
 	return file
 }
 
@@ -135,13 +137,16 @@ func (p *parser) enter() bool {
 func noStop(token.Kind) bool { return false }
 
 func (p *parser) unterminated(comment lexer.Token) {
-	if p.version < token.PHP80 {
+	text := comment.Text(p.src)
+	if !strings.HasPrefix(text, "/*") || len(text) >= 4 && strings.HasSuffix(text, "*/") {
 		return
 	}
-	text := comment.Text(p.src)
-	if strings.HasPrefix(text, "/*") && (len(text) < 4 || !strings.HasSuffix(text, "*/")) {
-		p.unterminatedAt(ast.Span{Start: comment.Start, End: comment.Start + 2}, "unterminated comment")
+	start := ast.Span{Start: comment.Start, End: comment.Start + 2}
+	if p.version < token.PHP80 {
+		p.warnings = append(p.warnings, ast.Error{Span: start, Message: "unterminated comment"})
+		return
 	}
+	p.unterminatedAt(start, "unterminated comment")
 }
 
 func (p *parser) unterminatedAt(span ast.Span, message string) {

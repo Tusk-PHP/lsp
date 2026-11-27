@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -25,7 +26,7 @@ class WP_Thing {
 
 func checkAttributes(t *testing.T, version string) (unknown, unavailable []Finding) {
 	t.Helper()
-	file := parser.ParseFile(forwardAttributesSource)
+	file := parser.ParseFile(forwardAttributesSource, token.Latest)
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: version})
 	unknown = (&UnknownClassRule{}).Check(file, forwardAttributesSource, idx)
@@ -64,7 +65,7 @@ func TestNamespacedAttributeWithoutImportIsStillUnknown(t *testing.T) {
 	// Inside a namespace, #[AllowDynamicProperties] without a leading \ or a
 	// `use` means App\AllowDynamicProperties, which PHP does not treat as its own.
 	src := "<?php\nnamespace App;\n#[AllowDynamicProperties]\nclass A {}\n#[\\AllowDynamicProperties]\nclass B {}\n"
-	got := (&UnknownClassRule{}).Check(parser.ParseFile(src), src, symbols.NewIndex())
+	got := (&UnknownClassRule{}).Check(parser.ParseFile(src, token.Latest), src, symbols.NewIndex())
 	if len(got) != 1 || got[0].StartLine != 2 {
 		t.Errorf("expected only the unqualified attribute in the namespace to be unknown, got %+v", got)
 	}
