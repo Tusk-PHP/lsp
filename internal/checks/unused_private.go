@@ -45,10 +45,10 @@ func checkUnusedPrivateMembers(cls parser.ClassNode, namespace string, fileToken
 			return nil
 		}
 		for _, src := range traits {
-			uses.collect(parser.Tokenize(src), declarationsAreUses)
+			uses.collect(parser.Tokenize(src), declarationsAreUses, cls.Name)
 		}
 	}
-	uses.collect(classTokens(fileTokens(), declarationStartLine(cls), cls.EndLine), declarationsAreNotUses)
+	uses.collect(classTokens(fileTokens(), declarationStartLine(cls), cls.EndLine), declarationsAreNotUses, cls.Name)
 	findings := checkUnusedPrivateMethods(cls, uses, lines)
 	findings = append(findings, checkUnusedPrivateProperties(cls, uses, lines)...)
 	return append(findings, checkUnusedPrivateConstants(cls, uses, lines)...)
