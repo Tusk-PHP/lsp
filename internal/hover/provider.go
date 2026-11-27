@@ -7,6 +7,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/coverage"
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/phparray"
@@ -25,6 +26,7 @@ type Provider struct {
 	arrayResolver *models.FrameworkArrayResolver
 	cfg           *config.Config
 	coverage      *coverage.Store
+	validation    *frameworklaravel.ValidationRules
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
@@ -63,7 +65,8 @@ func (p *Provider) SetConfig(cfg *config.Config) {
 }
 
 func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol.Hover {
-	ctx := sourcectx.Analyze(uri, source, pos)
+	doc := sourcectx.NewDocument(uri, source)
+	ctx := doc.At(pos)
 	if ctx == nil {
 		return nil
 	}
@@ -81,6 +84,12 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 	// Check for config key hover: config('database.connections.mysql')
 	if hover := p.hoverConfigKey(line, pos.Character); hover != nil {
 		return hover
+	}
+
+	if ctx.InString && frameworklaravel.MayValidate(doc.Tokens()) {
+		if hover := p.hoverValidationRule(source, pos, file); hover != nil {
+			return hover
+		}
 	}
 
 	if isInStringLiteral(line, pos.Character) {

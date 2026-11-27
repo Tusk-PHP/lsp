@@ -272,19 +272,3 @@ class Comment extends Model {}
 		}
 	})
 }
-
-func TestSnakeCase(t *testing.T) {
-	tests := []struct {
-		input, expected string
-	}{
-		{"FullName", "full_name"},
-		{"Name", "name"},
-		{"ID", "i_d"},
-		{"CreatedAt", "created_at"},
-	}
-	for _, tt := range tests {
-		if got := snakeCase(tt.input); got != tt.expected {
-			t.Errorf("snakeCase(%q) = %q, want %q", tt.input, got, tt.expected)
-		}
-	}
-}

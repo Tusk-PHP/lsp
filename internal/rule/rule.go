@@ -34,6 +34,7 @@ const (
 	UnknownView           Code = "unknown-view"
 	UnknownComponent      Code = "unknown-component"
 	UnclosedDirective     Code = "unclosed-directive"
+	UnknownValidationRule Code = "unknown-validation-rule"
 )
 
 var All = []Code{
@@ -62,6 +63,7 @@ var All = []Code{
 	UnknownView,
 	UnknownComponent,
 	UnclosedDirective,
+	UnknownValidationRule,
 }
 
 func ParseCode(s string) (Code, error) {

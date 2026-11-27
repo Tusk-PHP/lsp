@@ -360,3 +360,18 @@ func TestDocumentOutsideItsLines(t *testing.T) {
 		}
 	}
 }
+
+func TestAnalyzeInString(t *testing.T) {
+	src := "<?php\n$a = ['k' => 'req', \"x\"];\n"
+	for _, tc := range []struct {
+		col  int
+		want bool
+	}{
+		{5, false}, {7, true}, {10, false}, {13, false}, {14, true}, {17, true}, {18, false}, {21, true}, {23, false},
+	} {
+		ctx := Analyze("file:///a.php", src, protocol.Position{Line: 1, Character: tc.col})
+		if ctx.InString != tc.want {
+			t.Errorf("column %d (%q): InString %v, want %v", tc.col, src[6+tc.col:], ctx.InString, tc.want)
+		}
+	}
+}
