@@ -30,7 +30,11 @@ CACHE="${REPO_ROOT}/testdata/.downloads"
 STAMP="wordpress-${WP_VERSION} woocommerce-${WC_VERSION}"
 
 need curl shasum unzip
+# WordPress states no PHP version; WooCommerce supports 7.4 and up.
+PHP_VERSION="8.4"
+
 if [[ "$(cat "${DEST}/.fetch-stamp" 2>/dev/null || true)" == "${STAMP}" ]]; then
+  pin_php "${DEST}" "${PHP_VERSION}"
   log "up to date"
   exit 0
 fi
@@ -46,5 +50,6 @@ unzip -q "${CACHE}/wordpress-${WP_VERSION}.zip" -d "${DEST}.part"
 mv "${DEST}.part/wordpress" "${DEST}"
 rmdir "${DEST}.part"
 unzip -q "${CACHE}/woocommerce-${WC_VERSION}.zip" -d "${DEST}/wp-content/plugins"
+pin_php "${DEST}" "${PHP_VERSION}"
 echo "${STAMP}" > "${DEST}/.fetch-stamp"
 log "done"

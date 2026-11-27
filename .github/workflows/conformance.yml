@@ -135,6 +135,14 @@ jobs:
       - name: Benchmark against the pass marks
         run: make bench-reference WORKSPACES=${{ matrix.name }}
 
+      - name: Upload the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reference-bench-${{ matrix.name }}
+          path: bench/results/
+          if-no-files-found: ignore
+
   # ---------------------------------------------------------------------------
   # Nightly / manual job: full corpus + fuzz targets
   # ---------------------------------------------------------------------------

@@ -900,7 +900,6 @@ wp-content/plugins/woocommerce/src/Internal/ProductAttributesLookup/CLIRunner.ph
 wp-content/plugins/woocommerce/src/Internal/ProductAttributesLookup/CLIRunner.php	unknown-class	Unknown class 'WP_CLI'
 wp-content/plugins/woocommerce/src/Internal/ProductAttributesLookup/CLIRunner.php	unknown-function	Unknown function 'WP_CLI\Utils\make_progress_bar'
 wp-content/plugins/woocommerce/src/Internal/ProductDownloads/ApprovedDirectories/Admin/Table.php	unused-import	Unused import 'WP_Screen'
-wp-content/plugins/woocommerce/src/Internal/ProductDownloads/ApprovedDirectories/Admin/UI.php	deprecated	is_integer() is deprecated since PHP 8.6, use is_int()
 wp-content/plugins/woocommerce/src/Internal/ProductFilters/FilterData.php	unused-import	Unused import 'Automattic\WooCommerce\Enums\ProductStatus'
 wp-content/plugins/woocommerce/src/Internal/PushNotifications/Dispatchers/WpcomNotificationDispatcher.php	unknown-class	Unknown class 'Jetpack_Connection_Client'
 wp-content/plugins/woocommerce/src/Internal/PushNotifications/Traits/ConvertsExceptionsToWpError.php	unknown-member	Unknown member 'getErrorCode' on 'Exception'
@@ -1047,7 +1046,6 @@ wp-content/plugins/woocommerce/src/StoreApi/deprecated.php	unknown-class	Unknown
 wp-content/plugins/woocommerce/src/StoreApi/deprecated.php	unknown-class	Unknown class 'Automattic\WooCommerce\Blocks\StoreApi\Schemas\ProductSchema'
 wp-content/plugins/woocommerce/src/StoreApi/deprecated.php	unknown-class	Unknown class 'Automattic\WooCommerce\Blocks\StoreApi\Schemas\ShippingAddressSchema'
 wp-content/plugins/woocommerce/src/StoreApi/deprecated.php	unknown-class	Unknown class 'Automattic\WooCommerce\Blocks\StoreApi\Schemas\TermSchema'
-wp-content/plugins/woocommerce/src/Utilities/CallbackUtil.php	deprecated	spl_object_hash() is deprecated since PHP 8.6, use spl_object_id()
 wp-content/plugins/woocommerce/src/Utilities/PluginUtil.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\Utilities\PluginInstaller'
 wp-content/plugins/woocommerce/src/Utilities/TimeUtil.php	unused-import	Unused import 'Exception'
 wp-content/plugins/woocommerce/templates/brands/widgets/brand-description.php	undefined-variable	Undefined variable $brand
