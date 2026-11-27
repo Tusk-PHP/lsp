@@ -21,13 +21,22 @@ const validatorFacade = `Illuminate\Support\Facades\Validator`
 // none.
 type ValidationExtensions struct {
 	mu      sync.Mutex
-	files   map[string][]Registration
+	files   map[string]fileExtensions
+	unread  int
 	version uint64
+}
+
+type fileExtensions struct {
+	rules []Registration
+	// unread says the file registers rules the server can't name: extend()
+	// with a computed name, Validator::resolver(), or a callback run when
+	// the validator is resolved.
+	unread bool
 }
 
 // NewValidationExtensions returns an empty set of extensions.
 func NewValidationExtensions() *ValidationExtensions {
-	return &ValidationExtensions{files: map[string][]Registration{}}
+	return &ValidationExtensions{files: map[string]fileExtensions{}}
 }
 
 // IndexFile reads the rules a file registers; an empty source removes the
@@ -40,18 +49,23 @@ func (e *ValidationExtensions) IndexFile(uri, source string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	old, had := e.files[uri]
-	if len(found) == 0 {
-		if had {
-			delete(e.files, uri)
-			e.version++
-		}
+	if had && old.unread == found.unread && slices.Equal(old.rules, found.rules) {
 		return
 	}
-	if had && slices.Equal(old, found) {
-		return
+	if old.unread {
+		e.unread--
 	}
-	e.files[uri] = found
-	e.version++
+	if found.unread {
+		e.unread++
+	}
+	if len(found.rules) == 0 && !found.unread {
+		delete(e.files, uri)
+	} else {
+		e.files[uri] = found
+	}
+	if had || len(found.rules) > 0 || found.unread {
+		e.version++
+	}
 }
 
 func (e *ValidationExtensions) currentVersion() uint64 {
@@ -63,17 +77,16 @@ func (e *ValidationExtensions) currentVersion() uint64 {
 	return e.version
 }
 
-func (e *ValidationExtensions) snapshot() (uint64, []Registration) {
+func (e *ValidationExtensions) snapshot() (version uint64, rules []Registration, unread bool) {
 	if e == nil {
-		return 0, nil
+		return 0, nil, false
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	var all []Registration
-	for _, regs := range e.files {
-		all = append(all, regs...)
+	for _, f := range e.files {
+		rules = append(rules, f.rules...)
 	}
-	slices.SortFunc(all, func(a, b Registration) int {
+	slices.SortFunc(rules, func(a, b Registration) int {
 		if c := strings.Compare(a.URI, b.URI); c != 0 {
 			return c
 		}
@@ -82,17 +95,17 @@ func (e *ValidationExtensions) snapshot() (uint64, []Registration) {
 		}
 		return a.Col - b.Col
 	})
-	return e.version, all
+	return e.version, rules, e.unread > 0
 }
 
-func validationExtensionsIn(uri, src string) []Registration {
+func validationExtensionsIn(uri, src string) fileExtensions {
 	if !namesValidatorExtension(src) {
-		return nil
+		return fileExtensions{}
 	}
 	file := phpparser.Parse(src, token.Latest)
 	starts := lineStarts(src)
 	names := fileNames{uses: map[string]string{}}
-	var found []Registration
+	var found fileExtensions
 	ast.Walk(file, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.Namespace:
@@ -101,20 +114,31 @@ func validationExtensionsIn(uri, src string) []Registration {
 			names.use(src, n)
 		case *ast.StaticCall:
 			class, ok := n.Class.(*ast.ConstFetch)
-			if !ok || !isExtend(memberName(src, n.Name)) {
+			if !ok {
 				return true
 			}
-			if fqn := names.resolve(class.Name.Text(src)); fqn == validatorFacade || fqn == "Validator" {
-				found = appendExtension(found, uri, src, starts, n.Args)
+			if fqn := names.resolve(class.Name.Text(src)); fqn != validatorFacade && fqn != "Validator" {
+				found.unread = found.unread || isResolvingCallback(src, names, memberName(src, n.Name), n.Args)
+				return true
+			}
+			switch name := memberName(src, n.Name); {
+			case isExtend(name):
+				found.add(uri, src, starts, n.Args)
+			case name == "resolver":
+				found.unread = true
 			}
 		case *ast.MethodCall:
-			switch memberName(src, n.Name) {
+			switch name := memberName(src, n.Name); name {
 			case "extendImplicit", "extendDependent":
-				found = appendExtension(found, uri, src, starts, n.Args)
+				found.add(uri, src, starts, n.Args)
 			case "extend":
 				if isValidatorExpr(src, n.Object) {
-					found = appendExtension(found, uri, src, starts, n.Args)
+					found.add(uri, src, starts, n.Args)
 				}
+			case "resolver":
+				found.unread = found.unread || isValidatorExpr(src, n.Object)
+			default:
+				found.unread = found.unread || isResolvingCallback(src, names, name, n.Args)
 			}
 		}
 		return true
@@ -122,12 +146,42 @@ func validationExtensionsIn(uri, src string) []Registration {
 	return found
 }
 
+func isResolvingCallback(src string, names fileNames, method string, args *ast.ArgList) bool {
+	switch method {
+	case "resolving", "afterResolving", "callAfterResolving":
+	default:
+		return false
+	}
+	if len(args.Args) == 0 {
+		return false
+	}
+	switch target := args.Args[0].Value.(type) {
+	case *ast.Literal:
+		key, ok := constantString(src, target)
+		return ok && key == "validator"
+	case *ast.ClassConstFetch:
+		class, ok := target.Class.(*ast.ConstFetch)
+		if !ok || !strings.EqualFold(memberName(src, target.Name), "class") {
+			return false
+		}
+		switch names.resolve(class.Name.Text(src)) {
+		case `Illuminate\Contracts\Validation\Factory`, `Illuminate\Validation\Factory`:
+			return true
+		}
+	}
+	return false
+}
+
 func namesValidatorExtension(src string) bool {
-	if !mentionsExtend(src) {
+	if !mentionsExtend(src) && !strings.Contains(src, "resolver") && !strings.Contains(src, "esolving") {
 		return false
 	}
 	for _, t := range lexer.Lex(src, token.Latest) {
-		if t.Kind == token.Identifier && isExtend(t.Text(src)) {
+		if t.Kind != token.Identifier {
+			continue
+		}
+		switch name := t.Text(src); {
+		case isExtend(name), name == "resolver", name == "resolving", name == "afterResolving", name == "callAfterResolving":
 			return true
 		}
 	}
@@ -180,16 +234,17 @@ func isValidatorExpr(src string, e ast.Expr) bool {
 	return false
 }
 
-func appendExtension(found []Registration, uri, src string, starts []int, args *ast.ArgList) []Registration {
+func (f *fileExtensions) add(uri, src string, starts []int, args *ast.ArgList) {
 	if len(args.Args) == 0 {
-		return found
+		return
 	}
 	name, ok := constantString(src, args.Args[0].Value)
 	if !ok || name == "" {
-		return found
+		f.unread = true
+		return
 	}
 	at := offsetPosition(starts, int(args.Args[0].Value.Bounds().Start))
-	return append(found, Registration{Name: unescapePHP(name), URI: uri, Line: at.Line, Col: at.Character})
+	f.rules = append(f.rules, Registration{Name: unescapePHP(name), URI: uri, Line: at.Line, Col: at.Character})
 }
 
 type fileNames struct {

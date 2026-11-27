@@ -8,6 +8,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/rule"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func TestEveryRuleCodeIsEmittedByARule(t *testing.T) {
@@ -18,6 +19,7 @@ func TestEveryRuleCodeIsEmittedByARule(t *testing.T) {
 			return frameworklaravel.QueriedModel{}
 		},
 		BuilderMemberChecker: &stubMemberChecker{},
+		ValidationRules:      frameworklaravel.NewValidationRules(symbols.NewIndex(), nil, func(string) string { return "" }),
 	})
 	emitted := map[rule.Code]bool{}
 	for _, r := range rules {
@@ -46,6 +48,7 @@ func TestEveryRuleAcceptsAFileThatDidNotParse(t *testing.T) {
 			return frameworklaravel.QueriedModel{}
 		},
 		BuilderMemberChecker: &stubMemberChecker{},
+		ValidationRules:      frameworklaravel.NewValidationRules(symbols.NewIndex(), nil, func(string) string { return "" }),
 	})
 	for _, r := range rules {
 		if got := r.Check(nil, "<?php $a?->b; missing();", nil); len(got) != 0 {

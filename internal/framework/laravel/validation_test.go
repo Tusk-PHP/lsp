@@ -102,7 +102,7 @@ func TestSnake(t *testing.T) {
 }
 
 func extensionNames(e *ValidationExtensions) string {
-	_, regs := e.snapshot()
+	_, regs, _ := e.snapshot()
 	names := make([]string, 0, len(regs))
 	for _, r := range regs {
 		names = append(names, r.Name)
@@ -116,7 +116,7 @@ func TestValidationExtensions(t *testing.T) {
 	if got := extensionNames(e); got != "Postcode greater_than_field iban phone_number" {
 		t.Errorf("validation rules: %q", got)
 	}
-	_, regs := e.snapshot()
+	_, regs, _ := e.snapshot()
 	for _, reg := range regs {
 		if reg.Name == "phone_number" && (reg.Line != 11 || reg.URI != "file:///app/Providers/AppServiceProvider.php") {
 			t.Errorf("phone_number registered at %+v", reg)
@@ -173,7 +173,7 @@ config('validator')->extend('not_app', fn () => true);
 	if got := extensionNames(e); got != "Postcode from_app greater_than_field grouped iban phone_number qualified" {
 		t.Errorf("app('validator'), a grouped use and a name qualified through a use register: %q", got)
 	}
-	_, regs = e.snapshot()
+	_, regs, _ = e.snapshot()
 	var more []string
 	for _, reg := range regs {
 		if reg.URI == "file:///app/More.php" {
@@ -190,7 +190,7 @@ config('validator')->extend('not_app', fn () => true);
 
 	var none *ValidationExtensions
 	none.IndexFile("file:///x.php", validationProvider)
-	if v, regs := none.snapshot(); v != 0 || regs != nil || none.currentVersion() != 0 {
+	if v, regs, unread := none.snapshot(); v != 0 || regs != nil || unread || none.currentVersion() != 0 {
 		t.Error("a nil set has nothing")
 	}
 }
@@ -550,5 +550,30 @@ func TestValidationRuleSlotAt(t *testing.T) {
 		if slot, ok := ValidationRuleSlotAt(src, at, syn); ok {
 			t.Errorf("%s: %+v", name, slot)
 		}
+	}
+}
+
+func TestValidationExtensionsUnread(t *testing.T) {
+	e := NewValidationExtensions()
+	unread := func() bool { _, _, u := e.snapshot(); return u }
+	for name, src := range map[string]string{
+		"computed name":       "<?php\nIlluminate\\Support\\Facades\\Validator::extend($name, fn () => true);\n",
+		"custom validator":    "<?php\nIlluminate\\Support\\Facades\\Validator::resolver(fn () => null);\n",
+		"resolving callback":  "<?php\n$app->resolving('validator', fn ($v) => $v->extend('x', fn () => true));\n",
+		"after resolving":     "<?php\nuse Illuminate\\Contracts\\Validation\\Factory;\n$this->app->afterResolving(Factory::class, fn ($v) => null);\n",
+		"validator->resolver": "<?php\napp('validator')->resolver(fn () => null);\n",
+	} {
+		e.IndexFile("file:///x.php", src)
+		if !unread() {
+			t.Errorf("%s: the file's rules can't be read", name)
+		}
+		e.IndexFile("file:///x.php", "")
+		if unread() {
+			t.Errorf("%s: removing the file forgets it", name)
+		}
+	}
+	e.IndexFile("file:///y.php", "<?php\n$app->resolving(Foo::class, fn () => null);\nCache::resolver(fn () => null);\n")
+	if unread() {
+		t.Error("other services' callbacks register no rules")
 	}
 }
