@@ -66,6 +66,7 @@ func parse(src string, version token.Version, all []lexer.Token) *ast.File {
 		default:
 			if doc != (ast.Span{}) {
 				p.docs = append(p.docs, tokenDoc{tok: len(p.toks), doc: doc})
+				file.Docs = append(file.Docs, ast.Doc{Comment: doc, Token: tok.Start})
 				doc = ast.Span{}
 			}
 			p.toks = append(p.toks, tok)

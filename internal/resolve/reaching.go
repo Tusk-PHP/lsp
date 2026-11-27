@@ -40,6 +40,9 @@ func (r *Resolver) reachingType(varName string, lines []string, pos textpos.Posi
 	if reach.Latest == scope.NoWrite {
 		return ResolvedType{}, inRHS
 	}
+	if asserted, ok := r.assertedAfterWrite(varName, lines, pos, file, b, reach.Latest); ok {
+		return r.narrowVariable(varName, asserted, lines, pos, file), true
+	}
 	rt := r.writeValueType(varName, lines, file, b, reach.Latest)
 	if rt.IsEmpty() && !rt.Nullable {
 		// The line scan would read the same assignment, only with the wrong
@@ -49,6 +52,19 @@ func (r *Resolver) reachingType(varName string, lines []string, pos textpos.Posi
 		return ResolvedType{}, inRHS || readableWrite(r.syntaxTree(lines, file), b, reach.Latest) || b.Site(reach.Latest).Destructure
 	}
 	return r.narrowVariable(varName, rt, lines, pos, file), true
+}
+
+func (r *Resolver) assertedAfterWrite(varName string, lines []string, pos textpos.Position, file *parser.FileNode, b *scope.Binding, w int) (ResolvedType, bool) {
+	t := r.syntaxTree(lines, file)
+	after, ok := t.offset(b.Site(w).At)
+	if !ok {
+		return ResolvedType{}, false
+	}
+	off, ok := t.offset(pos)
+	if !ok {
+		return ResolvedType{}, false
+	}
+	return r.varAssertion(varName, pos, file, t, after, off)
 }
 
 // reachingValuesType is the type of a variable that may hold the value of any
