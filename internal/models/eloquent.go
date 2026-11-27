@@ -271,24 +271,15 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source mode
 			})
 			continue
 		}
-		if source.resolve(method.ReturnType.Name) == "Illuminate\\Database\\Eloquent\\Casts\\Attribute" {
+		if source.resolve(method.ReturnType.Name) == frameworklaravel.EloquentAttribute {
 			propName := "$" + method.Name
-			retType := ""
-			if method.DocComment != "" {
-				if doc := parser.ParseDocBlock(method.DocComment); doc != nil && doc.Return.Type != "" {
-					retType = doc.Return.Type
-				}
-			}
-			if retType == "" {
-				retType = "mixed"
-			}
 			index.AddVirtualMember(model.FQN, &symbols.Symbol{
 				Name:       propName,
 				FQN:        model.FQN + "::" + propName,
 				Kind:       symbols.KindProperty,
 				URI:        model.URI,
 				Visibility: "public",
-				Type:       source.resolve(retType),
+				Type:       source.attributeType(method, decls[method.Name]),
 				IsVirtual:  true,
 				DocComment: "Accessor from " + method.Name + "()",
 				Range:      methodNameRange(method),
