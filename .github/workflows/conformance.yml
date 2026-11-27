@@ -1,12 +1,22 @@
 name: Conformance
 
+# These jobs are heavy, so a pull request runs them only when a maintainer
+# adds the `conformance` label (or pushes to a PR that has it). They can also
+# be started by hand from the Actions tab on any branch, and they run on main
+# every night, so nothing merged goes unchecked for long.
 on:
   pull_request:
     branches: [main]
+    types: [opened, reopened, synchronize, labeled]
   schedule:
     # Nightly at 02:30 UTC
     - cron: "30 2 * * *"
   workflow_dispatch:
+    inputs:
+      full:
+        description: Also run the full corpus and the fuzz targets
+        type: boolean
+        default: false
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -14,7 +24,9 @@ jobs:
   # ---------------------------------------------------------------------------
   conformance-pr:
     name: Conformance (PR subset)
-    if: github.event_name == 'pull_request'
+    # Runs on a pull request with the `conformance` label; adding another
+    # label doesn't start it again.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'conformance') && (github.event.action != 'labeled' || github.event.label.name == 'conformance'))
     runs-on: ubuntu-latest
 
     steps:
@@ -55,7 +67,7 @@ jobs:
   # ---------------------------------------------------------------------------
   field-baseline:
     name: Field baseline (${{ matrix.name }})
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'conformance') && (github.event.action != 'labeled' || github.event.label.name == 'conformance'))
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -100,7 +112,7 @@ jobs:
   # ---------------------------------------------------------------------------
   reference-bench:
     name: Reference app benchmark (${{ matrix.name }})
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'conformance') && (github.event.action != 'labeled' || github.event.label.name == 'conformance'))
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -148,7 +160,7 @@ jobs:
   # ---------------------------------------------------------------------------
   conformance-nightly:
     name: Conformance (full) + Fuzz
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full)
     runs-on: ubuntu-latest
 
     steps:

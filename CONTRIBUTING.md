@@ -168,6 +168,7 @@ Contributions written with AI tools are welcome, and so are those written by han
 ### Review
 
 - Pull requests are merged with **Rebase and merge**, so each commit lands on `main` as written.
+- **What CI runs.** Every pull request runs the tests, except one that changes only Markdown outside `docs/`, images, `LICENSE` or `CODEOWNERS`. The conformance corpus, the field baselines and the reference-app benchmark are heavy, so they run only when a maintainer adds the `conformance` label: for changes to the parser, index, providers, diagnostics, typing, the benchmark or its workspaces. Once labelled, they run again on every push. They can also be started by hand from the Actions tab (**Conformance › Run workflow**, on any branch), and they run on `main` every night, with the full corpus and fuzzing.
 - Changes to the paths in [`.github/CODEOWNERS`](.github/CODEOWNERS) need the core maintainer's review: the project principles and ARCHITECTURE.md, CI and release workflows, dependencies, build scripts and the field baselines.
 - Architecture decisions are the core maintainer's. Expect questions on a pull request that adds packages or changes core code without an issue that agreed the approach.
 
