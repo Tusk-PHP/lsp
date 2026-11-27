@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
@@ -302,7 +301,7 @@ func LoadFromFile(path string) (*Config, error) {
 // WithClientOptions returns a copy of the config with client-provided
 // options applied over it. Only non-zero values from the client override;
 // the receiver is left unchanged, and nil options return a plain copy.
-func (c *Config) WithClientOptions(opts *protocol.InitializationOptions) *Config {
+func (c *Config) WithClientOptions(opts *ClientOptions) *Config {
 	merged := *c
 	if opts != nil {
 		merged.mergeClientOptions(opts)
@@ -310,7 +309,7 @@ func (c *Config) WithClientOptions(opts *protocol.InitializationOptions) *Config
 	return &merged
 }
 
-func (c *Config) mergeClientOptions(opts *protocol.InitializationOptions) {
+func (c *Config) mergeClientOptions(opts *ClientOptions) {
 	if opts.PHPVersion != "" {
 		c.PHPVersion = opts.PHPVersion
 		c.phpVersionExplicitlySet = true

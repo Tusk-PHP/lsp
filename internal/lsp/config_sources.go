@@ -68,12 +68,12 @@ func (s *Server) lastGoodConfigFile(err error) *config.Config {
 	return last
 }
 
-func tuskSettings(raw json.RawMessage) (*protocol.InitializationOptions, error) {
+func tuskSettings(raw json.RawMessage) (*config.ClientOptions, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || trimmed[0] != '{' {
 		return nil, nil
 	}
-	var opts protocol.InitializationOptions
+	var opts config.ClientOptions
 	if err := json.Unmarshal(trimmed, &opts); err != nil {
 		return nil, fmt.Errorf("settings are not Tusk PHP options: %w", err)
 	}

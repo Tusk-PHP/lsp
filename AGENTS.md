@@ -139,9 +139,10 @@ What each piece owns once it exists:
 - **Framework knowledge** lives under `framework/<name>/`, never inside generic
   completion, hover or checks.
 - **Core packages** use `textpos.Position` and `textpos.Range`, converted at
-  the transport edge, and don't add new uses of `protocol` types. The import
-  boundary test in `conformance` lists the engine packages that still import
-  `protocol`; that list only shrinks.
+  the transport edge, and never import `protocol` or the editor features. The
+  import boundary test in `conformance` fails when one does; client settings
+  reach the core as `config.ClientOptions`, and diagnostics leave it as
+  `diagnostics.Diagnostic`.
 
 ## Structure rules
 

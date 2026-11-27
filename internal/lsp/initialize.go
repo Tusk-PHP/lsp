@@ -26,7 +26,7 @@ import (
 )
 
 func (s *Server) handleInitialize(msg *jsonRPCMessage) {
-	params, ok := s.decodeParams[protocol.InitializeParams](msg)
+	params, ok := s.decodeParams[initializeParams](msg)
 	if !ok {
 		return
 	}
@@ -35,7 +35,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		s.rootPath = params.RootPath
 	}
 	s.logger.Printf("Initializing for workspace: %s", s.rootPath)
-	s.initOptions = params.InitializationOptions
+	s.initOptions = params.InitializationOptions.settings()
 	s.cfg = s.loadConfig()
 	s.encoding = document.Negotiate(params.Capabilities.General.PositionEncodings)
 	s.clientSupportsShowDocument = params.Capabilities.Window.ShowDocument.Support
