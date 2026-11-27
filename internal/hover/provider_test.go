@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -561,5 +562,34 @@ class Foo {
 				t.Errorf("expected '%s %s' in code block, got:\n%s", tt.wantType, tt.varName, val)
 			}
 		})
+	}
+}
+
+func TestHoverShowsAPreviewOfAHugeConstantValue(t *testing.T) {
+	var src strings.Builder
+	src.WriteString("<?php\nnamespace App;\n\nclass Mime {\n    const MAP = [\n")
+	for i := range 5000 {
+		n := strconv.Itoa(i)
+		src.WriteString("        'ext" + n + "' => ['type/sub" + n + "', \"it's {$i}\"],\n")
+	}
+	src.WriteString("    ];\n}\n")
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///mime.php", src.String())
+	p := NewProvider(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"), "none")
+
+	sym := idx.Lookup("App\\Mime::MAP")
+	if sym == nil {
+		t.Fatal("expected constant to be indexed")
+	}
+	if !strings.HasSuffix(sym.Value, "'ext4999'=>['type/sub4999',\"it's {$i}\"],]") {
+		t.Fatalf("the stored value must stay complete, ends with %q", sym.Value[max(0, len(sym.Value)-60):])
+	}
+	content := p.formatHover(sym)
+	want := "const MAP = ['ext0'=>['type/sub0',\"it's {$i}\"],'ext1'=>['type/sub1',\"it's {$i}\"],'ext2'=>['type/sub2',\"it's {$i}\"],'ext3'=>['type/sub3',\"it's {$i}\"],'ext4'=>['type/sub4',…]]"
+	if !strings.Contains(content, want) {
+		t.Errorf("expected a bounded preview %q, got:\n%s", want, content)
+	}
+	if len(content) > 1000 {
+		t.Errorf("hover is %d bytes long", len(content))
 	}
 }

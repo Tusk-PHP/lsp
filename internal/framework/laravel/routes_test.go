@@ -1,6 +1,8 @@
 package laravel
 
 import (
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -8,7 +10,7 @@ import (
 
 func TestRouteIndexScanWorkspaceFindsNamedRoutes(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "testdata", "laravel")
-	idx := NewRouteIndex(root)
+	idx := NewRouteIndex(root, func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
 
 	if err := idx.ScanWorkspace(); err != nil {
 		t.Fatalf("ScanWorkspace() error = %v", err)
@@ -42,7 +44,7 @@ func TestRouteIndexScanWorkspaceFindsNamedRoutes(t *testing.T) {
 }
 
 func TestRouteIndexReplacesEntriesOnReindex(t *testing.T) {
-	idx := NewRouteIndex("/tmp/project")
+	idx := NewRouteIndex("/tmp/project", func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
 	uri := "file:///tmp/project/routes/web.php"
 
 	idx.IndexFile(uri, "<?php\nRoute::get('/')->name('home');\n")
@@ -103,7 +105,7 @@ func TestFindRouteNameReference(t *testing.T) {
 }
 
 func TestRouteIndexCapturesControllerMetadata(t *testing.T) {
-	idx := NewRouteIndex("/tmp/project")
+	idx := NewRouteIndex("/tmp/project", func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
 	uri := "file:///tmp/project/routes/web.php"
 	source := `<?php
 

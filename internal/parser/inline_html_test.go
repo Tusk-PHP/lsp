@@ -1,6 +1,9 @@
 package parser
 
-import "testing"
+import (
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+	"testing"
+)
 
 func TestTokenizeSkipsInlineHTML(t *testing.T) {
 	src := "<html><?xml-ish text ?>\n" + // before the first open tag: HTML
@@ -35,7 +38,7 @@ func TestTokenizeSkipsInlineHTML(t *testing.T) {
 
 func TestTokenizeWithoutOpenTagIsPHP(t *testing.T) {
 	src := "class Foo { function bar() {} }"
-	if got := ParseFile(src); got == nil || len(got.Classes) != 1 {
+	if got := ParseFile(src, token.Latest); got == nil || len(got.Classes) != 1 {
 		t.Fatalf("a snippet without <?php should still parse as PHP: %+v", got)
 	}
 }

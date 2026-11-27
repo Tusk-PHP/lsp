@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 func undefinedIn(src string) []string {
 	var got []string
-	for _, f := range (&UndefinedVariableRule{}).Check(parser.ParseFile(src), src, nil) {
+	for _, f := range (&UndefinedVariableRule{}).Check(parser.ParseFile(src, token.Latest), src, nil) {
 		got = append(got, f.Message)
 	}
 	return got

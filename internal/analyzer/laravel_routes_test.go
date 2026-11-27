@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -13,7 +15,7 @@ func setupLaravelRouteAnalyzer(t *testing.T) *Analyzer {
 	t.Helper()
 
 	a := setupLaravelAnalyzer(t)
-	routes := frameworklaravel.NewRouteIndex(filepath.Join("..", "..", "testdata", "laravel"))
+	routes := frameworklaravel.NewRouteIndex(filepath.Join("..", "..", "testdata", "laravel"), func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
 	if err := routes.ScanWorkspace(); err != nil {
 		t.Fatalf("ScanWorkspace() error = %v", err)
 	}

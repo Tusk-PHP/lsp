@@ -44,9 +44,9 @@ func TestIsDeprecated(t *testing.T) {
 class Old {}
 #[\Deprecated]
 function gone() {}
-class New {}
+class Fresh {}
 `)
-	for fqn, want := range map[string]bool{"Old": true, "gone": true, "New": false} {
+	for fqn, want := range map[string]bool{"Old": true, "gone": true, "Fresh": false} {
 		if got := idx.Lookup(fqn).IsDeprecated(); got != want {
 			t.Errorf("%s: got %v, want %v", fqn, got, want)
 		}

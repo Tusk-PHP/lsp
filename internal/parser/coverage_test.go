@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"strings"
 	"testing"
 )
@@ -12,7 +13,7 @@ trait HasTimestamps {
     public function getCreatedAt(): string { return ""; }
     private string $created_at;
 }
-`)
+`, token.Latest)
 	if file == nil {
 		t.Fatal("expected non-nil file")
 	}
@@ -45,7 +46,7 @@ enum Status: string {
         };
     }
 }
-`)
+`, token.Latest)
 	if file == nil {
 		t.Fatal("expected non-nil file")
 	}
@@ -64,7 +65,7 @@ namespace App\Helpers;
 function formatName(string $first, string $last): string {
     return $first . ' ' . $last;
 }
-`)
+`, token.Latest)
 	if file == nil {
 		t.Fatal("expected non-nil file")
 	}
@@ -87,7 +88,7 @@ const MAX_RETRIES = 3;
 class Foo {
     const VERSION = '1.0';
 }
-`)
+`, token.Latest)
 	if file == nil {
 		t.Fatal("expected non-nil file")
 	}
@@ -108,7 +109,7 @@ interface Repository {
     public function find(int $id): mixed;
     public function all(): array;
 }
-`)
+`, token.Latest)
 	if file == nil {
 		t.Fatal("expected non-nil file")
 	}
@@ -155,7 +156,7 @@ func TestParseFileFaultTolerance(t *testing.T) {
 		file := ParseFile(`<?php
 class Foo {
     public function bar() {
-`)
+`, token.Latest)
 		// Should not panic, may return partial results
 		if file == nil {
 			t.Log("incomplete class returned nil (acceptable)")
@@ -167,7 +168,7 @@ class Foo {
 namespace App;
 class Service {
     public string $name;
-`)
+`, token.Latest)
 		if file == nil {
 			t.Log("missing brace returned nil (acceptable)")
 		} else if file.Namespace != "App" {
@@ -176,14 +177,14 @@ class Service {
 	})
 
 	t.Run("empty source", func(t *testing.T) {
-		file := ParseFile("")
+		file := ParseFile("", token.Latest)
 		if file == nil {
 			t.Log("empty source returned nil (acceptable)")
 		}
 	})
 
 	t.Run("just PHP tag", func(t *testing.T) {
-		file := ParseFile("<?php")
+		file := ParseFile("<?php", token.Latest)
 		if file == nil {
 			t.Log("just PHP tag returned nil (acceptable)")
 		}
@@ -199,7 +200,7 @@ class Foo {
 class Baz extends Foo {
     public function qux(): string { return ""; }
 }
-`)
+`, token.Latest)
 	if file == nil {
 		t.Fatal("expected non-nil")
 	}
@@ -216,7 +217,7 @@ use Illuminate\Support\Collection as Coll;
 use function App\Helpers\formatName;
 use const App\Config\MAX_RETRIES;
 class Foo extends Model {}
-`)
+`, token.Latest)
 	if file == nil {
 		t.Fatal("expected non-nil")
 	}
@@ -244,7 +245,7 @@ class Foo {
     private function privMethod(): void {}
     public static function staticMethod(): void {}
 }
-`)
+`, token.Latest)
 	if file == nil || len(file.Classes) == 0 {
 		t.Fatal("expected class")
 	}
@@ -278,7 +279,7 @@ namespace App;
 use \Vendor\Lib\Thing;
 use \Vendor\Lib\Other as Renamed;
 use function \Vendor\Lib\helper;
-`)
+`, token.Latest)
 	want := map[string]string{
 		"Thing":   `Vendor\Lib\Thing`,
 		"Renamed": `Vendor\Lib\Other`,
@@ -299,14 +300,14 @@ func TestParseFileGroupAndCommaImports(t *testing.T) {
 namespace App;
 use Foo\A, Bar\B as BB;
 use Lib\{C, D as E, function f, const K,};
-use function Fn\{g, h};
+use function Fns\{g, h};
 use \Lib\{Deep\X};
 $f = function () use ($x) {};
-`)
+`, token.Latest)
 	want := []string{
 		`class Foo\A A`, `class Bar\B BB`,
 		`class Lib\C C`, `class Lib\D E`, `function Lib\f f`, `const Lib\K K`,
-		`function Fn\g g`, `function Fn\h h`,
+		`function Fns\g g`, `function Fns\h h`,
 		`class Lib\Deep\X X`,
 	}
 	var got []string

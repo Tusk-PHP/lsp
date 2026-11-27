@@ -201,7 +201,7 @@ func (a *Analyzer) resolveDefinitionSymbol(r *resolve.Resolver, uri, source stri
 			}
 		}
 	}
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
 	if ctx == nil {
 		return definitionTarget{}
 	}
@@ -290,7 +290,7 @@ func (a *Analyzer) symbolTarget(r *resolve.Resolver, uri, source string, ctx *so
 
 	// Resolve via use statements
 	if file != nil {
-		for _, u := range ctx.Uses {
+		for _, u := range file.Uses {
 			if u.Alias == word {
 				if s := a.index.Lookup(u.FullName); s != nil {
 					return definitionTarget{sym: s, loc: symbolLocation(s)}
@@ -298,11 +298,8 @@ func (a *Analyzer) symbolTarget(r *resolve.Resolver, uri, source string, ctx *so
 			}
 		}
 		// Try as class name in current namespace
-		fqn := r.ResolveClassName(word, file)
-		if fqn != word {
-			if s := a.index.Lookup(fqn); s != nil {
-				return definitionTarget{sym: s, loc: symbolLocation(s)}
-			}
+		if s := a.index.Lookup(r.ResolveClassName(word, file)); s != nil {
+			return definitionTarget{sym: s, loc: symbolLocation(s)}
 		}
 	}
 
@@ -372,7 +369,7 @@ func (a *Analyzer) definitionForSymfonyCommand(r *resolve.Resolver, uri, source 
 	if cmd == nil {
 		return nil
 	}
-	file := parser.ParseFile(source)
+	file := sourcectx.IndexedFile(a.index, uri, source)
 	if !frameworksymfony.IsConsoleApplication(a.index, a.engine.ChainResolver(r, receiver, source, pos, file)) {
 		return nil
 	}
@@ -554,7 +551,7 @@ func singleLocation(loc *protocol.Location) []protocol.Location {
 
 func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position) []protocol.Location {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
 	if ctx == nil {
 		return nil
 	}
@@ -603,12 +600,12 @@ func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position)
 
 func (a *Analyzer) FindImplementation(uri, source string, pos protocol.Position) []protocol.Location {
 	r := a.engine.Resolver()
-	word, _ := sourcectx.WordAt(source, pos)
-	if word == "" {
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
+	if ctx == nil || ctx.SymbolText == "" {
 		return nil
 	}
 
-	sym := a.resolveSymbolAt(r, sourcectx.Analyze(uri, source, pos).Name(), source)
+	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 	if sym == nil {
 		return nil
 	}
@@ -706,16 +703,14 @@ func (a *Analyzer) FindReferences(uri, source string, pos protocol.Position) []p
 // to reading from the index's stored file URIs via disk.
 func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, readDocument func(string) string) []protocol.Location {
 	r := a.engine.Resolver()
-	word, _ := sourcectx.WordAt(source, pos)
-	if word == "" {
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
+	if ctx == nil || ctx.SymbolText == "" {
 		return nil
 	}
-
-	file := parser.ParseFile(source)
+	word := ctx.SymbolText
 
 	// Try to resolve as a symbol first — this handles properties ($name in declarations)
 	// and member access contexts before falling back to variable scope
-	ctx := sourcectx.Analyze(uri, source, pos)
 	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 
 	// Built-in symbols are opaque to navigation: do not scan the workspace for refs.
@@ -725,13 +720,13 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 
 	// W1 guard: if we were in a member access chain and the receiver/member couldn't
 	// be resolved, do not fall through to name-based lookups.
-	if sym == nil && ctx != nil && (ctx.AccessKind != sourcectx.AccessNone || ctx.FunctionCall) {
+	if sym == nil && (ctx.AccessKind != sourcectx.AccessNone || ctx.FunctionCall) {
 		return nil
 	}
 
 	// Variable references — local scope only (if not resolved as a property/symbol)
 	if sym == nil && strings.HasPrefix(word, "$") && word != "$this" {
-		return a.findVariableReferences(uri, source, pos, word, file)
+		return a.findVariableReferences(uri, source, pos, word)
 	}
 	if sym == nil {
 		// Fallback: definition-only lookup by name (original behavior)
@@ -771,7 +766,7 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 	}
 
 	// Check if it's a class property declaration ($name on a property line)
-	if strings.HasPrefix(word, "$") && file != nil {
+	if strings.HasPrefix(word, "$") {
 		bare := strings.TrimPrefix(word, "$")
 		classFQN := resolve.FindEnclosingClass(file, pos)
 		if classFQN != "" {
@@ -797,14 +792,8 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 	}
 
 	// Try resolving as a class/interface/enum/trait name
-	fqn := ""
-	if file != nil {
-		fqn = r.ResolveClassName(word, file)
-	}
-	if fqn != "" {
-		if sym := a.index.Lookup(fqn); sym != nil {
-			return sym
-		}
+	if sym := a.index.Lookup(r.ResolveClassName(word, file)); sym != nil {
+		return sym
 	}
 
 	// Try direct lookup
@@ -816,8 +805,7 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 }
 
 // findVariableReferences finds all occurrences of a variable within its enclosing function scope.
-func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Position, varName string, file *parser.FileNode) []protocol.Location {
-	_ = file
+func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Position, varName string) []protocol.Location {
 	doc := scope.Collect(source)
 	binding := doc.BindingAt(pos)
 	if binding == nil || binding.Name != varName {
@@ -944,10 +932,7 @@ func sameRange(a, b protocol.Range) bool {
 }
 
 func (a *Analyzer) GetDocumentSymbols(uri, source string) []protocol.DocumentSymbol {
-	file := parser.ParseFile(source)
-	if file == nil {
-		return nil
-	}
+	file := sourcectx.IndexedFile(a.index, uri, source)
 	var ds []protocol.DocumentSymbol
 	for _, cls := range file.Classes {
 		if cls.Name == "" {
@@ -1093,45 +1078,75 @@ func (a *Analyzer) GetWorkspaceSymbols(query string) []protocol.SymbolInformatio
 }
 
 func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *protocol.SignatureHelp {
-	callee, activeParam, ok := sourcectx.CallAt(uri, source, pos)
+	call, ok := sourcectx.CallAt(a.index, uri, source, pos)
 	if !ok {
 		return nil
 	}
-	sym := a.symbolTarget(a.engine.Resolver(), uri, source, callee).sym
+	sym := a.calledSymbol(uri, source, call)
 	if sym == nil {
 		return nil
 	}
-	sig := protocol.SignatureInformation{Label: sym.Name + formatParamLabel(sym)}
-	for _, p := range sym.Params {
-		l := ""
-		if p.Type != "" {
-			l = p.Type + " "
+	label, params := sym.Name+formatParamLabel(sym), sym.Params
+	if sym.Kind == symbols.KindClass {
+		label, params = sym.Name+"()", nil
+		if ctor := a.engine.Resolver().FindAccessedMember(sym.FQN, "__construct", resolve.CallAccess); ctor != nil {
+			label, params = sym.Name+formatParams(ctor), ctor.Params
 		}
-		l += p.Name
-		sig.Parameters = append(sig.Parameters, protocol.ParameterInformation{Label: l})
 	}
-	// Clamp activeParam so it never exceeds the last valid parameter index.
-	// e.g. a 2-parameter function must have activeParameter in [0, 1].
-	if maxParam := len(sym.Params) - 1; maxParam < 0 {
-		activeParam = 0
-	} else if activeParam > maxParam {
-		activeParam = maxParam
+	sig := protocol.SignatureInformation{Label: label, Parameters: make([]protocol.ParameterInformation, 0, len(params))}
+	for _, p := range params {
+		sig.Parameters = append(sig.Parameters, protocol.ParameterInformation{Label: paramLabel(p)})
 	}
-	return &protocol.SignatureHelp{Signatures: []protocol.SignatureInformation{sig}, ActiveParameter: activeParam}
+	return &protocol.SignatureHelp{Signatures: []protocol.SignatureInformation{sig}, ActiveParameter: activeParameter(params, call)}
+}
+
+func (a *Analyzer) calledSymbol(uri, source string, call sourcectx.Call) *symbols.Symbol {
+	r := a.engine.Resolver()
+	switch call.Callee {
+	case sourcectx.CalleeFunction:
+		return r.CalledFunction(call.Name, call.Namespace.View(&parser.FileNode{}))
+	case sourcectx.CalleeAnonymousClass:
+		class := sourcectx.IndexedFile(a.index, uri, source).AnonymousClassDeclaredAt(call.Position.Line, call.Position.Character)
+		if class == nil {
+			return nil
+		}
+		return a.index.Lookup(class.FullName)
+	}
+	return a.symbolTarget(r, uri, source, sourcectx.Analyze(a.index, uri, source, call.Position)).sym
+}
+
+func activeParameter(params []symbols.ParamInfo, call sourcectx.Call) int {
+	last := len(params) - 1
+	if last < 0 {
+		return 0
+	}
+	if call.Named != "" {
+		for i, p := range params {
+			if p.Name == "$"+call.Named {
+				return i
+			}
+		}
+		if params[last].IsVariadic {
+			return last
+		}
+	}
+	return min(call.Argument, last)
+}
+
+func paramLabel(p symbols.ParamInfo) string {
+	if p.Type == "" {
+		return p.Name
+	}
+	return p.Type + " " + p.Name
 }
 
 // formatParams returns the parenthesized parameter list for a symbol, e.g.
 // "(Type $a, $b)". Each parameter is rendered as "Type $name" when a type is
 // present, or just "$name" otherwise. The return type is not included.
 func formatParams(sym *symbols.Symbol) string {
-	var ps []string
+	ps := make([]string, 0, len(sym.Params))
 	for _, p := range sym.Params {
-		s := ""
-		if p.Type != "" {
-			s = p.Type + " "
-		}
-		s += p.Name
-		ps = append(ps, s)
+		ps = append(ps, paramLabel(p))
 	}
 	return "(" + strings.Join(ps, ", ") + ")"
 }
@@ -1156,7 +1171,7 @@ type ReferenceVariant struct {
 // resolvable named symbol.
 func (a *Analyzer) CopyReference(uri, source string, pos protocol.Position) []ReferenceVariant {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
 	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 	if sym == nil {
 		return nil
@@ -1253,7 +1268,7 @@ func getWordRangeAt(source string, pos protocol.Position) (string, protocol.Rang
 // the range and current name as a placeholder.
 func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *protocol.PrepareRenameResult {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
 	if ctx == nil {
 		return nil
 	}
@@ -1363,7 +1378,7 @@ func isPrepareRenameVariableBindingSupported(binding *scope.Binding, word string
 // readDocument is used to read file contents for files not open in the editor.
 func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName string, readDocument func(string) string) *protocol.WorkspaceEdit {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(a.index, uri, source, pos)
 	if ctx == nil {
 		return nil
 	}
@@ -1501,19 +1516,16 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 		return actions
 	}
 
-	file := parser.ParseFile(source)
-	if file == nil {
-		return actions
-	}
+	tree, file := sourcectx.IndexedTree(a.index, uri, source)
 
-	actions = append(actions, a.unknownClassCodeActions(uri, source, file, params)...)
+	actions = append(actions, a.unknownClassCodeActions(uri, source, tree, file, params)...)
 	actions = append(actions, a.importUnusedImportQuickFixes(uri, source, params)...)
 	actions = append(actions, IgnoreDiagnosticActions(uri, source, params)...)
 	if action := a.generateConstructorCodeAction(uri, source, parseResult, params.Context.Only, params.Range.Start); action != nil {
 		actions = append(actions, *action)
 	}
-	actions = append(actions, a.generateGetterSetterCodeActions(uri, source, parseResult, params.Context.Only, params.Range.Start)...)
-	actions = append(actions, a.implementMissingMethodsCodeActions(uri, source, parseResult, params.Context.Only, params.Range.Start)...)
+	actions = append(actions, a.generateGetterSetterCodeActions(uri, source, file, params.Context.Only, params.Range.Start)...)
+	actions = append(actions, a.implementMissingMethodsCodeActions(uri, source, file, params.Context.Only, params.Range.Start)...)
 	if action := a.extractVariableCodeAction(uri, source, params); action != nil {
 		actions = append(actions, *action)
 	}
@@ -1643,10 +1655,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 // GetFileNamespace returns the FQN of the primary class/interface/enum in a file,
 // or the namespace if no named type exists.
 func (a *Analyzer) GetFileNamespace(uri, source string) string {
-	file := parser.ParseFile(source)
-	if file == nil {
-		return ""
-	}
+	file := sourcectx.IndexedFile(a.index, uri, source)
 	ns := file.Namespace
 	for _, cls := range file.Classes {
 		if ns != "" {
@@ -1673,10 +1682,7 @@ func (a *Analyzer) GetFileNamespace(uri, source string) string {
 // the namespace declaration, all use imports across the workspace, FQN references,
 // and computing the new file path per PSR-4 autoload mappings.
 func (a *Analyzer) MoveToNamespace(uri, source, targetNS string, autoloadEntries []composer.AutoloadEntry, readDocument func(string) string) *protocol.WorkspaceEdit {
-	file := parser.ParseFile(source)
-	if file == nil {
-		return nil
-	}
+	file := sourcectx.IndexedFile(a.index, uri, source)
 
 	oldNS := file.Namespace
 
@@ -1768,7 +1774,7 @@ func (a *Analyzer) MoveToNamespace(uri, source, targetNS string, autoloadEntries
 			continue
 		}
 
-		fileFile := parser.ParseFile(fileSource)
+		fileFile := parser.ParseFileIn(fileSource, a.index.GrammarOf(fileURI))
 		fileLines := strings.Split(fileSource, "\n")
 		var fileEdits []protocol.TextEdit
 

@@ -154,7 +154,7 @@ func (p *parser) statementBody() ast.Stmt {
 	case token.Use:
 		return p.use()
 	case token.Const:
-		return p.constStmt(start, nil)
+		return p.constStmt(start, doc, nil)
 	case token.Function:
 		if p.isFunctionDecl() {
 			return p.functionDecl(start, doc, nil)
@@ -216,7 +216,7 @@ func (p *parser) attributedDecl(start uint32, doc ast.Span) ast.Stmt {
 		return p.enumDecl(start, doc, attrs)
 	case token.Const:
 		p.requires(token.PHP85, start, "attributes on constants")
-		return p.constStmt(start, attrs)
+		return p.constStmt(start, doc, attrs)
 	}
 	if !p.enter() {
 		return &ast.ExprStmt{Expr: &ast.BadExpr{Span: p.span(start)}, Span: p.span(start)}
@@ -227,11 +227,11 @@ func (p *parser) attributedDecl(start uint32, doc ast.Span) ast.Stmt {
 	return &ast.ExprStmt{Expr: e, Span: p.span(start)}
 }
 
-func (p *parser) constStmt(start uint32, attrs []*ast.AttributeGroup) ast.Stmt {
+func (p *parser) constStmt(start uint32, doc ast.Span, attrs []*ast.AttributeGroup) ast.Stmt {
 	p.next()
 	items := p.constItems(p.identifier)
 	p.endStatement()
-	return &ast.Const{Attrs: attrs, Items: items, Span: p.span(start)}
+	return &ast.Const{Attrs: attrs, Doc: doc, Items: items, Span: p.span(start)}
 }
 
 func (p *parser) staticVars() ast.Stmt {

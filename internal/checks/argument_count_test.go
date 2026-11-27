@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -28,7 +29,7 @@ $a = env(
     strtolower('x') . '_horizon:',
 );
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		assertNoFindings(t, checker.Check(file, source, idx))
 	})
 
@@ -49,12 +50,12 @@ class WP_User {
 function &init( $a, $b ) {}
 $item = new Item( 1, 2, 3 );
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		assertNoFindings(t, checker.Check(file, source, idx))
 
 		// A real call to the global function is still checked.
 		call := "<?php\ninit( 1, 2 );\n"
-		if got := checker.Check(parser.ParseFile(call), call, idx); len(got) != 1 {
+		if got := checker.Check(parser.ParseFile(call, token.Latest), call, idx); len(got) != 1 {
 			t.Errorf("expected the real init() call to be flagged, got %+v", got)
 		}
 	})
@@ -68,7 +69,7 @@ function greet(string $name): string {
 		source := `<?php
 $msg = greet("Alice");
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
@@ -85,7 +86,7 @@ $result = add(1);
 $ok = pad('x');
 $ok = pad('x', 3, '-');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		assertFindingCodes(t, findings, []string{"argument-count-mismatch"})
 		if len(findings) == 1 && findings[0].Message != "Too few arguments to add(): 1 passed, at least 2 required" {
@@ -102,7 +103,7 @@ function greet(string $name): string {
 		source := `<?php
 $msg = greet("Alice", "extra");
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		assertFindingCodes(t, findings, []string{"argument-count-mismatch"})
 	})
@@ -114,7 +115,7 @@ function doNothing(): void {}
 		source := `<?php
 doNothing();
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
@@ -128,7 +129,7 @@ function greet(string $name, string $greeting = "Hello"): string {
 		source := `<?php
 $msg = greet("Alice");
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
@@ -142,7 +143,7 @@ function sum(int ...$nums): int {
 		source := `<?php
 $s = sum(1, 2, 3, 4, 5);
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
@@ -157,7 +158,7 @@ function add(int $a, int $b): int {
 $args = [1, 2];
 $result = add(...$args);
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
@@ -171,7 +172,7 @@ function add(int $a, int $b): int {
 		source := `<?php
 $result = add(a: 1, b: 2);
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
@@ -180,7 +181,7 @@ $result = add(a: 1, b: 2);
 		source := `<?php
 doSomething(1, 2, 3);
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -208,7 +209,7 @@ use App\Math;
 $result = Math::multiply(1, 2, 3, 4);
 $result = Math::multiply(1);
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		assertFindingCodes(t, findings, []string{"argument-count-mismatch"})
 		if len(findings) == 1 && findings[0].StartLine != 4 {
@@ -229,7 +230,7 @@ namespace App;
 use App\Magic;
 Magic::doThing(1, 2, 3);
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		// __call is defined, so check is skipped
 		assertNoFindings(t, findings)
@@ -240,7 +241,7 @@ Magic::doThing(1, 2, 3);
 		source := `<?php
 $result = unknownFunction(1, 2, 3);
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
@@ -258,7 +259,7 @@ class Greeter {
 $greeter = new App\Greeter();
 $greeter->greet("Alice", "extra"); // extra arg via arrow, but we cannot check
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		// Arrow method calls are skipped (we can't resolve $greeter's type)
 		assertNoFindings(t, findings)
@@ -271,7 +272,7 @@ function init(): void {}
 		source := `<?php
 init();
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, idx)
 		assertNoFindings(t, findings)
 	})
@@ -310,7 +311,7 @@ $f = function () { $this->send('a'); };
 $mailer->send(...$args);
 $mailer->send(to: 'a', subject: 'b');
 `
-	got := checker.Check(parser.ParseFile(source), source, idx)
+	got := checker.Check(parser.ParseFile(source, token.Latest), source, idx)
 	var messages []string
 	for _, f := range got {
 		messages = append(messages, f.Message)
@@ -361,7 +362,7 @@ if ($unrelated) {
     pair(1);
 }
 `
-	got := checker.Check(parser.ParseFile(source), source, idx)
+	got := checker.Check(parser.ParseFile(source, token.Latest), source, idx)
 	var lines []int
 	for _, f := range got {
 		lines = append(lines, f.StartLine)
@@ -388,7 +389,7 @@ elseif (PHP_VERSION_ID < 80000):
 endif;
 pair(1);
 `
-	got := (&ArgumentCountRule{}).Check(parser.ParseFile(source), source, idx)
+	got := (&ArgumentCountRule{}).Check(parser.ParseFile(source, token.Latest), source, idx)
 	var lines []int
 	for _, f := range got {
 		lines = append(lines, f.StartLine)
@@ -411,7 +412,7 @@ $dup->run(1);
 $dup->run();
 `
 	var got []string
-	for _, f := range (&ArgumentCountRule{TypeResolver: dupResolver}).Check(parser.ParseFile(source), source, idx) {
+	for _, f := range (&ArgumentCountRule{TypeResolver: dupResolver}).Check(parser.ParseFile(source, token.Latest), source, idx) {
 		got = append(got, f.Message)
 	}
 	want := []string{
@@ -431,7 +432,7 @@ func TestArgumentCountWhenEveryDeclarationRejectsDifferently(t *testing.T) {
 	idx.IndexFile("file:///a.php", "<?php\nfunction h($a) {}\n")
 	idx.IndexFile("file:///b.php", "<?php\nfunction h($a, $b, $c) {}\n")
 	source := "<?php\nh(1, 2);\n"
-	got := (&ArgumentCountRule{}).Check(parser.ParseFile(source), source, idx)
+	got := (&ArgumentCountRule{}).Check(parser.ParseFile(source, token.Latest), source, idx)
 	if len(got) != 1 || got[0].Message != "Wrong number of arguments to h(): 2 passed, which none of its 2 declarations accepts" {
 		t.Errorf("too many for one declaration and too few for the other: %+v", got)
 	}
