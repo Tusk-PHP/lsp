@@ -249,6 +249,8 @@ func renderMarkdown(rep Report) string {
 		b.WriteString("\n</details>\n\n")
 	}
 
+	writeTagTable(&b, rep)
+
 	b.WriteString("## Reading these numbers\n\n")
 	b.WriteString("- **ready** is time from process spawn until the server first answers a cross-file question correctly. It is the only start-up number comparable across servers, because each one signals \"indexed\" differently (or not at all).\n")
 	b.WriteString("- **Correctness** counts only cases the server advertises support for. `n/a` means the capability was not advertised; those cases are excluded from the denominator rather than counted as failures.\n")
@@ -257,6 +259,80 @@ func renderMarkdown(rep Report) string {
 	b.WriteString("- Memory and CPU cover the server process and its children. A Node or PHP server carries its runtime in these numbers; that is a real cost to the user, but it is not a like-for-like comparison of indexing strategy.\n")
 	b.WriteString("- The case suite was written against this repository's fixtures. It covers what these fixtures exercise, not the whole of PHP.\n")
 	return b.String()
+}
+
+// statsByTag counts one server's results per case tag, across every
+// workspace it ran, so a tag shared by several suites (`variable`, `enum`,
+// `hooks`) reads as one score.
+func statsByTag(rep Report, serverID string) map[string]*featureStat {
+	out := map[string]*featureStat{}
+	for _, r := range rep.Runs {
+		if r.ServerID != serverID {
+			continue
+		}
+		for _, c := range r.Cases {
+			for _, tag := range c.Tags {
+				st, ok := out[tag]
+				if !ok {
+					st = &featureStat{}
+					out[tag] = st
+				}
+				switch c.Status {
+				case StatusPass:
+					st.Pass++
+				case StatusFail:
+					st.Fail++
+				case StatusUnsupported:
+					st.Unsupported++
+				case StatusSkipped:
+					st.Skipped++
+				default:
+					st.Errored++
+				}
+			}
+		}
+	}
+	return out
+}
+
+// writeTagTable writes correctness per tag across all workspaces, one column
+// per server, tags in alphabetical order.
+func writeTagTable(b *strings.Builder, rep Report) {
+	var servers []ServerRun
+	seen := map[string]bool{}
+	for _, r := range rep.Runs {
+		if !seen[r.ServerID] {
+			seen[r.ServerID] = true
+			servers = append(servers, r)
+		}
+	}
+	stats := make([]map[string]*featureStat, len(servers))
+	tagSet := map[string]bool{}
+	for i, r := range servers {
+		stats[i] = statsByTag(rep, r.ServerID)
+		for tag := range stats[i] {
+			tagSet[tag] = true
+		}
+	}
+	if len(tagSet) == 0 {
+		return
+	}
+	tags := make([]string, 0, len(tagSet))
+	for tag := range tagSet {
+		tags = append(tags, tag)
+	}
+	sort.Strings(tags)
+	b.WriteString("## Correctness by tag, all workspaces (cases passed / cases graded)\n\n")
+	b.WriteString("| tag | " + strings.Join(names(servers), " | ") + " |\n")
+	b.WriteString(strings.Repeat("|---", len(servers)+1) + "|\n")
+	for _, tag := range tags {
+		fmt.Fprintf(b, "| %s ", tag)
+		for i := range servers {
+			b.WriteString("| " + correctnessCell(stats[i][tag]) + " ")
+		}
+		b.WriteString("|\n")
+	}
+	b.WriteString("\n")
 }
 
 func readyCell(r ServerRun) string {
