@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -48,7 +49,7 @@ func TestEloquentLocalScopes(t *testing.T) {
 	p.index.IndexFile("file:///app/Models/Post.php", postModelSource)
 
 	preamble := "<?php\nuse App\\Models\\Post;\n\n\n\n"
-	file := parser.ParseFile(preamble)
+	file := parser.ParseFile(preamble, token.Latest)
 	typed := func(expr string) string {
 		return p.ResolveExpressionTypeTyped(expr, preamble, protocol.Position{Line: 4}, file).String()
 	}

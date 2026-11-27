@@ -8,7 +8,7 @@ Back to the [README](../README.md).
 |---------|---------|-------------|
 | `tuskPhpLsp.enable` | `true` | Enable/disable the extension |
 | `tuskPhpLsp.executablePath` | `""` | Custom path to the binary |
-| `tuskPhpLsp.phpVersion` | `"8.6"` | Target PHP version (`8.0`-`8.6`) |
+| `tuskPhpLsp.phpVersion` | `"8.6"` | Target PHP version (`7.4`, `8.0`-`8.6`), used when `composer.json` requires none. It decides which builtins exist and how files are parsed; without it the `php` on your PATH decides; with neither, builtins follow `8.6` and any version from `7.4` to `8.6` may be parsed. With a `composer.json` PHP constraint, builtins follow the oldest version it admits, and files are parsed with the versions it admits. Where several versions are possible, each file is first parsed as the newest one it has no syntax error on, or as the newest when it has errors on all of them; after an edit it keeps that version, and moves to the newest once that parses it without errors. |
 | `tuskPhpLsp.framework` | `"auto"` | Framework: `auto`, `laravel`, `symfony`, `magento`, `none` |
 | `tuskPhpLsp.containerAware` | `true` | Enable DI container analysis |
 | `tuskPhpLsp.diagnostics.enable` | `true` | Enable diagnostics |

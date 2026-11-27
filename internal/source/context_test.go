@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -25,12 +27,12 @@ class Handler
     }
 }`
 
-	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 11, Character: 14})
+	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 11, Character: 14}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
-	if ctx.Namespace != "App\\Services" {
-		t.Fatalf("Namespace = %q, want %q", ctx.Namespace, "App\\Services")
+	if ctx.File.Namespace != "App\\Services" {
+		t.Fatalf("Namespace = %q, want %q", ctx.File.Namespace, "App\\Services")
 	}
 	if ctx.SymbolText != "name" {
 		t.Fatalf("SymbolText = %q, want %q", ctx.SymbolText, "name")
@@ -47,8 +49,8 @@ class Handler
 	if ctx.EnclosingFQN != "App\\Services\\Handler" {
 		t.Fatalf("EnclosingFQN = %q", ctx.EnclosingFQN)
 	}
-	if len(ctx.Uses) != 1 || ctx.Uses[0].Alias != "User" {
-		t.Fatalf("Uses = %#v, want aliased User import", ctx.Uses)
+	if len(ctx.File.Uses) != 1 || ctx.File.Uses[0].Alias != "User" {
+		t.Fatalf("Uses = %#v, want aliased User import", ctx.File.Uses)
 	}
 	if ctx.Scope == nil || ctx.Scope.MethodName != "run" {
 		t.Fatalf("Scope = %#v, want run method scope", ctx.Scope)
@@ -107,12 +109,12 @@ function formatUser(User $user): string
 }
 `
 
-	ctx := Analyze("file:///helpers.php", source, protocol.Position{Line: 7, Character: 18})
+	ctx := Analyze("file:///helpers.php", source, protocol.Position{Line: 7, Character: 18}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
-	if ctx.Namespace != "App\\Helpers" {
-		t.Fatalf("Namespace = %q, want %q", ctx.Namespace, "App\\Helpers")
+	if ctx.File.Namespace != "App\\Helpers" {
+		t.Fatalf("Namespace = %q, want %q", ctx.File.Namespace, "App\\Helpers")
 	}
 	if ctx.Scope == nil {
 		t.Fatal("expected function scope")
@@ -140,7 +142,7 @@ class Handler
 }
 `
 
-	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 8, Character: 31})
+	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 8, Character: 31}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
@@ -172,7 +174,7 @@ class Handler
 }
 `
 
-	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 8, Character: 49})
+	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 8, Character: 49}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
@@ -211,26 +213,26 @@ namespace App\Two {
 }
 `
 
-	firstCtx := Analyze("file:///multi.php", source, protocol.Position{Line: 5, Character: 21})
+	firstCtx := Analyze("file:///multi.php", source, protocol.Position{Line: 5, Character: 21}, phpparser.OnlyGrammar(token.Latest))
 	if firstCtx == nil {
 		t.Fatal("expected first cursor context")
 	}
-	if firstCtx.Namespace != "App\\One" {
-		t.Fatalf("first namespace = %q, want %q", firstCtx.Namespace, "App\\One")
+	if firstCtx.File.Namespace != "App\\One" {
+		t.Fatalf("first namespace = %q, want %q", firstCtx.File.Namespace, "App\\One")
 	}
-	if len(firstCtx.Uses) != 1 || firstCtx.Uses[0].Alias != "Thing" {
-		t.Fatalf("first uses = %#v, want Thing import", firstCtx.Uses)
+	if len(firstCtx.File.Uses) != 1 || firstCtx.File.Uses[0].Alias != "Thing" {
+		t.Fatalf("first uses = %#v, want Thing import", firstCtx.File.Uses)
 	}
 
-	secondCtx := Analyze("file:///multi.php", source, protocol.Position{Line: 13, Character: 20})
+	secondCtx := Analyze("file:///multi.php", source, protocol.Position{Line: 13, Character: 20}, phpparser.OnlyGrammar(token.Latest))
 	if secondCtx == nil {
 		t.Fatal("expected second cursor context")
 	}
-	if secondCtx.Namespace != "App\\Two" {
-		t.Fatalf("second namespace = %q, want %q", secondCtx.Namespace, "App\\Two")
+	if secondCtx.File.Namespace != "App\\Two" {
+		t.Fatalf("second namespace = %q, want %q", secondCtx.File.Namespace, "App\\Two")
 	}
-	if len(secondCtx.Uses) != 1 || secondCtx.Uses[0].Alias != "Tool" {
-		t.Fatalf("second uses = %#v, want Tool import", secondCtx.Uses)
+	if len(secondCtx.File.Uses) != 1 || secondCtx.File.Uses[0].Alias != "Tool" {
+		t.Fatalf("second uses = %#v, want Tool import", secondCtx.File.Uses)
 	}
 	if secondCtx.EnclosingFQN != "App\\Two\\Handler" {
 		t.Fatalf("EnclosingFQN = %q, want %q", secondCtx.EnclosingFQN, "App\\Two\\Handler")
@@ -249,12 +251,12 @@ class BeforeImports
 use App\Later\Thing;
 `
 
-	ctx := Analyze("file:///imports.php", source, protocol.Position{Line: 4, Character: 20})
+	ctx := Analyze("file:///imports.php", source, protocol.Position{Line: 4, Character: 20}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
-	if len(ctx.Uses) != 0 {
-		t.Fatalf("Uses = %#v, want no active imports before declaration", ctx.Uses)
+	if len(ctx.File.Uses) != 0 {
+		t.Fatalf("Uses = %#v, want no active imports before declaration", ctx.File.Uses)
 	}
 }
 
@@ -276,10 +278,10 @@ $f = function ($a) use ($b) {
 };
 $after = 1;
 `
-	if ctx := Analyze("file:///c.php", source, positionAfter(t, source, "return $")); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure || ctx.Scope.StartLine != 1 || ctx.Scope.EndLine != 3 {
+	if ctx := Analyze("file:///c.php", source, positionAfter(t, source, "return $"), phpparser.OnlyGrammar(token.Latest)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure || ctx.Scope.StartLine != 1 || ctx.Scope.EndLine != 3 {
 		t.Errorf("inside the closure body: Scope = %#v, want a closure on lines 1-3", ctx.Scope)
 	}
-	if ctx := Analyze("file:///c.php", source, positionAfter(t, source, "$aft")); ctx.Scope != nil {
+	if ctx := Analyze("file:///c.php", source, positionAfter(t, source, "$aft"), phpparser.OnlyGrammar(token.Latest)); ctx.Scope != nil {
 		t.Errorf("after the closure: Scope = %#v, want none", ctx.Scope)
 	}
 }
@@ -294,13 +296,13 @@ func TestAnalyzeArrowFunctionScopeEndsWhereItsExpressionDoes(t *testing.T) {
 		{"running to the end of the file", "<?php\n$f = fn($x) => $x / 4", "/ ", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if ctx := Analyze("file:///a.php", tc.source, positionAfter(t, tc.source, tc.inside)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure {
+			if ctx := Analyze("file:///a.php", tc.source, positionAfter(t, tc.source, tc.inside), phpparser.OnlyGrammar(token.Latest)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure {
 				t.Errorf("inside the arrow function: Scope = %#v, want a closure", ctx.Scope)
 			}
 			if tc.outside == "" {
 				return
 			}
-			if ctx := Analyze("file:///a.php", tc.source, positionAfter(t, tc.source, tc.outside)); ctx.Scope != nil && ctx.Scope.Kind == ScopeClosure {
+			if ctx := Analyze("file:///a.php", tc.source, positionAfter(t, tc.source, tc.outside), phpparser.OnlyGrammar(token.Latest)); ctx.Scope != nil && ctx.Scope.Kind == ScopeClosure {
 				t.Errorf("after the arrow function: Scope = %#v, want no closure", ctx.Scope)
 			}
 		})
@@ -315,14 +317,14 @@ use const App\Support\LIMIT;
 use App\Models\User as Account;
 $x = 1;
 `
-	ctx := Analyze("file:///u.php", source, positionAfter(t, source, "$x"))
+	ctx := Analyze("file:///u.php", source, positionAfter(t, source, "$x"), phpparser.OnlyGrammar(token.Latest))
 	want := []parser.UseNode{
 		{FullName: "App\\Support\\helper", Alias: "helper", Kind: "function", StartLine: 2},
 		{FullName: "App\\Support\\LIMIT", Alias: "LIMIT", Kind: "const", StartLine: 3},
 		{FullName: "App\\Models\\User", Alias: "Account", Kind: "class", StartLine: 4},
 	}
-	if !reflect.DeepEqual(ctx.Uses, want) {
-		t.Errorf("Uses = %#v, want %#v", ctx.Uses, want)
+	if !reflect.DeepEqual(ctx.File.Uses, want) {
+		t.Errorf("Uses = %#v, want %#v", ctx.File.Uses, want)
 	}
 }
 
@@ -336,27 +338,87 @@ func BenchmarkNewDocument(b *testing.B) {
 	source := src.String()
 	b.ReportAllocs()
 	for b.Loop() {
-		if NewDocument("file:///a.php", source).File() == nil {
+		if NewDocument("file:///a.php", source, phpparser.OnlyGrammar(token.Latest)).File() == nil {
 			b.Fatal("the file parses")
+		}
+	}
+}
+
+func TestAnalyzeAdjacentClassesEndAtTheirClosingBrace(t *testing.T) {
+	source := "<?php\nnamespace App;\nclass A {\n    public function a() {}\n}\nclass B {\n    public function b() { return $this; }\n}\nclass C {}  class D { public function d() {} }\n"
+	for _, c := range []struct {
+		name      string
+		pos       protocol.Position
+		enclosing string
+		method    string
+	}{
+		{"the first line of the next class", protocol.Position{Line: 5, Character: 2}, "App\\B", ""},
+		{"a method of the next class", protocol.Position{Line: 6, Character: 32}, "App\\B", "b"},
+		{"the closing brace of the first class", protocol.Position{Line: 4, Character: 0}, "App\\A", ""},
+		{"a class after another on the same line", protocol.Position{Line: 8, Character: 43}, "App\\D", "d"},
+		{"between two classes on one line", protocol.Position{Line: 8, Character: 11}, "", ""},
+	} {
+		ctx := Analyze("file:///classes.php", source, c.pos, phpparser.OnlyGrammar(token.Latest))
+		if ctx.EnclosingFQN != c.enclosing {
+			t.Errorf("%s: EnclosingFQN = %q, want %q", c.name, ctx.EnclosingFQN, c.enclosing)
+		}
+		method := ""
+		if ctx.Scope != nil {
+			method = ctx.Scope.MethodName
+		}
+		if method != c.method {
+			t.Errorf("%s: method scope %q, want %q", c.name, method, c.method)
 		}
 	}
 }
 
 func TestDocumentOutsideItsLines(t *testing.T) {
 	source := "<?php\nnamespace App;\nclass Shop {}\n"
-	doc := NewDocument("file:///a.php", source)
+	doc := NewDocument("file:///a.php", source, phpparser.OnlyGrammar(token.Latest))
 	if file := doc.File(); file == nil || len(file.Classes) != 1 || file.Classes[0].Name != "Shop" {
 		t.Fatalf("the document's declarations are the parsed file's: %+v", file)
 	}
-	if name := Analyze("file:///a.php", source, protocol.Position{Line: 2, Character: 7}).Name(); name == nil || name.SymbolText != "Shop" {
+	if name := Analyze("file:///a.php", source, protocol.Position{Line: 2, Character: 7}, phpparser.OnlyGrammar(token.Latest)).Name(); name == nil || name.SymbolText != "Shop" {
 		t.Errorf("the name under the cursor is Shop, got %+v", name)
 	}
 	for _, pos := range []protocol.Position{{Line: -1}, {Line: 10}} {
 		if ctx := doc.At(pos); ctx != nil {
 			t.Errorf("At(%v) = %+v, want nil", pos, ctx)
 		}
-		if name := Analyze("file:///a.php", source, pos).Name(); name != nil {
+		if name := Analyze("file:///a.php", source, pos, phpparser.OnlyGrammar(token.Latest)).Name(); name != nil {
 			t.Errorf("Analyze(%v).Name() = %+v, want nil", pos, name)
+		}
+	}
+}
+
+func TestAnalyzeNamespaceOperatorIsNotADeclaration(t *testing.T) {
+	source := "<?php\nnamespace App;\nuse App\\Models\\User;\nnamespace\\foo();\nfunction bar() {}\n"
+	ctx := Analyze("file:///ns.php", source, protocol.Position{Line: 4, Character: 10}, phpparser.OnlyGrammar(token.Latest))
+	if ctx.File.Namespace != "App" {
+		t.Errorf("Namespace after namespace\\foo() = %q, want App", ctx.File.Namespace)
+	}
+	if len(ctx.File.Uses) != 1 || ctx.File.Uses[0].FullName != "App\\Models\\User" {
+		t.Errorf("Uses after namespace\\foo() = %#v, want the User import", ctx.File.Uses)
+	}
+	if ctx.Scope == nil || ctx.Scope.Kind != ScopeFunction || ctx.Scope.Name != "bar" {
+		t.Errorf("Scope = %#v, want function bar", ctx.Scope)
+	}
+}
+
+func TestAnalyzeCursorAfterAFileLevelArrowFunctionIsInNoScope(t *testing.T) {
+	for _, source := range []string{
+		"<?php\nmap(fn($x) => $x + 1); $later;\n",
+		"<?php\n$double = fn($x) => $x * 2;\n$later;\n",
+	} {
+		lines := strings.Split(source, "\n")
+		inside := protocol.Position{Line: 1, Character: strings.Index(lines[1], "$x ") + 1}
+		if ctx := Analyze("file:///a.php", source, inside, phpparser.OnlyGrammar(token.Latest)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure {
+			t.Errorf("%q: inside the arrow function, Scope = %#v, want a closure", source, ctx.Scope)
+		}
+		line := len(lines) - 2
+		after := protocol.Position{Line: line, Character: strings.Index(lines[line], "$later") + 2}
+		if ctx := Analyze("file:///a.php", source, after, phpparser.OnlyGrammar(token.Latest)); ctx.Scope != nil {
+			t.Errorf("%q: after the arrow function, Scope = %#v, want none", source, ctx.Scope)
 		}
 	}
 }

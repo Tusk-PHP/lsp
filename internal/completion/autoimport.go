@@ -5,6 +5,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -56,10 +57,10 @@ func importKindOf(kind string) importKind {
 // once per request so the file's names and the insertion line are worked
 // out once, not per item.
 type importPlanner struct {
-	source string
-	file   *parser.FileNode
-	index  *symbols.Index
-	style  string
+	file  *parser.FileNode
+	site  sourcectx.UseSite
+	index *symbols.Index
+	style string
 
 	// Per kind: lower-cased name brought in by a `use` → the FQN.
 	imported [importKinds]map[string]string
@@ -74,17 +75,14 @@ type importPlanner struct {
 	// namespace → their FQNs, filled from the index on first use.
 	sameNamespace       [importKinds]map[string]string
 	sameNamespaceLoaded bool
-
-	insertLine int // -1 until computed
 }
 
-func (p *Provider) newImportPlanner(source string, file *parser.FileNode) *importPlanner {
+func (p *Provider) newImportPlanner(file *parser.FileNode, site sourcectx.UseSite) *importPlanner {
 	pl := &importPlanner{
-		source:     source,
-		file:       file,
-		index:      p.index,
-		style:      normalizeAliasStyle(p.aliasStyle),
-		insertLine: -1,
+		file:  file,
+		site:  site,
+		index: p.index,
+		style: normalizeAliasStyle(p.aliasStyle),
 	}
 	if file == nil {
 		return pl
@@ -271,45 +269,7 @@ func (pl *importPlanner) useEdit(kind importKind, fqn, alias string) []protocol.
 		b.WriteString(alias)
 	}
 	b.WriteString(";\n")
-	line := pl.useInsertLine()
-	return []protocol.TextEdit{{
-		Range: protocol.Range{
-			Start: protocol.Position{Line: line, Character: 0},
-			End:   protocol.Position{Line: line, Character: 0},
-		},
-		NewText: b.String(),
-	}}
-}
-
-// useInsertLine is the line a new `use` goes on: after the last one, else
-// after the namespace declaration with a blank line, else after `<?php`.
-func (pl *importPlanner) useInsertLine() int {
-	if pl.insertLine >= 0 {
-		return pl.insertLine
-	}
-	line := 0
-	if len(pl.file.Uses) > 0 {
-		line = pl.file.Uses[len(pl.file.Uses)-1].StartLine + 1
-	} else {
-		rest := pl.source
-		for i := 0; rest != ""; i++ {
-			cur := rest
-			if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
-				cur, rest = rest[:nl], rest[nl+1:]
-			} else {
-				rest = ""
-			}
-			if strings.HasPrefix(strings.TrimSpace(cur), "namespace ") {
-				line = i + 2 // blank line after namespace
-				break
-			}
-		}
-		if line == 0 {
-			line = 1 // no namespace: after <?php
-		}
-	}
-	pl.insertLine = line
-	return line
+	return []protocol.TextEdit{pl.site.Insert(b.String())}
 }
 
 // foldKey lower-cases an ASCII s into buf, so that a lookup such as
