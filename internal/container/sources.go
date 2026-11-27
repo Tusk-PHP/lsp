@@ -19,6 +19,7 @@ const (
 	phaseLaravelProvider sourcePhase = iota
 	phaseSymfonyServicesYAML
 	phaseSymfonyServicesPHP
+	phaseSymfonyAttributeAlias
 	phaseSymfonyClass
 )
 
@@ -26,10 +27,14 @@ type contribution interface {
 	apply(set *bindingSet)
 }
 
-type source struct {
-	seq          uint64
+type part struct {
 	phase        sourcePhase
 	contribution contribution
+}
+
+type source struct {
+	seq   uint64
+	parts []part
 }
 
 // Analyze reads every file the container bindings come from and replaces
@@ -50,7 +55,7 @@ func (ca *ContainerAnalyzer) Analyze() {
 			if err != nil {
 				return nil
 			}
-			found[path] = source{seq: seq, phase: phase, contribution: ca.parse(phase, path, string(content))}
+			found[path] = source{seq: seq, parts: ca.parse(phase, path, string(content))}
 			return nil
 		})
 	}
@@ -79,14 +84,14 @@ func (ca *ContainerAnalyzer) Update(path string) error {
 	if !ok {
 		return nil
 	}
-	src := source{seq: ca.seq.Add(1), phase: phase}
+	src := source{seq: ca.seq.Add(1)}
 	content, err := os.ReadFile(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 	case err != nil:
 		return fmt.Errorf("re-read container bindings from %s: %w", path, err)
 	default:
-		src.contribution = ca.parse(phase, path, string(content))
+		src.parts = ca.parse(phase, path, string(content))
 	}
 	ca.sourcesMu.Lock()
 	defer ca.sourcesMu.Unlock()
@@ -161,33 +166,38 @@ func within(dir, path string) bool {
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func (ca *ContainerAnalyzer) parse(phase sourcePhase, path, content string) contribution {
+func (ca *ContainerAnalyzer) parse(phase sourcePhase, path, content string) []part {
 	switch phase {
 	case phaseLaravelProvider:
-		return ca.parseLaravelProvider(path, content)
+		return []part{{phase, ca.parseLaravelProvider(path, content)}}
 	case phaseSymfonyServicesYAML:
-		return parseSymfonyServicesYAML(path, content)
+		return []part{{phase, parseSymfonyServicesYAML(path, content)}}
 	case phaseSymfonyServicesPHP:
-		return ca.parseSymfonyPHPConfigFile(path, content)
+		return []part{{phase, ca.parseSymfonyPHPConfigFile(path, content)}}
 	case phaseSymfonyClass:
-		return ca.parseSymfonyClasses(path, content)
+		aliases, classes := ca.parseSymfonyClasses(path, content)
+		return []part{{phaseSymfonyAttributeAlias, aliases}, {phase, classes}}
 	}
 	panic(fmt.Sprintf("container: no reader for source phase %d of %s", phase, path))
 }
 
 func (ca *ContainerAnalyzer) rebuild() *bindingSet {
+	type placed struct {
+		path string
+		part part
+	}
 	set := newBindingSet(defaultBindings(ca.framework))
-	paths := make([]string, 0, len(ca.sources))
+	parts := make([]placed, 0, len(ca.sources))
 	for path, src := range ca.sources {
-		if src.contribution != nil {
-			paths = append(paths, path)
+		for _, p := range src.parts {
+			parts = append(parts, placed{path, p})
 		}
 	}
-	slices.SortFunc(paths, func(a, b string) int {
-		return cmp.Or(cmp.Compare(ca.sources[a].phase, ca.sources[b].phase), compareWalkOrder(a, b))
+	slices.SortFunc(parts, func(a, b placed) int {
+		return cmp.Or(cmp.Compare(a.part.phase, b.part.phase), compareWalkOrder(a.path, b.path))
 	})
-	for _, path := range paths {
-		ca.sources[path].contribution.apply(set)
+	for _, p := range parts {
+		p.part.contribution.apply(set)
 	}
 	set.resolveAliases()
 	return set
@@ -209,12 +219,13 @@ func compareWalkOrder(a, b string) int {
 }
 
 type bindingSet struct {
-	bindings map[string]*ServiceBinding
-	aliases  map[string]string
+	bindings   map[string]*ServiceBinding
+	aliases    map[string]string
+	configured map[string]bool
 }
 
 func newBindingSet(defaults []ServiceBinding) *bindingSet {
-	set := &bindingSet{bindings: make(map[string]*ServiceBinding, len(defaults)), aliases: make(map[string]string)}
+	set := &bindingSet{bindings: make(map[string]*ServiceBinding, len(defaults)), aliases: make(map[string]string), configured: make(map[string]bool)}
 	for _, b := range defaults {
 		set.bindings[b.Abstract] = &b
 	}
@@ -322,20 +333,35 @@ type serviceDefinitions []serviceDefinition
 
 func (defs serviceDefinitions) apply(set *bindingSet) {
 	for _, d := range defs {
-		b := set.ensure(d.id, d.source, d.at)
-		if d.class != "" {
-			b.Concrete = d.class
-		}
-		if d.alias != "" {
-			b.Alias = d.alias
-			set.aliases[d.id] = d.alias
-		}
-		switch d.sharing {
-		case sharingShared:
-			b.Singleton = true
-		case sharingUnshared:
-			b.Singleton = false
-		}
-		b.Tags = append(b.Tags, d.tags...)
+		set.define(d)
+		set.configured[d.id] = true
 	}
+}
+
+type attributeAliases []serviceDefinition
+
+func (defs attributeAliases) apply(set *bindingSet) {
+	for _, d := range defs {
+		if !set.configured[d.id] {
+			set.define(d)
+		}
+	}
+}
+
+func (set *bindingSet) define(d serviceDefinition) {
+	b := set.ensure(d.id, d.source, d.at)
+	if d.class != "" {
+		b.Concrete = d.class
+	}
+	if d.alias != "" {
+		b.Alias = d.alias
+		set.aliases[d.id] = d.alias
+	}
+	switch d.sharing {
+	case sharingShared:
+		b.Singleton = true
+	case sharingUnshared:
+		b.Singleton = false
+	}
+	b.Tags = append(b.Tags, d.tags...)
 }

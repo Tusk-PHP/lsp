@@ -534,23 +534,95 @@ func compactExpr(s string) string {
 	}, s)
 }
 
-func (ca *ContainerAnalyzer) parseSymfonyClasses(path string, content string) classBindings {
-	file := parser.ParseFileIn(content, ca.index.Grammars())
-	if file == nil {
-		return nil
-	}
-	var bindings classBindings
-	ns := file.Namespace
+const asAliasFQN = `Symfony\Component\DependencyInjection\Attribute\AsAlias`
+
+func (ca *ContainerAnalyzer) parseSymfonyClasses(path string, content string) (attributeAliases, classBindings) {
+	calls := newConfigCalls(content, ca.index.Grammars())
 	uri := pathToFileURI(path)
-	for _, cls := range file.Classes {
-		fqn := cls.FullName
-		bindings = append(bindings, ServiceBinding{Abstract: fqn, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: uri})
-		for _, iface := range cls.Implements {
-			ifaceFQN := parser.ResolveImportedName(iface, ns, file.Uses, "class")
-			bindings = append(bindings, ServiceBinding{Abstract: ifaceFQN, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: uri})
+	var bindings classBindings
+	for _, cls := range calls.file.Classes {
+		bindings = append(bindings, ServiceBinding{Abstract: cls.FullName, Concrete: cls.FullName, Singleton: true, Source: path, DefinitionURI: uri})
+		for _, iface := range calls.interfacesOf(cls) {
+			bindings = append(bindings, ServiceBinding{Abstract: iface, Concrete: cls.FullName, Singleton: true, Source: path, DefinitionURI: uri})
 		}
 	}
-	return bindings
+	return calls.asAliases(path), bindings
+}
+
+func (c configCalls) interfacesOf(cls parser.ClassNode) []string {
+	interfaces := make([]string, len(cls.Implements))
+	for i, iface := range cls.Implements {
+		interfaces[i] = parser.ResolveImportedName(iface, c.file.Namespace, c.file.Uses, "class")
+	}
+	return interfaces
+}
+
+func (c configCalls) asAliases(path string) attributeAliases {
+	var aliases attributeAliases
+	ast.Walk(c.tree, func(n ast.Node) bool {
+		decl, ok := n.(*ast.ClassDecl)
+		if !ok || decl.Name == nil {
+			return true
+		}
+		cls := c.classAt(decl.Name.Start)
+		if cls == nil {
+			return true
+		}
+		for _, group := range decl.Attrs {
+			for _, attr := range group.Attrs {
+				if attr.Name == nil || !strings.EqualFold(c.file.ResolveClassName(c.text(attr.Name)), asAliasFQN) {
+					continue
+				}
+				if id := c.asAliasID(attr, cls); id != "" {
+					aliases = append(aliases, serviceDefinition{id: id, source: path, at: c.position(attr), class: cls.FullName, alias: cls.FullName})
+				}
+			}
+		}
+		return true
+	})
+	return aliases
+}
+
+func (c configCalls) asAliasID(attr *ast.Attribute, cls *parser.ClassNode) string {
+	id := c.argument(attr.Args, "id", 0)
+	if id != nil && !c.isNull(id) {
+		return c.serviceName(id)
+	}
+	interfaces := c.interfacesOf(*cls)
+	if cls.Extends != "" || len(interfaces) != 1 {
+		return ""
+	}
+	return interfaces[0]
+}
+
+func (c configCalls) classAt(offset uint32) *parser.ClassNode {
+	line, col := c.lines.Position(offset)
+	for i := range c.file.Classes {
+		if cls := &c.file.Classes[i]; cls.StartLine == line && cls.StartCol == col {
+			return cls
+		}
+	}
+	return nil
+}
+
+func (c configCalls) argument(list *ast.ArgList, name string, position int) ast.Expr {
+	if list == nil {
+		return nil
+	}
+	for _, arg := range list.Args {
+		if arg.Name != nil && c.text(arg.Name) == name {
+			return arg.Value
+		}
+	}
+	if position < len(list.Args) && list.Args[position].Name == nil && !list.Args[position].Unpack {
+		return list.Args[position].Value
+	}
+	return nil
+}
+
+func (c configCalls) isNull(e ast.Expr) bool {
+	fetch, ok := e.(*ast.ConstFetch)
+	return ok && fetch.Name != nil && strings.EqualFold(c.text(fetch.Name), "null")
 }
 
 func leadingIndent(s string) int {
