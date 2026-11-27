@@ -1,11 +1,14 @@
 package symfony
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -223,5 +226,73 @@ func mustWriteFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func TestDiscoverRoutesFromAControllerFileImportedInYAML(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "composer.json"), "{}\n")
+	mustWriteFile(t, filepath.Join(root, "config", "routes.yaml"), `admin:
+  resource: ../src/Admin/DashboardController.php
+  type: attribute
+  prefix: /admin
+  name_prefix: admin_
+`)
+	mustWriteFile(t, filepath.Join(root, "src", "Admin", "DashboardController.php"), `<?php
+namespace App\Admin;
+
+use Symfony\Component\Routing\Attribute\Route;
+
+class DashboardController
+{
+    #[Route('/dashboard', name: 'dashboard')]
+    public function index(): void {}
+}
+`)
+	kernel := filepath.Join(root, "src", "Kernel.php")
+	mustWriteFile(t, kernel, "<?php\nnamespace App;\nclass Kernel {}\n")
+	idx := symbols.NewIndex()
+	idx.IndexFileWithSource("file://"+filepath.ToSlash(kernel), "<?php\nnamespace App;\nclass Kernel {}\n", symbols.SourceProject)
+
+	got := map[string]string{}
+	for _, route := range DiscoverRoutes(idx) {
+		got[route.Name] = route.Path
+	}
+	if got["admin_dashboard"] != "/admin/dashboard" {
+		t.Errorf("the imported controller file's route is found under the import's prefixes: %v", got)
+	}
+}
+
+func TestRouteAttributesFromTheSyntaxTree(t *testing.T) {
+	src := `<?php
+namespace App\Controller;
+use Symfony\Component\Routing\Annotation\Route as LegacyRoute;
+use Symfony\Component\Routing\Attribute\Route;
+use Other\Route as NotSymfony;
+
+#[Route('/blog', name: 'blog_')]
+class BlogController
+{
+    const NAME = 'x';
+    #[Route('/{slug}', 'show')]
+    public function show() {}
+    #[LegacyRoute(
+        path: '/list',
+        name: 'list',
+    )]
+    public function list() {}
+    #[NotSymfony('/other', name: 'other')]
+    public function other() {}
+    #[Route('/dynamic', name: self::NAME), Route]
+    public function dynamic() {}
+}
+`
+	var got []string
+	for _, r := range discoverRoutesInFile("file:///c.php", src, phpparser.OnlyGrammar(token.Latest)) {
+		got = append(got, fmt.Sprintf("%s %s %d:%d-%d", r.Name, r.Path, r.NameRange.Start.Line, r.NameRange.Start.Character, r.NameRange.End.Character))
+	}
+	want := []string{"blog_show /blog/{slug} 10:24-28", "blog_list /blog/list 14:15-19"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got\n%s", strings.Join(got, "\n"))
 	}
 }

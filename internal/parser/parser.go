@@ -23,7 +23,6 @@ type ParseResult struct {
 	Traits           []TraitDef
 	Enums            []EnumDef
 	Functions        []FunctionDef
-	Constants        []ConstantDef
 	Variables        []VariableDef
 	Tokens           []Token
 	Errors           []ParseError
@@ -55,8 +54,6 @@ type ClassDef struct {
 	Traits      []string
 	Properties  []PropertyDef
 	Methods     []MethodDef
-	Constants   []ConstantDef
-	Attributes  []AttributeDef
 	IsAbstract  bool
 	IsFinal     bool
 	IsReadonly  bool
@@ -79,8 +76,6 @@ type InterfaceDef struct {
 	Extends    []string
 	Methods    []MethodDef
 	Properties []PropertyDef
-	Constants  []ConstantDef
-	Attributes []AttributeDef
 	DocComment string
 	Line       int
 	EndLine    int
@@ -92,8 +87,6 @@ type TraitDef struct {
 	Properties  []PropertyDef
 	Methods     []MethodDef
 	Traits      []string
-	Constants   []ConstantDef
-	Attributes  []AttributeDef
 	TraitUseDoc string // docblocks above the trait `use` statements in the body
 	TraitRules  TraitAdaptations
 	DocComment  string
@@ -108,10 +101,8 @@ type EnumDef struct {
 	Cases       []EnumCase
 	Methods     []MethodDef
 	Properties  []PropertyDef
-	Constants   []ConstantDef
 	Traits      []string
 	Implements  []string
-	Attributes  []AttributeDef
 	DocComment  string
 	TraitUseDoc string // docblocks above the trait `use` statements in the body
 	TraitRules  TraitAdaptations
@@ -122,13 +113,11 @@ type EnumDef struct {
 type EnumCase struct {
 	Name       string
 	Value      string
-	Attributes []AttributeDef
 	DocComment string
 	Line       int
 }
 
 type FunctionDef struct {
-	Attributes []AttributeDef
 	Name       string
 	FullName   string
 	Params     []ParamDef
@@ -140,7 +129,6 @@ type FunctionDef struct {
 }
 
 type MethodDef struct {
-	Attributes []AttributeDef
 	Name       string
 	Params     []ParamDef
 	ReturnType string
@@ -167,7 +155,6 @@ type PropertyDef struct {
 	IsReadonly    bool
 	HasDefault    bool
 	Hooks         []PropertyHook // PHP 8.4 property hooks (get/set accessors)
-	Attributes    []AttributeDef
 	Line          int
 	DocComment    string
 }
@@ -185,30 +172,13 @@ type ParamDef struct {
 	SetVisibility string
 	DefaultValue  string
 	Hooks         []PropertyHook
-	Attributes    []AttributeDef
 	DocComment    string
 	Line          int
-}
-
-type ConstantDef struct {
-	Name       string
-	Value      string
-	Type       string
-	Visibility string
-	Attributes []AttributeDef
-	DocComment string
-	Line       int
 }
 
 type VariableDef struct {
 	Name string
 	Type string
-	Line int
-}
-
-type AttributeDef struct {
-	Name string
-	Args []string
 	Line int
 }
 
@@ -798,11 +768,10 @@ func parseStructure(tokens []Token, result *ParseResult) {
 }
 
 type structParser struct {
-	tokens     []Token
-	pos        int
-	result     *ParseResult
-	attributes []AttributeDef // read, waiting for the declaration they belong to
-	enumCases  *[]EnumCase    // where the enum body being parsed collects its cases
+	tokens    []Token
+	pos       int
+	result    *ParseResult
+	enumCases *[]EnumCase // where the enum body being parsed collects its cases
 	// traitUseDocs collects the docblocks above trait `use` statements in the
 	// class body being parsed, where @use gives the trait's type arguments.
 	traitUseDocs []string
@@ -826,10 +795,10 @@ func (p *structParser) inBlock() bool {
 // parseClassBodyWithTraitUses parses a class-like body and also returns the
 // docblocks written above its trait `use` statements, joined, and the rules
 // of their adaptation blocks.
-func (p *structParser) parseClassBodyWithTraitUses() (methods []MethodDef, props []PropertyDef, consts []ConstantDef, traits []string, traitDoc string, traitRules TraitAdaptations) {
+func (p *structParser) parseClassBodyWithTraitUses() (methods []MethodDef, props []PropertyDef, traits []string, traitDoc string, traitRules TraitAdaptations) {
 	savedDocs, savedRules := p.traitUseDocs, p.traitRules
 	p.traitUseDocs, p.traitRules = nil, TraitAdaptations{}
-	methods, props, consts, traits = p.parseClassBody()
+	methods, props, traits = p.parseClassBody()
 	traitDoc = strings.Join(p.traitUseDocs, "\n")
 	traitRules = p.traitRules
 	p.traitUseDocs, p.traitRules = savedDocs, savedRules
@@ -942,7 +911,7 @@ func (p *structParser) parse() {
 			p.advance()
 			continue
 		case TokenHash:
-			p.attributes = append(p.attributes, p.parseAttributeGroup()...)
+			p.skipAttributeGroup()
 			continue
 		case TokenNamespace:
 			p.parseNamespace()
@@ -966,7 +935,7 @@ func (p *structParser) parse() {
 		case TokenFunction:
 			p.parseFunction(lastDocComment)
 		case TokenConst:
-			p.parseConst(lastDocComment)
+			p.skipConst()
 		case TokenOpenBrace:
 			p.blocks = append(p.blocks, false)
 			p.advance()
@@ -979,7 +948,6 @@ func (p *structParser) parse() {
 			p.advance()
 		}
 		lastDocComment = ""
-		p.attributes = nil
 		// Safety: ensure forward progress to prevent infinite loops on malformed input
 		if p.pos == startPos {
 			p.advance()
@@ -987,40 +955,9 @@ func (p *structParser) parse() {
 	}
 }
 
-// parseAttributeGroup reads a PHP 8 `#[A, B(1, 'x')]` group.
-func (p *structParser) parseAttributeGroup() []AttributeDef {
-	if p.peek().Kind != TokenHash {
-		return nil
-	}
-	p.advance() // #
-	if p.peek().Kind != TokenOpenBracket {
-		return nil
-	}
-	p.advance() // [
-	var attrs []AttributeDef
-	for p.peek().Kind != TokenEOF {
-		switch p.peek().Kind {
-		case TokenCloseBracket:
-			p.advance()
-			return attrs
-		case TokenComma:
-			p.advance()
-			continue
-		}
-		attr := AttributeDef{Line: p.peek().Line, Name: p.readTypeName()}
-		if attr.Name == "" {
-			p.skipToAttributeGroupEnd()
-			return attrs
-		}
-		if p.peek().Kind == TokenOpenParen {
-			attr.Args = p.readAttributeArgs()
-		}
-		attrs = append(attrs, attr)
-	}
-	return attrs
-}
-
-func (p *structParser) skipToAttributeGroupEnd() {
+func (p *structParser) skipAttributeGroup() {
+	p.advance()
+	p.advance()
 	depth := 1
 	for depth > 0 && p.peek().Kind != TokenEOF {
 		switch p.peek().Kind {
@@ -1031,37 +968,6 @@ func (p *structParser) skipToAttributeGroupEnd() {
 		}
 		p.advance()
 	}
-}
-
-// readAttributeArgs returns each argument of an attribute as it's written.
-func (p *structParser) readAttributeArgs() []string {
-	p.advance() // (
-	var args []string
-	start, depth := p.pos, 0
-	for p.peek().Kind != TokenEOF {
-		switch p.peek().Kind {
-		case TokenOpenParen, TokenOpenBracket:
-			depth++
-		case TokenCloseBracket:
-			depth--
-		case TokenCloseParen:
-			if depth == 0 {
-				if p.pos > start {
-					args = append(args, tokensText(p.tokens[start:p.pos]))
-				}
-				p.advance()
-				return args
-			}
-			depth--
-		case TokenComma:
-			if depth == 0 {
-				args = append(args, tokensText(p.tokens[start:p.pos]))
-				start = p.pos + 1
-			}
-		}
-		p.advance()
-	}
-	return args
 }
 
 // tokensText joins tokens back into source text, spacing out only the words
@@ -1078,12 +984,6 @@ func tokensText(tokens []Token) string {
 		prevWord = isWord
 	}
 	return b.String()
-}
-
-func (p *structParser) takeAttributes() []AttributeDef {
-	attrs := p.attributes
-	p.attributes = nil
-	return attrs
 }
 
 func (p *structParser) parseNamespace() {
@@ -1198,7 +1098,7 @@ func (p *structParser) addUse(fullName, alias, kind string, line int) {
 }
 
 func (p *structParser) parseClass(docComment string) {
-	cls := ClassDef{DocComment: docComment, Attributes: p.takeAttributes()}
+	cls := ClassDef{DocComment: docComment}
 	for {
 		switch p.peek().Kind {
 		case TokenAbstract:
@@ -1249,7 +1149,7 @@ afterMod:
 	if _, ok := p.expect(TokenOpenBrace); !ok {
 		return
 	}
-	cls.Methods, cls.Properties, cls.Constants, cls.Traits, cls.TraitUseDoc, cls.TraitRules = p.parseClassBodyWithTraitUses()
+	cls.Methods, cls.Properties, cls.Traits, cls.TraitUseDoc, cls.TraitRules = p.parseClassBodyWithTraitUses()
 	if cls.IsReadonly {
 		for i := range cls.Properties {
 			cls.Properties[i].IsReadonly = true
@@ -1262,7 +1162,7 @@ afterMod:
 
 func (p *structParser) parseInterface(docComment string) {
 	p.advance()
-	iface := InterfaceDef{Attributes: p.takeAttributes(), DocComment: docComment}
+	iface := InterfaceDef{DocComment: docComment}
 	if t, ok := p.expect(TokenIdentifier); ok {
 		iface.Name = t.Value
 		iface.Line = t.Line
@@ -1290,14 +1190,14 @@ func (p *structParser) parseInterface(docComment string) {
 	if _, ok := p.expect(TokenOpenBrace); !ok {
 		return
 	}
-	iface.Methods, iface.Properties, iface.Constants, _ = p.parseClassBody()
+	iface.Methods, iface.Properties, _ = p.parseClassBody()
 	iface.EndLine = p.peek().Line
 	p.result.Interfaces = append(p.result.Interfaces, iface)
 }
 
 func (p *structParser) parseTrait(docComment string) {
 	p.advance()
-	trait := TraitDef{Attributes: p.takeAttributes(), DocComment: docComment}
+	trait := TraitDef{DocComment: docComment}
 	if t, ok := p.expect(TokenIdentifier); ok {
 		trait.Name = t.Value
 		trait.Line = t.Line
@@ -1310,14 +1210,14 @@ func (p *structParser) parseTrait(docComment string) {
 	if _, ok := p.expect(TokenOpenBrace); !ok {
 		return
 	}
-	trait.Methods, trait.Properties, trait.Constants, trait.Traits, trait.TraitUseDoc, trait.TraitRules = p.parseClassBodyWithTraitUses()
+	trait.Methods, trait.Properties, trait.Traits, trait.TraitUseDoc, trait.TraitRules = p.parseClassBodyWithTraitUses()
 	trait.EndLine = p.peek().Line
 	p.result.Traits = append(p.result.Traits, trait)
 }
 
 func (p *structParser) parseEnum(docComment string) {
 	p.advance()
-	e := EnumDef{DocComment: docComment, Attributes: p.takeAttributes()}
+	e := EnumDef{DocComment: docComment}
 	if t, ok := p.expect(TokenIdentifier); ok {
 		e.Name = t.Value
 		e.Line = t.Line
@@ -1350,7 +1250,7 @@ func (p *structParser) parseEnum(docComment string) {
 		return
 	}
 	p.enumCases = &e.Cases
-	e.Methods, e.Properties, e.Constants, e.Traits, e.TraitUseDoc, e.TraitRules = p.parseClassBodyWithTraitUses()
+	e.Methods, e.Properties, e.Traits, e.TraitUseDoc, e.TraitRules = p.parseClassBodyWithTraitUses()
 	p.enumCases = nil
 	e.EndLine = p.peek().Line
 	p.result.Enums = append(p.result.Enums, e)
@@ -1358,7 +1258,7 @@ func (p *structParser) parseEnum(docComment string) {
 
 func (p *structParser) parseFunction(docComment string) {
 	p.advance()
-	fn := FunctionDef{DocComment: docComment, Attributes: p.takeAttributes()}
+	fn := FunctionDef{DocComment: docComment}
 	// By-reference function: function &get()
 	if p.peek().Kind == TokenAmpersand {
 		p.advance()
@@ -1434,25 +1334,19 @@ func (p *structParser) collectNestedFunctions(start, end int) {
 	}
 }
 
-func (p *structParser) parseConst(docComment string) {
+func (p *structParser) skipConst() {
 	p.advance()
-	c := ConstantDef{DocComment: docComment, Line: p.peek().Line}
-	if t, ok := p.expect(TokenIdentifier); ok {
-		c.Name = t.Value
-	}
+	p.expect(TokenIdentifier)
 	if p.peek().Kind == TokenEquals {
 		p.advance()
-		c.Value = p.peek().Value
 		p.advance()
 	}
 	p.expect(TokenSemicolon)
-	p.result.Constants = append(p.result.Constants, c)
 }
 
-func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDef, consts []ConstantDef, traits []string) {
+func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDef, traits []string) {
 	depth := 1
 	var docComment string
-	var attributes []AttributeDef
 	enumCases := p.enumCases
 	for depth > 0 && p.peek().Kind != TokenEOF {
 		// Recovery: at the outermost class level, bail on top-level keywords (missing closing brace)
@@ -1467,12 +1361,12 @@ func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDe
 			continue
 		}
 		if t.Kind == TokenHash {
-			attributes = append(attributes, p.parseAttributeGroup()...)
+			p.skipAttributeGroup()
 			continue
 		}
 		if enumCases != nil && depth == 1 && t.Kind == TokenIdentifier && strings.EqualFold(t.Value, "case") {
 			p.advance()
-			c := EnumCase{Line: p.peek().Line, DocComment: docComment, Attributes: attributes}
+			c := EnumCase{Line: p.peek().Line, DocComment: docComment}
 			if isNameToken(p.peek()) {
 				c.Name = p.peek().Value
 				p.advance()
@@ -1484,7 +1378,7 @@ func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDe
 			}
 			*enumCases = append(*enumCases, c)
 			p.expect(TokenSemicolon)
-			docComment, attributes = "", nil
+			docComment = ""
 			continue
 		}
 		if t.Kind == TokenCloseBrace {
@@ -1577,7 +1471,6 @@ func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDe
 		case TokenFunction:
 			p.advance()
 			m := MethodDef{
-				Attributes: attributes,
 				Visibility: visibility, IsStatic: isStatic,
 				IsAbstract: isAbstract, IsFinal: isFinal,
 				DocComment: docComment, Line: p.peek().Line,
@@ -1618,11 +1511,10 @@ func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDe
 
 		case TokenConst:
 			p.advance()
-			consts = append(consts, p.parseClassConstants(visibility, attributes, docComment)...)
+			p.skipClassConstants()
 
 		case TokenVariable:
 			prop := PropertyDef{
-				Attributes: attributes,
 				Visibility: visibility, SetVisibility: setVisibility,
 				IsStatic: isStatic, IsReadonly: isReadonly,
 				DocComment: docComment, Line: p.peek().Line,
@@ -1660,7 +1552,6 @@ func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDe
 			}
 			if p.peek().Kind == TokenVariable {
 				prop := PropertyDef{
-					Attributes: attributes,
 					Visibility: visibility, SetVisibility: setVisibility,
 					IsStatic: isStatic, IsReadonly: isReadonly,
 					Type: typeName, DocComment: docComment,
@@ -1686,41 +1577,27 @@ func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDe
 		default:
 			p.advance()
 		}
-		docComment, attributes = "", nil
+		docComment = ""
 	}
 	return
 }
 
-// parseClassConstants reads the rest of a `const` statement, which may give a
-// PHP 8.3 type and declare several constants: `const string A = 'a', B = 'b';`.
-func (p *structParser) parseClassConstants(visibility string, attributes []AttributeDef, docComment string) []ConstantDef {
-	typeName := ""
+func (p *structParser) skipClassConstants() {
 	if !isNameToken(p.peek()) || (p.pos+1 < len(p.tokens) && p.tokens[p.pos+1].Kind != TokenEquals) {
-		typeName = p.readTypeName()
+		p.readTypeName()
 	}
-	var consts []ConstantDef
 	for isNameToken(p.peek()) {
-		c := ConstantDef{Name: p.peek().Value, Type: typeName, Visibility: visibility, Attributes: attributes, DocComment: docComment, Line: p.peek().Line}
 		p.advance()
 		if p.peek().Kind == TokenEquals {
 			p.advance()
-			// Record the immediate value token for simple constants.
-			if p.peek().Kind != TokenSemicolon && p.peek().Kind != TokenEOF {
-				c.Value = p.peek().Value
-			}
-			// Consume the full value expression, including PHP 8.3 dynamic const
-			// fetches like Colors::{$name} where '{' must not escape to the outer
-			// class-body depth counter.
 			p.skipConstantValue()
 		}
-		consts = append(consts, c)
 		if p.peek().Kind != TokenComma {
 			break
 		}
 		p.advance()
 	}
 	p.expect(TokenSemicolon)
-	return consts
 }
 
 // skipConstantValue stops at the `,` or `;` ending a constant's value.
@@ -1765,7 +1642,7 @@ func promotedProperties(params []ParamDef) []PropertyDef {
 		props = append(props, PropertyDef{
 			Name: param.Name, Type: param.Type, Visibility: param.Visibility, SetVisibility: param.SetVisibility,
 			IsReadonly: param.IsReadonly, HasDefault: param.HasDefault, Hooks: param.Hooks,
-			Attributes: param.Attributes, DocComment: param.DocComment, Line: param.Line,
+			DocComment: param.DocComment, Line: param.Line,
 		})
 	}
 	return props
@@ -1790,7 +1667,7 @@ func (p *structParser) parseParams() []ParamDef {
 				param.DocComment = p.peek().Value
 				p.advance()
 			case TokenHash:
-				param.Attributes = append(param.Attributes, p.parseAttributeGroup()...)
+				p.skipAttributeGroup()
 			case TokenPublic, TokenProtected, TokenPrivate:
 				vis := strings.ToLower(p.peek().Value)
 				p.advance()

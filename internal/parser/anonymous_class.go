@@ -75,7 +75,6 @@ func (p *structParser) parseAnonymousClasses() {
 			cls.FullName = name
 		}
 		p.pos = j + 1
-		p.attributes = nil
 		if p.peek().Kind == TokenOpenParen {
 			p.skipParens()
 		}
@@ -102,7 +101,7 @@ func (p *structParser) parseAnonymousClasses() {
 			continue
 		}
 		cls.BodyLine, cls.BodyCol = open.Line, open.Column
-		cls.Methods, cls.Properties, cls.Constants, cls.Traits, cls.TraitUseDoc, cls.TraitRules = p.parseClassBodyWithTraitUses()
+		cls.Methods, cls.Properties, cls.Traits, cls.TraitUseDoc, cls.TraitRules = p.parseClassBodyWithTraitUses()
 		if cls.IsReadonly {
 			for k := range cls.Properties {
 				cls.Properties[k].IsReadonly = true

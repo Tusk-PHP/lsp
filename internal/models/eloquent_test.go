@@ -3,8 +3,11 @@ package models
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -287,4 +290,71 @@ func TestSnakeCase(t *testing.T) {
 			t.Errorf("snakeCase(%q) = %q, want %q", tt.input, got, tt.expected)
 		}
 	}
+}
+
+func TestEloquentModelReadFromTheSyntaxTree(t *testing.T) {
+	src := `<?php
+namespace App\Models;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+class Author extends Model
+{
+    public function posts(): HasMany { return $this->hasMany(Post::class); }
+    public function team()
+    {
+        return $this
+            ->belongsTo(
+                Team::class,
+            );
+    }
+    public function other() { return $other->hasMany(Post::class); }
+    public function comments() { $relation = $this->hasMany(Comment::class); $relation->latest(); return $relation; }
+    public function dynamic(): HasMany { return $this->hasMany($class); }
+    public function abstractRelation(): HasMany;
+    /** @return string */
+    public function getFullNameAttribute() { return ''; }
+    public function getattribute() {}
+    public function get_Attribute() {}
+    public function getFoo_BarAttribute() {}
+    protected function title(): Attribute { return Attribute::make(); }
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "Author.php")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx := symbols.NewIndex()
+	idx.IndexFile("file://"+path, src)
+	model := idx.Lookup(`App\Models\Author`)
+	analyzeModelSource(idx, model, newModelSource(src, phpparser.OnlyGrammar(token.Latest)))
+	for prop, want := range map[string]string{
+		"$posts":     `Illuminate\Database\Eloquent\Collection`,
+		"$comments":  `Illuminate\Database\Eloquent\Collection`,
+		"$team":      `?App\Models\Team`,
+		"$dynamic":   "mixed",
+		"$full_name": "string",
+		"$title":     "mixed",
+	} {
+		if sym := idx.Lookup(`App\Models\Author::` + prop); sym == nil || sym.Type != want {
+			t.Errorf("%s: %+v, want %s", prop, sym, want)
+		}
+	}
+	for _, prop := range []string{"$other", "$", "$_", "$foo_Bar"} {
+		if idx.Lookup(`App\Models\Author::`+prop) != nil {
+			t.Errorf("%s should not be a virtual property", prop)
+		}
+	}
+	var rels []string
+	for _, r := range extractEloquentRelations(model, phpparser.OnlyGrammar(token.Latest)) {
+		rels = append(rels, r.MethodName+" "+r.RelationType+" "+r.TargetModel)
+	}
+	if want := []string{`posts HasMany App\Models\Post`, `team BelongsTo App\Models\Team`, `comments HasMany App\Models\Comment`}; strings.Join(rels, "\n") != strings.Join(want, "\n") {
+		t.Errorf("relations: %q", rels)
+	}
+	analyzeModelSource(idx, &symbols.Symbol{FQN: `App\Models\Missing`}, newModelSource(src, phpparser.OnlyGrammar(token.Latest)))
+	if got := extractEloquentRelations(&symbols.Symbol{FQN: `App\Models\Author`, URI: "file://" + filepath.Join(dir, "gone.php")}, phpparser.OnlyGrammar(token.Latest)); got != nil {
+		t.Errorf("a missing file: %v", got)
+	}
+	analyzeModel(idx, &symbols.Symbol{FQN: `App\Models\Author`, URI: "file://" + filepath.Join(dir, "gone.php")})
 }
