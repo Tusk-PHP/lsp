@@ -38,16 +38,8 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 		if gen := r.enclosingReturnType(lines, pos, file); gen.FQN == "Generator" && len(gen.Params) >= 3 {
 			return gen.Params[2], true
 		}
-	case *ast.Binary:
-		switch n.Op {
-		case token.Dot:
-			return ResolvedType{FQN: "string"}, true
-		case token.Coalesce:
-			rt := r.eitherType(t, n.Left, n.Right, ctx)
-			return rt, !rt.IsEmpty()
-		}
-	case *ast.Ternary:
-		rt := r.ternaryType(t, n, ctx)
+	case *ast.Binary, *ast.Unary, *ast.InstanceOf, *ast.Ternary:
+		rt := r.typeOf(t, n, nil, ctx)
 		return rt, !rt.IsEmpty()
 	case *ast.ClassConstFetch:
 		if strings.EqualFold(t.text(n.Name), "class") {

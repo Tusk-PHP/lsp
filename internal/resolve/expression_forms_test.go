@@ -69,7 +69,7 @@ func TestExpressionForms(t *testing.T) {
 		{"__FILE__", "string"},
 		{"-1", "int"},
 		{"+1.5", "float"},
-		{"-'1'", ""},
+		{"-'1'", "int|float"},
 		{"(int) $any", "int"},
 		{"(float) $any", "float"},
 		{"(string) $any", "string"},
