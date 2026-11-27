@@ -894,23 +894,6 @@ func (p *Provider) completeGlobal(prefix, source string, rk nameRanker, file *pa
 	return items
 }
 
-func extractVariableBefore(prefix, op string) string {
-	idx := strings.LastIndex(prefix, op)
-	if idx < 0 {
-		return ""
-	}
-	before := strings.TrimSpace(prefix[:idx])
-	for i := len(before) - 1; i >= 0; i-- {
-		if before[i] == '$' {
-			return before[i:]
-		}
-		if !(before[i] >= 'a' && before[i] <= 'z') && !(before[i] >= 'A' && before[i] <= 'Z') && !(before[i] >= '0' && before[i] <= '9') && before[i] != '_' {
-			break
-		}
-	}
-	return ""
-}
-
 func extractClassBefore(prefix, op string) string {
 	idx := strings.LastIndex(prefix, op)
 	if idx < 0 {
