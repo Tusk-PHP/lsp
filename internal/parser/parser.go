@@ -389,10 +389,10 @@ func tokenize(source string) ([]Token, []ParseError) {
 	return tokenizeFrom(source, HasOpenTag(source))
 }
 
-func blockCommentEnd(source string, offset, line, col int) (int, int, int) {
+func blockCommentEnd(source string, offset, line, col int) (int, int, int, bool) {
 	for offset < len(source) {
 		if source[offset] == '*' && offset+1 < len(source) && source[offset+1] == '/' {
-			return offset + 2, line, col + 2
+			return offset + 2, line, col + 2, true
 		}
 		if source[offset] == '\n' {
 			line++
@@ -402,7 +402,18 @@ func blockCommentEnd(source string, offset, line, col int) (int, int, int) {
 		}
 		offset++
 	}
-	return offset, line, col
+	return offset, line, col, false
+}
+
+func isDocCommentStart(source string, offset int) bool {
+	if offset+3 >= len(source) || source[offset+2] != '*' {
+		return false
+	}
+	switch source[offset+3] {
+	case ' ', '\t', '\r', '\n':
+		return true
+	}
+	return false
 }
 
 func tokenizeFrom(source string, inHTML bool) ([]Token, []ParseError) {
@@ -457,26 +468,18 @@ func tokenizeFrom(source string, inHTML bool) ([]Token, []ParseError) {
 			continue
 		}
 
-		// Doc comment /** ... */
-		if offset+2 < len(source) && source[offset:offset+3] == "/**" {
+		if offset+1 < len(source) && source[offset] == '/' && source[offset+1] == '*' {
 			start := offset
 			startLine, startCol := line, col
-			offset, line, col = blockCommentEnd(source, offset+3, line, col+3)
-			tokens = append(tokens, Token{TokenDocComment, source[start:offset], startLine, startCol, start})
-			if !strings.HasSuffix(source[start:offset], "*/") {
-				errors = append(errors, ParseError{Message: "unterminated doc comment", Line: startLine, Column: startCol})
+			kind, unterminated := TokenComment, "unterminated comment"
+			if isDocCommentStart(source, offset) {
+				kind, unterminated = TokenDocComment, "unterminated doc comment"
 			}
-			continue
-		}
-
-		// Block comment
-		if offset+1 < len(source) && source[offset:offset+2] == "/*" {
-			start := offset
-			startLine, startCol := line, col
-			offset, line, col = blockCommentEnd(source, offset+2, line, col+2)
-			tokens = append(tokens, Token{TokenComment, source[start:offset], startLine, startCol, start})
-			if !strings.HasSuffix(source[start:offset], "*/") {
-				errors = append(errors, ParseError{Message: "unterminated comment", Line: startLine, Column: startCol})
+			var closed bool
+			offset, line, col, closed = blockCommentEnd(source, offset+2, line, col+2)
+			tokens = append(tokens, Token{kind, source[start:offset], startLine, startCol, start})
+			if !closed {
+				errors = append(errors, ParseError{Message: unterminated, Line: startLine, Column: startCol})
 			}
 			continue
 		}
