@@ -296,6 +296,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 				doc := parser.ParseDocBlock(c.DocComment)
 				if doc != nil {
 					indexTypeAliases(existing, doc, resolve)
+					templates := templateNames(existing.Templates)
 					for _, prop := range doc.Properties {
 						if prop.Name == "" {
 							continue
@@ -310,7 +311,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 							Kind:       KindProperty,
 							URI:        uri,
 							Visibility: "public",
-							Type:       resolve(prop.Type),
+							Type:       resolveDocTypeString(prop.Type, resolve, templates),
 							ParentFQN:  fqn,
 							IsVirtual:  true,
 							DocComment: prop.Description,
@@ -331,7 +332,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 							Kind:       KindMethod,
 							URI:        uri,
 							Visibility: "public",
-							ReturnType: resolve(method.ReturnType),
+							ReturnType: resolveDocTypeString(method.ReturnType, resolve, templates),
 							ParentFQN:  fqn,
 							IsVirtual:  true,
 							DocComment: method.Description,
@@ -965,6 +966,7 @@ func (idx *Index) indexVirtualMembers(uri string, parent *Symbol, src SymbolSour
 	// Populate template parameters from @template tags
 	parent.Templates = templateParams(doc, resolve)
 	parent.Supertypes = supertypes(doc, resolve)
+	templates := templateNames(parent.Templates)
 
 	for _, prop := range doc.Properties {
 		if prop.Name == "" {
@@ -981,7 +983,7 @@ func (idx *Index) indexVirtualMembers(uri string, parent *Symbol, src SymbolSour
 			Kind:       KindProperty,
 			URI:        uri,
 			Visibility: "public",
-			Type:       resolve(prop.Type),
+			Type:       resolveDocTypeString(prop.Type, resolve, templates),
 			ParentFQN:  fqn,
 			IsVirtual:  true,
 			DocComment: prop.Description,
@@ -1003,7 +1005,7 @@ func (idx *Index) indexVirtualMembers(uri string, parent *Symbol, src SymbolSour
 			Kind:       KindMethod,
 			URI:        uri,
 			Visibility: "public",
-			ReturnType: resolve(method.ReturnType),
+			ReturnType: resolveDocTypeString(method.ReturnType, resolve, templates),
 			ParentFQN:  fqn,
 			IsVirtual:  true,
 			IsStatic:   method.IsStatic,
