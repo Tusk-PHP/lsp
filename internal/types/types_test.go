@@ -218,3 +218,11 @@ func TestExtractParamListType(t *testing.T) {
 		})
 	}
 }
+
+func TestIsCallableName(t *testing.T) {
+	for name, want := range map[string]bool{"callable": true, "Closure": true, `\Closure`: true, "closure": false, "Foo": false} {
+		if got := IsCallableName(name); got != want {
+			t.Errorf("IsCallableName(%q) = %v, want %v", name, got, want)
+		}
+	}
+}

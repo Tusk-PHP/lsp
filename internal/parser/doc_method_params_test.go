@@ -67,3 +67,43 @@ func TestParseDocMethodParams(t *testing.T) {
 		})
 	}
 }
+
+func TestParseDocMethodReturnTypes(t *testing.T) {
+	tests := []struct {
+		method      string
+		returnType  string
+		name        string
+		params      []DocMethodParam
+		description string
+		static      bool
+	}{
+		{"Closure(int): void make()", "Closure(int): void", "make", nil, "", false},
+		{"Closure(int) make(string $s)", "Closure(int)", "make", []DocMethodParam{{Type: "string", Name: "$s"}}, "", false},
+		{"static callable(int, string): bool handler() Gets it", "callable(int, string): bool", "handler", nil, "Gets it", true},
+		{"\\Closure(): (int|string) pick()", "\\Closure(): (int|string)", "pick", nil, "", false},
+		{"Closure<T>(T): T identity()", "Closure<T>(T): T", "identity", nil, "", false},
+		{"static Collection<int, Post> all()", "Collection<int, Post>", "all", nil, "", true},
+		{"array{id: int, tags: list<string>} meta()", "array{id: int, tags: list<string>}", "meta", nil, "", false},
+		{"int | null find(int $id)", "int | null", "find", []DocMethodParam{{Type: "int", Name: "$id"}}, "", false},
+		{"Foo bar (int $x)", "Foo", "bar", []DocMethodParam{{Type: "int", Name: "$x"}}, "", false},
+		{"foo() see(x)", "", "foo", nil, "see(x)", false},
+		{"foo (int $x)", "", "foo", []DocMethodParam{{Type: "int", Name: "$x"}}, "", false},
+		{"callable()", "", "callable", nil, "", false},
+		{"static make()", "", "make", nil, "", true},
+		{"Collection getCollection  the items", "Collection", "getCollection", nil, "the items", false},
+		{"getName", "", "getName", nil, "", false},
+		{"Foo<int>", "", "", nil, "", false},
+		{"static", "", "static", nil, "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.method, func(t *testing.T) {
+			m := parseDocMethod(tt.method)
+			if m.ReturnType != tt.returnType || m.Name != tt.name || m.Description != tt.description || m.IsStatic != tt.static || !slices.Equal(m.Params, tt.params) {
+				t.Fatalf("parseDocMethod(%q) = %+v", tt.method, m)
+			}
+			if (m.ParsedType != nil) != (tt.returnType != "") {
+				t.Fatalf("parsed type = %+v for return type %q", m.ParsedType, tt.returnType)
+			}
+		})
+	}
+}

@@ -476,8 +476,21 @@ func parseCallableExpr(raw string, nullable bool) (TypeExpr, bool) {
 	return expr, true
 }
 
+var callableNames = [...]string{"callable", "Closure", "\\Closure"}
+
+// IsCallableName reports whether name is one the type reader reads a callable
+// signature after, as in `callable(int): bool` or `Closure(int): bool`.
+func IsCallableName(name string) bool {
+	for _, n := range callableNames {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
 func callableName(raw string) string {
-	for _, name := range [...]string{"callable", "Closure", "\\Closure"} {
+	for _, name := range callableNames {
 		if len(raw) > len(name) && strings.HasPrefix(raw, name) && (raw[len(name)] == '(' || raw[len(name)] == '<') {
 			return name
 		}
