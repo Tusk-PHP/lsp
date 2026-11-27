@@ -9,6 +9,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -23,29 +24,7 @@ func setupLaravelE2E(t *testing.T) *Provider {
 
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
-
-	// Index real vendor files
-	for _, dir := range []string{
-		"vendor/laravel/framework/src/Illuminate/Database/Eloquent",
-		"vendor/laravel/framework/src/Illuminate/Collections",
-		"vendor/laravel/framework/src/Illuminate/Database/Eloquent/Relations",
-		"vendor/laravel/framework/src/Illuminate/Database/Query",
-		"vendor/laravel/framework/src/Illuminate/Database/Concerns", // BuildsQueries::first()
-	} {
-		absDir := filepath.Join(root, dir)
-		filepath.Walk(absDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() || filepath.Ext(path) != ".php" {
-				return nil
-			}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return nil
-			}
-			rel, _ := filepath.Rel(root, path)
-			idx.IndexFileWithSource("file:///"+rel, string(data), symbols.SourceVendor)
-			return nil
-		})
-	}
+	indexLaravelVendor(idx, root)
 
 	// Index project models
 	for _, rel := range []string{
@@ -69,13 +48,39 @@ func setupLaravelE2E(t *testing.T) *Provider {
 	return NewProvider(idx, ca, "laravel")
 }
 
+// indexLaravelVendor indexes the Eloquent, collection and query builder
+// sources of testdata/laravel's installed Laravel framework.
+func indexLaravelVendor(idx *symbols.Index, root string) {
+	for _, dir := range []string{
+		"vendor/laravel/framework/src/Illuminate/Database/Eloquent",
+		"vendor/laravel/framework/src/Illuminate/Collections",
+		"vendor/laravel/framework/src/Illuminate/Database/Eloquent/Relations",
+		"vendor/laravel/framework/src/Illuminate/Database/Query",
+		"vendor/laravel/framework/src/Illuminate/Database/Concerns", // BuildsQueries::first()
+	} {
+		absDir := filepath.Join(root, dir)
+		filepath.Walk(absDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || filepath.Ext(path) != ".php" {
+				return nil
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+			rel, _ := filepath.Rel(root, path)
+			idx.IndexFileWithSource("file:///"+rel, string(data), symbols.SourceVendor)
+			return nil
+		})
+	}
+}
+
 // TestE2EGenericChainResolution tests generic type propagation through
 // Eloquent method chains using the real Laravel vendor source files.
 func TestE2EGenericChainResolution(t *testing.T) {
 	p := setupLaravelE2E(t)
 
 	resolveTyped := func(expr, source string, line int) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
@@ -140,7 +145,7 @@ func TestE2EVariableGenericPropagation(t *testing.T) {
 	p := setupLaravelE2E(t)
 
 	resolveTyped := func(expr, source string, line int) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
@@ -282,7 +287,7 @@ func TestE2EMultiLineChainGenerics(t *testing.T) {
 
 	t.Run("single-line variable assignment preserves generics", func(t *testing.T) {
 		source := "<?php\nuse App\\Models\\Category;\n$categories = Category::query()->get()->all();\n$first = $categories[0];\n"
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 
 		rt := p.ResolveExpressionTypeTyped("$categories", source, protocol.Position{Line: 3}, file)
 		if rt.String() != "array<int, App\\Models\\Category>" {

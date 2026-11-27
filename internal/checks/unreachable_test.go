@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
@@ -19,7 +20,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
 		if findings[0].Severity != rule.SeverityWarning {
@@ -36,7 +37,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
 	})
@@ -50,7 +51,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
 	})
@@ -64,7 +65,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
 	})
@@ -78,7 +79,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
 	})
@@ -94,7 +95,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -114,7 +115,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -131,7 +132,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
 		if findings[0].StartLine != 7 {
@@ -150,7 +151,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code"})
 	})
@@ -163,7 +164,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -180,7 +181,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -191,7 +192,7 @@ abstract class Foo {
     abstract public function bar(): string;
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -209,7 +210,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unreachable-code", "unreachable-code"})
 	})
@@ -255,7 +256,7 @@ func TestUnreachableCodeRuleDoesNotFlag(t *testing.T) {
 	for name, body := range bodies {
 		t.Run(name, func(t *testing.T) {
 			source := "<?php\nclass Foo {\n    public function bar() {\n        " + body + "\n    }\n}\n"
-			if findings := (&UnreachableCodeRule{}).Check(parser.ParseFile(source), source, nil); len(findings) != 0 {
+			if findings := (&UnreachableCodeRule{}).Check(parser.ParseFile(source, token.Latest), source, nil); len(findings) != 0 {
 				t.Errorf("unexpected findings: %+v", findings)
 			}
 		})
@@ -286,7 +287,7 @@ func TestUnreachableCodeRuleInsideClosures(t *testing.T) {
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			source := "<?php\nclass Foo {\n    public function bar() {\n        " + c.body + "\n    }\n}\n"
-			findings := (&UnreachableCodeRule{}).Check(parser.ParseFile(source), source, nil)
+			findings := (&UnreachableCodeRule{}).Check(parser.ParseFile(source, token.Latest), source, nil)
 			if len(findings) != 1 || findings[0].StartLine != c.line || findings[0].EndLine != c.line {
 				t.Errorf("want one finding on line %d, got %+v", c.line, findings)
 			}

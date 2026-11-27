@@ -2,21 +2,15 @@ package checks
 
 import (
 	"fmt"
-	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
-
-// builtinConstantRe matches sequences of uppercase letters, digits, and
-// underscores that start with an uppercase letter and are at least two
-// characters long (to avoid false positives on single-letter type keywords).
-// The surrounding context is checked in the calling loop to filter out class
-// constant accesses (:: prefix) and function calls (trailing '(').
-var builtinConstantRe = regexp.MustCompile(`\b([A-Z][A-Z0-9_]+)\b`)
 
 // BuiltinUnavailableRule reports usages of PHP builtins that are not
 // available in the project's resolved PHP version / extension profile.
@@ -33,6 +27,8 @@ type BuiltinUnavailableRule struct {
 	// Extensions is the set of project-enabled PHP extensions, lower-cased,
 	// without the "ext-" prefix (e.g. {"json", "mbstring"}).
 	Extensions []string
+
+	Shared *Shared
 
 	// versionChecked is set, on the copy Check works with, when the file
 	// checks PHP's version: such code is written for several versions, so a
@@ -51,246 +47,77 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 	copied := *r
 	copied.versionChecked = checksPHPVersion(source)
 	r = &copied
-	lines := strings.Split(source, "\n")
+	syntax := r.Shared.tree(source, file.Grammar)
+	refs := syntax.references()
 	var findings []Finding
-	mask := newMaskState(source)
-	for lineNum, raw := range lines {
-		line := maskPHPLine(raw, &mask)
-		findings = append(findings, r.checkFunctions(line, lineNum, file, index)...)
-		findings = append(findings, r.checkClassLikesNew(line, lineNum, file, index)...)
-		findings = append(findings, r.checkClassLikesSingleRef(line, lineNum, file, index)...)
-		findings = append(findings, r.checkClassLikesStatic(line, lineNum, file, index)...)
-		findings = append(findings, r.checkClassLikesCatch(line, lineNum, file, index)...)
-		findings = append(findings, r.checkClassLikesImplements(line, lineNum, file, index)...)
-		findings = append(findings, r.checkClassLikesAttribute(line, lineNum, file, index)...)
-		findings = append(findings, r.checkConstants(line, lineNum)...)
+	for _, call := range refs.calls {
+		findings = append(findings, r.functionFinding(syntax, call.name, file, index)...)
 	}
+	for _, ref := range refs.classes {
+		name, line := syntax.text(ref.name), syntax.line(ref.name)
+		if ref.attribute {
+			findings = append(findings, r.attributeFinding(syntax, ref.name, name, line, file, index)...)
+		} else {
+			findings = append(findings, r.classLikeFinding(syntax, ref.name, name, line, file, index)...)
+		}
+	}
+	for _, constant := range refs.constants {
+		findings = append(findings, r.constantFinding(syntax, constant)...)
+	}
+	slices.SortStableFunc(findings, compareFindingStarts)
 	// Code that checks for an extension or symbol first runs only where it
 	// exists, so it is fine on a profile without it.
-	return dropGuarded(findings, lines, findExtensionGuards(source))
+	return dropGuarded(findings, strings.Split(source, "\n"), syntax.extensionGuards())
 }
 
-func (r *BuiltinUnavailableRule) checkFunctions(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
-	var findings []Finding
-	attrGroups := scanAttributeGroups(line)
-	for _, match := range unknownFunctionCallRe.FindAllStringSubmatchIndex(line, -1) {
-		start, end := match[2], match[3]
-		name := line[start:end]
-		// `#[\NoDiscard('…')]` is an attribute, not a call.
-		if posInAttributeGroup(start, attrGroups) || shouldSkipFunctionCall(line, start, name) {
-			continue
-		}
-
-		// If the function resolves to something already in the index, a
-		// parallel rule (unknown-function or the project's own definition)
-		// handles it. We only fire when the function is NOT in the index but
-		// IS a known builtin — which means it was excluded by the profile.
-		written := writtenName(line, start, name)
-		if functionExists(written, file, index) {
-			continue
-		}
-
-		bare, avail, ok := builtinFunctionAvailability(written, file)
-		if !ok {
-			// Not a known builtin — UnknownFunctionRule handles this.
-			continue
-		}
-
-		if r.satisfies(avail) {
-			// Builtin is known but within the profile's range; nothing to flag.
-			continue
-		}
-
-		findings = append(findings, Finding{
-			StartLine: lineNum,
-			StartCol:  start,
-			EndLine:   lineNum,
-			EndCol:    end,
-			Severity:  rule.SeverityWarning,
-			Code:      rule.BuiltinUnavailable,
-			Message:   r.functionMessage(bare, avail),
-		})
-	}
-	return findings
-}
-
-func (r *BuiltinUnavailableRule) checkClassLikesNew(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
-	return r.checkClassLikeMatches(line, lineNum, file, index, unknownClassNewRe)
-}
-
-func (r *BuiltinUnavailableRule) checkClassLikesSingleRef(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
-	return r.checkClassLikeMatches(line, lineNum, file, index, unknownClassSingleRefRe)
-}
-
-func (r *BuiltinUnavailableRule) checkClassLikesStatic(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
-	var findings []Finding
-	for _, match := range unknownClassStaticRe.FindAllStringSubmatchIndex(line, -1) {
-		start, end := match[4], match[5]
-		name := line[start:end]
-		findings = append(findings, r.classLikeFinding(name, lineNum, start, end, file, index)...)
-	}
-	return findings
-}
-
-func (r *BuiltinUnavailableRule) checkClassLikesCatch(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
-	var findings []Finding
-	for _, match := range unknownClassCatchRe.FindAllStringSubmatchIndex(line, -1) {
-		listStart, listEnd := match[2], match[3]
-		list := line[listStart:listEnd]
-		offset := 0
-		for _, part := range strings.Split(list, "|") {
-			trimmed := strings.TrimSpace(part)
-			if trimmed == "" {
-				offset += len(part) + 1
-				continue
-			}
-			rel := strings.Index(part, trimmed)
-			start := listStart + offset + rel
-			end := start + len(trimmed)
-			findings = append(findings, r.classLikeFinding(trimmed, lineNum, start, end, file, index)...)
-			offset += len(part) + 1
-		}
-	}
-	return findings
-}
-
-func (r *BuiltinUnavailableRule) checkClassLikesImplements(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
-	var findings []Finding
-	for _, match := range unknownClassImplementsRe.FindAllStringSubmatchIndex(line, -1) {
-		listStart, listEnd := match[2], match[3]
-		list := line[listStart:listEnd]
-		offset := 0
-		for _, part := range strings.Split(list, ",") {
-			trimmed := strings.TrimSpace(part)
-			if trimmed == "" {
-				offset += len(part) + 1
-				continue
-			}
-			rel := strings.Index(part, trimmed)
-			start := listStart + offset + rel
-			end := start + len(trimmed)
-			findings = append(findings, r.classLikeFinding(trimmed, lineNum, start, end, file, index)...)
-			offset += len(part) + 1
-		}
-	}
-	return findings
-}
-
-func (r *BuiltinUnavailableRule) checkClassLikesAttribute(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
-	var findings []Finding
-	for _, g := range scanAttributeGroups(line) {
-		for _, tok := range g.names {
-			findings = append(findings, r.attributeFinding(tok.name, lineNum, tok.start, tok.start+len(tok.name), file, index)...)
-		}
-	}
-	return findings
-}
-
-// checkClassLikeMatches handles regexes where group 2/3 is the class name.
-func (r *BuiltinUnavailableRule) checkClassLikeMatches(line string, lineNum int, file *parser.FileNode, index *symbols.Index, re *regexp.Regexp) []Finding {
-	var findings []Finding
-	for _, match := range re.FindAllStringSubmatchIndex(line, -1) {
-		start, end := match[2], match[3]
-		name := line[start:end]
-		findings = append(findings, r.classLikeFinding(name, lineNum, start, end, file, index)...)
-	}
-	return findings
-}
-
-// classLikeFinding emits a builtin-unavailable finding for a class-like name
-// when the name resolves to a known PHP builtin that the project's profile
-// cannot use. Returns nil if the name is already resolved or is in-profile.
-func (r *BuiltinUnavailableRule) classLikeFinding(name string, lineNum, start, end int, file *parser.FileNode, index *symbols.Index) []Finding {
-	// If the class-like is already resolved (locally defined or indexed), skip.
-	// classLikeExists returns true both for locally-defined types and for
-	// types present in the index (which includes builtins that passed the profile).
-	if classLikeExists(name, lineNum, file, index) {
+func (r *BuiltinUnavailableRule) functionFinding(syntax *fileSyntax, call *ast.Name, file *parser.FileNode, index *symbols.Index) []Finding {
+	written := syntax.text(call)
+	if functionExists(written, file, index) {
 		return nil
 	}
-
-	bare, avail, ok := builtinClassAvailability(name, lineNum, file)
-	if !ok {
-		// Not a known builtin — UnknownClassRule handles this.
+	bare, avail, ok := builtinFunctionAvailability(written, file)
+	if !ok || r.satisfies(avail) {
 		return nil
 	}
-
-	if r.satisfies(avail) {
-		return nil
-	}
-
-	return []Finding{{
-		StartLine: lineNum,
-		StartCol:  start,
-		EndLine:   lineNum,
-		EndCol:    end,
-		Severity:  rule.SeverityWarning,
-		Code:      rule.BuiltinUnavailable,
-		Message:   r.classMessage(bare, avail),
-	}}
+	return []Finding{syntax.at(call, Finding{
+		Severity: rule.SeverityWarning,
+		Code:     rule.BuiltinUnavailable,
+		Message:  r.functionMessage(bare, avail),
+	})}
 }
 
-// checkConstants scans a masked line for global built-in constant references
-// and emits findings for any that require a newer PHP version than the profile.
-// It uses builtinConstantRe to find candidate all-uppercase identifiers and
-// then applies context checks to exclude:
-//   - class constant accesses: Foo::BAR  (preceded by '::')
-//   - function calls: NAME(  (followed by '(')
-//   - const declarations: `const NAME` or `define(` contexts are already masked
-//     by the string/comment masking layer, but leading `const ` is checked too.
-func (r *BuiltinUnavailableRule) checkConstants(line string, lineNum int) []Finding {
-	var findings []Finding
-	for _, match := range builtinConstantRe.FindAllStringSubmatchIndex(line, -1) {
-		start, end := match[2], match[3]
-		name := line[start:end]
-
-		// Skip if preceded by '::' — this is a class constant (Foo::CONST).
-		if start >= 2 && line[start-2:start] == "::" {
-			continue
-		}
-		// A single ':' before means it's part of a ternary or label, not '::'.
-		// Skip '->CONST' — a property or method named with all-caps (unusual but valid).
-		if start >= 2 && line[start-2:start] == "->" {
-			continue
-		}
-
-		// Skip if followed by '(' — this is a function call, not a constant.
-		after := end
-		for after < len(line) && line[after] == ' ' {
-			after++
-		}
-		if after < len(line) && line[after] == '(' {
-			continue
-		}
-
-		// Skip leading `const NAME` declarations (class/namespace constants).
-		prefix := strings.TrimSpace(line[:start])
-		if strings.HasSuffix(prefix, "const") {
-			continue
-		}
-
-		// Strip a fully-qualified leading backslash (\JSON_THROW_ON_ERROR).
-		// builtinConstantRe won't include the backslash; the backslash sits one
-		// character before start. We look it up bare regardless.
-		avail, ok := symbols.LookupAvailability(name)
-		if !ok {
-			continue
-		}
-
-		if r.satisfies(avail) {
-			continue
-		}
-
-		findings = append(findings, Finding{
-			StartLine: lineNum,
-			StartCol:  start,
-			EndLine:   lineNum,
-			EndCol:    end,
-			Severity:  rule.SeverityWarning,
-			Code:      rule.BuiltinUnavailable,
-			Message:   r.constantMessage(name, avail),
-		})
+// classLikeFinding reports a class-like name that resolves to a PHP builtin
+// the profile can't use. A name the index has, or one that isn't a builtin,
+// is left to unknown-class.
+func (r *BuiltinUnavailableRule) classLikeFinding(syntax *fileSyntax, node *ast.Name, name string, line int, file *parser.FileNode, index *symbols.Index) []Finding {
+	if classLikeExists(name, line, file, index) {
+		return nil
 	}
-	return findings
+	bare, avail, ok := builtinClassAvailability(name, line, file)
+	if !ok || r.satisfies(avail) {
+		return nil
+	}
+	return []Finding{syntax.at(node, Finding{
+		Severity: rule.SeverityWarning,
+		Code:     rule.BuiltinUnavailable,
+		Message:  r.classMessage(bare, avail),
+	})}
+}
+
+func (r *BuiltinUnavailableRule) constantFinding(syntax *fileSyntax, node *ast.Name) []Finding {
+	name := strings.TrimPrefix(syntax.text(node), "\\")
+	if strings.Contains(name, "\\") {
+		return nil
+	}
+	avail, ok := symbols.LookupAvailability(name)
+	if !ok || r.satisfies(avail) {
+		return nil
+	}
+	return []Finding{syntax.at(node, Finding{
+		Severity: rule.SeverityWarning,
+		Code:     rule.BuiltinUnavailable,
+		Message:  r.constantMessage(name, avail),
+	})}
 }
 
 func (r *BuiltinUnavailableRule) constantMessage(name string, avail symbols.BuiltinAvailability) string {
@@ -363,42 +190,22 @@ func (r *BuiltinUnavailableRule) classMessage(name string, avail symbols.Builtin
 	return fmt.Sprintf("Class '%s' requires PHP >= %s", name, avail.Since)
 }
 
-// attributeFinding emits a builtin-unavailable finding for an attribute name
-// when the name resolves to a known PHP builtin that the project's profile
-// cannot use. Returns nil if the name is already resolved or is in-profile.
-func (r *BuiltinUnavailableRule) attributeFinding(name string, lineNum, start, end int, file *parser.FileNode, index *symbols.Index) []Finding {
-	// Before PHP 8.0, `#[...]` is a comment, so no attribute can fail there.
-	// Code that targets PHP 7 adds them on purpose, for when it runs on 8.x.
-	if compareBuiltinVersionsStrings(r.PHPVersion, "8.0") < 0 {
+// attributeFinding reports one of PHP's own attributes that has no effect
+// on the profile yet. PHP ignores an attribute it doesn't know, so this is a
+// hint, not a warning; before PHP 8.0 `#[...]` is a comment, so nothing is.
+func (r *BuiltinUnavailableRule) attributeFinding(syntax *fileSyntax, node *ast.Name, name string, line int, file *parser.FileNode, index *symbols.Index) []Finding {
+	if compareBuiltinVersionsStrings(r.PHPVersion, "8.0") < 0 || classLikeExists(name, line, file, index) {
 		return nil
 	}
-	// If the class-like is already resolved (locally defined or indexed), skip.
-	if classLikeExists(name, lineNum, file, index) {
+	bare, avail, ok := builtinClassAvailability(name, line, file)
+	if !ok || r.satisfies(avail) {
 		return nil
 	}
-
-	bare, avail, ok := builtinClassAvailability(name, lineNum, file)
-	if !ok {
-		// Not a known builtin — UnknownClassRule handles this.
-		return nil
-	}
-
-	if r.satisfies(avail) {
-		return nil
-	}
-
-	// PHP's own attributes are forward-compatible: an older PHP ignores one it
-	// doesn't know rather than failing. So this is a hint that it does nothing
-	// yet, not a warning.
-	return []Finding{{
-		StartLine: lineNum,
-		StartCol:  start,
-		EndLine:   lineNum,
-		EndCol:    end,
-		Severity:  rule.SeverityHint,
-		Code:      rule.BuiltinUnavailable,
-		Message:   r.attributeMessage(bare, avail),
-	}}
+	return []Finding{syntax.at(node, Finding{
+		Severity: rule.SeverityHint,
+		Code:     rule.BuiltinUnavailable,
+		Message:  r.attributeMessage(bare, avail),
+	})}
 }
 
 func (r *BuiltinUnavailableRule) attributeMessage(name string, avail symbols.BuiltinAvailability) string {
