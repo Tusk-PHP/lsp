@@ -21,6 +21,7 @@ type syntaxTree struct {
 type assignment struct {
 	name  string
 	value ast.Expr
+	path  []string
 }
 
 func newSyntaxTree(src string, tree *ast.File) *syntaxTree {
@@ -51,8 +52,15 @@ func (t *syntaxTree) collect(n ast.Node) bool {
 	case *ast.Foreach:
 		t.foreaches = append(t.foreaches, n)
 	case *ast.Assign:
-		if v, ok := n.Target.(*ast.Variable); ok && (n.Op == token.Equals || n.Op == token.CoalesceEqual) {
-			t.assigns[v.Start] = assignment{name: t.text(v), value: n.Value}
+		switch v := n.Target.(type) {
+		case *ast.Variable:
+			if n.Op == token.Equals || n.Op == token.CoalesceEqual {
+				t.assigns[v.Start] = assignment{name: t.text(v), value: n.Value}
+			}
+		case *ast.List, *ast.Array:
+			t.eachDestructured(n.Target, nil, func(target *ast.Variable, path []string) {
+				t.assigns[target.Start] = assignment{name: t.text(target), value: n.Value, path: path}
+			})
 		}
 	case *ast.Static:
 		if len(n.Vars) > 0 && n.Vars[0].Default != nil {
@@ -65,6 +73,33 @@ func (t *syntaxTree) collect(n ast.Node) bool {
 		}
 	}
 	return true
+}
+
+func (t *syntaxTree) eachDestructured(pattern ast.Expr, path []string, f func(v *ast.Variable, path []string)) {
+	var items []*ast.ArrayItem
+	switch n := pattern.(type) {
+	case *ast.List:
+		items = n.Items
+	case *ast.Array:
+		items = n.Items
+	default:
+		return
+	}
+	for i, item := range items {
+		if item == nil || item.Value == nil {
+			continue
+		}
+		key := itoa(i)
+		if item.Key != nil {
+			key = t.text(item.Key)
+		}
+		at := append(path[:len(path):len(path)], key)
+		if v, ok := item.Value.(*ast.Variable); ok {
+			f(v, at)
+			continue
+		}
+		t.eachDestructured(item.Value, at, f)
+	}
 }
 
 func (t *syntaxTree) text(n ast.Node) string {
@@ -87,13 +122,12 @@ func (t *syntaxTree) assignmentAt(off uint32, name string) (assignment, bool) {
 	return a, ok && a.name == name
 }
 
-func (t *syntaxTree) assignmentStartingLine(line int, name string) (ast.Expr, bool) {
+func (t *syntaxTree) assignmentStartingLine(line int, name string) (assignment, bool) {
 	off, ok := t.offset(textpos.Position{Line: line})
 	if !ok {
-		return nil, false
+		return assignment{}, false
 	}
-	a, ok := t.assignmentAt(t.indented(off), name)
-	return a.value, ok
+	return t.assignmentAt(t.indented(off), name)
 }
 
 func (t *syntaxTree) indented(lineStart uint32) uint32 {
@@ -108,6 +142,13 @@ type assignedValue struct {
 	expr     ast.Expr
 	called   bool
 	declared ast.Type
+	path     []string
+}
+
+func (t *syntaxTree) valueOf(a assignment) assignedValue {
+	v := t.reduce(a.value)
+	v.path = a.path
+	return v
 }
 
 func (t *syntaxTree) reduce(e ast.Expr) assignedValue {

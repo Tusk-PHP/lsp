@@ -239,8 +239,8 @@ func (r *Resolver) feedsItself(varName string, lines []string, file *parser.File
 func (r *Resolver) passesItselfThrough(lines []string, file *parser.FileNode, b *scope.Binding, w int) bool {
 	site := b.Site(w)
 	tree := r.syntaxTree(lines, file)
-	value, ok := writeScope(b, w, &site).assignedValue(tree, site.At.Line, b.Name)
-	return ok && passesThrough(tree, value, b.Name)
+	a, ok := writeScope(b, w, &site).assignedValue(tree, site.At.Line, b.Name)
+	return ok && len(a.path) == 0 && passesThrough(tree, a.value, b.Name)
 }
 
 func passesThrough(t *syntaxTree, e ast.Expr, name string) bool {

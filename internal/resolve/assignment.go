@@ -9,23 +9,22 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
-func (vs variableScope) assignedValue(t *syntaxTree, line int, varName string) (ast.Expr, bool) {
+func (vs variableScope) assignedValue(t *syntaxTree, line int, varName string) (assignment, bool) {
 	w := vs.write
 	if w == nil || line != w.At.Line {
 		return t.assignmentStartingLine(line, varName)
 	}
 	off, ok := t.offset(w.At)
 	if !ok {
-		return nil, false
+		return assignment{}, false
 	}
-	a, ok := t.assignmentAt(off, varName)
-	if !ok {
-		return nil, false
-	}
-	return a.value, true
+	return t.assignmentAt(off, varName)
 }
 
 func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, lines []string, pos textpos.Position, file *parser.FileNode) (ResolvedType, bool) {
+	if len(v.path) > 0 {
+		return r.destructuredType(varName, t, v, lines, pos, file), true
+	}
 	if rt, ok := r.documentedAssignment(varName, t, v, pos, file); ok {
 		return rt, true
 	}
@@ -109,6 +108,37 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 	return ResolvedType{}, false
 }
 
+// varDocType returns the type the doc comment of the statement holding the
+// assignment v gives varName with `@var Type $name`, or, when nameless, with
+// a bare `@var Type`.
+func (r *Resolver) varDocType(t *syntaxTree, v assignedValue, varName string, nameless bool, pos textpos.Position, file *parser.FileNode) ResolvedType {
+	declared := t.statementVarDoc(v.expr.Bounds().Start, varName, nameless)
+	if declared == "" {
+		return ResolvedType{}
+	}
+	return r.declaredVarType(declared, pos, file)
+}
+
+func (r *Resolver) destructuredType(varName string, t *syntaxTree, v assignedValue, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
+	if rt := r.varDocType(t, v, varName, false, pos, file); !rt.IsEmpty() {
+		return rt
+	}
+	whole := v
+	whole.path = nil
+	rt, _ := r.assignedType(varName, t, whole, lines, pos, file)
+	return r.elementAt(rt, v.path)
+}
+
+func (r *Resolver) elementAt(rt ResolvedType, path []string) ResolvedType {
+	for _, key := range path {
+		if rt.IsEmpty() {
+			break
+		}
+		rt = r.OffsetType(rt, key)
+	}
+	return rt
+}
+
 func (r *Resolver) assignedNewType(t *syntaxTree, n *ast.New, ctx ExprContext) (ResolvedType, bool) {
 	if n.Anonymous != nil {
 		return ResolvedType{}, false
@@ -158,15 +188,16 @@ func (r *Resolver) documentedAssignment(varName string, t *syntaxTree, v assigne
 	if v.declared != nil {
 		return r.resolveDocType(t.text(v.declared), file), true
 	}
-	if declared := t.statementVarDoc(v.expr.Bounds().Start, varName); declared != "" {
-		if rt := r.declaredVarType(declared, pos, file); !rt.IsEmpty() {
-			return rt, true
-		}
+	if rt := r.varDocType(t, v, varName, true, pos, file); !rt.IsEmpty() {
+		return rt, true
 	}
 	return ResolvedType{}, false
 }
 
 func (r *Resolver) assignedPlainType(varName string, t *syntaxTree, v assignedValue, lines []string, pos textpos.Position, file *parser.FileNode) (string, bool) {
+	if len(v.path) > 0 {
+		return PlainTypeName(r.destructuredType(varName, t, v, lines, pos, file)), true
+	}
 	if rt, ok := r.documentedAssignment(varName, t, v, pos, file); ok {
 		return rt.String(), true
 	}

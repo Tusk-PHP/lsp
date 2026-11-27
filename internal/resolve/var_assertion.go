@@ -139,13 +139,13 @@ func (t *syntaxTree) statementDoc(off uint32) (ast.Span, bool) {
 }
 
 // statementVarDoc returns the type the doc comment of the statement holding
-// off gives varName, with `@var Type $name` or a bare `@var Type`.
-func (t *syntaxTree) statementVarDoc(off uint32, varName string) string {
+// off gives varName, with `@var Type $name` or, when bare, a bare `@var Type`.
+func (t *syntaxTree) statementVarDoc(off uint32, varName string, bare bool) string {
 	doc, ok := t.statementDoc(off)
 	if !ok {
 		return ""
 	}
-	return t.docVarType(doc, varName, true)
+	return t.docVarType(doc, varName, bare)
 }
 
 // closureDoc returns the doc comment written on a closure, or else the one of
