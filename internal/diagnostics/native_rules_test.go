@@ -82,6 +82,7 @@ func TestNativeRulesDeterministicOrder(t *testing.T) {
 		rule.RedundantUnionMember,
 		rule.UndefinedVariable,
 		rule.UnusedVariable,
+		rule.CompileError,
 		rule.Deprecated,
 		rule.Deprecated,
 		rule.UnusedResult,
@@ -95,6 +96,14 @@ func TestNativeRulesDeterministicOrder(t *testing.T) {
 	for i, want := range wantOrder {
 		if got := rules[i].Codes()[0]; got != want {
 			t.Errorf("rules[%d]: expected %q, got %q", i, want, got)
+		}
+	}
+}
+
+func TestBladeViewsSkipTheCompileErrorRule(t *testing.T) {
+	for _, r := range EditRules(NativeRulesOptions{BladePHP: true}, &checks.Shared{}) {
+		if r.Codes()[0] == rule.CompileError {
+			t.Error("compile-error runs on the PHP compiled from a Blade view")
 		}
 	}
 }

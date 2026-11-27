@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -67,7 +69,7 @@ class Flux {}
 namespace Acme;
 class Hidden {}
 `)
-	aliases := NewAliases(root)
+	aliases := NewAliases(root, func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
 	aliases.Load()
 	idx.SetClassGenerator(aliases)
 	return aliases, idx
@@ -120,7 +122,7 @@ return [
         "Redis" => Illuminate\Support\Facades\Redis::class,
     ],
 ];
-`)
+`, phpparser.OnlyGrammar(token.Latest))
 	want := map[string]string{
 		"App":   `Illuminate\Support\Facades\App`,
 		"Redis": `Illuminate\Support\Facades\Redis`,

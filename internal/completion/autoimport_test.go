@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -166,7 +167,7 @@ func TestAutoImportAliasTakenAddsNextSegment(t *testing.T) {
 func TestAutoImportFallsBackToFullyQualified(t *testing.T) {
 	idx := symbols.NewIndex()
 	p := NewProvider(idx, nil, "")
-	file := parser.ParseFile("<?php\nnamespace App;\nuse Other\\User;\nuse Other\\UserModel;\n")
+	file := parser.ParseFile("<?php\nnamespace App;\nuse Other\\User;\nuse Other\\UserModel;\n", token.Latest)
 	name, edits := p.newImportPlanner("", file).class("Models\\User")
 	if name != "\\Models\\User" || edits != nil {
 		t.Errorf("got %q %v, want \\Models\\User with no import", name, edits)
@@ -176,7 +177,7 @@ func TestAutoImportFallsBackToFullyQualified(t *testing.T) {
 func TestAutoImportFunctionsAndConstantsHaveTheirOwnNames(t *testing.T) {
 	p := NewProvider(symbols.NewIndex(), nil, "")
 	src := "<?php\nnamespace App;\nuse Foo\\Bar\\User;\nuse function Foo\\Helpers\\format;\nuse const Foo\\Codes\\LIMIT;\n"
-	pl := p.newImportPlanner(src, parser.ParseFile(src))
+	pl := p.newImportPlanner(src, parser.ParseFile(src, token.Latest))
 
 	// A class import doesn't take a function's name.
 	if name, edits := pl.plan(importFunction, "Lib\\Helpers\\user"); name != "user" || importTextOf(edits) != "use function Lib\\Helpers\\user;\n" {

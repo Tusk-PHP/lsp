@@ -9,8 +9,6 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/scope"
 )
 
-var superglobals = []string{"$GLOBALS", "$_COOKIE", "$_ENV", "$_FILES", "$_GET", "$_POST", "$_REQUEST", "$_SERVER", "$_SESSION"}
-
 // typedVariablePrefix returns the variable name being typed at the end of
 // prefix, such as "$us" in `foo($us`, including the `$`.
 func typedVariablePrefix(prefix string) (string, bool) {
@@ -79,7 +77,7 @@ func (p *Provider) completeVariables(r *resolve.Resolver, typed string, lines []
 			add("$this", "Current object instance", rankMember, 0)
 		}
 	}
-	for _, g := range superglobals {
+	for _, g := range scope.AutoGlobals() {
 		add(g, "superglobal", rankLanguage, 0)
 	}
 	return items

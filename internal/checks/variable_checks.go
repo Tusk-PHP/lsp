@@ -11,20 +11,8 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
-// superglobals contains variables that are always available in any scope.
-var superglobals = map[string]bool{
-	"$_GET":     true,
-	"$_POST":    true,
-	"$_SERVER":  true,
-	"$_SESSION": true,
-	"$_COOKIE":  true,
-	"$_FILES":   true,
-	"$_ENV":     true,
-	"$_REQUEST": true,
-	"$GLOBALS":  true,
-	"$this":     true,
-	"$argv":     true,
-	"$argc":     true,
+func alwaysDefined(name string) bool {
+	return name == "$this" || name == "$argv" || name == "$argc" || scope.IsAutoGlobal(name)
 }
 
 // skipScopeFunctions are function names whose presence in a scope body
@@ -176,7 +164,7 @@ func checkUndefinedVariables(file *parser.FileNode, source string, outArg func(s
 			continue
 		}
 		name := tok.Value
-		if superglobals[name] {
+		if alwaysDefined(name) {
 			continue
 		}
 		if isExistenceCheck(result.Tokens, ti) {
