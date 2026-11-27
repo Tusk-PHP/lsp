@@ -1,0 +1,1055 @@
+{
+  "workspace": "woocommerce",
+  "root": "testdata/woocommerce",
+  "description": "WooCommerce 11.3.1 on WordPress 7.1.5, laid out as a real site (core at the root, the plugin under wp-content/plugins/woocommerce with its shipped vendor/); ~5.2k PHP files",
+  "readyProbe": "wsym.namespaced-class",
+  "comment": "Cases tagged hooks, template, rest-api or framework-depth need WordPress knowledge; the rest ask plain PHP questions of WordPress-style code (docblock-typed, global functions, `global $wpdb`). WooCommerce targets PHP 7.4, so its own code has no enums, match, nullsafe, readonly, promoted properties or first-class callables, and neither does WordPress core: those syntax tags are deliberately absent from this suite. Each anchor occurs once in its file.",
+  "openFiles": [
+    "wp-content/plugins/woocommerce/includes/class-woocommerce.php",
+    "wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version1/class-wc-rest-tax-classes-v1-controller.php",
+    "wp-content/plugins/woocommerce/templates/order/order-details.php",
+    "wp-content/plugins/woocommerce/src/Internal/PushNotifications/Dispatchers/InternalNotificationDispatcher.php",
+    "wp-content/plugins/woocommerce/includes/class-wc-cart-totals.php"
+  ],
+  "cases": [
+    {
+      "id": "def.wc-extends-wp-core",
+      "feature": "definition",
+      "desc": "readiness probe: WooCommerce REST base class extends the WordPress core controller",
+      "file": "wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version3/class-wc-rest-controller.php",
+      "anchor": "abstract class WC_REST_Controller extends WP_REST_Controller",
+      "offset": 42,
+      "expect": {
+        "targetFile": "wp-includes/rest-api/endpoints/class-wp-rest-controller.php",
+        "targetSymbol": "abstract class WP_REST_Controller"
+      },
+      "tags": [
+        "inheritance",
+        "cross-file",
+        "wordpress",
+        "rest-api"
+      ]
+    },
+    {
+      "id": "def.wc-function",
+      "feature": "definition",
+      "desc": "global WooCommerce function called from a template",
+      "file": "wp-content/plugins/woocommerce/templates/order/order-details.php",
+      "anchor": "$order = wc_get_order( $order_id );",
+      "offset": 9,
+      "expect": {
+        "targetFile": "includes/wc-order-functions.php",
+        "targetSymbol": "function wc_get_order("
+      },
+      "tags": [
+        "function",
+        "cross-file",
+        "template"
+      ]
+    },
+    {
+      "id": "def.wp-core-function",
+      "feature": "definition",
+      "desc": "WordPress core function called from the plugin",
+      "file": "wp-content/plugins/woocommerce/includes/class-wc-brands-coupons.php",
+      "anchor": "$included_brands = get_post_meta(",
+      "offset": 19,
+      "expect": {
+        "targetFile": "wp-includes/post.php",
+        "targetSymbol": "function get_post_meta("
+      },
+      "tags": [
+        "function",
+        "cross-file",
+        "wordpress"
+      ]
+    },
+    {
+      "id": "def.define-constant",
+      "feature": "definition",
+      "desc": "constant created with a plain `define()` in the plugin bootstrap file",
+      "file": "wp-content/plugins/woocommerce/includes/class-woocommerce.php",
+      "anchor": "dirname( WC_PLUGIN_FILE ) . '/'",
+      "offset": 9,
+      "expect": {
+        "targetFile": "woocommerce/woocommerce.php",
+        "targetSymbol": "define( 'WC_PLUGIN_FILE'"
+      },
+      "tags": [
+        "constant",
+        "cross-file",
+        "wordpress"
+      ]
+    },
+    {
+      "id": "def.define-wrapper-constant",
+      "feature": "definition",
+      "desc": "`WC_ABSPATH` is only ever defined through the private `$this->define()` wrapper",
+      "file": "wp-content/plugins/woocommerce/includes/class-woocommerce.php",
+      "anchor": "include_once WC_ABSPATH . 'includes/class-wc-autoloader.php'",
+      "offset": 13,
+      "expect": {
+        "targetFile": "includes/class-woocommerce.php",
+        "targetSymbol": "$this->define( 'WC_ABSPATH'"
+      },
+      "tags": [
+        "constant",
+        "wordpress",
+        "framework-depth"
+      ]
+    },
+    {
+      "id": "def.global-wpdb-property",
+      "feature": "definition",
+      "desc": "property of `global $wpdb`",
+      "file": "wp-content/plugins/woocommerce/includes/class-woocommerce.php",
+      "anchor": "$wpdb->prefix . $table;",
+      "offset": 7,
+      "expect": {
+        "targetFile": "wp-includes/class-wpdb.php",
+        "targetSymbol": "public $prefix"
+      },
+      "tags": [
+        "global",
+        "property",
+        "wordpress",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.hook-callback-this",
+      "feature": "definition",
+      "desc": "`[$this, 'method']` callback given to add_action",
+      "file": "wp-content/plugins/woocommerce/includes/class-woocommerce.php",
+      "anchor": "array( $this, 'on_plugins_loaded' )",
+      "offset": 15,
+      "expect": {
+        "targetFile": "includes/class-woocommerce.php",
+        "targetSymbol": "function on_plugins_loaded"
+      },
+      "tags": [
+        "hooks",
+        "method",
+        "wordpress",
+        "framework-depth"
+      ]
+    },
+    {
+      "id": "def.hook-callback-function-string",
+      "feature": "definition",
+      "desc": "global function named by a string callback in add_action",
+      "file": "wp-content/plugins/woocommerce/includes/class-woocommerce.php",
+      "anchor": "'wc_set_hooked_blocks_version', 10",
+      "offset": 1,
+      "expect": {
+        "targetFile": "includes/wc-template-functions.php",
+        "targetSymbol": "function wc_set_hooked_blocks_version()"
+      },
+      "tags": [
+        "hooks",
+        "function",
+        "cross-file",
+        "wordpress",
+        "framework-depth"
+      ]
+    },
+    {
+      "id": "def.rest-route-callback",
+      "feature": "definition",
+      "desc": "REST route `callback` given as `[$this, 'get_items']`",
+      "file": "wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version1/class-wc-rest-tax-classes-v1-controller.php",
+      "anchor": "'callback'            => array( $this, 'get_items' ),",
+      "offset": 40,
+      "expect": {
+        "targetFile": "class-wc-rest-tax-classes-v1-controller.php",
+        "targetSymbol": "public function get_items("
+      },
+      "tags": [
+        "rest-api",
+        "method",
+        "wordpress",
+        "framework-depth"
+      ]
+    },
+    {
+      "id": "def.core-class-constant",
+      "feature": "definition",
+      "desc": "class constant of a WordPress core class",
+      "file": "wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version1/class-wc-rest-tax-classes-v1-controller.php",
+      "anchor": "'methods'             => WP_REST_Server::READABLE,",
+      "offset": 41,
+      "expect": {
+        "targetFile": "wp-includes/rest-api/class-wp-rest-server.php",
+        "targetSymbol": "const READABLE"
+      },
+      "tags": [
+        "class-constant",
+        "cross-file",
+        "wordpress",
+        "rest-api"
+      ]
+    },
+    {
+      "id": "def.inherited-core-method",
+      "feature": "definition",
+      "desc": "method inherited from WP_REST_Controller two levels up",
+      "file": "wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version1/class-wc-rest-tax-classes-v1-controller.php",
+      "anchor": "$this->prepare_response_for_collection( $class );",
+      "offset": 7,
+      "expect": {
+        "targetFile": "wp-includes/rest-api/endpoints/class-wp-rest-controller.php",
+        "targetSymbol": "function prepare_response_for_collection"
+      },
+      "tags": [
+        "inheritance",
+        "method",
+        "cross-file",
+        "wordpress",
+        "rest-api"
+      ]
+    },
+    {
+      "id": "def.phpdoc-param-core",
+      "feature": "definition",
+      "desc": "method of a parameter typed only by `@param WP_REST_Request`",
+      "file": "wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version1/class-wc-rest-tax-classes-v1-controller.php",
+      "anchor": "$request->set_param( 'context', 'edit' );",
+      "occurrence": 1,
+      "offset": 10,
+      "expect": {
+        "targetFile": "wp-includes/rest-api/class-wp-rest-request.php",
+        "targetSymbol": "function set_param"
+      },
+      "tags": [
+        "phpdoc",
+        "method",
+        "cross-file",
+        "wordpress",
+        "rest-api"
+      ]
+    },
+    {
+      "id": "def.narrowing-is-wp-error",
+      "feature": "definition",
+      "desc": "`array|WP_Error` narrowed by `is_wp_error()` (`@phpstan-assert-if-true`)",
+      "file": "wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version1/class-wc-rest-tax-classes-v1-controller.php",
+      "anchor": "'woocommerce_rest_' . $tax_class->get_error_code(), $tax_class",
+      "offset": 34,
+      "expect": {
+        "targetFile": "wp-includes/class-wp-error.php",
+        "targetSymbol": "function get_error_code()"
+      },
+      "tags": [
+        "narrowing",
+        "phpdoc",
+        "cross-file",
+        "wordpress"
+      ]
+    },
+    {
+      "id": "def.union-return-subclass-method",
+      "feature": "definition",
+      "desc": "method only on WC_Order, on a `false|WC_Order|WC_Order_Refund` result",
+      "file": "wp-content/plugins/woocommerce/templates/myaccount/orders.php",
+      "anchor": "$order->get_view_order_url()",
+      "offset": 8,
+      "expect": {
+        "targetFile": "includes/class-wc-order.php",
+        "targetSymbol": "function get_view_order_url"
+      },
+      "tags": [
+        "phpdoc",
+        "method",
+        "template",
+        "function"
+      ]
+    },
+    {
+      "id": "def.template-arg-variable",
+      "feature": "definition",
+      "desc": "`$order` in an email template comes only from `wc_get_template()` arguments",
+      "file": "wp-content/plugins/woocommerce/templates/emails/customer-completed-order.php",
+      "anchor": "! empty( $order->get_billing_first_name()",
+      "offset": 17,
+      "expect": {
+        "targetFile": "includes/class-wc-order.php",
+        "targetSymbol": "function get_billing_first_name"
+      },
+      "tags": [
+        "template",
+        "variable",
+        "framework-depth",
+        "wordpress"
+      ]
+    },
+    {
+      "id": "def.narrowing-instanceof",
+      "feature": "definition",
+      "desc": "method after `$order instanceof WC_Order &&`",
+      "file": "wp-content/plugins/woocommerce/templates/order/order-details.php",
+      "anchor": "hash_equals( $order->get_order_key()",
+      "offset": 21,
+      "expect": {
+        "targetFile": "includes/class-wc-order.php",
+        "targetSymbol": "function get_order_key"
+      },
+      "tags": [
+        "narrowing",
+        "method",
+        "template"
+      ]
+    },
+    {
+      "id": "def.arrow-fn-param",
+      "feature": "definition",
+      "desc": "method on a typed arrow-function parameter (imported class)",
+      "file": "wp-content/plugins/woocommerce/src/Internal/PushNotifications/Dispatchers/InternalNotificationDispatcher.php",
+      "anchor": "fn ( Notification $notification ) => $notification->to_array()",
+      "offset": 52,
+      "expect": {
+        "targetFile": "PushNotifications/Notifications/Notification.php",
+        "targetSymbol": "function to_array"
+      },
+      "tags": [
+        "arrow-fn",
+        "namespace-import",
+        "method",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.closure-use-variable",
+      "feature": "definition",
+      "desc": "method on a variable captured with `use ( $order )`",
+      "file": "wp-content/plugins/woocommerce/src/Admin/Features/Fulfillments/FulfillmentUtils.php",
+      "anchor": "$order->get_qty_refunded_for_item( $item->get_id() ) : 0",
+      "offset": 8,
+      "expect": {
+        "targetFile": "includes/class-wc-order.php",
+        "targetSymbol": "function get_qty_refunded_for_item"
+      },
+      "tags": [
+        "closure",
+        "variable",
+        "method",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.foreach-phpdoc-array",
+      "feature": "definition",
+      "desc": "method on a foreach value from a `WC_Order_Item[]` return, declared on WC_Data",
+      "file": "wp-content/plugins/woocommerce/src/Admin/Features/Fulfillments/FulfillmentUtils.php",
+      "anchor": "$items_refunded[ $item->get_id() ]",
+      "offset": 24,
+      "expect": {
+        "targetFile": "includes/abstracts/abstract-wc-data.php",
+        "targetSymbol": "public function get_id()"
+      },
+      "tags": [
+        "foreach",
+        "phpdoc",
+        "inheritance",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.generics-container",
+      "feature": "definition",
+      "desc": "`@template T` + `class-string<T>` on the DI container",
+      "file": "wp-content/plugins/woocommerce/includes/class-wc-install.php",
+      "anchor": "get( DatabaseUtil::class )->get_max_index_length()",
+      "offset": 28,
+      "expect": {
+        "targetFile": "src/Internal/Utilities/DatabaseUtil.php",
+        "targetSymbol": "function get_max_index_length"
+      },
+      "tags": [
+        "generics",
+        "phpdoc",
+        "namespace-import",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.self-return",
+      "feature": "definition",
+      "desc": "method on a variable from a static factory returning `self`",
+      "file": "wp-content/plugins/woocommerce/src/Internal/ProductFeed/Integrations/POSCatalog/AsyncGenerator.php",
+      "anchor": "$walker->set_batch_size(",
+      "offset": 9,
+      "expect": {
+        "targetFile": "Feed/ProductWalker.php",
+        "targetSymbol": "function set_batch_size"
+      },
+      "tags": [
+        "static-return",
+        "static",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.trait-method",
+      "feature": "definition",
+      "desc": "trait method called through `$this`",
+      "file": "wp-content/plugins/woocommerce/includes/class-wc-cart-totals.php",
+      "anchor": "$items_total = $this->get_rounded_items_total(",
+      "offset": 22,
+      "expect": {
+        "targetFile": "includes/traits/trait-wc-item-totals.php",
+        "targetSymbol": "function get_rounded_items_total"
+      },
+      "tags": [
+        "trait",
+        "method",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.trait-callable-array",
+      "feature": "definition",
+      "desc": "trait method named in a `[$this, 'method']` callable",
+      "file": "wp-content/plugins/woocommerce/includes/class-wc-cart-totals.php",
+      "anchor": "$fee->total_tax = array_sum( array_map( array( $this, 'round_line_tax' )",
+      "offset": 55,
+      "expect": {
+        "targetFile": "includes/traits/trait-wc-item-totals.php",
+        "targetSymbol": "function round_line_tax"
+      },
+      "tags": [
+        "trait",
+        "method",
+        "hooks"
+      ]
+    },
+    {
+      "id": "def.wc-accessor-property",
+      "feature": "definition",
+      "desc": "`WC()->cart` typed by an `@var WC_Cart` property docblock",
+      "file": "wp-content/plugins/woocommerce/includes/class-wc-checkout.php",
+      "anchor": "WC()->cart->get_cart_contents_count() > 0",
+      "offset": 12,
+      "expect": {
+        "targetFile": "includes/class-wc-cart.php",
+        "targetSymbol": "function get_cart_contents_count"
+      },
+      "tags": [
+        "function",
+        "property",
+        "phpdoc",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.wp-query-method",
+      "feature": "definition",
+      "desc": "WP_Query method on a locally constructed query",
+      "file": "wp-content/plugins/woocommerce/includes/class-wc-shortcodes.php",
+      "anchor": "isset( $force_rendering ) && $single_product->have_posts()",
+      "offset": 46,
+      "expect": {
+        "targetFile": "wp-includes/class-wp-query.php",
+        "targetSymbol": "public function have_posts()"
+      },
+      "tags": [
+        "method",
+        "cross-file",
+        "wordpress"
+      ]
+    },
+    {
+      "id": "def.truthy-narrowing",
+      "feature": "definition",
+      "desc": "method after `$product && !$product->...` drops `null|false`",
+      "file": "wp-content/plugins/woocommerce/includes/class-wc-shortcodes.php",
+      "anchor": "$queried_product && ! $queried_product->is_viewable()",
+      "offset": 40,
+      "expect": {
+        "targetFile": "includes/abstracts/abstract-wc-product.php",
+        "targetSymbol": "function is_viewable"
+      },
+      "tags": [
+        "narrowing",
+        "phpdoc",
+        "inheritance"
+      ]
+    },
+    {
+      "id": "hover.global-wpdb",
+      "feature": "hover",
+      "desc": "`global $wpdb;` is the wpdb instance created in require_wp_db()",
+      "file": "wp-content/plugins/woocommerce/includes/class-woocommerce.php",
+      "anchor": "$wpdb->prefix . $table;",
+      "offset": 0,
+      "comment": "the variable name already contains `wpdb`, so the type is checked by ruling out `mixed`",
+      "expect": {
+        "contains": [
+          "wpdb"
+        ],
+        "notContains": [
+          "mixed"
+        ]
+      },
+      "tags": [
+        "global",
+        "variable",
+        "wordpress",
+        "framework-depth"
+      ]
+    },
+    {
+      "id": "hover.wc-get-order-result",
+      "feature": "hover",
+      "desc": "`false|WC_Order|WC_Order_Refund` from wc_get_order(), after an `if ( ! $order ) return;` guard",
+      "file": "wp-content/plugins/woocommerce/templates/order/order-details.php",
+      "anchor": "$order_items        = $order->get_items(",
+      "offset": 22,
+      "expect": {
+        "contains": [
+          "WC_Order",
+          "WC_Order_Refund"
+        ],
+        "notContains": [
+          "bool",
+          "false"
+        ]
+      },
+      "tags": [
+        "variable",
+        "function",
+        "phpdoc",
+        "narrowing",
+        "template"
+      ]
+    },
+    {
+      "id": "hover.template-docblock-var",
+      "feature": "hover",
+      "desc": "template variable documented by a file-level `@var bool`",
+      "file": "wp-content/plugins/woocommerce/templates/order/order-details.php",
+      "anchor": "if ( $show_downloads ) {",
+      "offset": 5,
+      "expect": {
+        "contains": [
+          "bool"
+        ]
+      },
+      "tags": [
+        "template",
+        "phpdoc",
+        "variable"
+      ]
+    },
+    {
+      "id": "hover.template-arg-variable",
+      "feature": "hover",
+      "desc": "`$has_orders` comes from the `wc_get_template()` args (`0 < $total`)",
+      "file": "wp-content/plugins/woocommerce/templates/myaccount/orders.php",
+      "anchor": "'woocommerce_before_account_orders', $has_orders",
+      "offset": 37,
+      "expect": {
+        "contains": [
+          "bool"
+        ]
+      },
+      "tags": [
+        "template",
+        "variable",
+        "framework-depth",
+        "wordpress"
+      ]
+    },
+    {
+      "id": "hover.null-coalesce",
+      "feature": "hover",
+      "desc": "`$customer ?? new WC_Customer()`",
+      "file": "wp-content/plugins/woocommerce/src/Blocks/Domain/Services/CheckoutFieldsFrontend.php",
+      "anchor": "$customer->save();",
+      "occurrence": 2,
+      "offset": 0,
+      "expect": {
+        "contains": [
+          "WC_Customer"
+        ]
+      },
+      "tags": [
+        "operator",
+        "variable"
+      ]
+    },
+    {
+      "id": "hover.list-destructuring",
+      "feature": "hover",
+      "desc": "element of `list()` over an `explode()` result",
+      "file": "wp-content/plugins/woocommerce/src/Blocks/BlockTemplatesController.php",
+      "anchor": "strtolower( $template_id )",
+      "offset": 12,
+      "expect": {
+        "contains": [
+          "string"
+        ]
+      },
+      "tags": [
+        "list-destructuring",
+        "variable"
+      ]
+    },
+    {
+      "id": "hover.foreach-phpdoc",
+      "feature": "hover",
+      "desc": "foreach value over a `@param Notification[]` array",
+      "file": "wp-content/plugins/woocommerce/src/Internal/PushNotifications/Dispatchers/InternalNotificationDispatcher.php",
+      "anchor": "$this->step_logger->log_failure(\n\t\t\t\t\t$notification,",
+      "offset": 38,
+      "expect": {
+        "contains": [
+          "Notification"
+        ]
+      },
+      "tags": [
+        "foreach",
+        "phpdoc",
+        "variable"
+      ]
+    },
+    {
+      "id": "hover.rest-ensure-response",
+      "feature": "hover",
+      "desc": "result of rest_ensure_response() (phpdoc return)",
+      "file": "wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version1/class-wc-rest-tax-classes-v1-controller.php",
+      "anchor": "$response = rest_ensure_response( $data );\n\t\t$response->header(",
+      "offset": 45,
+      "expect": {
+        "contains": [
+          "WP_REST_Response"
+        ]
+      },
+      "tags": [
+        "function",
+        "phpdoc",
+        "variable",
+        "rest-api",
+        "wordpress"
+      ]
+    },
+    {
+      "id": "hover.attribute",
+      "feature": "hover",
+      "desc": "`#[AllowDynamicProperties]` class attribute",
+      "file": "wp-content/plugins/woocommerce/src/Admin/API/Init.php",
+      "anchor": "#[AllowDynamicProperties]",
+      "offset": 2,
+      "expect": {
+        "contains": [
+          "AllowDynamicProperties"
+        ]
+      },
+      "tags": [
+        "attribute"
+      ]
+    },
+    {
+      "id": "completion.union-return-members",
+      "feature": "completion",
+      "desc": "members of a `WC_Order|WC_Order_Refund` from wc_get_order()",
+      "file": "wp-content/plugins/woocommerce/templates/order/order-details.php",
+      "anchor": "$order->get_items( apply_filters",
+      "offset": 8,
+      "expect": {
+        "items": [
+          "get_items",
+          "has_status",
+          "get_downloadable_items",
+          "get_order_key"
+        ]
+      },
+      "tags": [
+        "phpdoc",
+        "method",
+        "template",
+        "inheritance"
+      ]
+    },
+    {
+      "id": "completion.global-wpdb",
+      "feature": "completion",
+      "desc": "members of `global $wpdb`",
+      "file": "wp-content/plugins/woocommerce/src/Admin/API/RateLimits/QRLoginRateLimits.php",
+      "anchor": "$result = $wpdb->query(",
+      "offset": 17,
+      "expect": {
+        "items": [
+          "query",
+          "prepare",
+          "get_results",
+          "prefix"
+        ]
+      },
+      "tags": [
+        "global",
+        "method",
+        "property",
+        "wordpress",
+        "framework-depth"
+      ]
+    },
+    {
+      "id": "completion.core-class-constants",
+      "feature": "completion",
+      "desc": "constants of WP_REST_Server",
+      "file": "wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version1/class-wc-rest-tax-classes-v1-controller.php",
+      "anchor": "get_endpoint_args_for_item_schema( WP_REST_Server::CREATABLE )",
+      "offset": 51,
+      "expect": {
+        "items": [
+          "READABLE",
+          "CREATABLE",
+          "DELETABLE",
+          "EDITABLE"
+        ]
+      },
+      "tags": [
+        "class-constant",
+        "wordpress",
+        "rest-api"
+      ]
+    },
+    {
+      "id": "completion.array-shape-keys",
+      "feature": "completion",
+      "desc": "keys of an `array{limit:int, seconds:int}|null` return",
+      "file": "wp-content/plugins/woocommerce/src/Admin/API/RateLimits/QRLoginRateLimits.php",
+      "anchor": "(int) $options['limit']",
+      "offset": 16,
+      "expect": {
+        "items": [
+          "limit",
+          "seconds"
+        ]
+      },
+      "tags": [
+        "array-shape",
+        "phpdoc"
+      ]
+    },
+    {
+      "id": "completion.inherited-rest-members",
+      "feature": "completion",
+      "desc": "own and inherited WP_REST_Controller members on `$this`",
+      "file": "wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version1/class-wc-rest-tax-classes-v1-controller.php",
+      "anchor": "$this->update_additional_fields_for_object( $tax_class, $request );",
+      "offset": 7,
+      "expect": {
+        "items": [
+          "update_additional_fields_for_object",
+          "prepare_item_for_response",
+          "prepare_response_for_collection",
+          "get_collection_params",
+          "rest_base"
+        ]
+      },
+      "tags": [
+        "inheritance",
+        "method",
+        "property",
+        "rest-api",
+        "wordpress"
+      ]
+    },
+    {
+      "id": "completion.static-members",
+      "feature": "completion",
+      "desc": "static methods of a WooCommerce class",
+      "file": "wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version1/class-wc-rest-tax-classes-v1-controller.php",
+      "anchor": "WC_Tax::create_tax_class( $request['name'] )",
+      "offset": 8,
+      "expect": {
+        "items": [
+          "create_tax_class",
+          "get_tax_classes",
+          "get_tax_class_by"
+        ]
+      },
+      "tags": [
+        "static",
+        "method",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "completion.template-arg-members",
+      "feature": "completion",
+      "desc": "members of `$order` in an email template fed by wc_get_template()",
+      "file": "wp-content/plugins/woocommerce/templates/emails/customer-completed-order.php",
+      "anchor": "! empty( $order->get_billing_first_name()",
+      "offset": 17,
+      "expect": {
+        "items": [
+          "get_billing_first_name",
+          "get_order_number",
+          "get_billing_email"
+        ]
+      },
+      "tags": [
+        "template",
+        "framework-depth",
+        "wordpress"
+      ]
+    },
+    {
+      "id": "completion.global-function-prefix",
+      "feature": "completion",
+      "desc": "global WooCommerce functions by prefix",
+      "file": "wp-content/plugins/woocommerce/templates/order/order-details.php",
+      "anchor": "wc_get_account_orders_actions( $order ),",
+      "offset": 7,
+      "expect": {
+        "items": [
+          "wc_get_account_orders_actions",
+          "wc_get_order",
+          "wc_get_template"
+        ]
+      },
+      "tags": [
+        "function",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "completion.arrow-fn-param",
+      "feature": "completion",
+      "desc": "members of a typed arrow-function parameter",
+      "file": "wp-content/plugins/woocommerce/src/Internal/PushNotifications/Dispatchers/InternalNotificationDispatcher.php",
+      "anchor": "'type'        => $notification->get_type(),",
+      "offset": 32,
+      "expect": {
+        "items": [
+          "get_type",
+          "get_resource_id",
+          "get_identifier",
+          "to_array"
+        ]
+      },
+      "tags": [
+        "arrow-fn",
+        "method",
+        "namespace-import"
+      ]
+    },
+    {
+      "id": "sig.wp-core-function",
+      "feature": "signatureHelp",
+      "desc": "parameters of register_rest_route()",
+      "file": "wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version1/class-wc-rest-tax-classes-v1-controller.php",
+      "anchor": "register_rest_route(\n\t\t\t$this->namespace,\n\t\t\t'/' . $this->rest_base,\n\t\t\tarray(\n\t\t\t\tarray(",
+      "offset": 20,
+      "expect": {
+        "contains": [
+          "$route_namespace",
+          "$route"
+        ]
+      },
+      "tags": [
+        "function",
+        "wordpress",
+        "rest-api"
+      ]
+    },
+    {
+      "id": "sig.apply-filters",
+      "feature": "signatureHelp",
+      "desc": "parameters of apply_filters() at a hook call",
+      "file": "wp-content/plugins/woocommerce/templates/order/order-details.php",
+      "anchor": "apply_filters( 'woocommerce_purchase_order_item_types'",
+      "offset": 15,
+      "expect": {
+        "contains": [
+          "$hook_name",
+          "$value"
+        ]
+      },
+      "tags": [
+        "hooks",
+        "function",
+        "wordpress"
+      ]
+    },
+    {
+      "id": "sig.static-namespaced",
+      "feature": "signatureHelp",
+      "desc": "parameters of an imported class's static method",
+      "file": "wp-content/plugins/woocommerce/src/Internal/PushNotifications/Dispatchers/InternalNotificationDispatcher.php",
+      "anchor": "JsonWebToken::create(",
+      "offset": 21,
+      "expect": {
+        "contains": [
+          "$payload",
+          "$secret"
+        ]
+      },
+      "tags": [
+        "static",
+        "namespace-import"
+      ]
+    },
+    {
+      "id": "refs.trait",
+      "feature": "references",
+      "desc": "every `use` of a WooCommerce trait",
+      "file": "wp-content/plugins/woocommerce/includes/traits/trait-wc-item-totals.php",
+      "anchor": "trait WC_Item_Totals",
+      "offset": 6,
+      "expect": {
+        "minCount": 3,
+        "files": [
+          "includes/class-wc-cart-totals.php",
+          "includes/abstracts/abstract-wc-order.php"
+        ]
+      },
+      "tags": [
+        "trait",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "refs.hook-callback-method",
+      "feature": "references",
+      "desc": "a method referenced only as a hook callback string",
+      "file": "wp-content/plugins/woocommerce/includes/class-woocommerce.php",
+      "anchor": "public function on_plugins_loaded()",
+      "offset": 16,
+      "comment": "the declaration plus `array( $this, 'on_plugins_loaded' )` in add_action",
+      "expect": {
+        "minCount": 2,
+        "files": [
+          "includes/class-woocommerce.php"
+        ]
+      },
+      "tags": [
+        "hooks",
+        "method",
+        "framework-depth",
+        "wordpress"
+      ]
+    },
+    {
+      "id": "refs.global-function",
+      "feature": "references",
+      "desc": "uses of `wc_get_container()` across includes/ and src/",
+      "file": "wp-content/plugins/woocommerce/woocommerce.php",
+      "anchor": "function wc_get_container()",
+      "offset": 9,
+      "expect": {
+        "minCount": 50,
+        "files": [
+          "includes/class-wc-install.php",
+          "includes/class-woocommerce.php"
+        ]
+      },
+      "tags": [
+        "function",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "symbols.rest-controller",
+      "feature": "documentSymbol",
+      "desc": "class, properties and methods of a REST controller",
+      "file": "wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version1/class-wc-rest-tax-classes-v1-controller.php",
+      "expect": {
+        "items": [
+          "WC_REST_Tax_Classes_V1_Controller",
+          "rest_base",
+          "register_routes",
+          "get_items",
+          "create_item",
+          "delete_item"
+        ]
+      },
+      "tags": [
+        "rest-api",
+        "method",
+        "property"
+      ]
+    },
+    {
+      "id": "symbols.functions-file",
+      "feature": "documentSymbol",
+      "desc": "global functions in a WooCommerce functions file",
+      "file": "wp-content/plugins/woocommerce/includes/wc-order-functions.php",
+      "expect": {
+        "items": [
+          "wc_get_orders",
+          "wc_get_order",
+          "wc_get_order_statuses"
+        ]
+      },
+      "tags": [
+        "function"
+      ]
+    },
+    {
+      "id": "wsym.core-class",
+      "feature": "workspaceSymbol",
+      "desc": "find a WordPress core class from the plugin",
+      "file": "wp-content/plugins/woocommerce/includes/class-woocommerce.php",
+      "query": "WP_REST_Controller",
+      "expect": {
+        "items": [
+          "WP_REST_Controller"
+        ]
+      },
+      "tags": [
+        "wordpress",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "wsym.namespaced-class",
+      "feature": "workspaceSymbol",
+      "desc": "find a namespaced class under src/",
+      "file": "wp-content/plugins/woocommerce/includes/class-woocommerce.php",
+      "query": "NewOrderNotification",
+      "expect": {
+        "items": [
+          "NewOrderNotification"
+        ]
+      },
+      "tags": [
+        "namespace-import"
+      ]
+    },
+    {
+      "id": "impl.abstract-method",
+      "feature": "implementation",
+      "desc": "concrete overrides of an abstract method",
+      "file": "wp-content/plugins/woocommerce/src/Internal/PushNotifications/Notifications/Notification.php",
+      "anchor": "abstract public function get_type(): string;",
+      "offset": 25,
+      "expect": {
+        "targetFile": "Notifications/NewOrderNotification.php",
+        "targetSymbol": "function get_type"
+      },
+      "tags": [
+        "inheritance",
+        "method"
+      ]
+    },
+    {
+      "id": "impl.interface",
+      "feature": "implementation",
+      "desc": "classes implementing a WooCommerce interface",
+      "file": "wp-content/plugins/woocommerce/includes/interfaces/class-wc-queue-interface.php",
+      "anchor": "interface WC_Queue_Interface",
+      "offset": 10,
+      "expect": {
+        "targetFile": "includes/queue/class-wc-action-queue.php",
+        "targetSymbol": "class WC_Action_Queue"
+      },
+      "tags": [
+        "interface",
+        "cross-file"
+      ]
+    }
+  ]
+}

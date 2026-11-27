@@ -1,0 +1,1024 @@
+{
+  "workspace": "sylius",
+  "root": "testdata/sylius",
+  "description": "Sylius-Standard v2.3.1 (Symfony 7, Doctrine ORM, API Platform, Symfony UX) with a full vendor/; the app's src/ holds the entity overrides, the rest of the code lives in vendor/sylius/sylius and the Sylius plugins; fetched with `make reference-apps`",
+  "readyProbe": "wsym.vendor-enum",
+  "comment": "Most cases sit in the Sylius bundles a developer opens from vendor/, because the app's own src/ only overrides entities. Cases tagged symfony, doctrine, container, routing, twig, translation, api-platform or framework-depth need framework knowledge; the rest ask plain PHP questions of a large codebase. Every expected target was checked against the code; each anchor occurs once in its file unless `occurrence` is set.",
+  "openFiles": [
+    "src/Entity/Order/Order.php",
+    "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Twig/Component/Dashboard/StatisticsComponent.php",
+    "vendor/sylius/sylius/src/Sylius/Bundle/ShopBundle/Controller/ResendVerificationEmailController.php",
+    "vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Doctrine/ORM/OrderRepository.php",
+    "vendor/sylius/sylius/src/Sylius/Component/Core/Model/Order.php"
+  ],
+  "cases": [
+    {
+      "id": "def.vendor-base-entity",
+      "feature": "definition",
+      "desc": "readiness probe: aliased `extends BaseOrder` in an app entity jumps to the Sylius core model in vendor",
+      "file": "src/Entity/Order/Order.php",
+      "anchor": "extends BaseOrder",
+      "offset": 8,
+      "expect": {
+        "targetFile": "Component/Core/Model/Order.php",
+        "targetSymbol": "class Order"
+      },
+      "tags": [
+        "vendor",
+        "cross-file",
+        "namespace-import",
+        "inheritance",
+        "doctrine"
+      ]
+    },
+    {
+      "id": "def.orm-attribute",
+      "feature": "definition",
+      "desc": "Doctrine mapping attribute through the `ORM` namespace alias",
+      "file": "src/Entity/Order/Order.php",
+      "anchor": "#[ORM\\Table(name: 'sylius_order')]",
+      "offset": 6,
+      "expect": {
+        "targetFile": "doctrine/orm/src/Mapping/Table.php",
+        "targetSymbol": "class Table"
+      },
+      "tags": [
+        "attribute",
+        "namespace-import",
+        "doctrine",
+        "vendor"
+      ]
+    },
+    {
+      "id": "sig.orm-attribute-args",
+      "feature": "signatureHelp",
+      "desc": "constructor parameters of a Doctrine mapping attribute",
+      "file": "src/Entity/Order/Order.php",
+      "anchor": "#[ORM\\Table(name: 'sylius_order')]",
+      "offset": 12,
+      "expect": {
+        "contains": [
+          "name",
+          "schema"
+        ]
+      },
+      "tags": [
+        "attribute",
+        "promoted-property",
+        "doctrine",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.same-namespace-class",
+      "feature": "definition",
+      "desc": "unimported class resolved from the current namespace",
+      "file": "src/Entity/Product/ProductVariant.php",
+      "anchor": "new ProductVariantTranslation()",
+      "offset": 4,
+      "expect": {
+        "targetFile": "src/Entity/Product/ProductVariantTranslation.php",
+        "targetSymbol": "class ProductVariantTranslation"
+      },
+      "tags": [
+        "namespace-import",
+        "cross-file",
+        "doctrine"
+      ]
+    },
+    {
+      "id": "impl.plugin-interface-app-entity",
+      "feature": "implementation",
+      "desc": "implementations of a plugin interface include the app entity that implements it",
+      "file": "vendor/sylius/mollie-plugin/src/Entity/OrderInterface.php",
+      "anchor": "interface OrderInterface extends",
+      "offset": 10,
+      "expect": {
+        "targetFile": "src/Entity/Order/Order.php",
+        "targetSymbol": "class Order"
+      },
+      "tags": [
+        "interface",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "wsym.app-entity",
+      "feature": "workspaceSymbol",
+      "desc": "find an app entity class by name",
+      "file": "src/Entity/Order/Order.php",
+      "query": "ShopBillingData",
+      "expect": {
+        "items": [
+          "ShopBillingData"
+        ]
+      },
+      "tags": [
+        "doctrine"
+      ]
+    },
+    {
+      "id": "hover.array-shape-return",
+      "feature": "hover",
+      "desc": "variable typed by a `@return array<array{period: string, ...}>`",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Twig/Component/Dashboard/StatisticsComponent.php",
+      "anchor": "$saleList = $statistics->getSales();",
+      "offset": 1,
+      "expect": {
+        "contains": [
+          "period"
+        ]
+      },
+      "tags": [
+        "array-shape",
+        "phpdoc",
+        "variable"
+      ]
+    },
+    {
+      "id": "def.inline-var-phpdoc",
+      "feature": "definition",
+      "desc": "method on a variable typed only by an inline `/** @var ChannelInterface */`",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Twig/Component/Dashboard/StatisticsComponent.php",
+      "anchor": "Currencies::getSymbol($channel->getBaseCurrency()",
+      "offset": 32,
+      "expect": {
+        "targetFile": "Component/Core/Model/ChannelInterface.php",
+        "targetSymbol": "function getBaseCurrency"
+      },
+      "tags": [
+        "phpdoc",
+        "variable",
+        "interface",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "hover.promoted-readonly-property",
+      "feature": "hover",
+      "desc": "`protected readonly` promoted constructor property",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Twig/Component/Dashboard/StatisticsComponent.php",
+      "anchor": "$this->channelRepository->findOneByCode($this->channelCode)",
+      "offset": 7,
+      "expect": {
+        "contains": [
+          "ChannelRepositoryInterface"
+        ]
+      },
+      "tags": [
+        "promoted-property",
+        "readonly",
+        "property"
+      ]
+    },
+    {
+      "id": "completion.promoted-nullable-interface",
+      "feature": "completion",
+      "desc": "members of a nullable promoted property typed by a Symfony interface that extends the PSR one",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Twig/Component/Dashboard/StatisticsComponent.php",
+      "anchor": "$this->clock->now()->modify($datetime)",
+      "offset": 14,
+      "expect": {
+        "items": [
+          "now",
+          "sleep",
+          "withTimeZone"
+        ]
+      },
+      "tags": [
+        "promoted-property",
+        "interface",
+        "inheritance",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.live-component-attribute",
+      "feature": "definition",
+      "desc": "Symfony UX attribute on a method",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Twig/Component/Dashboard/StatisticsComponent.php",
+      "anchor": "#[LiveAction]\n    public function changeRange(",
+      "offset": 2,
+      "expect": {
+        "targetFile": "ux-live-component/src/Attribute/LiveAction.php",
+        "targetSymbol": "class LiveAction"
+      },
+      "tags": [
+        "attribute",
+        "symfony",
+        "vendor"
+      ]
+    },
+    {
+      "id": "hover.match-result",
+      "feature": "hover",
+      "desc": "variable assigned from a `match` whose arms are strings",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Twig/Component/Dashboard/StatisticsComponent.php",
+      "anchor": "return new \\DateInterval($interval);",
+      "offset": 26,
+      "expect": {
+        "contains": [
+          "string"
+        ]
+      },
+      "tags": [
+        "match",
+        "variable"
+      ]
+    },
+    {
+      "id": "hover.list-destructure-match",
+      "feature": "hover",
+      "desc": "variable destructured from a `match` returning string pairs",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Twig/Component/Dashboard/StatisticsComponent.php",
+      "anchor": "$this->startDate = $startDate;",
+      "offset": 20,
+      "expect": {
+        "contains": [
+          "string"
+        ]
+      },
+      "tags": [
+        "list-destructuring",
+        "match",
+        "variable"
+      ]
+    },
+    {
+      "id": "typedef.inline-var",
+      "feature": "typeDefinition",
+      "desc": "type of a variable declared by an inline `@var`",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Twig/Component/Dashboard/StatisticsComponent.php",
+      "anchor": "$channel = $this->channelRepository->findOneByCode($this->channelCode);",
+      "offset": 1,
+      "expect": {
+        "targetFile": "Component/Core/Model/ChannelInterface.php",
+        "targetSymbol": "interface ChannelInterface"
+      },
+      "tags": [
+        "phpdoc",
+        "variable"
+      ]
+    },
+    {
+      "id": "symbols.live-component",
+      "feature": "documentSymbol",
+      "desc": "props, actions and private helpers of a live component",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Twig/Component/Dashboard/StatisticsComponent.php",
+      "expect": {
+        "items": [
+          "StatisticsComponent",
+          "channelCode",
+          "getStatistics",
+          "changeRange",
+          "resolveDates"
+        ]
+      },
+      "tags": [
+        "property",
+        "method"
+      ]
+    },
+    {
+      "id": "def.vendor-function",
+      "feature": "definition",
+      "desc": "global function declared in Symfony's deprecation contracts",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Twig/Component/Dashboard/StatisticsComponent.php",
+      "anchor": "trigger_deprecation(",
+      "offset": 0,
+      "expect": {
+        "targetFile": "symfony/contracts/Deprecation/function.php",
+        "targetSymbol": "function trigger_deprecation"
+      },
+      "tags": [
+        "function",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.route-name",
+      "feature": "definition",
+      "desc": "route name passed to the router jumps to its YAML route in the Shop bundle",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/ShopBundle/Controller/ResendVerificationEmailController.php",
+      "anchor": "$this->router->generate('sylius_shop_login')",
+      "occurrence": 1,
+      "offset": 25,
+      "expect": {
+        "targetFile": "ShopBundle/Resources/config/routing/security.yml",
+        "targetSymbol": "sylius_shop_login:"
+      },
+      "tags": [
+        "routing",
+        "symfony",
+        "framework-depth",
+        "vendor"
+      ]
+    },
+    {
+      "id": "sig.named-args-readonly-ctor",
+      "feature": "signatureHelp",
+      "desc": "named arguments to a readonly command's promoted constructor",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/ShopBundle/Controller/ResendVerificationEmailController.php",
+      "anchor": "channelCode: $channel->getCode(),",
+      "offset": 13,
+      "expect": {
+        "contains": [
+          "channelCode",
+          "sendVerificationLink"
+        ]
+      },
+      "tags": [
+        "promoted-property",
+        "readonly",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "completion.readonly-class-property",
+      "feature": "completion",
+      "desc": "members of a promoted property in a `final readonly class`",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/ShopBundle/Controller/ResendVerificationEmailController.php",
+      "anchor": "$this->csrfTokenManager->isTokenValid($token)",
+      "offset": 25,
+      "expect": {
+        "items": [
+          "isTokenValid",
+          "getToken",
+          "refreshToken",
+          "removeToken"
+        ]
+      },
+      "tags": [
+        "readonly",
+        "promoted-property",
+        "symfony",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.trait-property",
+      "feature": "definition",
+      "desc": "`$this->container` is declared by a trait of the base ResourceController",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/PromotionBundle/Controller/PromotionCouponController.php",
+      "anchor": "$form = $this->container->get('form.factory')",
+      "offset": 15,
+      "expect": {
+        "targetFile": "resource-bundle/src/Bundle/Controller/ContainerAwareTrait.php",
+        "targetSymbol": "$container"
+      },
+      "tags": [
+        "trait",
+        "property",
+        "inheritance",
+        "vendor"
+      ]
+    },
+    {
+      "id": "hover.container-get-service",
+      "feature": "hover",
+      "desc": "result of `$container->get('form.factory')->create()` is a FormInterface",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/PromotionBundle/Controller/PromotionCouponController.php",
+      "anchor": "$form->handleRequest($request);",
+      "offset": 1,
+      "expect": {
+        "contains": [
+          "FormInterface"
+        ]
+      },
+      "tags": [
+        "container",
+        "symfony",
+        "framework-depth",
+        "variable"
+      ]
+    },
+    {
+      "id": "def.container-service-id",
+      "feature": "definition",
+      "desc": "service id string jumps to its registration in the bundle's PHP service config",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/PromotionBundle/Controller/PromotionCouponController.php",
+      "anchor": "$this->container->get('sylius.generator.promotion_coupon')",
+      "offset": 23,
+      "expect": {
+        "targetFile": "PromotionBundle/Resources/config/services.php",
+        "targetSymbol": "set('sylius.generator.promotion_coupon'"
+      },
+      "tags": [
+        "container",
+        "symfony",
+        "framework-depth",
+        "vendor"
+      ]
+    },
+    {
+      "id": "hover.container-repository-find",
+      "feature": "hover",
+      "desc": "entity fetched through a repository service from the container",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/PromotionBundle/Controller/PromotionCouponController.php",
+      "anchor": "$promotion = $this->container->get('sylius.repository.promotion')->find($promotionId)",
+      "offset": 1,
+      "expect": {
+        "contains": [
+          "Promotion"
+        ]
+      },
+      "tags": [
+        "container",
+        "doctrine",
+        "generics",
+        "framework-depth"
+      ]
+    },
+    {
+      "id": "def.doctrine-inherited-querybuilder",
+      "feature": "definition",
+      "desc": "`createQueryBuilder()` inherited from Doctrine's EntityRepository through two Sylius repositories",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Doctrine/ORM/OrderRepository.php",
+      "anchor": "return $this->createQueryBuilder('o')\n            ->addSelect('customer')",
+      "offset": 14,
+      "expect": {
+        "targetFile": "doctrine/orm/src/EntityRepository.php",
+        "targetSymbol": "function createQueryBuilder"
+      },
+      "tags": [
+        "doctrine",
+        "inheritance",
+        "generics",
+        "vendor"
+      ]
+    },
+    {
+      "id": "completion.querybuilder-chain",
+      "feature": "completion",
+      "desc": "QueryBuilder members after a chain of `static`-returning calls",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Doctrine/ORM/OrderRepository.php",
+      "anchor": "->leftJoin('o.customer', 'customer')\n            ->andWhere('o.state != :state')",
+      "offset": 51,
+      "expect": {
+        "items": [
+          "andWhere",
+          "setParameter",
+          "getQuery",
+          "orderBy"
+        ]
+      },
+      "tags": [
+        "static-return",
+        "doctrine",
+        "vendor"
+      ]
+    },
+    {
+      "id": "hover.null-coalesce-comparison",
+      "feature": "hover",
+      "desc": "`'' !== ($criteria['product'] ?? '')` is a bool",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Doctrine/ORM/OrderRepository.php",
+      "anchor": "$hasProductCriteria = '' !==",
+      "offset": 1,
+      "expect": {
+        "contains": [
+          "bool"
+        ]
+      },
+      "tags": [
+        "operator",
+        "variable"
+      ]
+    },
+    {
+      "id": "def.assert-narrowing",
+      "feature": "definition",
+      "desc": "`Assert::isInstanceOf` narrows a Shipping interface to the Core one that has `getZone()`",
+      "file": "vendor/sylius/sylius/src/Sylius/Component/Core/Shipping/Checker/Eligibility/ZoneEligibilityChecker.php",
+      "anchor": "$shippingMethod->getZone()",
+      "offset": 17,
+      "expect": {
+        "targetFile": "Component/Core/Model/ShippingMethodInterface.php",
+        "targetSymbol": "function getZone"
+      },
+      "tags": [
+        "narrowing",
+        "interface",
+        "namespace-import"
+      ]
+    },
+    {
+      "id": "def.instanceof-narrowing",
+      "feature": "definition",
+      "desc": "early return on `!instanceof ShipmentInterface` narrows the parameter",
+      "file": "vendor/sylius/sylius/src/Sylius/Component/Core/Shipping/Checker/Eligibility/ZoneEligibilityChecker.php",
+      "anchor": "$shippingSubject->getOrder()",
+      "offset": 18,
+      "expect": {
+        "targetFile": "Component/Core/Model/ShipmentInterface.php",
+        "targetSymbol": "function getOrder"
+      },
+      "tags": [
+        "narrowing",
+        "interface"
+      ]
+    },
+    {
+      "id": "hover.foreach-phpdoc-array",
+      "feature": "hover",
+      "desc": "loop variable over `@return array|ZoneInterface[]`",
+      "file": "vendor/sylius/sylius/src/Sylius/Component/Core/Shipping/Checker/Eligibility/ZoneEligibilityChecker.php",
+      "anchor": "if ($zone->getCode()",
+      "offset": 5,
+      "expect": {
+        "contains": [
+          "ZoneInterface"
+        ]
+      },
+      "tags": [
+        "foreach",
+        "phpdoc",
+        "variable"
+      ]
+    },
+    {
+      "id": "def.narrowed-promoted-property",
+      "feature": "definition",
+      "desc": "public promoted property on a command after `!instanceof` throws",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/Validator/Constraints/OrderAddressRequirementValidator.php",
+      "anchor": "null === $value->billingAddress &&",
+      "offset": 17,
+      "expect": {
+        "targetFile": "ApiBundle/Command/Checkout/UpdateCart.php",
+        "targetSymbol": "$billingAddress"
+      },
+      "tags": [
+        "narrowing",
+        "promoted-property",
+        "readonly",
+        "property"
+      ]
+    },
+    {
+      "id": "def.nullsafe-phpdoc-return",
+      "feature": "definition",
+      "desc": "method on a `?->` result whose `@return` narrows the native return type",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/Validator/Constraints/OrderAddressRequirementValidator.php",
+      "anchor": "$channel->isShippingAddressInCheckoutRequired()",
+      "offset": 10,
+      "expect": {
+        "targetFile": "Component/Core/Model/ChannelInterface.php",
+        "targetSymbol": "function isShippingAddressInCheckoutRequired"
+      },
+      "tags": [
+        "nullsafe",
+        "phpdoc",
+        "narrowing"
+      ]
+    },
+    {
+      "id": "def.enum-case-in-match",
+      "feature": "definition",
+      "desc": "backed enum case used as a `match` arm",
+      "file": "vendor/sylius/paypal-plugin/src/Verifier/ThreeDSecureVerifier.php",
+      "anchor": "ThreeDSecureEnrollmentStatus::Bypassed",
+      "offset": 30,
+      "expect": {
+        "targetFile": "Model/ThreeDSecureEnrollmentStatus.php",
+        "targetSymbol": "case Bypassed"
+      },
+      "tags": [
+        "enum",
+        "match",
+        "vendor"
+      ]
+    },
+    {
+      "id": "completion.enum-cases",
+      "feature": "completion",
+      "desc": "cases offered after `Enum::`",
+      "file": "vendor/sylius/paypal-plugin/src/Verifier/ThreeDSecureVerifier.php",
+      "anchor": "ThreeDSecureAuthenticationStatus::Succeeded, ",
+      "offset": 34,
+      "expect": {
+        "items": [
+          "Succeeded",
+          "Attempted",
+          "Failed",
+          "Decoupled"
+        ]
+      },
+      "tags": [
+        "enum",
+        "vendor"
+      ]
+    },
+    {
+      "id": "hover.foreach-generic-collection",
+      "feature": "hover",
+      "desc": "loop variable over a `Collection<array-key, ShipmentInterface>` property",
+      "file": "vendor/sylius/sylius/src/Sylius/Component/Core/Model/Order.php",
+      "anchor": "foreach ($this->shipments as $shipment) {",
+      "offset": 29,
+      "expect": {
+        "contains": [
+          "ShipmentInterface"
+        ]
+      },
+      "tags": [
+        "foreach",
+        "generics",
+        "phpdoc",
+        "doctrine"
+      ]
+    },
+    {
+      "id": "hover.collection-filter-last",
+      "feature": "hover",
+      "desc": "`$collection->filter(closure)->last()` keeps the element type",
+      "file": "vendor/sylius/sylius/src/Sylius/Component/Core/Model/Order.php",
+      "anchor": "return $payment !== false ? $payment : null;",
+      "offset": 8,
+      "expect": {
+        "contains": [
+          "PaymentInterface"
+        ]
+      },
+      "tags": [
+        "generics",
+        "closure",
+        "doctrine",
+        "variable"
+      ]
+    },
+    {
+      "id": "def.arrow-fn-param-method",
+      "feature": "definition",
+      "desc": "method on a typed arrow-function parameter whose type is an aliased import",
+      "file": "vendor/sylius/sylius/src/Sylius/Component/Core/Model/Order.php",
+      "anchor": "BaseAdjustmentInterface $adjustment) => !$adjustment->isNeutral()",
+      "offset": 54,
+      "expect": {
+        "targetFile": "Component/Order/Model/AdjustmentInterface.php",
+        "targetSymbol": "function isNeutral"
+      },
+      "tags": [
+        "arrow-fn",
+        "namespace-import",
+        "method"
+      ]
+    },
+    {
+      "id": "hover.closure-use-var",
+      "feature": "hover",
+      "desc": "variable captured with `use ($variant)` keeps its parameter type",
+      "file": "vendor/sylius/sylius/src/Sylius/Component/Core/Model/Order.php",
+      "anchor": "return $variant === $itemUnit->getStockable();",
+      "offset": 8,
+      "expect": {
+        "contains": [
+          "ProductVariantInterface"
+        ]
+      },
+      "tags": [
+        "closure",
+        "variable"
+      ]
+    },
+    {
+      "id": "hover.repository-generic-find",
+      "feature": "hover",
+      "desc": "`find()` on a `ProductVariantRepositoryInterface<ProductVariantInterface>` property from a trait",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/ShopBundle/Twig/Component/Product/SummaryComponent.php",
+      "anchor": "$changedVariant = $this->productVariantRepository->find($variantId);",
+      "offset": 1,
+      "expect": {
+        "contains": [
+          "ProductVariantInterface"
+        ]
+      },
+      "tags": [
+        "generics",
+        "doctrine",
+        "trait",
+        "phpdoc"
+      ]
+    },
+    {
+      "id": "hover.entitymanager-getrepository",
+      "feature": "hover",
+      "desc": "`getRepository(X::class)` returns `EntityRepository<X>`",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/Doctrine/ORM/Filter/ProductPriceOrderFilter.php",
+      "anchor": "$entityRepository = $queryBuilder->getEntityManager()",
+      "offset": 1,
+      "expect": {
+        "contains": [
+          "EntityRepository"
+        ]
+      },
+      "tags": [
+        "generics",
+        "doctrine",
+        "variable"
+      ]
+    },
+    {
+      "id": "def.api-provider-interface",
+      "feature": "definition",
+      "desc": "API Platform state provider interface",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/StateProvider/Shop/Order/Payment/PaymentMethod/CollectionProvider.php",
+      "anchor": "final readonly class CollectionProvider implements ProviderInterface",
+      "offset": 51,
+      "expect": {
+        "targetFile": "api-platform/state/ProviderInterface.php",
+        "targetSymbol": "interface ProviderInterface"
+      },
+      "tags": [
+        "api-platform",
+        "interface",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.api-operation-inherited",
+      "feature": "definition",
+      "desc": "`getClass()` on an API Platform Operation, declared on its Metadata parent",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/StateProvider/Shop/Order/Payment/PaymentMethod/CollectionProvider.php",
+      "anchor": "$operation->getClass()",
+      "offset": 12,
+      "expect": {
+        "targetFile": "api-platform/metadata/Metadata.php",
+        "targetSymbol": "function getClass"
+      },
+      "tags": [
+        "api-platform",
+        "inheritance",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.class-constant-cross-file",
+      "feature": "definition",
+      "desc": "class constant of a Sylius API helper class",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/StateProvider/Shop/Order/Payment/PaymentMethod/CollectionProvider.php",
+      "anchor": "Assert::keyExists($context, ContextKeys::CHANNEL);",
+      "offset": 41,
+      "expect": {
+        "targetFile": "ApiBundle/Serializer/ContextKeys.php",
+        "targetSymbol": "CHANNEL"
+      },
+      "tags": [
+        "class-constant",
+        "api-platform",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.static-vendor-assert",
+      "feature": "definition",
+      "desc": "static assertion helper in webmozart/assert",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/StateProvider/Shop/Order/Payment/PaymentMethod/CollectionProvider.php",
+      "anchor": "Assert::isInstanceOf($operation, GetCollection::class);",
+      "offset": 8,
+      "expect": {
+        "targetFile": "webmozart/assert/src/Assert.php",
+        "targetSymbol": "function isInstanceOf"
+      },
+      "tags": [
+        "static",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.first-class-callable",
+      "feature": "definition",
+      "desc": "method referenced as `$obj->method(...)`",
+      "file": "vendor/sylius/sylius/src/Sylius/Abstraction/StateMachine/src/Twig/StateMachineExtension.php",
+      "anchor": "$this->stateMachine->getEnabledTransitions(...)",
+      "offset": 21,
+      "expect": {
+        "targetFile": "StateMachine/src/StateMachineInterface.php",
+        "targetSymbol": "function getEnabledTransitions"
+      },
+      "tags": [
+        "first-class-callable",
+        "promoted-property",
+        "interface"
+      ]
+    },
+    {
+      "id": "def.translation-key",
+      "feature": "definition",
+      "desc": "translation key passed to `$translator->trans()` jumps to the bundle's YAML catalogue",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Installer/Requirement/SettingsRequirements.php",
+      "anchor": "$translator->trans('sylius.installer.settings.timezone_help')",
+      "offset": 20,
+      "expect": {
+        "targetFile": "CoreBundle/Resources/translations/messages.en.yml",
+        "targetSymbol": "timezone_help:"
+      },
+      "tags": [
+        "translation",
+        "symfony",
+        "framework-depth",
+        "vendor"
+      ]
+    },
+    {
+      "id": "sig.constructor-positional",
+      "feature": "signatureHelp",
+      "desc": "fourth positional argument of a promoted constructor",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Installer/Requirement/SettingsRequirements.php",
+      "anchor": "$translator->trans('sylius.installer.settings.timezone_help')",
+      "offset": 0,
+      "expect": {
+        "contains": [
+          "label",
+          "fulfilled",
+          "help"
+        ]
+      },
+      "tags": [
+        "promoted-property",
+        "method"
+      ]
+    },
+    {
+      "id": "hover.global-constant",
+      "feature": "hover",
+      "desc": "fully qualified builtin constant",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Installer/Requirement/SettingsRequirements.php",
+      "anchor": "version_compare(\\PHP_VERSION,",
+      "offset": 17,
+      "expect": {
+        "contains": [
+          "PHP_VERSION"
+        ]
+      },
+      "tags": [
+        "constant"
+      ]
+    },
+    {
+      "id": "def.inherited-constant",
+      "feature": "definition",
+      "desc": "`self::` constant declared on the Symfony parent class",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Validator/Constraints/CartItemAvailability.php",
+      "anchor": "return self::CLASS_CONSTRAINT;",
+      "offset": 13,
+      "expect": {
+        "targetFile": "symfony/validator/Constraint.php",
+        "targetSymbol": "CLASS_CONSTRAINT ="
+      },
+      "tags": [
+        "class-constant",
+        "inheritance",
+        "symfony",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.twig-template-name",
+      "feature": "definition",
+      "desc": "`@SyliusAdmin/...` template name in a render call jumps to the bundle template",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Controller/DashboardController.php",
+      "anchor": "render('@SyliusAdmin/dashboard/index.html.twig'",
+      "offset": 8,
+      "expect": {
+        "targetFile": "AdminBundle/templates/dashboard/index.html.twig",
+        "targetSymbol": "extends"
+      },
+      "tags": [
+        "twig",
+        "symfony",
+        "framework-depth",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.hooked-property-member",
+      "feature": "definition",
+      "desc": "method on `$request->query`, a property declared with hooks on Request, inherited from ParameterBag",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Controller/DashboardController.php",
+      "anchor": "$request->query->has('channel')",
+      "offset": 17,
+      "expect": {
+        "targetFile": "http-foundation/ParameterBag.php",
+        "targetSymbol": "function has"
+      },
+      "tags": [
+        "property",
+        "inheritance",
+        "symfony",
+        "vendor"
+      ]
+    },
+    {
+      "id": "hover.array-map-arrow-result",
+      "feature": "hover",
+      "desc": "`array_map` with an arrow function returning string gives an array of strings",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/CatalogPromotion/Processor/ProductCatalogPromotionsProcessor.php",
+      "anchor": "updateVariants($variantsCodes)",
+      "offset": 16,
+      "expect": {
+        "contains": [
+          "string"
+        ]
+      },
+      "tags": [
+        "arrow-fn",
+        "generics",
+        "function",
+        "variable"
+      ]
+    },
+    {
+      "id": "refs.api-context-key",
+      "feature": "references",
+      "desc": "uses of an API context key constant across providers, filters and processors",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/Serializer/ContextKeys.php",
+      "anchor": "public const CHANNEL =",
+      "offset": 13,
+      "expect": {
+        "minCount": 20,
+        "files": [
+          "Filter/ProductPriceOrderFilter.php",
+          "Payment/PaymentMethod/CollectionProvider.php"
+        ]
+      },
+      "tags": [
+        "class-constant",
+        "cross-file",
+        "api-platform"
+      ]
+    },
+    {
+      "id": "refs.attribute-constant",
+      "feature": "references",
+      "desc": "a constant referenced from `#[LiveListener(...)]` attributes in three components",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Twig/Component/Dashboard/ChannelSelectorComponent.php",
+      "anchor": "public const SYLIUS_ADMIN_CHANNEL_CHANGED",
+      "offset": 13,
+      "expect": {
+        "minCount": 4,
+        "files": [
+          "Dashboard/StatisticsComponent.php",
+          "Dashboard/NewOrdersComponent.php",
+          "Dashboard/PendingActionCountComponent.php"
+        ]
+      },
+      "tags": [
+        "class-constant",
+        "attribute",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "refs.command-class",
+      "feature": "references",
+      "desc": "a Messenger command used by a controller, its handler and an API context builder",
+      "file": "vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Command/Account/ResendVerificationEmail.php",
+      "anchor": "readonly class ResendVerificationEmail",
+      "offset": 15,
+      "expect": {
+        "minCount": 3,
+        "files": [
+          "Controller/ResendVerificationEmailController.php",
+          "Account/ResendVerificationEmailHandler.php",
+          "ContextBuilder/ResendVerificationEmailContextBuilder.php"
+        ]
+      },
+      "tags": [
+        "cross-file",
+        "readonly"
+      ]
+    },
+    {
+      "id": "impl.interface-class",
+      "feature": "implementation",
+      "desc": "implementation of a Core service interface",
+      "file": "vendor/sylius/sylius/src/Sylius/Component/Core/Statistics/Provider/StatisticsProviderInterface.php",
+      "anchor": "interface StatisticsProviderInterface",
+      "offset": 10,
+      "expect": {
+        "targetFile": "Statistics/Provider/StatisticsProvider.php",
+        "targetSymbol": "class StatisticsProvider"
+      },
+      "tags": [
+        "interface",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "wsym.vendor-enum",
+      "feature": "workspaceSymbol",
+      "desc": "find a vendor enum by name",
+      "file": "src/Entity/Order/Order.php",
+      "query": "ThreeDSecureEnrollmentStatus",
+      "expect": {
+        "items": [
+          "ThreeDSecureEnrollmentStatus"
+        ]
+      },
+      "tags": [
+        "enum",
+        "vendor"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "server": "tusk-php",
+  "comment": "First proposal for Tusk-PHP/lsp#431, from runs on 2026-11-27 (Apple silicon). minPass is the count passed then: a ratchet, raised when a change earns it and lowered only with a reason. Readiness, memory and latency marks leave room for slower CI runners (about 3-4x for time, +30% for memory). Interactive features must answer within 50 ms at p95; references scan the workspace and get 1 s.",
+  "workspaces": {
+    "filament": {
+      "minPass": 27,
+      "maxReadyMs": 1500,
+      "maxPeakRssMB": 650,
+      "maxP95Ms": { "completion": 50, "hover": 50, "definition": 50, "signatureHelp": 50, "references": 1000 }
+    },
+    "sylius": {
+      "minPass": 40,
+      "maxReadyMs": 5000,
+      "maxPeakRssMB": 800,
+      "maxP95Ms": { "completion": 50, "hover": 50, "definition": 50, "signatureHelp": 50, "references": 1000 }
+    },
+    "woocommerce": {
+      "minPass": 43,
+      "maxReadyMs": 3000,
+      "maxPeakRssMB": 300,
+      "maxP95Ms": { "completion": 50, "hover": 50, "definition": 50, "signatureHelp": 50, "references": 1000 }
+    },
+    "mageos": {
+      "minPass": 41,
+      "maxReadyMs": 15000,
+      "maxPeakRssMB": 1700,
+      "maxP95Ms": { "completion": 50, "hover": 50, "definition": 50, "signatureHelp": 50, "references": 1000 }
+    }
+  }
+}
