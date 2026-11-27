@@ -377,7 +377,7 @@ func tokenize(source string) ([]Token, []ParseError) {
 
 func tokenizeFrom(source string, inHTML bool) ([]Token, []ParseError) {
 	var errors []ParseError
-	tokens := make([]Token, 0, len(source)/4)
+	tokens := make([]Token, 0, len(source)/4+2)
 	line, col, offset := 0, 0, 0
 
 	for offset < len(source) {
@@ -668,7 +668,7 @@ func tokenizeFrom(source string, inHTML bool) ([]Token, []ParseError) {
 		case '\\':
 			kind = TokenBackslash
 		}
-		tokens = append(tokens, Token{kind, string(ch), line, col, offset})
+		tokens = append(tokens, Token{kind, source[offset : offset+1], line, col, offset})
 		offset++
 		col++
 	}
