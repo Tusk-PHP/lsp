@@ -195,13 +195,22 @@ func (rt ResolvedType) FullString() string {
 	return sb.String()
 }
 
-// name is the type's name as PHP writes it: the value of true and false,
-// whose FQN is bool, else the FQN.
+// name is the type's name as PHP writes it: the value of a literal type,
+// whose FQN is its base type, else the FQN.
 func (rt ResolvedType) name() string {
-	if rt.FQN == "bool" && rt.Literal != "" {
+	if rt.Literal != "" {
 		return rt.Literal
 	}
 	return rt.FQN
+}
+
+// generalized is rt with every literal type in it widened to its base type:
+// 'asc'|'desc' is string, and 1|2 is int.
+func (rt ResolvedType) generalized() ResolvedType {
+	return rt.transform(func(t ResolvedType) ResolvedType {
+		t.Literal = ""
+		return t
+	})
 }
 
 // ParseGenericType parses a type string like "Collection<int, Category>" into
@@ -558,7 +567,7 @@ func MakeUnion(parts []ResolvedType, nullable bool) ResolvedType {
 	for _, part := range parts {
 		add(part)
 	}
-	flat = collapseBools(flat)
+	flat = absorbLiterals(flat)
 	switch len(flat) {
 	case 0:
 		if nullable {
@@ -583,41 +592,75 @@ func MakeUnion(parts []ResolvedType, nullable bool) ResolvedType {
 	return best
 }
 
-// collapseBools replaces true and false with one bool where the union holds
-// both of them, or bool itself.
-func collapseBools(parts []ResolvedType) []ResolvedType {
-	var hasTrue, hasFalse, hasBool bool
+// absorbLiterals drops the literals a union holds beside their base type,
+// as 'a' beside string or 1 beside int, and writes true and false together
+// as bool.
+func absorbLiterals(parts []ResolvedType) []ResolvedType {
+	var bases, trueOrFalse scalarSet
 	for _, p := range parts {
+		bit := scalarBit(p)
 		switch {
-		case !isPlainBool(p):
+		case bit == 0:
+		case p.Literal == "":
+			bases |= bit
 		case p.Literal == "true":
-			hasTrue = true
+			trueOrFalse |= 1
 		case p.Literal == "false":
-			hasFalse = true
-		default:
-			hasBool = true
+			trueOrFalse |= 2
 		}
 	}
-	if !hasBool && !(hasTrue && hasFalse) {
+	if trueOrFalse == 3 {
+		bases |= scalarBool
+	}
+	if bases == 0 {
 		return parts
 	}
 	out := parts[:0]
-	placed := false
+	placedBool := false
 	for _, p := range parts {
-		if isPlainBool(p) {
-			if placed {
+		bit := scalarBit(p)
+		switch {
+		case bases&bit == 0:
+		case bit == scalarBool:
+			if placedBool {
 				continue
 			}
-			placed = true
+			placedBool = true
 			p = ResolvedType{FQN: "bool"}
+		case p.Literal != "":
+			continue
 		}
 		out = append(out, p)
 	}
 	return out
 }
 
-func isPlainBool(rt ResolvedType) bool {
-	return rt.FQN == "bool" && rt.Conditional == nil && len(rt.Union) == 0 && len(rt.Intersection) == 0
+type scalarSet uint8
+
+const (
+	scalarBool scalarSet = 1 << iota
+	scalarInt
+	scalarFloat
+	scalarString
+)
+
+// scalarBit is the scalar a union part is, or a literal of, or 0 for any
+// other part.
+func scalarBit(rt ResolvedType) scalarSet {
+	if rt.Conditional != nil || len(rt.Union) > 0 || len(rt.Intersection) > 0 {
+		return 0
+	}
+	switch rt.FQN {
+	case "bool":
+		return scalarBool
+	case "int":
+		return scalarInt
+	case "float":
+		return scalarFloat
+	case "string":
+		return scalarString
+	}
+	return 0
 }
 
 func makeIntersection(parts []ResolvedType, nullable bool) ResolvedType {

@@ -512,8 +512,8 @@ func (r *Resolver) NewExpressionType(className, args string, ctx ExprContext) Re
 	params := r.paramPatterns(ctor, parser.ParseDocBlock(ctor.DocComment))
 	names := templateNames(tmpls, ctor.Templates)
 	bound := r.bindCallTemplates(params, r.CallSiteFor(args, ctx), names, nil, ctor.ParentFQN, ctx.File)
-	r.dropOutOfBound(bound, tmpls, fqn, ctx.File)
-	r.dropOutOfBound(bound, ctor.Templates, ctor.ParentFQN, ctx.File)
+	r.settleBindings(bound, tmpls, fqn, ctx.File)
+	r.settleBindings(bound, ctor.Templates, ctor.ParentFQN, ctx.File)
 	if len(bound) == 0 {
 		// A constructor without types for its templates, given an array: its
 		// keys and values are the class's arguments, in order.
@@ -575,7 +575,7 @@ func (r *Resolver) arrayLiteralType(literal string, ctx ExprContext) ResolvedTyp
 				return rt
 			}
 			key := strings.Trim(strings.TrimSpace(v[:arrow]), `'"`)
-			vt := r.ExpressionType(strings.TrimSpace(v[arrow+2:]), ctx)
+			vt := r.ExpressionType(strings.TrimSpace(v[arrow+2:]), ctx).generalized()
 			if vt.IsEmpty() {
 				vt = ResolvedType{FQN: "mixed"}
 			}
@@ -598,7 +598,7 @@ func (r *Resolver) arrayLiteralType(literal string, ctx ExprContext) ResolvedTyp
 			}
 			return rt
 		}
-		vt := r.ExpressionType(v, ctx)
+		vt := r.ExpressionType(v, ctx).generalized()
 		if vt.IsEmpty() {
 			return rt
 		}
