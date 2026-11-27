@@ -37,9 +37,12 @@ func TestConformance(t *testing.T) {
 	}
 	t.Logf("corpus: %d PHP files", len(entries))
 
-	// --- Phase 2: Build shared index ---
-	idx := buildIndex(entries)
-	prov := newProviders(idx)
+	// --- Phase 2: Build one index per project ---
+	indexes := buildIndexes(entries)
+	provs := make(map[*corpusProject]*providers, len(indexes))
+	for project, idx := range indexes {
+		provs[project] = newProviders(idx)
+	}
 
 	// Build in-memory sources map for FindReferences (avoids disk I/O).
 	sources := make(map[string]string, len(entries))
@@ -64,6 +67,7 @@ func TestConformance(t *testing.T) {
 	t.Run("parser_and_index", func(t *testing.T) {
 		for _, entry := range entries {
 			entry := entry // capture
+			idx := indexes[entry.project]
 
 			// Count lines for range validation.
 			lineCount := strings.Count(entry.source, "\n") + 1
@@ -89,6 +93,7 @@ func TestConformance(t *testing.T) {
 	t.Run("operations", func(t *testing.T) {
 		for i, entry := range entries {
 			entry := entry
+			prov := provs[entry.project]
 			if i >= maxOperationsFiles {
 				break
 			}
@@ -132,6 +137,7 @@ func TestConformance(t *testing.T) {
 	t.Run("find_references", func(t *testing.T) {
 		for _, entry := range entries {
 			entry := entry
+			prov := provs[entry.project]
 			if !isProjectEntry(entry) {
 				continue
 			}
@@ -150,6 +156,7 @@ func TestConformance(t *testing.T) {
 	t.Run("spot_checks", func(t *testing.T) {
 		for _, entry := range entries {
 			entry := entry
+			idx, prov := indexes[entry.project], provs[entry.project]
 			add(checkUseImportSpotCheck(entry, idx, prov)...)
 		}
 	})

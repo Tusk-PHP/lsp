@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -52,19 +54,19 @@ func TestRefreshFollowsProjectFilesOnDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFiles(t, root, map[string]string{
-		"app/New.php":            "<?php\nnamespace App;\nclass New {}\n",
+		"app/Fresh.php":          "<?php\nnamespace App;\nclass Fresh {}\n",
 		"app/Changed.php":        "<?php\nnamespace App;\nclass Renamed {}\n",
 		"vendor/acme/Vendor.php": "<?php\nclass VendorClass {}\n",
 		"app/notes.txt":          "not PHP",
 	})
-	out := refreshPaths(t, ws, root, "app/Old.php", "app/New.php", "app/Changed.php", "app/Changed.php", "vendor/acme/Vendor.php", "app/notes.txt", "app/Gone.php")
+	out := refreshPaths(t, ws, root, "app/Old.php", "app/Fresh.php", "app/Changed.php", "app/Changed.php", "vendor/acme/Vendor.php", "app/notes.txt", "app/Gone.php")
 	if len(out.Files) != 3 || out.Composer || out.ProfileChanged {
 		t.Errorf("three project files changed: %+v", out)
 	}
 	if ws.Index.Lookup(`App\Old`) != nil || ws.Index.Lookup(`App\Changed`) != nil {
 		t.Error("the deleted file and the old content leave the index")
 	}
-	if ws.Index.Lookup(`App\New`) == nil || ws.Index.Lookup(`App\Renamed`) == nil {
+	if ws.Index.Lookup(`App\Fresh`) == nil || ws.Index.Lookup(`App\Renamed`) == nil {
 		t.Error("the new file and the new content are indexed")
 	}
 	if ws.Index.Lookup("VendorClass") != nil {
@@ -129,7 +131,7 @@ func TestRefreshRespectsMaxIndexFiles(t *testing.T) {
 
 func TestRefreshResolvesTheProfileAgain(t *testing.T) {
 	ws, root := newRefreshWorkspace(t, nil, map[string]string{"composer.json": `{"require": {"php": "^8.1", "ext-redis": "*"}}`})
-	if _, err := ws.SetProfile(symbols.BuiltinProfile{PHPVersion: "8.1", Extensions: []string{"redis"}}); err != nil {
+	if _, err := ws.SetProfile(symbols.BuiltinProfile{PHPVersion: "8.1", Extensions: []string{"redis"}, Grammars: phpparser.GrammarsBetween(token.PHP81, token.Latest)}); err != nil {
 		t.Fatal(err)
 	}
 	if out := refreshPaths(t, ws, root, "composer.json"); out.ProfileChanged || !out.Composer {
@@ -198,7 +200,7 @@ func TestRefreshSeparatesConfigErrorsFromFilesItCouldNotRead(t *testing.T) {
 }
 
 func TestWatchGlobsCoverWhatARefreshReads(t *testing.T) {
-	globs := WatchGlobs()
+	globs := New(Options{RootPath: t.TempDir(), Framework: "none", Config: config.DefaultConfig()}).WatchGlobs()
 	for _, want := range []string{"**/*.php", "**/*.phtml", "**/composer.json", "**/composer.lock", "**/vendor/composer/installed.json", "**/" + config.FileName} {
 		if !slices.Contains(globs, want) {
 			t.Errorf("the watchers cover %s: %v", want, globs)
@@ -359,5 +361,60 @@ func TestIDEHelperUnderAPathWithASpaceIsIndexedUnderItsFileURI(t *testing.T) {
 	want := symbols.PathToURI(filepath.Join(root, "_ide_helper.php"))
 	if route := ws.Index.Lookup(`Illuminate\Support\Facades\Route`); route == nil || route.URI != want {
 		t.Errorf("the IDE helper's class is declared at %s: %+v", want, route)
+	}
+}
+
+func TestRefreshReplacesTheContainerBindingsOfChangedProviders(t *testing.T) {
+	provider := func(abstract string) string {
+		return "<?php\nnamespace App\\Providers;\nclass AppServiceProvider {\n    public function register() {\n        $this->app->bind('" + abstract + "', 'App\\Service');\n    }\n}\n"
+	}
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"app/Providers/AppServiceProvider.php":  provider("payments"),
+		"app/Providers/MailServiceProvider.php": provider("mailer"),
+	})
+	ws := New(Options{RootPath: root, Framework: "laravel", Config: config.DefaultConfig(), Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+	ws.IndexWorkspace()
+	ws.Container.Analyze()
+
+	writeFiles(t, root, map[string]string{"app/Providers/AppServiceProvider.php": provider("reports")})
+	if err := os.Remove(filepath.Join(root, "app/Providers/MailServiceProvider.php")); err != nil {
+		t.Fatal(err)
+	}
+	refreshPaths(t, ws, root, "app/Providers/AppServiceProvider.php", "app/Providers/MailServiceProvider.php")
+
+	for abstract, bound := range map[string]bool{"payments": false, "mailer": false, "reports": true} {
+		if got := ws.Container.LookupBinding(abstract) != nil; got != bound {
+			t.Errorf("%s bound = %v, want %v", abstract, got, bound)
+		}
+	}
+}
+
+func TestRefreshReadsChangedSymfonyServicesConfig(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{"config/services.yaml": "services:\n    app.mailer:\n        class: App\\Mailer\n"})
+	ws := New(Options{RootPath: root, Framework: "symfony", Config: config.DefaultConfig(), Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+	ws.IndexWorkspace()
+	ws.Container.Analyze()
+	if globs := ws.WatchGlobs(); !slices.Contains(globs, "**/config/services.yaml") || !slices.Contains(globs, "**/config/services.yml") {
+		t.Errorf("a Symfony project watches its services config: %v", globs)
+	}
+
+	writeFiles(t, root, map[string]string{"config/services.yaml": "services:\n    app.notifier:\n        class: App\\Notifier\n"})
+	refreshPaths(t, ws, root, "config/services.yaml")
+
+	if ws.Container.LookupBinding("app.mailer") != nil || ws.Container.LookupBinding("app.notifier") == nil {
+		t.Errorf("the changed services.yaml reaches the container: %v", ws.Container.GetBindings())
+	}
+}
+
+func TestOnlySymfonyProjectsWatchServicesConfig(t *testing.T) {
+	for _, framework := range []string{"laravel", "none"} {
+		ws := New(Options{RootPath: t.TempDir(), Framework: framework, Config: config.DefaultConfig()})
+		for _, glob := range ws.WatchGlobs() {
+			if strings.Contains(glob, "services.y") {
+				t.Errorf("%s watches %s", framework, glob)
+			}
+		}
 	}
 }

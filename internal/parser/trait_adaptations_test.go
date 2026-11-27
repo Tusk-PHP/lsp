@@ -3,6 +3,8 @@ package parser
 import (
 	"reflect"
 	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 func TestTraitAdaptationsAreRead(t *testing.T) {
@@ -18,7 +20,7 @@ class Talker {
         lock as final;
     }
     public function own() {}
-}`)
+}`, token.Latest)
 	if len(file.Classes) != 1 {
 		t.Fatalf("classes = %d, want 1", len(file.Classes))
 	}
@@ -50,7 +52,7 @@ class Talker {
 func TestTraitAdaptationsInTraitsAndEnums(t *testing.T) {
 	file := ParseFile(`<?php
 trait Both { use A, B { A::run insteadof B; } }
-enum Suit { use A { run as go; } case Hearts; }`)
+enum Suit { use A { run as go; } case Hearts; }`, token.Latest)
 	if len(file.Traits) != 1 || len(file.Traits[0].TraitRules.Precedences) != 1 {
 		t.Fatalf("trait rules = %+v", file.Traits)
 	}
@@ -64,12 +66,23 @@ func TestUnterminatedTraitAdaptationBlockKeepsParsing(t *testing.T) {
 class Broken {
     use A { A::foo insteadof
 }
-class After {}`)
+class After {}`, token.Latest)
 	var names []string
 	for _, c := range file.Classes {
 		names = append(names, c.Name)
 	}
 	if len(names) == 0 || names[0] != "Broken" {
 		t.Fatalf("classes = %v", names)
+	}
+}
+
+func TestTraitAdaptationWithoutAMethodNameIsSkipped(t *testing.T) {
+	file := ParseFile("<?php\nclass Talker {\n    use A {\n        A::$x as broken;\n        hello as greet;\n    }\n}\n", token.Latest)
+	if len(file.Classes) != 1 {
+		t.Fatalf("classes = %d, want 1", len(file.Classes))
+	}
+	want := TraitAdaptations{Aliases: []TraitAlias{{Method: "hello", Alias: "greet"}}}
+	if got := file.Classes[0].TraitRules; !reflect.DeepEqual(got, want) {
+		t.Errorf("TraitRules = %+v, want only the adaptation that names a method: %+v", got, want)
 	}
 }

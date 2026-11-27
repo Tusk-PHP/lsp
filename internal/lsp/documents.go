@@ -113,13 +113,17 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 	if params.Text != nil && isPHPDocument(uri) {
 		s.indexDocumentMaybeAsync(uri, *params.Text)
 	}
+	s.goSafe("container.Update", func() {
+		if err := s.container.Update(symbols.URIToPath(uri)); err != nil {
+			s.logger.Printf("container: %v", err)
+		}
+	})
 	if !isPHPDocument(uri) {
 		return
 	}
 	if affectsComponents(s.rootPath, uri) {
 		s.components.Invalidate()
 	}
-	s.goSafe("container.Analyze", s.container.Analyze)
 	if s.cfg.DiagnosticsEnabled {
 		s.goSafe("diagnostics.RunTools", func() {
 			filePath := symbols.URIToPath(uri)

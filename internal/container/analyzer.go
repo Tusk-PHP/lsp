@@ -1,15 +1,19 @@
 package container
 
 import (
-	"encoding/json"
+	"cmp"
+	"maps"
 	"os"
 	"path/filepath"
-	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -26,24 +30,24 @@ type ServiceBinding struct {
 }
 
 type ContainerAnalyzer struct {
-	mu        sync.RWMutex
-	bindings  map[string]*ServiceBinding
-	aliases   map[string]string
-	tags      map[string][]string
+	view      atomic.Pointer[bindingSet]
+	sourcesMu sync.Mutex
+	sources   map[string]source
+	seq       atomic.Uint64
 	index     *symbols.Index
 	rootPath  string
 	framework string
 }
 
 func NewContainerAnalyzer(index *symbols.Index, rootPath, framework string) *ContainerAnalyzer {
-	return &ContainerAnalyzer{
-		bindings:  make(map[string]*ServiceBinding),
-		aliases:   make(map[string]string),
-		tags:      make(map[string][]string),
+	ca := &ContainerAnalyzer{
+		sources:   make(map[string]source),
 		index:     index,
 		rootPath:  rootPath,
 		framework: framework,
 	}
+	ca.view.Store(newBindingSet(nil))
+	return ca
 }
 
 func (ca *ContainerAnalyzer) Framework() string {
@@ -60,50 +64,12 @@ func (ca *ContainerAnalyzer) RootPath() string {
 	return ca.rootPath
 }
 
-func (ca *ContainerAnalyzer) Analyze() {
-	switch ca.framework {
-	case "laravel":
-		ca.analyzeLaravel()
-	case "symfony":
-		ca.analyzeSymfony()
-	}
-}
-
 func (ca *ContainerAnalyzer) ResolveDependency(typeName string) *ServiceBinding {
-	ca.mu.RLock()
-	defer ca.mu.RUnlock()
-	return ca.resolveDependencyLocked(typeName, map[string]bool{})
+	return ca.view.Load().resolve(typeName, map[string]bool{})
 }
 
 func (ca *ContainerAnalyzer) LookupBinding(name string) *ServiceBinding {
-	ca.mu.RLock()
-	defer ca.mu.RUnlock()
-	if binding, ok := ca.bindings[name]; ok {
-		return binding
-	}
-	return nil
-}
-
-func (ca *ContainerAnalyzer) resolveDependencyLocked(name string, seen map[string]bool) *ServiceBinding {
-	if seen[name] {
-		return nil
-	}
-	seen[name] = true
-	if abstract, ok := ca.aliases[name]; ok {
-		if binding := ca.resolveDependencyLocked(abstract, seen); binding != nil {
-			return binding
-		}
-	}
-	binding, ok := ca.bindings[name]
-	if !ok {
-		return nil
-	}
-	if binding.Alias != "" {
-		if resolved := ca.resolveDependencyLocked(binding.Alias, seen); resolved != nil {
-			return resolved
-		}
-	}
-	return binding
+	return ca.view.Load().bindings[name]
 }
 
 // ResolveFacade checks whether classFQN is a Laravel Facade (extends
@@ -158,44 +124,34 @@ func (ca *ContainerAnalyzer) extractFacadeAccessor(classFQN string) string {
 		if err != nil {
 			continue
 		}
-		return parseFacadeAccessorReturn(string(content))
+		return parseFacadeAccessorReturn(string(content), ca.index.GrammarOf(m.URI))
 	}
 	return ""
 }
 
-var facadeAccessorReturnRegex = regexp.MustCompile(`function\s+getFacadeAccessor\s*\(\s*\)\s*(?::\s*\S+\s*)?\{[^}]*return\s+['"]([^'"]+)['"]`)
-
-// parseFacadeAccessorReturn extracts the string literal from a
-// getFacadeAccessor() method body.
-func parseFacadeAccessorReturn(source string) string {
-	m := facadeAccessorReturnRegex.FindStringSubmatch(source)
-	if len(m) >= 2 {
-		return m[1]
-	}
-	return ""
+func parseFacadeAccessorReturn(source string, grammars phpparser.GrammarRange) string {
+	accessor := ""
+	ast.Walk(parser.ParseTreeIn(source, grammars), func(n ast.Node) bool {
+		method, ok := n.(*ast.Method)
+		if !ok || accessor != "" {
+			return accessor == ""
+		}
+		if method.Name == nil || method.Body == nil || !strings.EqualFold(method.Name.Bounds().Text(source), "getFacadeAccessor") {
+			return false
+		}
+		for _, stmt := range method.Body.Stmts {
+			if ret, ok := stmt.(*ast.Return); ok && ret.Value != nil {
+				accessor, _ = parser.StringLiteral(ret.Value.Bounds().Text(source))
+				break
+			}
+		}
+		return false
+	})
+	return accessor
 }
 
 func (ca *ContainerAnalyzer) GetBindings() map[string]*ServiceBinding {
-	ca.mu.RLock()
-	defer ca.mu.RUnlock()
-	result := make(map[string]*ServiceBinding, len(ca.bindings))
-	for k, v := range ca.bindings {
-		result[k] = v
-	}
-	return result
-}
-
-// AddBinding inserts or overwrites a binding in the analyzer's bindings map,
-// keyed by b.Abstract (the same key used by LookupBinding and GetBindings).
-// A nil b is silently ignored. This method is intended primarily for tests
-// and programmatic seeding of bindings without filesystem parsing.
-func (ca *ContainerAnalyzer) AddBinding(b *ServiceBinding) {
-	if ca == nil || b == nil {
-		return
-	}
-	ca.mu.Lock()
-	defer ca.mu.Unlock()
-	ca.bindings[b.Abstract] = b
+	return maps.Clone(ca.view.Load().bindings)
 }
 
 type InjectedDependency struct {
@@ -228,7 +184,7 @@ func (ca *ContainerAnalyzer) AnalyzeConstructorInjection(classFQN string) []Inje
 	if ca.framework == "symfony" && sym.URI != "" && sym.URI != "builtin" {
 		path := symbols.URIToPath(sym.URI)
 		if data, err := os.ReadFile(path); err == nil {
-			autowireList = parseConstructorAutowireAttrsByPosition(string(data))
+			autowireList = constructorAutowire(string(data), sym.FQN, ca.index.GrammarOf(sym.URI))
 		}
 	}
 
@@ -267,609 +223,334 @@ func (ca *ContainerAnalyzer) AnalyzeConstructorInjection(classFQN string) []Inje
 	return deps
 }
 
-// autowireAttr holds parsed #[Autowire] information for one constructor param.
 type autowireAttr struct {
-	kind  string // "service", "param", "env"
-	value string // raw value
+	kind  string
+	value string
 }
 
-// Regexes for #[Autowire(...)] attribute argument parsing.
-var (
-	// service: 'service.id' or service: "service.id"
-	autowireServicePattern = regexp.MustCompile(`service\s*:\s*['"]([^'"]+)['"]`)
-	// param: 'name' or param: "name"
-	autowireParamNamePattern = regexp.MustCompile(`param\s*:\s*['"]([^'"]+)['"]`)
-	// env: 'VAR' or env: "VAR"
-	autowireEnvPattern = regexp.MustCompile(`env\s*:\s*['"]([^'"]+)['"]`)
-	// bare %param% form: first string arg that starts/ends with %
-	autowirePercentParamPattern = regexp.MustCompile(`^\s*['"](%[^'"]+%)['"]`)
-)
+const autowireFQN = `Symfony\Component\DependencyInjection\Attribute\Autowire`
 
-// parseConstructorAutowireAttrsByPosition scans source text for a __construct
-// method and returns a slice of autowireAttr indexed by parameter position.
-// Parameters without #[Autowire] get a zero-value entry (kind == "").
-// This position-based approach is robust to AST parsers that may not correctly
-// handle attributes in promoted constructor parameters.
-func parseConstructorAutowireAttrsByPosition(source string) []autowireAttr {
-	if source == "" {
-		return nil
-	}
-
-	// Find __construct in source
-	ctorIdx := strings.Index(source, "__construct")
-	if ctorIdx < 0 {
-		return nil
-	}
-
-	// Find the opening paren of the parameter list
-	parenIdx := strings.Index(source[ctorIdx:], "(")
-	if parenIdx < 0 {
-		return nil
-	}
-	parenIdx += ctorIdx
-
-	// Extract the constructor signature block (from open paren to close paren)
-	closeIdx := findMatchingParen(source, parenIdx)
-	if closeIdx < 0 {
-		return nil
-	}
-	ctorSignature := source[parenIdx+1 : closeIdx]
-
-	// Walk through lines of the constructor signature looking for #[Autowire]
-	// followed by a parameter declaration. Each parameter position gets one entry.
-	lines := strings.Split(ctorSignature, "\n")
-	var result []autowireAttr
-	var pendingAutowire *autowireAttr
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+func constructorAutowire(source, classFQN string, grammars phpparser.GrammarRange) []autowireAttr {
+	file := parser.ParseFileIn(source, grammars)
+	for _, cls := range file.Classes {
+		if !strings.EqualFold(cls.FullName, classFQN) {
 			continue
 		}
-
-		// Detect #[Autowire(...)] on this line
-		if strings.Contains(trimmed, "#[") && strings.Contains(trimmed, "Autowire") {
-			attr := parseAutowireAttributeLine(trimmed)
-			pendingAutowire = attr
-			// Check if the param is also on the same line (inline attribute)
-			// by looking for a $ after the ']'
-			bracketEnd := strings.LastIndex(trimmed, "]")
-			if bracketEnd >= 0 {
-				rest := strings.TrimSpace(trimmed[bracketEnd+1:])
-				if extractParamName(rest) != "" {
-					// Same-line: add now
-					if pendingAutowire != nil {
-						result = append(result, *pendingAutowire)
-					} else {
-						result = append(result, autowireAttr{})
-					}
-					pendingAutowire = nil
-				}
+		for _, method := range cls.Methods {
+			if !strings.EqualFold(method.Name, "__construct") {
+				continue
 			}
-			continue
-		}
-
-		// Check if this line declares a parameter (has a $name token)
-		if extractParamName(trimmed) != "" {
-			if pendingAutowire != nil {
-				result = append(result, *pendingAutowire)
-				pendingAutowire = nil
-			} else {
-				result = append(result, autowireAttr{})
+			attrs := make([]autowireAttr, len(method.Params))
+			for i, param := range method.Params {
+				attrs[i] = autowireOf(file, param.Attributes)
 			}
+			return attrs
 		}
-	}
-	return result
-}
-
-// parseConstructorAutowireAttrs is kept as an alias for tests that call it
-// directly. It returns a map keyed by parameter name for unit test convenience.
-func parseConstructorAutowireAttrs(source string) map[string]autowireAttr {
-	if source == "" {
-		return nil
-	}
-
-	ctorIdx := strings.Index(source, "__construct")
-	if ctorIdx < 0 {
-		return nil
-	}
-	parenIdx := strings.Index(source[ctorIdx:], "(")
-	if parenIdx < 0 {
-		return nil
-	}
-	parenIdx += ctorIdx
-	closeIdx := findMatchingParen(source, parenIdx)
-	if closeIdx < 0 {
-		return nil
-	}
-	ctorSignature := source[parenIdx+1 : closeIdx]
-
-	lines := strings.Split(ctorSignature, "\n")
-	result := make(map[string]autowireAttr)
-	var pendingAutowire *autowireAttr
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-
-		if strings.Contains(trimmed, "#[") && strings.Contains(trimmed, "Autowire") {
-			attr := parseAutowireAttributeLine(trimmed)
-			pendingAutowire = attr
-			continue
-		}
-
-		if pendingAutowire != nil {
-			if paramName := extractParamName(trimmed); paramName != "" {
-				result[paramName] = *pendingAutowire
-			}
-			pendingAutowire = nil
-		}
-	}
-	return result
-}
-
-// parseAutowireAttributeLine parses a single line containing #[Autowire(...)].
-func parseAutowireAttributeLine(line string) *autowireAttr {
-	open := strings.Index(line, "(")
-	close := strings.LastIndex(line, ")")
-	if open < 0 || close <= open {
-		return nil
-	}
-
-	// Verify attribute name is Autowire
-	namePart := strings.TrimSpace(line[strings.Index(line, "#[")+2 : open])
-	parts := strings.Split(namePart, "\\")
-	short := parts[len(parts)-1]
-	if short != "Autowire" {
-		return nil
-	}
-
-	args := line[open+1 : close]
-
-	// service: 'id'
-	if m := autowireServicePattern.FindStringSubmatch(args); len(m) >= 2 {
-		return &autowireAttr{kind: "service", value: m[1]}
-	}
-	// param: 'name'
-	if m := autowireParamNamePattern.FindStringSubmatch(args); len(m) >= 2 {
-		return &autowireAttr{kind: "param", value: m[1]}
-	}
-	// env: 'VAR'
-	if m := autowireEnvPattern.FindStringSubmatch(args); len(m) >= 2 {
-		return &autowireAttr{kind: "env", value: m[1]}
-	}
-	// %param% positional form
-	if m := autowirePercentParamPattern.FindStringSubmatch(args); len(m) >= 2 {
-		val := strings.Trim(m[1], "%")
-		return &autowireAttr{kind: "param", value: val}
 	}
 	return nil
 }
 
-// extractParamName extracts the PHP parameter name (e.g. "$logger") from a
-// constructor parameter line like "private LoggerInterface $logger,".
-// Returns the bare name without "$" prefix, or "" if not found.
-func extractParamName(line string) string {
-	// Find the last $name token on the line.
-	idx := strings.LastIndex(line, "$")
-	if idx < 0 {
-		return ""
-	}
-	rest := line[idx+1:]
-	end := 0
-	for end < len(rest) && (isAlphanumUnderscore(rest[end])) {
-		end++
-	}
-	if end == 0 {
-		return ""
-	}
-	return "$" + rest[:end]
-}
-
-func isAlphanumUnderscore(ch byte) bool {
-	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_'
-}
-
-var (
-	laravelBindRegex      = regexp.MustCompile(`\$this->app->bind\(\s*([^,]+),\s*([^)]+)\)`)
-	laravelSingletonRegex = regexp.MustCompile(`\$this->app->singleton\(\s*([^,]+),\s*([^)]+)\)`)
-	symfonyClassExprRegex = regexp.MustCompile(`^[A-Za-z_\\][A-Za-z0-9_\\]*::class$`)
-)
-
-func (ca *ContainerAnalyzer) analyzeLaravel() {
-	ca.mu.Lock()
-	defer ca.mu.Unlock()
-	ca.registerLaravelDefaults()
-	providersDir := filepath.Join(ca.rootPath, "app", "Providers")
-	ca.scanDirectory(providersDir, ca.parseLaravelProvider)
-}
-
-func (ca *ContainerAnalyzer) registerLaravelDefaults() {
-	defaults := []ServiceBinding{
-		{Abstract: "Illuminate\\Contracts\\Auth\\Factory", Concrete: "Illuminate\\Auth\\AuthManager", Singleton: true},
-		{Abstract: "Illuminate\\Contracts\\Cache\\Factory", Concrete: "Illuminate\\Cache\\CacheManager", Singleton: true},
-		{Abstract: "Illuminate\\Contracts\\Config\\Repository", Concrete: "Illuminate\\Config\\Repository", Singleton: true},
-		{Abstract: "Illuminate\\Contracts\\Container\\Container", Concrete: "Illuminate\\Container\\Container", Singleton: true},
-		{Abstract: "Illuminate\\Contracts\\Events\\Dispatcher", Concrete: "Illuminate\\Events\\Dispatcher", Singleton: true},
-		{Abstract: "Illuminate\\Contracts\\Filesystem\\Factory", Concrete: "Illuminate\\Filesystem\\FilesystemManager", Singleton: true},
-		{Abstract: "Illuminate\\Contracts\\Http\\Kernel", Concrete: "App\\Http\\Kernel", Singleton: true},
-		{Abstract: "Illuminate\\Contracts\\Mail\\Mailer", Concrete: "Illuminate\\Mail\\Mailer", Singleton: true},
-		{Abstract: "Illuminate\\Contracts\\Queue\\Factory", Concrete: "Illuminate\\Queue\\QueueManager", Singleton: true},
-		{Abstract: "Illuminate\\Contracts\\Routing\\ResponseFactory", Concrete: "Illuminate\\Routing\\ResponseFactory", Singleton: true},
-		{Abstract: "Illuminate\\Contracts\\Routing\\UrlGenerator", Concrete: "Illuminate\\Routing\\UrlGenerator", Singleton: true},
-		{Abstract: "Illuminate\\Contracts\\Session\\Session", Concrete: "Illuminate\\Session\\Store", Singleton: true},
-		{Abstract: "Illuminate\\Contracts\\Validation\\Factory", Concrete: "Illuminate\\Validation\\Factory", Singleton: true},
-		{Abstract: "Illuminate\\Contracts\\View\\Factory", Concrete: "Illuminate\\View\\Factory", Singleton: true},
-		{Abstract: "auth", Concrete: "Illuminate\\Auth\\AuthManager", Singleton: true},
-		{Abstract: "cache", Concrete: "Illuminate\\Cache\\CacheManager", Singleton: true},
-		{Abstract: "config", Concrete: "Illuminate\\Config\\Repository", Singleton: true},
-		{Abstract: "db", Concrete: "Illuminate\\Database\\DatabaseManager", Singleton: true},
-		{Abstract: "events", Concrete: "Illuminate\\Events\\Dispatcher", Singleton: true},
-		{Abstract: "log", Concrete: "Illuminate\\Log\\LogManager", Singleton: true},
-		{Abstract: "queue", Concrete: "Illuminate\\Queue\\QueueManager", Singleton: true},
-		{Abstract: "request", Concrete: "Illuminate\\Http\\Request", Singleton: true},
-		{Abstract: "router", Concrete: "Illuminate\\Routing\\Router", Singleton: true},
-		{Abstract: "session", Concrete: "Illuminate\\Session\\SessionManager", Singleton: true},
-		{Abstract: "view", Concrete: "Illuminate\\View\\Factory", Singleton: true},
-	}
-	for _, b := range defaults {
-		binding := b
-		ca.bindings[binding.Abstract] = &binding
-	}
-}
-
-func (ca *ContainerAnalyzer) parseLaravelProvider(path string, content string) {
-	for _, match := range laravelBindRegex.FindAllStringSubmatch(content, -1) {
-		abstract := cleanPHPString(match[1])
-		concrete := cleanPHPString(match[2])
-		ca.bindings[abstract] = &ServiceBinding{Abstract: abstract, Concrete: concrete, Source: path}
-	}
-	for _, match := range laravelSingletonRegex.FindAllStringSubmatch(content, -1) {
-		abstract := cleanPHPString(match[1])
-		concrete := cleanPHPString(match[2])
-		ca.bindings[abstract] = &ServiceBinding{Abstract: abstract, Concrete: concrete, Singleton: true, Source: path}
-	}
-}
-
-func (ca *ContainerAnalyzer) analyzeSymfony() {
-	ca.mu.Lock()
-	defer ca.mu.Unlock()
-	ca.registerSymfonyDefaults()
-	ca.parseSymfonyServicesYAML()
-	ca.parseSymfonyServicesPHP()
-	ca.scanDirectory(filepath.Join(ca.rootPath, "src"), ca.parseSymfonyAttributes)
-	ca.resolveSymfonyAliases()
-}
-
-func (ca *ContainerAnalyzer) registerSymfonyDefaults() {
-	defaults := []ServiceBinding{
-		{Abstract: "Symfony\\Component\\HttpFoundation\\RequestStack", Concrete: "Symfony\\Component\\HttpFoundation\\RequestStack", Singleton: true},
-		{Abstract: "Symfony\\Component\\HttpKernel\\KernelInterface", Concrete: "App\\Kernel", Singleton: true},
-		{Abstract: "Symfony\\Component\\Routing\\RouterInterface", Concrete: "Symfony\\Component\\Routing\\Router", Singleton: true},
-		{Abstract: "Symfony\\Component\\EventDispatcher\\EventDispatcherInterface", Concrete: "Symfony\\Component\\EventDispatcher\\EventDispatcher", Singleton: true},
-		{Abstract: "Psr\\Log\\LoggerInterface", Concrete: "Symfony\\Bridge\\Monolog\\Logger", Singleton: true},
-		{Abstract: "Doctrine\\ORM\\EntityManagerInterface", Concrete: "Doctrine\\ORM\\EntityManager", Singleton: true},
-		{Abstract: "Symfony\\Component\\Security\\Core\\Authorization\\AuthorizationCheckerInterface", Concrete: "Symfony\\Component\\Security\\Core\\Authorization\\AuthorizationChecker", Singleton: true},
-		{Abstract: "Symfony\\Component\\Serializer\\SerializerInterface", Concrete: "Symfony\\Component\\Serializer\\Serializer", Singleton: true},
-		{Abstract: "Symfony\\Component\\Validator\\Validator\\ValidatorInterface", Concrete: "Symfony\\Component\\Validator\\Validator\\RecursiveValidator", Singleton: true},
-		{Abstract: "Symfony\\Component\\Mailer\\MailerInterface", Concrete: "Symfony\\Component\\Mailer\\Mailer", Singleton: true},
-		{Abstract: "Symfony\\Component\\Messenger\\MessageBusInterface", Concrete: "Symfony\\Component\\Messenger\\MessageBus", Singleton: true},
-		{Abstract: "Twig\\Environment", Concrete: "Twig\\Environment", Singleton: true},
-	}
-	for _, b := range defaults {
-		binding := b
-		ca.bindings[binding.Abstract] = &binding
-	}
-}
-
-func (ca *ContainerAnalyzer) parseSymfonyServicesYAML() {
-	for _, name := range []string{"services.yaml", "services.yml"} {
-		yamlPath := filepath.Join(ca.rootPath, "config", name)
-		content, err := os.ReadFile(yamlPath)
-		if err != nil {
+func autowireOf(file *parser.FileNode, attrs []parser.AttributeDef) autowireAttr {
+	for _, attr := range attrs {
+		if !strings.EqualFold(file.ResolveClassName(attr.Name), autowireFQN) {
 			continue
 		}
-		lines := strings.Split(string(content), "\n")
-		var (
-			inServices     bool
-			servicesIndent = -1
-			serviceIndent  = -1
-			currentService string
-			currentIndent  int
-			inTags         bool
-		)
-		for lineNo, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-				continue
+		for _, arg := range []struct {
+			kind, name string
+			position   int
+		}{{"service", "service", 1}, {"param", "param", 4}, {"env", "env", 3}} {
+			if value, ok := attr.Args.Get(arg.name, arg.position); ok {
+				if str, ok := parser.StringLiteral(value); ok && str != "" {
+					return autowireAttr{kind: arg.kind, value: str}
+				}
 			}
-
-			indent := leadingIndent(line)
-			key, isMapping := parseYAMLMappingKey(trimmed)
-			if !inServices {
-				if isMapping && key == "services" {
-					inServices = true
-					servicesIndent = indent
-					serviceIndent = -1
-				}
-				continue
-			}
-			if indent <= servicesIndent {
-				inServices = false
-				currentService = ""
-				inTags = false
-				serviceIndent = -1
-				continue
-			}
-			if isMapping && indent > servicesIndent && (serviceIndent == -1 || indent == serviceIndent) {
-				currentService = ""
-				inTags = false
-				if serviceIndent == -1 {
-					serviceIndent = indent
-				}
-				currentIndent = indent
-				serviceID := normalizeYAMLScalar(key)
-				if !shouldTrackSymfonyServiceID(serviceID) {
-					continue
-				}
-				currentService = serviceID
-				binding := ca.ensureSymfonyBinding(serviceID, yamlPath, textpos.Position{
-					Line:      lineNo,
-					Character: len(line) - len(strings.TrimLeft(line, " \t")),
-				})
-				if binding.Concrete == "" {
-					binding.Concrete = serviceID
-				}
-				continue
-			}
-			if currentService == "" || indent <= currentIndent {
-				inTags = false
-				continue
-			}
-
-			if inTags && strings.HasPrefix(trimmed, "-") {
-				if binding, ok := ca.bindings[currentService]; ok {
-					binding.Tags = append(binding.Tags, normalizeYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))))
-				}
-				continue
-			}
-			inTags = false
-
-			if !isMapping {
-				continue
-			}
-			value := normalizeYAMLScalar(strings.TrimSpace(trimmed[strings.Index(trimmed, ":")+1:]))
-			switch key {
-			case "class":
-				if b, ok := ca.bindings[currentService]; ok {
-					b.Concrete = value
-				}
-			case "alias":
-				if b, ok := ca.bindings[currentService]; ok {
-					b.Alias = value
-					if b.Concrete == "" {
-						b.Concrete = value
-					}
-					ca.aliases[currentService] = value
-				}
-			case "shared":
-				if b, ok := ca.bindings[currentService]; ok {
-					b.Singleton = value != "false"
-				}
-			case "tags":
-				inTags = true
-				if value != "" && value != "[]" {
-					if b, ok := ca.bindings[currentService]; ok {
-						b.Tags = append(b.Tags, parseInlineYAMLList(value)...)
-					}
-				}
+		}
+		if value, ok := attr.Args.Get("value", 0); ok {
+			if str, ok := parser.StringLiteral(value); ok && len(str) > 2 && strings.HasPrefix(str, "%") && strings.HasSuffix(str, "%") {
+				return autowireAttr{kind: "param", value: str[1 : len(str)-1]}
 			}
 		}
 	}
+	return autowireAttr{}
 }
 
-func (ca *ContainerAnalyzer) parseSymfonyServicesPHP() {
-	configDir := filepath.Join(ca.rootPath, "config")
-	filepath.Walk(configDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info == nil || info.IsDir() || filepath.Ext(path) != ".php" {
-			return nil
-		}
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return nil
-		}
-		ca.parseSymfonyPHPConfigFile(path, string(content))
-		return nil
-	})
+func defaultBindings(framework string) []ServiceBinding {
+	switch framework {
+	case "laravel":
+		return laravelDefaults
+	case "symfony":
+		return symfonyDefaults
+	}
+	return nil
 }
 
-func (ca *ContainerAnalyzer) parseSymfonyPHPConfigFile(path, content string) {
-	file := parser.ParseFile(content)
+var laravelDefaults = []ServiceBinding{
+	{Abstract: "Illuminate\\Contracts\\Auth\\Factory", Concrete: "Illuminate\\Auth\\AuthManager", Singleton: true},
+	{Abstract: "Illuminate\\Contracts\\Cache\\Factory", Concrete: "Illuminate\\Cache\\CacheManager", Singleton: true},
+	{Abstract: "Illuminate\\Contracts\\Config\\Repository", Concrete: "Illuminate\\Config\\Repository", Singleton: true},
+	{Abstract: "Illuminate\\Contracts\\Container\\Container", Concrete: "Illuminate\\Container\\Container", Singleton: true},
+	{Abstract: "Illuminate\\Contracts\\Events\\Dispatcher", Concrete: "Illuminate\\Events\\Dispatcher", Singleton: true},
+	{Abstract: "Illuminate\\Contracts\\Filesystem\\Factory", Concrete: "Illuminate\\Filesystem\\FilesystemManager", Singleton: true},
+	{Abstract: "Illuminate\\Contracts\\Http\\Kernel", Concrete: "App\\Http\\Kernel", Singleton: true},
+	{Abstract: "Illuminate\\Contracts\\Mail\\Mailer", Concrete: "Illuminate\\Mail\\Mailer", Singleton: true},
+	{Abstract: "Illuminate\\Contracts\\Queue\\Factory", Concrete: "Illuminate\\Queue\\QueueManager", Singleton: true},
+	{Abstract: "Illuminate\\Contracts\\Routing\\ResponseFactory", Concrete: "Illuminate\\Routing\\ResponseFactory", Singleton: true},
+	{Abstract: "Illuminate\\Contracts\\Routing\\UrlGenerator", Concrete: "Illuminate\\Routing\\UrlGenerator", Singleton: true},
+	{Abstract: "Illuminate\\Contracts\\Session\\Session", Concrete: "Illuminate\\Session\\Store", Singleton: true},
+	{Abstract: "Illuminate\\Contracts\\Validation\\Factory", Concrete: "Illuminate\\Validation\\Factory", Singleton: true},
+	{Abstract: "Illuminate\\Contracts\\View\\Factory", Concrete: "Illuminate\\View\\Factory", Singleton: true},
+	{Abstract: "auth", Concrete: "Illuminate\\Auth\\AuthManager", Singleton: true},
+	{Abstract: "cache", Concrete: "Illuminate\\Cache\\CacheManager", Singleton: true},
+	{Abstract: "config", Concrete: "Illuminate\\Config\\Repository", Singleton: true},
+	{Abstract: "db", Concrete: "Illuminate\\Database\\DatabaseManager", Singleton: true},
+	{Abstract: "events", Concrete: "Illuminate\\Events\\Dispatcher", Singleton: true},
+	{Abstract: "log", Concrete: "Illuminate\\Log\\LogManager", Singleton: true},
+	{Abstract: "queue", Concrete: "Illuminate\\Queue\\QueueManager", Singleton: true},
+	{Abstract: "request", Concrete: "Illuminate\\Http\\Request", Singleton: true},
+	{Abstract: "router", Concrete: "Illuminate\\Routing\\Router", Singleton: true},
+	{Abstract: "session", Concrete: "Illuminate\\Session\\SessionManager", Singleton: true},
+	{Abstract: "view", Concrete: "Illuminate\\View\\Factory", Singleton: true},
+}
+
+func (ca *ContainerAnalyzer) parseLaravelProvider(path string, content string) providerBindings {
+	var bindings providerBindings
+	calls := newConfigCalls(content, ca.index.Grammars())
+	for _, call := range calls.named("bind", "singleton") {
+		if len(call.args) < 2 || compactExpr(calls.text(call.owner)) != "$this->app" {
+			continue
+		}
+		abstract := calls.serviceName(call.args[0].Value)
+		if abstract == "" {
+			continue
+		}
+		concrete := calls.serviceName(call.args[1].Value)
+		if concrete == "" {
+			concrete = abstract
+		}
+		bindings = append(bindings, ServiceBinding{Abstract: abstract, Concrete: concrete, Singleton: strings.EqualFold(call.method, "singleton"), Source: path})
+	}
+	return bindings
+}
+
+var symfonyDefaults = []ServiceBinding{
+	{Abstract: "Symfony\\Component\\HttpFoundation\\RequestStack", Concrete: "Symfony\\Component\\HttpFoundation\\RequestStack", Singleton: true},
+	{Abstract: "Symfony\\Component\\HttpKernel\\KernelInterface", Concrete: "App\\Kernel", Singleton: true},
+	{Abstract: "Symfony\\Component\\Routing\\RouterInterface", Concrete: "Symfony\\Component\\Routing\\Router", Singleton: true},
+	{Abstract: "Symfony\\Component\\EventDispatcher\\EventDispatcherInterface", Concrete: "Symfony\\Component\\EventDispatcher\\EventDispatcher", Singleton: true},
+	{Abstract: "Psr\\Log\\LoggerInterface", Concrete: "Symfony\\Bridge\\Monolog\\Logger", Singleton: true},
+	{Abstract: "Doctrine\\ORM\\EntityManagerInterface", Concrete: "Doctrine\\ORM\\EntityManager", Singleton: true},
+	{Abstract: "Symfony\\Component\\Security\\Core\\Authorization\\AuthorizationCheckerInterface", Concrete: "Symfony\\Component\\Security\\Core\\Authorization\\AuthorizationChecker", Singleton: true},
+	{Abstract: "Symfony\\Component\\Serializer\\SerializerInterface", Concrete: "Symfony\\Component\\Serializer\\Serializer", Singleton: true},
+	{Abstract: "Symfony\\Component\\Validator\\Validator\\ValidatorInterface", Concrete: "Symfony\\Component\\Validator\\Validator\\RecursiveValidator", Singleton: true},
+	{Abstract: "Symfony\\Component\\Mailer\\MailerInterface", Concrete: "Symfony\\Component\\Mailer\\Mailer", Singleton: true},
+	{Abstract: "Symfony\\Component\\Messenger\\MessageBusInterface", Concrete: "Symfony\\Component\\Messenger\\MessageBus", Singleton: true},
+	{Abstract: "Twig\\Environment", Concrete: "Twig\\Environment", Singleton: true},
+}
+
+func parseSymfonyServicesYAML(path, content string) serviceDefinitions {
 	var (
-		ns   string
-		uses []parser.UseNode
+		defs           serviceDefinitions
+		inServices     bool
+		servicesIndent = -1
+		serviceIndent  = -1
+		current        = -1
+		currentIndent  int
+		inTags         bool
 	)
-	if file != nil {
-		ns = file.Namespace
-		uses = file.Uses
-	}
-
-	for _, call := range findSymfonyPHPConfigCalls(content) {
-		switch call.method {
-		case "set":
-			serviceID := interpretSymfonyPHPServiceExpr(call.args[0].raw, ns, uses)
-			if serviceID == "" || !shouldTrackSymfonyServiceID(serviceID) {
-				continue
-			}
-			concrete := serviceID
-			if len(call.args) > 1 {
-				if resolved := interpretSymfonyPHPServiceExpr(call.args[1].raw, ns, uses); resolved != "" {
-					concrete = resolved
-				}
-			}
-			binding := ca.ensureSymfonyBinding(serviceID, path, offsetToPosition(content, call.args[0].start))
-			binding.Concrete = concrete
-		case "alias":
-			if len(call.args) < 2 {
-				continue
-			}
-			serviceID := interpretSymfonyPHPServiceExpr(call.args[0].raw, ns, uses)
-			target := interpretSymfonyPHPServiceExpr(call.args[1].raw, ns, uses)
-			if serviceID == "" || target == "" || !shouldTrackSymfonyServiceID(serviceID) {
-				continue
-			}
-			binding := ca.ensureSymfonyBinding(serviceID, path, offsetToPosition(content, call.args[0].start))
-			binding.Alias = target
-			binding.Concrete = target
-			ca.aliases[serviceID] = target
-		}
-	}
-}
-
-func (ca *ContainerAnalyzer) resolveSymfonyAliases() {
-	for serviceID, binding := range ca.bindings {
-		if binding.Alias == "" || binding.Concrete != binding.Alias {
+	for lineNo, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if resolved := ca.resolveDependencyLocked(serviceID, map[string]bool{}); resolved != nil {
-			binding.Concrete = resolved.Concrete
-			binding.Singleton = resolved.Singleton
-		}
-	}
-}
 
-func (ca *ContainerAnalyzer) ensureSymfonyBinding(serviceID, sourcePath string, pos textpos.Position) *ServiceBinding {
-	if binding, ok := ca.bindings[serviceID]; ok {
-		if binding.DefinitionURI == "" {
-			binding.DefinitionURI = pathToFileURI(sourcePath)
-			binding.Definition = textpos.Range{
-				Start: pos,
-				End:   textpos.Position{Line: pos.Line, Character: pos.Character + len(serviceID)},
+		indent := leadingIndent(line)
+		key, isMapping := parseYAMLMappingKey(trimmed)
+		if !inServices {
+			if isMapping && key == "services" {
+				inServices = true
+				servicesIndent = indent
+				serviceIndent = -1
+			}
+			continue
+		}
+		if indent <= servicesIndent {
+			inServices = false
+			current = -1
+			inTags = false
+			serviceIndent = -1
+			continue
+		}
+		if isMapping && indent > servicesIndent && (serviceIndent == -1 || indent == serviceIndent) {
+			current = -1
+			inTags = false
+			if serviceIndent == -1 {
+				serviceIndent = indent
+			}
+			currentIndent = indent
+			serviceID := normalizeYAMLScalar(key)
+			if !shouldTrackSymfonyServiceID(serviceID) {
+				continue
+			}
+			defs = append(defs, serviceDefinition{id: serviceID, source: path, at: textpos.Position{Line: lineNo, Character: indent}})
+			current = len(defs) - 1
+			continue
+		}
+		if current < 0 || indent <= currentIndent {
+			inTags = false
+			continue
+		}
+		def := &defs[current]
+
+		if inTags && strings.HasPrefix(trimmed, "-") {
+			def.tags = append(def.tags, normalizeYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))))
+			continue
+		}
+		inTags = false
+
+		if !isMapping {
+			continue
+		}
+		value := normalizeYAMLScalar(strings.TrimSpace(trimmed[strings.Index(trimmed, ":")+1:]))
+		switch key {
+		case "class":
+			def.class = value
+		case "alias":
+			def.alias = value
+			def.class = cmp.Or(def.class, value)
+		case "shared":
+			def.sharing = sharingShared
+			if value == "false" {
+				def.sharing = sharingUnshared
+			}
+		case "tags":
+			inTags = true
+			if value != "" && value != "[]" {
+				def.tags = append(def.tags, parseInlineYAMLList(value)...)
 			}
 		}
-		if binding.Source == "" {
-			binding.Source = sourcePath
-		}
-		return binding
 	}
-	binding := &ServiceBinding{
-		Abstract:      serviceID,
-		Concrete:      serviceID,
-		Singleton:     true,
-		Source:        sourcePath,
-		DefinitionURI: pathToFileURI(sourcePath),
-		Definition: textpos.Range{
-			Start: pos,
-			End:   textpos.Position{Line: pos.Line, Character: pos.Character + len(serviceID)},
-		},
-	}
-	ca.bindings[serviceID] = binding
-	return binding
+	return defs
 }
 
-func (ca *ContainerAnalyzer) parseSymfonyAttributes(path string, content string) {
-	if !strings.HasSuffix(path, ".php") {
-		return
-	}
-	file := parser.ParseFile(content)
-	if file == nil {
-		return
-	}
-	ns := file.Namespace
-	for _, cls := range file.Classes {
-		fqn := ns + "\\" + cls.Name
-		if strings.Contains(path, "src"+string(filepath.Separator)) {
-			if _, exists := ca.bindings[fqn]; !exists {
-				ca.bindings[fqn] = &ServiceBinding{Abstract: fqn, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: pathToFileURI(path)}
-			}
+func (ca *ContainerAnalyzer) parseSymfonyPHPConfigFile(path, content string) serviceDefinitions {
+	var defs serviceDefinitions
+	calls := newConfigCalls(content, ca.index.Grammars())
+	for _, call := range calls.named("set", "alias") {
+		if len(call.args) == 0 {
+			continue
 		}
-		for _, iface := range cls.Implements {
-			ifaceFQN := resolveType(iface, ns, file.Uses)
-			if _, exists := ca.bindings[ifaceFQN]; !exists {
-				ca.bindings[ifaceFQN] = &ServiceBinding{Abstract: ifaceFQN, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: pathToFileURI(path)}
-			}
+		serviceID := calls.serviceName(call.args[0].Value)
+		if serviceID == "" || !shouldTrackSymfonyServiceID(serviceID) {
+			continue
 		}
+		var target string
+		if len(call.args) > 1 {
+			target = calls.serviceName(call.args[1].Value)
+		}
+		alias := strings.EqualFold(call.method, "alias")
+		if alias && target == "" {
+			continue
+		}
+		def := serviceDefinition{id: serviceID, source: path, at: calls.position(call.args[0]), class: cmp.Or(target, serviceID)}
+		if alias {
+			def.alias = target
+		}
+		defs = append(defs, def)
 	}
+	return defs
 }
 
-func (ca *ContainerAnalyzer) scanDirectory(dir string, handler func(string, string)) {
-	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
+type configCall struct {
+	method string
+	owner  ast.Expr
+	args   []*ast.Arg
+}
+
+type configCalls struct {
+	src   string
+	file  *parser.FileNode
+	tree  *ast.File
+	lines ast.Lines
+}
+
+func newConfigCalls(content string, grammars phpparser.GrammarRange) configCalls {
+	tree := parser.ParseTreeIn(content, grammars)
+	return configCalls{src: content, file: parser.FileNodeOf(content, tree), tree: tree, lines: ast.NewLines(content)}
+}
+
+func (c configCalls) text(n ast.Node) string {
+	return n.Bounds().Text(c.src)
+}
+
+func (c configCalls) named(methods ...string) []configCall {
+	var calls []configCall
+	ast.Walk(c.tree, func(n ast.Node) bool {
+		call, ok := n.(*ast.MethodCall)
+		if !ok || call.Args == nil {
+			return true
 		}
-		if !strings.HasSuffix(path, ".php") && !strings.HasSuffix(path, ".yaml") && !strings.HasSuffix(path, ".yml") {
-			return nil
+		name, ok := call.Name.(*ast.IdentifierExpr)
+		if !ok {
+			return true
 		}
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return nil
+		method := c.text(name)
+		if slices.ContainsFunc(methods, func(m string) bool { return strings.EqualFold(m, method) }) {
+			calls = append(calls, configCall{method: method, owner: call.Object, args: call.Args.Args})
 		}
-		handler(path, string(content))
-		return nil
+		return true
 	})
+	return calls
 }
 
-type ComposerAutoload struct {
-	PSR4 map[string]string
+func (c configCalls) serviceName(e ast.Expr) string {
+	if e == nil {
+		return ""
+	}
+	if value, ok := parser.StringLiteral(c.text(e)); ok {
+		return value
+	}
+	fetch, ok := e.(*ast.ClassConstFetch)
+	if !ok || !strings.EqualFold(c.text(fetch.Name), "class") {
+		return ""
+	}
+	class, ok := fetch.Class.(*ast.ConstFetch)
+	if !ok || class.Name == nil {
+		return ""
+	}
+	return c.file.ResolveClassName(c.text(class.Name))
 }
 
-func ParseComposerAutoload(rootPath string) *ComposerAutoload {
-	composerPath := filepath.Join(rootPath, "composer.json")
-	data, err := os.ReadFile(composerPath)
-	if err != nil {
+func (c configCalls) position(n ast.Node) textpos.Position {
+	line, col := c.lines.Position(n.Bounds().Start)
+	return textpos.Position{Line: line, Character: col}
+}
+
+func compactExpr(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+func (ca *ContainerAnalyzer) parseSymfonyClasses(path string, content string) classBindings {
+	file := parser.ParseFileIn(content, ca.index.Grammars())
+	if file == nil {
 		return nil
 	}
-	var composer struct {
-		Autoload struct {
-			PSR4 map[string]interface{} `json:"psr-4"`
-		} `json:"autoload"`
-	}
-	if json.Unmarshal(data, &composer) != nil {
-		return nil
-	}
-	result := &ComposerAutoload{PSR4: make(map[string]string)}
-	for ns, paths := range composer.Autoload.PSR4 {
-		switch v := paths.(type) {
-		case string:
-			result.PSR4[ns] = v
-		case []interface{}:
-			if len(v) > 0 {
-				if s, ok := v[0].(string); ok {
-					result.PSR4[ns] = s
-				}
-			}
+	var bindings classBindings
+	ns := file.Namespace
+	uri := pathToFileURI(path)
+	for _, cls := range file.Classes {
+		fqn := cls.FullName
+		bindings = append(bindings, ServiceBinding{Abstract: fqn, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: uri})
+		for _, iface := range cls.Implements {
+			ifaceFQN := parser.ResolveImportedName(iface, ns, file.Uses, "class")
+			bindings = append(bindings, ServiceBinding{Abstract: ifaceFQN, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: uri})
 		}
 	}
-	return result
-}
-
-func cleanPHPString(s string) string {
-	s = strings.TrimSpace(s)
-	s = strings.Trim(s, "'\"")
-	s = strings.TrimSuffix(s, "::class")
-	s = strings.ReplaceAll(s, "\\\\", "\\")
-	return s
-}
-
-func resolveType(name, currentNs string, uses []parser.UseNode) string {
-	if strings.HasPrefix(name, "\\") {
-		return strings.TrimPrefix(name, "\\")
-	}
-	parts := strings.SplitN(name, "\\", 2)
-	for _, u := range uses {
-		if u.Alias == parts[0] {
-			if len(parts) > 1 {
-				return u.FullName + "\\" + parts[1]
-			}
-			return u.FullName
-		}
-	}
-	if currentNs != "" {
-		return currentNs + "\\" + name
-	}
-	return name
+	return bindings
 }
 
 func leadingIndent(s string) int {
@@ -925,178 +606,6 @@ func parseInlineYAMLList(value string) []string {
 	}
 	sort.Strings(items)
 	return items
-}
-
-type symfonyPHPConfigArg struct {
-	raw   string
-	start int
-}
-
-type symfonyPHPConfigCall struct {
-	method string
-	args   []symfonyPHPConfigArg
-}
-
-func findSymfonyPHPConfigCalls(content string) []symfonyPHPConfigCall {
-	var calls []symfonyPHPConfigCall
-	for _, method := range []string{"set", "alias"} {
-		needle := "->" + method + "("
-		offset := 0
-		for {
-			idx := strings.Index(content[offset:], needle)
-			if idx < 0 {
-				break
-			}
-			open := offset + idx + len(needle) - 1
-			close := findMatchingParen(content, open)
-			if close < 0 {
-				offset = open + 1
-				continue
-			}
-			args := splitSymfonyPHPArgs(content, open+1, close)
-			if len(args) > 0 {
-				calls = append(calls, symfonyPHPConfigCall{method: method, args: args})
-			}
-			offset = close + 1
-		}
-	}
-	sort.SliceStable(calls, func(i, j int) bool {
-		return calls[i].args[0].start < calls[j].args[0].start
-	})
-	return calls
-}
-
-func findMatchingParen(content string, open int) int {
-	depth := 0
-	inQuote := byte(0)
-	escaped := false
-	for i := open; i < len(content); i++ {
-		ch := content[i]
-		if inQuote != 0 {
-			if escaped {
-				escaped = false
-				continue
-			}
-			if ch == '\\' {
-				escaped = true
-				continue
-			}
-			if ch == inQuote {
-				inQuote = 0
-			}
-			continue
-		}
-		switch ch {
-		case '\'', '"':
-			inQuote = ch
-		case '(':
-			depth++
-		case ')':
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-	return -1
-}
-
-func splitSymfonyPHPArgs(content string, start, end int) []symfonyPHPConfigArg {
-	var args []symfonyPHPConfigArg
-	depth := 0
-	inQuote := byte(0)
-	escaped := false
-	argStart := start
-
-	flush := func(argEnd int) {
-		raw := strings.TrimSpace(content[argStart:argEnd])
-		if raw == "" {
-			return
-		}
-		trimmedStart := argStart
-		for trimmedStart < argEnd {
-			switch content[trimmedStart] {
-			case ' ', '\t', '\n', '\r':
-				trimmedStart++
-			default:
-				args = append(args, symfonyPHPConfigArg{
-					raw:   raw,
-					start: trimmedStart,
-				})
-				return
-			}
-		}
-	}
-
-	for i := start; i < end; i++ {
-		ch := content[i]
-		if inQuote != 0 {
-			if escaped {
-				escaped = false
-				continue
-			}
-			if ch == '\\' {
-				escaped = true
-				continue
-			}
-			if ch == inQuote {
-				inQuote = 0
-			}
-			continue
-		}
-		switch ch {
-		case '\'', '"':
-			inQuote = ch
-		case '(':
-			depth++
-		case ')':
-			if depth > 0 {
-				depth--
-			}
-		case ',':
-			if depth == 0 {
-				flush(i)
-				argStart = i + 1
-			}
-		}
-	}
-	flush(end)
-	return args
-}
-
-func interpretSymfonyPHPServiceExpr(expr, currentNs string, uses []parser.UseNode) string {
-	expr = strings.TrimSpace(expr)
-	if expr == "" {
-		return ""
-	}
-	if strings.HasPrefix(expr, "'") || strings.HasPrefix(expr, `"`) {
-		return cleanPHPString(expr)
-	}
-	if symfonyClassExprRegex.MatchString(expr) {
-		return resolveType(cleanPHPString(expr), currentNs, uses)
-	}
-	return ""
-}
-
-func offsetToPosition(content string, offset int) textpos.Position {
-	if offset < 0 {
-		offset = 0
-	}
-	if offset > len(content) {
-		offset = len(content)
-	}
-	line := 0
-	lineStart := 0
-	for i := 0; i < offset; i++ {
-		if content[i] == '\n' {
-			line++
-			lineStart = i + 1
-		}
-	}
-	return textpos.Position{
-		Line:      line,
-		Character: offset - lineStart,
-	}
 }
 
 func pathToFileURI(path string) string {

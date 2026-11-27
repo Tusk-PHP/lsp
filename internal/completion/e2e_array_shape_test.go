@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -13,7 +14,7 @@ func TestE2EArrayShapeInference(t *testing.T) {
 	p := setupLaravelE2E(t)
 
 	resolveTyped := func(expr, source string, line int) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
@@ -78,7 +79,7 @@ func TestE2EConstructorGenericPropagation(t *testing.T) {
 	p := setupLaravelE2E(t)
 
 	resolveTyped := func(expr, source string, line int) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
@@ -149,7 +150,7 @@ func TestE2EMethodTemplateInference(t *testing.T) {
 	p := setupLaravelE2E(t)
 
 	resolveTyped := func(expr, source string, line int) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}

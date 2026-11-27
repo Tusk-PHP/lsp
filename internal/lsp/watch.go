@@ -25,7 +25,7 @@ func (s *Server) watchFiles() {
 	if !s.clientWatchesFiles || s.rootPath == "" {
 		return
 	}
-	globs := workspace.WatchGlobs()
+	globs := s.workspace.WatchGlobs()
 	watchers := make([]protocol.FileSystemWatcher, len(globs), len(globs)+1)
 	for i, glob := range globs {
 		watchers[i] = protocol.FileSystemWatcher{GlobPattern: glob}

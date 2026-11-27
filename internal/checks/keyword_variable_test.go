@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -21,7 +22,7 @@ function diff( $new, $old, $extends, $catch, $implements ) {
 }
 `
 	idx.IndexFile("file:///lib.php", "<?php\nclass Foo { const new = 1; }\ninterface Countable {}\n")
-	got := (&UnknownClassRule{}).Check(parser.ParseFile(src), src, idx)
+	got := (&UnknownClassRule{}).Check(parser.ParseFile(src, token.Latest), src, idx)
 	if len(got) != 1 || got[0].Message != "Unknown class 'Missing'" {
 		t.Errorf("only Missing should be reported, got %+v", got)
 	}
