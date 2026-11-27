@@ -17,7 +17,6 @@ import (
 	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
-	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
@@ -69,9 +68,6 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.container = s.workspace.Container
 	s.routeIndex = s.workspace.RouteIndex
 	s.schemaCache = s.workspace.SchemaCache
-	arrayResolver := models.NewFrameworkArrayResolver(s.index, s.rootPath, s.framework)
-	viewResolver := frameworklaravel.NewViews(s.rootPath)
-	translationResolver := frameworklaravel.NewTranslationResolver(s.rootPath)
 	symfonyTranslations := frameworksymfony.NewTranslationResolver(s.rootPath)
 	s.completion = completion.NewProvider(s.index, s.container, s.framework)
 	// Clients that resolve documentation and detail later get member items
@@ -89,12 +85,12 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if s.cfg != nil {
 		s.completion.SetAutoImportAliasStyle(s.cfg.AutoImport.AliasStyle)
 	}
-	s.completion.SetArrayResolver(arrayResolver)
+	s.completion.SetArrayResolver(s.workspace.ArrayKeys)
 	if s.routeIndex != nil {
 		s.completion.SetLaravelRouteIndex(s.routeIndex)
 	}
-	s.completion.SetViewResolver(viewResolver)
-	s.completion.SetTranslationResolver(translationResolver)
+	s.completion.SetViewResolver(s.workspace.Views)
+	s.completion.SetTranslationResolver(s.workspace.Translations)
 	s.completion.SetSymfonyTranslationResolver(symfonyTranslations)
 	s.completion.SetSymfonyCommands(s.workspace.SymfonyCommands)
 	s.inlayHint = inlayhint.NewProvider(s.index, s.container)
@@ -102,7 +98,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
 	})
 	s.hover = hover.NewProvider(s.index, s.container, s.framework)
-	s.hover.SetArrayResolver(arrayResolver)
+	s.hover.SetArrayResolver(s.workspace.ArrayKeys)
 	s.hover.SetConfig(s.cfg)
 	s.coverage = coverage.NewStore(s.rootPath, s.cfg.CoverageReportPath, s.logger)
 	s.hover.SetCoverage(s.coverage)
@@ -129,9 +125,9 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(s.index, s.workspace.SchemaIsLive)
 	s.diag.Profile = s.workspace.Profile
 	s.providers = frameworklaravel.NewProviders(s.rootPath, s.index)
-	viewResolver.SetProviders(s.providers)
+	s.workspace.Views.SetProviders(s.providers)
 	s.components = frameworklaravel.NewComponents(s.rootPath, s.index, s.providers, s.getDocumentReader())
-	s.bladeFeatures = &blade.Features{Views: viewResolver, Components: s.components, Read: s.getDocumentReader(), Custom: s.providers.Custom}
+	s.bladeFeatures = &blade.Features{Views: s.workspace.Views, Components: s.components, Read: s.getDocumentReader(), Custom: s.providers.Custom}
 	s.diag.Blade = s.bladeFeatures
 	if s.workspace.ViewData != nil {
 		s.viewTypes = &frameworklaravel.ViewTypes{
@@ -153,8 +149,8 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if s.routeIndex != nil {
 		s.analyzer.SetLaravelRouteIndex(s.routeIndex)
 	}
-	s.analyzer.SetViewResolver(viewResolver)
-	s.analyzer.SetTranslationResolver(translationResolver)
+	s.analyzer.SetViewResolver(s.workspace.Views)
+	s.analyzer.SetTranslationResolver(s.workspace.Translations)
 	s.analyzer.SetSymfonyTranslationResolver(symfonyTranslations)
 	s.analyzer.SetSymfonyCommands(s.workspace.SymfonyCommands)
 	s.sendResponse(msg.ID, protocol.InitializeResult{

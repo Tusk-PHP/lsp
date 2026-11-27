@@ -304,3 +304,36 @@ func BenchmarkSyncWithDiskUnchanged(b *testing.B) {
 		})
 	}
 }
+
+func diagnosticCodes(t *testing.T, session *mcp.ClientSession, path string) []string {
+	t.Helper()
+	diags, err := callTool(t, session, "php_diagnostics", map[string]any{"path": path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var codes []string
+	for _, f := range diags["files"].([]any) {
+		for _, d := range f.(map[string]any)["diagnostics"].([]any) {
+			codes = append(codes, d.(map[string]any)["code"].(string))
+		}
+	}
+	return codes
+}
+
+func TestToolCallsSeeAViewDeletedOnDisk(t *testing.T) {
+	session, root := connectedService(t, map[string]string{
+		".tusk-php.json":                         `{"framework": "laravel", "databaseEnabled": false}`,
+		"composer.json":                          `{"require": {"php": "^8.2"}}`,
+		"resources/views/home.blade.php":         "@include('partials.nav')\n",
+		"resources/views/partials/nav.blade.php": "<nav></nav>\n",
+	})
+	if codes := diagnosticCodes(t, session, "resources/views/home.blade.php"); slices.Contains(codes, "unknown-view") {
+		t.Fatalf("the included view exists: %v", codes)
+	}
+	if err := os.Remove(filepath.Join(root, "resources/views/partials/nav.blade.php")); err != nil {
+		t.Fatal(err)
+	}
+	if codes := diagnosticCodes(t, session, "resources/views/home.blade.php"); !slices.Contains(codes, "unknown-view") {
+		t.Errorf("a view deleted since the last call is reported missing: %v", codes)
+	}
+}

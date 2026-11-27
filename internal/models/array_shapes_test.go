@@ -383,7 +383,7 @@ return ['key' => 'val'];
 	}
 
 	// After invalidation, should discover new package
-	r.InvalidateVendorCache()
+	r.InvalidateVendorConfigs()
 	fields3 := r.ListConfigFiles()
 
 	keys := make(map[string]bool)
