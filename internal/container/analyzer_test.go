@@ -252,31 +252,6 @@ class Controller {
 	}
 }
 
-func TestParseComposerAutoload(t *testing.T) {
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "composer.json"), []byte(`{
-		"autoload": {
-			"psr-4": {
-				"App\\": "src/"
-			}
-		}
-	}`), 0644)
-
-	result := ParseComposerAutoload(dir)
-	if result == nil || len(result.PSR4) == 0 {
-		t.Error("expected PSR-4 mappings")
-	}
-	if result.PSR4["App\\"] != "src/" {
-		t.Errorf("PSR4 = %v", result.PSR4)
-	}
-
-	t.Run("missing composer.json", func(t *testing.T) {
-		if ParseComposerAutoload("/nonexistent") != nil {
-			t.Error("expected nil for missing file")
-		}
-	})
-}
-
 func TestSymfonyClassesInSrcAreBoundWithTheirInterfaces(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "src", "Service", "Mailer.php")

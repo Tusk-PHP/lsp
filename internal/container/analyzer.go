@@ -2,7 +2,6 @@ package container
 
 import (
 	"cmp"
-	"encoding/json"
 	"maps"
 	"os"
 	"path/filepath"
@@ -551,40 +550,6 @@ func (ca *ContainerAnalyzer) parseSymfonyClasses(path string, content string) cl
 		}
 	}
 	return bindings
-}
-
-type ComposerAutoload struct {
-	PSR4 map[string]string
-}
-
-func ParseComposerAutoload(rootPath string) *ComposerAutoload {
-	composerPath := filepath.Join(rootPath, "composer.json")
-	data, err := os.ReadFile(composerPath)
-	if err != nil {
-		return nil
-	}
-	var composer struct {
-		Autoload struct {
-			PSR4 map[string]interface{} `json:"psr-4"`
-		} `json:"autoload"`
-	}
-	if json.Unmarshal(data, &composer) != nil {
-		return nil
-	}
-	result := &ComposerAutoload{PSR4: make(map[string]string)}
-	for ns, paths := range composer.Autoload.PSR4 {
-		switch v := paths.(type) {
-		case string:
-			result.PSR4[ns] = v
-		case []interface{}:
-			if len(v) > 0 {
-				if s, ok := v[0].(string); ok {
-					result.PSR4[ns] = s
-				}
-			}
-		}
-	}
-	return result
 }
 
 func leadingIndent(s string) int {
