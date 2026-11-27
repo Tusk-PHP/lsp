@@ -40,6 +40,9 @@ type Bootstrapped struct {
 	RouteIndex *frameworklaravel.RouteIndex
 	// ViewData indexes the data a Laravel app passes to its views.
 	ViewData *frameworklaravel.ViewData
+	// ValidationExtensions are the custom validation rules a Laravel app's
+	// files and packages register.
+	ValidationExtensions *frameworklaravel.ValidationExtensions
 	// Aliases are the Laravel class aliases (facades by short name), read
 	// with the Composer dependencies.
 	Aliases       *frameworklaravel.Aliases
@@ -84,6 +87,7 @@ func New(opts Options) *Bootstrapped {
 	var routeIndex *frameworklaravel.RouteIndex
 	var aliases *frameworklaravel.Aliases
 	var viewData *frameworklaravel.ViewData
+	var validationExtensions *frameworklaravel.ValidationExtensions
 	var commands *frameworksymfony.CommandIndex
 	if opts.Framework == "symfony" {
 		commands = frameworksymfony.NewCommandIndex()
@@ -93,24 +97,26 @@ func New(opts Options) *Bootstrapped {
 		index.SetScopeConventions(frameworklaravel.ScopeConventions())
 		routeIndex = frameworklaravel.NewRouteIndex(opts.RootPath)
 		viewData = frameworklaravel.NewViewData(opts.RootPath)
+		validationExtensions = frameworklaravel.NewValidationExtensions()
 		aliases = frameworklaravel.NewAliases(opts.RootPath)
 		index.SetClassGenerator(aliases)
 	}
 
 	ws := &Bootstrapped{
-		RootPath:        opts.RootPath,
-		Framework:       opts.Framework,
-		Config:          cfg,
-		Logger:          opts.Logger,
-		Index:           index,
-		Container:       container.NewContainerAnalyzer(index, opts.RootPath, opts.Framework),
-		RouteIndex:      routeIndex,
-		ViewData:        viewData,
-		Aliases:         aliases,
-		SymfonyCommands: commands,
-		SchemaCache:     models.NewSchemaCache(),
-		exclude:         newExcludeRules(cfg.ExcludePaths),
-		projectFiles:    newProjectFiles(cfg.MaxIndexFiles),
+		RootPath:             opts.RootPath,
+		Framework:            opts.Framework,
+		Config:               cfg,
+		Logger:               opts.Logger,
+		Index:                index,
+		Container:            container.NewContainerAnalyzer(index, opts.RootPath, opts.Framework),
+		RouteIndex:           routeIndex,
+		ViewData:             viewData,
+		ValidationExtensions: validationExtensions,
+		Aliases:              aliases,
+		SymfonyCommands:      commands,
+		SchemaCache:          models.NewSchemaCache(),
+		exclude:              newExcludeRules(cfg.ExcludePaths),
+		projectFiles:         newProjectFiles(cfg.MaxIndexFiles),
 	}
 	profile := opts.BuiltinProfile
 	ws.profile.Store(&profile)
@@ -201,6 +207,7 @@ func (ws *Bootstrapped) IndexWorkspace() IndexedFiles {
 		if content, err := os.ReadFile(path); err == nil {
 			ws.Index.IndexFileWithSource(symbols.PathToURI(path), string(content), symbols.SourceProject)
 			ws.ViewData.IndexFile(symbols.PathToURI(path), string(content))
+			ws.ValidationExtensions.IndexFile(symbols.PathToURI(path), string(content))
 		}
 		return nil
 	})
@@ -267,6 +274,7 @@ func (ws *Bootstrapped) IndexComposerDependencies() int {
 		if entry.IsFile {
 			if content, err := os.ReadFile(entry.Path); err == nil {
 				ws.Index.IndexFileWithSource(symbols.PathToURI(entry.Path), string(content), src)
+				ws.ValidationExtensions.IndexFile(symbols.PathToURI(entry.Path), string(content))
 				if entry.IsVendor {
 					vendorCount++
 				}
@@ -290,6 +298,7 @@ func (ws *Bootstrapped) IndexComposerDependencies() int {
 			}
 			if content, err := os.ReadFile(path); err == nil {
 				ws.Index.IndexFileWithSource(symbols.PathToURI(path), string(content), symbols.SourceVendor)
+				ws.ValidationExtensions.IndexFile(symbols.PathToURI(path), string(content))
 				vendorCount++
 			}
 			return nil

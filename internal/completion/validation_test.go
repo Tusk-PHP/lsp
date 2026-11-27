@@ -70,6 +70,7 @@ func validationProvider(t testing.TB) *Provider {
 	t.Helper()
 	root := t.TempDir()
 	idx := symbols.NewIndex()
+	ext := frameworklaravel.NewValidationExtensions()
 	idx.RegisterBuiltins()
 	for rel, src := range validationStubs {
 		path := filepath.Join(root, filepath.FromSlash(rel))
@@ -80,6 +81,7 @@ func validationProvider(t testing.TB) *Provider {
 			t.Fatal(err)
 		}
 		idx.IndexFileWithSource(symbols.PathToURI(path), src, symbols.SourceProject)
+		ext.IndexFile(symbols.PathToURI(path), src)
 	}
 	idx.MarkReady()
 	read := func(uri string) string {
@@ -90,7 +92,7 @@ func validationProvider(t testing.TB) *Provider {
 		return string(data)
 	}
 	p := NewProvider(idx, nil, "laravel")
-	p.SetValidationRules(frameworklaravel.NewValidationRules(idx, frameworklaravel.NewProviders(root, idx), read))
+	p.SetValidationRules(frameworklaravel.NewValidationRules(idx, ext, read))
 	return p
 }
 
@@ -259,7 +261,7 @@ func TestValidationRulesFromTheInstalledFramework(t *testing.T) {
 		}
 		return string(data)
 	}
-	rules := frameworklaravel.NewValidationRules(idx, frameworklaravel.NewProviders(root, idx), read)
+	rules := frameworklaravel.NewValidationRules(idx, frameworklaravel.NewValidationExtensions(), read)
 	if n := len(rules.All()); n < 100 {
 		t.Errorf("%d built-in rules", n)
 	}

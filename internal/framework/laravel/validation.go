@@ -88,18 +88,18 @@ func Snake(s string) string {
 }
 
 // ValidationRules are the validation rules of a Laravel app: the built-in
-// rules of its installed framework and the custom rules its providers
-// register. They are read again when the framework's rule trait is
-// re-indexed or the providers are read again.
+// rules of its installed framework and the custom rules its files register.
+// They are read again when the framework's rule trait is re-indexed or a
+// file's registrations change.
 type ValidationRules struct {
-	index     *symbols.Index
-	providers *Providers
-	read      func(uri string) string
+	index      *symbols.Index
+	extensions *ValidationExtensions
+	read       func(uri string) string
 
-	mu      sync.Mutex
-	trait   *symbols.Symbol
-	regs    *Registrations
-	catalog *validationCatalog
+	mu         sync.Mutex
+	trait      *symbols.Symbol
+	extVersion uint64
+	catalog    *validationCatalog
 }
 
 type validationCatalog struct {
@@ -108,9 +108,10 @@ type validationCatalog struct {
 }
 
 // NewValidationRules returns the validation rules of the app whose index
-// and providers are given; read returns a file's source by URI.
-func NewValidationRules(index *symbols.Index, providers *Providers, read func(uri string) string) *ValidationRules {
-	return &ValidationRules{index: index, providers: providers, read: read}
+// and custom rule registrations are given; read returns a file's source by
+// URI.
+func NewValidationRules(index *symbols.Index, extensions *ValidationExtensions, read func(uri string) string) *ValidationRules {
+	return &ValidationRules{index: index, extensions: extensions, read: read}
 }
 
 // All returns every rule, sorted by name. The slice is shared: read only.
@@ -130,22 +131,22 @@ func (v *ValidationRules) Lookup(name string) (ValidationRule, bool) {
 
 func (v *ValidationRules) current() *validationCatalog {
 	trait := v.index.Lookup(validatesAttributes)
-	regs := v.providers.Get()
 	v.mu.Lock()
-	if v.catalog != nil && v.trait == trait && v.regs == regs {
+	if v.catalog != nil && v.trait == trait && v.extVersion == v.extensions.currentVersion() {
 		c := v.catalog
 		v.mu.Unlock()
 		return c
 	}
 	v.mu.Unlock()
-	c := v.build(trait, regs)
+	version, custom := v.extensions.snapshot()
+	c := v.build(trait, custom)
 	v.mu.Lock()
-	v.trait, v.regs, v.catalog = trait, regs, c
+	v.trait, v.extVersion, v.catalog = trait, version, c
 	v.mu.Unlock()
 	return c
 }
 
-func (v *ValidationRules) build(trait *symbols.Symbol, regs *Registrations) *validationCatalog {
+func (v *ValidationRules) build(trait *symbols.Symbol, custom []Registration) *validationCatalog {
 	c := &validationCatalog{byKey: map[string]int{}}
 	if trait != nil {
 		required := requiredParameters(v.read(trait.URI))
@@ -170,13 +171,11 @@ func (v *ValidationRules) build(trait *symbols.Symbol, regs *Registrations) *val
 			c.add(rule)
 		}
 	}
-	if regs != nil {
-		for _, reg := range regs.ValidationRules {
-			if _, builtin := c.byKey[ValidationRuleKey(reg.Name)]; builtin {
-				continue
-			}
-			c.add(ValidationRule{Name: reg.Name, Registered: &reg})
+	for _, reg := range custom {
+		if _, known := c.byKey[ValidationRuleKey(reg.Name)]; known {
+			continue
 		}
+		c.add(ValidationRule{Name: reg.Name, Registered: &reg})
 	}
 	slices.SortFunc(c.rules, func(a, b ValidationRule) int { return strings.Compare(a.Name, b.Name) })
 	for i, r := range c.rules {

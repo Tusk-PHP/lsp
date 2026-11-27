@@ -99,28 +99,67 @@ func TestSnake(t *testing.T) {
 	}
 }
 
-func TestProviderValidationRules(t *testing.T) {
-	root := t.TempDir()
-	writeFiles(t, root, map[string]string{
-		"composer.json":                        `{"autoload": {"psr-4": {"App\\": "app/"}}}`,
-		"app/Providers/AppServiceProvider.php": validationProvider,
-	})
-	r := NewProviders(root, nil).read()
-	var names []string
-	for key, reg := range r.ValidationRules {
-		if key != ValidationRuleKey(reg.Name) {
-			t.Errorf("%q is filed under %q", reg.Name, key)
-		}
-		names = append(names, reg.Name)
+func extensionNames(e *ValidationExtensions) string {
+	_, regs := e.snapshot()
+	names := make([]string, 0, len(regs))
+	for _, r := range regs {
+		names = append(names, r.Name)
 	}
-	if got := strings.Join(slices.Sorted(slices.Values(names)), " "); got != "Postcode greater_than_field iban phone_number" {
+	return strings.Join(slices.Sorted(slices.Values(names)), " ")
+}
+
+func TestValidationExtensions(t *testing.T) {
+	e := NewValidationExtensions()
+	e.IndexFile("file:///app/Providers/AppServiceProvider.php", validationProvider)
+	if got := extensionNames(e); got != "Postcode greater_than_field iban phone_number" {
 		t.Errorf("validation rules: %q", got)
 	}
-	if !r.UnknownValidationRules {
-		t.Error("a rule registered under a variable's name is unknown")
+	_, regs := e.snapshot()
+	for _, reg := range regs {
+		if reg.Name == "phone_number" && (reg.Line != 11 || reg.URI != "file:///app/Providers/AppServiceProvider.php") {
+			t.Errorf("phone_number registered at %+v", reg)
+		}
 	}
-	if reg := r.ValidationRules[ValidationRuleKey("phone_number")]; reg.Line != 11 || !strings.HasSuffix(reg.URI, "AppServiceProvider.php") {
-		t.Errorf("phone_number registered at %+v", reg)
+
+	e.IndexFile("file:///bootstrap/app.php", "<?php\nuse Illuminate\\Support\\Facades\\Validator as V;\nV::extend('slug', fn () => true);\n\\Illuminate\\Support\\Facades\\Validator::extendImplicit('vat_id', fn () => true);\n")
+	if got := extensionNames(e); got != "Postcode greater_than_field iban phone_number slug vat_id" {
+		t.Errorf("rules registered anywhere count: %q", got)
+	}
+
+	before := e.currentVersion()
+	e.IndexFile("file:///bootstrap/app.php", "<?php\nuse Illuminate\\Support\\Facades\\Validator as V;\nV::extend('slug', fn () => true);\n\\Illuminate\\Support\\Facades\\Validator::extendImplicit('vat_id', fn () => true);\n")
+	if e.currentVersion() != before {
+		t.Error("indexing a file again unchanged keeps the catalog")
+	}
+	e.IndexFile("file:///bootstrap/app.php", "<?php\nValidator::extend('isbn', fn () => true);\n")
+	if got := extensionNames(e); got != "Postcode greater_than_field iban isbn phone_number" || e.currentVersion() == before {
+		t.Errorf("a file's rules are replaced when it changes: %q", got)
+	}
+	e.IndexFile("file:///bootstrap/app.php", "")
+	if got := extensionNames(e); got != "Postcode greater_than_field iban phone_number" {
+		t.Errorf("a removed file's rules go: %q", got)
+	}
+
+	e.IndexFile("file:///app/Other.php", `<?php
+namespace App;
+class Other
+{
+    public function boot($manager)
+    {
+        Validator::extend('in_namespace', fn () => true);
+        $manager->extend('driver', fn () => null);
+        // Validator::extend('commented', fn () => true);
+        $x = "Validator::extend('in_a_string')";
+    }
+}
+`)
+	if got := extensionNames(e); got != "Postcode greater_than_field iban phone_number" {
+		t.Errorf("App\\Validator, managers, comments and strings register nothing: %q", got)
+	}
+	var none *ValidationExtensions
+	none.IndexFile("file:///x.php", validationProvider)
+	if v, regs := none.snapshot(); v != 0 || regs != nil {
+		t.Error("a nil set has nothing")
 	}
 }
 
@@ -143,7 +182,9 @@ func validationFixture(t *testing.T) *ValidationRules {
 		}
 		return string(data)
 	}
-	return NewValidationRules(idx, NewProviders(root, idx), read)
+	ext := NewValidationExtensions()
+	ext.IndexFile(symbols.PathToURI(filepath.Join(root, "app/Providers/AppServiceProvider.php")), validationProvider)
+	return NewValidationRules(idx, ext, read)
 }
 
 func TestValidationRulesCatalog(t *testing.T) {

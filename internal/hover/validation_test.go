@@ -41,6 +41,7 @@ class AppServiceProvider
 `,
 	}
 	idx := symbols.NewIndex()
+	ext := frameworklaravel.NewValidationExtensions()
 	for rel, src := range files {
 		path := filepath.Join(root, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -50,6 +51,7 @@ class AppServiceProvider
 			t.Fatal(err)
 		}
 		idx.IndexFileWithSource(symbols.PathToURI(path), src, symbols.SourceProject)
+		ext.IndexFile(symbols.PathToURI(path), src)
 	}
 	idx.MarkReady()
 	read := func(uri string) string {
@@ -60,7 +62,7 @@ class AppServiceProvider
 		return string(data)
 	}
 	p := NewProvider(idx, nil, "laravel")
-	p.SetValidationRules(frameworklaravel.NewValidationRules(idx, frameworklaravel.NewProviders(root, idx), read))
+	p.SetValidationRules(frameworklaravel.NewValidationRules(idx, ext, read))
 
 	src := `<?php
 use Illuminate\Http\Request;
