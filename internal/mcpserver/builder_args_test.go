@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
 // TestRuntimeWiresBuilderArgRules checks that the MCP runtime gives the
@@ -28,7 +28,7 @@ Product::where('missing_column', 1)->get();
 	for _, d := range rt.Diagnostics.Analyze(uri, src) {
 		if d.Code == "unknown-relation" || d.Code == "unknown-column" {
 			got = append(got, string(d.Code)+": "+d.Message)
-			if d.Severity != protocol.DiagnosticSeverityWarning {
+			if d.Severity != rule.SeverityWarning {
 				t.Errorf("%s: severity %d", d.Code, d.Severity)
 			}
 		}

@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/mcpserver"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
@@ -283,13 +283,13 @@ func relativePath(root, path string) string {
 	return filepath.ToSlash(path)
 }
 
-func severityName(s protocol.DiagnosticSeverity) string {
+func severityName(s rule.Severity) string {
 	switch s {
-	case protocol.DiagnosticSeverityError:
+	case rule.SeverityError:
 		return "error"
-	case protocol.DiagnosticSeverityWarning:
+	case rule.SeverityWarning:
 		return "warning"
-	case protocol.DiagnosticSeverityInformation:
+	case rule.SeverityInfo:
 		return "info"
 	default:
 		return "hint"

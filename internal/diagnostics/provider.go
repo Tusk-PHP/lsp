@@ -10,7 +10,6 @@ import (
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
@@ -48,8 +47,8 @@ type Provider struct {
 	ViewTypes *frameworklaravel.ViewTypes
 
 	mu          sync.RWMutex
-	toolResults map[string][]protocol.Diagnostic
-	saveResults map[string][]protocol.Diagnostic
+	toolResults map[string][]Diagnostic
+	saveResults map[string][]Diagnostic
 }
 
 func NewProvider(index *symbols.Index, framework, rootPath string, logger *log.Logger, cfg *config.Config) *Provider {
@@ -59,8 +58,8 @@ func NewProvider(index *symbols.Index, framework, rootPath string, logger *log.L
 		rootPath:    rootPath,
 		logger:      logger,
 		cfg:         cfg,
-		toolResults: make(map[string][]protocol.Diagnostic),
-		saveResults: make(map[string][]protocol.Diagnostic),
+		toolResults: make(map[string][]Diagnostic),
+		saveResults: make(map[string][]Diagnostic),
 	}
 	p.phpstan = newPHPStanRunner(rootPath, cfg, logger)
 	p.pint = newPintRunner(rootPath, cfg, logger)
@@ -69,7 +68,7 @@ func NewProvider(index *symbols.Index, framework, rootPath string, logger *log.L
 
 // Analyze runs fast static checks and merges cached external tool results.
 // Called on every file change — only includes lightweight checks.
-func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
+func (p *Provider) Analyze(uri, source string) []Diagnostic {
 	return p.analyze(uri, source, false)
 }
 
@@ -77,12 +76,12 @@ func (p *Provider) Analyze(uri, source string) []protocol.Diagnostic {
 // this source, computed now and not cached: for one-shot runs over files on
 // disk, such as `tusk-php check` and the MCP diagnostics tool, where every
 // file counts as saved.
-func (p *Provider) AnalyzeAll(uri, source string) []protocol.Diagnostic {
+func (p *Provider) AnalyzeAll(uri, source string) []Diagnostic {
 	return p.analyze(uri, source, true)
 }
 
-func (p *Provider) analyze(uri, source string, withSaveRules bool) []protocol.Diagnostic {
-	var diags []protocol.Diagnostic
+func (p *Provider) analyze(uri, source string, withSaveRules bool) []Diagnostic {
+	var diags []Diagnostic
 	shared := &checks.Shared{}
 	if workspace.IsBlade(uri) {
 		// A Blade view is checked through the PHP it contains, and only what
@@ -117,7 +116,7 @@ func (p *Provider) analyze(uri, source string, withSaveRules bool) []protocol.Di
 	return p.dropSuppressed(uri, source, shared, diags)
 }
 
-func (p *Provider) analyzeNative(source string, shared *checks.Shared, bladePHP, includedFile bool) []protocol.Diagnostic {
+func (p *Provider) analyzeNative(source string, shared *checks.Shared, bladePHP, includedFile bool) []Diagnostic {
 	rules := EditRules(p.ruleOptions(bladePHP, includedFile), shared)
 	return p.toDiagnostics(p.runRules(rules, parser.ParseFile(source), source))
 }
@@ -151,8 +150,8 @@ func (p *Provider) runRules(rules []checks.Rule, file *parser.FileNode, source s
 	return findings
 }
 
-func (p *Provider) toDiagnostics(findings []checks.Finding) []protocol.Diagnostic {
-	diags := make([]protocol.Diagnostic, 0, len(findings))
+func (p *Provider) toDiagnostics(findings []checks.Finding) []Diagnostic {
+	diags := make([]Diagnostic, 0, len(findings))
 	for _, f := range findings {
 		if !p.cfg.IsRuleEnabled(f.Code) {
 			continue
@@ -172,7 +171,7 @@ func (p *Provider) bladeCustom() *blade.Custom {
 	return p.Blade.Custom()
 }
 
-func (p *Provider) analyzeBlade(source string) []protocol.Diagnostic {
+func (p *Provider) analyzeBlade(source string) []Diagnostic {
 	if p.Blade == nil {
 		return nil
 	}
@@ -196,7 +195,7 @@ func (p *Provider) analyzeBlade(source string) []protocol.Diagnostic {
 // toTemplate moves diagnostics found in a Blade view's virtual PHP to the
 // view. Those that start in generated PHP have no place in the view and are
 // dropped.
-func toTemplate(doc *blade.Document, diags []protocol.Diagnostic) []protocol.Diagnostic {
+func toTemplate(doc *blade.Document, diags []Diagnostic) []Diagnostic {
 	out := diags[:0]
 	for _, d := range diags {
 		r := d.Range
@@ -220,7 +219,7 @@ func (p *Provider) AnalyzeOnSave(uri, source string) {
 }
 
 // saveDiagnostics runs the rules that wait for a save.
-func (p *Provider) saveDiagnostics(uri, source string) []protocol.Diagnostic {
+func (p *Provider) saveDiagnostics(uri, source string) []Diagnostic {
 	var doc *blade.Document
 	if workspace.IsBlade(uri) {
 		doc = blade.CompileWith(source, blade.CompileOptions{Vars: p.ViewTypes.For(uri).BladeVars(), Custom: p.bladeCustom()})
@@ -236,7 +235,7 @@ func (p *Provider) saveDiagnostics(uri, source string) []protocol.Diagnostic {
 // RunTools executes external analysis tools (PHPStan, Pint) on a file.
 // Results are cached and included in subsequent Analyze calls.
 func (p *Provider) RunTools(uri, filePath string) {
-	var toolDiags []protocol.Diagnostic
+	var toolDiags []Diagnostic
 	if p.phpstan.available() {
 		toolDiags = append(toolDiags, p.phpstan.analyze(filePath)...)
 	}
@@ -260,7 +259,7 @@ func (p *Provider) ClearCache(uri string) {
 // one of the provided codes removed. It reuses the backing array of diags when
 // possible to avoid an allocation in the common (no-op) case where the slice is
 // already empty.
-func filterOutCodes(diags []protocol.Diagnostic, codes ...rule.Code) []protocol.Diagnostic {
+func filterOutCodes(diags []Diagnostic, codes ...rule.Code) []Diagnostic {
 	if len(diags) == 0 {
 		return diags
 	}
@@ -277,26 +276,17 @@ func filterOutCodes(diags []protocol.Diagnostic, codes ...rule.Code) []protocol.
 	return out
 }
 
-var lspSeverity = map[rule.Severity]protocol.DiagnosticSeverity{
-	rule.SeverityError:   protocol.DiagnosticSeverityError,
-	rule.SeverityWarning: protocol.DiagnosticSeverityWarning,
-	rule.SeverityInfo:    protocol.DiagnosticSeverityInformation,
-	rule.SeverityHint:    protocol.DiagnosticSeverityHint,
-}
-
-func findingToDiagnostic(f checks.Finding) protocol.Diagnostic {
-	d := protocol.Diagnostic{
+func findingToDiagnostic(f checks.Finding) Diagnostic {
+	d := Diagnostic{
 		Range: textpos.Range{
 			Start: textpos.Position{Line: f.StartLine, Character: f.StartCol},
 			End:   textpos.Position{Line: f.EndLine, Character: f.EndCol},
 		},
-		Severity: lspSeverity[f.Severity],
+		Severity: f.Severity,
 		Source:   string(rule.SourceTusk),
 		Message:  f.Message,
 		Code:     string(f.Code),
 	}
-	for _, tag := range f.Tags {
-		d.Tags = append(d.Tags, protocol.DiagnosticTag(tag))
-	}
+	d.Tags = append(d.Tags, f.Tags...)
 	return d
 }

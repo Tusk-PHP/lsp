@@ -6,12 +6,11 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/config"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
-func (p *Provider) dropSuppressed(uri, source string, shared *checks.Shared, diags []protocol.Diagnostic) []protocol.Diagnostic {
+func (p *Provider) dropSuppressed(uri, source string, shared *checks.Shared, diags []Diagnostic) []Diagnostic {
 	if len(diags) == 0 {
 		return diags
 	}
@@ -20,7 +19,7 @@ func (p *Provider) dropSuppressed(uri, source string, shared *checks.Shared, dia
 	if len(rules) == 0 && suppressions == nil {
 		return diags
 	}
-	kept := make([]protocol.Diagnostic, 0, len(diags))
+	kept := make([]Diagnostic, 0, len(diags))
 	for _, d := range diags {
 		if ignoredByRule(rules, d) || suppressions.Suppresses(d.Range.Start.Line, d.Source, d.Code) {
 			continue
@@ -60,7 +59,7 @@ func (p *Provider) relativePath(uri string) (string, bool) {
 	return rel, rel != ".." && !strings.HasPrefix(rel, "../")
 }
 
-func ignoredByRule(rules []config.IgnoreRule, d protocol.Diagnostic) bool {
+func ignoredByRule(rules []config.IgnoreRule, d Diagnostic) bool {
 	for _, rule := range rules {
 		if rule.Matches(d.Source, d.Code, d.Message) {
 			return true

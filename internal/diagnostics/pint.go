@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -79,7 +78,7 @@ func (r *pintRunner) available() bool {
 	return r.enabled && r.binPath != ""
 }
 
-func (r *pintRunner) analyze(filePath string) []protocol.Diagnostic {
+func (r *pintRunner) analyze(filePath string) []Diagnostic {
 	args := []string{"--test", "--format=json"}
 
 	if r.cfgFile != "" {
@@ -109,7 +108,7 @@ func (r *pintRunner) analyze(filePath string) []protocol.Diagnostic {
 	return r.parseOutput(output)
 }
 
-func (r *pintRunner) parseOutput(data []byte) []protocol.Diagnostic {
+func (r *pintRunner) parseOutput(data []byte) []Diagnostic {
 	jsonData := extractJSON(data)
 	if jsonData == nil {
 		return nil
@@ -121,19 +120,19 @@ func (r *pintRunner) parseOutput(data []byte) []protocol.Diagnostic {
 		return nil
 	}
 
-	var diags []protocol.Diagnostic
+	var diags []Diagnostic
 	for _, file := range result.Files {
 		if file.Diff != "" {
 			diags = append(diags, parseDiffDiagnostics(file.Diff, file.AppliedFixers)...)
 		} else {
 			// No diff available — report each fixer at file level
 			for _, fixer := range file.AppliedFixers {
-				diags = append(diags, protocol.Diagnostic{
+				diags = append(diags, Diagnostic{
 					Range: textpos.Range{
 						Start: textpos.Position{Line: 0, Character: 0},
 						End:   textpos.Position{Line: 0, Character: 0},
 					},
-					Severity: protocol.DiagnosticSeverityWarning,
+					Severity: rule.SeverityWarning,
 					Source:   string(rule.SourcePint),
 					Message:  formatFixerName(fixer),
 					Code:     fixer,
@@ -149,8 +148,8 @@ var hunkHeaderRe = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+\d+(?:,\d+)? @@`)
 
 // parseDiffDiagnostics extracts line-precise diagnostics from a unified diff.
 // Removed lines (starting with '-') represent the original code that needs fixing.
-func parseDiffDiagnostics(diff string, fixers []string) []protocol.Diagnostic {
-	var diags []protocol.Diagnostic
+func parseDiffDiagnostics(diff string, fixers []string) []Diagnostic {
+	var diags []Diagnostic
 	fixerDesc := rule.PintCode(fixers)
 	message := formatFixerName(fixerDesc)
 
@@ -187,12 +186,12 @@ func parseDiffDiagnostics(diff string, fixers []string) []protocol.Diagnostic {
 					trimmed := strings.TrimLeft(line[1:], " \t")
 					col = len(line[1:]) - len(trimmed)
 				}
-				diags = append(diags, protocol.Diagnostic{
+				diags = append(diags, Diagnostic{
 					Range: textpos.Range{
 						Start: textpos.Position{Line: lspLine, Character: col},
 						End:   textpos.Position{Line: lspLine, Character: col + len(strings.TrimSpace(content))},
 					},
-					Severity: protocol.DiagnosticSeverityWarning,
+					Severity: rule.SeverityWarning,
 					Source:   string(rule.SourcePint),
 					Message:  message,
 					Code:     fixerDesc,

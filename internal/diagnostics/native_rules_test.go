@@ -54,14 +54,6 @@ func TestEveryRuleAcceptsAFileThatDidNotParse(t *testing.T) {
 	}
 }
 
-func TestEverySeverityHasAnLSPSeverity(t *testing.T) {
-	for _, severity := range rule.Severities {
-		if lspSeverity[severity] == 0 {
-			t.Errorf("severity %s has no LSP severity", severity)
-		}
-	}
-}
-
 // TestNativeRulesWithoutDepsOmitsDependentRules ensures that rules requiring
 // optional deps are silently omitted when those deps are nil.
 func TestNativeRulesWithoutDepsOmitsDependentRules(t *testing.T) {

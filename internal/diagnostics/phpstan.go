@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -92,7 +91,7 @@ func (r *phpstanRunner) available() bool {
 	return r.enabled && r.binPath != ""
 }
 
-func (r *phpstanRunner) analyze(filePath string) []protocol.Diagnostic {
+func (r *phpstanRunner) analyze(filePath string) []Diagnostic {
 	args := []string{"analyse", "--error-format=json", "--no-progress", "--no-ansi"}
 
 	if r.cfgFile != "" {
@@ -134,7 +133,7 @@ func (r *phpstanRunner) analyze(filePath string) []protocol.Diagnostic {
 	return r.parseOutput(output, lines)
 }
 
-func (r *phpstanRunner) parseOutput(data []byte, sourceLines []string) []protocol.Diagnostic {
+func (r *phpstanRunner) parseOutput(data []byte, sourceLines []string) []Diagnostic {
 	jsonData := extractJSON(data)
 	if jsonData == nil {
 		return nil
@@ -146,7 +145,7 @@ func (r *phpstanRunner) parseOutput(data []byte, sourceLines []string) []protoco
 		return nil
 	}
 
-	var diags []protocol.Diagnostic
+	var diags []Diagnostic
 	for _, fileResult := range result.Files {
 		for _, msg := range fileResult.Messages {
 			line := msg.Line - 1 // PHPStan 1-based → LSP 0-based
@@ -161,12 +160,12 @@ func (r *phpstanRunner) parseOutput(data []byte, sourceLines []string) []protoco
 
 			startCol, endCol := diagnosticRange(sourceLines, line, msg.Message)
 
-			diags = append(diags, protocol.Diagnostic{
+			diags = append(diags, Diagnostic{
 				Range: textpos.Range{
 					Start: textpos.Position{Line: line, Character: startCol},
 					End:   textpos.Position{Line: line, Character: endCol},
 				},
-				Severity: protocol.DiagnosticSeverityError,
+				Severity: rule.SeverityError,
 				Source:   string(rule.SourcePHPStan),
 				Message:  msg.Message,
 				Code:     code,
