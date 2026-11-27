@@ -475,6 +475,12 @@ func (k Kind) IsTrivia() bool {
 	return k == Whitespace || k == Comment || k == DocComment
 }
 
+// IsSemiReserved reports whether k can name a member or a named argument:
+// an identifier or any keyword.
+func (k Kind) IsSemiReserved() bool {
+	return k == Identifier || k >= Abstract && k <= TraitConst
+}
+
 var keywords = func() map[string]Kind {
 	m := map[string]Kind{"die": Exit}
 	for k := Abstract; k <= TraitConst; k++ {

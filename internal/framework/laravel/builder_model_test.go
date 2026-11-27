@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -13,7 +14,7 @@ func TestBuilderModel(t *testing.T) {
 	idx := queriedModelIndex()
 	src := "<?php\nnamespace App\\Http;\nuse App\\Models\\Post;\nuse App\\Models\\Plain;\n/** @param \\Illuminate\\Database\\Eloquent\\Builder<Post> $query */\nfunction run($query) {\n    return 1;\n}\n"
 	idx.IndexFile("file:///app/Http/run.php", src)
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	line := strings.Count(src[:strings.Index(src, "return 1;")], "\n")
 	r := resolve.NewResolver(idx)
 	for _, c := range []struct{ prefix, method, want string }{
