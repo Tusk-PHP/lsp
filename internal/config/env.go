@@ -16,39 +16,19 @@ type DatabaseConfig struct {
 	Password string
 }
 
-// ParseEnvFile reads a .env file and returns key-value pairs.
-// Supports simple KEY=VALUE, quoted values, and comments.
+// ParseEnvFile reads a .env file and returns its values by key; a key
+// assigned twice keeps its last value, as phpdotenv does.
 func ParseEnvFile(path string) (map[string]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return parseEnvString(string(data)), nil
-}
-
-func parseEnvString(content string) map[string]string {
-	env := make(map[string]string)
-	for _, line := range strings.Split(content, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		idx := strings.IndexByte(line, '=')
-		if idx < 0 {
-			continue
-		}
-		key := strings.TrimSpace(line[:idx])
-		value := strings.TrimSpace(line[idx+1:])
-		// Strip surrounding quotes
-		if len(value) >= 2 {
-			if (value[0] == '"' && value[len(value)-1] == '"') ||
-				(value[0] == '\'' && value[len(value)-1] == '\'') {
-				value = value[1 : len(value)-1]
-			}
-		}
-		env[key] = value
+	entries := ParseDotenv(string(data))
+	env := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		env[entry.Key] = entry.Value
 	}
-	return env
+	return env, nil
 }
 
 // ParseLaravelDatabaseConfig extracts database config from .env files in a Laravel project.
