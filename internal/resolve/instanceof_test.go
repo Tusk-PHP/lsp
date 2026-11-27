@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -64,7 +65,7 @@ function run(object $o, Foo|Bar $u, Base $b, Foo $f, $m, object $g, object $h, o
 	idx.IndexFile("file:///a.php", src)
 	idx.IndexFile("file:///b.php", "<?php\nnamespace Other;\nclass Thing {}\n")
 	r := NewResolver(idx)
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	lines := SplitLines(src)
 	at := func(v, marker string) string {
 		for i, l := range lines {
@@ -156,7 +157,7 @@ function run(object $o, object $p, object $q, Foo|Bar $u, Foo|Bar $v, object $s,
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///a.php", src)
 	r := NewResolver(idx)
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	lines := SplitLines(src)
 	at := func(v, marker string) string {
 		for i, l := range lines {

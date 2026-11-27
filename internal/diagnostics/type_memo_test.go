@@ -4,25 +4,29 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 func TestMemoizeTypeResolverAsksOncePerRun(t *testing.T) {
 	calls := 0
-	resolve := MemoizeTypeResolver(func(expr, source string, line, col int, file *parser.FileNode) string {
+	resolve := MemoizeTypeResolver(func(file *parser.FileNode, e ast.Expr) string {
 		calls++
-		return expr + "@" + source
+		return e.Bounds().Text(file.Source) + "@" + file.Source[len("<?php\n"):len("<?php\n")+2]
 	})
+	v1 := parser.ParseFile("<?php\nv1($a, $b);\n", token.Latest)
+	args := v1.Tree.Stmts[0].(*ast.ExprStmt).Expr.(*ast.Call).Args.Args
 	for i := 0; i < 3; i++ {
-		if got := resolve("$a", "v1", 4, 0, nil); got != "$a@v1" {
+		if got := resolve(v1, args[0].Value); got != "$a@v1" {
 			t.Fatalf("got %q", got)
 		}
 	}
-	resolve("$a", "v1", 5, 0, nil) // another line is another question
+	resolve(v1, args[1].Value)
 	if calls != 2 {
 		t.Fatalf("calls = %d, want 2", calls)
 	}
-	// A new version of the file forgets what the old one said.
-	if got := resolve("$a", "v2", 4, 0, nil); got != "$a@v2" || calls != 3 {
+	v2 := parser.ParseFile("<?php\nv2($a, $b);\n", token.Latest)
+	if got := resolve(v2, v2.Tree.Stmts[0].(*ast.ExprStmt).Expr.(*ast.Call).Args.Args[0].Value); got != "$a@v2" || calls != 3 {
 		t.Fatalf("got %q after %d calls", got, calls)
 	}
 	if MemoizeTypeResolver(nil) != nil {

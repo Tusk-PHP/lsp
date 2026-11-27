@@ -3,11 +3,10 @@ package diagnostics
 import (
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 type NativeRulesOptions struct {
-	TypeResolver           func(expr string, source string, line, col int, file *parser.FileNode) string
+	TypeResolver           checks.TypeResolver
 	BuiltinUnavailableRule *checks.BuiltinUnavailableRule
 	BuilderModelResolver   checks.ModelResolverFunc
 	BuilderMemberChecker   checks.MemberChecker
@@ -18,21 +17,23 @@ type NativeRulesOptions struct {
 func EditRules(opts NativeRulesOptions, shared *checks.Shared) []checks.Rule {
 	typeResolver := MemoizeTypeResolver(opts.TypeResolver)
 	uses := &checks.MemberUseCache{Shared: shared}
-	deprecatedFunctions := &checks.DeprecatedFunctionRule{}
+	deprecatedFunctions := &checks.DeprecatedFunctionRule{Shared: shared}
 	if opts.BuiltinUnavailableRule != nil {
 		deprecatedFunctions.PHPVersion = opts.BuiltinUnavailableRule.PHPVersion
 	}
 	rules := []checks.Rule{
 		&checks.SyntaxErrorRule{},
 		&checks.AbstractInConcreteRule{},
-		&checks.UnknownClassRule{},
-		&checks.UnknownFunctionRule{},
+		&checks.UnknownClassRule{Shared: shared},
+		&checks.UnknownFunctionRule{Shared: shared},
 	}
 	if opts.TypeResolver != nil {
 		rules = append(rules, &checks.UnknownMemberRule{TypeResolver: typeResolver, ConventionMethod: frameworklaravel.ConventionMethod, Shared: shared})
 	}
 	if opts.BuiltinUnavailableRule != nil {
-		rules = append(rules, opts.BuiltinUnavailableRule)
+		builtins := *opts.BuiltinUnavailableRule
+		builtins.Shared = shared
+		rules = append(rules, &builtins)
 	}
 	rules = append(rules,
 		&checks.UnusedImportsRule{},
@@ -60,7 +61,7 @@ func SaveRules(opts NativeRulesOptions) []checks.Rule {
 		rules = append(rules, &checks.RedundantNullsafeRule{TypeResolver: opts.TypeResolver})
 	}
 	if opts.BuilderModelResolver != nil && opts.BuilderMemberChecker != nil {
-		rules = append(rules, &checks.InvalidBuilderArgRule{ModelResolver: opts.BuilderModelResolver, Members: opts.BuilderMemberChecker})
+		rules = append(rules, &checks.InvalidBuilderArgRule{ModelResolver: opts.BuilderModelResolver, Members: opts.BuilderMemberChecker, Shared: &checks.Shared{}})
 	}
 	return rules
 }

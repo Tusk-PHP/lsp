@@ -6,6 +6,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -29,7 +30,7 @@ func TestAnalyzeOnSaveWithTypeResolver(t *testing.T) {
 	idx := symbols.NewIndex()
 	cfg := config.DefaultConfig()
 	p := NewProvider(idx, "none", "/tmp", nil, cfg)
-	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
+	p.TypeResolver = func(*parser.FileNode, ast.Expr) string {
 		return "SomeClass" // non-nullable
 	}
 

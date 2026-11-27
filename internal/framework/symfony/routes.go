@@ -4,12 +4,15 @@ import (
 	"encoding/xml"
 	"os"
 	"path/filepath"
-	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -29,9 +32,7 @@ type routeAttribute struct {
 	AttrRange protocol.Range
 }
 
-var routeNamePattern = regexp.MustCompile(`name\s*:\s*['"]([^'"]*)['"]`)
-var routePathPattern = regexp.MustCompile(`path\s*:\s*['"]([^'"]*)['"]`)
-var firstStringPattern = regexp.MustCompile(`^\s*['"]([^'"]*)['"]`)
+var routeAttributeFQNs = []string{`Symfony\Component\Routing\Attribute\Route`, `Symfony\Component\Routing\Annotation\Route`}
 
 type routeConfigEntry struct {
 	Name       string
@@ -108,7 +109,7 @@ func discoverAttributeRoutes(index *symbols.Index) []Route {
 		if source == "" || !strings.Contains(source, "Route") || !strings.Contains(source, "#[") {
 			continue
 		}
-		routes = append(routes, discoverRoutesInFile(uri, source)...)
+		routes = append(routes, discoverRoutesInFile(uri, source, index.GrammarOf(uri))...)
 	}
 	return routes
 }
@@ -124,7 +125,7 @@ func discoverConfigRoutes(index *symbols.Index) []Route {
 			if _, err := os.Stat(path); err != nil {
 				continue
 			}
-			routes = append(routes, discoverRoutesFromConfigPath(path, "", "", visited)...)
+			routes = append(routes, discoverRoutesFromConfigPath(path, "", "", visited, index.Grammars())...)
 		}
 	}
 
@@ -173,7 +174,7 @@ func discoverSymfonyRoots(index *symbols.Index) []string {
 	return roots
 }
 
-func discoverRoutesFromConfigPath(path, pathPrefix, namePrefix string, visited map[string]bool) []Route {
+func discoverRoutesFromConfigPath(path, pathPrefix, namePrefix string, visited map[string]bool, grammars phpparser.GrammarRange) []Route {
 	cleanPath := filepath.Clean(path)
 	if visited[cleanPath] {
 		return nil
@@ -203,7 +204,7 @@ func discoverRoutesFromConfigPath(path, pathPrefix, namePrefix string, visited m
 
 		if entry.IsImport {
 			resourcePath := filepath.Clean(filepath.Join(baseDir, entry.Resource))
-			routes = append(routes, discoverRoutesFromResource(resourcePath, entry.Type, entryPathPrefix, entryNamePrefix, visited)...)
+			routes = append(routes, discoverRoutesFromResource(resourcePath, entry.Type, entryPathPrefix, entryNamePrefix, visited, grammars)...)
 			continue
 		}
 
@@ -219,7 +220,7 @@ func discoverRoutesFromConfigPath(path, pathPrefix, namePrefix string, visited m
 	return routes
 }
 
-func discoverRoutesFromResource(path, resourceType, pathPrefix, namePrefix string, visited map[string]bool) []Route {
+func discoverRoutesFromResource(path, resourceType, pathPrefix, namePrefix string, visited map[string]bool, grammars phpparser.GrammarRange) []Route {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil
@@ -229,36 +230,36 @@ func discoverRoutesFromResource(path, resourceType, pathPrefix, namePrefix strin
 		if resourceType != "attribute" && resourceType != "" {
 			return nil
 		}
-		return discoverRoutesFromAttributeDir(path, pathPrefix, namePrefix)
+		return discoverRoutesFromAttributeDir(path, pathPrefix, namePrefix, grammars)
 	}
 
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".yaml", ".yml", ".xml":
-		return discoverRoutesFromConfigPath(path, pathPrefix, namePrefix, visited)
+		return discoverRoutesFromConfigPath(path, pathPrefix, namePrefix, visited, grammars)
 	case ".php":
 		if resourceType != "attribute" && resourceType != "" {
 			return nil
 		}
-		return discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix)
+		return discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix, grammars)
 	default:
 		return nil
 	}
 }
 
-func discoverRoutesFromAttributeDir(root, pathPrefix, namePrefix string) []Route {
+func discoverRoutesFromAttributeDir(root, pathPrefix, namePrefix string, grammars phpparser.GrammarRange) []Route {
 	var routes []Route
 	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info == nil || info.IsDir() || filepath.Ext(path) != ".php" {
 			return nil
 		}
-		routes = append(routes, discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix)...)
+		routes = append(routes, discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix, grammars)...)
 		return nil
 	})
 	return routes
 }
 
-func discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix string) []Route {
+func discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix string, grammars phpparser.GrammarRange) []Route {
 	source, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -269,7 +270,7 @@ func discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix string) []Rout
 		uri = "file://" + filepath.ToSlash(abs)
 	}
 
-	routes := discoverRoutesInFile(uri, string(source))
+	routes := discoverRoutesInFile(uri, string(source), grammars)
 	for i := range routes {
 		routes[i].Name = namePrefix + routes[i].Name
 		routes[i].Path = joinRoutePath(pathPrefix, routes[i].Path)
@@ -287,124 +288,40 @@ func FindRoute(index *symbols.Index, name string) *Route {
 	return nil
 }
 
-func ExtractRouteNameContext(trimmed string) (partial, quote string, ok bool) {
-	patterns := []string{
-		"generateUrl(",
-		"redirectToRoute(",
-		"->generate(",
-	}
-	for _, pat := range patterns {
-		idx := strings.LastIndex(trimmed, pat)
-		if idx < 0 {
-			continue
+func discoverRoutesInFile(uri, source string, grammars phpparser.GrammarRange) []Route {
+	tree := parser.ParseTreeIn(source, grammars)
+	reader := routeReader{src: source, file: parser.FileNodeOf(source, tree), lines: ast.NewLines(source)}
+	var routes []Route
+	ast.Walk(tree, func(n ast.Node) bool {
+		class, ok := n.(*ast.ClassDecl)
+		if !ok {
+			return true
 		}
-		after := trimmed[idx+len(pat):]
-		if strings.Contains(after, ")") || strings.Contains(after, ",") {
-			continue
-		}
-		after = strings.TrimLeft(after, " \t")
-		if len(after) > 0 && (after[0] == '\'' || after[0] == '"') {
-			return after[1:], string(after[0]), true
-		}
-		return after, "", true
-	}
-	return "", "", false
-}
-
-func RouteNameAtPosition(source string, pos protocol.Position) (string, protocol.Range, bool) {
-	lines := strings.Split(source, "\n")
-	if pos.Line < 0 || pos.Line >= len(lines) {
-		return "", protocol.Range{}, false
-	}
-	line := lines[pos.Line]
-	if pos.Character < 0 || pos.Character > len(line) {
-		return "", protocol.Range{}, false
-	}
-
-	patterns := []string{
-		"generateUrl(",
-		"redirectToRoute(",
-		"->generate(",
-	}
-	for _, pat := range patterns {
-		idx := strings.LastIndex(line[:pos.Character], pat)
-		if idx < 0 {
-			continue
-		}
-		i := idx + len(pat)
-		for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
-			i++
-		}
-		if i >= len(line) || (line[i] != '\'' && line[i] != '"') {
-			continue
-		}
-		quote := line[i]
-		start := i + 1
-		end := start
-		for end < len(line) {
-			if line[end] == '\\' {
-				end += 2
+		prefix := mergeRoutePrefix(reader.attributes(class.Attrs))
+		for _, member := range class.Members {
+			method, ok := member.(*ast.Method)
+			if !ok {
 				continue
 			}
-			if line[end] == quote {
-				break
-			}
-			end++
-		}
-		if end >= len(line) || pos.Character < start || pos.Character > end {
-			continue
-		}
-		if comma := strings.Index(line[idx+len(pat):start-1], ","); comma >= 0 {
-			continue
-		}
-		return line[start:end], protocol.Range{
-			Start: protocol.Position{Line: pos.Line, Character: start},
-			End:   protocol.Position{Line: pos.Line, Character: end},
-		}, true
-	}
-	return "", protocol.Range{}, false
-}
-
-func discoverRoutesInFile(uri, source string) []Route {
-	file := parser.ParseFile(source)
-	if file == nil {
-		return nil
-	}
-
-	lines := strings.Split(source, "\n")
-	var routes []Route
-
-	for _, class := range file.Classes {
-		classAttrs := routeAttributesNearLine(lines, class.StartLine)
-		classPrefix := mergeRoutePrefix(classAttrs)
-
-		for _, method := range class.Methods {
-			methodAttrs := routeAttributesNearLine(lines, method.StartLine)
-			for _, attr := range methodAttrs {
-				name := attr.Name
-				if name == "" {
+			for _, attr := range reader.attributes(method.Attrs) {
+				if attr.Name == "" {
 					continue
 				}
-				if classPrefix.Name != "" {
-					name = classPrefix.Name + name
-				}
-
 				declRange := attr.AttrRange
 				if attr.NameRange != (protocol.Range{}) {
 					declRange = attr.NameRange
 				}
-
 				routes = append(routes, Route{
-					Name:      name,
-					Path:      classPrefix.Path + attr.Path,
+					Name:      prefix.Name + attr.Name,
+					Path:      prefix.Path + attr.Path,
 					URI:       uri,
 					NameRange: attr.NameRange,
 					DeclRange: declRange,
 				})
 			}
 		}
-	}
-
+		return true
+	})
 	return routes
 }
 
@@ -417,158 +334,58 @@ func mergeRoutePrefix(attrs []routeAttribute) routeAttribute {
 	return routeAttribute{}
 }
 
-func routeAttributesNearLine(lines []string, line int) []routeAttribute {
-	if line < 0 || line >= len(lines) {
-		return nil
-	}
-
-	declLine := line
-	for declLine < len(lines) && !looksLikeDeclarationLine(lines[declLine]) {
-		declLine++
-	}
-	if declLine >= len(lines) {
-		return nil
-	}
-
-	start := declLine - 1
-	for start >= 0 {
-		trimmed := strings.TrimSpace(lines[start])
-		if trimmed == "" || trimmed == "{" || trimmed == "}" || looksLikeDeclarationLine(lines[start]) {
-			break
-		}
-		start--
-	}
-	start++
-
-	snippet := strings.Join(lines[start:declLine+1], "\n")
-	if !strings.Contains(snippet, "#[") {
-		return nil
-	}
-
-	return parseRouteAttributes(snippet, start)
+type routeReader struct {
+	src   string
+	file  *parser.FileNode
+	lines ast.Lines
 }
 
-func looksLikeDeclarationLine(line string) bool {
-	trimmed := strings.TrimSpace(line)
-	return strings.Contains(trimmed, "class ") ||
-		strings.Contains(trimmed, "interface ") ||
-		strings.Contains(trimmed, "trait ") ||
-		strings.Contains(trimmed, "enum ") ||
-		strings.Contains(trimmed, "function ")
-}
-
-func parseRouteAttributes(snippet string, baseLine int) []routeAttribute {
+func (r routeReader) attributes(groups []*ast.AttributeGroup) []routeAttribute {
 	var attrs []routeAttribute
-	for i := 0; i < len(snippet); i++ {
-		if i+1 >= len(snippet) || snippet[i] != '#' || snippet[i+1] != '[' {
-			continue
+	for _, group := range groups {
+		for _, attr := range group.Attrs {
+			if attr.Name == nil || !slices.ContainsFunc(routeAttributeFQNs, func(fqn string) bool {
+				return strings.EqualFold(r.file.ResolveClassName(attr.Name.Bounds().Text(r.src)), fqn)
+			}) {
+				continue
+			}
+			route := routeAttribute{AttrRange: r.rangeOf(group.Span)}
+			if attr.Args != nil {
+				if name, ok := r.stringArgument(attr.Args, "name", 1); ok {
+					route.Name, _ = parser.StringLiteral(name.Bounds().Text(r.src))
+					route.NameRange = r.rangeOf(ast.Span{Start: name.Bounds().Start + 1, End: name.Bounds().End - 1})
+				}
+				if path, ok := r.stringArgument(attr.Args, "path", 0); ok {
+					route.Path, _ = parser.StringLiteral(path.Bounds().Text(r.src))
+				}
+			}
+			attrs = append(attrs, route)
 		}
-		end := findAttributeEnd(snippet, i+2)
-		if end < 0 {
-			continue
-		}
-
-		block := snippet[i : end+1]
-		attr, ok := parseRouteAttributeBlock(snippet, block, baseLine, i)
-		if ok {
-			attrs = append(attrs, attr)
-		}
-		i = end
 	}
 	return attrs
 }
 
-func findAttributeEnd(snippet string, start int) int {
-	inString := byte(0)
-	parenDepth := 0
-	for i := start; i < len(snippet); i++ {
-		ch := snippet[i]
-		if inString != 0 {
-			if ch == '\\' {
-				i++
-				continue
-			}
-			if ch == inString {
-				inString = 0
-			}
-			continue
-		}
-		if ch == '\'' || ch == '"' {
-			inString = ch
-			continue
-		}
-		if ch == '(' {
-			parenDepth++
-			continue
-		}
-		if ch == ')' && parenDepth > 0 {
-			parenDepth--
-			continue
-		}
-		if ch == ']' && parenDepth == 0 {
-			return i
+func (r routeReader) stringArgument(args *ast.ArgList, name string, position int) (ast.Expr, bool) {
+	var value ast.Expr
+	if position < len(args.Args) && args.Args[position].Name == nil {
+		value = args.Args[position].Value
+	}
+	for _, arg := range args.Args {
+		if arg.Name != nil && arg.Name.Bounds().Text(r.src) == name {
+			value = arg.Value
 		}
 	}
-	return -1
+	lit, ok := value.(*ast.Literal)
+	return lit, ok && lit.Kind == token.ConstantString
 }
 
-func parseRouteAttributeBlock(snippet, block string, baseLine, blockOffset int) (routeAttribute, bool) {
-	open := strings.Index(block, "(")
-	close := strings.LastIndex(block, ")")
-	if open < 0 || close <= open {
-		return routeAttribute{}, false
+func (r routeReader) rangeOf(s ast.Span) protocol.Range {
+	startLine, startCol := r.lines.Position(s.Start)
+	endLine, endCol := r.lines.Position(s.End)
+	return protocol.Range{
+		Start: protocol.Position{Line: startLine, Character: startCol},
+		End:   protocol.Position{Line: endLine, Character: endCol},
 	}
-
-	namePart := strings.TrimSpace(block[2:open])
-	parts := strings.Split(namePart, "\\")
-	short := parts[len(parts)-1]
-	if short != "Route" {
-		return routeAttribute{}, false
-	}
-
-	args := block[open+1 : close]
-	attr := routeAttribute{
-		AttrRange: protocol.Range{
-			Start: positionFromOffset(snippet, baseLine, blockOffset),
-			End:   positionFromOffset(snippet, baseLine, blockOffset+len(block)),
-		},
-	}
-
-	if match := routeNamePattern.FindStringSubmatchIndex(args); len(match) >= 4 {
-		attr.Name = args[match[2]:match[3]]
-		attr.NameRange = protocol.Range{
-			Start: positionFromOffset(snippet, baseLine, blockOffset+open+1+match[2]),
-			End:   positionFromOffset(snippet, baseLine, blockOffset+open+1+match[3]),
-		}
-	}
-	if match := routePathPattern.FindStringSubmatchIndex(args); len(match) >= 4 {
-		attr.Path = args[match[2]:match[3]]
-	} else if match := firstStringPattern.FindStringSubmatchIndex(args); len(match) >= 4 {
-		attr.Path = args[match[2]:match[3]]
-	}
-
-	return attr, true
-}
-
-func positionFromOffset(text string, baseLine, offset int) protocol.Position {
-	if offset < 0 {
-		offset = 0
-	}
-	if offset > len(text) {
-		offset = len(text)
-	}
-
-	line := baseLine
-	col := 0
-	for i := 0; i < offset; i++ {
-		if text[i] == '\n' {
-			line++
-			col = 0
-			continue
-		}
-		col++
-	}
-	return protocol.Position{Line: line, Character: col}
 }
 
 func parseYAMLRouteConfig(uri, source string) []routeConfigEntry {
@@ -744,8 +561,6 @@ func findXMLDeclRange(source, attr, value string) protocol.Range {
 		return protocol.Range{}
 	}
 
-	valueOffset := offset + len(attr) + 2
-	start := positionFromOffset(source, 0, valueOffset)
-	end := positionFromOffset(source, 0, valueOffset+len(value))
-	return protocol.Range{Start: start, End: end}
+	valueOffset := uint32(offset + len(attr) + 2)
+	return routeReader{lines: ast.NewLines(source)}.rangeOf(ast.Span{Start: valueOffset, End: valueOffset + uint32(len(value))})
 }

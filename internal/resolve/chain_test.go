@@ -5,20 +5,11 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
-
-func TestForwardsCallingClass(t *testing.T) {
-	for before, want := range map[string]bool{
-		"parent::": true, "  self :: ": true, "return STATIC::": true,
-		"Base::": false, "$this->": false, "$parent::": false, "": false,
-	} {
-		if got := ForwardsCallingClass(before); got != want {
-			t.Errorf("ForwardsCallingClass(%q) = %v, want %v", before, got, want)
-		}
-	}
-}
 
 const chainSource = `<?php
 namespace App;
@@ -62,7 +53,7 @@ func chainFixture(t *testing.T) (*Resolver, *parser.FileNode, protocol.Position)
 	t.Helper()
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///chain.php", chainSource)
-	file := parser.ParseFile(chainSource)
+	file := parser.ParseFile(chainSource, token.Latest)
 	line := strings.Count(chainSource[:strings.Index(chainSource, "return 1;")], "\n")
 	return NewResolver(idx), file, protocol.Position{Line: line, Character: 8}
 }
@@ -102,7 +93,7 @@ func TestChainType(t *testing.T) {
 		"Article":                         `App\Models\Post`,
 		"":                                ``,
 	} {
-		if got := r.ChainType(expr, chainSource, pos, file).FullString(); got != want {
+		if got := r.chainTypeOf(expr, chainSource, pos, file).FullString(); got != want {
 			t.Errorf("ChainType(%q) = %q, want %q", expr, got, want)
 		}
 	}
@@ -114,7 +105,7 @@ func TestChainTypeWithoutFile(t *testing.T) {
 	for expr, want := range map[string]string{
 		"$this": ``, "self::make()": ``, "parent::make()": ``, "Person": `App\Person`, "$p->logger()": ``,
 	} {
-		if got := r.ChainType(expr, chainSource, pos, nil).FullString(); got != want {
+		if got := r.chainTypeOf(expr, chainSource, pos, nil).FullString(); got != want {
 			t.Errorf("ChainType(%q) without a file = %q, want %q", expr, got, want)
 		}
 	}
@@ -123,14 +114,14 @@ func TestChainTypeWithoutFile(t *testing.T) {
 // A container call answers through the ContainerCall hook.
 func TestChainTypeContainerCall(t *testing.T) {
 	r, file, pos := chainFixture(t)
-	r.ContainerCall = func(_ *Resolver, callExpr, source string, file *parser.FileNode) string {
-		switch callExpr {
+	r.ContainerCall = func(_ *Resolver, src string, _ *parser.FileNode, call ast.Expr) (ResolvedType, bool) {
+		switch call.Bounds().Text(src) {
 		case "app('log')":
-			return `App\Logger`
+			return ResolvedType{FQN: `App\Logger`}, true
 		case "config('a')":
-			return "-"
+			return ResolvedType{}, true
 		}
-		return ""
+		return ResolvedType{}, false
 	}
 	for expr, want := range map[string]string{
 		"app('log')":       `App\Logger`,
@@ -138,42 +129,9 @@ func TestChainTypeContainerCall(t *testing.T) {
 		"config('a')->x":   ``,
 		"app('other')->x":  ``,
 	} {
-		if got := r.ChainType(expr, chainSource, pos, file).FullString(); got != want {
+		if got := r.chainTypeOf(expr, chainSource, pos, file).FullString(); got != want {
 			t.Errorf("ChainType(%q) = %q, want %q", expr, got, want)
 		}
-	}
-}
-
-// A resolver wired to another one asks it, for whole chains and receivers.
-func TestChainTypeWired(t *testing.T) {
-	r, file, pos := chainFixture(t)
-	var asked []string
-	r.TypedChainResolver = func(_ *Resolver, expr, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
-		asked = append(asked, expr)
-		return ResolvedType{FQN: `App\Logger`}
-	}
-	if got := r.ChainType("$p->logger()", chainSource, pos, file).FQN; got != `App\Logger` {
-		t.Errorf("ChainType = %q", got)
-	}
-	// A slice, not a map: the order of the calls is checked below.
-	for _, tc := range []struct {
-		line string
-		ws   int
-	}{{"$p->info", 4}, {"$p?->info", 5}, {"Person :: make", 10}} {
-		if got := r.AccessOwnerType(tc.line, tc.ws, chainSource, pos, file).FQN; got != `App\Logger` {
-			t.Errorf("AccessOwnerType(%q) = %q", tc.line, got)
-		}
-	}
-	if got := r.AccessOwnerType("info", 0, chainSource, pos, file); !got.IsEmpty() {
-		t.Errorf("AccessOwnerType without an operator = %v", got)
-	}
-	want := []string{"$p->logger()", "$p", "$p", "Person "}
-	if strings.Join(asked, ",") != strings.Join(want, ",") {
-		t.Errorf("asked %q, want %q", asked, want)
-	}
-	r.TypedChainResolver = nil
-	if got := r.AccessOwnerType("$p->logger", 4, chainSource, pos, file).FQN; got != `App\Person` {
-		t.Errorf("own AccessOwnerType = %q", got)
 	}
 }
 
@@ -200,7 +158,7 @@ func TestResolveClassNameLoose(t *testing.T) {
 		t.Errorf("unknown without a file = %q", got)
 	}
 	// A global class is found as written.
-	global := parser.ParseFile("<?php\nnamespace Other;\n")
+	global := parser.ParseFile("<?php\nnamespace Other;\n", token.Latest)
 	if got := r.ResolveClassNameLoose(`App\Person`, global); got != `App\Person` {
 		t.Errorf("a full name as written = %q", got)
 	}
@@ -210,7 +168,7 @@ func TestResolveClassNameLooseFindsOnlyClasses(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///h.php", "<?php\nnamespace Helper;\nfunction person() {}\nclass Box { public function person() {} }\n")
 	r := NewResolver(idx)
-	file := parser.ParseFile("<?php\nnamespace App;\n")
+	file := parser.ParseFile("<?php\nnamespace App;\n", token.Latest)
 	for _, f := range []*parser.FileNode{nil, file} {
 		if got := r.ResolveClassNameLoose("person", f); got != "person" {
 			t.Errorf("a function or method named like the class is not a class, got %q", got)
@@ -221,33 +179,7 @@ func TestResolveClassNameLooseFindsOnlyClasses(t *testing.T) {
 	}
 }
 
-func TestExtractNewClassAndArgs(t *testing.T) {
-	for in, want := range map[string][2]string{
-		"new Foo()":       {"Foo", ""},
-		"(new Foo(1, 2))": {"Foo", "1, 2"},
-		"new Foo":         {"Foo", ""},
-		"(new Foo)":       {"Foo", ""},
-		"(new Foo((1)))":  {"Foo", "(1)"},
-		"foo()":           {"", ""},
-	} {
-		if got := ExtractNewClass(in); got != want[0] {
-			t.Errorf("ExtractNewClass(%q) = %q, want %q", in, got, want[0])
-		}
-		if got := extractNewArgs(in); got != want[1] {
-			t.Errorf("extractNewArgs(%q) = %q, want %q", in, got, want[1])
-		}
-	}
-}
-
-func TestChainOriginClassName(t *testing.T) {
-	r, file, _ := chainFixture(t)
-	if got := r.ChainOriginClassName("Person::make", 0, "Person", file); got != `App\Person` {
-		t.Errorf("origin = %q", got)
-	}
-	// A word after -> or :: is a member, never a class.
-	if got := r.ChainOriginClassName("$x->Person", 4, "Person", file); got != "" {
-		t.Errorf("member = %q", got)
-	}
+func TestClassKeyword(t *testing.T) {
 	if got := ClassKeyword("Self"); got != "self" {
 		t.Errorf("ClassKeyword = %q", got)
 	}

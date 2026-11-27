@@ -3,11 +3,12 @@ package symfony
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -25,14 +26,16 @@ type CommandEntry struct {
 // safe for concurrent use: the server updates it as files change while
 // requests read it.
 type CommandIndex struct {
-	mu      sync.RWMutex
-	byURI   map[string][]CommandEntry
-	entries []CommandEntry // by name, one per name; rebuilt on change
+	grammars phpparser.GrammarRange
+	mu       sync.RWMutex
+	byURI    map[string][]CommandEntry
+	entries  []CommandEntry // by name, one per name; rebuilt on change
 }
 
-// NewCommandIndex returns an empty CommandIndex.
-func NewCommandIndex() *CommandIndex {
-	return &CommandIndex{byURI: map[string][]CommandEntry{}}
+// NewCommandIndex returns an empty CommandIndex that reads files with the
+// project's PHP grammars.
+func NewCommandIndex(grammars phpparser.GrammarRange) *CommandIndex {
+	return &CommandIndex{grammars: grammars, byURI: map[string][]CommandEntry{}}
 }
 
 // rebuildLocked recomputes the sorted entries from byURI. A name declared
@@ -66,7 +69,7 @@ func (ci *CommandIndex) UpdateFile(uri, source string) {
 	}
 	var found []CommandEntry
 	if mayDeclareCommand(source) {
-		found = discoverCommandsInFile(uri, source)
+		found = discoverCommandsInFile(uri, source, ci.grammars)
 	}
 	ci.mu.Lock()
 	defer ci.mu.Unlock()
@@ -143,27 +146,15 @@ func mayDeclareCommand(source string) bool {
 	return strings.Contains(source, "AsCommand") && strings.Contains(source, "#[") || strings.Contains(source, "$defaultName")
 }
 
-// Package-level compiled regexes — anchored and conservative.
-var (
-	// Matches #[AsCommand(name: 'app:do-thing', description: 'Description here')]
-	asCommandNamePattern = regexp.MustCompile(`name\s*:\s*['"]([^'"]+)['"]`)
-	// Matches the optional description argument
-	asCommandDescPattern = regexp.MustCompile(`description\s*:\s*['"]([^'"]+)['"]`)
-	// Matches the first positional string: #[AsCommand('app:do-thing')]
-	asCommandFirstStringPattern = regexp.MustCompile(`^\s*['"]([^'"]+)['"]`)
-	// Matches legacy protected static $defaultName = 'app:do-thing';
-	defaultNamePattern = regexp.MustCompile(`protected\s+static\s+\$defaultName\s*=\s*['"]([^'"]+)['"]`)
-	// Matches legacy protected static $defaultDescription = 'Description';
-	defaultDescPattern = regexp.MustCompile(`protected\s+static\s+\$defaultDescription\s*=\s*['"]([^'"]+)['"]`)
-)
+const asCommandFQN = `Symfony\Component\Console\Attribute\AsCommand`
 
 // DiscoverCommands scans indexed project PHP sources for Symfony console commands,
 // recognising both #[AsCommand(...)] attributes and legacy $defaultName properties.
 func DiscoverCommands(index *symbols.Index) *CommandIndex {
-	ci := NewCommandIndex()
 	if index == nil {
-		return ci
+		return NewCommandIndex(phpparser.AnyGrammar())
 	}
+	ci := NewCommandIndex(index.Grammars())
 
 	for _, uri := range index.GetAllFileURIs() {
 		if strings.Contains(uri, "/vendor/") {
@@ -173,21 +164,21 @@ func DiscoverCommands(index *symbols.Index) *CommandIndex {
 		if source == "" || !mayDeclareCommand(source) {
 			continue
 		}
-		if found := discoverCommandsInFile(uri, source); len(found) > 0 {
+		if found := discoverCommandsInFile(uri, source, index.GrammarOf(uri)); len(found) > 0 {
 			ci.byURI[uri] = found
 		}
 	}
 
 	// Also scan project src/ directories directly for files not yet indexed
 	for _, root := range discoverSymfonyRoots(index) {
-		discoverCommandsFromDir(filepath.Join(root, "src"), ci.byURI)
+		discoverCommandsFromDir(filepath.Join(root, "src"), ci.byURI, ci.grammars)
 	}
 
 	ci.rebuildLocked()
 	return ci
 }
 
-func discoverCommandsFromDir(dir string, byURI map[string][]CommandEntry) {
+func discoverCommandsFromDir(dir string, byURI map[string][]CommandEntry, grammars phpparser.GrammarRange) {
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info == nil || info.IsDir() || filepath.Ext(path) != ".php" {
 			return nil
@@ -208,164 +199,70 @@ func discoverCommandsFromDir(dir string, byURI map[string][]CommandEntry) {
 		if _, ok := byURI[uri]; ok {
 			return nil
 		}
-		if found := discoverCommandsInFile(uri, src); len(found) > 0 {
+		if found := discoverCommandsInFile(uri, src, grammars); len(found) > 0 {
 			byURI[uri] = found
 		}
 		return nil
 	})
 }
 
-func discoverCommandsInFile(uri, source string) []CommandEntry {
-	lines := strings.Split(source, "\n")
+func discoverCommandsInFile(uri, source string, grammars phpparser.GrammarRange) []CommandEntry {
+	file := parser.ParseFileIn(source, grammars)
 	var entries []CommandEntry
-
-	// Extract namespace and class FQN from source
-	classFQN := extractCommandClassFQN(source)
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		// Detect #[AsCommand(...)] attribute
-		if strings.Contains(trimmed, "#[") && strings.Contains(trimmed, "AsCommand") {
-			end := findAttributeEnd(source, indexOf(source, trimmed, i)+2)
-			var block string
-			if end >= 0 {
-				startOff := indexOf(source, trimmed, i)
-				if startOff >= 0 && end < len(source) {
-					block = source[startOff : end+1]
-				}
-			}
-			if block == "" {
-				block = trimmed
-			}
-			name, desc := parseAsCommandBlock(block)
-			if name != "" {
-				rng := protocol.Range{
-					Start: protocol.Position{Line: i, Character: leadingYAMLIndent(line)},
-					End:   protocol.Position{Line: i, Character: leadingYAMLIndent(line) + len(trimmed)},
-				}
-				entries = append(entries, CommandEntry{
-					Name:        name,
-					Description: desc,
-					ClassFQN:    classFQN,
-					URI:         uri,
-					Range:       rng,
-				})
-			}
+	add := func(cls parser.ClassNode, name, description string, line, col, width int) {
+		entries = append(entries, CommandEntry{
+			Name:        name,
+			Description: description,
+			ClassFQN:    cls.FullName,
+			URI:         uri,
+			Range: protocol.Range{
+				Start: protocol.Position{Line: line, Character: col},
+				End:   protocol.Position{Line: line, Character: col + width},
+			},
+		})
+	}
+	for _, cls := range file.Classes {
+		if name, description, ok := asCommand(file, cls); ok {
+			add(cls, name, description, cls.StartLine, cls.StartCol, len(cls.Name))
 		}
-
-		// Detect legacy protected static $defaultName = 'app:do-thing';
-		if strings.Contains(trimmed, "$defaultName") {
-			if m := defaultNamePattern.FindStringSubmatch(trimmed); len(m) >= 2 {
-				name := m[1]
-				desc := ""
-				// Look ahead for $defaultDescription
-				for j := i + 1; j < len(lines) && j < i+5; j++ {
-					if dm := defaultDescPattern.FindStringSubmatch(strings.TrimSpace(lines[j])); len(dm) >= 2 {
-						desc = dm[1]
-						break
-					}
-				}
-				rng := protocol.Range{
-					Start: protocol.Position{Line: i, Character: leadingYAMLIndent(line)},
-					End:   protocol.Position{Line: i, Character: leadingYAMLIndent(line) + len(trimmed)},
-				}
-				entries = append(entries, CommandEntry{
-					Name:        name,
-					Description: desc,
-					ClassFQN:    classFQN,
-					URI:         uri,
-					Range:       rng,
-				})
+		if prop, ok := staticStringProperty(cls, "$defaultName"); ok {
+			name, _ := parser.StringLiteral(prop.DefaultValue)
+			description := ""
+			if desc, ok := staticStringProperty(cls, "$defaultDescription"); ok {
+				description, _ = parser.StringLiteral(desc.DefaultValue)
 			}
+			add(cls, name, description, prop.StartLine, prop.StartCol, len(prop.Name))
 		}
 	}
-
 	return entries
 }
 
-// indexOf finds the byte offset of lineContent in source starting at approximately
-// lineNo, used for block extraction.
-func indexOf(source, lineContent string, lineNo int) int {
-	// Walk to the line
-	current := 0
-	for i := 0; i < lineNo; i++ {
-		nl := strings.Index(source[current:], "\n")
-		if nl < 0 {
-			return -1
-		}
-		current += nl + 1
-	}
-	idx := strings.Index(source[current:], lineContent)
-	if idx < 0 {
-		return -1
-	}
-	return current + idx
-}
-
-// parseAsCommandBlock extracts name and description from an #[AsCommand(...)] block.
-func parseAsCommandBlock(block string) (name, description string) {
-	open := strings.Index(block, "(")
-	close := strings.LastIndex(block, ")")
-	if open < 0 || close <= open {
-		return "", ""
-	}
-
-	// Verify this is an AsCommand attribute
-	namePart := strings.TrimSpace(block[2:open])
-	parts := strings.Split(namePart, "\\")
-	short := parts[len(parts)-1]
-	// Allow both bare "AsCommand" and "Console\Attribute\AsCommand"
-	if !strings.HasSuffix(short, "AsCommand") {
-		return "", ""
-	}
-
-	args := block[open+1 : close]
-
-	// Named form: name: 'app:do-thing'
-	if m := asCommandNamePattern.FindStringSubmatch(args); len(m) >= 2 {
-		name = m[1]
-	}
-	// Positional form: first string is the name
-	if name == "" {
-		if m := asCommandFirstStringPattern.FindStringSubmatch(args); len(m) >= 2 {
-			name = m[1]
-		}
-	}
-	// Description
-	if m := asCommandDescPattern.FindStringSubmatch(args); len(m) >= 2 {
-		description = m[1]
-	}
-	return name, description
-}
-
-// extractCommandClassFQN extracts the FQN of the first class found in the source.
-func extractCommandClassFQN(source string) string {
-	ns := ""
-	lines := strings.Split(source, "\n")
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "namespace ") {
-			ns = strings.TrimSuffix(strings.TrimPrefix(trimmed, "namespace "), ";")
-			ns = strings.TrimSpace(ns)
+func asCommand(file *parser.FileNode, cls parser.ClassNode) (name, description string, ok bool) {
+	for _, attr := range cls.Attributes {
+		if !strings.EqualFold(file.ResolveClassName(attr.Name), asCommandFQN) {
 			continue
 		}
-		if strings.HasPrefix(trimmed, "class ") || strings.Contains(trimmed, " class ") {
-			parts := strings.Fields(trimmed)
-			for i, p := range parts {
-				if p == "class" && i+1 < len(parts) {
-					className := parts[i+1]
-					// Strip trailing { or other punctuation
-					className = strings.TrimRight(className, "{(")
-					if ns != "" {
-						return ns + "\\" + className
-					}
-					return className
-				}
+		value, _ := attr.Args.Get("name", 0)
+		name, ok = parser.StringLiteral(value)
+		if !ok || name == "" {
+			return "", "", false
+		}
+		value, _ = attr.Args.Get("description", 1)
+		description, _ = parser.StringLiteral(value)
+		return name, description, true
+	}
+	return "", "", false
+}
+
+func staticStringProperty(cls parser.ClassNode, name string) (parser.PropertyNode, bool) {
+	for _, prop := range cls.Properties {
+		if prop.Name == name && prop.IsStatic {
+			if value, ok := parser.StringLiteral(prop.DefaultValue); ok && (value != "" || name != "$defaultName") {
+				return prop, true
 			}
 		}
 	}
-	return ""
+	return parser.PropertyNode{}, false
 }
 
 // ExtractCommandNameContext detects if the cursor is inside a command-name
@@ -402,101 +299,6 @@ const consoleApplicationFQN = "Symfony\\Component\\Console\\Application"
 // commandNameMethods are the console Application methods whose first
 // argument is a command name.
 var commandNameMethods = []string{"find", "get", "has"}
-
-// CommandNameCall reports whether prefix, a line up to the cursor, ends in
-// the first argument of `->find(`, `->get(` or `->has(`. It returns the
-// receiver's expression as written, which the caller must resolve to a
-// console application (see IsConsoleApplication) before treating the
-// argument as a command name: other classes have get() too. partial is the
-// name typed so far and quote the quote it opened with, "" before any.
-func CommandNameCall(prefix string) (receiver, partial, quote string, ok bool) {
-	open := -1
-	for _, m := range commandNameMethods {
-		pat := "->" + m + "("
-		if i := strings.LastIndex(prefix, pat); i >= 0 && i+len(pat) > open {
-			open = i + len(pat)
-			receiver = receiverBefore(strings.TrimSuffix(prefix[:i], "?"))
-		}
-	}
-	if open < 0 || receiver == "" {
-		return "", "", "", false
-	}
-	arg := strings.TrimLeft(prefix[open:], " \t")
-	if arg == "" {
-		return receiver, "", "", true
-	}
-	if arg[0] != '\'' && arg[0] != '"' {
-		return "", "", "", false
-	}
-	quote, partial = arg[:1], arg[1:]
-	if strings.ContainsAny(partial, quote+"\\$") {
-		return "", "", "", false // the string closed, or isn't a plain name
-	}
-	return receiver, partial, quote, true
-}
-
-// CommandNameAt returns the command name in the string under cursor on line
-// when that string is the first argument of `->find(`, `->get(` or `->has(`,
-// with the receiver's expression as written.
-func CommandNameAt(line string, cursor int) (receiver, name string, ok bool) {
-	if cursor < 0 || cursor > len(line) {
-		return "", "", false
-	}
-	receiver, partial, quote, ok := CommandNameCall(line[:cursor])
-	if !ok || quote == "" {
-		return "", "", false
-	}
-	end := strings.Index(line[cursor:], quote)
-	if end < 0 {
-		return "", "", false
-	}
-	name = partial + line[cursor:cursor+end]
-	if name == "" {
-		return "", "", false
-	}
-	return receiver, name, true
-}
-
-// receiverBefore returns the expression that ends at the end of s: a
-// variable, property or call chain such as `$this->app` or `$kernel->app()`.
-func receiverBefore(s string) string {
-	s = strings.TrimRight(s, " \t")
-	i := len(s)
-	for i > 0 {
-		c := s[i-1]
-		switch {
-		case c == '_' || c == '$' || c == '\\' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9':
-			i--
-		case c == '>' && i >= 2 && s[i-2] == '-':
-			i -= 2
-			if i > 0 && s[i-1] == '?' {
-				i--
-			}
-		case c == ':' && i >= 2 && s[i-2] == ':':
-			i -= 2
-		case c == ')':
-			depth := 0
-			j := i - 1
-			for ; j >= 0; j-- {
-				if s[j] == ')' {
-					depth++
-				} else if s[j] == '(' {
-					depth--
-					if depth == 0 {
-						break
-					}
-				}
-			}
-			if j < 0 {
-				return ""
-			}
-			i = j
-		default:
-			return s[i:]
-		}
-	}
-	return s[i:]
-}
 
 // IsConsoleApplication reports whether fqn is Symfony's console Application
 // or a class extending it, such as FrameworkBundle's.
