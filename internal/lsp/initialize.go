@@ -6,19 +6,12 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/analyzer"
-	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/composer/cardhover"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/coverage"
 	"github.com/Tusk-PHP/lsp/internal/document"
-	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
-	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
-	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
-	"github.com/Tusk-PHP/lsp/internal/models"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/session"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -68,13 +61,9 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.container = s.workspace.Container
 	s.routeIndex = s.workspace.RouteIndex
 	s.schemaCache = s.workspace.SchemaCache
-	arrayResolver := models.NewFrameworkArrayResolver(s.index, s.rootPath, s.framework)
 	s.session = session.New(s.workspace, session.Options{Read: s.getDocumentReader(), Logger: s.logger})
 	s.analysis = s.session
-	viewResolver := s.session.Views()
-	translationResolver := frameworklaravel.NewTranslationResolver(s.rootPath)
-	symfonyTranslations := frameworksymfony.NewTranslationResolver(s.rootPath)
-	s.completion = completion.NewProvider(s.index, s.container, s.framework)
+	s.completion = s.session.Completion()
 	// Clients that resolve documentation and detail later get member items
 	// without them, which keeps long member lists cheap to send.
 	lazyDoc, lazyDetail := false, false
@@ -87,33 +76,15 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		}
 	}
 	s.completion.SetLazyResolve(lazyDoc, lazyDetail)
-	if s.cfg != nil {
-		s.completion.SetAutoImportAliasStyle(s.cfg.AutoImport.AliasStyle)
-	}
-	s.completion.SetArrayResolver(arrayResolver)
-	if s.routeIndex != nil {
-		s.completion.SetLaravelRouteIndex(s.routeIndex)
-	}
-	s.completion.SetViewResolver(viewResolver)
-	s.completion.SetTranslationResolver(translationResolver)
-	s.completion.SetSymfonyTranslationResolver(symfonyTranslations)
-	s.completion.SetSymfonyCommands(s.workspace.SymfonyCommands)
 	s.inlayHint = inlayhint.NewProvider(s.index, s.container)
-	s.inlayHint.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	})
-	s.hover = hover.NewProvider(s.index, s.container, s.framework)
-	s.hover.SetArrayResolver(arrayResolver)
-	s.hover.SetConfig(s.cfg)
+	s.inlayHint.SetTypedChainResolver(s.session.TypedExpression)
+	s.hover = s.session.Hover()
 	s.coverage = coverage.NewStore(s.rootPath, s.cfg.CoverageReportPath, s.logger)
 	s.hover.SetCoverage(s.coverage)
 	s.coverageNotifications = params.InitializationOptions != nil && params.InitializationOptions.CoverageNotifications
 	if s.coverageNotifications {
 		s.coverage.OnChange(func() { s.sendNotification("tusk/coverageChanged", nil) })
 	}
-	s.hover.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	})
 	s.composerHover = cardhover.NewProvider(s.rootPath, func() string { return s.workspace.Profile().PHPVersion })
 	s.composerHover.SetEnabled(s.cfg.Composer.Hover.Enable)
 	s.composerHover.SetOpenOnDefinition(s.cfg.Composer.OpenOnDefinition)
@@ -129,14 +100,14 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if opts := params.InitializationOptions; opts != nil {
 		s.analyzer.SetClientCommands(opts.ClientCommands)
 	}
-	s.analyzer.SetChainResolver(s.completion.ResolveExpressionType)
-	s.analyzer.SetTypedChainResolver(s.completion.ResolveExpressionTypeTyped)
+	s.analyzer.SetChainResolver(s.session.Expression)
+	s.analyzer.SetTypedChainResolver(s.session.TypedExpression)
 	if s.routeIndex != nil {
 		s.analyzer.SetLaravelRouteIndex(s.routeIndex)
 	}
-	s.analyzer.SetViewResolver(viewResolver)
-	s.analyzer.SetTranslationResolver(translationResolver)
-	s.analyzer.SetSymfonyTranslationResolver(symfonyTranslations)
+	s.analyzer.SetViewResolver(s.session.Views())
+	s.analyzer.SetTranslationResolver(s.session.Translations())
+	s.analyzer.SetSymfonyTranslationResolver(s.session.SymfonyTranslations())
 	s.analyzer.SetSymfonyCommands(s.workspace.SymfonyCommands)
 	s.sendResponse(msg.ID, protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{

@@ -11,13 +11,13 @@ import (
 	"testing"
 )
 
-// The analysis engine is meant to move to Tusk-PHP/diagnostics (see
-// plans/analysis-engine-extraction.md there). These packages are the language
-// server's side of that boundary: the transport, the editor features, and what
-// only the editor, MCP or CLI uses. Every other package under internal/ is
-// engine.
+// The analysis engine stays apart from the editor inside this module (see
+// plans/analysis-engine-extraction.md in Tusk-PHP/diagnostics). These packages
+// are the language server's side of that boundary: the transports, the editor
+// features, session (which wires both for every transport), and what only the
+// editor, MCP or CLI uses. Every other package under internal/ is engine.
 var lspSidePackages = []string{
-	"protocol", "lsp", "document", "mcpserver",
+	"protocol", "lsp", "document", "mcpserver", "session",
 	"completion", "hover", "analyzer", "inlayhint", "source",
 	"coverage", "introspect", "symquery",
 	"graph", "deps", "unuseddeps",
@@ -27,7 +27,7 @@ var lspSidePackages = []string{
 
 // An engine package must not import these.
 var engineForbiddenImports = []string{
-	"protocol", "lsp", "document", "mcpserver",
+	"protocol", "lsp", "document", "mcpserver", "session",
 	"completion", "hover", "analyzer", "inlayhint", "source",
 }
 

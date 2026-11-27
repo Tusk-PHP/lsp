@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
+	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/rule"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
@@ -122,5 +124,26 @@ func TestOpenFailsOnABrokenConfiguration(t *testing.T) {
 	}
 	if _, err := Open(context.Background(), root, Options{}); err == nil {
 		t.Error("opened a project whose configuration doesn't parse")
+	}
+}
+
+func TestCompletionAndHoverShareTheSessionsResolvers(t *testing.T) {
+	s := newSession(t, Options{})
+	if s.Completion() == nil || s.Hover() == nil {
+		t.Fatal("completion or hover isn't built")
+	}
+	if s.Translations() == nil || s.SymfonyTranslations() == nil {
+		t.Error("the translation resolvers aren't built")
+	}
+	const uri = "file:///probe/Foo.php"
+	src := "<?php\nclass Foo { public function bar(): Foo { return $this; } }\n$foo = new Foo();\n"
+	s.ws.Index.IndexFile(uri, src)
+	file := parser.ParseFile(src)
+	pos := textpos.Position{Line: 3, Character: 0}
+	if got := s.Expression("$foo->bar()", src, pos, file); got != "Foo" {
+		t.Errorf("Expression = %q, want Foo", got)
+	}
+	if got := s.TypedExpression("$foo->bar()", src, pos, file); got.FullString() != "Foo" {
+		t.Errorf("TypedExpression = %q, want Foo", got.FullString())
 	}
 }
