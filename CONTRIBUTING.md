@@ -219,7 +219,7 @@ This section is for internals, the team behind Tusk PHP who review, merge and re
 
 **Who the internals are.** Anyone can become one. The core maintainer (@d8vjork) decides, weighing the work a contributor has done on the project, community demand (issues, discussions) and the project's own workload (internal tasks, milestones and their scope).
 
-**One milestone per release.** The next release always has an open milestone named after its version (`x.y.z`), holding the issues and PRs it ships. Create the same milestone in [`Tusk-PHP/vscode`](https://github.com/Tusk-PHP/vscode/milestones) and [`Tusk-PHP/zed`](https://github.com/Tusk-PHP/zed/milestones) for their release that pins it. There is no separate tracking issue: the milestone is the release plan.
+**One milestone per release.** The next release always has an open milestone named after its version (`x.y.z`), holding the issues and PRs it ships. Milestones live only in this repo: the [`Tusk-PHP/vscode`](https://github.com/Tusk-PHP/vscode) and [`Tusk-PHP/zed`](https://github.com/Tusk-PHP/zed) extensions release each version by pinning it, without milestones of their own. There is no separate tracking issue: the milestone is the release plan.
 
 - **Description:** why this release exists and what it's about, in a sentence or two, plus anything that decides its scope (a PR waiting on a decision, a stack that must ship together).
 - **Closed PRs:** what has merged for it.
@@ -240,7 +240,7 @@ Choose the version from the changes, following [SemVer](https://semver.org/) whi
 1. Write the release's `CHANGELOG.md` section ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)) from the release notes of the milestone's merged PRs, in one commit, under the version and date. Only maintainers edit `CHANGELOG.md`, and only at this step. Commit it before pushing the tag: the release workflow reads that version's section of `CHANGELOG.md` for the GitHub Release notes.
 2. Check that CI, conformance and the field baselines are green on `main`.
 3. Push the tag (see [Release Process](#release-process)).
-4. Close the milestone, in this repo and the extensions' repos once they have released, after moving any of its PRs and issues still open to the next milestone (open it if it doesn't exist yet).
+4. Close the milestone, after moving any of its PRs and issues still open to the next milestone (open it if it doesn't exist yet).
 
 ## License
 
