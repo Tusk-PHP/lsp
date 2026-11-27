@@ -140,3 +140,52 @@ func TestMemberAccessReadsTheFormOfTheAccess(t *testing.T) {
 		}
 	}
 }
+
+func TestStringArgumentAtReadsTheStringAndItsCallFromTokens(t *testing.T) {
+	cases := []struct {
+		src      string
+		ok       bool
+		callee   string
+		class    string
+		argument int
+		text     string
+		partial  string
+	}{
+		{"env('APP_|')", true, "env", "", 0, "APP_", "APP_"},
+		{"env('APP_|", true, "env", "", 0, "APP_", "APP_"},
+		{"env(\"AP|P_NAME\", 'x')", true, "env", "", 0, "APP_NAME", "AP"},
+		{"env('|')", true, "env", "", 0, "", ""},
+		{"\\env('A|')", true, "\\env", "", 0, "A", "A"},
+		{"Env::get('A|')", true, "get", "Env", 0, "A", "A"},
+		{"return \\Illuminate\\Support\\Env::get('A|');", true, "get", "\\Illuminate\\Support\\Env", 0, "A", "A"},
+		{"$x->get('A|')", true, "get", "", 0, "A", "A"},
+		{"env('A', 'de|f')", true, "env", "", 1, "def", "de"},
+		{"env(['A|'])", false, "", "", 0, "", ""},
+		{"env('A' . 'B|')", false, "", "", 0, "", ""},
+		{"env|('A')", false, "", "", 0, "", ""},
+		{"env('A')|", false, "", "", 0, "", ""},
+		{"$a = 'A|';", false, "", "", 0, "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.src, func(t *testing.T) {
+			src := "<?php\n" + tc.src + "\n"
+			offset := strings.Index(src, "|")
+			src = src[:offset] + src[offset+1:]
+			pos := protocol.Position{Line: strings.Count(src[:offset], "\n"), Character: offset - strings.LastIndex(src[:offset], "\n") - 1}
+			arg, ok := NewDocument("file:///a.php", src).StringArgumentAt(pos)
+			if ok != tc.ok {
+				t.Fatalf("ok = %v, want %v", ok, tc.ok)
+			}
+			if !ok {
+				return
+			}
+			if arg.Callee.SymbolText != tc.callee || arg.Class != tc.class || arg.Argument != tc.argument || arg.Text != tc.text || arg.Partial != tc.partial {
+				t.Errorf("got callee %q class %q argument %d text %q partial %q; want %q %q %d %q %q",
+					arg.Callee.SymbolText, arg.Class, arg.Argument, arg.Text, arg.Partial, tc.callee, tc.class, tc.argument, tc.text, tc.partial)
+			}
+			if arg.Content.Start.Line != pos.Line || arg.Content.End.Character-arg.Content.Start.Character != len(tc.text) {
+				t.Errorf("content range %+v does not cover %q", arg.Content, tc.text)
+			}
+		})
+	}
+}

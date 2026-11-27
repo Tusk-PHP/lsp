@@ -199,7 +199,7 @@ func TestRefreshSeparatesConfigErrorsFromFilesItCouldNotRead(t *testing.T) {
 
 func TestWatchGlobsCoverWhatARefreshReads(t *testing.T) {
 	globs := WatchGlobs()
-	for _, want := range []string{"**/*.php", "**/*.phtml", "**/composer.json", "**/composer.lock", "**/vendor/composer/installed.json", "**/" + config.FileName} {
+	for _, want := range []string{"**/*.php", "**/*.phtml", "**/composer.json", "**/composer.lock", "**/vendor/composer/installed.json", "**/" + config.FileName, "**/lang/*.json", "**/.env", "**/.env.*"} {
 		if !slices.Contains(globs, want) {
 			t.Errorf("the watchers cover %s: %v", want, globs)
 		}
@@ -328,6 +328,78 @@ func TestRefreshKeepsLaravelsViewsRoutesAndIDEHelperCurrent(t *testing.T) {
 	refreshPaths(t, ws, root, "routes/web.php")
 	if ws.RouteIndex.Find("dashboard") != nil {
 		t.Error("a deleted route file's routes leave")
+	}
+}
+
+func TestRefreshKeepsLaravelsViewTranslationAndConfigNamesCurrent(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"composer.json":                     `{"name": "app/app"}`,
+		"composer.lock":                     `{"packages": []}`,
+		"resources/views/welcome.blade.php": "<h1>Hi</h1>\n",
+		"lang/en.json":                      "{\n  \"Hello\": \"Hello\"\n}\n",
+	})
+	ws := New(Options{RootPath: root, Framework: "laravel", Config: config.DefaultConfig(), Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+	ws.IndexWorkspace()
+	configNames := func() []string {
+		var names []string
+		for _, f := range ws.ArrayKeys.ListConfigFiles() {
+			names = append(names, f.Key)
+		}
+		return names
+	}
+	if names := ws.Views.ViewNames(""); !slices.Equal(names, []string{"welcome"}) {
+		t.Fatalf("the views are listed: %v", names)
+	}
+	if loc := ws.Translations.Definition("Goodbye"); loc != nil {
+		t.Fatalf("an unknown key has no definition: %v", loc)
+	}
+	if names := configNames(); slices.Contains(names, "sanctum") {
+		t.Fatalf("no package config before the package is installed: %v", names)
+	}
+
+	writeFiles(t, root, map[string]string{
+		"resources/views/orders/show.blade.php":     "<p>Order</p>\n",
+		"lang/en.json":                              "{\n  \"Hello\": \"Hello\",\n  \"Goodbye\": \"Goodbye\"\n}\n",
+		"vendor/laravel/sanctum/config/sanctum.php": "<?php\nreturn ['guard' => ['web']];\n",
+	})
+	refreshPaths(t, ws, root, "resources/views/orders/show.blade.php", "lang/en.json")
+	if names := ws.Views.ViewNames("orders."); !slices.Equal(names, []string{"orders.show"}) {
+		t.Errorf("a created view is listed: %v", names)
+	}
+	if loc := ws.Translations.Definition("Goodbye"); loc == nil {
+		t.Error("a key added to a JSON translation file is found")
+	}
+	if names := configNames(); slices.Contains(names, "sanctum") {
+		t.Errorf("packages are walked again only when composer.lock changes: %v", names)
+	}
+
+	writeFiles(t, root, map[string]string{"composer.lock": `{"packages": [{"name": "laravel/sanctum"}]}`})
+	refreshPaths(t, ws, root, "composer.lock")
+	if names := configNames(); !slices.Contains(names, "sanctum") {
+		t.Errorf("an installed package's config is listed after composer.lock changes: %v", names)
+	}
+}
+
+func TestRefreshKeepsTheEnvKeysCurrent(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"composer.json": `{"name": "app/app"}`,
+		".env":          "APP_NAME=Shop\n",
+	})
+	ws := New(Options{RootPath: root, Framework: "laravel", Config: config.DefaultConfig(), Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+	ws.IndexWorkspace()
+	if names := ws.EnvKeys.Names(); !slices.Equal(names, []string{"APP_NAME"}) {
+		t.Fatalf("the keys are read: %v", names)
+	}
+
+	writeFiles(t, root, map[string]string{".env": "APP_NAME=Shop\nAPP_DEBUG=true\n", ".env.example": "MAIL_HOST=smtp\n"})
+	out := refreshPaths(t, ws, root, ".env", ".env.example")
+	if names := ws.EnvKeys.Names(); !slices.Equal(names, []string{"APP_DEBUG", "APP_NAME", "MAIL_HOST"}) {
+		t.Errorf("changed and created dotenv files are read again: %v", names)
+	}
+	if len(out.Files) != 0 || len(out.Failed) != 0 {
+		t.Errorf("a dotenv file is not a source to index: %+v", out)
 	}
 }
 

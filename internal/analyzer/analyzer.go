@@ -26,6 +26,7 @@ type Analyzer struct {
 	routes              *frameworklaravel.RouteIndex
 	views               *frameworklaravel.Views
 	translations        *frameworklaravel.TranslationResolver
+	envKeys             *frameworklaravel.EnvKeys
 	symfonyTranslations *frameworksymfony.TranslationResolver
 	symfonyCommands     *frameworksymfony.CommandIndex
 	// clientCommands lists the commands the client handles itself, from the
@@ -69,6 +70,10 @@ func (a *Analyzer) SetTypedChainResolver(fn func(expr string, source string, pos
 
 func (a *Analyzer) SetTranslationResolver(resolver *frameworklaravel.TranslationResolver) {
 	a.translations = resolver
+}
+
+func (a *Analyzer) SetEnvKeys(keys *frameworklaravel.EnvKeys) {
+	a.envKeys = keys
 }
 
 func (a *Analyzer) SetSymfonyTranslationResolver(resolver *frameworksymfony.TranslationResolver) {
@@ -201,9 +206,15 @@ func (a *Analyzer) resolveDefinitionSymbol(r *resolve.Resolver, uri, source stri
 			}
 		}
 	}
-	ctx := sourcectx.Analyze(uri, source, pos)
+	doc := sourcectx.NewDocument(uri, source)
+	ctx := doc.At(pos)
 	if ctx == nil {
 		return definitionTarget{}
+	}
+	if a.framework == "laravel" && a.envKeys != nil {
+		if arg, ok := frameworklaravel.EnvKeyAt(a.index, doc, pos); ok {
+			return definitionTarget{loc: a.envKeys.Definition(arg.Key)}
+		}
 	}
 	if l := a.frameworkDefinition(r, source, ctx); l != nil {
 		return definitionTarget{loc: l}

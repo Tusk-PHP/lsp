@@ -11,29 +11,51 @@ func FunctionNames(name string, file *parser.FileNode) ([]string, bool) {
 	if file == nil {
 		return nil, false
 	}
+	fqns := FunctionNamesIn(name, file.Namespace, file.Uses)
+	return fqns, fqns != nil
+}
+
+// FunctionNamesIn lists the functions a call of name in namespace, with uses
+// imported, can reach, in the order PHP tries them: the namespaced one, then
+// the global one it falls back to.
+func FunctionNamesIn(name, namespace string, uses []parser.UseNode) []string {
 	name = strings.TrimSpace(name)
 	fullyQualified := strings.HasPrefix(name, "\\")
 	name = strings.TrimPrefix(name, "\\")
 	if name == "" {
-		return nil, false
+		return nil
 	}
 	if fullyQualified {
-		return []string{name}, true
+		return []string{name}
 	}
 	if strings.Contains(name, "\\") {
-		return []string{ImportedName(name, file.Namespace, file.Uses, "class")}, true
+		return []string{ImportedName(name, namespace, uses, "class")}
 	}
-	for _, u := range file.Uses {
+	for _, u := range uses {
 		if u.Kind == "function" && strings.EqualFold(u.Alias, name) {
-			return []string{u.FullName}, true
+			return []string{u.FullName}
 		}
 	}
-	var fqns []string
-	if file.Namespace != "" {
-		fqns = append(fqns, file.Namespace+"\\"+name)
+	if namespace == "" {
+		return []string{name}
 	}
-	fqns = append(fqns, name)
-	return fqns, true
+	return []string{namespace + "\\" + name, name}
+}
+
+// CalledFunctionFQN is the function a call of name runs: the first of
+// FunctionNamesIn the index has, else the last, which PHP falls back to and
+// which may be defined where the index doesn't reach.
+func CalledFunctionFQN(index *symbols.Index, name, namespace string, uses []parser.UseNode) string {
+	fqns := FunctionNamesIn(name, namespace, uses)
+	for _, fqn := range fqns {
+		if fn := index.LookupFold(fqn, isFunction); fn != nil {
+			return fn.FQN
+		}
+	}
+	if len(fqns) == 0 {
+		return ""
+	}
+	return fqns[len(fqns)-1]
 }
 
 func ImportedName(name, currentNs string, uses []parser.UseNode, useKind string) string {
