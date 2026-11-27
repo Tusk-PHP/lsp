@@ -1,91 +1,35 @@
 package resolve
 
 // Regression tests for C1 — fatal stack overflow via infinite mutual recursion
-// between ResolveVariableType / ResolveVariableTypeTyped and the ChainResolver /
-// TypedChainResolver callbacks.
+// between ResolveVariableType / ResolveVariableTypeTyped and the typing of the
+// member chain a variable is assigned:
 //
-// The cycle (from CURRENT_ISSUES.md):
-//   resolveExpressionType (hover/completion)
-//     → resolveAccessChain
-//       → Resolver.ResolveVariableType / ResolveVariableTypeTyped
-//         → ChainResolver / TypedChainResolver  (calls back into resolveExpressionType)
+//   ResolveVariableType / ResolveVariableTypeTyped
+//     → the assigned member chain's type
+//       → the receiver variable's type (ResolveVariableType again)
 //
 // Inputs like "$x = $x->foo();" or mutual "$a = $b->x(); $b = $a->y();" used to
 // overflow the goroutine stack — a fatal, unrecoverable runtime error. After the
-// fix (per-goroutine recursion guard) these inputs must return normally.
+// fix (the request's recursion guard) these inputs must return normally.
 
 import (
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-// buildRecursionResolver creates a Resolver whose ChainResolver and
-// TypedChainResolver mimic the hover/completion behavior: they call back into
-// ResolveVariableType / ResolveVariableTypeTyped for any variable found in the
-// expression, faithfully reproducing the real cycle.
-//
-// The optional chainHook is called every time ChainResolver fires so tests can
-// count invocations or record calls.
-func buildRecursionResolver(t *testing.T, idx *symbols.Index, lines []string, file *parser.FileNode, chainHook func()) *Resolver {
+// buildRecursionResolver returns a resolver over idx. Typing an assigned
+// chain types its receiver variable, which is the re-entrant call the cycle
+// goes through.
+func buildRecursionResolver(t *testing.T, idx *symbols.Index) *Resolver {
 	t.Helper()
-	r := NewResolver(idx)
-
-	r.ChainResolver = func(req *Resolver, expr, source string, pos protocol.Position, f *parser.FileNode) string {
-		if chainHook != nil {
-			chainHook()
-		}
-		// Strip trailing semicolon (matches real resolveExpressionType usage)
-		expr = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(expr), ";"))
-		if expr == "" {
-			return ""
-		}
-		// If the expression starts with a variable, resolve it — this is exactly
-		// the re-entrant call that causes the cycle.
-		if strings.HasPrefix(expr, "$") {
-			// Extract just the variable name (up to the first non-identifier char)
-			varName := expr
-			for i := 1; i < len(expr); i++ {
-				c := expr[i]
-				if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
-					varName = expr[:i]
-					break
-				}
-			}
-			return req.ResolveVariableType(varName, lines, pos, f)
-		}
-		return ""
-	}
-
-	r.TypedChainResolver = func(req *Resolver, expr, source string, pos protocol.Position, f *parser.FileNode) ResolvedType {
-		if chainHook != nil {
-			chainHook()
-		}
-		expr = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(expr), ";"))
-		if expr == "" {
-			return ResolvedType{}
-		}
-		if strings.HasPrefix(expr, "$") {
-			varName := expr
-			for i := 1; i < len(expr); i++ {
-				c := expr[i]
-				if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
-					varName = expr[:i]
-					break
-				}
-			}
-			rt := req.ResolveVariableTypeTyped(varName, lines, pos, f)
-			return rt
-		}
-		return ResolvedType{}
-	}
-
-	return r
+	return NewResolver(idx)
 }
 
 // TestRecursionGuard_SelfReferentialAssignment covers the basic case:
@@ -101,11 +45,10 @@ $x = $x->foo();
 $y = $x->bar();
 `
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 
-	var calls int
-	r := buildRecursionResolver(t, idx, lines, file, func() { calls++ })
+	r := buildRecursionResolver(t, idx)
 
 	// Position the cursor on the "$y = $x->bar();" line, resolving $x.
 	// This will hit $x = $x->foo() on the line above and recurse.
@@ -114,7 +57,7 @@ $y = $x->bar();
 
 	// We don't assert a specific type — any return (including "") is a pass.
 	// The important thing is that we reach this line (no fatal crash).
-	t.Logf("ResolveVariableType returned %q after %d chain calls", got, calls)
+	t.Logf("ResolveVariableType returned %q", got)
 }
 
 // TestRecursionGuard_SelfReferentialTyped covers the same case via
@@ -124,16 +67,15 @@ func TestRecursionGuard_SelfReferentialTyped(t *testing.T) {
 $x = $x->foo();
 `
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 
-	var calls int
-	r := buildRecursionResolver(t, idx, lines, file, func() { calls++ })
+	r := buildRecursionResolver(t, idx)
 
 	pos := protocol.Position{Line: 1}
 	got := r.ResolveVariableTypeTyped("$x", lines, pos, file)
 
-	t.Logf("ResolveVariableTypeTyped returned %v after %d chain calls", got, calls)
+	t.Logf("ResolveVariableTypeTyped returned %v", got)
 }
 
 // TestRecursionGuard_MutualAssignment covers two variables that reference each
@@ -149,38 +91,36 @@ $a = $b->x();
 $b = $a->y();
 `
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 
-	var calls int
-	r := buildRecursionResolver(t, idx, lines, file, func() { calls++ })
+	r := buildRecursionResolver(t, idx)
 
 	pos := protocol.Position{Line: 2}
 	gotA := r.ResolveVariableType("$a", lines, pos, file)
 	gotB := r.ResolveVariableType("$b", lines, pos, file)
 
-	t.Logf("$a → %q, $b → %q after %d chain calls", gotA, gotB, calls)
+	t.Logf("$a → %q, $b → %q", gotA, gotB)
 }
 
 // TestRecursionGuard_MutualAssignmentTyped covers the mutual assignment case
-// through the TypedChainResolver path.
+// through ResolveVariableTypeTyped.
 func TestRecursionGuard_MutualAssignmentTyped(t *testing.T) {
 	source := `<?php
 $a = $b->x();
 $b = $a->y();
 `
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 
-	var calls int
-	r := buildRecursionResolver(t, idx, lines, file, func() { calls++ })
+	r := buildRecursionResolver(t, idx)
 
 	pos := protocol.Position{Line: 2}
 	gotA := r.ResolveVariableTypeTyped("$a", lines, pos, file)
 	gotB := r.ResolveVariableTypeTyped("$b", lines, pos, file)
 
-	t.Logf("$a → %v, $b → %v after %d chain calls", gotA, gotB, calls)
+	t.Logf("$a → %v, $b → %v", gotA, gotB)
 }
 
 // TestRecursionGuard_DeepChain covers a deeper cycle (three variables in a
@@ -193,16 +133,15 @@ $b = $c->y();
 $c = $a->z();
 `
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 
-	var calls int
-	r := buildRecursionResolver(t, idx, lines, file, func() { calls++ })
+	r := buildRecursionResolver(t, idx)
 
 	pos := protocol.Position{Line: 3}
 	got := r.ResolveVariableType("$a", lines, pos, file)
 
-	t.Logf("deep cycle $a → %q after %d chain calls", got, calls)
+	t.Logf("deep cycle $a → %q", got)
 }
 
 // TestRecursionGuard_NormalChainUnaffected verifies that the depth guard does
@@ -227,9 +166,9 @@ class Logger {
 	idx.IndexFile("file:///app.php", source)
 
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 
-	r := buildRecursionResolver(t, idx, lines, file, nil)
+	r := buildRecursionResolver(t, idx)
 
 	// $logger is assigned from "new Logger()" — must resolve to Monolog\Logger.
 	pos := protocol.Position{Line: 6}
@@ -238,10 +177,9 @@ class Logger {
 		t.Errorf("expected Monolog\\Logger, got %q (regression: depth guard triggered prematurely)", got)
 	}
 
-	// TypedChainResolver path should also resolve correctly.
 	gotTyped := r.ResolveVariableTypeTyped("$logger", lines, pos, file)
 	if gotTyped.FQN != "Monolog\\Logger" {
-		t.Errorf("TypedChainResolver: expected Monolog\\Logger, got %q", gotTyped.FQN)
+		t.Errorf("ResolveVariableTypeTyped: expected Monolog\\Logger, got %q", gotTyped.FQN)
 	}
 }
 
@@ -259,9 +197,9 @@ class Logger {}
 `)
 
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 
-	r := buildRecursionResolver(t, idx, lines, file, nil)
+	r := buildRecursionResolver(t, idx)
 
 	pos := protocol.Position{Line: 1}
 
@@ -285,18 +223,18 @@ func TestRecursionGuard_ConcurrentNonRecursiveTypedResolutions(t *testing.T) {
 $result = Factory::make();
 `
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}
 
 	e := NewEngine(symbols.NewIndex())
-	e.TypedChainResolver = func(_ *Resolver, expr, source string, pos protocol.Position, f *parser.FileNode) ResolvedType {
-		if expr == "Factory::make()" {
+	e.ContainerCall = func(_ *Resolver, src string, _ *parser.FileNode, call ast.Expr) (ResolvedType, bool) {
+		if call.Bounds().Text(src) == "Factory::make()" {
 			time.Sleep(20 * time.Millisecond)
-			return ResolvedType{FQN: "App\\Logger"}
+			return ResolvedType{FQN: "App\\Logger"}, true
 		}
-		return ResolvedType{}
+		return ResolvedType{}, false
 	}
 
 	const workers = 64

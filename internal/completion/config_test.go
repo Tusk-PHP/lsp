@@ -3,12 +3,18 @@ package completion
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/models"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -55,7 +61,7 @@ return [
 	return p, dir
 }
 
-func TestExtractConfigArgContext(t *testing.T) {
+func TestConfigArgContext(t *testing.T) {
 	tests := []struct {
 		name        string
 		trimmed     string
@@ -71,12 +77,21 @@ func TestExtractConfigArgContext(t *testing.T) {
 		{"nested partial", "config('database.co", "database", "co", "'", true},
 		{"deep nested", "config('database.connections.", "database.connections", "", "'", true},
 		{"deep nested partial", "config('database.connections.my", "database.connections", "my", "'", true},
+		{"closed string", "config('database.co|')", "database", "co", "'", true},
+		{"no quote", "config(", "", "", "", true},
+		{"argument on the next line", "config(\n    'database.|'\n);", "database", "", "'", true},
 		{"closed paren", "config('database')", "", "", "", false},
+		{"second argument", "config('database', '", "", "", "", false},
 		{"not config", "app('something", "", "", "", false},
+		{"a method named config", "$this->config('da", "", "", "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			path, partial, quote, ok := extractConfigArgContext(tt.trimmed)
+			arg, ok := callArgAt(t, "<?php\n"+tt.trimmed)
+			var path, partial, quote string
+			if ok {
+				path, partial, quote, ok = configArgContext(arg)
+			}
 			if ok != tt.wantOk {
 				t.Errorf("ok = %v, want %v", ok, tt.wantOk)
 				return
@@ -272,9 +287,47 @@ config('database.
 	t.Error("'connections' not found")
 }
 
+func TestConfigResultContext(t *testing.T) {
+	for code, want := range map[string]*configResultArrayContext{
+		"config('database')['connections']['my": {ConfigArg: "database", AccessKeys: []string{"connections"}, Partial: "my", Quote: "'"},
+		"config('database')[":                   {ConfigArg: "database"},
+		"config('database')[$k]['":              nil,
+		"config($key)['":                        nil,
+		"config('')['":                          nil,
+		"config()['":                            nil,
+		"other('database')['":                   nil,
+		"$config['":                             nil,
+	} {
+		source := "<?php\n" + code
+		ctx := sourcectx.Analyze("file:///test.php", source, protocol.Position{Line: 1, Character: len(code)}, phpparser.OnlyGrammar(token.Latest))
+		var got *configResultArrayContext
+		if dim, ok := ctx.StringDim(); ok {
+			got = configResultContext(ctx.File.Source, dim)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%q: got %#v, want %#v", code, got, want)
+		}
+	}
+}
+
+func TestConfigResultKeysNeedALiteralConfigKey(t *testing.T) {
+	p, _ := setupConfigProvider(t)
+	for _, source := range []string{"<?php\nconfig($key)['", "<?php\nconfig('')['", "<?php\nconfig('database')[$k]['", "<?php\nother('database')['"} {
+		for _, item := range p.GetCompletions("file:///test.php", source, protocol.Position{Line: 1, Character: len(source) - len("<?php\n")}) {
+			if item.Label == "connections" || item.Label == "default" {
+				t.Errorf("%q: unexpected config key %q", source, item.Label)
+			}
+		}
+	}
+}
+
 func TestCompleteConfigDoesNotBreakContainerCompletion(t *testing.T) {
 	// app() should still trigger container completion, not config
-	_, path, quote, ok := extractConfigArgContext("app('re")
+	arg, ok := callArgAt(t, "<?php\napp('re")
+	var path, quote string
+	if ok {
+		_, path, quote, ok = configArgContext(arg)
+	}
 	if ok {
 		t.Errorf("app() should NOT trigger config context, got path=%q quote=%q", path, quote)
 	}
@@ -386,5 +439,60 @@ config("database.
 
 	if !labels["connections"] {
 		t.Error("expected 'connections' with double quotes")
+	}
+}
+
+func assignedValue(t *testing.T, src string) (*parser.FileNode, ast.Expr) {
+	t.Helper()
+	file := parser.ParseFile(src, token.Latest)
+	var value ast.Expr
+	ast.Walk(file.Tree, func(n ast.Node) bool {
+		if assign, ok := n.(*ast.Assign); ok && value == nil {
+			value = assign.Value
+		}
+		return value == nil
+	})
+	if value == nil {
+		t.Fatalf("no assignment in %q", src)
+	}
+	return file, value
+}
+
+func TestCompletionAndContainerAgreeOnConfigCalls(t *testing.T) {
+	p, dir := setupConfigProvider(t)
+	ca := container.NewContainerAnalyzer(p.index, dir, "laravel")
+	ca.Analyze()
+	r := container.NewEngine(p.index, ca).Resolver()
+	tests := []struct {
+		call     string
+		isConfig bool
+		key      string
+	}{
+		{call: "config('app')", isConfig: true, key: "name"},
+		{call: `\config("app")`, isConfig: true, key: "name"},
+		{call: "config()", isConfig: true, key: "app"},
+		{call: "$this->config('app')"},
+		{call: "Config::get('app')"},
+		{call: "configure('app')"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.call, func(t *testing.T) {
+			src := "<?php\nfunction f() {\n    $c = " + tt.call + ";\n    $c['‸\n}\n"
+			file, value := assignedValue(t, strings.Replace(src, "‸", "", 1))
+			rt, typed := ca.CallType(r, file.Source, file, value)
+			if typed != tt.isConfig {
+				t.Fatalf("container typed %q: %v (%q), want %v", tt.call, typed, rt.FQN, tt.isConfig)
+			}
+			if want := tt.call == "config()"; typed && (rt.FQN == `Illuminate\Config\Repository`) != want {
+				t.Fatalf("container typed %q as %q", tt.call, rt.FQN)
+			}
+			labels := completeMarked(p, src)
+			if tt.isConfig != labels[tt.key] && tt.key != "" {
+				t.Fatalf("completion of %q offers %q: %v, want %v (%v)", tt.call, tt.key, labels[tt.key], tt.isConfig, mapKeys(labels, 10))
+			}
+			if !tt.isConfig && (labels["name"] || labels["app"]) {
+				t.Fatalf("completion of %q offers config keys: %v", tt.call, mapKeys(labels, 10))
+			}
+		})
 	}
 }

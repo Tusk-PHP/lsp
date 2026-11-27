@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-
-	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 type View struct {
@@ -162,116 +160,6 @@ type ViewContext struct {
 	Name    string
 	Partial string
 	Quote   string
-}
-
-func ExtractViewCompletionContext(prefix string) (*ViewContext, bool) {
-	call, ok := findViewCall(prefix)
-	if !ok {
-		return nil, false
-	}
-	scan := prefix[call.argsStart:]
-	argIndex := 0
-	depth := 0
-	var quote byte
-	quoteStart := -1
-	for i := 0; i < len(scan); i++ {
-		ch := scan[i]
-		if quote != 0 {
-			if ch == '\\' {
-				i++
-				continue
-			}
-			if ch == quote {
-				quote = 0
-				quoteStart = -1
-			}
-			continue
-		}
-		switch ch {
-		case '\'', '"':
-			quote = ch
-			quoteStart = i
-		case '(':
-			depth++
-		case ')':
-			if depth == 0 {
-				return nil, false
-			}
-			depth--
-		case ',':
-			if depth == 0 {
-				argIndex++
-			}
-		}
-	}
-	if quote == 0 || quoteStart < 0 || argIndex != call.targetArg {
-		return nil, false
-	}
-	return &ViewContext{
-		Partial: scan[quoteStart+1:],
-		Quote:   string(quote),
-	}, true
-}
-
-func ExtractViewDefinitionContext(line string, char int) (*ViewContext, bool) {
-	if char < 0 {
-		return nil, false
-	}
-	if char > len(line) {
-		char = len(line)
-	}
-	ctx, ok := ExtractViewCompletionContext(line[:char])
-	if !ok {
-		return nil, false
-	}
-	start := char
-	for start > 0 && line[start-1] != ctx.Quote[0] {
-		start--
-	}
-	if start == 0 {
-		return nil, false
-	}
-	end := char
-	for end < len(line) {
-		ch := line[end]
-		if ch == '\\' {
-			end += 2
-			continue
-		}
-		if ch == ctx.Quote[0] {
-			break
-		}
-		end++
-	}
-	if end > len(line) {
-		end = len(line)
-	}
-	name := line[start:end]
-	if name == "" {
-		return nil, false
-	}
-	ctx.Name = name
-	return ctx, true
-}
-
-type viewCall struct {
-	argsStart int
-	targetArg int
-}
-
-func findViewCall(prefix string) (viewCall, bool) {
-	for idx := strings.LastIndex(prefix, "view("); idx >= 0; idx = strings.LastIndex(prefix[:idx], "view(") {
-		if idx > 0 && parser.IsIdentByte(prefix[idx-1]) {
-			continue
-		}
-		call := viewCall{argsStart: idx + len("view(")}
-		before := strings.TrimSpace(prefix[:idx])
-		if strings.HasSuffix(before, "::") || strings.HasSuffix(before, "->") {
-			call.targetArg = 1
-		}
-		return call, true
-	}
-	return viewCall{}, false
 }
 
 // ViewURI returns the file of a view by name. A view created since the views

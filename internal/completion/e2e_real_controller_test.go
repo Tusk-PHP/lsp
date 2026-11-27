@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 )
@@ -17,14 +18,14 @@ func TestE2ERealControllerFile(t *testing.T) {
 	source := laravelControllerSource(t)
 	uri := "file:///app/Http/Controllers/CategoryController.php"
 	p.index.IndexFile(uri, source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 
 	rt := func(varName string, lineSubstr string) resolve.ResolvedType {
 		line := findLine(source, lineSubstr)
 		if line < 0 {
 			t.Fatalf("line containing %q not found", lineSubstr)
 		}
-		return p.ResolveExpressionTypeTyped(varName, source, protocol.Position{Line: line + 1}, file)
+		return p.exprTypeAt(varName, source, protocol.Position{Line: line + 1}, file)
 	}
 
 	t.Run("$category = Category::first()", func(t *testing.T) {

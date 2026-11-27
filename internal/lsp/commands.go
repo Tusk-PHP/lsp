@@ -112,8 +112,8 @@ func (s *Server) debugDocument(uri string) string {
 		bufferState = "live-buffer"
 	}
 
-	file := parser.ParseFile(source)
-	var typeRes diagnostics.TypeResolverFunc
+	file := parser.ParseFileIn(source, s.index.GrammarOf(uri))
+	var typeRes checks.TypeResolver
 	var builtinRule *checks.BuiltinUnavailableRule
 	if s.diag != nil {
 		typeRes = s.diag.TypeResolver

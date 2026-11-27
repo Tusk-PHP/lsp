@@ -130,3 +130,19 @@ func TestExtractDocTypeString(t *testing.T) {
 		})
 	}
 }
+
+func TestFieldsAt(t *testing.T) {
+	fields := ParseArrayShape("array{db: array{host: string, port?: int}, name: string}")
+	if got := FieldsAt(fields, nil); len(got) != 2 {
+		t.Errorf("no path: got %v", got)
+	}
+	if got := FieldsAt(fields, []string{"db"}); len(got) != 2 || got[0].Key != "host" || !got[1].Optional {
+		t.Errorf("db: got %v", got)
+	}
+	if got := FieldsAt(fields, []string{"missing"}); got != nil {
+		t.Errorf("a missing key: got %v", got)
+	}
+	if got := FieldsAt(fields, []string{"name", "x"}); got != nil {
+		t.Errorf("a key of a string: got %v", got)
+	}
+}

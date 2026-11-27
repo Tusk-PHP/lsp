@@ -147,32 +147,6 @@ func TestInferValueType(t *testing.T) {
 	}
 }
 
-func TestCollectArrayLiteral(t *testing.T) {
-	t.Run("single line", func(t *testing.T) {
-		lines := []string{"return ['a' => 1, 'b' => 2];"}
-		got := CollectArrayLiteral(lines, 0)
-		if got != "['a' => 1, 'b' => 2]" {
-			t.Errorf("got %q", got)
-		}
-	})
-
-	t.Run("multi-line", func(t *testing.T) {
-		lines := []string{"return [", "    'a' => 1,", "    'b' => 2,", "];"}
-		got := CollectArrayLiteral(lines, 0)
-		if !strings.HasPrefix(got, "[") || !strings.HasSuffix(got, "]") {
-			t.Errorf("got %q", got)
-		}
-	})
-
-	t.Run("nested arrays", func(t *testing.T) {
-		lines := []string{"['outer' => ['inner' => 1]]"}
-		got := CollectArrayLiteral(lines, 0)
-		if got != "['outer' => ['inner' => 1]]" {
-			t.Errorf("got %q", got)
-		}
-	})
-}
-
 func TestCollectReturnArray(t *testing.T) {
 	t.Run("with line comments", func(t *testing.T) {
 		lines := []string{"return [", "    // comment", "    'a' => 1,", "];"}

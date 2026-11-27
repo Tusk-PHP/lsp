@@ -6,6 +6,10 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
+func parsedArgs(args string) []CallArg {
+	return NewResolver(nil).callSiteFor(args, ExprContext{}).Args
+}
+
 func TestIsPartialApplicationArgs(t *testing.T) {
 	for args, want := range map[string]bool{
 		"?":               true,
@@ -21,7 +25,7 @@ func TestIsPartialApplicationArgs(t *testing.T) {
 		"fn () => $a?->b": false,
 		"":                false,
 	} {
-		if got := IsPartialApplicationArgs(args); got != want {
+		if got := isCallableArgs(parsedArgs(args)); got != want {
 			t.Errorf("%q: got %v, want %v", args, got, want)
 		}
 	}
@@ -41,7 +45,7 @@ func TestPartialClosureKeepsTheOpenParameters(t *testing.T) {
 		"...":            "Closure(string, int, float): bool",
 		"?, 'x', ?":      "Closure(string, float): bool",
 	} {
-		if got := PartialClosure(full, fn, args).FullString(); got != want {
+		if got := PartialClosure(full, fn, parsedArgs(args)).FullString(); got != want {
 			t.Errorf("%q: got %s, want %s", args, got, want)
 		}
 	}
