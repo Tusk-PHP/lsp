@@ -101,8 +101,8 @@ Options:
   --pecl-php=COMMANDS
                  Builds with PECL extensions (redis, brotli, ...). What only
                  these builds have needs its extension in the project's profile.
-  --phpstan=PATH A phpstan-src checkout, whose resources/functionMap*.php
-                 signatures mode reads.
+  --phpstan=TAG  The phpstan-src tag whose resources/functionMap*.php
+                 signatures mode fetches from GitHub, such as 2.3.7.
   -h, --help     Show this help.
 
 TXT;

@@ -43,23 +43,25 @@ function unverifiedPhpstanSignatures(): array
 }
 
 /**
- * PHPStan's function map for each version: resources/functionMap.php with
- * every functionMap_phpXYdelta.php up to that version applied, as PHPStan
- * applies them (the delta's old entries removed, then its new ones added).
- * Keys are lower-case names; an entry is the return type followed by the
- * parameter types keyed by name.
+ * PHPStan's function map for each version, fetched from phpstan-src at the
+ * tag $ref: resources/functionMap.php with every functionMap_phpXYdelta.php
+ * up to that version applied, as PHPStan applies them (the delta's old
+ * entries removed, then its new ones added). Keys are lower-case names; an
+ * entry is the return type followed by the parameter types keyed by name.
  *
  * @param list<string> $versions
  * @return array<string, array<string, array<int|string, string>>> by version
  */
-function phpstanFunctionMaps(string $phpstanDir, array $versions): array
+function phpstanFunctionMaps(string $ref, array $versions): array
 {
-    $map = array_change_key_case(readPhpReturnedArray($phpstanDir . '/resources/functionMap.php'), CASE_LOWER);
+    $base = 'https://raw.githubusercontent.com/phpstan/phpstan-src/' . rawurlencode($ref) . '/resources/';
+    $map = array_change_key_case(readPhpReturnedArray(fetchPhpstanResource($base . 'functionMap.php', false), $base . 'functionMap.php'), CASE_LOWER);
     $maps = [];
     foreach ($versions as $version) {
-        $delta = $phpstanDir . '/resources/functionMap_php' . str_replace('.', '', $version) . 'delta.php';
-        if (is_file($delta)) {
-            $changes = readPhpReturnedArray($delta);
+        $url = $base . 'functionMap_php' . str_replace('.', '', $version) . 'delta.php';
+        $source = fetchPhpstanResource($url, true);
+        if ($source !== null) {
+            $changes = readPhpReturnedArray($source, $url);
             foreach (array_keys($changes['old']) as $name) {
                 unset($map[strtolower((string) $name)]);
             }
@@ -73,17 +75,31 @@ function phpstanFunctionMaps(string $phpstanDir, array $versions): array
 }
 
 /**
- * The array a PHP file of the form `<?php return [...];` returns, read with
- * PHP's tokenizer instead of running the file. Only arrays, single-quoted
- * strings and integers are accepted.
+ * The body of $url, or null when it is missing (HTTP 404) and $optional.
  */
-function readPhpReturnedArray(string $file): array
+function fetchPhpstanResource(string $url, bool $optional): ?string
 {
-    $source = file_get_contents($file);
-    if ($source === false) {
-        fwrite(STDERR, "Can't read {$file}\n");
+    $context = stream_context_create(['http' => ['timeout' => 60, 'ignore_errors' => true]]);
+    $body = @file_get_contents($url, false, $context);
+    $statusLine = http_get_last_response_headers()[0] ?? 'no response';
+    $status = (int) (explode(' ', $statusLine)[1] ?? 0);
+    if ($status === 404 && $optional) {
+        return null;
+    }
+    if ($body === false || $status !== 200) {
+        fwrite(STDERR, "Can't fetch {$url}: {$statusLine}\n");
         exit(1);
     }
+    return $body;
+}
+
+/**
+ * The array PHP source of the form `<?php return [...];` returns, read with
+ * PHP's tokenizer instead of running it. Only arrays, single-quoted strings
+ * and integers are accepted. $file names the source in errors.
+ */
+function readPhpReturnedArray(string $source, string $file): array
+{
     $tokens = array_values(array_filter(
         token_get_all($source),
         static fn($t): bool => !is_array($t) || !in_array($t[0], [T_OPEN_TAG, T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)
@@ -508,7 +524,7 @@ function phpstanDocBlock(array $phpstan, array $build, array $reference, array $
  * @param list<array{version:string, extensions:list<string>, classes:list<string>, functions:array<string, array{0:string, 1:list<array>, 2:string}>}> $extensionDumps
  * @param list<array{version:string, extensions:list<string>, classes:list<string>, functions:array<string, array{0:string, 1:list<array>, 2:string}>}> $peclDumps
  */
-function generateGoFunctionSignatures(array $defaultDumps, array $extensionDumps, array $peclDumps, string $extensionStubsDir, string $phpstanDir): string
+function generateGoFunctionSignatures(array $defaultDumps, array $extensionDumps, array $peclDumps, string $extensionStubsDir, string $phpstanRef): string
 {
     $stubExtensions = array_flip(array_values(extensionStubFunctions($extensionStubsDir, loadedExtensions($defaultDumps))));
     $byVersion = [];
@@ -519,7 +535,7 @@ function generateGoFunctionSignatures(array $defaultDumps, array $extensionDumps
     }
     uksort($byVersion, 'version_compare');
     $versions = array_map('strval', array_keys($byVersion));
-    $maps = phpstanFunctionMaps($phpstanDir, $versions);
+    $maps = phpstanFunctionMaps($phpstanRef, $versions);
     $unverified = unverifiedPhpstanSignatures();
 
     $latest = [];
@@ -573,7 +589,7 @@ function generateGoFunctionSignatures(array $defaultDumps, array $extensionDumps
         '',
         '// Code generated from PHP runtime builtin symbols; DO NOT EDIT.',
         "// Generated by scripts/generate-builtins.php signatures from reflection of PHP {$buildVersions}",
-        '// and the PHPDoc types of PHPStan\'s function map (MIT License, see NOTICE-PHPStan).',
+        "// and the PHPDoc types of PHPStan's function map in phpstan-src {$phpstanRef} (MIT License, see NOTICE-PHPStan).",
         '',
         'var generatedBuiltinFunctionSignatures = []builtinFunctionSignature{',
         ...$lines,
@@ -584,19 +600,20 @@ function generateGoFunctionSignatures(array $defaultDumps, array $extensionDumps
 
 return [
     'name' => 'signatures',
-    'usage' => 'php scripts/generate-builtins.php signatures --php=COMMANDS --phpstan=PATH [--extensions-php=COMMANDS] [--pecl-php=COMMANDS] [--output=PATH]',
+    'usage' => 'php scripts/generate-builtins.php signatures --php=COMMANDS --phpstan=TAG [--extensions-php=COMMANDS] [--pecl-php=COMMANDS] [--output=PATH]',
     'help' => '  signatures    Run the same builds as classes mode and emit the Go table of
                 PHP\'s built-in functions with their native signature, from the
                 newest PHP that has each, and the PHPDoc types PHPStan\'s
                 function map gives them, version by version, where those say
                 more than the native types of that version\'s build and allow
-                the same kinds of value. --phpstan is a phpstan-src checkout.
+                the same kinds of value. --phpstan is the phpstan-src tag
+                whose function map is fetched from GitHub, such as 2.3.7.
                 Output defaults to
                 internal/symbols/builtin_signatures_generated.go.
 ',
     'run' => static function (array $options): void {
         if ($options['php'] === '' || $options['phpstan'] === null) {
-            fwrite(STDERR, "Signatures mode needs PHP's default builds (--php) and a phpstan-src checkout (--phpstan).\n");
+            fwrite(STDERR, "Signatures mode needs PHP's default builds (--php) and a phpstan-src tag (--phpstan).\n");
             exit(1);
         }
         writeOutput(
