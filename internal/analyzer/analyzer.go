@@ -24,6 +24,7 @@ type Analyzer struct {
 	engine              *resolve.Engine
 	framework           string
 	routes              *frameworklaravel.RouteIndex
+	authorization       *frameworklaravel.Authorization
 	views               *frameworklaravel.Views
 	translations        *frameworklaravel.TranslationResolver
 	symfonyTranslations *frameworksymfony.TranslationResolver
@@ -75,6 +76,12 @@ func (a *Analyzer) SetClientCommands(commands []protocol.CommandName) {
 	for _, c := range commands {
 		a.clientCommands[c] = true
 	}
+}
+
+// SetLaravelAuthorization sets the Gate abilities and middleware names that
+// definition follows from the arguments that take them.
+func (a *Analyzer) SetLaravelAuthorization(authorization *frameworklaravel.Authorization) {
+	a.authorization = authorization
 }
 
 func (a *Analyzer) SetLaravelRouteIndex(routeIndex *frameworklaravel.RouteIndex) {
@@ -294,6 +301,11 @@ func (a *Analyzer) definitionForCallArg(r *resolve.Resolver, arg sourcectx.CallA
 	if ctx, ok := frameworklaravel.TranslationKeyArg(arg); ok && a.translations != nil {
 		if l := a.translations.Definition(ctx.Key); l != nil {
 			return l
+		}
+	}
+	if a.framework == "laravel" && a.authorization != nil {
+		if name, ok := frameworklaravel.AuthNameArg(r, a.index, file, arg); ok {
+			return a.authNameDefinition(r, file, name)
 		}
 	}
 	if a.framework == "symfony" {

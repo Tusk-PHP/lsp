@@ -720,6 +720,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	if ws.RouteIndex != nil {
 		rt.Completion.SetLaravelRouteIndex(ws.RouteIndex)
 	}
+	rt.Completion.SetLaravelAuthorization(ws.Authorization)
 	rt.Completion.SetViewResolver(viewResolver)
 	rt.Completion.SetTranslationResolver(translationResolver)
 	rt.Completion.SetSymfonyTranslationResolver(symfonyTranslations)
@@ -728,6 +729,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.InlayHint = inlayhint.NewProvider(ws.Index, ws.Container)
 
 	rt.Hover = hover.NewProvider(ws.Index, ws.Container, s.Framework)
+	rt.Hover.SetLaravelAuthorization(ws.Authorization)
 	rt.Hover.SetArrayResolver(arrayResolver)
 	rt.Hover.SetConfig(ws.Config)
 
@@ -735,6 +737,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	if ws.RouteIndex != nil {
 		rt.Analyzer.SetLaravelRouteIndex(ws.RouteIndex)
 	}
+	rt.Analyzer.SetLaravelAuthorization(ws.Authorization)
 	rt.Analyzer.SetViewResolver(viewResolver)
 	rt.Analyzer.SetTranslationResolver(translationResolver)
 	rt.Analyzer.SetSymfonyTranslationResolver(symfonyTranslations)

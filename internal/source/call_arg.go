@@ -96,10 +96,16 @@ func dimKeys(src string, e ast.Expr) (ast.Expr, []string, bool) {
 }
 
 func (a CallArg) StringArg(i int) (string, bool) {
+	return StringValue(a.src, a.Arg(i))
+}
+
+// Arg returns the value of the call's argument i, or nil when the call has
+// no such argument.
+func (a CallArg) Arg(i int) ast.Expr {
 	if i >= len(a.args.Args) {
-		return "", false
+		return nil
 	}
-	return StringValue(a.src, a.args.Args[i].Value)
+	return a.args.Args[i].Value
 }
 
 func (a CallArg) ReceiverCall() (function, firstArg string, ok bool) {

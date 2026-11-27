@@ -38,6 +38,9 @@ type Bootstrapped struct {
 	Index      *symbols.Index
 	Container  *container.ContainerAnalyzer
 	RouteIndex *frameworklaravel.RouteIndex
+	// Authorization holds a Laravel app's Gate abilities and middleware
+	// names; nil for other frameworks.
+	Authorization *frameworklaravel.Authorization
 	// ViewData indexes the data a Laravel app passes to its views.
 	ViewData *frameworklaravel.ViewData
 	// Aliases are the Laravel class aliases (facades by short name), read
@@ -82,6 +85,7 @@ func New(opts Options) *Bootstrapped {
 	}
 
 	var routeIndex *frameworklaravel.RouteIndex
+	var authorization *frameworklaravel.Authorization
 	var aliases *frameworklaravel.Aliases
 	var viewData *frameworklaravel.ViewData
 	var commands *frameworksymfony.CommandIndex
@@ -93,6 +97,7 @@ func New(opts Options) *Bootstrapped {
 		index.SetScopeConventions(frameworklaravel.ScopeConventions())
 		index.SetTemplateFallbacks(frameworklaravel.TemplateFallbacks())
 		routeIndex = frameworklaravel.NewRouteIndex(opts.RootPath, index.Grammars)
+		authorization = frameworklaravel.NewAuthorization(opts.RootPath, index, index.Grammars)
 		viewData = frameworklaravel.NewViewData(opts.RootPath)
 		aliases = frameworklaravel.NewAliases(opts.RootPath, index.Grammars)
 		index.SetClassGenerator(aliases)
@@ -106,6 +111,7 @@ func New(opts Options) *Bootstrapped {
 		Index:           index,
 		Container:       container.NewContainerAnalyzer(index, opts.RootPath, opts.Framework),
 		RouteIndex:      routeIndex,
+		Authorization:   authorization,
 		ViewData:        viewData,
 		Aliases:         aliases,
 		SymfonyCommands: commands,
@@ -149,6 +155,7 @@ func (ws *Bootstrapped) Load(ctx context.Context) error {
 	if err := ws.ScanRoutes(); err != nil {
 		return err
 	}
+	ws.ScanAuthorization()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -299,6 +306,15 @@ func (ws *Bootstrapped) IndexComposerDependencies() int {
 
 	ws.logf("Indexed %d vendor PHP files from Composer dependencies", vendorCount)
 	return vendorCount
+}
+
+// ScanAuthorization reads a Laravel app's Gate abilities and middleware
+// names.
+func (ws *Bootstrapped) ScanAuthorization() {
+	if ws == nil || ws.Authorization == nil {
+		return
+	}
+	ws.Authorization.ScanWorkspace(ws.autoload())
 }
 
 func (ws *Bootstrapped) ScanRoutes() error {

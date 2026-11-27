@@ -130,6 +130,9 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 	}
 	if out.Composer {
 		ws.rereadAutoload()
+		if ws.Authorization != nil {
+			ws.Authorization.ComposerChanged(ws.autoload())
+		}
 	}
 	if profile {
 		if err := ws.refreshProfile(r.Config, &out); err != nil {

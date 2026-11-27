@@ -25,6 +25,7 @@ type Provider struct {
 	framework           string
 	arrayResolver       *models.FrameworkArrayResolver
 	routes              *frameworklaravel.RouteIndex
+	authorization       *frameworklaravel.Authorization
 	views               *frameworklaravel.Views
 	translations        *frameworklaravel.TranslationResolver
 	symfonyTranslations *frameworksymfony.TranslationResolver
@@ -61,6 +62,12 @@ func (p *Provider) SetArrayResolver(resolver *models.FrameworkArrayResolver) {
 
 func (p *Provider) SetViewResolver(resolver *frameworklaravel.Views) {
 	p.views = resolver
+}
+
+// SetLaravelAuthorization sets the Gate abilities and middleware names
+// offered in the arguments that take them.
+func (p *Provider) SetLaravelAuthorization(authorization *frameworklaravel.Authorization) {
+	p.authorization = authorization
 }
 
 func (p *Provider) SetLaravelRouteIndex(routeIndex *frameworklaravel.RouteIndex) {
@@ -181,6 +188,11 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		if p.framework == "laravel" && p.translations != nil {
 			if txCtx, ok := frameworklaravel.TranslationKeyArg(arg); ok {
 				return sanitizeCompletions(p.translations.Complete(txCtx))
+			}
+		}
+		if p.framework == "laravel" && p.authorization != nil {
+			if name, ok := frameworklaravel.AuthNameArg(r, p.index, file, arg); ok {
+				return sanitizeCompletions(p.completeAuthNames(name, pos))
 			}
 		}
 	}
