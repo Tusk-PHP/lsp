@@ -74,6 +74,12 @@ type scanner struct {
 
 func (s *scanner) add(n Node) { s.nodes = append(s.nodes, n) }
 
+// CommentOpen and CommentClose delimit a Blade comment.
+const (
+	CommentOpen  = "{{--"
+	CommentClose = "--}}"
+)
+
 // scan reads src[start:end] for Blade constructs.
 func (s *scanner) scan(start, end int) {
 	src := s.src
@@ -81,8 +87,8 @@ func (s *scanner) scan(start, end int) {
 	for i < end {
 		c := src[i]
 		switch {
-		case c == '{' && strings.HasPrefix(src[i:end], "{{--"):
-			next := indexFrom(src, "--}}", i+4, end, 4)
+		case c == '{' && strings.HasPrefix(src[i:end], CommentOpen):
+			next := indexFrom(src, CommentClose, i+len(CommentOpen), end, len(CommentClose))
 			s.comments = append(s.comments, Span{i, next})
 			i = next
 		case c == '{' && strings.HasPrefix(src[i:end], "{!!"):

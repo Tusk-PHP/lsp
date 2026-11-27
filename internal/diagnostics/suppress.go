@@ -31,7 +31,7 @@ func (p *Provider) dropSuppressed(uri, source string, shared *checks.Shared, dia
 
 func (p *Provider) sourceSuppressions(uri, source string, shared *checks.Shared) checks.Suppressions {
 	if workspace.IsBlade(uri) {
-		return checks.BladeSuppressions(source, p.bladeCustom())
+		return bladeSuppressions(source, p.bladeCustom())
 	}
 	return checks.PHPSuppressions(source, shared)
 }
