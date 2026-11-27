@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -20,7 +21,7 @@ missing_function();
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
 	var got []string
-	for _, f := range (&UnknownFunctionRule{}).Check(parser.ParseFile(src), src, idx) {
+	for _, f := range (&UnknownFunctionRule{}).Check(parser.ParseFile(src, token.Latest), src, idx) {
 		got = append(got, f.Message)
 	}
 	if want := "Unknown function 'missing_function'"; strings.Join(got, ",") != want {

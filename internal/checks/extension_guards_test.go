@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -49,7 +50,7 @@ class WP_Image_Editor_Imagick {
 `
 
 func TestUnknownSymbolsSkipGuardedExtensionNames(t *testing.T) {
-	file := parser.ParseFile(guardedImagickSource)
+	file := parser.ParseFile(guardedImagickSource, token.Latest)
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
 	var got []string

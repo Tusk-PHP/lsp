@@ -112,7 +112,7 @@ func (s *Server) debugDocument(uri string) string {
 		bufferState = "live-buffer"
 	}
 
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, s.index.GrammarOf(uri))
 	var typeRes diagnostics.TypeResolverFunc
 	var builtinRule *checks.BuiltinUnavailableRule
 	if s.diag != nil {

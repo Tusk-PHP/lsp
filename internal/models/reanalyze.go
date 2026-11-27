@@ -36,7 +36,7 @@ func analyzeEloquentFile(index *symbols.Index, uri, source string, schema *Schem
 	if len(models) == 0 {
 		return
 	}
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, index.GrammarOf(uri))
 	if file == nil {
 		return
 	}

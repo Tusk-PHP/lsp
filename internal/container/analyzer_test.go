@@ -290,3 +290,22 @@ func TestParseComposerAutoload(t *testing.T) {
 		}
 	})
 }
+
+func TestSymfonyClassesInSrcAreBoundWithTheirInterfaces(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "src", "Service", "Mailer.php")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("<?php\nnamespace App\\Service;\nuse App\\Contract\\SendsMail;\nclass Mailer implements SendsMail {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ca := NewContainerAnalyzer(symbols.NewIndex(), dir, "symfony")
+	ca.Analyze()
+
+	for _, service := range []string{`App\Service\Mailer`, `App\Contract\SendsMail`} {
+		if b := ca.LookupBinding(service); b == nil || b.Concrete != `App\Service\Mailer` {
+			t.Errorf("%s is bound to the class in src/: %+v", service, b)
+		}
+	}
+}
