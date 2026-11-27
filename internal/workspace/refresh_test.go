@@ -200,7 +200,7 @@ func TestRefreshSeparatesConfigErrorsFromFilesItCouldNotRead(t *testing.T) {
 }
 
 func TestWatchGlobsCoverWhatARefreshReads(t *testing.T) {
-	globs := WatchGlobs()
+	globs := New(Options{RootPath: t.TempDir(), Framework: "none", Config: config.DefaultConfig()}).WatchGlobs()
 	for _, want := range []string{"**/*.php", "**/*.phtml", "**/composer.json", "**/composer.lock", "**/vendor/composer/installed.json", "**/" + config.FileName} {
 		if !slices.Contains(globs, want) {
 			t.Errorf("the watchers cover %s: %v", want, globs)
@@ -386,6 +386,35 @@ func TestRefreshReplacesTheContainerBindingsOfChangedProviders(t *testing.T) {
 	for abstract, bound := range map[string]bool{"payments": false, "mailer": false, "reports": true} {
 		if got := ws.Container.LookupBinding(abstract) != nil; got != bound {
 			t.Errorf("%s bound = %v, want %v", abstract, got, bound)
+		}
+	}
+}
+
+func TestRefreshReadsChangedSymfonyServicesConfig(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{"config/services.yaml": "services:\n    app.mailer:\n        class: App\\Mailer\n"})
+	ws := New(Options{RootPath: root, Framework: "symfony", Config: config.DefaultConfig(), Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+	ws.IndexWorkspace()
+	ws.Container.Analyze()
+	if globs := ws.WatchGlobs(); !slices.Contains(globs, "**/config/services.yaml") || !slices.Contains(globs, "**/config/services.yml") {
+		t.Errorf("a Symfony project watches its services config: %v", globs)
+	}
+
+	writeFiles(t, root, map[string]string{"config/services.yaml": "services:\n    app.notifier:\n        class: App\\Notifier\n"})
+	refreshPaths(t, ws, root, "config/services.yaml")
+
+	if ws.Container.LookupBinding("app.mailer") != nil || ws.Container.LookupBinding("app.notifier") == nil {
+		t.Errorf("the changed services.yaml reaches the container: %v", ws.Container.GetBindings())
+	}
+}
+
+func TestOnlySymfonyProjectsWatchServicesConfig(t *testing.T) {
+	for _, framework := range []string{"laravel", "none"} {
+		ws := New(Options{RootPath: t.TempDir(), Framework: framework, Config: config.DefaultConfig()})
+		for _, glob := range ws.WatchGlobs() {
+			if strings.Contains(glob, "services.y") {
+				t.Errorf("%s watches %s", framework, glob)
+			}
 		}
 	}
 }
