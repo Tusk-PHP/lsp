@@ -83,3 +83,42 @@ function show(string $dir) {
 		}
 	}
 }
+
+func TestHoverWidensTemplatesBoundFromLiteralsEverywhere(t *testing.T) {
+	src := `<?php
+/**
+ * @template T
+ * @param T $value
+ * @param callable(T): void $fn
+ */
+function tap($value, callable $fn) {}
+/**
+ * @template T
+ * @param T $expected
+ * @phpstan-assert T $actual
+ */
+function assertLike($expected, $actual): void {}
+function run($given) {
+    tap(5, function ($n) {
+        echo $n;
+    });
+    assertLike('x', $given);
+    echo $given;
+}
+`
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	idx.IndexFile("file:///tap.php", src)
+	p := NewProvider(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"), "none")
+	for needle, want := range map[string]string{
+		"echo $n;":     "int $n",
+		"echo $given;": "string $given",
+	} {
+		i := strings.Index(src, needle) + strings.Index(needle, "$")
+		pos := protocol.Position{Line: strings.Count(src[:i], "\n"), Character: i - strings.LastIndex(src[:i], "\n")}
+		h := p.GetHover("file:///tap.php", src, pos)
+		if h == nil || !strings.Contains(h.Contents.Value, "\n"+want+"\n") {
+			t.Errorf("hover on %q: want %q, got %+v", needle, want, h)
+		}
+	}
+}
