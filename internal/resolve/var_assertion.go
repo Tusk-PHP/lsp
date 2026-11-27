@@ -16,16 +16,18 @@ import (
 // of them wins.
 func (r *Resolver) varAssertion(varName string, pos textpos.Position, file *parser.FileNode, t *syntaxTree, after, off uint32) (ResolvedType, bool) {
 	declared := ""
-	for node := ast.Node(t.root); node != nil; {
-		var next ast.Node
-		statements := holdsStatements(node)
+	for _, node := range t.path(off) {
+		stmts, ok := statementsOf(node)
+		if !ok {
+			continue
+		}
 		prevEnd := node.Bounds().Start
-		ast.Children(node, func(c ast.Node) {
-			span := c.Bounds()
-			if next != nil || span.Start > off {
-				return
+		for _, stmt := range stmts {
+			span := stmt.Bounds()
+			if span.Start > off {
+				break
 			}
-			if statements && (span.Start > after && !t.assignsTo(c, varName) || declaresGlobal(c, after)) {
+			if span.Start > after && !t.assignsTo(stmt, varName) || declaresGlobal(stmt, after) {
 				for _, doc := range t.docsBetween(prevEnd, span.Start) {
 					if d := t.docVarType(doc.Comment, varName, false); d != "" {
 						declared = d
@@ -33,11 +35,7 @@ func (r *Resolver) varAssertion(varName string, pos textpos.Position, file *pars
 				}
 			}
 			prevEnd = span.End
-			if off <= span.End && span.End > span.Start {
-				next = c
-			}
-		})
-		node = next
+		}
 	}
 	if declared == "" {
 		return ResolvedType{}, false
@@ -56,14 +54,6 @@ func declaresGlobal(stmt ast.Node, after uint32) bool {
 	}
 	span := g.Bounds()
 	return span.Start <= after && after < span.End
-}
-
-func holdsStatements(n ast.Node) bool {
-	switch n.(type) {
-	case *ast.Block, *ast.Case, *ast.Namespace, *ast.File:
-		return true
-	}
-	return false
 }
 
 // assignsTo reports whether stmt is an assignment to varName, whose @var
@@ -130,25 +120,20 @@ func (t *syntaxTree) docsBetween(from, to uint32) []ast.Doc {
 func (t *syntaxTree) statementDoc(off uint32) (ast.Span, bool) {
 	var doc ast.Span
 	found := false
-	for node := ast.Node(t.root); node != nil; {
-		var next ast.Node
-		statements := holdsStatements(node)
+	path := t.path(off)
+	for i, node := range path[:len(path)-1] {
+		stmts, ok := statementsOf(node)
+		if !ok {
+			continue
+		}
 		prevEnd := node.Bounds().Start
-		ast.Children(node, func(c ast.Node) {
-			span := c.Bounds()
-			if next != nil || span.Start > off {
-				return
+		for _, stmt := range stmts {
+			if ast.Node(stmt) == path[i+1] {
+				doc, found = t.docBetween(prevEnd, stmt.Bounds().Start)
+				break
 			}
-			if off > span.End || span.End == span.Start {
-				prevEnd = span.End
-				return
-			}
-			next = c
-			if statements {
-				doc, found = t.docBetween(prevEnd, span.Start)
-			}
-		})
-		node = next
+			prevEnd = stmt.Bounds().End
+		}
 	}
 	return doc, found
 }
