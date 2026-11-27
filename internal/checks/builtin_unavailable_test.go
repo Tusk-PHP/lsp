@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -16,7 +17,7 @@ $a = 'hello world';
 $b = 'world';
 str_contains($a, $b);
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	// Register builtins for PHP 7.4 — str_contains is NOT included.
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
@@ -52,7 +53,7 @@ func TestBuiltinUnavailableFunctionExtension(t *testing.T) {
 $a = '{"key": "value"}';
 json_validate($a);
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	// Register builtins for PHP 8.3 without ext-json — json_validate is excluded.
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.3", Extensions: []string{}})
@@ -88,7 +89,7 @@ func TestBuiltinUnavailableClass(t *testing.T) {
 $fn = function() { return 42; };
 $fiber = new Fiber($fn);
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	// Register builtins for PHP 7.4 — Fiber is NOT included.
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
@@ -125,7 +126,7 @@ $a = 'hello world';
 $b = 'world';
 str_contains($a, $b);
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	// Register builtins for PHP 8.1 — str_contains IS included.
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.1"})
@@ -152,7 +153,7 @@ $a = 'hello world';
 $b = 'world';
 str_contains($a, $b);
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	// Register builtins for PHP 7.4 — str_contains is NOT in the index.
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
@@ -180,7 +181,7 @@ func TestBuiltinUnavailableImplementsList(t *testing.T) {
 	source := `<?php
 class Foo implements WeakMap {}
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	// Register builtins for PHP 7.4 — WeakMap is NOT included (PHP 8.0+).
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
@@ -213,7 +214,7 @@ class Foo implements WeakMap {}
 // in PHP 8.3 is flagged when the project profile targets PHP 8.2.
 func TestBuiltinUnavailableAttribute(t *testing.T) {
 	source := "<?php\nclass Foo {\n    #[Override]\n    public function run(): void {}\n}\n"
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	// Register builtins for PHP 8.2 — Override is NOT included (PHP 8.3+).
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.2"})
@@ -249,7 +250,7 @@ func TestBuiltinUnavailableConstant(t *testing.T) {
 $flags = JSON_THROW_ON_ERROR;
 json_encode($data, $flags);
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.1"})
 
@@ -285,7 +286,7 @@ func TestBuiltinUnavailableConstantBitwiseOr(t *testing.T) {
 	source := `<?php
 $opts = JSON_THROW_ON_ERROR | FILTER_VALIDATE_BOOL;
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.3"})
 
@@ -329,7 +330,7 @@ class Foo {
 }
 $v = Foo::JSON_THROW_ON_ERROR;
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.1"})
 
@@ -349,7 +350,7 @@ func TestBuiltinUnavailableConstantOnSufficientVersion(t *testing.T) {
 	source := `<?php
 $flags = JSON_THROW_ON_ERROR;
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
 
@@ -369,7 +370,7 @@ func TestBuiltinUnavailableArrayIsListPHP74(t *testing.T) {
 	source := `<?php
 $result = array_is_list([1, 2, 3]);
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
 
@@ -394,7 +395,7 @@ func TestBuiltinUnavailableArrayIsListPHP81(t *testing.T) {
 	source := `<?php
 $result = array_is_list([1, 2, 3]);
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.1"})
 

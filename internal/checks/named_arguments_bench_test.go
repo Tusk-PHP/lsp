@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
@@ -25,7 +26,7 @@ class User { public function rename(string $name): void {} public function repo(
 	}
 	src.WriteString("        $this->user->rename(name: 'y');\n    }\n}\n")
 	source := src.String()
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	types := resolve.NewChainEngine(idx)
 	resolver := func(expr, source string, line, col int, file *parser.FileNode) string {
 		return types.DiagnosticType(expr, source, textpos.Position{Line: line, Character: col}, file)

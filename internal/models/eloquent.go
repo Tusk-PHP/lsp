@@ -108,7 +108,7 @@ func analyzeModel(index *symbols.Index, model *symbols.Symbol) {
 		return
 	}
 	source := string(content)
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, index.GrammarOf(model.URI))
 	if file == nil {
 		return
 	}
@@ -278,22 +278,7 @@ func resolveWithUses(name, ns string, uses []parser.UseNode) string {
 	if symbols.IsPHPBuiltinType(strings.ToLower(name)) {
 		return name
 	}
-	if strings.HasPrefix(name, "\\") {
-		return strings.TrimPrefix(name, "\\")
-	}
-	parts := strings.SplitN(name, "\\", 2)
-	for _, u := range uses {
-		if u.Alias == parts[0] {
-			if len(parts) > 1 {
-				return u.FullName + "\\" + parts[1]
-			}
-			return u.FullName
-		}
-	}
-	if ns != "" {
-		return ns + "\\" + name
-	}
-	return name
+	return parser.ResolveImportedName(name, ns, uses, "class")
 }
 
 // shortClassName extracts the short class name from a potentially qualified name.
