@@ -223,9 +223,15 @@ func (c *compiler) translation(n Node, d directive) {
 		c.args(n)
 		return
 	}
-	c.emit("echo app('translator')->" + d.translate + "(")
+	c.emit("echo app('translator')->" + d.method + "(")
 	c.copy(n.Args)
 	c.emit(");")
+}
+
+func (c *compiler) gate(n Node, d directive) {
+	c.emit(`app(\Illuminate\Contracts\Auth\Access\Gate::class)->` + d.method + "(")
+	c.copy(n.Args)
+	c.emit(")")
 }
 
 func (c *compiler) condition(n Node, d directive) {
@@ -246,6 +252,8 @@ func (c *compiler) condition(n Node, d directive) {
 		c.emit("empty(")
 		c.copy(n.Args)
 		c.emit(")")
+	case condGate:
+		c.gate(n, d)
 	case condOpaque:
 		c.emit("[")
 		c.copy(n.Args)
@@ -397,7 +405,14 @@ func (c *compiler) flatDirective(n Node) {
 		c.emit("[")
 		c.copy(n.Args)
 		c.emit("];")
-	case dirIf, dirElseIf, dirCase, dirBreak, dirContinue, dirArgs:
+	case dirIf, dirElseIf:
+		if d.cond == condGate && n.HasArgs {
+			c.gate(n, d)
+			c.emit(";")
+			return
+		}
+		c.args(n)
+	case dirCase, dirBreak, dirContinue, dirArgs:
 		c.args(n)
 	case dirTranslate:
 		c.translation(n, d)

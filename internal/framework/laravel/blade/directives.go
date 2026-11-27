@@ -41,13 +41,14 @@ const (
 	condNot                     // `@unless($x)`
 	condIsset                   // `@isset($x)`
 	condEmpty                   // `@empty($x)`
-	condOpaque                  // `@auth`, `@can('edit', $post)`: arguments are only checked
+	condOpaque                  // `@auth`, `@env('local')`: arguments are only checked
+	condGate                    // `@can('edit', $post)`: a Gate check of the arguments
 )
 
 type directive struct {
-	kind      directiveKind
-	cond      condition
-	translate string
+	kind   directiveKind
+	cond   condition
+	method string
 }
 
 // directives lists the directives of Laravel and Livewire. Anything else after
@@ -65,11 +66,15 @@ func init() {
 	add(dirIf, condNot, "unless")
 	add(dirIf, condIsset, "isset")
 	add(dirIf, condEmpty, "empty")
-	add(dirIf, condOpaque, "auth", "guest", "production", "env", "can", "cannot", "canany",
+	add(dirIf, condOpaque, "auth", "guest", "production", "env",
 		"error", "hasSection", "sectionMissing", "session", "context", "hasstack")
 	add(dirElse, condExpr, "else")
 	add(dirElseIf, condExpr, "elseif")
-	add(dirElseIf, condOpaque, "elseauth", "elseguest", "elsecan", "elsecannot", "elsecanany")
+	add(dirElseIf, condOpaque, "elseauth", "elseguest")
+	for name, method := range map[string]string{"can": "check", "cannot": "denies", "canany": "any"} {
+		directives[name] = directive{kind: dirIf, cond: condGate, method: method}
+		directives["else"+name] = directive{kind: dirElseIf, cond: condGate, method: method}
+	}
 	add(dirEndIf, condExpr, "endif", "endunless", "endisset", "endempty", "endauth", "endguest",
 		"endproduction", "endenv", "endcan", "endcannot", "endcanany", "enderror", "endsession", "endcontext")
 	add(dirForeach, condExpr, "foreach")
@@ -102,8 +107,8 @@ func init() {
 		// Common packages
 		"filamentStyles", "filamentScripts", "routes", "inertia", "inertiaHead", "fluxAppearance", "fluxScripts",
 	)
-	directives["lang"] = directive{kind: dirTranslate, translate: "get"}
-	directives["choice"] = directive{kind: dirTranslate, translate: "choice"}
+	directives["lang"] = directive{kind: dirTranslate, method: "get"}
+	directives["choice"] = directive{kind: dirTranslate, method: "choice"}
 	add(dirNone, condExpr,
 		"endsection", "endpush", "endPushOnce", "endPushIf", "endprepend", "endPrependOnce", "endonce",
 		"endfragment", "endcomponent", "endcomponentClass", "endslot", "endlang", "endpersist",
