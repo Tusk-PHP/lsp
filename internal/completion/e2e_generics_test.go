@@ -24,29 +24,7 @@ func setupLaravelE2E(t *testing.T) *Provider {
 
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
-
-	// Index real vendor files
-	for _, dir := range []string{
-		"vendor/laravel/framework/src/Illuminate/Database/Eloquent",
-		"vendor/laravel/framework/src/Illuminate/Collections",
-		"vendor/laravel/framework/src/Illuminate/Database/Eloquent/Relations",
-		"vendor/laravel/framework/src/Illuminate/Database/Query",
-		"vendor/laravel/framework/src/Illuminate/Database/Concerns", // BuildsQueries::first()
-	} {
-		absDir := filepath.Join(root, dir)
-		filepath.Walk(absDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() || filepath.Ext(path) != ".php" {
-				return nil
-			}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return nil
-			}
-			rel, _ := filepath.Rel(root, path)
-			idx.IndexFileWithSource("file:///"+rel, string(data), symbols.SourceVendor)
-			return nil
-		})
-	}
+	indexLaravelVendor(idx, root)
 
 	// Index project models
 	for _, rel := range []string{
@@ -68,6 +46,32 @@ func setupLaravelE2E(t *testing.T) *Provider {
 
 	ca := container.NewContainerAnalyzer(idx, root, "laravel")
 	return NewProvider(idx, ca, "laravel")
+}
+
+// indexLaravelVendor indexes the Eloquent, collection and query builder
+// sources of testdata/laravel's installed Laravel framework.
+func indexLaravelVendor(idx *symbols.Index, root string) {
+	for _, dir := range []string{
+		"vendor/laravel/framework/src/Illuminate/Database/Eloquent",
+		"vendor/laravel/framework/src/Illuminate/Collections",
+		"vendor/laravel/framework/src/Illuminate/Database/Eloquent/Relations",
+		"vendor/laravel/framework/src/Illuminate/Database/Query",
+		"vendor/laravel/framework/src/Illuminate/Database/Concerns", // BuildsQueries::first()
+	} {
+		absDir := filepath.Join(root, dir)
+		filepath.Walk(absDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || filepath.Ext(path) != ".php" {
+				return nil
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+			rel, _ := filepath.Rel(root, path)
+			idx.IndexFileWithSource("file:///"+rel, string(data), symbols.SourceVendor)
+			return nil
+		})
+	}
 }
 
 // TestE2EGenericChainResolution tests generic type propagation through

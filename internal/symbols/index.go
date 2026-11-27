@@ -1605,7 +1605,7 @@ func (idx *Index) RefineProperty(fqn, fallbackType string, readonly bool) bool {
 		return false
 	}
 	refined := *existing
-	if refined.Type == "" || refined.Type == "mixed" {
+	if refined.Type == "" || refined.Type == "mixed" || strings.HasPrefix(fallbackType, refined.Type+"<") {
 		refined.Type = fallbackType
 	}
 	refined.IsReadonly = refined.IsReadonly || readonly

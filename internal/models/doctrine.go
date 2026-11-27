@@ -43,7 +43,10 @@ var (
 	repoClassRe      = regexp.MustCompile(`repositoryClass\s*[:=]\s*([A-Za-z_\\]+)::class`)
 )
 
-const doctrineMapping = `Doctrine\ORM\Mapping\`
+const (
+	doctrineMapping    = `Doctrine\ORM\Mapping\`
+	doctrineCollection = `Doctrine\Common\Collections\Collection`
+)
 
 var doctrineRelationKinds = []string{"OneToOne", "OneToMany", "ManyToOne", "ManyToMany"}
 
@@ -213,9 +216,16 @@ func typeDoctrineRelation(index *symbols.Index, entitySym *symbols.Symbol, relat
 	case doctrineSingularRelations[relation.kind] && relation.target != "":
 		propType = "?" + relation.target
 	case doctrinePluralRelations[relation.kind]:
-		propType = "Doctrine\\Common\\Collections\\Collection"
+		propType = doctrineToManyType(relation.target)
 	}
 	index.RefineProperty(entitySym.FQN+"::"+relation.name, propType, false)
+}
+
+func doctrineToManyType(target string) string {
+	if target == "" {
+		return doctrineCollection
+	}
+	return doctrineCollection + "<int, " + target + ">"
 }
 
 // injectRepositoryMagicMethods injects findBy*, findOneBy*, countBy* methods
@@ -454,7 +464,7 @@ func parseDoctrineXMLMapping(index *symbols.Index, entitySym *symbols.Symbol, en
 			Kind:       symbols.KindProperty,
 			URI:        entitySym.URI,
 			Visibility: "private",
-			Type:       "Doctrine\\Common\\Collections\\Collection",
+			Type:       doctrineToManyType(resolve(rel.TargetEntity)),
 			IsVirtual:  true,
 			DocComment: "OneToMany relation",
 		})
@@ -467,7 +477,7 @@ func parseDoctrineXMLMapping(index *symbols.Index, entitySym *symbols.Symbol, en
 			Kind:       symbols.KindProperty,
 			URI:        entitySym.URI,
 			Visibility: "private",
-			Type:       "Doctrine\\Common\\Collections\\Collection",
+			Type:       doctrineToManyType(resolve(rel.TargetEntity)),
 			IsVirtual:  true,
 			DocComment: "ManyToMany relation",
 		})

@@ -275,7 +275,7 @@ func injectRelation(index *symbols.Index, model *symbols.Symbol, methodName stri
 		if singularRelations[relation.kind] {
 			propType = "?" + relation.target
 		} else {
-			propType = "Illuminate\\Database\\Eloquent\\Collection"
+			propType = frameworklaravel.EloquentCollection + "<int, " + relation.target + ">"
 		}
 	}
 	propName := "$" + methodName
