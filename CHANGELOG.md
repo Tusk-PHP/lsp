@@ -7,10 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-27
+
+Thanks to [@stubbedev](https://github.com/stubbedev), who contributed to this release.
+
+### Added
+
+- **Hover on a constant shows its docblock.** Class constants, global constants and enum cases show their summary and `@deprecated`, and an untyped constant shows its `@var` type.
+- **Column and relation completion on more query builders**: inside `where('…')`, `with('…')` and the like, names are now offered on a builder held in a variable or passed in as a parameter (`$q = Category::query(); $q->where('…`), and on relations whose return type names their model, such as `HasMany<Post, $this>`.
+
 ### Changed
 
 - **Building from source needs Go 1.27** or later (was 1.25).
 - A request whose parameters can't be read, or a `workspace/executeCommand` call with a missing or wrongly typed argument, now gets an `Invalid params` error naming the method and the argument, and the server log records it. Before, commands answered with an empty result, and a malformed notification was dropped without a trace.
+- **Files created, changed or deleted outside the editor reach the index** without opening them: after a branch switch, a code generator or `rm`, a deleted class no longer completes or hides `unknown-class`, and a new one resolves straight away. Deleting or renaming a directory works too, on Windows as well. Directories under `excludePaths` stay out, and a file open in the editor keeps the editor's text until it is closed; closing it without saving brings back the text on disk.
+- **Changing the PHP version or extensions no longer needs a restart**: edit `"php"` or an `ext-*` requirement in `composer.json`, `phpVersion` or `extensions` in `.tusk-php.json`, or the settings the editor sends, and builtins, completion, hover and `builtin-unavailable` follow the new profile. After `composer require` or `composer install`, classes of a newly installed package resolve on demand.
+- Settings the editor sends apply over its initialization options instead of replacing them (Zed's empty default settings no longer reset the PHP version), and saving a `.tusk-php.json` with a syntax error keeps the last good one in effect. A skipped part of the configuration is reported once instead of on every reload.
+- **The MCP server follows the files on disk**: an agent's edits, new and deleted files, a branch switch, `composer install` or `update`, and a new PHP version in `composer.json` or `.tusk-php.json` show in the next tool call, without a restart or `tusk_reindex`. A PHP file that can't be read no longer makes every call fail. `tusk_reindex` now uses the current `.tusk-php.json` for everything, not only the PHP version.
+- **`tusk-php mcp` and `tusk-php check` honour `phpVersion` from `.tusk-php.json`** when `composer.json` names no PHP version, as the editor server already did.
+- **Go to Symbol in Workspace answers with at most the 500 best matches**, exact names first, instead of every matching symbol. An empty query, which pickers such as Telescope send once before filtering on their side, gets the first 500 classes, interfaces, traits and enums by name, then other symbols.
+- **The unknown-column and unknown-relation checks cover more builders**: the builders in variables and the relations that completion now reads. To avoid false warnings they don't report unqualified columns after a join on the same builder (anywhere in the chain, in a `when()` or `tap()` closure, or earlier on the same variable), columns on relations that join a pivot or intermediate table (`belongsToMany`, `morphToMany`, `morphedByMany`, `hasManyThrough`, `hasOneThrough`), anything on a relation to a union of models such as `MorphTo<Post|Video, $this>`, or unqualified columns on a builder held in a property, an array element or a function's result.
+- **Faster on large projects**: workspace symbol search and name completion no longer re-sort every name in the project after an edit, so symbol search answers in well under a millisecond instead of about 100 ms on a 24k-file Laravel app, and doesn't hold up other requests while indexing. Re-indexing a file in a crowded namespace, such as WordPress's global one, is about four times faster, variable types are worked out faster without concurrent requests waiting on each other, and variables are collected about a third faster in files with many methods.
 
 ### Removed
 
@@ -18,6 +35,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Columns on lines with non-ASCII text are right.** After text such as `'Größe'`, an emoji or CJK on the same line, hover, go to definition, references, rename, diagnostics, semantic highlighting, document links, quick fixes and the rest pointed one or more columns too far right. Positions now count in UTF-16 as LSP expects, or in UTF-8 when the editor offers it.
+- **Names with non-ASCII letters work.** Classes, methods, functions and variables such as `class Ätna`, `größe()` or `$café` are indexed whole and get completion, hover, go to definition and selection ranges, and `unused-import` no longer counts a longer non-ASCII name such as `Café` as a use of `Caf`. Before, the name was cut at its first non-ASCII letter.
+- **`excludePaths` entries with a `/` now work**, including the default `var/cache`, so Symfony's generated cache is no longer indexed. An entry with a `/` in it, or starting with `/` or `./` (as in `.gitignore`), matches that path from the workspace root; a bare name still matches a directory of that name anywhere. A workspace whose own folder is named like an excluded directory (such as `storage`) is indexed instead of being skipped.
+- **Trait `insteadof` and `as` rules are followed.** Completion, hover, go to definition and `unknown-member` now see which trait method a class gets and the aliases its `use` block makes, including `as final` (PHP 8.3). Before, the first trait listed won, and an alias such as `hello as hi` was reported as an unknown member.
+- When a class uses one trait that declares a method abstract and another that implements it, hover, completion and go to definition use the implemented method, whichever trait is listed first.
+- **A bare function call is always read as a function**, found the way PHP finds it (a `use function` import, the current namespace, then the global one, with imported names matched ignoring case), by go to definition and declaration, hover, find references, rename and signature help. When no such function exists they give no answer, instead of a same-named method of an unrelated class or of the class you're in.
+- **The type of a function call follows the same name rules**: `use function App\Helpers\money; $m = money(1);` gives `$m` the imported `money()`'s return type, also with an alias or in another case, and a call to a function that doesn't exist where it's called no longer takes the return type of a same-named function in another namespace. Parameter-name inlay hints and array-key completion on a call's result follow the same rules, and array keys from `$this->method()` or `$repo->load()` come from the receiver's own class.
+- When a method and a property share a name, go to definition, hover, references and rename on `$this->area()` go to the method and on `$this->area` to the property. Signature help inside a container call such as `app(Service::class, ['x' => helper(1, ` shows `helper`'s signature.
+- **`Class::NAME` resolves to the constant and `Class::$NAME` to the static property**, even when the class declares both and the property comes first, in hover, go to definition and the type of the expression. A constant access no longer reaches a constant through `@mixin` or forwarded calls, which PHP never does.
+- **Go to definition on Eloquent relation and accessor properties opens the method**: `$user->posts` opens `posts()` (also when an ide-helper `@property-read` declares it), `$user->full_name` opens `getFullNameAttribute()` and `$user->slug` opens a `slug(): Attribute` accessor, instead of the top of the model's file.
+- Document highlights mark only what the name under the cursor refers to: on `$room->area()`, the method's declaration and the calls on a `Room`, never `$shape->area()`, a property or local variable named `area`, or the word in a string or comment. On a promoted constructor parameter, they mark the property and its `$this->` accesses.
+- Inside an anonymous class (`new class { … }`) written in a method, hover and go to definition on its members refer to the anonymous class, not the class around it.
+- While the function you're typing in isn't closed yet (for example while typing `$post['` without the closing quote), completion, hover and type lookups no longer give a variable the type of a same-named variable in an earlier function. Variables after a function whose signature holds a closure (PHP 8.5) are no longer treated as being inside that closure.
+- Go to definition, hover and completion work on a variable in top-level code when its assignment shares a line with an earlier statement, such as `<?php use App\Shop; $shop = new Shop(); $shop->total();`, as in one-line, minified and generated scripts.
+- With `openManual` on, go to definition and declaration still go to Symfony console commands (`$application->find('app:sync')`) and translation keys; before, turning the option on silently turned these off.
+- A constant declared with `const X = …` in two files is no longer lost when one of them is edited or deleted: the other file's declaration takes its place.
+- When a file that redeclares a class is edited and an earlier declaration from another file takes over again, the members they share stay in completion and workspace symbols.
+- Hover and completion no longer fail on a call whose PHPDoc return type refers to an array class constant, such as Monolog's `LogRecord::toArray()` with its `value-of<Level::NAMES>`.
+- In Blade, a `@tusk-ignore` marker above a directive or conditional your project registers (`Blade::directive('money', …)`, `Blade::if('admin', …)`) whose arguments span several lines now covers all of them, and the quick fix's marker silences the finding.
+- Reading the live MySQL schema works with an IPv6 database host (`DB_HOST=::1`, `DB_HOST=[::1]` or `DATABASE_URL=mysql://user:pass@[::1]/db`), and PostgreSQL accepts the bracketed `DB_HOST=[::1]` too. Reading the live PostgreSQL schema also works when the database name, user or password from `.env` contains a space, a quote or a backslash.
 - The "stopped indexing at maxIndexFiles" warning no longer appears when the workspace has exactly `maxIndexFiles` PHP files; it shows only when files were actually left out.
 
 ## [0.16.0] - 2026-11-25
