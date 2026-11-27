@@ -27,6 +27,8 @@ class Builder {
     public function leftJoin($table, $first, $operator = null, $second = null): static { return $this; }
     public function crossJoin($table): static { return $this; }
     public function joinSub($query, $as, $first): static { return $this; }
+    public function when($value, $callback): static { return $this; }
+    public function tap($callback): static { return $this; }
 }
 `,
 	"file:///vendor/Relations.php": `<?php
@@ -191,6 +193,14 @@ func TestBuilderArgsAfterAJoinLeaveUnqualifiedColumnsAlone(t *testing.T) {
     $other = Post::query();
     $other->where('title', 'x')->joinSub($q, 'u', 'u.id');
     $other->where('email', $email)->with('missingRelation');
+    $self = Post::query();
+    $self->join('users', 'users.id', '=', 'posts.user_id');
+    $self = $self->where('title', 1);
+    $self->where('email', $email);
+    Post::query()->when($email, fn ($q) => $q->join('users', 'users.id', '=', 'posts.user_id'))->where('email', $email);
+    $tapped = Post::query();
+    $tapped->tap(function ($q) { $q->leftJoin('users', 'users.id', '=', 'posts.user_id'); });
+    $tapped->where('email', $email);
     $plain = Post::query();
     $plain->where('email', $email);
 `,

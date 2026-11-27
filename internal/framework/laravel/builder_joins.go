@@ -90,13 +90,12 @@ func callLink(tokens []parser.Token, i int) (int, bool) {
 }
 
 func lastValueWritten(binding *scope.Binding, at protocol.Position) protocol.Position {
-	var since protocol.Position
-	for i := range binding.Rebinds {
-		if binding.Rebinds[i].HoldsAt(at) {
-			since = binding.Rebinds[i].At
+	for i := len(binding.Rebinds) - 1; i >= 0; i-- {
+		if binding.Rebinds[i].HoldsAt(at) && !binding.ReadsItself(i) {
+			return binding.Rebinds[i].At
 		}
 	}
-	return since
+	return protocol.Position{}
 }
 
 func assignedJoined(tokens []parser.Token, variable int) bool {
@@ -201,10 +200,14 @@ func chainJoins(tokens []parser.Token, head int) bool {
 		case parser.TokenBackslash:
 			wantOperand = true
 		case parser.TokenOpenParen, parser.TokenOpenBracket:
-			if i = parser.MatchingClose(tokens, i); i < 0 {
+			closing := parser.MatchingClose(tokens, i)
+			if closing < 0 {
 				return false
 			}
-			wantOperand, afterOperator = false, false
+			if groupJoins(tokens, i, closing) {
+				return true
+			}
+			i, wantOperand, afterOperator = closing, false, false
 		case parser.TokenArrow, parser.TokenDoubleColon:
 			if wantOperand {
 				return false
@@ -216,6 +219,18 @@ func chainJoins(tokens []parser.Token, head int) bool {
 			}
 		default:
 			return false
+		}
+	}
+	return false
+}
+
+func groupJoins(tokens []parser.Token, open, closing int) bool {
+	for i := open + 1; i < closing; i++ {
+		if tokens[i].Kind != parser.TokenIdentifier || !joinMethods[strings.ToLower(tokens[i].Value)] || !opensCall(tokens, i) {
+			continue
+		}
+		if op := parser.PrevSignificant(tokens, i-1); isMemberOperator(tokens[op].Kind) {
+			return true
 		}
 	}
 	return false
