@@ -32,6 +32,30 @@ permissions:
   contents: read
 
 jobs:
+  wasm:
+    # Compile only: the web build is never run in CI, since running it has
+    # exhausted a machine's memory before.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build every package for wasip1
+        env:
+          GOOS: wasip1
+          GOARCH: wasm
+          CGO_ENABLED: '0'
+        run: go build ./...
+
+      - name: Build the WASM binary
+        run: make wasm
+
   test:
     runs-on: ubuntu-latest
 
