@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 )
@@ -91,9 +92,9 @@ type Document struct {
 	file   *parser.FileNode
 }
 
-func NewDocument(uri, source string) *Document {
+func NewDocument(uri, source string, grammars phpparser.GrammarRange) *Document {
 	result := parser.New().Parse(source)
-	return &Document{uri: uri, lines: result.Lines, result: result, file: parser.FileNodeOf(result)}
+	return &Document{uri: uri, lines: result.Lines, result: result, file: parser.ParseFileIn(source, grammars)}
 }
 
 func (d *Document) Tokens() []parser.Token {
@@ -104,8 +105,8 @@ func (d *Document) File() *parser.FileNode {
 	return d.file
 }
 
-func Analyze(uri, source string, pos protocol.Position) *CursorContext {
-	return NewDocument(uri, source).At(pos)
+func Analyze(uri, source string, pos protocol.Position, grammars phpparser.GrammarRange) *CursorContext {
+	return NewDocument(uri, source, grammars).At(pos)
 }
 
 func (d *Document) At(pos protocol.Position) *CursorContext {

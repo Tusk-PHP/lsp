@@ -266,7 +266,7 @@ func scanNewExpressions(
 		}
 
 		// Build a FileNode for use-statement resolution.
-		file := parser.ParseFile(src)
+		file := parser.ParseFileIn(src, idx.GrammarOf(uri))
 		if file == nil {
 			continue
 		}

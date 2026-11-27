@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -73,8 +74,8 @@ func inAttribute(tokens []parser.Token, i int) bool {
 	return false
 }
 
-func CallAt(uri, source string, pos protocol.Position) (callee *CursorContext, argument int, ok bool) {
-	doc := NewDocument(uri, source)
+func CallAt(uri, source string, pos protocol.Position, grammars phpparser.GrammarRange) (callee *CursorContext, argument int, ok bool) {
+	doc := NewDocument(uri, source, grammars)
 	calleePos, argument, ok := calleeAt(doc.Tokens(), pos)
 	if !ok {
 		return nil, 0, false

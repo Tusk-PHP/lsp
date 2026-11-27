@@ -7,6 +7,7 @@ import (
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -78,7 +79,7 @@ func laravelRelations(index *symbols.Index) []Relation {
 	var relations []Relation
 
 	for _, model := range models {
-		rels := extractEloquentRelations(model)
+		rels := extractEloquentRelations(model, index.GrammarOf(model.URI))
 		relations = append(relations, rels...)
 	}
 
@@ -88,7 +89,7 @@ func laravelRelations(index *symbols.Index) []Relation {
 
 // extractEloquentRelations mirrors the relation-detection portion of analyzeModel,
 // but collects Relation structs instead of injecting virtual members.
-func extractEloquentRelations(model *symbols.Symbol) (result []Relation) {
+func extractEloquentRelations(model *symbols.Symbol, grammars phpparser.GrammarRange) (result []Relation) {
 	defer func() {
 		// Panic-safe: skip the model on any unexpected error.
 		if r := recover(); r != nil {
@@ -104,7 +105,7 @@ func extractEloquentRelations(model *symbols.Symbol) (result []Relation) {
 	source := string(content)
 	lines := strings.Split(source, "\n")
 
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, grammars)
 	if file == nil {
 		return nil
 	}
@@ -196,7 +197,7 @@ func symfonyEntityClasses(index *symbols.Index) []*symbols.Symbol {
 			continue
 		}
 
-		file := parser.ParseFile(source)
+		file := parser.ParseFileIn(source, index.GrammarOf(uri))
 		if file == nil {
 			continue
 		}
@@ -238,7 +239,7 @@ func symfonyRelations(index *symbols.Index) []Relation {
 	var relations []Relation
 
 	for _, entity := range entities {
-		rels := extractDoctrineRelations(entity)
+		rels := extractDoctrineRelations(entity, index.GrammarOf(entity.URI))
 		relations = append(relations, rels...)
 	}
 
@@ -248,7 +249,7 @@ func symfonyRelations(index *symbols.Index) []Relation {
 
 // extractDoctrineRelations scans property attributes on a Doctrine entity for
 // ORM relation attributes and returns the corresponding Relation edges.
-func extractDoctrineRelations(entity *symbols.Symbol) (result []Relation) {
+func extractDoctrineRelations(entity *symbols.Symbol, grammars phpparser.GrammarRange) (result []Relation) {
 	defer func() {
 		if r := recover(); r != nil {
 			result = nil
@@ -262,7 +263,7 @@ func extractDoctrineRelations(entity *symbols.Symbol) (result []Relation) {
 	}
 	source := string(content)
 
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, grammars)
 	if file == nil {
 		return nil
 	}
