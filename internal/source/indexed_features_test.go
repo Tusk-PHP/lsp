@@ -156,3 +156,41 @@ func TestEveryCursorFeatureAnswersAlikeFromTheStoredParse(t *testing.T) {
 		})
 	}
 }
+
+func TestInlayHintsAndHoverAnswerAlikeWhateverTheResolverLastRead(t *testing.T) {
+	cfg := &config.InlayHintsConfig{Enabled: true, VariableTypes: true, ForeachTypes: true, ClosureReturnTypes: true, ReturnTypes: true, ParameterNames: true}
+	edited := strings.Replace(featureSource, "        $fn =", "        $extra = 1;\n        $fn =", 1)
+	reference := newFeatures(featureSource)
+	wantHints := reference.hints.GetInlayHints(featureURI, featureSource, cfg)
+	if len(wantHints) == 0 {
+		t.Fatal("no inlay hints in the sample")
+	}
+	wantHovers := map[protocol.Position]*protocol.Hover{}
+	for _, pos := range featurePositions(featureSource) {
+		wantHovers[pos] = newFeatures(featureSource).hover.GetHover(featureURI, featureSource, pos)
+	}
+	f := newFeatures(featureSource)
+	for _, step := range []struct {
+		name string
+		read func()
+	}{
+		{"a fresh resolver", func() {}},
+		{"the same text read before", func() { f.hints.GetInlayHints(featureURI, featureSource, cfg) }},
+		{"another split of the same text", func() {
+			f.hover.GetHover(featureURI, strings.Clone(featureSource), protocol.Position{Line: 9, Character: 12})
+		}},
+		{"another document in between", func() { f.hints.GetInlayHints("file:///app/user.php", featureClasses, cfg) }},
+		{"an edit and back", func() { f.hints.GetInlayHints(featureURI, edited, cfg) }},
+	} {
+		step.read()
+		if got := f.hints.GetInlayHints(featureURI, featureSource, cfg); !reflect.DeepEqual(got, wantHints) {
+			t.Fatalf("inlay hints after %s: %+v, want %+v", step.name, got, wantHints)
+		}
+		for _, pos := range featurePositions(featureSource) {
+			step.read()
+			if got := f.hover.GetHover(featureURI, featureSource, pos); !reflect.DeepEqual(got, wantHovers[pos]) {
+				t.Fatalf("hover at %v after %s: %+v, want %+v", pos, step.name, got, wantHovers[pos])
+			}
+		}
+	}
+}

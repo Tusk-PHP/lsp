@@ -68,7 +68,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		return nil
 	}
 	r := p.engine.Resolver()
-	lines := strings.Split(source, "\n")
+	lines := r.Lines(source)
 	line := ctx.Line
 
 	file := ctx.File

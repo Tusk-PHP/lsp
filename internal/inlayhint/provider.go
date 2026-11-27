@@ -59,8 +59,8 @@ func (p *Provider) GetInlayHints(uri, source string, cfg *config.InlayHintsConfi
 
 	file := sourcectx.IndexedFile(p.index, uri, source)
 	result := parser.New().Parse(source)
-	lines := resolve.SplitLines(source)
 	r := p.engine.Resolver()
+	lines := r.Lines(source)
 
 	var hints []protocol.InlayHint
 
