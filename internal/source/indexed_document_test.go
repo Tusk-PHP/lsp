@@ -2,6 +2,7 @@ package sourcectx
 
 import (
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -117,4 +118,23 @@ func BenchmarkSemanticTokensTree(b *testing.B) {
 			IndexedTree(idx, "file:///room.php", source)
 		}
 	})
+}
+
+func TestNamesAtReadsEachPositionAsNameAt(t *testing.T) {
+	doc := NewDocument("file:///room.php", indexedRoom, phpparser.AnyGrammar())
+	positions := append(positionsOf(indexedRoom), protocol.Position{Line: -1}, protocol.Position{Line: 999})
+	reversed := slices.Clone(positions)
+	slices.Reverse(reversed)
+	for _, order := range [][]protocol.Position{positions, reversed} {
+		names := doc.NamesAt(order)
+		for i, pos := range order {
+			if want := doc.NamesAt([]protocol.Position{pos})[0]; !reflect.DeepEqual(names[i], want) {
+				t.Fatalf("at %v: %+v, alone %+v", pos, names[i], want)
+			}
+		}
+	}
+	at := doc.At(protocol.Position{Line: 10, Character: 12})
+	if at == nil || at.Scope == nil || at.Scope.MethodName != "area" {
+		t.Errorf("the cursor in area() has scope %+v", at)
+	}
 }

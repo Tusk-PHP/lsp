@@ -1,6 +1,9 @@
 package sourcectx
 
 import (
+	"cmp"
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -167,43 +170,63 @@ func Analyze(idx *symbols.Index, uri, source string, pos protocol.Position) *Cur
 }
 
 func (d *Document) At(pos protocol.Position) *CursorContext {
-	name, at := d.nameAt(pos)
-	if name == nil {
+	names, ats := d.namesAt([]protocol.Position{pos})
+	if names[0] == nil {
 		return nil
 	}
-	return &CursorContext{NameContext: *name, Scope: at.scope, NewUse: at.newUse}
+	return &CursorContext{NameContext: *names[0], Scope: ats[0].scope, NewUse: ats[0].newUse}
 }
 
 func (d *Document) NameAt(pos protocol.Position) *NameContext {
-	name, _ := d.nameAt(pos)
-	return name
+	return d.NamesAt([]protocol.Position{pos})[0]
 }
 
-func (d *Document) nameAt(pos protocol.Position) (*NameContext, cursorDeclarations) {
-	if pos.Line < 0 || pos.Line >= len(d.lines) {
-		return nil, cursorDeclarations{}
+// NamesAt is NameAt for each position, reading the syntax tree once for all
+// of them; a position outside the document gives nil.
+func (d *Document) NamesAt(positions []protocol.Position) []*NameContext {
+	names, _ := d.namesAt(positions)
+	return names
+}
+
+func (d *Document) namesAt(positions []protocol.Position) ([]*NameContext, []cursorDeclarations) {
+	names := make([]*NameContext, len(positions))
+	ats := make([]cursorDeclarations, len(positions))
+	inside := make([]int, 0, len(positions))
+	for i, pos := range positions {
+		if pos.Line < 0 || pos.Line >= len(d.lines) {
+			continue
+		}
+		line := d.lines[pos.Line]
+		word, wordRange := wordAtLine(line, pos)
+		joinedLine, joinedWordStart := resolve.JoinChainLines(d.lines, pos.Line, wordRange.Start.Character)
+		accessKind, subjectExpr := detectAccess(joinedLine, joinedWordStart)
+		ats[i] = d.declarationsBefore(pos, wordRange)
+		names[i] = &NameContext{
+			URI:             d.uri,
+			Position:        pos,
+			SymbolText:      word,
+			SymbolKind:      classifySymbolKind(word),
+			AccessKind:      accessKind,
+			SubjectExpr:     subjectExpr,
+			WordRange:       wordRange,
+			Line:            line,
+			JoinedLine:      joinedLine,
+			JoinedWordStart: joinedWordStart,
+		}
+		inside = append(inside, i)
 	}
-	line := d.lines[pos.Line]
-	word, wordRange := wordAtLine(line, pos)
-	joinedLine, joinedWordStart := resolve.JoinChainLines(d.lines, pos.Line, wordRange.Start.Character)
-	accessKind, subjectExpr := detectAccess(joinedLine, joinedWordStart)
-	at := d.declarationsAt(pos, wordRange)
-	return &NameContext{
-		URI:             d.uri,
-		Position:        pos,
-		SymbolText:      word,
-		SymbolKind:      classifySymbolKind(word),
-		AccessKind:      accessKind,
-		SubjectExpr:     subjectExpr,
-		EnclosingFQN:    at.classFQN,
-		WordRange:       wordRange,
-		Line:            line,
-		JoinedLine:      joinedLine,
-		JoinedWordStart: joinedWordStart,
-		File:            at.namespace.View(d.file),
-		Called:          at.called,
-		FunctionCall:    at.called && accessKind == AccessNone,
-	}, at
+	slices.SortStableFunc(inside, func(a, b int) int { return cmp.Compare(ats[a].offset, ats[b].offset) })
+	for _, stmt := range d.tree.Stmts {
+		encloseAll(ats, inside, stmt)
+	}
+	for _, i := range inside {
+		at, name := &ats[i], names[i]
+		name.EnclosingFQN = at.classFQN
+		name.File = at.namespace.View(d.file)
+		name.Called = at.called
+		name.FunctionCall = at.called && name.AccessKind == AccessNone
+	}
+	return names, ats
 }
 
 func WordAt(source string, pos protocol.Position) (string, protocol.Range) {
@@ -324,9 +347,9 @@ type cursorDeclarations struct {
 	called    bool
 }
 
-func (d *Document) declarationsAt(pos protocol.Position, word protocol.Range) cursorDeclarations {
+func (d *Document) declarationsBefore(pos protocol.Position, word protocol.Range) cursorDeclarations {
 	offset := offsetOf(d.source, d.offsets, pos)
-	at := cursorDeclarations{
+	return cursorDeclarations{
 		src:       d.source,
 		file:      d.file,
 		pos:       pos,
@@ -336,50 +359,50 @@ func (d *Document) declarationsAt(pos protocol.Position, word protocol.Range) cu
 		namespace: d.namespaces.At(offset),
 		newUse:    d.namespaces.UseSiteAt(offset),
 	}
-	for _, stmt := range d.tree.Stmts {
-		if stmt.Bounds().Start > at.offset {
-			break
-		}
-		at.enclose(stmt)
-	}
-	return at
 }
 
-func (at *cursorDeclarations) enclose(stmt ast.Stmt) {
-	ast.Walk(stmt, func(n ast.Node) bool {
-		span := n.Bounds()
-		if at.offset < span.Start || at.offset > span.End {
-			return false
+func encloseAll(ats []cursorDeclarations, byOffset []int, n ast.Node) {
+	span := n.Bounds()
+	lo := sort.Search(len(byOffset), func(k int) bool { return ats[byOffset[k]].offset >= span.Start })
+	hi := sort.Search(len(byOffset), func(k int) bool { return ats[byOffset[k]].offset > span.End })
+	if lo >= hi {
+		return
+	}
+	inside := byOffset[lo:hi]
+	for _, i := range inside {
+		ats[i].enter(n, span)
+	}
+	ast.Children(n, func(c ast.Node) { encloseAll(ats, inside, c) })
+}
+
+func (at *cursorDeclarations) enter(n ast.Node, span ast.Span) {
+	switch n := n.(type) {
+	case *ast.ClassDecl:
+		if n.Name == nil {
+			at.enterAnonymousClass()
+		} else {
+			at.enterClass(n.Name)
 		}
-		switch n := n.(type) {
-		case *ast.ClassDecl:
-			if n.Name == nil {
-				at.enterAnonymousClass()
-			} else {
-				at.enterClass(n.Name)
-			}
-		case *ast.InterfaceDecl:
-			at.enterClass(n.Name)
-		case *ast.TraitDecl:
-			at.enterClass(n.Name)
-		case *ast.EnumDecl:
-			at.enterClass(n.Name)
-		case *ast.Method:
-			name := n.Name.Text(at.src)
-			at.scope = &Scope{Kind: ScopeMethod, Name: name, ClassFQN: at.classFQN, MethodName: name, StartLine: at.line(n.Name.Start), EndLine: at.endLine(span)}
-		case *ast.FunctionDecl:
-			at.scope = &Scope{Kind: ScopeFunction, Name: n.Name.Text(at.src), StartLine: at.line(n.Name.Start), EndLine: at.endLine(span)}
-		case *ast.Closure, *ast.ArrowFunction:
-			at.scope = &Scope{Kind: ScopeClosure, ClassFQN: at.classFQN, StartLine: at.line(span.Start), EndLine: at.endLine(span)}
-		case *ast.Call:
-			at.calls(n.Callee)
-		case *ast.MethodCall:
-			at.calls(n.Name)
-		case *ast.StaticCall:
-			at.calls(n.Name)
-		}
-		return true
-	})
+	case *ast.InterfaceDecl:
+		at.enterClass(n.Name)
+	case *ast.TraitDecl:
+		at.enterClass(n.Name)
+	case *ast.EnumDecl:
+		at.enterClass(n.Name)
+	case *ast.Method:
+		name := n.Name.Text(at.src)
+		at.scope = &Scope{Kind: ScopeMethod, Name: name, ClassFQN: at.classFQN, MethodName: name, StartLine: at.line(n.Name.Start), EndLine: at.endLine(span)}
+	case *ast.FunctionDecl:
+		at.scope = &Scope{Kind: ScopeFunction, Name: n.Name.Text(at.src), StartLine: at.line(n.Name.Start), EndLine: at.endLine(span)}
+	case *ast.Closure, *ast.ArrowFunction:
+		at.scope = &Scope{Kind: ScopeClosure, ClassFQN: at.classFQN, StartLine: at.line(span.Start), EndLine: at.endLine(span)}
+	case *ast.Call:
+		at.calls(n.Callee)
+	case *ast.MethodCall:
+		at.calls(n.Name)
+	case *ast.StaticCall:
+		at.calls(n.Name)
+	}
 }
 
 func (at *cursorDeclarations) calls(callee ast.Expr) {
