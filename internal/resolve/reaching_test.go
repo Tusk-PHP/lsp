@@ -196,3 +196,61 @@ function run(bool $c, int $n, array $xs, $untyped): void {
 		}
 	}
 }
+
+func TestLoopWriteThatPassesItselfThroughKeepsItsType(t *testing.T) {
+	src := `<?php
+namespace App;
+interface Usage {}
+class Link { public function next(): Usage {} }
+class Chunk { public function usage(): ?Usage { return null; } }
+function run(bool $c, iterable $chunks, Chunk $chunk, Link $link): void {
+    $usage = null;
+    foreach ($chunks as $_) {
+        $usage = $chunk->usage() ?? $usage;
+        echo $usage; // coalesce from itself
+    }
+    $last = null;
+    foreach ($chunks as $_) {
+        $last = $c ? $link : $last;
+        echo $last; // ternary from itself
+    }
+    $kept = null;
+    foreach ($chunks as $_) {
+        $kept = $kept ?: $link;
+        echo $kept; // short ternary from itself
+    }
+    $node = $link;
+    foreach ($chunks as $_) {
+        $node = $node->next();
+        echo $node; // member of itself
+    }
+    $mixed = null;
+    foreach ($chunks as $_) {
+        $mixed = $chunk->usage() ?? $mixed->next();
+        echo $mixed; // read beyond passing through
+    }
+}
+`
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///a.php", src)
+	r := NewResolver(idx)
+	file := parser.ParseFile(src, token.Latest)
+	lines := SplitLines(src)
+	for _, c := range []struct{ v, marker, want string }{
+		{"$usage", "coalesce from itself", `?App\Usage`},
+		{"$last", "ternary from itself", `?App\Link`},
+		{"$kept", "short ternary from itself", `App\Link`},
+		{"$node", "member of itself", ``},
+		{"$mixed", "read beyond passing through", ``},
+	} {
+		got := "no line"
+		for i, l := range lines {
+			if strings.HasSuffix(l, "// "+c.marker) {
+				got = r.ResolveVariableTypeTyped(c.v, lines, textpos.Position{Line: i, Character: strings.LastIndex(l, c.v) + 2}, file).FullString()
+			}
+		}
+		if got != c.want {
+			t.Errorf("%s (%s) = %q, want %q", c.v, c.marker, got, c.want)
+		}
+	}
+}
