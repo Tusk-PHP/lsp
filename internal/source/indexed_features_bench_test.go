@@ -37,6 +37,9 @@ func BenchmarkCursorFeature(b *testing.B) {
 		run  func()
 	}{
 		{"Hover", func() { f.hover.GetHover(featureURI, source, pos) }},
+		{"HoverVariable", func() {
+			f.hover.GetHover(featureURI, source, protocol.Position{Line: pos.Line, Character: len("        return $us")})
+		}},
 		{"Completion", func() { f.comp.GetCompletions(featureURI, source, pos) }},
 		{"Definition", func() { f.a.FindDefinition(featureURI, source, pos) }},
 		{"References", func() { f.a.FindAllReferences(featureURI, source, pos, read) }},
