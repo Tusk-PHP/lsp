@@ -8,21 +8,25 @@ import (
 
 func (c *importCollector) markDocComment(comment string) {
 	c.markInlineDocTags(comment)
-	var tag string
+	annotation := false
 	for line := range docLines(comment) {
 		if c.pending == 0 {
 			return
 		}
-		if strings.HasPrefix(line, "@") {
-			c.markDocTag(tag)
-			tag = line[1:]
+		if !line.isTag {
+			if annotation {
+				c.markDocCode(line.text)
+			}
 			continue
 		}
-		if tag != "" {
-			tag += " " + line
-		}
+		annotation = isDocAnnotation(line.tag.Name)
+		c.markDocTag(line.tag)
 	}
-	c.markDocTag(tag)
+}
+
+func (c *importCollector) markDocCode(code string) {
+	tokens, _ := tokenizeFrom(code, false)
+	c.collect(tokens, nil)
 }
 
 func (c *importCollector) markInlineDocTags(comment string) {
@@ -44,17 +48,14 @@ func (c *importCollector) markInlineDocTags(comment string) {
 	}
 }
 
-func (c *importCollector) markDocTag(tag string) {
-	if tag == "" || c.pending == 0 {
-		return
-	}
-	name, value := splitDocTag(tag)
+func (c *importCollector) markDocTag(tag DocTag) {
+	name, value := tag.Name, tag.Value
 	base, prio := docTagName(name)
 	switch docTagSpecOf(base).layout {
 	case docLayoutProse:
 		if isDocAnnotation(name) {
-			tokens, _ := tokenizeFrom(tag, false)
-			c.collect(tokens, nil)
+			c.markDocCode(name)
+			c.markDocCode(value)
 		}
 	case docLayoutMethod:
 		c.markDocMethod(value)
@@ -71,8 +72,7 @@ func (c *importCollector) markDocMethod(value string) {
 	for _, param := range method.Params {
 		c.markDocType(param.Type)
 		if param.Default != "" {
-			tokens, _ := tokenizeFrom(param.Default, false)
-			c.collect(tokens, nil)
+			c.markDocCode(param.Default)
 		}
 	}
 }
@@ -85,8 +85,7 @@ func (c *importCollector) markDocTarget(value string) {
 	if target == "" || strings.Contains(target, "://") {
 		return
 	}
-	tokens, _ := tokenizeFrom(target, false)
-	c.collect(tokens, nil)
+	c.markDocCode(target)
 }
 
 func isDocAnnotation(name string) bool {

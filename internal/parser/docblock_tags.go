@@ -1,38 +1,10 @@
 package parser
 
 import (
-	"iter"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
-
-// docTag is one @tag line of a docblock, before it's interpreted.
-type docTag struct {
-	name  string
-	value string
-}
-
-// splitDocTag splits "return Foo $x" into its name and value.
-func splitDocTag(s string) (name, value string) {
-	end := strings.IndexAny(s, " \t")
-	if end < 0 {
-		return s, ""
-	}
-	return s[:end], strings.TrimSpace(s[end+1:])
-}
-
-func docLines(comment string) iter.Seq[string] {
-	return func(yield func(string) bool) {
-		body := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(comment), "/*"), "*/")
-		for line := range strings.Lines(body) {
-			line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "*"))
-			if line != "" && !yield(line) {
-				return
-			}
-		}
-	}
-}
 
 // docTagLayout says where the value of a PHPDoc tag holds types.
 type docTagLayout uint8
@@ -237,26 +209,26 @@ type pickedTag struct {
 // applyDocTags interprets the docblock's tags. Where a prefixed and a plain tag
 // describe the same thing (the same parameter, the return type, the same
 // parent class), only the highest-precedence one is kept.
-func applyDocTags(doc *DocBlock, tags []docTag) {
+func applyDocTags(doc *DocBlock, tags []DocTag) {
 	picked := make([]pickedTag, 0, len(tags))
 	slot := make(map[string]int, len(tags))
 	for i, t := range tags {
-		base, prio, ok := docTagBase(t.name)
+		base, prio, ok := docTagBase(t.Name)
 		if !ok {
 			continue
 		}
-		key := base + "|" + docTagKey(base, t.value)
+		key := base + "|" + docTagKey(base, t.Value)
 		// Lists such as several @throws or @method tags keep every entry.
 		if !docTagRepeats(base) {
 			if j, seen := slot[key]; seen {
 				if prio > picked[j].prio {
-					picked[j].value, picked[j].prio = t.value, prio
+					picked[j].value, picked[j].prio = t.Value, prio
 				}
 				continue
 			}
 			slot[key] = len(picked)
 		}
-		picked = append(picked, pickedTag{base: base, key: key, value: t.value, prio: prio, order: i})
+		picked = append(picked, pickedTag{base: base, key: key, value: t.Value, prio: prio, order: i})
 	}
 
 	var params, returns, vars []string

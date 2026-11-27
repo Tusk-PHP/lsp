@@ -325,17 +325,17 @@ func ParseDocBlock(raw string) *DocBlock {
 	}
 
 	doc := &DocBlock{Tags: make(map[string][]string)}
-	var tagged []docTag
+	var buf [8]DocTag
+	tagged := buf[:0]
 
 	for line := range docLines(trimmed) {
-		if strings.HasPrefix(line, "@") {
-			name, value := splitDocTag(line[1:])
-			doc.Tags[name] = append(doc.Tags[name], value)
-			tagged = append(tagged, docTag{name: name, value: value})
+		if line.isTag {
+			doc.Tags[line.tag.Name] = append(doc.Tags[line.tag.Name], line.tag.Value)
+			tagged = append(tagged, line.tag)
 			continue
 		}
 		if doc.Summary == "" {
-			doc.Summary = line
+			doc.Summary = line.text
 		}
 	}
 	applyDocTags(doc, tagged)

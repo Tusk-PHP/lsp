@@ -141,6 +141,7 @@ func TestImportReferencesInDocComments(t *testing.T) {
 		{"qualified uses its first segment", "/** @var Models\\Post */", map[string]bool{"Models": true, "Post": false}},
 		{"another case", "/** @param post $p @see USER */\n/** @see USER */", map[string]bool{"Post": true, "User": true}},
 		{"type keyword prefix", "/** @param non-empty-string $non */", map[string]bool{"non": false}},
+		{"annotation description lines", "/**\n * @SuppressWarnings(PHPMD.CouplingBetweenObjects) - uses constants:\n *      BasePrice::PRICE_CODE\n * @since 1.0\n * User text\n */", map[string]bool{"BasePrice": true, "User": false}},
 		{"annotation", "/**\n * @ORM\\Column(type=\"string\")\n * @Route(\"/posts\", name=\"Post\")\n * @Assert\\All({@Constraint(User::class)})\n */", map[string]bool{"ORM": true, "Route": true, "Post": false, "Assert": true, "Constraint": true, "User": true}},
 		{"lower-case unknown tag", "/** @group Post */", map[string]bool{"Post": false}},
 		{"prose", "/**\n * Ajax grid action.\n * Executes the Post command.\n */", map[string]bool{"Action": false, "Command": false, "Post": false}},
