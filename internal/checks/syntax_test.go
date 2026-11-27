@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -34,7 +35,7 @@ func TestSyntaxErrorRuleRanges(t *testing.T) {
 
 func TestAbstractInConcreteRule(t *testing.T) {
 	source := "<?php\nclass A {\n    abstract function run();\n}\nabstract class B {\n    abstract function run();\n}\n"
-	got := (&AbstractInConcreteRule{}).Check(parser.ParseFile(source), source, symbols.NewIndex())
+	got := (&AbstractInConcreteRule{}).Check(parser.ParseFile(source, token.Latest), source, symbols.NewIndex())
 	if len(got) != 1 || got[0].StartLine != 2 || got[0].Code != rule.AbstractInConcrete {
 		t.Errorf("got %+v", got)
 	}
@@ -49,7 +50,7 @@ func TestUnknownClassInCatchAndImplements(t *testing.T) {
 	idx.RegisterBuiltins()
 	idx.IndexFile("file:///Known.php", "<?php\ninterface Known {}\n")
 	var names []string
-	for _, f := range (&UnknownClassRule{}).Check(parser.ParseFile(source), source, idx) {
+	for _, f := range (&UnknownClassRule{}).Check(parser.ParseFile(source, token.Latest), source, idx) {
 		names = append(names, f.Message)
 	}
 	want := []string{"Unknown class 'Missing'", "Unknown class 'Gone'"}

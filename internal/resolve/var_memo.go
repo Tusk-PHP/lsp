@@ -1,6 +1,7 @@
 package resolve
 
 import (
+	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -30,7 +31,7 @@ const maxMemoDistance = 190
 // type might depend on more than its last write: no binding (a global or a
 // captured variable), several writes that may give its value, a read far from
 // the write, or a call in between that may narrow it.
-func (r *Resolver) varMemoKeyAt(vs variableScope, varName string, lines []string, pos textpos.Position) (varMemoKey, bool) {
+func (r *Resolver) varMemoKeyAt(vs variableScope, varName string, lines []string, pos textpos.Position, file *parser.FileNode) (varMemoKey, bool) {
 	b := vs.binding
 	if b == nil || b.Kind == scope.BindingImport || !vs.reach.Single() {
 		return varMemoKey{}, false
@@ -49,8 +50,7 @@ func (r *Resolver) varMemoKeyAt(vs variableScope, varName string, lines []string
 	if pos.Line-writeLine > maxMemoDistance || pos.Line < writeLine {
 		return varMemoKey{}, false
 	}
-	from := r.lastWriteLine(varName, lines, pos)
-	if from >= 0 && from <= pos.Line && r.mayNarrow(lines, from, pos, varName) {
+	if r.mayBeNarrowed(varName, lines, pos, file) {
 		return varMemoKey{}, false
 	}
 	return key, true

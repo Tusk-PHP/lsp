@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
-	internaltypes "github.com/Tusk-PHP/lsp/internal/types"
 )
 
 func setupGenericResolverCoverage(t *testing.T) (*Resolver, *symbols.Index, string, *parser.FileNode, []string) {
@@ -59,7 +59,7 @@ class Service {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///coverage.php", source)
 
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}
@@ -76,75 +76,6 @@ func lineContaining(t *testing.T, lines []string, needle string) int {
 	}
 	t.Fatalf("line containing %q not found", needle)
 	return -1
-}
-
-func TestArrayLiteralCoverageHelpers(t *testing.T) {
-	t.Run("shape arrays keep shape string", func(t *testing.T) {
-		rt := InferArrayLiteralType(`['id' => 1, 'name' => 'desk']`)
-		if rt.String() != "array{id: int, name: string}" {
-			t.Fatalf("got %q", rt.String())
-		}
-	})
-
-	t.Run("indexed arrays infer scalar value type", func(t *testing.T) {
-		rt := InferArrayLiteralType(`[1, 2, 3]`)
-		if rt.String() != "array<int, int>" {
-			t.Fatalf("got %q", rt.String())
-		}
-	})
-
-	t.Run("arrays of shapes preserve nested shape", func(t *testing.T) {
-		rt := InferArrayLiteralType(`[['id' => 1], ['id' => 2]]`)
-		if rt.String() != "array<int, array{id: int}>" {
-			t.Fatalf("got %q", rt.String())
-		}
-	})
-
-	t.Run("mixed indexed arrays fall back to bare array", func(t *testing.T) {
-		rt := InferArrayLiteralType(`[1, 'x']`)
-		if rt.String() != "array" {
-			t.Fatalf("got %q", rt.String())
-		}
-	})
-
-	t.Run("unterminated literals are a bare array", func(t *testing.T) {
-		for _, literal := range []string{`[`, `[1, 2`, `['id' => 1`} {
-			if rt := InferArrayLiteralType(literal); rt.String() != "array" {
-				t.Errorf("InferArrayLiteralType(%q) = %q, want array", literal, rt.String())
-			}
-		}
-	})
-
-	t.Run("shape string builder and nullable shape serialization", func(t *testing.T) {
-		shape := buildShapeString([]internaltypes.ShapeField{
-			{Key: "id", Type: "int"},
-			{Key: "name", Type: "string"},
-		})
-		if shape != "array{id: int, name: string}" {
-			t.Fatalf("got %q", shape)
-		}
-
-		rt := ResolvedType{FQN: "array", Shape: shape, Nullable: true}
-		if rt.String() != "?array{id: int, name: string}" {
-			t.Fatalf("got %q", rt.String())
-		}
-	})
-
-	t.Run("splitArrayValues respects nesting and strings", func(t *testing.T) {
-		values := splitArrayValues(`'a,b', [1, 2], foo(1, 2)`)
-		if len(values) != 3 {
-			t.Fatalf("expected 3 values, got %d (%v)", len(values), values)
-		}
-		if values[0] != "'a,b'" || values[1] != "[1, 2]" || values[2] != "foo(1, 2)" {
-			t.Fatalf("unexpected split values: %v", values)
-		}
-	})
-
-	t.Run("empty shape produces empty string", func(t *testing.T) {
-		if buildShapeString(nil) != "" {
-			t.Fatal("expected empty shape string")
-		}
-	})
 }
 
 func TestGenericResolverHelperCoverage(t *testing.T) {
@@ -184,7 +115,11 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 		}
 	})
 
-	t.Run("member type resolved falls back to known template registry", func(t *testing.T) {
+	t.Run("member type resolved falls back to the index's template fallbacks", func(t *testing.T) {
+		idx.SetTemplateFallbacks(map[string]symbols.TemplateFallback{
+			"Illuminate\\Database\\Eloquent\\Builder": {Params: []string{"TModel"}, Methods: map[string]string{"first": "?TModel"}},
+		})
+		defer idx.SetTemplateFallbacks(nil)
 		member := &symbols.Symbol{
 			Kind:      symbols.KindMethod,
 			ParentFQN: "Illuminate\\Database\\Eloquent\\Builder",
@@ -193,23 +128,6 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 		rt := r.MemberTypeResolved(member, file, "", []ResolvedType{{FQN: "App\\Logger"}})
 		if rt.String() != "?App\\Logger" {
 			t.Fatalf("got %q", rt.String())
-		}
-	})
-
-	t.Run("template substitution helpers resolve names", func(t *testing.T) {
-		subst := buildTemplateSubst(idx, "App\\Repository", []ResolvedType{{FQN: "App\\Logger"}})
-		if subst["TModel"].FQN != "App\\Logger" {
-			t.Fatalf("unexpected substitution map: %#v", subst)
-		}
-
-		if got := resolveTypeParam(r, "TModel", "App\\Repository", subst, file); got != "App\\Logger" {
-			t.Fatalf("got %q", got)
-		}
-		if got := resolveTypeParam(r, "static", "App\\Repository", subst, file); got != "App\\Repository" {
-			t.Fatalf("got %q", got)
-		}
-		if got := resolveStaticOrClassName(r, "Logger", "App\\Repository", file); got != "App\\Logger" {
-			t.Fatalf("got %q", got)
 		}
 	})
 
@@ -228,12 +146,12 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 
 	t.Run("argument and constructor helpers infer generic arrays", func(t *testing.T) {
 		pos := textpos.Position{Line: lineContaining(t, lines, "$collection =")}
-		argRT := r.inferArgType(`$numbers, $ignored`, lines, pos, file, 0)
+		argRT := r.ExpressionType(`$numbers`, ExprContext{Lines: lines, Pos: pos, File: file})
 		if argRT.String() != "array<int, int>" {
 			t.Fatalf("got %q", argRT.String())
 		}
 
-		literalRT := r.inferArgType(`[1, 2], $ignored`, lines, pos, file, 0)
+		literalRT := r.ExpressionType(`[1, 2]`, ExprContext{Lines: lines, Pos: pos, File: file})
 		if literalRT.String() != "array<int, int>" {
 			t.Fatalf("got %q", literalRT.String())
 		}
@@ -244,15 +162,9 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 		}
 	})
 
-	t.Run("misc helpers cover raw member return type and comma scan", func(t *testing.T) {
+	t.Run("misc helpers cover raw member return type", func(t *testing.T) {
 		if got := r.rawMemberReturnType(repoAll); got != "Collection<int, TModel>|null" {
 			t.Fatalf("got %q", got)
-		}
-
-		input := `foo([1, 2], "a,b"), $rest`
-		idx := IndexOutsideBrackets(input, ',')
-		if idx < 0 || input[idx:] != ", $rest" {
-			t.Fatalf("unexpected index %d for %q", idx, input)
 		}
 	})
 }
@@ -318,7 +230,7 @@ class Service {
 	idx.IndexFile("file:///this.php", source)
 
 	r := NewResolver(idx)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}
@@ -362,7 +274,7 @@ class Category {}
 	idx.IndexFile("file:///controller.php", source)
 
 	r := NewResolver(idx)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}
@@ -395,7 +307,7 @@ func TestDeclaredParamType(t *testing.T) {
 	}
 }
 
-func TestAssignmentValue(t *testing.T) {
+func TestAssignmentStartingLine(t *testing.T) {
 	lines := []string{
 		"$a = 1;",
 		"$a ??= 2;",
@@ -422,14 +334,18 @@ func TestAssignmentValue(t *testing.T) {
 		"    return 1;",
 		"};",
 	}
-	// A closure passed to a call is read through, so the chain after it
-	// counts; one assigned to the variable is not.
 	want := map[int]string{
-		0: "1;", 1: "2;", 6: "$b->c()->d()?->e();", 9: "f($g,)->h();", 12: "i(function () {return 1;});", 15: "$b",
-		17: "j(function () {return 1;})->k();", 21: "function () {",
+		0: "1", 1: "2", 6: "$b->c()\n    ->d()\n    ?->e()", 9: "f(\n    $g,\n)->h()", 12: "i(function () {\n    return 1;\n})", 15: "$b\n    ?? 1",
+		17: "j(function () {\n    return 1;\n})\n    ->k()", 21: "function () {\n    return 1;\n}",
 	}
+	src := strings.Join(lines, "\n")
+	tree := newSyntaxTree(src, parser.ParseTree(src, token.Latest))
 	for i := range lines {
-		got, _, ok := assignmentValue(lines, i, "$a")
+		a, ok := tree.assignmentStartingLine(i, "$a")
+		var got string
+		if ok {
+			got = tree.text(a.value)
+		}
 		w, wantOK := want[i]
 		if ok != wantOK || got != w {
 			t.Errorf("line %d: got %q, %v; want %q, %v", i, got, ok, w, wantOK)

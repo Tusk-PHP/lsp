@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 func TestDeprecatedFunctionRuleIgnoresMethodsAndNonCalls(t *testing.T) {
@@ -32,7 +33,7 @@ class Seeder {
     }
 }
 `
-	got := (&DeprecatedFunctionRule{}).Check(parser.ParseFile(src), src, nil)
+	got := (&DeprecatedFunctionRule{}).Check(parser.ParseFile(src, token.Latest), src, nil)
 	if len(got) != 0 {
 		t.Fatalf("expected no deprecation findings, got %+v", got)
 	}
@@ -44,7 +45,7 @@ $a = each($arr); $b = \each($arr);
 $c = create_function('$a', 'return $a;');
 $d = UTF8_ENCODE($s) . utf8_decode($s);
 `
-	got := (&DeprecatedFunctionRule{}).Check(parser.ParseFile(src), src, nil)
+	got := (&DeprecatedFunctionRule{}).Check(parser.ParseFile(src, token.Latest), src, nil)
 	if len(got) != 5 {
 		t.Fatalf("expected 5 deprecation findings, got %d: %+v", len(got), got)
 	}
@@ -75,7 +76,7 @@ insert into t values
 SQL;
 }
 `
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	got := (&DeprecatedFunctionRule{}).Check(file, src, nil)
 	if len(got) != 1 || got[0].StartLine != 11 {
 		t.Fatalf("expected only the real each() call on line 11, got %+v", got)
@@ -97,7 +98,7 @@ SQL;
 
 func TestDeprecatedFunctionRuleFollowsPHPVersion(t *testing.T) {
 	src := "<?php\n$a = utf8_encode($s);\n$b = each($arr);\n"
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	names := func(version string) []string {
 		var out []string
 		for _, f := range (&DeprecatedFunctionRule{PHPVersion: version}).Check(file, src, nil) {
@@ -122,7 +123,7 @@ func TestDeprecatedFunctionRuleFollowsPHPVersion(t *testing.T) {
 // supports 8.5 isn't told to move off them yet.
 func TestDeprecatedFunctionRulePHP86(t *testing.T) {
 	src := "<?php\nif (is_integer($a) || is_double($b)) { mb_split(',', $s); }\n$h = spl_object_hash($o);\n$c->is_long();\n"
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	var got []string
 	for _, f := range (&DeprecatedFunctionRule{PHPVersion: "8.6"}).Check(file, src, nil) {
 		got = append(got, f.Message)

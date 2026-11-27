@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/stubs"
 )
 
@@ -18,7 +19,7 @@ func TestOptionalExtensionSymbols(t *testing.T) {
 	}{
 		{"imagick", "Imagick", "readImage", []ParamInfo{{Name: "$filename", Type: "string"}}, "bool"},
 		{"redis", "Redis", "get", []ParamInfo{{Name: "$key", Type: "string"}}, "mixed"},
-		{"memcached", "Memcached", "set", []ParamInfo{{Name: "$key", Type: "string"}, {Name: "$value", Type: "mixed"}, {Name: "$expiration", Type: "int", DefaultValue: "0"}}, "bool"},
+		{"memcached", "Memcached", "set", []ParamInfo{{Name: "$key", Type: "string"}, {Name: "$value", Type: "mixed"}, {Name: "$expiration", Type: "int", DefaultValue: "0", DefaultType: "0"}}, "bool"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.extension, func(t *testing.T) {
@@ -74,7 +75,7 @@ func TestOptionalExtensionAvailabilityAndIsolation(t *testing.T) {
 			continue
 		}
 		ext := strings.Split(entry.Path, "/")[2]
-		file := parser.ParseFile(entry.Content)
+		file := parser.ParseFile(entry.Content, token.Latest)
 		names := make([]string, 0, len(file.Classes)+len(file.Functions)+len(file.Constants))
 		for _, class := range file.Classes {
 			names = append(names, class.Name)

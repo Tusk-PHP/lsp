@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -64,6 +66,7 @@ type Symbol struct {
 	Extends    string
 	BackedType string
 	Value      string
+	ValueType  string
 	IsVirtual  bool
 	// IsConditional marks a class declared inside a block, such as a
 	// placeholder under `if (false)` or a polyfill under `if (!class_exists())`:
@@ -82,9 +85,9 @@ func (s *Symbol) IsDeprecated() bool {
 
 // Attribute is a PHP 8 attribute on a symbol.
 type Attribute struct {
-	Name string   // as written
-	FQN  string   // what the name resolves to
-	Args []string // each argument as written
+	Name string // as written
+	FQN  string // what the name resolves to
+	Args parser.AttributeArgs
 }
 
 // Attribute returns the attribute with this fully qualified name, if it has one.
@@ -133,11 +136,13 @@ type ParamInfo struct {
 	Name         string
 	Type         string
 	DefaultValue string
+	DefaultType  string
 	IsVariadic   bool
 	IsReference  bool
 }
 
 type Index struct {
+	grammars          phpparser.GrammarRange
 	attributedSymbols atomic.Bool
 	// generation counts changes to the index, so caches built from it can
 	// tell when they're out of date.
@@ -154,8 +159,9 @@ type Index struct {
 	foldIndex            map[string][]string // lowercase FQN → FQNs of class-likes and functions, whose names PHP matches case-insensitively
 	fileSymbols          map[string][]*Symbol
 	namespaceIndex       map[string][]string
-	optionalNamespaces   []string                   // lowercase prefixes of optional packages that aren't installed; see SetOptionalNamespaces
-	callForwards         map[string][]string        // class FQN → types it forwards unknown calls to; see SetCallForwards
+	optionalNamespaces   []string            // lowercase prefixes of optional packages that aren't installed; see SetOptionalNamespaces
+	callForwards         map[string][]string // class FQN → types it forwards unknown calls to; see SetCallForwards
+	templateFallbacks    map[string]TemplateFallback
 	scopeConventions     map[string]ScopeConvention // builder class FQN → how it finds its model's scopes; see SetScopeConventions
 	inheritanceMap       map[string]string
 	childrenMap          map[string][]string // lowercase parent FQN → direct subclass FQNs, the reverse of inheritanceMap
@@ -206,7 +212,12 @@ func (idx *Index) MayNarrow(name string) bool {
 }
 
 func NewIndex() *Index {
+	return NewIndexFor(phpparser.AnyGrammar())
+}
+
+func NewIndexFor(grammars phpparser.GrammarRange) *Index {
 	return &Index{
+		grammars:             grammars,
 		symbols:              make(map[string]*Symbol),
 		nameIndex:            make(map[string][]string),
 		foldIndex:            make(map[string][]string),
@@ -225,6 +236,31 @@ func NewIndex() *Index {
 	}
 }
 
+var builtinGrammars = phpparser.OnlyGrammar(token.Latest)
+
+func (idx *Index) Grammars() phpparser.GrammarRange {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.grammars
+}
+
+func (idx *Index) GrammarOf(uri string) phpparser.GrammarRange {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	indexed, ok := idx.fileSource[uri]
+	if !ok {
+		return idx.grammars
+	}
+	return idx.grammarsForLocked(indexed.from).After(indexed.grammar)
+}
+
+func (idx *Index) grammarsForLocked(src SymbolSource) phpparser.GrammarRange {
+	if src == SourceBuiltin {
+		return builtinGrammars
+	}
+	return idx.grammars
+}
+
 func (idx *Index) IndexFile(uri string, source string) {
 	idx.IndexFileWithSource(uri, source, SourceProject)
 }
@@ -233,7 +269,7 @@ func (idx *Index) IndexFile(uri string, source string) {
 // merging virtual members from @property/@method docblocks into existing class symbols.
 // Classes that don't already exist in the index are indexed normally.
 func (idx *Index) IndexIDEHelperFile(uri string, source string) {
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, idx.GrammarOf(uri))
 	if file == nil {
 		return
 	}
@@ -242,7 +278,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 
 	// Remove any previously indexed symbols from this URI (for re-indexing)
 	idx.removeFileSymbols(uri)
-	idx.fileSource[uri] = indexedText{text: source, ideHelper: true}
+	idx.fileSource[uri] = indexedText{text: source, ideHelper: true, grammar: file.Grammar}
 	if _, ok := idx.fileSymbols[uri]; !ok {
 		idx.fileSymbols[uri] = nil
 		idx.files.add(uri)
@@ -321,16 +357,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 			}
 			idx.addSymbolWithSource(uri, sym, SourceProject)
 			idx.linkTypeLocked(sym)
-			for _, prop := range c.Properties {
-				ps := &Symbol{Name: prop.Name, FQN: fqn + "::" + prop.Name, Kind: KindProperty, URI: uri,
-					Visibility: prop.Visibility, SetVisibility: prop.SetVisibility,
-					IsStatic: prop.IsStatic, Type: resolve(prop.Type.Name),
-					DocComment: qualifyDocTypes(prop.DocComment, file.Uses), ParentFQN: fqn,
-					Hooks: append([]parser.PropertyHook(nil), prop.Hooks...),
-					Range: symRange(prop.StartLine, prop.StartCol, len(prop.Name))}
-				sym.Children = append(sym.Children, ps)
-				idx.addSymbolWithSource(uri, ps, SourceProject)
-			}
+			idx.indexProperties(uri, sym, fqn, c.Properties, SourceProject, resolve, file.Uses)
 			idx.indexMethods(uri, sym, fqn, c.Methods, SourceProject, resolve, file.Uses)
 			idx.indexVirtualMembers(uri, sym, SourceProject, resolve)
 		}
@@ -341,20 +368,25 @@ type indexedText struct {
 	text      string
 	from      SymbolSource
 	ideHelper bool
+	grammar   token.Version
 }
 
 func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSource) {
-	indexed := indexedText{text: source, from: src}
 	idx.mu.RLock()
 	previous, indexedBefore := idx.fileSource[uri]
+	grammars := idx.grammarsForLocked(src)
 	idx.mu.RUnlock()
-	if indexedBefore && previous == indexed {
+	if indexedBefore && previous.text == source && previous.from == src && !previous.ideHelper {
 		return
 	}
-	file := parser.ParseFile(source)
+	if indexedBefore {
+		grammars = grammars.After(previous.grammar)
+	}
+	file := parser.ParseFileIn(source, grammars)
 	if file == nil {
 		return
 	}
+	indexed := indexedText{text: source, from: src, grammar: file.Grammar}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	foreign := idx.foreignMembersLocked(uri)
@@ -528,12 +560,7 @@ func FunctionSymbol(uri string, file *parser.FileNode, fn *parser.FunctionNode) 
 		Attributes: indexAttributes(fn.Attributes, resolve),
 		DocComment: qualifyDocTypes(fn.DocComment, file.Uses), Range: symRange(fn.StartLine, fn.StartCol, len(fn.Name))}
 	sym.Templates = docTemplates(sym.DocComment, resolve)
-	if len(fn.Params) > 0 {
-		sym.Params = make([]ParamInfo, 0, len(fn.Params))
-	}
-	for _, p := range fn.Params {
-		sym.Params = append(sym.Params, ParamInfo{Name: p.Name, Type: resolve(p.Type.Name), DefaultValue: p.DefaultValue, IsVariadic: p.IsVariadic, IsReference: p.IsReference})
-	}
+	sym.Params = paramInfos(fn.Params, resolve)
 	return sym
 }
 
@@ -818,25 +845,28 @@ func (idx *Index) indexMethods(uri string, parent *Symbol, parentFQN string, met
 			Range:      symRange(m.StartLine, m.StartCol, len(m.Name)),
 		}
 		ms.Templates = docTemplates(ms.DocComment, resolve)
-		for _, p := range m.Params {
-			ms.Params = append(ms.Params, ParamInfo{
-				Name:         p.Name,
-				Type:         resolve(p.Type.Name),
-				DefaultValue: p.DefaultValue,
-				IsVariadic:   p.IsVariadic,
-				IsReference:  p.IsReference,
-			})
-		}
+		ms.Params = paramInfos(m.Params, resolve)
 		parent.Children = append(parent.Children, ms)
 		idx.addSymbolWithSource(uri, ms, src)
 	}
+}
+
+func paramInfos(params []parser.ParamNode, resolve func(string) string) []ParamInfo {
+	if len(params) == 0 {
+		return nil
+	}
+	out := make([]ParamInfo, len(params))
+	for i, p := range params {
+		out[i] = ParamInfo{Name: p.Name, Type: resolve(p.Type.Name), DefaultValue: p.DefaultValue, DefaultType: p.DefaultType, IsVariadic: p.IsVariadic, IsReference: p.IsReference}
+	}
+	return out
 }
 
 func (idx *Index) indexProperties(uri string, parent *Symbol, parentFQN string, props []parser.PropertyNode, src SymbolSource, resolve func(string) string, uses []parser.UseNode) {
 	for _, prop := range props {
 		ps := &Symbol{Name: prop.Name, FQN: parentFQN + "::" + prop.Name, Kind: KindProperty, URI: uri,
 			Visibility: prop.Visibility, SetVisibility: prop.SetVisibility,
-			IsStatic: prop.IsStatic, IsReadonly: prop.IsReadonly, Type: resolve(prop.Type.Name),
+			IsStatic: prop.IsStatic, IsReadonly: prop.IsReadonly, Type: resolve(prop.Type.Name), Value: prop.DefaultValue,
 			DocComment: qualifyDocTypes(prop.DocComment, uses), ParentFQN: parentFQN, Attributes: indexAttributes(prop.Attributes, resolve),
 			Hooks: append([]parser.PropertyHook(nil), prop.Hooks...),
 			Range: symRange(prop.StartLine, prop.StartCol, len(prop.Name))}
@@ -1715,22 +1745,7 @@ func resolveTypeName(name string, currentNs string, uses []parser.UseNode) strin
 	if phpBuiltinTypes[strings.ToLower(name)] {
 		return prefix + name
 	}
-	if strings.HasPrefix(name, "\\") {
-		return prefix + strings.TrimPrefix(name, "\\")
-	}
-	parts := strings.SplitN(name, "\\", 2)
-	for _, u := range uses {
-		if u.Alias == parts[0] {
-			if len(parts) > 1 {
-				return prefix + u.FullName + "\\" + parts[1]
-			}
-			return prefix + u.FullName
-		}
-	}
-	if currentNs != "" {
-		return prefix + currentNs + "\\" + name
-	}
-	return prefix + name
+	return prefix + parser.ResolveImportedName(name, currentNs, uses, "class")
 }
 
 func splitTypeExpr(name string) []string {

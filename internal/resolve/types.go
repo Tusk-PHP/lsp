@@ -3,7 +3,6 @@ package resolve
 import (
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/phparray"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
@@ -201,18 +200,6 @@ func ParseGenericType(raw string) ResolvedType {
 	return resolvedTypeFromDocType(types.ParseTypeExpr(raw))
 }
 
-// InferArrayLiteralType analyzes a PHP array literal string and returns a
-// ResolvedType with generic params or a shape string.
-// Examples:
-//
-//	"['name' => 'John', 'age' => 30]" → array{name: string, age: int}
-//	"[1, 2, 3]" → array<int, int>
-//	"[['id' => 1], ['id' => 2]]" → array<int, array{id: int}>
-//	"[]" → array (bare)
-func InferArrayLiteralType(literal string) ResolvedType {
-	return attachShapeFields(inferArrayLiteralType(literal))
-}
-
 // attachShapeFields fills in the structured fields of shapes that were built
 // as strings, here and in the type's arguments.
 func attachShapeFields(rt ResolvedType) ResolvedType {
@@ -225,159 +212,6 @@ func attachShapeFields(rt ResolvedType) ResolvedType {
 		rt.Params[i] = attachShapeFields(rt.Params[i])
 	}
 	return rt
-}
-
-func inferArrayLiteralType(literal string) ResolvedType {
-	literal = strings.TrimSpace(literal)
-	if !strings.HasPrefix(literal, "[") || !strings.HasSuffix(literal, "]") || literal == "[]" {
-		return ResolvedType{FQN: "array"}
-	}
-
-	// Parse the array structure
-	fields := phparray.ParseLiteralToShape(literal)
-
-	// If we got associative fields (key => value), it's a shape
-	if len(fields) > 0 && fields[0].Key != "" {
-		return ResolvedType{FQN: "array", Shape: buildShapeString(fields)}
-	}
-
-	// No associative fields — try as indexed array
-	entries := phparray.ParseLiteralEntries(literal[1 : len(literal)-1])
-	if len(entries) == 0 {
-		// Non-associative: parse individual values
-		return inferIndexedArrayType(literal)
-	}
-
-	// Associative but ParseLiteralToShape returned results
-	return ResolvedType{FQN: "array", Shape: buildShapeString(fields)}
-}
-
-// inferIndexedArrayType infers the type of an indexed array like [1, 2, 3] or
-// [['id' => 1], ['id' => 2]].
-func inferIndexedArrayType(literal string) ResolvedType {
-	if len(literal) < 2 {
-		return ResolvedType{FQN: "array"}
-	}
-	content := strings.TrimSpace(literal[1 : len(literal)-1])
-	if content == "" {
-		return ResolvedType{FQN: "array"}
-	}
-
-	// Split top-level values (respecting nested brackets/strings)
-	values := splitArrayValues(content)
-	if len(values) == 0 {
-		return ResolvedType{FQN: "array"}
-	}
-
-	// Infer the type of each value and find the common type
-	var valueTypes []string
-	var valueShape string
-	allSameShape := true
-
-	for _, v := range values {
-		v = strings.TrimSpace(v)
-		v = strings.TrimSuffix(v, ",")
-		v = strings.TrimSpace(v)
-		if v == "" {
-			continue
-		}
-		if strings.HasPrefix(v, "[") {
-			// Nested array — try to infer shape
-			inner := phparray.ParseLiteralToShape(v)
-			if len(inner) > 0 && inner[0].Key != "" {
-				shape := buildShapeString(inner)
-				if valueShape == "" {
-					valueShape = shape
-				} else if valueShape != shape {
-					allSameShape = false
-				}
-				valueTypes = append(valueTypes, shape)
-				continue
-			}
-		}
-		allSameShape = false
-		valueTypes = append(valueTypes, phparray.InferValueType(v))
-	}
-
-	if len(valueTypes) == 0 {
-		return ResolvedType{FQN: "array"}
-	}
-
-	// All nested arrays with the same shape
-	if allSameShape && valueShape != "" {
-		return ResolvedType{
-			FQN:    "array",
-			Params: []ResolvedType{{FQN: "int"}, {FQN: "array", Shape: valueShape}},
-		}
-	}
-
-	// All same scalar type
-	commonType := valueTypes[0]
-	allSame := true
-	for _, vt := range valueTypes[1:] {
-		if vt != commonType {
-			allSame = false
-			break
-		}
-	}
-
-	if allSame {
-		return ResolvedType{
-			FQN:    "array",
-			Params: []ResolvedType{{FQN: "int"}, {FQN: commonType}},
-		}
-	}
-
-	// Mixed types — return bare array
-	return ResolvedType{FQN: "array"}
-}
-
-// buildShapeString builds "array{key: type, ...}" from shape fields.
-func buildShapeString(fields []types.ShapeField) string {
-	var parts []string
-	for _, f := range fields {
-		if f.Key != "" {
-			parts = append(parts, f.Key+": "+f.Type)
-		}
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	return "array{" + strings.Join(parts, ", ") + "}"
-}
-
-// splitArrayValues splits top-level array values respecting nesting.
-func splitArrayValues(content string) []string {
-	var values []string
-	depth := 0
-	inString := byte(0)
-	start := 0
-	for i := 0; i < len(content); i++ {
-		ch := content[i]
-		if inString != 0 {
-			if ch == inString && (i == 0 || content[i-1] != '\\') {
-				inString = 0
-			}
-			continue
-		}
-		switch ch {
-		case '\'', '"':
-			inString = ch
-		case '[', '(':
-			depth++
-		case ']', ')':
-			depth--
-		case ',':
-			if depth == 0 {
-				values = append(values, strings.TrimSpace(content[start:i]))
-				start = i + 1
-			}
-		}
-	}
-	if tail := strings.TrimSpace(content[start:]); tail != "" {
-		values = append(values, tail)
-	}
-	return values
 }
 
 func resolvedTypeFromDocType(t types.TypeExpr) ResolvedType {
