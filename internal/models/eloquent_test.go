@@ -437,3 +437,55 @@ class Category extends Model
 		}
 	}
 }
+
+func TestEloquentModelCollectionClass(t *testing.T) {
+	src := `<?php
+namespace App\Models;
+use App\Collections\ProductCollection;
+use App\Collections\TagCollection;
+use Illuminate\Database\Eloquent\Attributes\CollectedBy;
+use Illuminate\Database\Eloquent\Collection;
+
+#[CollectedBy(ProductCollection::class)]
+class Product extends Model {}
+
+class Tag extends Model
+{
+    public function newCollection(array $models = []): Collection { return new TagCollection($models); }
+}
+
+class Label extends Model
+{
+    public function newCollection(array $models = []) { return new \App\Collections\LabelCollection($models); }
+}
+
+#[CollectedBy(ProductCollection::class)]
+class Overridden extends Model
+{
+    public function newCollection(array $models = []) { return new static($models); }
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "Models.php")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx := symbols.NewIndex()
+	idx.IndexFile("file://"+path, src)
+	idx.IndexFile("file:///Collection.php", "<?php\nnamespace Illuminate\\Database\\Eloquent;\nclass Collection {}\n")
+	idx.IndexFile("file:///Collections.php", "<?php\nnamespace App\\Collections;\nuse Illuminate\\Database\\Eloquent\\Collection;\nclass ProductCollection extends Collection {}\nclass TagCollection extends Collection {}\nclass LabelCollection extends Collection {}\n")
+	source := newModelSource(src, phpparser.OnlyGrammar(token.Latest))
+	for _, model := range []string{"Product", "Tag", "Label", "Overridden"} {
+		analyzeModelSource(idx, idx.Lookup(`App\Models\`+model), source)
+	}
+	for model, want := range map[string]string{
+		"Product":    `App\Collections\ProductCollection`,
+		"Tag":        `App\Collections\TagCollection`,
+		"Label":      `App\Collections\LabelCollection`,
+		"Overridden": "",
+	} {
+		if sym := idx.Lookup(`App\Models\` + model + `::newCollection`); sym == nil || sym.ReturnType != want {
+			t.Errorf("%s::newCollection(): %+v, want return type %q", model, sym, want)
+		}
+	}
+}

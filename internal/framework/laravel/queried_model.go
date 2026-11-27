@@ -13,6 +13,8 @@ const (
 	EloquentCollection = `Illuminate\Database\Eloquent\Collection`
 	EloquentRelations  = `Illuminate\Database\Eloquent\Relations\`
 	EloquentRelation   = EloquentRelations + `Relation`
+
+	CollectedByAttribute = `Illuminate\Database\Eloquent\Attributes\CollectedBy`
 )
 
 var tableJoiningRelations = []string{

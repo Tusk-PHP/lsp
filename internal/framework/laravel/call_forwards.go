@@ -26,3 +26,11 @@ func ScopeConventions() map[string]symbols.ScopeConvention {
 		},
 	}
 }
+
+// CollectionFactories is how Eloquent builds a model's collections, for
+// symbols.Index.SetCollectionFactories: Model::newCollection() makes every
+// Collection of that model, so a model that overrides it, or names its
+// class with #[CollectedBy], gets its own collection class.
+func CollectionFactories() map[string]string {
+	return map[string]string{EloquentCollection: "newCollection"}
+}

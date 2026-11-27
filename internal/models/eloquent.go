@@ -235,6 +235,7 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source mode
 	if classNode == nil {
 		return
 	}
+	injectModelCollection(index, model, source, classNode, decls)
 	for _, method := range classNode.Methods {
 		if relation, ok := source.relation(method, decls[method.Name]); ok {
 			injectRelation(index, model, method.Name, methodNameRange(method), relation)
@@ -288,6 +289,75 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source mode
 			})
 		}
 	}
+}
+
+const modelCollectionFactory = "newCollection"
+
+func injectModelCollection(index *symbols.Index, model *symbols.Symbol, source modelSource, classNode *parser.ClassNode, decls map[string]*ast.Method) {
+	for _, method := range classNode.Methods {
+		if method.Name != modelCollectionFactory {
+			continue
+		}
+		if class := source.newedClass(decls[method.Name]); class != "" {
+			index.RefineMethodReturnType(model.FQN+"::"+method.Name, class)
+		}
+		return
+	}
+	class := source.collectedBy(classNode)
+	if class == "" {
+		return
+	}
+	index.AddVirtualMember(model.FQN, &symbols.Symbol{
+		Name:       modelCollectionFactory,
+		FQN:        model.FQN + "::" + modelCollectionFactory,
+		Kind:       symbols.KindMethod,
+		URI:        model.URI,
+		Visibility: "public",
+		ReturnType: class,
+		Params:     []symbols.ParamInfo{{Name: "$models", Type: "array", DefaultValue: "[]"}},
+		IsVirtual:  true,
+		DocComment: "Collection from #[CollectedBy]",
+	})
+}
+
+func (m modelSource) collectedBy(classNode *parser.ClassNode) string {
+	for _, attr := range classNode.Attributes {
+		if !strings.EqualFold(m.resolve(attr.Name), frameworklaravel.CollectedByAttribute) {
+			continue
+		}
+		value, _ := attr.Args.Get("collectionClass", 0)
+		if class, ok := strings.CutSuffix(value, "::class"); ok && class != "" {
+			return m.resolve(class)
+		}
+	}
+	return ""
+}
+
+func (m modelSource) newedClass(decl *ast.Method) string {
+	if decl == nil || decl.Body == nil {
+		return ""
+	}
+	class := ""
+	ast.Walk(decl.Body, func(n ast.Node) bool {
+		if class != "" {
+			return false
+		}
+		ret, ok := n.(*ast.Return)
+		if !ok {
+			return true
+		}
+		if created, isNew := ret.Value.(*ast.New); isNew {
+			if name, named := created.Class.(*ast.ConstFetch); named && name.Name != nil {
+				switch written := m.text(name.Name); strings.ToLower(written) {
+				case "static", "self", "parent":
+				default:
+					class = m.resolve(written)
+				}
+			}
+		}
+		return false
+	})
+	return class
 }
 
 func hasDocReturn(method parser.MethodNode) bool {
