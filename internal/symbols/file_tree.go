@@ -44,8 +44,12 @@ func (t *fileTree) remove(uri string) {
 }
 
 func (t *fileTree) under(dir string) []string {
+	root, err := slashPath(dir, t.windows)
+	if err != nil {
+		return nil
+	}
 	var out []string
-	pending := []string{slashPath(dir, t.windows)}
+	pending := []string{root}
 	for len(pending) > 0 {
 		dir := pending[len(pending)-1]
 		pending = pending[:len(pending)-1]

@@ -57,13 +57,22 @@ func TestPathToURIWritesWindowsPathsWithOneDriveLetterCase(t *testing.T) {
 		`C:\proj\my app\#1.php`: "file:///C:/proj/my%20app/%231.php",
 		"d:/proj/café.php":      "file:///D:/proj/caf%C3%A9.php",
 	} {
-		uri := slashPathToURI(slashPath(path, true))
-		if uri != want {
-			t.Errorf("%s: got %s, want %s", path, uri, want)
-		}
-		if back, err := uriSlashPath(uri, true); err != nil || back != slashPath(path, true) {
-			t.Errorf("%s does not round-trip: %s, %v", uri, back, err)
-		}
+		assertWindowsPathRoundTrips(t, path, want)
+	}
+}
+
+func assertWindowsPathRoundTrips(t *testing.T, path, want string) {
+	t.Helper()
+	uri := pathToURI(path, true)
+	if uri != want {
+		t.Errorf("%s: got %s, want %s", path, uri, want)
+	}
+	slashed, err := slashPath(path, true)
+	if err != nil {
+		t.Fatalf("%s names a file: %v", path, err)
+	}
+	if back, err := uriSlashPath(uri, true); err != nil || back != slashed {
+		t.Errorf("%s does not round-trip: %s, %v", uri, back, err)
 	}
 }
 
@@ -161,6 +170,12 @@ func FuzzCanonicalFileURIIsThePathToURIOfItsPath(f *testing.F) {
 		"file:///a%zz",
 		`file://C:\proj\a.php`,
 		"untitled:Untitled-1",
+		"file:////%3F/C:/long/Foo.php",
+		"file:////%3F/UNC/server/share/x.php",
+		"file:////%3F/unc/",
+		"file:////%3F/Volume%7Bb75e2c83%7D/x.php",
+		"file:////./C:/x.php",
+		"file://./C:/x.php",
 	} {
 		f.Add(uri, false)
 		f.Add(uri, true)
@@ -187,7 +202,11 @@ func FuzzCanonicalFileURIIsThePathToURIOfItsPath(f *testing.F) {
 		if err != nil {
 			t.Fatalf("%q (windows %v): its canonical %q is not a file URI: %v", uri, windows, canonical, err)
 		}
-		if rebuilt := slashPathToURI(slashPath(path, windows)); rebuilt != canonical {
+		slashed, err := slashPath(path, windows)
+		if err != nil {
+			t.Fatalf("%q (windows %v): the path %q of its canonical %q names no file: %v", uri, windows, path, canonical, err)
+		}
+		if rebuilt := slashPathToURI(slashed); rebuilt != canonical {
 			t.Errorf("%s (windows %v): canonical %s, but the URI of its path is %s", uri, windows, canonical, rebuilt)
 		}
 	})
@@ -232,13 +251,7 @@ func TestPathToURIWritesAUNCPathWithItsHost(t *testing.T) {
 		`\\\srv\Foo.php`:               "file:///srv/Foo.php",
 		`\\c:\proj\Foo.php`:            "file:///C:/proj/Foo.php",
 	} {
-		uri := slashPathToURI(slashPath(path, true))
-		if uri != want {
-			t.Errorf("%s: got %s, want %s", path, uri, want)
-		}
-		if back, err := uriSlashPath(uri, true); err != nil || back != slashPath(path, true) {
-			t.Errorf("%s does not round-trip: %s, %v", uri, back, err)
-		}
+		assertWindowsPathRoundTrips(t, path, want)
 	}
 }
 
@@ -288,4 +301,100 @@ func TestFileTreeListsUNCFilesUnderAShare(t *testing.T) {
 	if got := tree.under(`\\server`); len(got) != 0 {
 		t.Errorf("removed files leave the host: %v", got)
 	}
+}
+
+func TestPathToURIReadsWindowsExtendedLengthPaths(t *testing.T) {
+	for path, want := range map[string]string{
+		`\\?\C:\long\path\Foo.php`:           "file:///C:/long/path/Foo.php",
+		`\\?\c:\proj\app\..\Foo.php`:         "file:///C:/proj/Foo.php",
+		`//?/C:/proj/Foo.php`:                "file:///C:/proj/Foo.php",
+		`\\?\UNC\server\share\app\Foo.php`:   "file://server/share/app/Foo.php",
+		`\\?\unc\Server\share\my app\#1.php`: "file://server/share/my%20app/%231.php",
+		`\\?\UNC\localhost\c$\Foo.php`:       "file:////localhost/c$/Foo.php",
+	} {
+		assertWindowsPathRoundTrips(t, path, want)
+	}
+	for uri, want := range map[string]string{
+		"file:////%3F/C:/long/Foo.php":             "file:///C:/long/Foo.php",
+		"file:////%3F/UNC/server/share/x.php":      "file://server/share/x.php",
+		"file://localhost//%3F/d:/proj/../Foo.php": "file:///D:/Foo.php",
+	} {
+		if got := canonicalURI(uri, true); got != want {
+			t.Errorf("%s: canonical %s, want %s", uri, got, want)
+		}
+	}
+}
+
+func TestADevicePathIsNoFileUnderWindowsRules(t *testing.T) {
+	for _, path := range []string{
+		`\\.\C:\proj\Foo.php`,
+		`\\.\pipe\tusk`,
+		`//./C:/proj/Foo.php`,
+		`\\.`,
+		`\\?\Volume{b75e2c83-0000-0000-0000-602f00000000}\Foo.php`,
+		`\\?\`,
+		`\\?\UNC\`,
+		`\\?\UNC\[::1]\share\Foo.php`,
+	} {
+		if got := pathToURI(path, true); got != path {
+			t.Errorf("%s is kept as it is spelled, got %s", path, got)
+		}
+		if got, err := slashPath(path, true); err == nil || !strings.Contains(err.Error(), strconv.Quote(path)) {
+			t.Errorf("%s names no file: got %s, %v", path, got, err)
+		}
+		if got, err := uriSlashPath(path, true); err == nil {
+			t.Errorf("%s is not read back as a file: %s", path, got)
+		}
+		if got := canonicalURI(path, true); got != path {
+			t.Errorf("%s is kept by CanonicalURI, got %s", path, got)
+		}
+	}
+	for _, uri := range []string{"file://./C:/proj/Foo.php", "file:////./C:/proj/Foo.php", "file:////%3F/Volume%7Bb75e2c83%7D/Foo.php", "file:////%3F/UNC/"} {
+		if got := canonicalURI(uri, true); got != uri {
+			t.Errorf("%s is kept as the client spelled it, got %s", uri, got)
+		}
+		if got, err := uriSlashPath(uri, true); err == nil || !strings.Contains(err.Error(), strconv.Quote(uri)) {
+			t.Errorf("%s names no file: got %s, %v", uri, got, err)
+		}
+	}
+	if got := (&fileTree{windows: true}).under(`\\.\C:\proj`); got != nil {
+		t.Errorf("no file sits under a device path: %v", got)
+	}
+}
+
+func FuzzPathToURIReadsBackAsItsPath(f *testing.F) {
+	for _, path := range []string{
+		"/srv/app/Order.php",
+		`C:\proj\Order.php`,
+		`\\server\share\x.php`,
+		`\\?\C:\long\Foo.php`,
+		`\\?\UNC\server\share\x.php`,
+		`\\?\Volume{b75e2c83}\x.php`,
+		`\\.\C:\x.php`,
+		`\\localhost\c$\x.php`,
+		"relative/x.php",
+	} {
+		f.Add(path, false)
+		f.Add(path, true)
+	}
+	f.Fuzz(func(t *testing.T, path string, windows bool) {
+		uri := pathToURI(path, windows)
+		slashed, err := slashPath(path, windows)
+		if err != nil {
+			if uri != path {
+				t.Errorf("%q (windows %v) names no file (%v), but is written %q", path, windows, err, uri)
+			}
+			return
+		}
+		back, err := uriSlashPath(uri, windows)
+		if err != nil {
+			t.Fatalf("%q (windows %v): its URI %q is not a file URI: %v", path, windows, uri, err)
+		}
+		if strings.HasPrefix(slashed, "/") && back != slashed {
+			t.Errorf("%q (windows %v): its URI %q reads back as %q, not %q", path, windows, uri, back, slashed)
+		}
+		if again := pathToURI(back, windows); again != uri {
+			t.Errorf("%q (windows %v): its URI %q reads back as %q, whose URI is %q", path, windows, uri, back, again)
+		}
+	})
 }

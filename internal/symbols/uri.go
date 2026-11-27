@@ -15,6 +15,9 @@ const (
 	hostWindows = runtime.GOOS == "windows"
 	localHost   = "localhost"
 	uncPrefix   = "//"
+	uncShare    = "UNC/"
+	deviceHost  = "."
+	extendHost  = "?"
 )
 
 func URIToPath(uri string) (string, error) {
@@ -34,7 +37,15 @@ func ReadURI(uri string) ([]byte, error) {
 }
 
 func PathToURI(path string) string {
-	return slashPathToURI(slashPath(path, hostWindows))
+	return pathToURI(path, hostWindows)
+}
+
+func pathToURI(path string, windows bool) string {
+	p, err := slashPath(path, windows)
+	if err != nil {
+		return path
+	}
+	return slashPathToURI(p)
 }
 
 func CanonicalURI(uri string) string {
@@ -51,7 +62,7 @@ func canonicalURI(uri string, windows bool) string {
 
 func uriSlashPath(uri string, windows bool) (string, error) {
 	if rest, ok := strings.CutPrefix(uri, fileScheme); ok && windows && startsWithDrive(rest) {
-		return slashPath(rest, windows), nil
+		return fileURIPath(uri, rest, windows)
 	}
 	u, err := url.Parse(uri)
 	switch {
@@ -67,7 +78,7 @@ func uriSlashPath(uri string, windows bool) (string, error) {
 	host := strings.ToLower(u.Host)
 	switch {
 	case host == "" || host == localHost:
-		return slashPath(u.Path, windows), nil
+		return fileURIPath(uri, u.Path, windows)
 	case !windows:
 		return "", fmt.Errorf("%q is not a local file URI: it names the host %q", uri, u.Host)
 	case !isUNCHost(host):
@@ -76,13 +87,24 @@ func uriSlashPath(uri string, windows bool) (string, error) {
 	return uncSlashPath(host, u.Path), nil
 }
 
-func slashPath(p string, windows bool) string {
-	if !windows {
-		return path.Clean(p)
+func fileURIPath(uri, p string, windows bool) (string, error) {
+	slashed, err := slashPath(p, windows)
+	if err != nil {
+		return "", fmt.Errorf("%q is not a file URI: %w", uri, err)
 	}
-	p = strings.ReplaceAll(p, `\`, "/")
+	return slashed, nil
+}
+
+func slashPath(p string, windows bool) (string, error) {
+	if !windows {
+		return path.Clean(p), nil
+	}
+	p, err := win32Path(p)
+	if err != nil {
+		return "", err
+	}
 	if host, rest, ok := splitUNC(p); ok {
-		return uncSlashPath(host, rest)
+		return uncSlashPath(host, rest), nil
 	}
 	p = path.Clean(p)
 	if strings.HasPrefix(p, "/") && startsWithDrive(p[1:]) {
@@ -91,7 +113,37 @@ func slashPath(p string, windows bool) string {
 	if startsWithDrive(p) {
 		p = strings.ToUpper(p[:1]) + p[1:]
 	}
-	return p
+	return p, nil
+}
+
+func win32Path(p string) (string, error) {
+	slashed := strings.ReplaceAll(p, `\`, "/")
+	after, ok := strings.CutPrefix(slashed, uncPrefix)
+	if !ok {
+		return slashed, nil
+	}
+	namespace, rest, _ := strings.Cut(after, "/")
+	switch namespace {
+	case deviceHost:
+		return "", fmt.Errorf("%q is a device path, not a file", p)
+	case extendHost:
+		return extendedLengthPath(p, rest)
+	}
+	return slashed, nil
+}
+
+func extendedLengthPath(p, rest string) (string, error) {
+	if len(rest) >= len(uncShare) && strings.EqualFold(rest[:len(uncShare)], uncShare) {
+		unc := uncPrefix + rest[len(uncShare):]
+		if _, _, ok := splitUNC(unc); !ok {
+			return "", fmt.Errorf("%q is an extended-length path that names no share", p)
+		}
+		return unc, nil
+	}
+	if !startsWithDrive(rest) {
+		return "", fmt.Errorf("%q is an extended-length path that names no drive or share", p)
+	}
+	return rest, nil
 }
 
 func slashPathToURI(p string) string {
@@ -130,7 +182,7 @@ func uncSlashPath(host, p string) string {
 }
 
 func isUNCHost(host string) bool {
-	if host == "" {
+	if host == "" || host == deviceHost {
 		return false
 	}
 	for i := 0; i < len(host); i++ {
