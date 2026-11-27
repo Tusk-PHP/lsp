@@ -96,15 +96,18 @@ func (idx *RouteIndex) update(change func(map[string]*routeFile)) {
 	defer idx.writeMu.Unlock()
 
 	change(idx.files)
-	all := readRouteFiles(idx.files, idx.rootPath)
+	all := readRouteFiles(idx.files, idx.rootPath, len(idx.all))
 	slices.SortFunc(all, compareRoutes)
 	byName := make(map[string][]RouteName)
-	names := make([]string, 0, len(all))
-	for _, route := range all {
-		if len(byName[route.Name]) == 0 {
-			names = append(names, route.Name)
+	var names []string
+	for start := 0; start < len(all); {
+		end := start + 1
+		for end < len(all) && all[end].Name == all[start].Name {
+			end++
 		}
-		byName[route.Name] = append(byName[route.Name], route)
+		names = append(names, all[start].Name)
+		byName[all[start].Name] = all[start:end:end]
+		start = end
 	}
 
 	idx.mu.Lock()
