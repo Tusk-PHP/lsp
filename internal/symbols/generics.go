@@ -65,19 +65,40 @@ func supertypes(doc *parser.DocBlock, resolve func(string) string) []Supertype {
 	return out
 }
 
-// resolveDocTypeString resolves a PHPDoc type for storage. A plain class name
-// is resolved with the file's imports and namespace; anything more (generics,
-// unions, shapes) keeps the form its imports were qualified to, as the names
-// in it may be templates. Template names stay as they are.
+// resolveDocTypeString resolves a PHPDoc type for storage: each class name in
+// it is resolved with the file's imports and namespace, part by part, while
+// keywords, pseudo-types and template names stay as they are. A type with
+// nothing to resolve is kept as written.
 func resolveDocTypeString(t string, resolve func(string) string, templates map[string]bool) string {
 	t = strings.TrimSpace(t)
-	if t == "" || templates[t] || isPseudoTypeName(t) {
+	if t == "" {
 		return t
 	}
-	if strings.ContainsAny(t, "<>{}()|&,: '\"") {
+	rename := func(name string) string {
+		if templates[name] || isPseudoTypeName(name) {
+			return name
+		}
+		return resolve(name)
+	}
+	if !strings.ContainsAny(t, "<>{}()[]|&?,:$ '\"") {
+		return rename(t)
+	}
+	expr, changed := types.MapClassNames(types.ParseTypeExpr(t), rename)
+	if !changed {
 		return t
 	}
-	return resolve(t)
+	return expr.CompactString()
+}
+
+func templateNames(params []TemplateParam) map[string]bool {
+	if len(params) == 0 {
+		return nil
+	}
+	names := make(map[string]bool, len(params))
+	for _, p := range params {
+		names[p.Name] = true
+	}
+	return names
 }
 
 // isPseudoTypeName reports whether a PHPDoc type is a keyword such as

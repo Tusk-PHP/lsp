@@ -262,6 +262,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 				doc := parser.ParseDocBlock(c.DocComment)
 				if doc != nil {
 					indexTypeAliases(existing, doc, resolve)
+					templates := templateNames(existing.Templates)
 					for _, prop := range doc.Properties {
 						if prop.Name == "" {
 							continue
@@ -276,7 +277,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 							Kind:       KindProperty,
 							URI:        uri,
 							Visibility: "public",
-							Type:       resolve(prop.Type),
+							Type:       resolveDocTypeString(prop.Type, resolve, templates),
 							ParentFQN:  fqn,
 							IsVirtual:  true,
 							DocComment: prop.Description,
@@ -288,7 +289,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 						if idx.symbols[fqn+"::"+method.Name] != nil {
 							continue
 						}
-						ms := docMethodSymbol(fqn, uri, method, resolve)
+						ms := docMethodSymbol(fqn, uri, method, resolve, templates)
 						existing.Children = append(existing.Children, ms)
 						idx.addSymbolWithSource(uri, ms, SourceProject)
 					}
@@ -919,6 +920,7 @@ func (idx *Index) indexVirtualMembers(uri string, parent *Symbol, src SymbolSour
 	// Populate template parameters from @template tags
 	parent.Templates = templateParams(doc, resolve)
 	parent.Supertypes = supertypes(doc, resolve)
+	templates := templateNames(parent.Templates)
 
 	for _, prop := range doc.Properties {
 		if prop.Name == "" {
@@ -935,7 +937,7 @@ func (idx *Index) indexVirtualMembers(uri string, parent *Symbol, src SymbolSour
 			Kind:       KindProperty,
 			URI:        uri,
 			Visibility: "public",
-			Type:       resolve(prop.Type),
+			Type:       resolveDocTypeString(prop.Type, resolve, templates),
 			ParentFQN:  fqn,
 			IsVirtual:  true,
 			DocComment: prop.Description,
@@ -948,20 +950,20 @@ func (idx *Index) indexVirtualMembers(uri string, parent *Symbol, src SymbolSour
 		if idx.symbols[fqn+"::"+method.Name] != nil {
 			continue
 		}
-		ms := docMethodSymbol(fqn, uri, method, resolve)
+		ms := docMethodSymbol(fqn, uri, method, resolve, templates)
 		parent.Children = append(parent.Children, ms)
 		idx.addSymbolWithSource(uri, ms, src)
 	}
 }
 
-func docMethodSymbol(classFQN, uri string, method parser.DocMethod, resolve func(string) string) *Symbol {
+func docMethodSymbol(classFQN, uri string, method parser.DocMethod, resolve func(string) string, templates map[string]bool) *Symbol {
 	sym := &Symbol{
 		Name:       method.Name,
 		FQN:        classFQN + "::" + method.Name,
 		Kind:       KindMethod,
 		URI:        uri,
 		Visibility: "public",
-		ReturnType: resolve(method.ReturnType),
+		ReturnType: resolveDocTypeString(method.ReturnType, resolve, templates),
 		ParentFQN:  classFQN,
 		IsVirtual:  true,
 		IsStatic:   method.IsStatic,
@@ -972,7 +974,7 @@ func docMethodSymbol(classFQN, uri string, method parser.DocMethod, resolve func
 		for i, p := range method.Params {
 			sym.Params[i] = ParamInfo{
 				Name:         p.Name,
-				Type:         resolveDocTypeString(p.Type, resolve, nil),
+				Type:         resolveDocTypeString(p.Type, resolve, templates),
 				DefaultValue: p.Default,
 				IsVariadic:   p.IsVariadic,
 				IsReference:  p.IsReference,

@@ -58,3 +58,30 @@ class Factory {}
 		t.Errorf("parameters = %q, want %q", labels, want)
 	}
 }
+
+func TestSignatureHelpDocMethodResolvesStructuredParamTypes(t *testing.T) {
+	a := setupSigHelpAnalyzer(t, `<?php
+namespace App\Models;
+
+use Illuminate\Support\Collection;
+
+/**
+ * @method void attach(Collection<int, Tag> $tags, array{id: int, tag: Tag} $meta)
+ */
+class Post {}
+`)
+	prefix := "    $p->attach("
+	src := "<?php\nnamespace App\\Http;\n\nuse App\\Models\\Post;\n\nfunction run(Post $p): void {\n" + prefix
+	help := a.GetSignatureHelp("file:///call.php", src, protocol.Position{Line: 6, Character: len(prefix)})
+	if help == nil || len(help.Signatures) != 1 {
+		t.Fatalf("expected one signature, got %+v", help)
+	}
+	var labels []string
+	for _, p := range help.Signatures[0].Parameters {
+		labels = append(labels, p.Label)
+	}
+	want := []string{`Illuminate\Support\Collection<int, App\Models\Tag> $tags`, `array{id: int, tag: App\Models\Tag} $meta`}
+	if !slices.Equal(labels, want) {
+		t.Errorf("parameters = %q, want %q", labels, want)
+	}
+}
