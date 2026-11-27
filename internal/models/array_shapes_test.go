@@ -52,7 +52,7 @@ func TestLaravelConfigTopLevelKeys(t *testing.T) {
 	r := NewFrameworkArrayResolver(idx, dir, "laravel")
 
 	// config('app') should return top-level keys from config/app.php
-	fields := r.ResolveCallReturnKeys("config('app')", "")
+	fields := r.ConfigKeys("app")
 	if len(fields) == 0 {
 		t.Fatal("expected keys from config/app.php")
 	}
@@ -81,7 +81,7 @@ func TestLaravelConfigNestedKeys(t *testing.T) {
 	r := NewFrameworkArrayResolver(idx, dir, "laravel")
 
 	// config('app.database') should drill into the nested array
-	fields := r.ResolveCallReturnKeys("config('app.database')", "")
+	fields := r.ConfigKeys("app.database")
 	if len(fields) == 0 {
 		t.Fatal("expected nested keys from config/app.php database section")
 	}
@@ -326,7 +326,7 @@ return [
 	r := NewFrameworkArrayResolver(idx, dir, "laravel")
 
 	// config('sanctum.middleware') should drill into vendor config
-	fields := r.ResolveCallReturnKeys("config('sanctum.middleware')", "")
+	fields := r.ConfigKeys("sanctum.middleware")
 	if len(fields) == 0 {
 		t.Fatal("expected nested keys from vendor sanctum.middleware")
 	}
@@ -397,11 +397,11 @@ return ['key' => 'val'];
 
 func TestNonLaravelReturnsNil(t *testing.T) {
 	dir, idx := setupTestProject(t)
+	idx.IndexFileWithSource("file:///user.php", "<?php\nnamespace App\\Models;\nclass User { public string $name; }\n", symbols.SourceProject)
 	r := NewFrameworkArrayResolver(idx, dir, "none")
 
-	fields := r.ResolveCallReturnKeys("config('app')", "")
-	if fields != nil {
-		t.Error("expected nil for non-laravel framework")
+	if fields := r.ResolveMethodReturnKeys("App\\Models\\User", "toArray"); fields != nil {
+		t.Errorf("expected nil for non-laravel framework, got %v", fields)
 	}
 }
 
@@ -412,4 +412,31 @@ func mustReadFile(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return data
+}
+
+func TestLaravelFormRequestKeysFromAParentsRules(t *testing.T) {
+	dir, idx := setupTestProject(t)
+	files := map[string]string{
+		"BaseRequest.php":      "<?php\nnamespace App\\Http\\Requests;\nclass BaseRequest {\n    public function rules(): array {\n        return ['title' => 'required', 'body' => 'string'];\n    }\n}\n",
+		"StorePostRequest.php": "<?php\nnamespace App\\Http\\Requests;\nclass StorePostRequest extends BaseRequest {}\n",
+	}
+	for name, content := range files {
+		path := filepath.Join(dir, "app", "Http", "Requests", name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		idx.IndexFile("file://"+path, content)
+	}
+
+	fields := NewFrameworkArrayResolver(idx, dir, "laravel").ResolveMethodReturnKeys(`App\Http\Requests\StorePostRequest`, "validated")
+	keys := map[string]bool{}
+	for _, f := range fields {
+		keys[f.Key] = true
+	}
+	if len(keys) != 2 || !keys["title"] || !keys["body"] {
+		t.Errorf("a request without its own rules() takes its parent's keys, got %v", keys)
+	}
 }

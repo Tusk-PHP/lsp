@@ -24,6 +24,7 @@ type Analyzer struct {
 	engine              *resolve.Engine
 	framework           string
 	routes              *frameworklaravel.RouteIndex
+	authorization       *frameworklaravel.Authorization
 	views               *frameworklaravel.Views
 	translations        *frameworklaravel.TranslationResolver
 	symfonyTranslations *frameworksymfony.TranslationResolver
@@ -52,19 +53,7 @@ func NewAnalyzer(index *symbols.Index, ca *container.ContainerAnalyzer) *Analyze
 	if ca != nil {
 		framework = ca.Framework()
 	}
-	a := &Analyzer{index: index, container: ca, engine: resolve.NewEngine(index), framework: framework}
-	if ca != nil {
-		a.engine.ContainerCall = a.resolveContainerCallType
-	}
-	return a
-}
-
-func (a *Analyzer) SetChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) string) {
-	a.engine.DelegateChains(fn)
-}
-
-func (a *Analyzer) SetTypedChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType) {
-	a.engine.DelegateTypedChains(fn)
+	return &Analyzer{index: index, container: ca, engine: container.NewEngine(index, ca), framework: framework}
 }
 
 func (a *Analyzer) SetTranslationResolver(resolver *frameworklaravel.TranslationResolver) {
@@ -87,6 +76,12 @@ func (a *Analyzer) SetClientCommands(commands []protocol.CommandName) {
 	for _, c := range commands {
 		a.clientCommands[c] = true
 	}
+}
+
+// SetLaravelAuthorization sets the Gate abilities and middleware names that
+// definition follows from the arguments that take them.
+func (a *Analyzer) SetLaravelAuthorization(authorization *frameworklaravel.Authorization) {
+	a.authorization = authorization
 }
 
 func (a *Analyzer) SetLaravelRouteIndex(routeIndex *frameworklaravel.RouteIndex) {
@@ -184,52 +179,24 @@ type definitionTarget struct {
 
 // resolveDefinitionSymbol resolves the symbol at the cursor position.
 func (a *Analyzer) resolveDefinitionSymbol(r *resolve.Resolver, uri, source string, pos protocol.Position) definitionTarget {
-	if a.framework == "symfony" {
-		if routeName, _, ok := frameworksymfony.RouteNameAtPosition(source, pos); ok {
-			if route := frameworksymfony.FindRoute(a.index, routeName); route != nil {
-				return definitionTarget{loc: &protocol.Location{URI: route.URI, Range: route.DeclRange}}
-			}
-		}
-		if a.symfonyCommands != nil {
-			if l := a.definitionForSymfonyCommand(r, uri, source, pos); l != nil {
-				return definitionTarget{loc: l}
-			}
-		}
-		if a.symfonyTranslations != nil {
-			if l := a.definitionForSymfonyTranslationKey(source, pos); l != nil {
-				return definitionTarget{loc: l}
-			}
-		}
-	}
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	if ctx == nil {
 		return definitionTarget{}
 	}
-	if l := a.frameworkDefinition(r, source, ctx); l != nil {
+	if l := a.frameworkDefinition(r, ctx); l != nil {
 		return definitionTarget{loc: l}
 	}
 	return a.symbolTarget(r, uri, source, ctx)
 }
 
-func (a *Analyzer) frameworkDefinition(r *resolve.Resolver, source string, ctx *sourcectx.CursorContext) *protocol.Location {
-	line, pos := ctx.Line, ctx.Position
+func (a *Analyzer) frameworkDefinition(r *resolve.Resolver, ctx *sourcectx.CursorContext) *protocol.Location {
+	if arg, ok := ctx.CallArg(); ok {
+		if l := a.definitionForCallArg(r, arg, ctx.File); l != nil {
+			return l
+		}
+	}
 	if a.container != nil {
-		if l := a.definitionForContainerArg(r, line, pos, source, ctx.File, false); l != nil {
-			return l
-		}
-	}
-	if a.framework == "laravel" && a.views != nil {
-		if l := a.definitionForLaravelView(line, pos.Character); l != nil {
-			return l
-		}
-	}
-	if a.translations != nil {
-		if l := a.definitionForTranslationKey(line, pos.Character); l != nil {
-			return l
-		}
-	}
-	if a.framework == "laravel" && a.routes != nil {
-		if l := a.definitionForRouteName(line, pos.Character); l != nil {
+		if l := a.definitionForContainerArg(r, ctx, false); l != nil {
 			return l
 		}
 	}
@@ -259,7 +226,7 @@ func (a *Analyzer) symbolTarget(r *resolve.Resolver, uri, source string, ctx *so
 
 	// Check for -> or :: access (method/property on a class)
 	if ctx.AccessKind != sourcectx.AccessNone {
-		owner := r.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		owner := r.ReceiverTypeAt(source, pos, file)
 		classFQN := owner.BaseFQN()
 		if classFQN == "" {
 			return definitionTarget{}
@@ -317,100 +284,55 @@ func (a *Analyzer) symbolTarget(r *resolve.Resolver, uri, source string, ctx *so
 	return definitionTarget{sym: best, loc: symbolLocation(best)}
 }
 
-func (a *Analyzer) definitionForTranslationKey(line string, character int) *protocol.Location {
-	ctx := frameworklaravel.DetectTranslationContext(line, character)
-	if ctx == nil {
+func (a *Analyzer) definitionForCallArg(r *resolve.Resolver, arg sourcectx.CallArg, file *parser.FileNode) *protocol.Location {
+	if arg.Value != sourcectx.ArgString || arg.Text == "" {
 		return nil
 	}
-	return a.translations.Definition(ctx.Key)
-}
-
-func (a *Analyzer) definitionForRouteName(line string, character int) *protocol.Location {
-	name, ok := frameworklaravel.FindRouteNameReference(line, character)
-	if !ok {
-		return nil
-	}
-	route := a.routes.Find(name)
-	if route == nil {
-		return nil
-	}
-	return &protocol.Location{URI: route.URI, Range: route.Range}
-}
-
-func (a *Analyzer) definitionForLaravelView(line string, character int) *protocol.Location {
-	ctx, ok := frameworklaravel.ExtractViewDefinitionContext(line, character)
-	if !ok {
-		return nil
-	}
-	view := a.views.Find(ctx.Name)
-	if view == nil {
-		return nil
-	}
-	return &protocol.Location{
-		URI: view.URI,
-		Range: protocol.Range{
-			Start: protocol.Position{Line: 0, Character: 0},
-			End:   protocol.Position{Line: 0, Character: 0},
-		},
-	}
-}
-
-// definitionForSymfonyTranslationKey resolves a translation key to its source file
-// when the cursor is inside a Symfony translation call.
-// definitionForSymfonyCommand returns the command a console application's
-// find(), get() or has() names at pos.
-func (a *Analyzer) definitionForSymfonyCommand(r *resolve.Resolver, uri, source string, pos protocol.Position) *protocol.Location {
-	line, ok := sourceLine(source, pos.Line)
-	if !ok || a.engine.ChainResolver == nil {
-		return nil
-	}
-	receiver, name, ok := frameworksymfony.CommandNameAt(line, pos.Character)
-	if !ok {
-		return nil
-	}
-	cmd := a.symfonyCommands.Find(name)
-	if cmd == nil {
-		return nil
-	}
-	file := parser.ParseFile(source)
-	if !frameworksymfony.IsConsoleApplication(a.index, a.engine.ChainResolver(r, receiver, source, pos, file)) {
-		return nil
-	}
-	return &protocol.Location{URI: cmd.URI, Range: cmd.Range}
-}
-
-// sourceLine returns line n of source without splitting the whole text.
-func sourceLine(source string, n int) (string, bool) {
-	if n < 0 {
-		return "", false
-	}
-	for ; n > 0; n-- {
-		i := strings.IndexByte(source, '\n')
-		if i < 0 {
-			return "", false
+	if a.framework == "laravel" && a.routes != nil && frameworklaravel.IsRouteNameArg(arg) {
+		if route := a.routes.Find(arg.Text); route != nil {
+			return &protocol.Location{URI: route.URI, Range: route.Range}
 		}
-		source = source[i+1:]
 	}
-	if i := strings.IndexByte(source, '\n'); i >= 0 {
-		source = source[:i]
+	if ctx, ok := frameworklaravel.ViewNameArg(arg); ok && a.framework == "laravel" && a.views != nil {
+		if view := a.views.Find(ctx.Name); view != nil {
+			return &protocol.Location{URI: view.URI}
+		}
 	}
-	return strings.TrimSuffix(source, "\r"), true
+	if ctx, ok := frameworklaravel.TranslationKeyArg(arg); ok && a.translations != nil {
+		if l := a.translations.Definition(ctx.Key); l != nil {
+			return l
+		}
+	}
+	if a.framework == "laravel" && a.authorization != nil {
+		if name, ok := frameworklaravel.AuthNameArg(r, a.index, file, arg); ok {
+			return a.authNameDefinition(r, file, name)
+		}
+	}
+	if a.framework == "symfony" {
+		return a.symfonyCallArgDefinition(r, arg, file)
+	}
+	return nil
 }
 
-func (a *Analyzer) definitionForSymfonyTranslationKey(source string, pos protocol.Position) *protocol.Location {
-	lines := strings.Split(source, "\n")
-	if pos.Line < 0 || pos.Line >= len(lines) {
-		return nil
+func (a *Analyzer) symfonyCallArgDefinition(r *resolve.Resolver, arg sourcectx.CallArg, file *parser.FileNode) *protocol.Location {
+	if frameworksymfony.IsRouteNameArg(arg) {
+		if route := frameworksymfony.FindRoute(a.index, arg.Text); route != nil {
+			return &protocol.Location{URI: route.URI, Range: route.DeclRange}
+		}
 	}
-	line := lines[pos.Line]
-	ctx := frameworksymfony.DetectSymfonyTranslationContext(line, pos.Character)
-	if ctx == nil {
-		return nil
+	if a.symfonyCommands != nil && frameworksymfony.IsCommandNameArg(arg) {
+		if cmd := a.symfonyCommands.Find(arg.Text); cmd != nil &&
+			frameworksymfony.IsConsoleApplication(a.index, resolve.PlainTypeName(r.NodeType(file, arg.Receiver))) {
+			return &protocol.Location{URI: cmd.URI, Range: cmd.Range}
+		}
 	}
-	if ctx.Domain != "" {
-		return a.symfonyTranslations.DefinitionInDomain(ctx.Key, ctx.Domain)
+	if ctx, ok := frameworksymfony.TranslationKeyArg(arg); ok && a.symfonyTranslations != nil {
+		if ctx.Domain != "" {
+			return a.symfonyTranslations.DefinitionInDomain(ctx.Key, ctx.Domain)
+		}
+		return a.symfonyTranslations.Definition(ctx.Key)
 	}
-	return a.symfonyTranslations.Definition(ctx.Key)
+	return nil
 }
 
 // definitionForVariable resolves a $variable to its type's definition.
@@ -431,94 +353,31 @@ func (a *Analyzer) definitionForVariable(r *resolve.Resolver, varName string, so
 	return nil
 }
 
-// definitionForContainerArg checks if the cursor is inside a container resolution
-// call argument (e.g. app('request'), app(Request::class)) and returns the
-// definition of the concrete class.
-func (a *Analyzer) definitionForContainerArg(r *resolve.Resolver, line string, pos protocol.Position, source string, file *parser.FileNode, preferType bool) *protocol.Location {
-	prefix := line[:min(pos.Character, len(line))]
-	// Check if we're inside a container call
-	patterns := []string{"app(", "resolve(", "->get(", "->make("}
-	insideCall := false
-	var argStart int
-	for _, pat := range patterns {
-		idx := strings.LastIndex(prefix, pat)
-		if idx < 0 {
-			continue
-		}
-		after := prefix[idx+len(pat):]
-		// If there's already a closing paren before cursor, we're past the call
-		if strings.Contains(after, ")") {
-			continue
-		}
-		insideCall = true
-		argStart = idx + len(pat)
-		break
-	}
-	if !insideCall {
+func (a *Analyzer) definitionForContainerArg(r *resolve.Resolver, ctx *sourcectx.CursorContext, preferType bool) *protocol.Location {
+	file := ctx.File
+	call, args := sourcectx.CallNodeAt(file.Tree, file.Source, ctx.Offset)
+	if call == nil || len(args.Args) == 0 || container.ResolvingArgs(file.Source, call) == nil {
 		return nil
 	}
-
-	// Also grab everything after cursor to the closing paren on the same line
-	rest := line[min(pos.Character, len(line)):]
-	closeIdx := strings.Index(rest, ")")
-	var fullArg string
-	if closeIdx >= 0 {
-		fullArg = line[argStart : pos.Character+closeIdx]
-	} else {
-		fullArg = line[argStart:min(pos.Character, len(line))]
+	first := args.Args[0].Value
+	if span := first.Bounds(); ctx.Offset < span.Start || ctx.Offset > span.End {
+		return nil
 	}
-
-	arg := strings.TrimSpace(fullArg)
-	// Strip first arg only
-	if commaIdx := strings.Index(arg, ","); commaIdx >= 0 {
-		arg = strings.TrimSpace(arg[:commaIdx])
+	abstract, ok := container.AbstractOf(r, file.Source, file, first)
+	if !ok {
+		return nil
 	}
-	arg = strings.Trim(arg, "'\"")
-
-	wasClassConst := false
-	if strings.HasSuffix(arg, "::class") {
-		wasClassConst = true
-		className := strings.TrimSuffix(arg, "::class")
-		arg = r.ResolveClassName(className, file)
-	}
-
-	if !preferType && !wasClassConst {
-		if binding := a.container.LookupBinding(arg); binding != nil && binding.DefinitionURI != "" {
+	if !preferType && !abstract.Class {
+		if binding := a.container.LookupBinding(abstract.Name); binding != nil && binding.DefinitionURI != "" {
 			return &protocol.Location{URI: binding.DefinitionURI, Range: binding.Definition}
 		}
 	}
-
-	// Resolve via container bindings
-	if binding := a.container.ResolveDependency(arg); binding != nil {
+	if binding := a.container.ResolveDependency(abstract.Name); binding != nil {
 		if sym := a.index.Lookup(binding.Concrete); sym != nil {
 			return symbolLocation(sym)
 		}
 	}
-	// Direct FQN lookup
-	if sym := a.index.Lookup(arg); sym != nil {
-		return symbolLocation(sym)
-	}
-	return nil
-}
-
-// resolveContainerCallType resolves a container call expression to a concrete FQN.
-// Uses the shared ExtractContainerCallArg helper from the resolve package.
-func (a *Analyzer) resolveContainerCallType(r *resolve.Resolver, expr string, source string, file *parser.FileNode) string {
-	arg := resolve.ExtractContainerCallArg(expr)
-	if arg == "" {
-		return ""
-	}
-	if strings.HasSuffix(arg, "::class") {
-		className := strings.TrimSuffix(arg, "::class")
-		arg = r.ResolveClassName(className, file)
-	}
-	if binding := a.container.ResolveDependency(arg); binding != nil {
-		return binding.Concrete
-	}
-	if a.index.Lookup(arg) != nil {
-		return arg
-	}
-	return ""
+	return symbolLocation(a.index.Lookup(abstract.Name))
 }
 
 func symbolLocation(sym *symbols.Symbol) *protocol.Location {
@@ -537,7 +396,7 @@ func singleLocation(loc *protocol.Location) []protocol.Location {
 
 func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position) []protocol.Location {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	if ctx == nil {
 		return nil
 	}
@@ -549,7 +408,7 @@ func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position)
 	file := ctx.File
 
 	if a.container != nil {
-		if loc := a.definitionForContainerArg(r, ctx.Line, pos, source, file, true); loc != nil {
+		if loc := a.definitionForContainerArg(r, ctx, true); loc != nil {
 			return singleLocation(loc)
 		}
 	}
@@ -559,7 +418,7 @@ func (a *Analyzer) FindTypeDefinition(uri, source string, pos protocol.Position)
 	}
 
 	if ctx.AccessKind != sourcectx.AccessNone {
-		classFQN := r.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file).BaseFQN()
+		classFQN := r.ReceiverTypeAt(source, pos, file).BaseFQN()
 		if classFQN == "" {
 			return nil
 		}
@@ -591,7 +450,7 @@ func (a *Analyzer) FindImplementation(uri, source string, pos protocol.Position)
 		return nil
 	}
 
-	sym := a.resolveSymbolAt(r, sourcectx.Analyze(uri, source, pos).Name(), source)
+	sym := a.resolveSymbolAt(r, sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri)).Name(), source)
 	if sym == nil {
 		return nil
 	}
@@ -694,11 +553,11 @@ func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, 
 		return nil
 	}
 
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
 
 	// Try to resolve as a symbol first — this handles properties ($name in declarations)
 	// and member access contexts before falling back to variable scope
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 
 	// Built-in symbols are opaque to navigation: do not scan the workspace for refs.
@@ -743,7 +602,7 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 	// the member, return nil — do not fall through to name-based lookups that
 	// would match unrelated symbols across the project.
 	if ctx.AccessKind != sourcectx.AccessNone {
-		owner := r.AccessOwnerType(ctx.JoinedLine, ctx.JoinedWordStart, source, pos, file)
+		owner := r.ReceiverTypeAt(source, pos, file)
 		if owner.BaseFQN() == "" {
 			return nil
 		}
@@ -927,7 +786,7 @@ func sameRange(a, b protocol.Range) bool {
 }
 
 func (a *Analyzer) GetDocumentSymbols(uri, source string) []protocol.DocumentSymbol {
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
 	if file == nil {
 		return nil
 	}
@@ -1076,7 +935,7 @@ func (a *Analyzer) GetWorkspaceSymbols(query string) []protocol.SymbolInformatio
 }
 
 func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *protocol.SignatureHelp {
-	callee, activeParam, ok := sourcectx.CallAt(uri, source, pos)
+	callee, activeParam, ok := sourcectx.CallAt(uri, source, pos, a.index.GrammarOf(uri))
 	if !ok {
 		return nil
 	}
@@ -1139,7 +998,7 @@ type ReferenceVariant struct {
 // resolvable named symbol.
 func (a *Analyzer) CopyReference(uri, source string, pos protocol.Position) []ReferenceVariant {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 	if sym == nil {
 		return nil
@@ -1236,7 +1095,7 @@ func getWordRangeAt(source string, pos protocol.Position) (string, protocol.Rang
 // the range and current name as a placeholder.
 func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *protocol.PrepareRenameResult {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	if ctx == nil {
 		return nil
 	}
@@ -1346,7 +1205,7 @@ func isPrepareRenameVariableBindingSupported(binding *scope.Binding, word string
 // readDocument is used to read file contents for files not open in the editor.
 func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName string, readDocument func(string) string) *protocol.WorkspaceEdit {
 	r := a.engine.Resolver()
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, a.index.GrammarOf(uri))
 	if ctx == nil {
 		return nil
 	}
@@ -1484,7 +1343,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 		return actions
 	}
 
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
 	if file == nil {
 		return actions
 	}
@@ -1626,7 +1485,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 // GetFileNamespace returns the FQN of the primary class/interface/enum in a file,
 // or the namespace if no named type exists.
 func (a *Analyzer) GetFileNamespace(uri, source string) string {
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
 	if file == nil {
 		return ""
 	}
@@ -1656,7 +1515,7 @@ func (a *Analyzer) GetFileNamespace(uri, source string) string {
 // the namespace declaration, all use imports across the workspace, FQN references,
 // and computing the new file path per PSR-4 autoload mappings.
 func (a *Analyzer) MoveToNamespace(uri, source, targetNS string, autoloadEntries []composer.AutoloadEntry, readDocument func(string) string) *protocol.WorkspaceEdit {
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
 	if file == nil {
 		return nil
 	}
@@ -1751,7 +1610,7 @@ func (a *Analyzer) MoveToNamespace(uri, source, targetNS string, autoloadEntries
 			continue
 		}
 
-		fileFile := parser.ParseFile(fileSource)
+		fileFile := parser.ParseFileIn(fileSource, a.index.GrammarOf(fileURI))
 		fileLines := strings.Split(fileSource, "\n")
 		var fileEdits []protocol.TextEdit
 

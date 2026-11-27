@@ -18,9 +18,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/models"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
@@ -93,15 +91,14 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if s.routeIndex != nil {
 		s.completion.SetLaravelRouteIndex(s.routeIndex)
 	}
+	s.completion.SetLaravelAuthorization(s.workspace.Authorization)
 	s.completion.SetViewResolver(viewResolver)
 	s.completion.SetTranslationResolver(translationResolver)
 	s.completion.SetSymfonyTranslationResolver(symfonyTranslations)
 	s.completion.SetSymfonyCommands(s.workspace.SymfonyCommands)
 	s.inlayHint = inlayhint.NewProvider(s.index, s.container)
-	s.inlayHint.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	})
 	s.hover = hover.NewProvider(s.index, s.container, s.framework)
+	s.hover.SetLaravelAuthorization(s.workspace.Authorization)
 	s.hover.SetArrayResolver(arrayResolver)
 	s.hover.SetConfig(s.cfg)
 	s.coverage = coverage.NewStore(s.rootPath, s.cfg.CoverageReportPath, s.logger)
@@ -110,9 +107,6 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if s.coverageNotifications {
 		s.coverage.OnChange(func() { s.sendNotification("tusk/coverageChanged", nil) })
 	}
-	s.hover.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	})
 	s.composerHover = cardhover.NewProvider(s.rootPath, func() string { return s.workspace.Profile().PHPVersion })
 	s.composerHover.SetEnabled(s.cfg.Composer.Hover.Enable)
 	s.composerHover.SetOpenOnDefinition(s.cfg.Composer.OpenOnDefinition)
@@ -125,9 +119,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		})
 	}
 	s.diag = diagnostics.NewProvider(s.index, s.framework, s.rootPath, s.logger, s.cfg)
-	s.diag.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		return s.completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
-	}
+	s.diag.TypeResolver = s.completion.DiagnosticType
 	s.diag.BuilderModelResolver = s.completion.ResolveBuilderModel
 	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(s.index, s.workspace.SchemaIsLive)
 	s.diag.Profile = s.workspace.Profile
@@ -138,12 +130,10 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.diag.Blade = s.bladeFeatures
 	if s.workspace.ViewData != nil {
 		s.viewTypes = &frameworklaravel.ViewTypes{
-			Data:  s.workspace.ViewData,
-			Index: s.index,
-			Read:  s.getDocumentReader(),
-			Resolve: func(expr, source string, file *parser.FileNode, line, col int) string {
-				return s.completion.ResolveExpressionType(expr, source, protocol.Position{Line: line, Character: col}, file)
-			},
+			Data:     s.workspace.ViewData,
+			Index:    s.index,
+			Read:     s.getDocumentReader(),
+			Resolver: s.completion.Resolver,
 		}
 		s.diag.ViewTypes = s.viewTypes
 	}
@@ -151,11 +141,10 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if opts := params.InitializationOptions; opts != nil {
 		s.analyzer.SetClientCommands(opts.ClientCommands)
 	}
-	s.analyzer.SetChainResolver(s.completion.ResolveExpressionType)
-	s.analyzer.SetTypedChainResolver(s.completion.ResolveExpressionTypeTyped)
 	if s.routeIndex != nil {
 		s.analyzer.SetLaravelRouteIndex(s.routeIndex)
 	}
+	s.analyzer.SetLaravelAuthorization(s.workspace.Authorization)
 	s.analyzer.SetViewResolver(viewResolver)
 	s.analyzer.SetTranslationResolver(translationResolver)
 	s.analyzer.SetSymfonyTranslationResolver(symfonyTranslations)
@@ -246,6 +235,7 @@ func (s *Server) handleInitialized(msg *jsonRPCMessage) {
 	if s.routeIndex != nil {
 		s.goSafe("laravelRoutes.ScanWorkspace", func() {
 			_ = s.workspace.ScanRoutes()
+			s.workspace.ScanAuthorization()
 		})
 	}
 	// Run model analysis after both workspace and vendor indexing complete

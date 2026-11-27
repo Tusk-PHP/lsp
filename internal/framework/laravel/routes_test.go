@@ -1,6 +1,8 @@
 package laravel
 
 import (
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -8,7 +10,7 @@ import (
 
 func TestRouteIndexScanWorkspaceFindsNamedRoutes(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "testdata", "laravel")
-	idx := NewRouteIndex(root)
+	idx := NewRouteIndex(root, func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
 
 	if err := idx.ScanWorkspace(); err != nil {
 		t.Fatalf("ScanWorkspace() error = %v", err)
@@ -42,7 +44,7 @@ func TestRouteIndexScanWorkspaceFindsNamedRoutes(t *testing.T) {
 }
 
 func TestRouteIndexReplacesEntriesOnReindex(t *testing.T) {
-	idx := NewRouteIndex("/tmp/project")
+	idx := NewRouteIndex("/tmp/project", func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
 	uri := "file:///tmp/project/routes/web.php"
 
 	idx.IndexFile(uri, "<?php\nRoute::get('/')->name('home');\n")
@@ -59,51 +61,8 @@ func TestRouteIndexReplacesEntriesOnReindex(t *testing.T) {
 	}
 }
 
-func TestExtractRouteNameArgContext(t *testing.T) {
-	tests := []struct {
-		name      string
-		trimmed   string
-		wantOK    bool
-		wantPart  string
-		wantQuote string
-	}{
-		{"route helper", "route('da", true, "da", "'"},
-		{"blade binding", ":href=\"route('pro", true, "pro", "'"},
-		{"routeIs", "request()->routeIs('sec", true, "sec", "'"},
-		{"to_route helper", "to_route(\"ho", true, "ho", "\""},
-		{"past closing paren", "route('home')", false, "", ""},
-		{"not a route call", "config('app", false, "", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			part, quote, ok := ExtractRouteNameArgContext(tt.trimmed)
-			if ok != tt.wantOK {
-				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
-			}
-			if part != tt.wantPart {
-				t.Fatalf("part = %q, want %q", part, tt.wantPart)
-			}
-			if quote != tt.wantQuote {
-				t.Fatalf("quote = %q, want %q", quote, tt.wantQuote)
-			}
-		})
-	}
-}
-
-func TestFindRouteNameReference(t *testing.T) {
-	line := `<a href="{{ route('dashboard') }}" :current="request()->routeIs('profile.edit')">`
-
-	if name, ok := FindRouteNameReference(line, 20); !ok || name != "dashboard" {
-		t.Fatalf("dashboard reference = (%q, %v)", name, ok)
-	}
-	if name, ok := FindRouteNameReference(line, 67); !ok || name != "profile.edit" {
-		t.Fatalf("profile.edit reference = (%q, %v)", name, ok)
-	}
-}
-
 func TestRouteIndexCapturesControllerMetadata(t *testing.T) {
-	idx := NewRouteIndex("/tmp/project")
+	idx := NewRouteIndex("/tmp/project", func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
 	uri := "file:///tmp/project/routes/web.php"
 	source := `<?php
 

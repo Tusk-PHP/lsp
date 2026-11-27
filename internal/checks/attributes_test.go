@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -35,7 +37,8 @@ class Svc {
 
 // typeOf types the receivers the test source uses, as the server's
 // resolver would.
-func typeOf(expr, _ string, _, _ int, _ *parser.FileNode) string {
+func typeOf(file *parser.FileNode, e ast.Expr) string {
+	expr := e.Bounds().Text(file.Source)
 	switch strings.TrimSpace(expr) {
 	case "$svc", "$svc->self()", "(new Svc())", "new Svc()":
 		return "Lib\\Svc"
@@ -47,7 +50,7 @@ func attributeFindings(t *testing.T, src string) []string {
 	t.Helper()
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///vendor/lib.php", attributedVendor)
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	uses := &MemberUseCache{}
 	var got []string
 	for _, f := range (&DeprecatedUsageRule{TypeResolver: typeOf, Uses: uses}).Check(file, src, idx) {
@@ -112,7 +115,7 @@ plain();
 	// An index with no attributed symbols finds nothing without parsing.
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///plain.php", "<?php\nfunction plain() {}\n")
-	file := parser.ParseFile("<?php\nplain();\n")
+	file := parser.ParseFile("<?php\nplain();\n", token.Latest)
 	if got := (&DeprecatedUsageRule{}).Check(file, "<?php\nplain();\n", idx); len(got) != 0 {
 		t.Errorf("got %v", got)
 	}
@@ -120,13 +123,14 @@ plain();
 
 func TestAttributeMessage(t *testing.T) {
 	for _, c := range []struct {
-		args []string
+		args parser.AttributeArgs
 		want string
 	}{
-		{[]string{`'first'`}, "first"},
-		{[]string{`message: "named"`}, "named"},
-		{[]string{`since: '2.0'`, `message: 'later'`}, "later"},
-		{[]string{`since: '2.0'`}, ""},
+		{parser.AttributeArgs{{Value: `'first'`}}, "first"},
+		{parser.AttributeArgs{{Name: "message", Value: `"named"`}}, "named"},
+		{parser.AttributeArgs{{Name: "since", Value: `'2.0'`}, {Name: "message", Value: `'later'`}}, "later"},
+		{parser.AttributeArgs{{Name: "since", Value: `'2.0'`}}, ""},
+		{parser.AttributeArgs{{Value: `'a'`}, {Value: `'b'`}}, "a"},
 		{nil, ""},
 	} {
 		if got := attributeMessage(&symbols.Attribute{Args: c.args}); got != c.want {
@@ -146,5 +150,39 @@ STALE();
 	want := "deprecated: 'stale' is deprecated: use fresh() instead"
 	if got := attributeFindings(t, src); len(got) != 2 || got[0] != want || got[1] != want {
 		t.Errorf("PHP calls a function whatever the case it is written in, got %q", got)
+	}
+}
+
+func TestAttributeRulesFindTheReceiverOnTheSyntaxTree(t *testing.T) {
+	src := `<?php
+namespace App;
+
+use Lib\Svc;
+
+function run(Svc $svc): void {
+    $svc /* the service */ ->with();
+    $svc->legacy;
+    $svc
+        ->with();
+    $other->with();
+    $svc->missing();
+}
+`
+	want := []string{"unused-result: The result of 'with' should be used: the copy is the result"}
+	if got := attributeFindings(t, src); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("a comment before -> doesn't hide the receiver; a property named like a method and a chain split over lines aren't uses:\ngot  %q\nwant %q", got, want)
+	}
+}
+
+func TestAttributeRulesWithoutATypeResolverReadOnlyClassNames(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///vendor/lib.php", attributedVendor)
+	src := "<?php\nuse Lib\\Svc;\n$svc->with();\nSvc::legacy();\n"
+	var got []string
+	for _, f := range (&DeprecatedUsageRule{}).Check(parser.ParseFile(src, token.Latest), src, idx) {
+		got = append(got, f.Message)
+	}
+	if want := []string{"'legacy' is deprecated"}; strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

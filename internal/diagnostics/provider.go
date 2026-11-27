@@ -27,7 +27,7 @@ type Provider struct {
 
 	// TypeResolver resolves the type of a PHP expression for redundant nullsafe checks.
 	// Set by the LSP server after initialization.
-	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
+	TypeResolver checks.TypeResolver
 
 	// BuilderModelResolver resolves the Eloquent model FQN from a builder chain.
 	// Set by the LSP server after initialization.
@@ -88,10 +88,10 @@ func (p *Provider) analyze(uri, source string, withSaveRules bool) []protocol.Di
 		// is found in that PHP is reported, at its place in the view.
 		in := p.ViewTypes.For(uri)
 		doc := blade.CompileWith(source, blade.CompileOptions{Vars: in.BladeVars(), Defined: in.Complete, Custom: p.bladeCustom()})
-		diags = toTemplate(doc, p.analyzeNative(doc.PHP, shared, true, !in.Complete))
+		diags = toTemplate(doc, p.analyzeNative(uri, doc.PHP, shared, true, !in.Complete))
 		diags = append(diags, p.analyzeBlade(source)...)
 	} else {
-		diags = p.analyzeNative(source, shared, false, workspace.IsTemplate(uri))
+		diags = p.analyzeNative(uri, source, shared, false, workspace.IsTemplate(uri))
 	}
 	p.mu.RLock()
 	if cached, ok := p.toolResults[uri]; ok {
@@ -116,9 +116,9 @@ func (p *Provider) analyze(uri, source string, withSaveRules bool) []protocol.Di
 	return p.dropSuppressed(uri, source, shared, diags)
 }
 
-func (p *Provider) analyzeNative(source string, shared *checks.Shared, bladePHP, includedFile bool) []protocol.Diagnostic {
+func (p *Provider) analyzeNative(uri, source string, shared *checks.Shared, bladePHP, includedFile bool) []protocol.Diagnostic {
 	rules := EditRules(p.ruleOptions(bladePHP, includedFile), shared)
-	return p.toDiagnostics(p.runRules(rules, parser.ParseFile(source), source))
+	return p.toDiagnostics(p.runRules(rules, parser.ParseFileIn(source, p.index.GrammarOf(uri)), source))
 }
 
 func (p *Provider) ruleOptions(bladePHP, includedFile bool) NativeRulesOptions {
@@ -225,7 +225,7 @@ func (p *Provider) saveDiagnostics(uri, source string) []protocol.Diagnostic {
 		doc = blade.CompileWith(source, blade.CompileOptions{Vars: p.ViewTypes.For(uri).BladeVars(), Custom: p.bladeCustom()})
 		source = doc.PHP
 	}
-	diags := p.toDiagnostics(p.runRules(SaveRules(p.ruleOptions(doc != nil, false)), parser.ParseFile(source), source))
+	diags := p.toDiagnostics(p.runRules(SaveRules(p.ruleOptions(doc != nil, false)), parser.ParseFileIn(source, p.index.GrammarOf(uri)), source))
 	if doc != nil {
 		diags = toTemplate(doc, diags)
 	}

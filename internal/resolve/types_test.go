@@ -168,12 +168,39 @@ class Repository {
 	}
 }
 
+func fallbackResolver() *Resolver {
+	idx := symbols.NewIndex()
+	idx.SetTemplateFallbacks(map[string]symbols.TemplateFallback{
+		"Illuminate\\Database\\Eloquent\\Builder": {
+			Params:  []string{"TModel"},
+			Methods: map[string]string{"get": "Illuminate\\Database\\Eloquent\\Collection<int, TModel>", "first": "?TModel", "where": "static"},
+		},
+		"Illuminate\\Database\\Eloquent\\Collection": {
+			Params:  []string{"TKey", "TModel"},
+			Methods: map[string]string{"first": "?TModel", "all": "array"},
+		},
+	})
+	return NewResolver(idx)
+}
+
+func TestTemplateFallbacksAreOnlyForClassesWithoutGenerics(t *testing.T) {
+	r := fallbackResolver()
+	r.Index.IndexFile("file:///Builder.php", "<?php\nnamespace Illuminate\\Database\\Eloquent;\n/** @template TModel */\nclass Builder {}\n")
+	if rt := r.fallbackTemplateReturn("Illuminate\\Database\\Eloquent\\Builder", "first", []ResolvedType{{FQN: "App\\Models\\Category"}}); !rt.IsEmpty() {
+		t.Errorf("a class whose PHPDoc declares its templates is typed from them, not the fallback: %+v", rt)
+	}
+	if rt := r.fallbackTemplateReturn("Illuminate\\Database\\Eloquent\\Collection", "first", []ResolvedType{{FQN: "int"}, {FQN: "App\\Models\\Category"}}); rt.FQN != "App\\Models\\Category" {
+		t.Errorf("one that declares none falls back: %+v", rt)
+	}
+}
+
 func TestResolveTemplateReturn(t *testing.T) {
 	catType := ResolvedType{FQN: "App\\Models\\Category"}
 	intType := ResolvedType{FQN: "int"}
+	r := fallbackResolver()
 
 	t.Run("Builder get returns Collection<int, Category>", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Illuminate\\Database\\Eloquent\\Builder", "get", []ResolvedType{catType})
+		rt := r.fallbackTemplateReturn("Illuminate\\Database\\Eloquent\\Builder", "get", []ResolvedType{catType})
 		if rt.BaseFQN() != "Illuminate\\Database\\Eloquent\\Collection" {
 			t.Errorf("FQN = %q", rt.FQN)
 		}
@@ -189,7 +216,7 @@ func TestResolveTemplateReturn(t *testing.T) {
 	})
 
 	t.Run("Builder first returns ?Category", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Illuminate\\Database\\Eloquent\\Builder", "first", []ResolvedType{catType})
+		rt := r.fallbackTemplateReturn("Illuminate\\Database\\Eloquent\\Builder", "first", []ResolvedType{catType})
 		if rt.FQN != "App\\Models\\Category" {
 			t.Errorf("FQN = %q", rt.FQN)
 		}
@@ -199,7 +226,7 @@ func TestResolveTemplateReturn(t *testing.T) {
 	})
 
 	t.Run("Builder where returns static (Builder<Category>)", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Illuminate\\Database\\Eloquent\\Builder", "where", []ResolvedType{catType})
+		rt := r.fallbackTemplateReturn("Illuminate\\Database\\Eloquent\\Builder", "where", []ResolvedType{catType})
 		if rt.FQN != "Illuminate\\Database\\Eloquent\\Builder" {
 			t.Errorf("FQN = %q", rt.FQN)
 		}
@@ -209,7 +236,7 @@ func TestResolveTemplateReturn(t *testing.T) {
 	})
 
 	t.Run("Collection first returns ?Category", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Illuminate\\Database\\Eloquent\\Collection", "first", []ResolvedType{intType, catType})
+		rt := r.fallbackTemplateReturn("Illuminate\\Database\\Eloquent\\Collection", "first", []ResolvedType{intType, catType})
 		if rt.FQN != "App\\Models\\Category" {
 			t.Errorf("FQN = %q", rt.FQN)
 		}
@@ -219,21 +246,21 @@ func TestResolveTemplateReturn(t *testing.T) {
 	})
 
 	t.Run("Collection all returns array", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Illuminate\\Database\\Eloquent\\Collection", "all", []ResolvedType{intType, catType})
+		rt := r.fallbackTemplateReturn("Illuminate\\Database\\Eloquent\\Collection", "all", []ResolvedType{intType, catType})
 		if rt.FQN != "array" {
 			t.Errorf("FQN = %q", rt.FQN)
 		}
 	})
 
 	t.Run("unknown class returns empty", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Unknown\\Class", "get", nil)
+		rt := r.fallbackTemplateReturn("Unknown\\Class", "get", nil)
 		if !rt.IsEmpty() {
 			t.Error("expected empty for unknown class")
 		}
 	})
 
 	t.Run("unknown method returns empty", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Illuminate\\Database\\Eloquent\\Builder", "unknownMethod", []ResolvedType{catType})
+		rt := r.fallbackTemplateReturn("Illuminate\\Database\\Eloquent\\Builder", "unknownMethod", []ResolvedType{catType})
 		if !rt.IsEmpty() {
 			t.Error("expected empty for unknown method")
 		}
@@ -259,5 +286,25 @@ func TestFullStringParenthesisesCallablesInUnions(t *testing.T) {
 	bare := MakeUnion([]ResolvedType{{FQN: "callable", Callable: &CallableType{}}, {FQN: "int"}}, false)
 	if got, want := bare.FullString(), "callable()|int"; got != want {
 		t.Errorf("without a return type: FullString = %q, want %q", got, want)
+	}
+}
+
+func TestAnUntypedCallableParameterIsWrittenAsMixed(t *testing.T) {
+	closure := ResolvedType{FQN: "Closure", Callable: &CallableType{Params: []ResolvedType{{}, {FQN: "int"}}}}
+	if got, want := closure.String(), "Closure(mixed, int)"; got != want {
+		t.Errorf("String = %q, want %q", got, want)
+	}
+}
+
+func TestAClassWithGenericsIsNeverTypedFromTheFallbacks(t *testing.T) {
+	r := fallbackResolver()
+	r.Index.IndexFile("file:///Collection.php", "<?php\nnamespace Illuminate\\Database\\Eloquent;\n/**\n * @template TKey\n * @template TModel\n */\nclass Collection {\n    public function first() {}\n}\n")
+	first := r.FindMember("Illuminate\\Database\\Eloquent\\Collection", "first")
+	if first == nil {
+		t.Fatal("first() is indexed")
+	}
+	rt := r.MemberTypeForCall(first, nil, "", []ResolvedType{{FQN: "int"}, {FQN: "App\\Models\\Category"}}, nil)
+	if rt.FQN == "App\\Models\\Category" {
+		t.Errorf("first() documents no return type, and its class declares generics, so the fallback table says nothing about it: %+v", rt)
 	}
 }

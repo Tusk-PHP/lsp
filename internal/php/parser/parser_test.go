@@ -726,7 +726,7 @@ func TestParseCodeStartsInPHP(t *testing.T) {
 }
 
 func TestUnterminatedStringPointsAtItsOpening(t *testing.T) {
-	for _, src := range []string{"<?php\n$a = \"x $b\n", "<?php\n$a = `x\n", "<?php\n$a = <<<EOT\nx\n"} {
+	for _, src := range []string{"<?php\n$a = \"x $b\n", "<?php\n$a = `x\n", "<?php\n$a = <<<EOT\nx\n", "<?php\n$a = 'x\n"} {
 		errs := Parse(src, token.Latest).Errors
 		if len(errs) != 1 || errs[0].Message != "unterminated string" || errs[0].Start != 11 {
 			t.Errorf("%q: got %v", src, errs)
@@ -792,6 +792,11 @@ func TestMissingSemicolonKeepsTheCodeAfterIt(t *testing.T) {
 			body: func(f *ast.File) []ast.Stmt { return f.Stmts },
 			want: "*ast.ExprStmt *ast.FunctionDecl *ast.ExprStmt *ast.ClassDecl *ast.ExprStmt *ast.ClassDecl",
 		},
+		{
+			src:  "<?php\nfoo()\nbar();\n",
+			body: func(f *ast.File) []ast.Stmt { return f.Stmts },
+			want: "*ast.ExprStmt *ast.ExprStmt",
+		},
 	}
 	for _, c := range cases {
 		file := Parse(c.src, token.Latest)
@@ -828,6 +833,7 @@ func TestAKeywordAfterAnArrowOnTheNextLineStartsTheNextStatement(t *testing.T) {
 		{method("$this->\n        try { y(); } finally {}"), token.Latest, "*ast.ExprStmt *ast.Try"},
 		{method("$this-> // note\n        return $x;"), token.Latest, "*ast.ExprStmt *ast.Return"},
 		{method("self::\n        return $x;"), token.Latest, "*ast.ExprStmt *ast.Return"},
+		{method("parent::\n        self::m();"), token.Latest, "*ast.ExprStmt *ast.ExprStmt"},
 		{method("$this->\n        return $x;"), token.PHP74, "*ast.ExprStmt *ast.Return"},
 	}
 	for _, c := range cases {
@@ -867,6 +873,83 @@ func TestAKeywordNamedMemberOnTheNextLineStaysAMember(t *testing.T) {
 		}
 		if got := fmt.Sprintf("%T", file.Stmts[0].(*ast.ExprStmt).Expr); got != c.want {
 			t.Errorf("%q on PHP %s: got %s, want %s", c.src, c.version, got, c.want)
+		}
+	}
+}
+
+func TestAnUnterminatedSingleQuotedStringIsALiteral(t *testing.T) {
+	src := "<?php\nconfig('database."
+	file := Parse(src, token.Latest)
+	arg := file.Stmts[0].(*ast.ExprStmt).Expr.(*ast.Call).Args.Args[0].Value
+	if lit, ok := arg.(*ast.Literal); !ok || lit.Kind != token.EncapsedAndWhitespace || lit.Text(src) != "'database." {
+		t.Fatalf("argument = %#v", arg)
+	}
+	checkTree(t, src, token.Latest)
+}
+
+func TestAMissingClassMemberKeepsTheClass(t *testing.T) {
+	for _, src := range []string{"<?php\nFoo::", "<?php\nfunction f() {\n    Foo::\n}", "<?php\nfoo(Foo::"} {
+		file := Parse(src, token.Latest)
+		var fetch *ast.ClassConstFetch
+		ast.Walk(file, func(n ast.Node) bool {
+			if f, ok := n.(*ast.ClassConstFetch); ok {
+				fetch = f
+			}
+			return true
+		})
+		if fetch == nil || fetch.Class.Bounds().Text(src) != "Foo" || !ast.IsMissing(fetch.Name) {
+			t.Errorf("%q: got %#v", src, fetch)
+		}
+		if len(file.Errors) == 0 {
+			t.Errorf("%q: expected an error", src)
+		}
+		checkTree(t, src, token.Latest)
+	}
+}
+
+func TestAnUnclosedListReachesTheTokenAfterIt(t *testing.T) {
+	cases := []struct {
+		src      string
+		unclosed bool
+		end      string
+	}{
+		{"<?php\nf(1, ", true, "<?php\nf(1, "},
+		{"<?php\nfunction g() {\n    f(1, \n}", true, "<?php\nfunction g() {\n    f(1, \n"},
+		{"<?php\nf(1);", false, "<?php\nf(1)"},
+	}
+	for _, c := range cases {
+		file := Parse(c.src, token.Latest)
+		var args *ast.ArgList
+		ast.Walk(file, func(n ast.Node) bool {
+			if a, ok := n.(*ast.ArgList); ok {
+				args = a
+			}
+			return true
+		})
+		if args.Unclosed != c.unclosed || int(args.End) != len(c.end) {
+			t.Errorf("%q: unclosed %v, end %d; want %v, %d", c.src, args.Unclosed, args.End, c.unclosed, len(c.end))
+		}
+	}
+	arrays := []struct {
+		src      string
+		unclosed bool
+	}{
+		{"<?php\n$a = ['x', ", true},
+		{"<?php\n$a = array('x', ", true},
+		{"<?php\n$a = ['x'];", false},
+	}
+	for _, c := range arrays {
+		file := Parse(c.src, token.Latest)
+		array := file.Stmts[0].(*ast.ExprStmt).Expr.(*ast.Assign).Value.(*ast.Array)
+		if array.Unclosed != c.unclosed || c.unclosed && int(array.End) != len(c.src) {
+			t.Errorf("%q: unclosed %v, end %d", c.src, array.Unclosed, array.End)
+		}
+	}
+	for src, unclosed := range map[string]bool{"<?php\n$a['x'": true, "<?php\n$a[": true, "<?php\n$a['x'];": false} {
+		file := Parse(src, token.Latest)
+		dim := file.Stmts[0].(*ast.ExprStmt).Expr.(*ast.ArrayDimFetch)
+		if dim.Unclosed != unclosed {
+			t.Errorf("%q: unclosed %v", src, dim.Unclosed)
 		}
 	}
 }
@@ -1243,5 +1326,46 @@ func TestAShebangLineIsNotInlineHTML(t *testing.T) {
 		if html != tc.html {
 			t.Errorf("%q: inline HTML %q, want %q", tc.src, html, tc.html)
 		}
+	}
+}
+
+func TestAMissingArgumentKeepsTheArgumentsAfterIt(t *testing.T) {
+	src := "<?php f(/* none yet */, $b, c: $c);"
+	file := Parse(src, token.Latest)
+	args := file.Stmts[0].(*ast.ExprStmt).Expr.(*ast.Call).Args.Args
+	if len(args) != 3 {
+		t.Fatalf("got %d arguments, want 3", len(args))
+	}
+	if missing, ok := args[0].Value.(*ast.BadExpr); !ok || missing.Start != missing.End {
+		t.Errorf("first argument = %#v, want an empty bad expression", args[0].Value)
+	}
+	if got := args[1].Text(src); got != "$b" {
+		t.Errorf("second argument = %q, want $b", got)
+	}
+	if got := args[2].Text(src); got != "c: $c" {
+		t.Errorf("third argument = %q, want c: $c", got)
+	}
+	if len(file.Errors) != 1 || file.Errors[0].Message != "syntax error, unexpected ',', expected an expression" {
+		t.Errorf("errors = %v, want only the missing argument", file.Errors)
+	}
+}
+
+func TestAttributesWithoutATargetAreKept(t *testing.T) {
+	for _, src := range []string{"<?php\n#[", "<?php\n#[Foo, Ba", "<?php\n#[Foo]\n$x = 1;"} {
+		file := Parse(src, token.Latest)
+		var bad *ast.BadExpr
+		ast.Walk(file, func(n ast.Node) bool {
+			if b, ok := n.(*ast.BadExpr); ok && len(b.Attrs) > 0 {
+				bad = b
+			}
+			return true
+		})
+		if bad == nil || bad.Attrs[0].Start != uint32(len("<?php\n")) {
+			t.Errorf("%q: got %#v", src, bad)
+		}
+		if len(file.Errors) == 0 {
+			t.Errorf("%q: expected an error", src)
+		}
+		checkTree(t, src, token.Latest)
 	}
 }

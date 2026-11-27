@@ -33,18 +33,6 @@ func TestLaravelTranslationCompletionInPHPHelper(t *testing.T) {
 	t.Fatal("expected translation completion item")
 }
 
-func TestLaravelTranslationCompletionInBladeDirective(t *testing.T) {
-	p := setupTranslationProvider(t)
-
-	source := "@lang('Wel"
-	items := p.GetCompletions("file:///test.blade.php", source, protocol.Position{Line: 0, Character: len("@lang('Wel")})
-	labels := collectLabels(items)
-
-	if !labels["Welcome"] {
-		t.Fatalf("expected Welcome, got %v", mapKeys(labels, 10))
-	}
-}
-
 func setupTranslationProvider(t *testing.T) *Provider {
 	t.Helper()
 

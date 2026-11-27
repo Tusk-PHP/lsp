@@ -3,6 +3,7 @@ package completion
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/container"
@@ -27,7 +28,7 @@ func collectLabels(items []protocol.CompletionItem) map[string]bool {
 	return m
 }
 
-func indexPHPDir(t *testing.T, idx *symbols.Index, root, dir string, src symbols.SymbolSource) {
+func indexPHPDir(t testing.TB, idx *symbols.Index, root, dir string, src symbols.SymbolSource) {
 	t.Helper()
 	absDir := filepath.Join(root, dir)
 	filepath.Walk(absDir, func(path string, info os.FileInfo, err error) error {
@@ -44,7 +45,7 @@ func indexPHPDir(t *testing.T, idx *symbols.Index, root, dir string, src symbols
 	})
 }
 
-func setupLaravelIndex(t *testing.T) (*symbols.Index, *container.ContainerAnalyzer) {
+func setupLaravelIndex(t testing.TB) (*symbols.Index, *container.ContainerAnalyzer) {
 	t.Helper()
 	requireLaravelVendor(t)
 	root := filepath.Join("..", "..", "testdata", "laravel")
@@ -101,9 +102,7 @@ func setupSymfonyIndex(t *testing.T) (*symbols.Index, *container.ContainerAnalyz
 	return idx, ca
 }
 
-// --- extractContainerArgContext tests ---
-
-func TestExtractContainerArgContext(t *testing.T) {
+func TestContainerArgContext(t *testing.T) {
 	tests := []struct {
 		name      string
 		trimmed   string
@@ -121,20 +120,28 @@ func TestExtractContainerArgContext(t *testing.T) {
 		{"container get", "$container->get('ca", true, "ca", "'"},
 		{"container make", "$container->make(App", true, "App", ""},
 		{"this app make", "$this->app->make(Pay", true, "Pay", ""},
+		{"this app get is not the container", "$this->app->get(Pay", false, "", ""},
+		{"another variable's get", "$cache->get('ca", false, "", ""},
+		{"static get", "Container::get('ca", false, "", ""},
+		{"second argument", "app('a', '", false, "", ""},
+		{"get on a call's result", "container()->get('ca", false, "", ""},
 		{"not inside app", "$myapp = new Foo(", false, "", ""},
-		{"app on different line", "return $x; // app(", true, "", ""},
+		{"app in a comment", "return $x; // app(", false, "", ""},
+		{"argument on the next line", "app(\n    'req|'\n);", true, "req", "'"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filter, quote, ok := extractContainerArgContext(tt.trimmed)
+			source := "<?php\n" + tt.trimmed
+			arg, ok := callArgAt(t, source)
+			ok = ok && isContainerArg(arg, strings.Replace(source, "|", "", 1))
 			if ok != tt.wantOk {
 				t.Errorf("ok = %v, want %v", ok, tt.wantOk)
 			}
-			if ok && filter != tt.wantFlt {
-				t.Errorf("filter = %q, want %q", filter, tt.wantFlt)
+			if ok && arg.Partial != tt.wantFlt {
+				t.Errorf("filter = %q, want %q", arg.Partial, tt.wantFlt)
 			}
-			if ok && quote != tt.wantQuote {
-				t.Errorf("quote = %q, want %q", quote, tt.wantQuote)
+			if ok && arg.Quote != tt.wantQuote {
+				t.Errorf("quote = %q, want %q", arg.Quote, tt.wantQuote)
 			}
 		})
 	}
@@ -573,35 +580,6 @@ class TestController {
 
 	if !labels["url"] {
 		t.Errorf("expected 'url' method from Request via resolve('request')->, got labels count: %d", len(labels))
-	}
-}
-
-// --- ExtractContainerCallArg tests ---
-
-func TestExtractContainerCallArg(t *testing.T) {
-	tests := []struct {
-		name string
-		expr string
-		want string
-	}{
-		{"app string", "app('request')", "request"},
-		{"app double quote", `app("request")`, "request"},
-		{"app class", "app(Request::class)", "Request::class"},
-		{"resolve string", "resolve('cache')", "cache"},
-		{"container get", "$container->get('log')", "log"},
-		{"container make", "$this->app->make('auth')", "auth"},
-		{"not container", "foo('bar')", ""},
-		{"no closing paren", "app('request'", ""},
-		{"with second arg", "app('request', true)", "request"},
-		{"empty", "", ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ExtractContainerCallArg(tt.expr)
-			if got != tt.want {
-				t.Errorf("ExtractContainerCallArg(%q) = %q, want %q", tt.expr, got, tt.want)
-			}
-		})
 	}
 }
 

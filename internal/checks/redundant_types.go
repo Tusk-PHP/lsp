@@ -18,7 +18,7 @@ import (
 type RedundantNullsafeRule struct {
 	// TypeResolver is kept for the rule set's wiring; the rule no longer
 	// relies on it. If nil, the rule is a no-op.
-	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
+	TypeResolver TypeResolver
 }
 
 func (r *RedundantNullsafeRule) Codes() []rule.Code { return []rule.Code{rule.RedundantNullsafe} }
@@ -259,25 +259,6 @@ func checkUnionType(typeStr string, line int, index *symbols.Index) []Finding {
 			})
 		}
 		seen[lower] = true
-	}
-
-	// Check ?Type|null redundancy (the ? already makes it nullable)
-	if strings.HasPrefix(typeStr, "?") {
-		// Only what's written counts, not the |null this function adds for the `?`.
-		for _, p := range strings.Split(typeStr[1:], "|") {
-			if strings.ToLower(strings.TrimSpace(p)) == "null" {
-				findings = append(findings, Finding{
-					StartLine: line,
-					StartCol:  0,
-					EndLine:   line,
-					EndCol:    0,
-					Severity:  rule.SeverityInfo,
-					Code:      rule.RedundantUnionMember,
-					Message:   fmt.Sprintf("Redundant 'null' in union: '?' already makes '%s' nullable", typeStr),
-				})
-				break
-			}
-		}
 	}
 
 	// Check for supertype subsumption

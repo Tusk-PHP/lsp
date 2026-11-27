@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -25,15 +26,17 @@ type RouteName struct {
 
 type RouteIndex struct {
 	rootPath string
+	grammars func() phpparser.GrammarRange
 
 	mu     sync.RWMutex
 	byURI  map[string][]RouteName
 	byName map[string][]RouteName
 }
 
-func NewRouteIndex(rootPath string) *RouteIndex {
+func NewRouteIndex(rootPath string, grammars func() phpparser.GrammarRange) *RouteIndex {
 	return &RouteIndex{
 		rootPath: rootPath,
+		grammars: grammars,
 		byURI:    make(map[string][]RouteName),
 		byName:   make(map[string][]RouteName),
 	}
@@ -70,7 +73,7 @@ func (idx *RouteIndex) IndexFile(uri, source string) {
 		return
 	}
 
-	routes := parseRouteDefinitions(uri, source)
+	routes := parseRouteDefinitions(uri, source, idx.grammars())
 
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -196,9 +199,9 @@ var supportedRouteMethods = map[string]bool{
 	"redirect": true,
 }
 
-func parseRouteDefinitions(uri, source string) []RouteName {
+func parseRouteDefinitions(uri, source string, grammars phpparser.GrammarRange) []RouteName {
 	result := parser.New().Parse(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, grammars)
 	var routes []RouteName
 
 	for i := 0; i < len(result.Tokens); i++ {
@@ -483,102 +486,4 @@ func resolveRouteClassName(name string, file *parser.FileNode) string {
 func isLaravelRouteFile(uri string) bool {
 	path := filepath.ToSlash(symbols.URIToPath(uri))
 	return strings.HasSuffix(path, ".php") && strings.Contains(path, "/routes/")
-}
-
-var routeCallPatterns = []string{
-	"route(",
-	"to_route(",
-	"->route(",
-	"::route(",
-	"->routeIs(",
-}
-
-func ExtractRouteNameArgContext(trimmed string) (string, string, bool) {
-	bestIdx := -1
-	bestPattern := ""
-	for _, pattern := range routeCallPatterns {
-		idx := strings.LastIndex(trimmed, pattern)
-		if idx > bestIdx {
-			bestIdx = idx
-			bestPattern = pattern
-		}
-	}
-	if bestIdx < 0 {
-		return "", "", false
-	}
-
-	after := trimmed[bestIdx+len(bestPattern):]
-	if strings.Contains(after, ")") {
-		return "", "", false
-	}
-
-	quote := ""
-	if len(after) > 0 && (after[0] == '\'' || after[0] == '"') {
-		quote = string(after[0])
-		after = after[1:]
-	}
-
-	return after, quote, true
-}
-
-func FindRouteNameReference(line string, character int) (string, bool) {
-	if character < 0 || len(line) == 0 {
-		return "", false
-	}
-	if character >= len(line) {
-		character = len(line) - 1
-	}
-	if character < 0 {
-		return "", false
-	}
-
-	prefix := strings.TrimSpace(line[:character+1])
-	if _, _, ok := ExtractRouteNameArgContext(prefix); !ok {
-		return "", false
-	}
-
-	start, end, ok := enclosingQuotedString(line, character)
-	if !ok {
-		return "", false
-	}
-
-	if _, _, ok := ExtractRouteNameArgContext(strings.TrimSpace(line[:start+1])); !ok {
-		return "", false
-	}
-
-	if end-start < 2 {
-		return "", false
-	}
-	return line[start+1 : end], true
-}
-
-func enclosingQuotedString(line string, character int) (int, int, bool) {
-	for start := character; start >= 0; start-- {
-		if !isQuote(line[start]) || isEscaped(line, start) {
-			continue
-		}
-		quote := line[start]
-		for end := start + 1; end < len(line); end++ {
-			if line[end] != quote || isEscaped(line, end) {
-				continue
-			}
-			if character > start && character < end {
-				return start, end, true
-			}
-			break
-		}
-	}
-	return 0, 0, false
-}
-
-func isQuote(ch byte) bool {
-	return ch == '\'' || ch == '"'
-}
-
-func isEscaped(s string, idx int) bool {
-	backslashes := 0
-	for i := idx - 1; i >= 0 && s[i] == '\\'; i-- {
-		backslashes++
-	}
-	return backslashes%2 == 1
 }

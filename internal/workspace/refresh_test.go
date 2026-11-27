@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -52,19 +54,19 @@ func TestRefreshFollowsProjectFilesOnDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFiles(t, root, map[string]string{
-		"app/New.php":            "<?php\nnamespace App;\nclass New {}\n",
+		"app/Fresh.php":          "<?php\nnamespace App;\nclass Fresh {}\n",
 		"app/Changed.php":        "<?php\nnamespace App;\nclass Renamed {}\n",
 		"vendor/acme/Vendor.php": "<?php\nclass VendorClass {}\n",
 		"app/notes.txt":          "not PHP",
 	})
-	out := refreshPaths(t, ws, root, "app/Old.php", "app/New.php", "app/Changed.php", "app/Changed.php", "vendor/acme/Vendor.php", "app/notes.txt", "app/Gone.php")
+	out := refreshPaths(t, ws, root, "app/Old.php", "app/Fresh.php", "app/Changed.php", "app/Changed.php", "vendor/acme/Vendor.php", "app/notes.txt", "app/Gone.php")
 	if len(out.Files) != 3 || out.Composer || out.ProfileChanged {
 		t.Errorf("three project files changed: %+v", out)
 	}
 	if ws.Index.Lookup(`App\Old`) != nil || ws.Index.Lookup(`App\Changed`) != nil {
 		t.Error("the deleted file and the old content leave the index")
 	}
-	if ws.Index.Lookup(`App\New`) == nil || ws.Index.Lookup(`App\Renamed`) == nil {
+	if ws.Index.Lookup(`App\Fresh`) == nil || ws.Index.Lookup(`App\Renamed`) == nil {
 		t.Error("the new file and the new content are indexed")
 	}
 	if ws.Index.Lookup("VendorClass") != nil {
@@ -129,7 +131,7 @@ func TestRefreshRespectsMaxIndexFiles(t *testing.T) {
 
 func TestRefreshResolvesTheProfileAgain(t *testing.T) {
 	ws, root := newRefreshWorkspace(t, nil, map[string]string{"composer.json": `{"require": {"php": "^8.1", "ext-redis": "*"}}`})
-	if _, err := ws.SetProfile(symbols.BuiltinProfile{PHPVersion: "8.1", Extensions: []string{"redis"}}); err != nil {
+	if _, err := ws.SetProfile(symbols.BuiltinProfile{PHPVersion: "8.1", Extensions: []string{"redis"}, Grammars: phpparser.GrammarsBetween(token.PHP81, token.Latest)}); err != nil {
 		t.Fatal(err)
 	}
 	if out := refreshPaths(t, ws, root, "composer.json"); out.ProfileChanged || !out.Composer {
@@ -359,5 +361,40 @@ func TestIDEHelperUnderAPathWithASpaceIsIndexedUnderItsFileURI(t *testing.T) {
 	want := symbols.PathToURI(filepath.Join(root, "_ide_helper.php"))
 	if route := ws.Index.Lookup(`Illuminate\Support\Facades\Route`); route == nil || route.URI != want {
 		t.Errorf("the IDE helper's class is declared at %s: %+v", want, route)
+	}
+}
+
+func TestRefreshKeepsLaravelsAbilitiesAndMiddlewareCurrent(t *testing.T) {
+	root := t.TempDir()
+	provider := "<?php\nnamespace App\\Providers;\nuse Illuminate\\Support\\Facades\\Gate;\nclass AuthServiceProvider {\n    public function boot() { Gate::define('%s', fn () => true); }\n}\n"
+	middleware := "<?php\nnamespace Illuminate\\Foundation\\Configuration;\nclass Middleware {\n    protected function defaultAliases() { $aliases = ['%s' => Auth::class]; return $aliases; }\n}\n"
+	writeFiles(t, root, map[string]string{
+		"composer.json":                         `{"name": "app/app", "autoload": {"psr-4": {"App\\": "app/"}}}`,
+		"composer.lock":                         `{"packages": []}`,
+		"app/Providers/AuthServiceProvider.php": strings.Replace(provider, "%s", "view-dashboard", 1),
+		"vendor/laravel/framework/src/Illuminate/Foundation/Configuration/Middleware.php": strings.Replace(middleware, "%s", "auth", 1),
+	})
+	ws := New(Options{RootPath: root, Framework: "laravel", Config: config.DefaultConfig(), Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+	ws.IndexWorkspace()
+	ws.ScanAuthorization()
+	if !slices.Contains(ws.Authorization.AbilityNames(), "view-dashboard") || !slices.Contains(ws.Authorization.MiddlewareNames(), "auth") {
+		t.Fatalf("the provider and Laravel's defaults are read at startup: %v %v", ws.Authorization.AbilityNames(), ws.Authorization.MiddlewareNames())
+	}
+
+	writeFiles(t, root, map[string]string{
+		"app/Providers/AuthServiceProvider.php":                                           strings.Replace(provider, "%s", "manage-team", 1),
+		"app/Policies/PostPolicy.php":                                                     "<?php\nnamespace App\\Policies;\nclass PostPolicy {\n    public function publish($user) {}\n}\n",
+		"vendor/laravel/framework/src/Illuminate/Foundation/Configuration/Middleware.php": strings.Replace(middleware, "%s", "auth.basic", 1),
+	})
+	refreshPaths(t, ws, root, "app/Providers/AuthServiceProvider.php", "app/Policies/PostPolicy.php")
+	if names := ws.Authorization.AbilityNames(); !slices.Equal(names, []string{"manage-team", "publish"}) {
+		t.Errorf("an edited provider and a created policy change the abilities: %v", names)
+	}
+	if names := ws.Authorization.MiddlewareNames(); !slices.Equal(names, []string{"auth"}) {
+		t.Errorf("Laravel's defaults are read again only when Composer's state changes: %v", names)
+	}
+	refreshPaths(t, ws, root, "composer.lock")
+	if names := ws.Authorization.MiddlewareNames(); !slices.Equal(names, []string{"auth.basic"}) {
+		t.Errorf("an update of the installed packages reads Laravel's defaults again: %v", names)
 	}
 }

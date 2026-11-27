@@ -27,7 +27,8 @@ const (
 	dirEndSwitch
 	dirBreak // `@break`, `@break($cond)`
 	dirContinue
-	dirUse  // `@use('App\Models\User')`
+	dirUse // `@use('App\Models\User')`
+	dirTranslate
 	dirPHP  // `@php`, read by the scanner
 	dirNone // known, with nothing to check: `@csrf`, `@endsection`
 )
@@ -40,12 +41,14 @@ const (
 	condNot                     // `@unless($x)`
 	condIsset                   // `@isset($x)`
 	condEmpty                   // `@empty($x)`
-	condOpaque                  // `@auth`, `@can('edit', $post)`: arguments are only checked
+	condOpaque                  // `@auth`, `@env('local')`: arguments are only checked
+	condGate                    // `@can('edit', $post)`: a Gate check of the arguments
 )
 
 type directive struct {
-	kind directiveKind
-	cond condition
+	kind   directiveKind
+	cond   condition
+	method string
 }
 
 // directives lists the directives of Laravel and Livewire. Anything else after
@@ -63,11 +66,15 @@ func init() {
 	add(dirIf, condNot, "unless")
 	add(dirIf, condIsset, "isset")
 	add(dirIf, condEmpty, "empty")
-	add(dirIf, condOpaque, "auth", "guest", "production", "env", "can", "cannot", "canany",
+	add(dirIf, condOpaque, "auth", "guest", "production", "env",
 		"error", "hasSection", "sectionMissing", "session", "context", "hasstack")
 	add(dirElse, condExpr, "else")
 	add(dirElseIf, condExpr, "elseif")
-	add(dirElseIf, condOpaque, "elseauth", "elseguest", "elsecan", "elsecannot", "elsecanany")
+	add(dirElseIf, condOpaque, "elseauth", "elseguest")
+	for name, method := range map[string]string{"can": "check", "cannot": "denies", "canany": "any"} {
+		directives[name] = directive{kind: dirIf, cond: condGate, method: method}
+		directives["else"+name] = directive{kind: dirElseIf, cond: condGate, method: method}
+	}
 	add(dirEndIf, condExpr, "endif", "endunless", "endisset", "endempty", "endauth", "endguest",
 		"endproduction", "endenv", "endcan", "endcannot", "endcanany", "enderror", "endsession", "endcontext")
 	add(dirForeach, condExpr, "foreach")
@@ -93,13 +100,15 @@ func init() {
 		"push", "pushOnce", "pushIf", "prepend", "prependOnce", "stack", "once", "fragment",
 		"component", "componentFirst", "slot", "props", "aware", "inject",
 		"json", "js", "class", "style", "checked", "selected", "disabled", "readonly", "required",
-		"method", "csrf", "lang", "choice", "dd", "dump", "vite", "viteReactRefresh", "unset",
+		"method", "csrf", "dd", "dump", "vite", "viteReactRefresh", "unset",
 		// Livewire
 		"livewire", "livewireStyles", "livewireScripts", "livewireScriptConfig", "persist", "entangle",
 		"this", "script", "assets", "teleport",
 		// Common packages
 		"filamentStyles", "filamentScripts", "routes", "inertia", "inertiaHead", "fluxAppearance", "fluxScripts",
 	)
+	directives["lang"] = directive{kind: dirTranslate, method: "get"}
+	directives["choice"] = directive{kind: dirTranslate, method: "choice"}
 	add(dirNone, condExpr,
 		"endsection", "endpush", "endPushOnce", "endPushIf", "endprepend", "endPrependOnce", "endonce",
 		"endfragment", "endcomponent", "endcomponentClass", "endslot", "endlang", "endpersist",

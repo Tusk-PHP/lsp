@@ -17,6 +17,7 @@ func (ws *Bootstrapped) IndexFile(uri, source string) {
 	if ws.RouteIndex != nil {
 		ws.RouteIndex.IndexFile(uri, source)
 	}
+	ws.Authorization.IndexFile(uri, source)
 }
 
 func (ws *Bootstrapped) RemoveFile(uri string) {
@@ -26,4 +27,5 @@ func (ws *Bootstrapped) RemoveFile(uri string) {
 	if ws.RouteIndex != nil {
 		ws.RouteIndex.IndexFile(uri, "")
 	}
+	ws.Authorization.IndexFile(uri, "")
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/phparray"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/types"
@@ -25,22 +26,6 @@ func NewFrameworkArrayResolver(index *symbols.Index, rootPath, framework string)
 	return &FrameworkArrayResolver{index: index, rootPath: rootPath, framework: framework}
 }
 
-// ResolveCallReturnKeys resolves array keys for a call expression result.
-// expr is the call expression (e.g. "config('app')", "$request->validated()").
-// source is the current file content for context.
-func (r *FrameworkArrayResolver) ResolveCallReturnKeys(expr, source string) []types.ShapeField {
-	expr = strings.TrimSpace(expr)
-	expr = strings.TrimSuffix(expr, ";")
-
-	switch r.framework {
-	case "laravel":
-		return r.resolveLaravelCall(expr, source)
-	case "symfony":
-		return r.resolveSymfonyCall(expr, source)
-	}
-	return nil
-}
-
 // ResolveMethodReturnKeys resolves array keys for $var->method() based on the
 // class type and method name.
 func (r *FrameworkArrayResolver) ResolveMethodReturnKeys(classFQN, methodName string) []types.ShapeField {
@@ -51,53 +36,16 @@ func (r *FrameworkArrayResolver) ResolveMethodReturnKeys(classFQN, methodName st
 	return nil
 }
 
-// --- Laravel ---
-
-func (r *FrameworkArrayResolver) resolveLaravelCall(expr, source string) []types.ShapeField {
-	// config('app') → keys from config/app.php
-	if strings.HasPrefix(expr, "config(") {
-		return r.resolveLaravelConfig(expr)
-	}
-	return nil
-}
-
-func (r *FrameworkArrayResolver) resolveLaravelConfig(expr string) []types.ShapeField {
-	// Extract the config key: config('app') → "app", config('app.name') → "app"
-	arg := extractFirstStringArg(expr)
-	if arg == "" {
-		// config() with no args — list top-level config file names
+func (r *FrameworkArrayResolver) ConfigKeys(path string) []types.ShapeField {
+	if path == "" {
 		return r.ListConfigFiles()
 	}
-
-	// Split on dots: 'database.connections.mysql' → ['database', 'connections', 'mysql']
-	parts := strings.Split(arg, ".")
-	configFile := parts[0]
-
-	// Parse the config file
-	keys := r.ParseConfigFile(configFile)
-	if keys == nil {
-		return nil
+	file, rest, _ := strings.Cut(path, ".")
+	fields := r.ParseConfigFile(file)
+	if rest == "" {
+		return fields
 	}
-
-	// Drill into nested keys via dot segments
-	for _, segment := range parts[1:] {
-		var nestedType string
-		for _, f := range keys {
-			if f.Key == segment {
-				nestedType = f.Type
-				break
-			}
-		}
-		if nestedType == "" {
-			return nil
-		}
-		keys = types.ParseArrayShape(nestedType)
-		if keys == nil {
-			return nil
-		}
-	}
-
-	return keys
+	return types.FieldsAt(fields, strings.Split(rest, "."))
 }
 
 // ListConfigFiles returns all available config file names as shape fields,
@@ -199,26 +147,7 @@ func (r *FrameworkArrayResolver) resolveFormRequestKeys(classFQN string) []types
 			if err != nil {
 				continue
 			}
-			return extractRulesKeys(string(content))
-		}
-	}
-
-	// Walk inheritance chain
-	chain := r.index.GetInheritanceChain(classFQN)
-	for _, parent := range chain {
-		members := r.index.GetClassMembers(parent)
-		for _, m := range members {
-			if m.Name == "rules" && m.Kind == symbols.KindMethod {
-				if m.URI == "" || m.URI == "builtin" {
-					continue
-				}
-				path := symbols.URIToPath(m.URI)
-				content, err := os.ReadFile(path)
-				if err != nil {
-					continue
-				}
-				return extractRulesKeys(string(content))
-			}
+			return extractRulesKeys(string(content), r.index.GrammarOf(m.URI))
 		}
 	}
 	return nil
@@ -249,14 +178,6 @@ func (r *FrameworkArrayResolver) resolveModelToArrayKeys(classFQN string) []type
 		fields = append(fields, types.ShapeField{Key: name, Type: typ})
 	}
 	return fields
-}
-
-// --- Symfony ---
-
-func (r *FrameworkArrayResolver) resolveSymfonyCall(expr, source string) []types.ShapeField {
-	// $container->getParameter('key') — we'd need to parse services.yaml parameters
-	// For now, return nil (future implementation)
-	return nil
 }
 
 // --- Vendor Config Discovery ---
@@ -471,27 +392,10 @@ func stripQuotes(s string) string {
 
 // --- Helpers ---
 
-func extractFirstStringArg(expr string) string {
-	openParen := strings.Index(expr, "(")
-	if openParen < 0 {
-		return ""
-	}
-	closeParen := strings.LastIndex(expr, ")")
-	if closeParen <= openParen {
-		return ""
-	}
-	arg := strings.TrimSpace(expr[openParen+1 : closeParen])
-	// Strip quotes
-	if len(arg) >= 2 && (arg[0] == '\'' || arg[0] == '"') && arg[len(arg)-1] == arg[0] {
-		return arg[1 : len(arg)-1]
-	}
-	return ""
-}
-
 // extractRulesKeys parses a FormRequest class source and extracts field names
 // from the rules() method's return array.
-func extractRulesKeys(source string) []types.ShapeField {
-	file := parser.ParseFile(source)
+func extractRulesKeys(source string, grammars phpparser.GrammarRange) []types.ShapeField {
+	file := parser.ParseFileIn(source, grammars)
 	if file == nil {
 		return nil
 	}

@@ -26,9 +26,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/models"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/symquery"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -722,49 +720,40 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	if ws.RouteIndex != nil {
 		rt.Completion.SetLaravelRouteIndex(ws.RouteIndex)
 	}
+	rt.Completion.SetLaravelAuthorization(ws.Authorization)
 	rt.Completion.SetViewResolver(viewResolver)
 	rt.Completion.SetTranslationResolver(translationResolver)
 	rt.Completion.SetSymfonyTranslationResolver(symfonyTranslations)
 	rt.Completion.SetSymfonyCommands(ws.SymfonyCommands)
 
 	rt.InlayHint = inlayhint.NewProvider(ws.Index, ws.Container)
-	rt.InlayHint.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return rt.Completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	})
 
 	rt.Hover = hover.NewProvider(ws.Index, ws.Container, s.Framework)
+	rt.Hover.SetLaravelAuthorization(ws.Authorization)
 	rt.Hover.SetArrayResolver(arrayResolver)
 	rt.Hover.SetConfig(ws.Config)
-	rt.Hover.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return rt.Completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	})
 
 	rt.Analyzer = analyzer.NewAnalyzer(ws.Index, ws.Container)
 	if ws.RouteIndex != nil {
 		rt.Analyzer.SetLaravelRouteIndex(ws.RouteIndex)
 	}
-	rt.Analyzer.SetChainResolver(rt.Completion.ResolveExpressionType)
-	rt.Analyzer.SetTypedChainResolver(rt.Completion.ResolveExpressionTypeTyped)
+	rt.Analyzer.SetLaravelAuthorization(ws.Authorization)
 	rt.Analyzer.SetViewResolver(viewResolver)
 	rt.Analyzer.SetTranslationResolver(translationResolver)
 	rt.Analyzer.SetSymfonyTranslationResolver(symfonyTranslations)
 	rt.Analyzer.SetSymfonyCommands(ws.SymfonyCommands)
 
 	rt.Diagnostics = diagnostics.NewProvider(ws.Index, s.Framework, s.RootPath, newStdLogger(nil), ws.Config)
-	rt.Diagnostics.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		return rt.Completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
-	}
+	rt.Diagnostics.TypeResolver = rt.Completion.DiagnosticType
 	rt.Diagnostics.BuilderModelResolver = rt.Completion.ResolveBuilderModel
 	rt.Diagnostics.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(ws.Index, ws.SchemaIsLive)
 	rt.Diagnostics.Profile = ws.Profile
 	if ws.ViewData != nil {
 		rt.Diagnostics.ViewTypes = &frameworklaravel.ViewTypes{
-			Data:  ws.ViewData,
-			Index: ws.Index,
-			Read:  readFile,
-			Resolve: func(expr, source string, file *parser.FileNode, line, col int) string {
-				return rt.Completion.ResolveExpressionType(expr, source, protocol.Position{Line: line, Character: col}, file)
-			},
+			Data:     ws.ViewData,
+			Index:    ws.Index,
+			Read:     readFile,
+			Resolver: rt.Completion.Resolver,
 		}
 	}
 	providers := frameworklaravel.NewProviders(s.RootPath, ws.Index)
@@ -1126,7 +1115,7 @@ func (s *Service) laravelModelSchema(fqn string) (LaravelModelSchemaOutput, erro
 	if sym == nil {
 		return LaravelModelSchemaOutput{}, fmt.Errorf("model %q not found", fqn)
 	}
-	tableName := models.ResolveModelTableName(ws.Index, sym, s.RootPath)
+	tableName := models.ResolveModelTableName(ws.Index, sym)
 	out := LaravelModelSchemaOutput{
 		Model:       ptrSymbolMatch(toSymbolMatch(sym)),
 		TableName:   tableName,
@@ -1221,7 +1210,7 @@ func (s *Service) laravelModels() []map[string]any {
 	for _, model := range modelsList {
 		record := map[string]any{
 			"symbol":    toSymbolMatch(model),
-			"tableName": models.ResolveModelTableName(ws.Index, model, s.RootPath),
+			"tableName": models.ResolveModelTableName(ws.Index, model),
 		}
 		out = append(out, record)
 	}

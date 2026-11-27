@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 func kinds(nodes []Node, src string) []string {
@@ -96,7 +97,7 @@ func TestCompileIsValidPHP(t *testing.T) {
 	if !doc.Structured {
 		t.Fatal("balanced template compiled flat")
 	}
-	file := parser.ParseFile(doc.PHP)
+	file := parser.ParseFile(doc.PHP, token.Latest)
 	if len(file.Errors) > 0 {
 		t.Fatalf("virtual PHP has syntax errors %v:\n%s", file.Errors, doc.PHP)
 	}
@@ -110,7 +111,7 @@ func TestCompileUnbalancedIsFlat(t *testing.T) {
 	if doc.Structured {
 		t.Fatal("unbalanced template should compile flat")
 	}
-	if file := parser.ParseFile(doc.PHP); len(file.Errors) > 0 {
+	if file := parser.ParseFile(doc.PHP, token.Latest); len(file.Errors) > 0 {
 		t.Fatalf("flat PHP has syntax errors %v:\n%s", file.Errors, doc.PHP)
 	}
 }
@@ -206,6 +207,50 @@ func TestCommentsListsBladeComments(t *testing.T) {
 	for i, span := range got {
 		if src[span.Start:span.End] != want[i] {
 			t.Errorf("comment %d: got %q, want %q", i, src[span.Start:span.End], want[i])
+		}
+	}
+}
+
+func TestTranslationDirectivesCompileToTheTranslator(t *testing.T) {
+	tests := []struct{ template, want string }{
+		{"@lang('messages.welcome')", "echo app('translator')->get('messages.welcome');"},
+		{"@lang('messages.hi', ['name' => $n])", "echo app('translator')->get('messages.hi', ['name' => $n]);"},
+		{"@choice('messages.apples', $count)", "echo app('translator')->choice('messages.apples', $count);"},
+		{"@lang(['name' => $n]) Hello :name @endlang", "[['name' => $n]];"},
+		{"@if($a) @lang('x') @endif", "echo app('translator')->get('x');"},
+		{"@if($a) @lang('x')", "echo app('translator')->get('x');"},
+	}
+	for _, tt := range tests {
+		doc := Compile(tt.template)
+		if !strings.Contains(doc.PHP, tt.want) {
+			t.Errorf("%q compiled to\n%s\nwant it to contain %q", tt.template, doc.PHP, tt.want)
+		}
+		if file := parser.ParseFile(doc.PHP, token.Latest); len(file.Errors) > 0 {
+			t.Errorf("%q: syntax errors %v:\n%s", tt.template, file.Errors, doc.PHP)
+		}
+	}
+	if doc := Compile("@lang Hello @endlang"); strings.Contains(doc.PHP, "translator") {
+		t.Errorf("a block @lang has no key:\n%s", doc.PHP)
+	}
+}
+
+func TestGateDirectivesCompileToGateChecks(t *testing.T) {
+	gate := `app(\Illuminate\Contracts\Auth\Access\Gate::class)->`
+	tests := []struct{ template, want string }{
+		{"@can('edit', $post) x @endcan", "if (" + gate + "check('edit', $post)):"},
+		{"@cannot('edit') x @endcannot", "if (" + gate + "denies('edit')):"},
+		{"@canany(['edit', 'view']) x @endcanany", "if (" + gate + "any(['edit', 'view'])):"},
+		{"@can('a') x @elsecan('b') y @elsecannot('c') z @elsecanany(['d']) w @endcan", "elseif (" + gate + "check('b')):"},
+		{"@can('a') x @elsecannot('c') z @endcan", "elseif (" + gate + "denies('c')):"},
+		{"@can('a') x", gate + "check('a');"},
+	}
+	for _, tt := range tests {
+		doc := Compile(tt.template)
+		if !strings.Contains(doc.PHP, tt.want) {
+			t.Errorf("%q compiled to\n%s\nwant it to contain %q", tt.template, doc.PHP, tt.want)
+		}
+		if file := parser.ParseFile(doc.PHP, token.Latest); len(file.Errors) > 0 {
+			t.Errorf("%q: syntax errors %v:\n%s", tt.template, file.Errors, doc.PHP)
 		}
 	}
 }

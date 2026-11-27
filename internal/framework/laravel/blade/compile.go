@@ -218,6 +218,22 @@ func (c *compiler) args(n Node) {
 	c.emit("];")
 }
 
+func (c *compiler) translation(n Node, d directive) {
+	if !n.HasArgs || n.Args.End > n.Args.Start && c.tpl[n.Args.Start] == '[' {
+		c.args(n)
+		return
+	}
+	c.emit("echo app('translator')->" + d.method + "(")
+	c.copy(n.Args)
+	c.emit(");")
+}
+
+func (c *compiler) gate(n Node, d directive) {
+	c.emit(`app(\Illuminate\Contracts\Auth\Access\Gate::class)->` + d.method + "(")
+	c.copy(n.Args)
+	c.emit(")")
+}
+
 func (c *compiler) condition(n Node, d directive) {
 	if !n.HasArgs {
 		c.emit("true")
@@ -236,6 +252,8 @@ func (c *compiler) condition(n Node, d directive) {
 		c.emit("empty(")
 		c.copy(n.Args)
 		c.emit(")")
+	case condGate:
+		c.gate(n, d)
 	case condOpaque:
 		c.emit("[")
 		c.copy(n.Args)
@@ -365,6 +383,8 @@ func (c *compiler) directive(n Node) {
 		c.use(n)
 	case dirArgs:
 		c.args(n)
+	case dirTranslate:
+		c.translation(n, d)
 	}
 }
 
@@ -385,8 +405,17 @@ func (c *compiler) flatDirective(n Node) {
 		c.emit("[")
 		c.copy(n.Args)
 		c.emit("];")
-	case dirIf, dirElseIf, dirCase, dirBreak, dirContinue, dirArgs:
+	case dirIf, dirElseIf:
+		if d.cond == condGate && n.HasArgs {
+			c.gate(n, d)
+			c.emit(";")
+			return
+		}
 		c.args(n)
+	case dirCase, dirBreak, dirContinue, dirArgs:
+		c.args(n)
+	case dirTranslate:
+		c.translation(n, d)
 	case dirUse:
 		c.use(n)
 	}
