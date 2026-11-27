@@ -80,6 +80,7 @@ func TestCompleteUseWithNamespace(t *testing.T) {
 
 func TestCompleteAttribute(t *testing.T) {
 	p := setupCoverageCompletion()
+	p.index.IndexFile("file:///test.php", "<?php\n")
 	source := "<?php\n#["
 	items := p.GetCompletions("file:///test.php", source, protocol.Position{Line: 1, Character: 2})
 
@@ -100,6 +101,7 @@ namespace Toramanlis\ImplicitMigrations\Attributes;
 #[\Attribute]
 class Char {}
 `)
+	idx.IndexFile("file:///test.php", "<?php\n")
 	p := NewProvider(idx, nil, "none")
 
 	source := "<?php\n#[Ch"

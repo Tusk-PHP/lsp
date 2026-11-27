@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -35,15 +36,15 @@ class ftp_base {
 }
 `
 	idx.IndexFile("file:///base.php", src)
-	resolver := func(expr, source string, line, col int, file *parser.FileNode) string {
+	resolver := typesByText(func(expr string) string {
 		if expr == "$other" || expr == "$this" {
 			return "ftp_base"
 		}
 		return ""
-	}
+	})
 	checker := &UnknownMemberRule{TypeResolver: resolver}
 	var got []string
-	for _, f := range checker.Check(parser.ParseFile(src), src, idx) {
+	for _, f := range checker.Check(parser.ParseFile(src, token.Latest), src, idx) {
 		got = append(got, strings.Split(f.Message, " on ")[0])
 	}
 	// verbose differs from the declared $Verbose (properties are case-sensitive),
@@ -90,7 +91,7 @@ function f(AbstractDb $db, ItemInterface $item, Concrete $c) {
 }
 `
 	idx.IndexFile("file:///app.php", src)
-	resolver := func(expr, source string, line, col int, file *parser.FileNode) string {
+	resolver := typesByText(func(expr string) string {
 		switch expr {
 		case "$db":
 			return "Lib\\AbstractDb"
@@ -100,10 +101,10 @@ function f(AbstractDb $db, ItemInterface $item, Concrete $c) {
 			return "Lib\\Concrete"
 		}
 		return ""
-	}
+	})
 	checker := &UnknownMemberRule{TypeResolver: resolver}
 	var got []string
-	for _, f := range checker.Check(parser.ParseFile(src), src, idx) {
+	for _, f := range checker.Check(parser.ParseFile(src, token.Latest), src, idx) {
 		got = append(got, f.Message)
 	}
 	// A concrete class may be the object's own class, so a subclass's method

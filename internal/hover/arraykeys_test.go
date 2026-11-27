@@ -8,39 +8,85 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func TestGetArrayKeyAt(t *testing.T) {
+func hoverMarked(p *Provider, marked string) string {
+	before, after, _ := strings.Cut(marked, "‸")
+	line := strings.Count(before, "\n")
+	col := len(before) - strings.LastIndexByte(before, '\n') - 1
+	h := p.GetHover("file:///test.php", before+after, protocol.Position{Line: line, Character: col})
+	if h == nil {
+		return ""
+	}
+	return h.Contents.Value
+}
+
+func TestHoverArrayKeyCursorPositions(t *testing.T) {
+	p := NewProvider(symbols.NewIndex(), nil, "")
+	head := "<?php\nfunction f() {\n    $config = ['host' => 'h'];\n    "
+	for name, code := range map[string]string{
+		"single quote":     "$config['h‸ost'];",
+		"double quote":     `$config["h‸ost"];`,
+		"on the quote":     "$config[‸'host'];",
+		"on the last char": "$config['hos‸t'];",
+		"closing quote":    "$config['host‸'];",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := hoverMarked(p, head+code+"\n}\n"); !strings.Contains(got, "(array key) string $host") {
+				t.Errorf("hover = %q, want the host key", got)
+			}
+		})
+	}
+	for name, code := range map[string]string{
+		"integer key":       "$config[‸0];",
+		"not an access":     "echo 'ho‸st';",
+		"on the variable":   "$con‸fig['host'];",
+		"after the bracket": "$config['host']‸;",
+		"before the key":    "$config[‸ 'host'];",
+		"an empty offset":   "$config[‸] = 1;",
+		"a call's result":   "load()['h‸ost'];",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := hoverMarked(p, head+code+"\n}\n"); strings.Contains(got, "array key") {
+				t.Errorf("hover = %q, want no array key", got)
+			}
+		})
+	}
+}
+
+func TestHoverArrayKeysComeFromTheResolver(t *testing.T) {
+	p := NewProvider(symbols.NewIndex(), nil, "")
 	tests := []struct {
-		name    string
-		line    string
-		char    int
-		wantVar string
-		wantKey string
-		wantOk  bool
+		name, code, want string
 	}{
-		{"single quote", "        $config['host']", 18, "$config", "host", true},
-		{"double quote", `        $config["host"]`, 18, "$config", "host", true},
-		{"cursor on key start", "        $config['host']", 17, "$config", "host", true},
-		{"cursor on key end", "        $config['host']", 20, "$config", "host", true},
-		{"not in string", "        $config[0]", 17, "", "", false},
-		{"no bracket", "        echo 'hello'", 14, "", "", false},
+		{"an array split over lines", "<?php\nfunction f() {\n    $data = [\n        'name'\n            => 'n',\n        'age' => 3,\n    ];\n    $data['a‸ge'];\n}\n", "(array key) int $age"},
+		{"an array() literal", "<?php\nfunction f() {\n    $data = array('name' => 'n');\n    $data['na‸me'];\n}\n", "(array key) string $name"},
+		{"keys written one by one", "<?php\nfunction f() {\n    $data = [];\n    $data['name'] = 'n';\n    $data['na‸me'];\n}\n", "(array key) $name"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			varName, key, ok := getArrayKeyAt(tt.line, tt.char)
-			if ok != tt.wantOk {
-				t.Errorf("ok = %v, want %v", ok, tt.wantOk)
-				return
-			}
-			if !ok {
-				return
-			}
-			if varName != tt.wantVar {
-				t.Errorf("varName = %q, want %q", varName, tt.wantVar)
-			}
-			if key != tt.wantKey {
-				t.Errorf("key = %q, want %q", key, tt.wantKey)
+			if got := hoverMarked(p, tt.code); !strings.Contains(got, tt.want) {
+				t.Errorf("hover = %q, want %q", got, tt.want)
 			}
 		})
+	}
+
+	for name, code := range map[string]string{
+		"a key in a comment":          "<?php\nfunction f() {\n    /*\n    $data = ['name' => 'n'];\n    */\n    $data = load();\n    $data['na‸me'];\n}\n",
+		"a key in a string":           "<?php\nfunction f() {\n    $s = '\n    $data = [\"name\" => 1];\n    ';\n    $data = load();\n    $data['na‸me'];\n}\n",
+		"an assignment in a function": "<?php\nfunction other() {\n    $data = ['name' => 'n'];\n}\nfunction f($data) {\n    $data['na‸me'];\n}\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := hoverMarked(p, code); strings.Contains(got, "array key") {
+				t.Errorf("hover = %q, want no array key", got)
+			}
+		})
+	}
+}
+
+func TestHoverArrayKeyOfAConfigResult(t *testing.T) {
+	p := setupConfigHoverProvider(t)
+	got := hoverMarked(p, "<?php\nfunction f() {\n    $db = config('database.connections');\n    $db['mysql']['p‸ort'];\n}\n")
+	if !strings.Contains(got, "(array key) int $port") {
+		t.Errorf("hover = %q, want the port key of the config file", got)
 	}
 }
 

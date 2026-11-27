@@ -218,6 +218,16 @@ func (c *compiler) args(n Node) {
 	c.emit("];")
 }
 
+func (c *compiler) translation(n Node, d directive) {
+	if !n.HasArgs || n.Args.End > n.Args.Start && c.tpl[n.Args.Start] == '[' {
+		c.args(n)
+		return
+	}
+	c.emit("echo app('translator')->" + d.translate + "(")
+	c.copy(n.Args)
+	c.emit(");")
+}
+
 func (c *compiler) condition(n Node, d directive) {
 	if !n.HasArgs {
 		c.emit("true")
@@ -365,6 +375,8 @@ func (c *compiler) directive(n Node) {
 		c.use(n)
 	case dirArgs:
 		c.args(n)
+	case dirTranslate:
+		c.translation(n, d)
 	}
 }
 
@@ -387,6 +399,8 @@ func (c *compiler) flatDirective(n Node) {
 		c.emit("];")
 	case dirIf, dirElseIf, dirCase, dirBreak, dirContinue, dirArgs:
 		c.args(n)
+	case dirTranslate:
+		c.translation(n, d)
 	case dirUse:
 		c.use(n)
 	}

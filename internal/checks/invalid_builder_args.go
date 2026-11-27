@@ -2,11 +2,11 @@ package checks
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -40,10 +40,11 @@ var builderRelationMethods = map[string]bool{
 	"load": true, "loadMissing": true, "loadCount": true,
 }
 
-// ModelResolverFunc resolves the Eloquent model a builder call is made on.
-// prefix is the line up to and including the call's opening parenthesis
-// (`Post::query()->where(`). Its FQN is "" if the model cannot be determined.
-type ModelResolverFunc func(prefix string, method string, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel
+// ModelResolverFunc gives the Eloquent model a builder call is made on, from
+// the call's receiver node in file: the class of `Post::where(`, or the
+// builder or model `$query->where(` is called on. Its FQN is "" when the
+// model can't be worked out.
+type ModelResolverFunc func(file *parser.FileNode, receiver ast.Expr) frameworklaravel.QueriedModel
 
 // MemberChecker provides methods to verify columns and relations on a model.
 type MemberChecker interface {
@@ -81,6 +82,7 @@ var aggregateRelationMethods = map[string]bool{
 type InvalidBuilderArgRule struct {
 	ModelResolver ModelResolverFunc
 	Members       MemberChecker
+	Shared        *Shared
 }
 
 func (r *InvalidBuilderArgRule) Codes() []rule.Code {
@@ -91,17 +93,17 @@ func (r *InvalidBuilderArgRule) Check(file *parser.FileNode, source string, _ *s
 	if r.ModelResolver == nil || r.Members == nil || file == nil {
 		return nil
 	}
-	lines := strings.Split(source, "\n")
+	syntax := r.Shared.tree(source, file)
 	var findings []Finding
-
-	mask := newMaskState(source)
 	joins := &builderJoins{source: source}
-	for i, line := range lines {
-		code := maskPHPLine(line, &mask)
-		if !strings.Contains(code, "->") && !strings.Contains(code, "::") {
+	for _, m := range syntax.references().members {
+		if !m.call() || len(m.args.Args) == 0 {
 			continue
 		}
-		findings = append(findings, r.checkLine(line, code, i, source, file, joins)...)
+		method := syntax.text(m.name)
+		if builderRelationMethods[method] || builderColumnMethods[method] || builderDBColumnMethods[method] {
+			findings = append(findings, r.checkCall(syntax, m, method, file, joins)...)
+		}
 	}
 	return findings
 }
@@ -120,19 +122,47 @@ func (j *builderJoins) mayBeJoined(line, col int) bool {
 	return frameworklaravel.BuilderMayBeJoined(j.tokens, j.doc, line, col)
 }
 
-// callPrefix returns the line up to and including the opening parenthesis of
-// the call a match starts at (its `->` or `::`), or false when that operator
-// is inside a comment or string rather than code.
-func callPrefix(line, code string, match []int) (string, bool) {
-	start, nameEnd := match[0], match[3]
-	if code[start:start+2] != line[start:start+2] {
-		return "", false
+func (r *InvalidBuilderArgRule) checkCall(syntax *fileSyntax, call memberReference, method string, file *parser.FileNode, joins *builderJoins) []Finding {
+	lineNum := syntax.line(call.name)
+	owner := call.owner
+	at := builderCall{line: lineNum, owner: owner}
+	at.operatorLine, at.operatorCol = syntax.lines.Position(syntax.memberOperator(call.name))
+	onNameLine := func(n ast.Node) bool {
+		start, _ := syntax.lines.Position(n.Bounds().Start)
+		end, _ := syntax.lines.Position(n.Bounds().End)
+		return start == lineNum && end == lineNum
 	}
-	open := strings.IndexByte(line[nameEnd:], '(')
-	if open < 0 {
-		return "", false
+	var findings []Finding
+	add := func(f *Finding) {
+		if f != nil {
+			findings = append(findings, *f)
+		}
 	}
-	return line[:nameEnd+open+1], true
+	args := call.args.Args
+	first := args[0].Value
+	if relation, ok := syntax.stringLiteral(first); ok && onNameLine(first) {
+		if len(args) > 1 && aggregateRelationMethods[method] {
+			if column, ok := syntax.stringLiteral(args[1].Value); ok && onNameLine(args[1].Value) {
+				startCol, endCol := syntax.stringContent(args[1].Value)
+				add(r.validateAggregateSecondArg(method, relation, column, lineNum, startCol, endCol, owner, file))
+			}
+		}
+		startCol, endCol := syntax.stringContent(first)
+		add(r.validateArg(method, relation, at, startCol, endCol, file, joins))
+	}
+	if array, ok := first.(*ast.Array); ok && onNameLine(array) {
+		for _, item := range array.Items {
+			name := item.Key
+			if name == nil {
+				name = item.Value
+			}
+			if value, ok := syntax.stringLiteral(name); ok {
+				startCol, endCol := syntax.stringContent(name)
+				add(r.validateArg(method, stripAlias(value), at, startCol, endCol, file, joins))
+			}
+		}
+	}
+	return findings
 }
 
 // isPlainName reports whether s is a bare column or relation name. Anything
@@ -151,103 +181,14 @@ func isPlainName(s string) bool {
 	return true
 }
 
-// Matches ->method('arg') or ::method('arg') with a completed single-quoted string.
-var directArgSingleRe = regexp.MustCompile(`(?:->|::)(\w+)\s*\(\s*'([^']*)'`)
-
-// Matches ->method("arg") or ::method("arg") with a completed double-quoted string.
-var directArgDoubleRe = regexp.MustCompile(`(?:->|::)(\w+)\s*\(\s*"([^"]*)"`)
-
-// Matches string literals inside array arguments: ['val1', 'val2']
-var arrayArgRe = regexp.MustCompile(`(?:->|::)(\w+)\s*\(\s*\[([^\]]*)\]`)
-
-// Matches individual single-quoted strings.
-var singleQuotedRe = regexp.MustCompile(`'([^']*)'`)
-
-// Matches individual double-quoted strings.
-var doubleQuotedRe = regexp.MustCompile(`"([^"]*)"`)
-
-// Matches two-arg pattern: ->withSum('relation', 'column') — captures method, first and second args.
-var twoArgSingleRe = regexp.MustCompile(`(?:->|::)(\w+)\s*\(\s*'([^']*)'\s*,\s*'([^']*)'`)
-var twoArgDoubleRe = regexp.MustCompile(`(?:->|::)(\w+)\s*\(\s*"([^"]*)"\s*,\s*"([^"]*)"`)
-
-func (r *InvalidBuilderArgRule) checkLine(line, code string, lineNum int, source string, file *parser.FileNode, joins *builderJoins) []Finding {
-	var findings []Finding
-
-	// Check aggregate two-arg methods first: ->withSum('relation', 'column')
-	for _, re := range []*regexp.Regexp{twoArgSingleRe, twoArgDoubleRe} {
-		for _, match := range re.FindAllStringSubmatchIndex(line, -1) {
-			method := line[match[2]:match[3]]
-			if !aggregateRelationMethods[method] {
-				continue
-			}
-			prefix, ok := callPrefix(line, code, match)
-			if !ok {
-				continue
-			}
-			firstArg := line[match[4]:match[5]]
-			secondArg := line[match[6]:match[7]]
-			secondStart := match[6]
-			secondEnd := match[7]
-
-			if f := r.validateAggregateSecondArg(method, firstArg, secondArg, lineNum, secondStart, secondEnd, prefix, source, file); f != nil {
-				findings = append(findings, *f)
-			}
-		}
-	}
-
-	// Check direct string arguments: ->where('column_name', or ->where("column_name",
-	for _, re := range []*regexp.Regexp{directArgSingleRe, directArgDoubleRe} {
-		for _, match := range re.FindAllStringSubmatchIndex(line, -1) {
-			method := line[match[2]:match[3]]
-			argValue := line[match[4]:match[5]]
-			argStart := match[4]
-			argEnd := match[5]
-			prefix, ok := callPrefix(line, code, match)
-			if !ok {
-				continue
-			}
-
-			if f := r.validateArg(method, argValue, builderCall{lineNum, match[0], prefix}, argStart, argEnd, source, file, joins); f != nil {
-				findings = append(findings, *f)
-			}
-		}
-	}
-
-	// Check array arguments: ->with(['products', 'category'])
-	for _, match := range arrayArgRe.FindAllStringSubmatchIndex(line, -1) {
-		method := line[match[2]:match[3]]
-		arrayContent := line[match[4]:match[5]]
-		prefix, ok := callPrefix(line, code, match)
-		if !ok {
-			continue
-		}
-
-		// Extract each quoted string from the array
-		for _, re := range []*regexp.Regexp{singleQuotedRe, doubleQuotedRe} {
-			for _, strMatch := range re.FindAllStringSubmatchIndex(arrayContent, -1) {
-				argValue := arrayContent[strMatch[2]:strMatch[3]]
-				absStart := match[4] + strMatch[2]
-				absEnd := match[4] + strMatch[3]
-
-				cleaned := stripAlias(argValue)
-				if f := r.validateArg(method, cleaned, builderCall{lineNum, match[0], prefix}, absStart, absEnd, source, file, joins); f != nil {
-					findings = append(findings, *f)
-				}
-			}
-		}
-	}
-
-	return findings
-}
-
 // validateAggregateSecondArg validates the second argument of aggregate methods
 // like withSum('relation', 'column') — the column must exist on the related model.
-func (r *InvalidBuilderArgRule) validateAggregateSecondArg(method, relationName, columnName string, lineNum, startCol, endCol int, prefix, source string, file *parser.FileNode) *Finding {
+func (r *InvalidBuilderArgRule) validateAggregateSecondArg(method, relationName, columnName string, lineNum, startCol, endCol int, owner ast.Expr, file *parser.FileNode) *Finding {
 	if !isPlainName(columnName) || relationName == "" {
 		return nil
 	}
 
-	modelFQN := r.ModelResolver(prefix, method, source, lineNum, file).FQN
+	modelFQN := r.ModelResolver(file, owner).FQN
 	if modelFQN == "" {
 		return nil
 	}
@@ -273,12 +214,13 @@ func (r *InvalidBuilderArgRule) validateAggregateSecondArg(method, relationName,
 }
 
 type builderCall struct {
-	line     int
-	operator int
-	prefix   string
+	line         int
+	operatorLine int
+	operatorCol  int
+	owner        ast.Expr
 }
 
-func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builderCall, startCol, endCol int, source string, file *parser.FileNode, joins *builderJoins) *Finding {
+func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builderCall, startCol, endCol int, file *parser.FileNode, joins *builderJoins) *Finding {
 	if argValue == "" {
 		return nil
 	}
@@ -321,8 +263,7 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 		return nil
 	}
 
-	// Resolve the model from the line up to the method call
-	model := r.ModelResolver(call.prefix, method, source, call.line, file)
+	model := r.ModelResolver(file, call.owner)
 	modelFQN := model.FQN
 	if modelFQN == "" {
 		return nil
@@ -352,7 +293,7 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 	if msg == "" {
 		return nil
 	}
-	if !isRelMethod && (model.OtherTables || joins.mayBeJoined(call.line, call.operator)) {
+	if !isRelMethod && (model.OtherTables || joins.mayBeJoined(call.operatorLine, call.operatorCol)) {
 		return nil
 	}
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/stubs"
 )
 
@@ -74,7 +75,7 @@ func TestOptionalExtensionAvailabilityAndIsolation(t *testing.T) {
 			continue
 		}
 		ext := strings.Split(entry.Path, "/")[2]
-		file := parser.ParseFile(entry.Content)
+		file := parser.ParseFile(entry.Content, token.Latest)
 		names := make([]string, 0, len(file.Classes)+len(file.Functions)+len(file.Constants))
 		for _, class := range file.Classes {
 			names = append(names, class.Name)

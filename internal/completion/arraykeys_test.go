@@ -1,48 +1,64 @@
 package completion
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func TestExtractArrayKeyContext(t *testing.T) {
+func arrayKeyContextAt(t *testing.T, marked string) (keys *arrayKeyContext, varName string, ok bool) {
+	t.Helper()
+	ctx := cursorContextAt(t, marked)
+	dim, ok := ctx.StringDim()
+	if !ok {
+		return nil, "", false
+	}
+	keys, ok = arrayKeyContextOf(dim)
+	if ok {
+		varName = keys.Var.Bounds().Text(ctx.File.Source)
+	}
+	return keys, varName, ok
+}
+
+func TestArrayKeyContext(t *testing.T) {
 	tests := []struct {
-		name      string
-		prefix    string
-		wantVar   string
-		wantPart  string
-		wantQuote string
-		wantOk    bool
+		name       string
+		code       string
+		wantVar    string
+		wantAccess []string
+		wantPart   string
+		wantQuote  string
+		wantOk     bool
 	}{
-		{"single quote start", "        $config['", "$config", "", "'", true},
-		{"double quote start", `        $config["`, "$config", "", "\"", true},
-		{"partial key", "        $config['da", "$config", "da", "'", true},
-		{"bracket only", "        $config[", "$config", "", "", true},
-		{"nested in call", "        foo($config['k", "$config", "k", "'", true},
-		{"not array access", "        foo('bar", "", "", "", false},
-		{"no variable", "        ['key", "", "", "", false},
-		{"method call not var", "        $this->method('", "", "", "", false},
+		{name: "single quote start", code: "$config['", wantVar: "$config", wantQuote: "'", wantOk: true},
+		{name: "double quote start", code: `$config["`, wantVar: "$config", wantQuote: "\"", wantOk: true},
+		{name: "partial key", code: "$config['da", wantVar: "$config", wantPart: "da", wantQuote: "'", wantOk: true},
+		{name: "bracket only", code: "$config[", wantVar: "$config", wantOk: true},
+		{name: "nested in call", code: "foo($config['k", wantVar: "$config", wantPart: "k", wantQuote: "'", wantOk: true},
+		{name: "two levels", code: "$config['database']['", wantVar: "$config", wantAccess: []string{"database"}, wantQuote: "'", wantOk: true},
+		{name: "three levels", code: "$config['database']['replicas']['", wantVar: "$config", wantAccess: []string{"database", "replicas"}, wantQuote: "'", wantOk: true},
+		{name: "a level on the next line", code: "$config['database']\n    ['repl", wantVar: "$config", wantAccess: []string{"database"}, wantPart: "repl", wantQuote: "'", wantOk: true},
+		{name: "inside a closed key", code: "$config['da|ta'];", wantVar: "$config", wantPart: "da", wantQuote: "'", wantOk: true},
+		{name: "not array access", code: "foo('bar"},
+		{name: "no variable", code: "['key"},
+		{name: "method call not var", code: "$this->method('"},
+		{name: "a property", code: "$this->data['"},
+		{name: "a level that is not a string", code: "$config[$k]['"},
+		{name: "in a comment", code: "// $config['"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			varName, partial, quote, ok := extractArrayKeyContext(tt.prefix)
+			ctx, varName, ok := arrayKeyContextAt(t, "<?php\n"+tt.code)
 			if ok != tt.wantOk {
-				t.Errorf("ok = %v, want %v", ok, tt.wantOk)
-				return
+				t.Fatalf("ok = %v, want %v (%#v)", ok, tt.wantOk, ctx)
 			}
 			if !ok {
 				return
 			}
-			if varName != tt.wantVar {
-				t.Errorf("varName = %q, want %q", varName, tt.wantVar)
-			}
-			if partial != tt.wantPart {
-				t.Errorf("partial = %q, want %q", partial, tt.wantPart)
-			}
-			if quote != tt.wantQuote {
-				t.Errorf("quote = %q, want %q", quote, tt.wantQuote)
+			if varName != tt.wantVar || ctx.Partial != tt.wantPart || ctx.Quote != tt.wantQuote || !slices.Equal(ctx.AccessKeys, tt.wantAccess) {
+				t.Fatalf("got %#v", ctx)
 			}
 		})
 	}
@@ -300,64 +316,6 @@ class Service {
 	}
 	if !labels["cache"] {
 		t.Error("expected 'cache' at top level")
-	}
-}
-
-func TestParseArrayKeyContextNested(t *testing.T) {
-	tests := []struct {
-		name       string
-		prefix     string
-		wantVar    string
-		wantAccess []string
-		wantOk     bool
-	}{
-		{
-			"single level",
-			"        $config['",
-			"$config",
-			nil,
-			true,
-		},
-		{
-			"two levels",
-			"        $config['database']['",
-			"$config",
-			[]string{"database"},
-			true,
-		},
-		{
-			"three levels",
-			`        $config['database']['replicas']['`,
-			"$config",
-			[]string{"database", "replicas"},
-			true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := parseArrayKeyContext(tt.prefix)
-			if tt.wantOk && ctx == nil {
-				t.Fatal("expected context, got nil")
-			}
-			if !tt.wantOk && ctx != nil {
-				t.Fatal("expected nil context")
-			}
-			if !tt.wantOk {
-				return
-			}
-			if ctx.VarName != tt.wantVar {
-				t.Errorf("VarName = %q, want %q", ctx.VarName, tt.wantVar)
-			}
-			if len(ctx.AccessKeys) != len(tt.wantAccess) {
-				t.Errorf("AccessKeys = %v, want %v", ctx.AccessKeys, tt.wantAccess)
-			} else {
-				for i, k := range ctx.AccessKeys {
-					if k != tt.wantAccess[i] {
-						t.Errorf("AccessKeys[%d] = %q, want %q", i, k, tt.wantAccess[i])
-					}
-				}
-			}
-		})
 	}
 }
 

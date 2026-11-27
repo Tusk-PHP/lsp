@@ -2,80 +2,37 @@ package completion
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+
+	"github.com/Tusk-PHP/lsp/internal/container"
+
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-// resolveContainerCallType checks if the expression is a container resolution call
-// like app('request'), app(Request::class), resolve('cache'), $container->get('log')
-// and returns the concrete FQN from the container bindings.
-// config() with no args returns Repository; config('key') returns mixed (no resolution).
-func (p *Provider) resolveContainerCallType(r *resolve.Resolver, expr, source string, file *parser.FileNode) string {
-	// Special case: config() with no args returns the Repository instance
-	t := strings.TrimSpace(expr)
-	if t == "config()" {
-		if binding := p.container.ResolveDependency("config"); binding != nil {
-			return binding.Concrete
-		}
-		return "Illuminate\\Config\\Repository"
+func isContainerArg(arg sourcectx.CallArg, src string) bool {
+	if arg.Index != 0 || arg.InArray {
+		return false
 	}
-	// config('key') returns a mixed value, not a class — signal to stop resolution
-	if strings.HasPrefix(t, "config(") && strings.HasSuffix(t, ")") {
-		return "-"
+	if slices.Contains(container.ResolvingFunctions, arg.Function) {
+		return true
 	}
-
-	arg := ExtractContainerCallArg(expr)
-	if arg == "" {
-		return ""
+	if arg.Static || !slices.Contains(container.ResolvingMethods, arg.Method) {
+		return false
 	}
-	// Resolve ::class references: "Request::class" → FQN
-	if strings.HasSuffix(arg, "::class") {
-		className := strings.TrimSuffix(arg, "::class")
-		arg = r.ResolveClassNameLoose(className, file)
+	switch recv := arg.Receiver.(type) {
+	case *ast.Variable:
+		return recv.Bounds().Text(src) == "$container"
+	case *ast.PropertyFetch:
+		this, ok := recv.Object.(*ast.Variable)
+		return arg.Method == "make" && ok && this.Bounds().Text(src) == "$this" && recv.Name.Bounds().Text(src) == "app"
 	}
-	if binding := p.container.ResolveDependency(arg); binding != nil {
-		return binding.Concrete
-	}
-	// Try direct lookup if arg is already a FQN
-	if p.index.Lookup(arg) != nil {
-		return arg
-	}
-	return ""
-}
-
-// ExtractContainerCallArg is a backward-compatible wrapper for resolve.ExtractContainerCallArg.
-// Deprecated: use resolve.ExtractContainerCallArg directly.
-func ExtractContainerCallArg(expr string) string {
-	return resolve.ExtractContainerCallArg(expr)
-}
-
-// extractContainerArgContext detects whether the cursor is inside a container
-// resolution call like app(...), $container->get(...), $container->make(...),
-// resolve(...). Returns the partial argument text, the quote character used
-// (empty string if no quote), and true if matched.
-func extractContainerArgContext(trimmed string) (string, string, bool) {
-	patterns := []string{"app(", "resolve(", "$container->get(", "$container->make(", "$this->app->make("}
-	for _, pat := range patterns {
-		idx := strings.LastIndex(trimmed, pat)
-		if idx < 0 {
-			continue
-		}
-		after := trimmed[idx+len(pat):]
-		if strings.Contains(after, ")") {
-			continue
-		}
-		quote := ""
-		if len(after) > 0 && (after[0] == '\'' || after[0] == '"') {
-			quote = string(after[0])
-			after = after[1:]
-		}
-		return after, quote, true
-	}
-	return "", "", false
+	return false
 }
 
 // completeContainerResolve returns completion items for container resolution calls.

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -38,7 +39,7 @@ $selected = Arr::first($rows);
 
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///provider.php", source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}
@@ -59,29 +60,22 @@ func providerLineContaining(t *testing.T, source, needle string) int {
 func TestProviderGenericCoverageHelpers(t *testing.T) {
 	p, idx, source, file := setupTemplateProviderCoverage(t)
 
-	// Completion types chains with its own resolver, never through a callback.
-	if p.engine.TypedChainResolver != nil {
-		t.Fatal("expected NewProvider to leave TypedChainResolver unset")
-	}
-
-	if got := p.ResolveExpressionTypeTyped("   ", source, protocol.Position{}, file); !got.IsEmpty() {
+	if got := p.exprTypeAt("   ", source, protocol.Position{}, file); !got.IsEmpty() {
 		t.Fatalf("expected empty expression type, got %#v", got)
 	}
 
-	if got := p.resolveChainTypeTyped(p.engine.Resolver(), source, "$rows", "->", protocol.Position{}, file); !got.IsEmpty() {
-		t.Fatalf("expected empty chain type, got %#v", got)
+	if got := p.engine.Resolver().ReceiverTypeAt(source, protocol.Position{}, file); !got.IsEmpty() {
+		t.Fatalf("expected no receiver outside a member access, got %#v", got)
 	}
 
-	member := idx.Lookup("App\\Arr::first")
-	if member == nil {
+	if idx.Lookup("App\\Arr::first") == nil {
 		t.Fatal("expected App\\Arr::first symbol")
 	}
 
 	pos := protocol.Position{Line: providerLineContaining(t, source, "$selected =")}
 
-	ctx := resolve.ExprContext{Lines: resolve.SplitLines(source), Pos: pos, File: file}
 	call := func(args string) resolve.ResolvedType {
-		return p.engine.Resolver().MemberTypeForCall(member, file, "", nil, p.engine.Resolver().CallSiteFor(args, ctx))
+		return p.exprTypeAt("Arr::first("+args+")", source, pos, file)
 	}
 
 	if rt := call("[1, 2, 3]"); rt.String() != "?int" {

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -40,12 +41,12 @@ class Invoice extends \Fw\Notification {}
 			}
 			source := "<?php\nnamespace App\\Http;\n" + tc.use + "\n"
 			checker := &UnknownMemberRule{
-				TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string {
+				TypeResolver: typesByText(func(expr string) string {
 					return map[string]string{"$v": tc.typ}[expr]
-				},
+				}),
 				ConventionMethod: convention,
 			}
-			got := unknownMemberMessages(checker.Check(parser.ParseFile(source), source, idx))
+			got := unknownMemberMessages(checker.Check(parser.ParseFile(source, token.Latest), source, idx))
 			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
 				t.Errorf("got %v, want %v", got, tc.want)
 			}
