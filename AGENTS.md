@@ -48,6 +48,7 @@ go test -v -race -run TestHoverMethodChain ./internal/hover/   # one test
 TUSK_PHP_TOKENIZERS='php;docker run --rm -i -v /tmp:/tmp:ro php:7.4-cli php' go test ./internal/php/lexer/   # lexer against each PHP's token_get_all
 php scripts/generate-builtins.php registry --output=internal/symbols/builtin_registry_generated.go
 php scripts/generate-builtins.php stubs --output=/tmp/php-builtins.generated.php
+php scripts/generate-builtins.php constants --php='docker run --rm php:7.4-cli php;docker run --rm php:8.0-cli php;…;docker run --rm php:8.6-cli php' --extensions-php='/path/to/php-with-extensions-8.4/bin/php;…'   # internal/symbols/builtin_constants_generated.go
 ```
 
 Project config is `.tusk-php.json` in the workspace root, merged under the
@@ -76,7 +77,8 @@ above it in this list**, never from a later one:
    parser of PHP 7.4 and 8.0 to 8.6, with `short_open_tag` off, so `<?` is
    inline HTML; see issue #140; the lexer leaves out the empty
    `T_ENCAPSED_AND_WHITESPACE` PHP emits for a space in an unquoted string offset
-   like `"$a[ b]"`), `parser` (the older tokenizer and lightweight AST the
+   like `"$a[ b]"`), `parser` (`ParseFile` builds the declarations the index
+   reads from `php/parser`; the older tokenizer and lightweight AST other
    features still use),
    `types`, `phparray`, `stubs` (embedded builtin stubs by PHP version and
    extension), `phpdetect`.

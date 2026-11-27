@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -101,7 +102,7 @@ $x = $x->foo();
 $y = $x->bar();
 `
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 
 	var calls int
@@ -124,7 +125,7 @@ func TestRecursionGuard_SelfReferentialTyped(t *testing.T) {
 $x = $x->foo();
 `
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 
 	var calls int
@@ -149,7 +150,7 @@ $a = $b->x();
 $b = $a->y();
 `
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 
 	var calls int
@@ -170,7 +171,7 @@ $a = $b->x();
 $b = $a->y();
 `
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 
 	var calls int
@@ -193,7 +194,7 @@ $b = $c->y();
 $c = $a->z();
 `
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	idx := symbols.NewIndex()
 
 	var calls int
@@ -227,7 +228,7 @@ class Logger {
 	idx.IndexFile("file:///app.php", source)
 
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 
 	r := buildRecursionResolver(t, idx, lines, file, nil)
 
@@ -259,7 +260,7 @@ class Logger {}
 `)
 
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 
 	r := buildRecursionResolver(t, idx, lines, file, nil)
 
@@ -285,7 +286,7 @@ func TestRecursionGuard_ConcurrentNonRecursiveTypedResolutions(t *testing.T) {
 $result = Factory::make();
 `
 	lines := SplitLines(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}

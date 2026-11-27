@@ -3,6 +3,8 @@ package parser
 import (
 	"strings"
 	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 // benchSources are a plain class file and a template that mixes PHP with
@@ -50,6 +52,19 @@ func BenchmarkTokenize(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				Tokenize(src)
+			}
+		})
+	}
+}
+
+func BenchmarkFileNodeOf(b *testing.B) {
+	for name, src := range benchSources {
+		tree := ParseTree(src, token.Latest)
+		b.Run(name, func(b *testing.B) {
+			b.SetBytes(int64(len(src)))
+			b.ReportAllocs()
+			for b.Loop() {
+				FileNodeOf(src, tree)
 			}
 		})
 	}

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/stubs"
 )
 
@@ -111,6 +112,7 @@ var builtinClasses = []struct{ Name, Doc string }{
 type BuiltinProfile struct {
 	PHPVersion string
 	Extensions []string
+	Grammars   phpparser.GrammarRange
 }
 
 // BuiltinAvailability records the version and optional extension constraint
@@ -284,7 +286,7 @@ func (idx *Index) RegisterBuiltins() {
 // DefaultBuiltinProfile returns the broadest bundled built-in profile.
 func DefaultBuiltinProfile() BuiltinProfile {
 	profile := stubs.DefaultProfile()
-	return BuiltinProfile{PHPVersion: profile.PHPVersion, Extensions: profile.Extensions}
+	return BuiltinProfile{PHPVersion: profile.PHPVersion, Extensions: profile.Extensions, Grammars: phpparser.AnyGrammar()}
 }
 
 // RegisterBuiltinsForProfile populates the index with built-in symbols
@@ -335,6 +337,20 @@ func (idx *Index) registerBuiltinRegistryLocked(profile BuiltinProfile) {
 		}
 		idx.addBuiltinClassLikeLocked(name, "PHP built-in class-like symbol")
 	}
+
+	for _, c := range generatedBuiltinConstants {
+		if idx.symbols[c.Name] != nil || !availableIn(constantAvailability(c), profile) {
+			continue
+		}
+		idx.storeBuiltinLocked(&Symbol{Name: shortName(c.Name), FQN: c.Name, Kind: KindConstant, Source: SourceBuiltin, URI: builtinRegistryURI, Type: c.Type, Value: c.Value})
+	}
+}
+
+func constantAvailability(c builtinConstant) BuiltinAvailability {
+	if a, ok := builtinAvailabilityByName[c.Name]; ok {
+		return a
+	}
+	return c.BuiltinAvailability
 }
 
 // RegisterBuiltinStubs indexes embedded PHP stub declarations as built-in
@@ -374,9 +390,10 @@ func normalizeBuiltinProfile(profile BuiltinProfile) BuiltinProfile {
 
 func builtinAvailable(name string, profile BuiltinProfile) bool {
 	availability, ok := LookupAvailability(name)
-	if !ok {
-		return true
-	}
+	return !ok || availableIn(availability, profile)
+}
+
+func availableIn(availability BuiltinAvailability, profile BuiltinProfile) bool {
 	if availability.Since != "" && compareBuiltinVersions(availability.Since, profile.PHPVersion) > 0 {
 		return false
 	}
@@ -395,12 +412,16 @@ func builtinAvailable(name string, profile BuiltinProfile) bool {
 // to a version or extension constraint. The hand-authored override map
 // (builtinAvailabilityByName in this file) wins over the generated table
 // (builtin_availability_generated.go) so we can correct upstream stub data
-// without regenerating.
+// without regenerating. Generated constants count only when their presence
+// depends on the PHP version alone (Warnable).
 func LookupAvailability(name string) (BuiltinAvailability, bool) {
 	if a, ok := builtinAvailabilityByName[name]; ok {
 		return a, true
 	}
 	if a, ok := generatedBuiltinAvailability[name]; ok {
+		return a, true
+	}
+	if a, ok := lookupWarnableConstant(name); ok && a != (BuiltinAvailability{}) {
 		return a, true
 	}
 	return BuiltinAvailability{}, false
@@ -438,11 +459,11 @@ func parseBuiltinMajorMinor(version string) (int, int) {
 }
 
 func (idx *Index) addBuiltinFunctionLocked(name string, params []ParamInfo, ret string, doc string) {
-	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: "builtin", ReturnType: ret, DocComment: doc, Params: params})
+	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: builtinRegistryURI, ReturnType: ret, DocComment: doc, Params: params})
 }
 
 func (idx *Index) addBuiltinClassLikeLocked(name string, doc string) {
-	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: "builtin", DocComment: doc})
+	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: builtinRegistryURI, DocComment: doc})
 }
 
 func (idx *Index) storeBuiltinLocked(sym *Symbol) {
