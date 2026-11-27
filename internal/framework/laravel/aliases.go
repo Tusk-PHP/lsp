@@ -8,6 +8,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -74,7 +75,8 @@ var defaultAliases = map[string]string{
 // resolves, hovers and goes to its target. An alias whose target isn't
 // indexed stays unknown.
 type Aliases struct {
-	rootPath string
+	rootPath  string
+	grammarOf func(uri string) phpparser.GrammarRange
 	// byName maps a lower-case alias to its name as written and its target.
 	byName atomic.Pointer[map[string]alias]
 }
@@ -85,8 +87,8 @@ type alias struct {
 
 // NewAliases returns the aliases of the Laravel app at rootPath. They are
 // empty until Load reads them.
-func NewAliases(rootPath string) *Aliases {
-	return &Aliases{rootPath: rootPath}
+func NewAliases(rootPath string, grammarOf func(uri string) phpparser.GrammarRange) *Aliases {
+	return &Aliases{rootPath: rootPath, grammarOf: grammarOf}
 }
 
 // Load reads the aliases from the project: Laravel's defaults, then
@@ -105,8 +107,9 @@ func (a *Aliases) Load() {
 	for name, target := range defaultAliases {
 		add(name, target)
 	}
-	if data, err := os.ReadFile(filepath.Join(a.rootPath, "config", "app.php")); err == nil {
-		for name, target := range configAliases(string(data)) {
+	appConfig := filepath.Join(a.rootPath, "config", "app.php")
+	if data, err := os.ReadFile(appConfig); err == nil {
+		for name, target := range configAliases(string(data), a.grammarOf(symbols.PathToURI(appConfig))) {
 			add(name, target)
 		}
 	}
@@ -171,9 +174,9 @@ func (a *Aliases) Generate(fqn string, idx *symbols.Index) (string, string, bool
 // configAliases reads the `aliases` entry of config/app.php: every
 // `'Name' => Some\Class::class` or `'Name' => 'Some\Class'` pair in its value,
 // including inside `Facade::defaultAliases()->merge([...])`.
-func configAliases(source string) map[string]string {
+func configAliases(source string, grammars phpparser.GrammarRange) map[string]string {
 	result := parser.New().Parse(source)
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, grammars)
 	tokens := result.Tokens
 	aliases := map[string]string{}
 	for i := 0; i < len(tokens); i++ {

@@ -16,7 +16,7 @@ func isBuiltinURI(uri string) bool {
 
 func (p BuiltinProfile) Equal(other BuiltinProfile) bool {
 	a, b := normalizeBuiltinProfile(p), normalizeBuiltinProfile(other)
-	return a.PHPVersion == b.PHPVersion && slices.Equal(a.Extensions, b.Extensions)
+	return a.PHPVersion == b.PHPVersion && slices.Equal(a.Extensions, b.Extensions) && a.Grammars == b.Grammars
 }
 
 func (idx *Index) ReplaceBuiltins(profile BuiltinProfile) error {
@@ -27,10 +27,14 @@ func (idx *Index) ReplaceBuiltins(profile BuiltinProfile) error {
 	}
 	files := make([]*parser.FileNode, len(entries))
 	for i, entry := range entries {
-		files[i] = parser.ParseFile(entry.Content)
+		files[i] = parser.ParseFileIn(entry.Content, builtinGrammars)
 	}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
+	if idx.grammars != profile.Grammars {
+		idx.grammars = profile.Grammars
+		idx.grammarEpoch++
+	}
 	for uri := range idx.fileSymbols {
 		if isBuiltinURI(uri) {
 			idx.removeFileSymbols(uri)
@@ -42,7 +46,7 @@ func (idx *Index) ReplaceBuiltins(profile BuiltinProfile) error {
 			continue
 		}
 		uri := "builtin://" + entry.Path
-		idx.fileSource[uri] = indexedText{text: entry.Content, from: SourceBuiltin}
+		idx.fileSource[uri] = indexedText{text: entry.Content, from: SourceBuiltin, grammar: files[i].Grammar, clean: files[i].Clean}
 		idx.indexParsedLocked(uri, files[i], SourceBuiltin)
 	}
 	return nil

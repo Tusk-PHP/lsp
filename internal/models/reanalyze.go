@@ -19,9 +19,9 @@ func AnalyzeModelFile(index *symbols.Index, rootPath, framework, uri, source str
 	case "laravel":
 		analyzeEloquentFile(index, uri, source, schema, migrationColumns)
 	case "symfony":
-		analyzeDoctrineSource(index, rootPath, source)
+		analyzeDoctrineSource(index, rootPath, uri, source)
 		if schema != nil {
-			injectDoctrineSchemaSource(index, schema, source)
+			injectDoctrineSchemaSource(index, schema, uri, source)
 		}
 	}
 }
@@ -36,7 +36,7 @@ func analyzeEloquentFile(index *symbols.Index, uri, source string, schema *Schem
 	if len(models) == 0 {
 		return
 	}
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, index.GrammarOf(uri))
 	if file == nil {
 		return
 	}

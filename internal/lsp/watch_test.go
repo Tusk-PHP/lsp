@@ -244,6 +244,25 @@ func TestComposerPHPVersionChangeAppliesWithoutARestart(t *testing.T) {
 	waitForDiagnostic(t, h, uri, "builtin-unavailable", false)
 }
 
+func TestFilesIndexedBeforeAPHPVersionChangeGetTheNewGrammars(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json": `{"require": {"php": "~8.0.0"}}`,
+		"app/Suit.php":  "<?php\nnamespace App;\nenum Suit { case Hearts; }\nclass Ready {}\n",
+	}, map[string]interface{}{}, nil)
+	waitForSymbols(t, h, "Ready", func(names []string) bool { return slices.Contains(names, "Ready") })
+	if names := symbolNames(t, h, "Suit"); slices.Contains(names, "Suit") {
+		t.Fatalf("enum Suit is a syntax error on PHP 8.0: %v", names)
+	}
+	uri := "file://" + filepath.Join(root, "app/Checkout.php")
+	openDocument(h, uri, "<?php\nnamespace App;\nfunction checkout() { return Suit::Hearts; }\n")
+	waitForDiagnostic(t, h, uri, "unknown-class", true)
+
+	writeProjectFiles(t, root, map[string]string{"composer.json": `{"require": {"php": "~8.1.0"}}`})
+	notifyWatched(h, root, "composer.json")
+	waitForSymbols(t, h, "Suit", func(names []string) bool { return slices.Contains(names, "Suit") })
+	waitForDiagnostic(t, h, uri, "unknown-class", false)
+}
+
 func TestConfigFileAndClientSettingsChangeThePHPVersion(t *testing.T) {
 	h, root := startWatchedProject(t, map[string]string{
 		"composer.json":  `{"name": "app/app"}`,

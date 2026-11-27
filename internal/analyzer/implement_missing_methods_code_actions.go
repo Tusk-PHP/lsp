@@ -25,7 +25,7 @@ func (a *Analyzer) implementMissingMethodsCodeActions(uri, source string, result
 		return nil
 	}
 
-	methods := a.collectImplementMissingMethods(r, source, target)
+	methods := a.collectImplementMissingMethods(r, uri, source, target)
 	if len(methods) == 0 {
 		return nil
 	}
@@ -85,13 +85,13 @@ type implementMissingMethodCandidate struct {
 	signatureKey string
 }
 
-func (a *Analyzer) collectImplementMissingMethods(r *resolve.Resolver, source string, target *implementMissingMethodsTarget) []string {
+func (a *Analyzer) collectImplementMissingMethods(r *resolve.Resolver, uri, source string, target *implementMissingMethodsTarget) []string {
 	if target == nil || target.fqn == "" {
 		return nil
 	}
 
 	methodIndent := implementMissingMethodsIndent(source, target.startLine)
-	targetFile := parser.ParseFile(source)
+	targetFile := parser.ParseFileIn(source, a.index.GrammarOf(uri))
 	if targetFile == nil {
 		return nil
 	}
@@ -211,7 +211,7 @@ func (a *Analyzer) interfaceExtendedFQNs(r *resolve.Resolver, iface *symbols.Sym
 	if source == "" {
 		return nil
 	}
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(iface.URI))
 	if file == nil {
 		return nil
 	}

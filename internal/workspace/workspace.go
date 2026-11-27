@@ -74,7 +74,7 @@ func New(opts Options) *Bootstrapped {
 		cfg = config.DefaultConfig()
 	}
 
-	index := symbols.NewIndex()
+	index := symbols.NewIndexFor(opts.BuiltinProfile.Grammars)
 	index.RegisterBuiltinsForProfile(opts.BuiltinProfile)
 	index.SetOptionalNamespaces(composer.SuggestedNamespaces(opts.RootPath))
 	if opts.Framework == "magento" {
@@ -91,9 +91,9 @@ func New(opts Options) *Bootstrapped {
 	if opts.Framework == "laravel" {
 		index.SetCallForwards(frameworklaravel.CallForwards())
 		index.SetScopeConventions(frameworklaravel.ScopeConventions())
-		routeIndex = frameworklaravel.NewRouteIndex(opts.RootPath)
+		routeIndex = frameworklaravel.NewRouteIndex(opts.RootPath, index.GrammarOf)
 		viewData = frameworklaravel.NewViewData(opts.RootPath)
-		aliases = frameworklaravel.NewAliases(opts.RootPath)
+		aliases = frameworklaravel.NewAliases(opts.RootPath, index.GrammarOf)
 		index.SetClassGenerator(aliases)
 	}
 

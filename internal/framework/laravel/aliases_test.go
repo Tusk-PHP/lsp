@@ -5,7 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/symbols/symboltest"
 )
 
 func writeFile(t *testing.T, path, content string) {
@@ -16,6 +19,17 @@ func writeFile(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func latestGrammar(string) phpparser.GrammarRange {
+	return phpparser.OnlyGrammar(token.Latest)
+}
+
+func pinnedToPHP74(t *testing.T, uri, source string) *symbols.Index {
+	t.Helper()
+	idx := symbols.NewIndexFor(phpparser.GrammarsBetween(token.PHP74, token.Latest))
+	symboltest.PinToPHP74(t, idx, uri, source)
+	return idx
 }
 
 // aliasProject writes a Laravel app with a config alias, a discovered package
@@ -67,7 +81,7 @@ class Flux {}
 namespace Acme;
 class Hidden {}
 `)
-	aliases := NewAliases(root)
+	aliases := NewAliases(root, latestGrammar)
 	aliases.Load()
 	idx.SetClassGenerator(aliases)
 	return aliases, idx
@@ -120,7 +134,7 @@ return [
         "Redis" => Illuminate\Support\Facades\Redis::class,
     ],
 ];
-`)
+`, phpparser.OnlyGrammar(token.Latest))
 	want := map[string]string{
 		"App":   `Illuminate\Support\Facades\App`,
 		"Redis": `Illuminate\Support\Facades\Redis`,
@@ -132,5 +146,27 @@ return [
 		if got[k] != v {
 			t.Errorf("configAliases[%s] = %q, want %q", k, got[k], v)
 		}
+	}
+}
+
+func TestAliasesReadConfigWithTheIndexsGrammar(t *testing.T) {
+	root := t.TempDir()
+	appConfig := filepath.Join(root, "config", "app.php")
+	source := `<?php
+namespace App\Support;
+
+#[Pinned] function pinned() {} use App\Billing\Money;
+
+return [
+    'aliases' => ['Money' => Money::class],
+];
+`
+	writeFile(t, appConfig, source)
+	idx := pinnedToPHP74(t, symbols.PathToURI(appConfig), source)
+	aliases := NewAliases(root, idx.GrammarOf)
+	aliases.Load()
+
+	if got, _ := aliases.Target("Money"); got != `App\Support\Money` {
+		t.Errorf("Money stands for %q, want the class PHP 7.4 reads, where the import is a comment", got)
 	}
 }

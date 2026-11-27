@@ -3,6 +3,7 @@ package parser
 import (
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
@@ -169,6 +170,7 @@ type FunctionNode struct {
 }
 
 type FileNode struct {
+	Grammar   token.Version
 	Namespace string
 	Uses      []UseNode
 	Classes   []ClassNode
@@ -181,6 +183,7 @@ type FileNode struct {
 	Functions        []FunctionNode
 	Constants        []ConstantNode
 	Errors           []ParseError
+	Clean            bool
 }
 
 type DocParam struct {
@@ -287,27 +290,6 @@ type DocAssert struct {
 	// Equality is set for =Type: the value is exactly that type, no narrowing
 	// by intersection.
 	Equality bool
-}
-
-func ParseFile(source string) (file *FileNode) {
-	defer func() {
-		if recover() != nil {
-			file = nil
-		}
-	}()
-	return FileNodeOf(New().Parse(source))
-}
-
-// FileNodeOf builds the declarations of a parsed file, so a caller that
-// already holds the parse result doesn't parse the source again. It is nil
-// when building them panics.
-func FileNodeOf(result *ParseResult) (file *FileNode) {
-	defer func() {
-		if recover() != nil {
-			file = nil
-		}
-	}()
-	return toFileNode(result)
 }
 
 func ParseDocBlock(raw string) *DocBlock {
@@ -537,271 +519,4 @@ func parseDocImportedTypeAlias(value string) DocImportedTypeAlias {
 		alias.Alias = parts[4]
 	}
 	return alias
-}
-
-func toFileNode(result *ParseResult) *FileNode {
-	file := &FileNode{
-		Namespace: result.Namespace,
-		Errors:    append([]ParseError(nil), result.Errors...),
-	}
-
-	for _, useStmt := range result.Uses {
-		file.Uses = append(file.Uses, UseNode{
-			FullName:  useStmt.FullName,
-			Alias:     useStmt.Alias,
-			Kind:      useStmt.Kind,
-			StartLine: useStmt.Line,
-		})
-	}
-
-	for _, classDef := range result.Classes {
-		file.Classes = append(file.Classes, toClassNode(result, classDef))
-	}
-	for _, classDef := range result.AnonymousClasses {
-		file.AnonymousClasses = append(file.AnonymousClasses, toClassNode(result, classDef))
-	}
-
-	for _, interfaceDef := range result.Interfaces {
-		ifaceNode := InterfaceNode{
-			Attributes: interfaceDef.Attributes,
-			Name:       interfaceDef.Name,
-			FullName:   interfaceDef.FullName,
-			Extends:    append([]string(nil), interfaceDef.Extends...),
-			DocComment: interfaceDef.DocComment,
-			StartLine:  interfaceDef.Line,
-			EndLine:    interfaceDef.EndLine,
-			StartCol:   startColumnForDeclaration(result, interfaceDef.Name, interfaceDef.Line, TokenInterface),
-		}
-		for _, methodDef := range interfaceDef.Methods {
-			ifaceNode.Methods = append(ifaceNode.Methods, toMethodNode(result, methodDef))
-		}
-		for _, propertyDef := range interfaceDef.Properties {
-			ifaceNode.Properties = append(ifaceNode.Properties, toPropertyNode(result, propertyDef))
-		}
-		for _, constantDef := range interfaceDef.Constants {
-			ifaceNode.Constants = append(ifaceNode.Constants, toConstantNode(result, constantDef))
-		}
-		file.Interfaces = append(file.Interfaces, ifaceNode)
-	}
-
-	for _, traitDef := range result.Traits {
-		traitNode := TraitNode{
-			Attributes:  traitDef.Attributes,
-			Name:        traitDef.Name,
-			FullName:    traitDef.FullName,
-			Traits:      append([]string(nil), traitDef.Traits...),
-			TraitUseDoc: traitDef.TraitUseDoc,
-			TraitRules:  traitDef.TraitRules,
-			DocComment:  traitDef.DocComment,
-			StartLine:   traitDef.Line,
-			EndLine:     traitDef.EndLine,
-			StartCol:    startColumnForDeclaration(result, traitDef.Name, traitDef.Line, TokenTrait),
-		}
-		for _, propertyDef := range traitDef.Properties {
-			traitNode.Properties = append(traitNode.Properties, toPropertyNode(result, propertyDef))
-		}
-		for _, methodDef := range traitDef.Methods {
-			traitNode.Methods = append(traitNode.Methods, toMethodNode(result, methodDef))
-		}
-		for _, constantDef := range traitDef.Constants {
-			traitNode.Constants = append(traitNode.Constants, toConstantNode(result, constantDef))
-		}
-		file.Traits = append(file.Traits, traitNode)
-	}
-
-	for _, enumDef := range result.Enums {
-		enumNode := EnumNode{
-			Name:       enumDef.Name,
-			FullName:   enumDef.FullName,
-			BackedType: enumDef.BackedType,
-			Implements: append([]string(nil), enumDef.Implements...),
-			Traits:     append([]string(nil), enumDef.Traits...),
-			TraitRules: enumDef.TraitRules,
-			Attributes: enumDef.Attributes,
-			DocComment: enumDef.DocComment,
-			EndLine:    enumDef.EndLine,
-			StartLine:  enumDef.Line,
-			StartCol:   startColumnForDeclaration(result, enumDef.Name, enumDef.Line, TokenEnum),
-		}
-		for _, enumCase := range enumDef.Cases {
-			enumNode.Cases = append(enumNode.Cases, EnumCaseNode{
-				Name:       enumCase.Name,
-				Value:      enumCase.Value,
-				Attributes: enumCase.Attributes,
-				DocComment: enumCase.DocComment,
-				StartLine:  enumCase.Line,
-				StartCol:   nameColumnOnLine(result, enumCase.Name, enumCase.Line),
-			})
-		}
-		for _, methodDef := range enumDef.Methods {
-			enumNode.Methods = append(enumNode.Methods, toMethodNode(result, methodDef))
-		}
-		for _, propertyDef := range enumDef.Properties {
-			enumNode.Properties = append(enumNode.Properties, toPropertyNode(result, propertyDef))
-		}
-		for _, constantDef := range enumDef.Constants {
-			enumNode.Constants = append(enumNode.Constants, toConstantNode(result, constantDef))
-		}
-		file.Enums = append(file.Enums, enumNode)
-	}
-
-	for _, functionDef := range result.Functions {
-		fnNode := FunctionNode{
-			Attributes: functionDef.Attributes,
-			EndLine:    functionDef.EndLine,
-			Name:       functionDef.Name,
-			FullName:   functionDef.FullName,
-			ReturnType: TypeNode{Name: functionDef.ReturnType},
-			StartLine:  functionDef.Line,
-			StartCol:   startColumnForDeclaration(result, functionDef.Name, functionDef.Line, TokenFunction),
-			DocComment: functionDef.DocComment,
-		}
-		for _, paramDef := range functionDef.Params {
-			fnNode.Params = append(fnNode.Params, toParamNode(paramDef))
-		}
-		file.Functions = append(file.Functions, fnNode)
-	}
-
-	for _, constantDef := range result.Constants {
-		file.Constants = append(file.Constants, toConstantNode(result, constantDef))
-	}
-
-	return file
-}
-
-func toPropertyNode(result *ParseResult, propertyDef PropertyDef) PropertyNode {
-	node := PropertyNode{
-		Name:          propertyDef.Name,
-		Type:          TypeNode{Name: propertyDef.Type},
-		Visibility:    propertyDef.Visibility,
-		SetVisibility: propertyDef.SetVisibility,
-		IsStatic:      propertyDef.IsStatic,
-		IsReadonly:    propertyDef.IsReadonly,
-		Attributes:    propertyDef.Attributes,
-		DocComment:    propertyDef.DocComment,
-		StartLine:     propertyDef.Line,
-		StartCol:      nameColumnOnLine(result, propertyDef.Name, propertyDef.Line),
-	}
-	if len(propertyDef.Hooks) > 0 {
-		node.Hooks = append([]PropertyHook(nil), propertyDef.Hooks...)
-	}
-	return node
-}
-
-func toMethodNode(result *ParseResult, methodDef MethodDef) MethodNode {
-	methodNode := MethodNode{
-		Attributes: methodDef.Attributes,
-		Name:       methodDef.Name,
-		ReturnType: TypeNode{Name: methodDef.ReturnType},
-		Visibility: methodDef.Visibility,
-		IsStatic:   methodDef.IsStatic,
-		IsAbstract: methodDef.IsAbstract,
-		IsFinal:    methodDef.IsFinal,
-		DocComment: methodDef.DocComment,
-		StartLine:  methodDef.Line,
-		StartCol:   startColumnForDeclaration(result, methodDef.Name, methodDef.Line, TokenFunction),
-		EndLine:    methodDef.EndLine,
-	}
-	for _, paramDef := range methodDef.Params {
-		methodNode.Params = append(methodNode.Params, toParamNode(paramDef))
-	}
-	return methodNode
-}
-
-func toParamNode(paramDef ParamDef) ParamNode {
-	return ParamNode{
-		Name:         paramDef.Name,
-		Type:         TypeNode{Name: paramDef.Type},
-		DefaultValue: paramDef.DefaultValue,
-		IsVariadic:   paramDef.IsVariadic,
-		IsReference:  paramDef.IsReference,
-		DocComment:   paramDef.DocComment,
-	}
-}
-
-func toConstantNode(result *ParseResult, constantDef ConstantDef) ConstantNode {
-	return ConstantNode{
-		Name:       constantDef.Name,
-		Value:      constantDef.Value,
-		Type:       TypeNode{Name: constantDef.Type},
-		Visibility: constantDef.Visibility,
-		Attributes: constantDef.Attributes,
-		DocComment: constantDef.DocComment,
-		StartLine:  constantDef.Line,
-		StartCol:   nameColumnOnLine(result, constantDef.Name, constantDef.Line),
-	}
-}
-
-func startColumnForDeclaration(result *ParseResult, name string, line int, kind TokenKind) int {
-	for i := 0; i < len(result.Tokens)-1; i++ {
-		token := result.Tokens[i]
-		if token.Kind != kind || token.Line != line {
-			continue
-		}
-		for j := i + 1; j < len(result.Tokens); j++ {
-			next := result.Tokens[j]
-			if next.Line != line {
-				break
-			}
-			if next.Kind == TokenIdentifier && next.Value == name {
-				return next.Column
-			}
-		}
-		return token.Column
-	}
-	return 0
-}
-
-// nameColumnOnLine finds the column of an identifier token with the given name on the given line.
-// Falls back to searching for a variable token ($name) for property declarations.
-func nameColumnOnLine(result *ParseResult, name string, line int) int {
-	for _, token := range result.Tokens {
-		if token.Line != line {
-			if token.Line > line {
-				break
-			}
-			continue
-		}
-		if token.Kind == TokenIdentifier && token.Value == name {
-			return token.Column
-		}
-		// For properties, the name includes $ in the token
-		if token.Kind == TokenVariable && (token.Value == name || token.Value == "$"+name) {
-			return token.Column
-		}
-	}
-	return 0
-}
-
-func toClassNode(result *ParseResult, classDef ClassDef) ClassNode {
-	classNode := ClassNode{
-		Attributes:  classDef.Attributes,
-		Name:        classDef.Name,
-		FullName:    classDef.FullName,
-		Extends:     classDef.Extends,
-		Implements:  append([]string(nil), classDef.Implements...),
-		Traits:      append([]string(nil), classDef.Traits...),
-		IsAbstract:  classDef.IsAbstract,
-		IsFinal:     classDef.IsFinal,
-		IsReadonly:  classDef.IsReadonly,
-		Conditional: classDef.Conditional,
-		StartLine:   classDef.Line,
-		EndLine:     classDef.EndLine,
-		StartCol:    startColumnForDeclaration(result, classDef.Name, classDef.Line, TokenClass),
-		DocComment:  classDef.DocComment,
-		TraitUseDoc: classDef.TraitUseDoc,
-		TraitRules:  classDef.TraitRules,
-		BodyLine:    classDef.BodyLine,
-		BodyCol:     classDef.BodyCol,
-	}
-	for _, propertyDef := range classDef.Properties {
-		classNode.Properties = append(classNode.Properties, toPropertyNode(result, propertyDef))
-	}
-	for _, methodDef := range classDef.Methods {
-		classNode.Methods = append(classNode.Methods, toMethodNode(result, methodDef))
-	}
-	for _, constantDef := range classDef.Constants {
-		classNode.Constants = append(classNode.Constants, toConstantNode(result, constantDef))
-	}
-	return classNode
 }

@@ -67,9 +67,15 @@ func (typ) typeNode() {}
 
 type File struct {
 	Span
-	Shebang Span
-	Stmts   []Stmt
-	Errors  []Error
+	Shebang  Span
+	Stmts    []Stmt
+	Errors   []Error
+	Warnings []Error
+	Version  token.Version
+}
+
+func (f *File) Clean() bool {
+	return len(f.Errors) == 0 && len(f.Warnings) == 0
 }
 
 type Error struct {
@@ -654,6 +660,7 @@ type Const struct {
 	stmt
 	Span
 	Attrs []*AttributeGroup
+	Doc   Span
 	Items []*ConstItem
 }
 

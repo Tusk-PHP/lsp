@@ -146,6 +146,21 @@ func TestToolCallsFollowThePHPVersionInComposerJSON(t *testing.T) {
 	}
 }
 
+func TestToolCallsSeeFilesReadUnderTheNewPHPVersion(t *testing.T) {
+	session, root := connectedService(t, map[string]string{
+		".tusk-php.json": plainProjectConfig,
+		"composer.json":  `{"require": {"php": "~8.0.0"}}`,
+		"app/Suit.php":   "<?php\nnamespace App;\nenum Suit { case Hearts; }\n",
+	})
+	if got := foundFQNs(t, session, `App\Suit`); slices.Contains(got, `App\Suit`) {
+		t.Fatalf("enum Suit is a syntax error on PHP 8.0: %v", got)
+	}
+	writeProject(t, root, map[string]string{"composer.json": `{"require": {"php": "~8.1.0"}}`})
+	if got := foundFQNs(t, session, `App\Suit`); !slices.Contains(got, `App\Suit`) {
+		t.Errorf("the next tool call reads app/Suit.php as PHP 8.1: %v", got)
+	}
+}
+
 func TestToolCallsSeeComposerInstallsAndRemovals(t *testing.T) {
 	installed := func(name, ns string) string {
 		return `{"packages": [{"name": "` + name + `", "install-path": "../` + name + `", "autoload": {"psr-4": {"` + ns + `\\": "src/"}}}]}`

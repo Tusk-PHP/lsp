@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/symbols/symboltest"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -223,5 +224,76 @@ func mustWriteFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func TestDiscoverRoutesFromAControllerFileImportedInYAML(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "composer.json"), "{}\n")
+	mustWriteFile(t, filepath.Join(root, "config", "routes.yaml"), `admin:
+  resource: ../src/Admin/DashboardController.php
+  type: attribute
+  prefix: /admin
+  name_prefix: admin_
+`)
+	mustWriteFile(t, filepath.Join(root, "src", "Admin", "DashboardController.php"), `<?php
+namespace App\Admin;
+
+use Symfony\Component\Routing\Attribute\Route;
+
+class DashboardController
+{
+    #[Route('/dashboard', name: 'dashboard')]
+    public function index(): void {}
+}
+`)
+	kernel := filepath.Join(root, "src", "Kernel.php")
+	mustWriteFile(t, kernel, "<?php\nnamespace App;\nclass Kernel {}\n")
+	idx := symbols.NewIndex()
+	idx.IndexFileWithSource("file://"+filepath.ToSlash(kernel), "<?php\nnamespace App;\nclass Kernel {}\n", symbols.SourceProject)
+
+	got := map[string]string{}
+	for _, route := range DiscoverRoutes(idx) {
+		got[route.Name] = route.Path
+	}
+	if got["admin_dashboard"] != "/admin/dashboard" {
+		t.Errorf("the imported controller file's route is found under the import's prefixes: %v", got)
+	}
+}
+
+func TestControllerFilesImportedInConfigAreReadWithTheIndexsGrammar(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "composer.json"), "{}\n")
+	mustWriteFile(t, filepath.Join(root, "config", "routes.yaml"), `admin:
+  resource: ../src/Admin/DashboardController.php
+  type: attribute
+  prefix: /admin
+  name_prefix: admin_
+`)
+	controller := filepath.Join(root, "src", "Admin", "DashboardController.php")
+	source := `<?php
+namespace App\Admin;
+
+#[Pinned] function pinned() {} /*
+class DashboardController
+{
+    #[Route('/dashboard', name: 'dashboard')]
+    public function index(): void {}
+}
+// */
+`
+	mustWriteFile(t, controller, source)
+	kernel := filepath.Join(root, "src", "Kernel.php")
+	mustWriteFile(t, kernel, "<?php\nnamespace App;\nclass Kernel {}\n")
+	idx := symbols.NewIndex()
+	idx.IndexFileWithSource(symbols.PathToURI(kernel), "<?php\nnamespace App;\nclass Kernel {}\n", symbols.SourceProject)
+	symboltest.PinToPHP74(t, idx, symbols.PathToURI(controller), source)
+
+	got := map[string]string{}
+	for _, route := range DiscoverRoutes(idx) {
+		got[route.Name] = route.Path
+	}
+	if got["admin_dashboard"] != "/admin/dashboard" {
+		t.Errorf("the imported controller is read as PHP 7.4, where the class is code and not a comment: %v", got)
 	}
 }

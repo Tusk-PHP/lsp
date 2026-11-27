@@ -693,7 +693,6 @@ vendor/mage-os/module-sales-rule/Model/ValidateCouponCode.php	unused-import	Unus
 vendor/mage-os/module-sales-rule/Model/Validator.php	unknown-function	Unknown function 'getShippingDiscountAmount'
 vendor/mage-os/module-sales-sample-data/Model/Order/Processor.php	unused-import	Unused import 'Magento\Framework\DataObject'
 vendor/mage-os/module-sales/Block/Adminhtml/Order/Invoice/Totals.php	unused-import	Unused import 'Magento\Framework\DataObject'
-vendor/mage-os/module-sales/Block/Adminhtml/Order/Totals/Item.php	unknown-class	Unknown class 'Magento\Sales\Block\Adminhtml\Order\Totals'
 vendor/mage-os/module-sales/Block/Order/Item/Renderer/DefaultRenderer.php	unused-import	Unused import 'Magento\Sales\Model\Order\Creditmemo\Item'
 vendor/mage-os/module-sales/Controller/Adminhtml/Creditmemo/AbstractCreditmemo/Index.php	unknown-member	Unknown member 'addBreadcrumb' on 'Page'
 vendor/mage-os/module-sales/Controller/Adminhtml/Creditmemo/AbstractCreditmemo/Index.php	unknown-member	Unknown member 'addBreadcrumb' on 'Page'

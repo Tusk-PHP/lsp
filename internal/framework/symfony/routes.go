@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -108,7 +109,7 @@ func discoverAttributeRoutes(index *symbols.Index) []Route {
 		if source == "" || !strings.Contains(source, "Route") || !strings.Contains(source, "#[") {
 			continue
 		}
-		routes = append(routes, discoverRoutesInFile(uri, source)...)
+		routes = append(routes, discoverRoutesInFile(uri, source, index.GrammarOf(uri))...)
 	}
 	return routes
 }
@@ -124,7 +125,7 @@ func discoverConfigRoutes(index *symbols.Index) []Route {
 			if _, err := os.Stat(path); err != nil {
 				continue
 			}
-			routes = append(routes, discoverRoutesFromConfigPath(path, "", "", visited)...)
+			routes = append(routes, discoverRoutesFromConfigPath(path, "", "", visited, index)...)
 		}
 	}
 
@@ -173,7 +174,7 @@ func discoverSymfonyRoots(index *symbols.Index) []string {
 	return roots
 }
 
-func discoverRoutesFromConfigPath(path, pathPrefix, namePrefix string, visited map[string]bool) []Route {
+func discoverRoutesFromConfigPath(path, pathPrefix, namePrefix string, visited map[string]bool, index *symbols.Index) []Route {
 	cleanPath := filepath.Clean(path)
 	if visited[cleanPath] {
 		return nil
@@ -203,7 +204,7 @@ func discoverRoutesFromConfigPath(path, pathPrefix, namePrefix string, visited m
 
 		if entry.IsImport {
 			resourcePath := filepath.Clean(filepath.Join(baseDir, entry.Resource))
-			routes = append(routes, discoverRoutesFromResource(resourcePath, entry.Type, entryPathPrefix, entryNamePrefix, visited)...)
+			routes = append(routes, discoverRoutesFromResource(resourcePath, entry.Type, entryPathPrefix, entryNamePrefix, visited, index)...)
 			continue
 		}
 
@@ -219,7 +220,7 @@ func discoverRoutesFromConfigPath(path, pathPrefix, namePrefix string, visited m
 	return routes
 }
 
-func discoverRoutesFromResource(path, resourceType, pathPrefix, namePrefix string, visited map[string]bool) []Route {
+func discoverRoutesFromResource(path, resourceType, pathPrefix, namePrefix string, visited map[string]bool, index *symbols.Index) []Route {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil
@@ -229,36 +230,36 @@ func discoverRoutesFromResource(path, resourceType, pathPrefix, namePrefix strin
 		if resourceType != "attribute" && resourceType != "" {
 			return nil
 		}
-		return discoverRoutesFromAttributeDir(path, pathPrefix, namePrefix)
+		return discoverRoutesFromAttributeDir(path, pathPrefix, namePrefix, index)
 	}
 
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".yaml", ".yml", ".xml":
-		return discoverRoutesFromConfigPath(path, pathPrefix, namePrefix, visited)
+		return discoverRoutesFromConfigPath(path, pathPrefix, namePrefix, visited, index)
 	case ".php":
 		if resourceType != "attribute" && resourceType != "" {
 			return nil
 		}
-		return discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix)
+		return discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix, index)
 	default:
 		return nil
 	}
 }
 
-func discoverRoutesFromAttributeDir(root, pathPrefix, namePrefix string) []Route {
+func discoverRoutesFromAttributeDir(root, pathPrefix, namePrefix string, index *symbols.Index) []Route {
 	var routes []Route
 	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info == nil || info.IsDir() || filepath.Ext(path) != ".php" {
 			return nil
 		}
-		routes = append(routes, discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix)...)
+		routes = append(routes, discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix, index)...)
 		return nil
 	})
 	return routes
 }
 
-func discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix string) []Route {
+func discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix string, index *symbols.Index) []Route {
 	source, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -266,10 +267,10 @@ func discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix string) []Rout
 
 	uri := path
 	if abs, err := filepath.Abs(path); err == nil {
-		uri = "file://" + filepath.ToSlash(abs)
+		uri = symbols.PathToURI(abs)
 	}
 
-	routes := discoverRoutesInFile(uri, string(source))
+	routes := discoverRoutesInFile(uri, string(source), index.GrammarOf(uri))
 	for i := range routes {
 		routes[i].Name = namePrefix + routes[i].Name
 		routes[i].Path = joinRoutePath(pathPrefix, routes[i].Path)
@@ -365,8 +366,8 @@ func RouteNameAtPosition(source string, pos textpos.Position) (string, textpos.R
 	return "", textpos.Range{}, false
 }
 
-func discoverRoutesInFile(uri, source string) []Route {
-	file := parser.ParseFile(source)
+func discoverRoutesInFile(uri, source string, grammars phpparser.GrammarRange) []Route {
+	file := parser.ParseFileIn(source, grammars)
 	if file == nil {
 		return nil
 	}

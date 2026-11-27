@@ -6,6 +6,8 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/config"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/phpdetect"
 	"github.com/Tusk-PHP/lsp/internal/stubs"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -15,28 +17,33 @@ func ResolveBuiltinProfileWithConfig(rootPath, phpBinary string, timeout time.Du
 	platform := composer.GetPlatform(rootPath)
 	profile := symbols.BuiltinProfile{Extensions: platform.Extensions}
 	var source string
+	configVersion, configGrammar := explicitConfigVersion(cfg, logf)
 
 	switch {
-	case platform.PHPVersion != "":
+	case platform.PHP != nil:
 		// Composer wins: config.platform.php or require.php is the most
 		// authoritative constraint because it reflects the actual deployment
 		// target declared in the project manifest.
-		profile.PHPVersion = platform.PHPVersion
+		profile.PHPVersion = platform.PHP.Oldest.String()
+		profile.Grammars = platform.PHP.Grammars
 		source = "composer"
 
-	case cfg != nil && cfg.IsPHPVersionExplicitlySet():
+	case configVersion != "":
 		// .tusk-php.json / initializationOptions: the developer explicitly
 		// declared a version override. Only participates when composer has no
 		// opinion (no config.platform.php and no require.php constraint).
-		profile.PHPVersion = cfg.PHPVersion
+		profile.PHPVersion = configVersion
+		profile.Grammars = phpparser.OnlyGrammar(configGrammar)
 		source = "config"
 
 	default:
-		if local, err := phpdetect.Detect(phpBinary, timeout); err == nil && local.Version != "" {
-			profile.PHPVersion = local.Version
+		if local, grammar, ok := localVersion(phpBinary, timeout, logf); ok {
+			profile.PHPVersion = local
+			profile.Grammars = phpparser.OnlyGrammar(grammar)
 			source = "local"
 		} else {
 			profile.PHPVersion = stubs.DefaultProfile().PHPVersion
+			profile.Grammars = phpparser.AnyGrammar()
 			source = "fallback"
 		}
 	}
@@ -49,9 +56,38 @@ func ResolveBuiltinProfileWithConfig(rootPath, phpBinary string, timeout time.Du
 	}
 
 	if logf != nil {
-		logf(fmt.Sprintf("PHP LSP: PHP %s (source: %s)", profile.PHPVersion, source))
+		logf(fmt.Sprintf("PHP LSP: PHP %s, grammar %s (source: %s)", profile.PHPVersion, profile.Grammars, source))
 	}
 	return profile, source
+}
+
+func explicitConfigVersion(cfg *config.Config, logf func(string)) (string, token.Version) {
+	if cfg == nil || !cfg.IsPHPVersionExplicitlySet() {
+		return "", 0
+	}
+	grammar, err := token.ParseVersion(cfg.PHPVersion)
+	if err != nil {
+		if logf != nil {
+			logf(fmt.Sprintf("PHP LSP: ignoring phpVersion from the configuration: %v", err))
+		}
+		return "", 0
+	}
+	return cfg.PHPVersion, grammar
+}
+
+func localVersion(phpBinary string, timeout time.Duration, logf func(string)) (string, token.Version, bool) {
+	local, err := phpdetect.Detect(phpBinary, timeout)
+	if err != nil || local.Version == "" {
+		return "", 0, false
+	}
+	grammar, err := token.ParseVersion(local.Version)
+	if err != nil {
+		if logf != nil {
+			logf(fmt.Sprintf("PHP LSP: ignoring the version of the php on PATH: %v", err))
+		}
+		return "", 0, false
+	}
+	return local.Version, grammar, true
 }
 
 // mergeExtensions returns the union of base and extra extension lists,
@@ -90,15 +126,39 @@ func (ws *Bootstrapped) Profile() symbols.BuiltinProfile {
 	return *ws.profile.Load()
 }
 
-func (ws *Bootstrapped) SetProfile(profile symbols.BuiltinProfile) (bool, error) {
+type ProfileChange int
+
+const (
+	ProfileKept ProfileChange = iota
+	BuiltinsChanged
+	GrammarsChanged
+)
+
+func (ws *Bootstrapped) SetProfile(profile symbols.BuiltinProfile) (ProfileChange, error) {
 	ws.profileMu.Lock()
 	defer ws.profileMu.Unlock()
-	if ws.Profile().Equal(profile) {
-		return false, nil
+	previous := ws.Profile()
+	if previous.Equal(profile) {
+		return ProfileKept, nil
 	}
 	if err := ws.Index.ReplaceBuiltins(profile); err != nil {
-		return false, fmt.Errorf("replace the builtins for PHP %s %v: %w", profile.PHPVersion, profile.Extensions, err)
+		return ProfileKept, fmt.Errorf("replace the builtins for PHP %s %v: %w", profile.PHPVersion, profile.Extensions, err)
 	}
 	ws.profile.Store(&profile)
-	return true, nil
+	if previous.Grammars != profile.Grammars {
+		return GrammarsChanged, nil
+	}
+	return BuiltinsChanged, nil
+}
+
+func (ws *Bootstrapped) ReparseForGrammars() int {
+	reparsed := 0
+	ws.Index.ReparseForGrammars(func(uri, source string) {
+		ws.updateFromTree(uri, source)
+		reparsed++
+	})
+	if reparsed > 0 {
+		ws.Container.Analyze()
+	}
+	return reparsed
 }

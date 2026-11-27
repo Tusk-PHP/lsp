@@ -6,6 +6,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -19,7 +20,7 @@ func TestVariableGenericPropagation(t *testing.T) {
 	p := setupRealisticEloquentTest(t)
 
 	resolveTyped := func(expr, source string, line int) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
@@ -163,7 +164,7 @@ class Category extends Model {
 	p := NewProvider(idx, nil, "laravel")
 
 	resolveTyped := func(expr, source string, line int) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
@@ -291,7 +292,7 @@ class Category extends Model {
 	p := NewProvider(idx, nil, "laravel")
 
 	resolveTyped := func(expr, source string, line int) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
@@ -371,7 +372,7 @@ func TestEloquentMagicMethodGenerics(t *testing.T) {
 	p := setupLaravelE2E(t)
 
 	resolveTyped := func(expr, source string) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: 5}, file)
 		return rt.String()
 	}
@@ -512,7 +513,7 @@ class CategoryController {
 `
 
 	resolveTyped := func(expr string, line int) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
