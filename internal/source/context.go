@@ -9,6 +9,7 @@ import (
 	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 type ContextSymbolKind string
@@ -99,6 +100,20 @@ type Document struct {
 
 func NewDocument(uri, source string, grammars phpparser.GrammarRange) *Document {
 	parsed := parser.ParseIn(source, grammars)
+	return documentOf(uri, source, parsed, parser.FileNodeOf(source, parsed.Tree))
+}
+
+// IndexedDocument is the document for source, built from the parse the index
+// made of it when source is the text idx last indexed for uri, and parsed
+// as NewDocument does otherwise.
+func IndexedDocument(idx *symbols.Index, uri, source string) *Document {
+	if parsed, file, ok := idx.IndexedParse(uri, source); ok {
+		return documentOf(uri, source, parsed, file)
+	}
+	return NewDocument(uri, source, idx.GrammarOf(uri))
+}
+
+func documentOf(uri, source string, parsed phpparser.Parsed, file *parser.FileNode) *Document {
 	offsets := ast.NewLines(source)
 	return &Document{
 		uri:         uri,
@@ -107,7 +122,7 @@ func NewDocument(uri, source string, grammars phpparser.GrammarRange) *Document 
 		offsets:     offsets,
 		tree:        parsed.Tree,
 		significant: parsed.Significant,
-		file:        parser.FileNodeOf(source, parsed.Tree),
+		file:        file,
 		namespaces:  NamespacesOf(source, offsets, parsed.Tree),
 	}
 }

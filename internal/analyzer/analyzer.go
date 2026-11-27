@@ -1109,14 +1109,13 @@ func (a *Analyzer) calledSymbol(uri, source string, call sourcectx.Call) *symbol
 	case sourcectx.CalleeFunction:
 		return r.CalledFunction(call.Name, call.Namespace.View(&parser.FileNode{}))
 	case sourcectx.CalleeAnonymousClass:
-		ctx := sourcectx.Analyze(uri, source, call.Position, a.index.GrammarOf(uri))
-		class := ctx.File.AnonymousClassDeclaredAt(call.Position.Line, call.Position.Character)
+		class := sourcectx.IndexedDocument(a.index, uri, source).File().AnonymousClassDeclaredAt(call.Position.Line, call.Position.Character)
 		if class == nil {
 			return nil
 		}
 		return a.index.Lookup(class.FullName)
 	}
-	return a.symbolTarget(r, uri, source, sourcectx.Analyze(uri, source, call.Position, a.index.GrammarOf(uri))).sym
+	return a.symbolTarget(r, uri, source, sourcectx.IndexedDocument(a.index, uri, source).At(call.Position)).sym
 }
 
 func activeParameter(params []symbols.ParamInfo, call sourcectx.Call) int {
