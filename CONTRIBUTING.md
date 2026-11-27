@@ -187,8 +187,8 @@ Tests use `testdata/project/` which contains a mock PHP project with `composer.j
 
 Issues are organised two ways, and each answers a different question:
 
-- **Goals say why.** The [Roadmap](https://github.com/Tusk-PHP/lsp/issues/39) lists the project's goals as its sub-issues, such as #116 Fewer false warnings or #378 Laravel awareness, and every other issue is a sub-issue of one goal. A goal is open-ended and has no end date. When you open an issue, say which goal it belongs to if you know; the maintainers link it.
-- **Milestones say when.** There is one milestone per version, named like its tag (`x.y.z`). An issue or pull request in a milestone is planned for, or has shipped in, that release, and one without a milestone is in the backlog. Only maintainers set milestones, and a theme never gets one: it becomes a goal.
+- **Goals say why.** The project's goals are the open issues with the [`roadmap`](https://github.com/Tusk-PHP/lsp/issues?q=is%3Aissue%20state%3Aopen%20label%3Aroadmap) label, such as #116 Fewer false warnings or #378 Laravel awareness, and every other issue is a sub-issue of one goal. A goal is open-ended. When you open an issue, say which goal it belongs to if you know; the maintainers link it.
+- **Milestones say when.** There is one milestone per version, named like its tag (`x.y.z`). An issue or pull request in a milestone is planned for, or has shipped in, that release, and one without a milestone is in the backlog. Only maintainers set milestones. A goal has no milestone unless a release depends on it: the goals the first stable release needs are in the [1.0.0](https://github.com/Tusk-PHP/lsp/milestone/9) milestone, whose description says what that release has to pass.
 
 Each issue also gets a type (**Bug**, **Feature** or **Task**) and, where one fits, an `area:` label (`area: diagnostics`, `area: navigation`, `area: parser`, `area: indexing`, `area: tooling`).
 
