@@ -434,7 +434,6 @@ src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-
 src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'WriteConcern'
 src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'WriteConcern'
 src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/MongoDbReceiver.php	unknown-class	Unknown class 'BSONDocument'
-src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	undefined-variable	Undefined variable $auth
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
@@ -496,8 +495,6 @@ src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown 
 src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'Factory'
 src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'PluginInterface'
 src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'ScriptEvents'
-src/Symfony/Component/Runtime/Runner/FrankenPhpWorkerRunner.php	unused-variable	Variable $sfRequest is assigned but never read
-src/Symfony/Component/Runtime/Runner/FrankenPhpWorkerRunner.php	unused-variable	Variable $sfResponse is assigned but never read
 src/Symfony/Component/Security/Core/Role/SwitchUserRole.php	unused-private-property	Private property 'SwitchUserRole::$deprecationTriggered' is never used
 src/Symfony/Component/Security/Core/Role/SwitchUserRole.php	unused-private-property	Private property 'SwitchUserRole::$source' is never used
 src/Symfony/Component/Security/Core/Test/AccessDecisionStrategyTestCase.php	unknown-class	Unknown attribute 'DataProvider'
@@ -573,7 +570,6 @@ src/Symfony/Component/VarDumper/Caster/SymfonyCaster.php	unknown-member	Unknown 
 src/Symfony/Component/VarDumper/Test/VarDumperTestTrait.php	unknown-class	Unknown attribute 'After'
 src/Symfony/Component/Webhook/Test/AbstractRequestParserTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Webhook/Test/AbstractRequestParserTestCase.php	unknown-class	Unknown class 'TestCase'
-src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	undefined-variable	Undefined variable $steps
 src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'Group'
 src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'Group'
 src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'Group'

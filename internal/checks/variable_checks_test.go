@@ -422,6 +422,7 @@ func TestUndefinedVariableNotFlagged(t *testing.T) {
 		"out argument of a method":  "function f($q) { $q->fetch($o); Foo::fetch($p); new Foo($r); return [$o, $p, $r]; }",
 		"out variadic argument":     "function g($a, &...$o) {} function f() { g(1, $o, $p); return [$o, $p]; }",
 		"out argument of unknown":   "function f() { unknown_function($o); return $o; }",
+		"by-reference closure use":  "function g($cb, $x) {} function f() { g(function () use (&$e) { $e = 1; }, $e); return $e; }",
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -446,6 +447,7 @@ func TestUndefinedVariableStillFlagged(t *testing.T) {
 		"class name of new":               "function f() { return new $missing(1); }",
 		"class name property of new":      "function f() { return new $missing->cls(); }",
 		"subscript read":                  "function f() { return $missing[0]; }",
+		"after a by-value closure use":    "function f() { $cb = function () use (&$e, $missing) { return $e; }; return $missing; }",
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
