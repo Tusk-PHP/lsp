@@ -23,7 +23,7 @@ func applied(contributions ...contribution) *bindingSet {
 
 func seed(ca *ContainerAnalyzer, bindings ...ServiceBinding) {
 	current := ca.view.Load()
-	next := &bindingSet{bindings: maps.Clone(current.bindings)}
+	next := &bindingSet{bindings: maps.Clone(current.bindings), configured: maps.Clone(current.configured)}
 	providerBindings(bindings).apply(next)
 	ca.view.Store(next)
 }
