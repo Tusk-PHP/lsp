@@ -10,7 +10,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func BenchmarkValidationExtensionsScan(b *testing.B) {
+func BenchmarkValidationScans(b *testing.B) {
 	root := filepath.Join("..", "..", "..", "testdata", "laravel", "vendor")
 	var sources []string
 	size := 0
@@ -35,6 +35,16 @@ func BenchmarkValidationExtensionsScan(b *testing.B) {
 			e := NewValidationExtensions()
 			for _, src := range sources {
 				e.IndexFile("file:///f.php", src)
+			}
+		}
+	})
+	b.Run("helpers", func(b *testing.B) {
+		b.SetBytes(int64(size))
+		b.ReportAllocs()
+		for b.Loop() {
+			h := NewValidationHelpers()
+			for _, src := range sources {
+				h.IndexFile("file:///f.php", src)
 			}
 		}
 	})

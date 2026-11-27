@@ -43,6 +43,9 @@ type Bootstrapped struct {
 	// ValidationExtensions are the custom validation rules a Laravel app's
 	// files and packages register.
 	ValidationExtensions *frameworklaravel.ValidationExtensions
+	// ValidationHelpers are the project's methods that supply validation
+	// rules to a rules position elsewhere.
+	ValidationHelpers *frameworklaravel.ValidationHelpers
 	// Aliases are the Laravel class aliases (facades by short name), read
 	// with the Composer dependencies.
 	Aliases       *frameworklaravel.Aliases
@@ -88,6 +91,7 @@ func New(opts Options) *Bootstrapped {
 	var aliases *frameworklaravel.Aliases
 	var viewData *frameworklaravel.ViewData
 	var validationExtensions *frameworklaravel.ValidationExtensions
+	var validationHelpers *frameworklaravel.ValidationHelpers
 	var commands *frameworksymfony.CommandIndex
 	if opts.Framework == "symfony" {
 		commands = frameworksymfony.NewCommandIndex()
@@ -98,6 +102,7 @@ func New(opts Options) *Bootstrapped {
 		routeIndex = frameworklaravel.NewRouteIndex(opts.RootPath)
 		viewData = frameworklaravel.NewViewData(opts.RootPath)
 		validationExtensions = frameworklaravel.NewValidationExtensions()
+		validationHelpers = frameworklaravel.NewValidationHelpers()
 		aliases = frameworklaravel.NewAliases(opts.RootPath)
 		index.SetClassGenerator(aliases)
 	}
@@ -112,6 +117,7 @@ func New(opts Options) *Bootstrapped {
 		RouteIndex:           routeIndex,
 		ViewData:             viewData,
 		ValidationExtensions: validationExtensions,
+		ValidationHelpers:    validationHelpers,
 		Aliases:              aliases,
 		SymfonyCommands:      commands,
 		SchemaCache:          models.NewSchemaCache(),
@@ -208,6 +214,7 @@ func (ws *Bootstrapped) IndexWorkspace() IndexedFiles {
 			ws.Index.IndexFileWithSource(symbols.PathToURI(path), string(content), symbols.SourceProject)
 			ws.ViewData.IndexFile(symbols.PathToURI(path), string(content))
 			ws.ValidationExtensions.IndexFile(symbols.PathToURI(path), string(content))
+			ws.ValidationHelpers.IndexFile(symbols.PathToURI(path), string(content))
 		}
 		return nil
 	})

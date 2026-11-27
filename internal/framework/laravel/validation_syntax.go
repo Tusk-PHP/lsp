@@ -24,6 +24,10 @@ type ValidationSyntax struct {
 	// IsSubtype reports whether child is parent or extends, implements or
 	// uses it.
 	IsSubtype func(child, parent string) bool
+	// Helper returns what a method of a class or trait supplies as rules
+	// when its returned value is used as validation rules elsewhere; nil
+	// follows no helper.
+	Helper func(class, method string) (RulesForm, bool)
 }
 
 // RuleString is a string literal Laravel reads as validation rules: a value
@@ -79,7 +83,8 @@ func (r RuleString) Segments(src string) []RuleSegment {
 // ValidationRuleStrings visits every rule string of a file: in the rules of
 // $request->validate(), $this->validate($request, …), validateWithBag(),
 // Validator::make(), Validator::validate(), validator() and the array a
-// form request's rules() returns. A rule built at run time, by
+// form request's rules() returns, and in what a helper method returns into
+// one of those (see ValidationHelpers). A rule built at run time, by
 // concatenation, interpolation or from a variable, is not visited.
 func ValidationRuleStrings(src string, file *ast.File, syn ValidationSyntax, visit func(RuleString)) {
 	w := ruleWalk{src: src, syn: syn, visit: visit, keep: func(ast.Span) bool { return true }}
@@ -113,20 +118,32 @@ func ValidationRuleAt(src string, file *ast.File, syn ValidationSyntax, offset u
 }
 
 type ruleWalk struct {
-	src   string
-	syn   ValidationSyntax
-	keep  func(ast.Span) bool
-	visit func(RuleString)
+	src       string
+	syn       ValidationSyntax
+	keep      func(ast.Span) bool
+	visit     func(RuleString)
+	namespace string
 }
 
 func (w *ruleWalk) walk(root ast.Node) {
 	ast.Walk(root, func(n ast.Node) bool {
+		if ns, ok := n.(*ast.Namespace); ok {
+			w.namespace = ""
+			if ns.Name != nil {
+				w.namespace = ns.Name.Text(w.src)
+			}
+		}
 		if !w.keep(n.Bounds()) {
 			return false
 		}
 		switch n := n.(type) {
 		case *ast.ClassDecl:
-			w.formRequest(n)
+			read := w.formRequest(n)
+			if n.Name != nil {
+				w.helpers(n.Name, n.Members, read)
+			}
+		case *ast.TraitDecl:
+			w.helpers(n.Name, n.Members, false)
 		case *ast.MethodCall:
 			w.rulesArg(n.Args, w.methodRulesArg(n))
 		case *ast.StaticCall:
@@ -138,28 +155,64 @@ func (w *ruleWalk) walk(root ast.Node) {
 	})
 }
 
-func (w *ruleWalk) formRequest(class *ast.ClassDecl) {
+func (w *ruleWalk) formRequest(class *ast.ClassDecl) bool {
 	if class.Extends == nil || !w.syn.IsSubtype(w.syn.ClassName(class.Extends.Text(w.src)), formRequest) {
-		return
+		return false
 	}
 	for _, m := range class.Members {
 		method, ok := m.(*ast.Method)
 		if !ok || method.Body == nil || !strings.EqualFold(method.Name.Text(w.src), "rules") || !w.keep(method.Span) {
 			continue
 		}
-		ast.Walk(method.Body, func(n ast.Node) bool {
-			switch n := n.(type) {
-			case *ast.Closure, *ast.ArrowFunction, *ast.ClassDecl, *ast.FunctionDecl, *ast.New:
-				return false
-			case *ast.Return:
-				if rules, ok := n.Value.(*ast.Array); ok {
-					w.rules(rules)
-				}
-				return false
+		w.returned(method.Body, func(value ast.Expr) {
+			if rules, ok := value.(*ast.Array); ok {
+				w.rules(rules)
 			}
-			return w.keep(n.Bounds())
 		})
 	}
+	return true
+}
+
+func (w *ruleWalk) helpers(name *ast.Identifier, members []ast.Member, rulesRead bool) {
+	if w.syn.Helper == nil {
+		return
+	}
+	class := name.Text(w.src)
+	if w.namespace != "" {
+		class = w.namespace + `\` + class
+	}
+	for _, m := range members {
+		method, ok := m.(*ast.Method)
+		if !ok || method.Body == nil || !w.keep(method.Span) || (rulesRead && strings.EqualFold(method.Name.Text(w.src), "rules")) {
+			continue
+		}
+		form, ok := w.syn.Helper(class, method.Name.Text(w.src))
+		if !ok {
+			continue
+		}
+		w.returned(method.Body, func(value ast.Expr) {
+			if rules, isArray := value.(*ast.Array); isArray && form == RulesArray {
+				w.rules(rules)
+			} else if form == FieldRules {
+				w.fieldRules(value)
+			}
+		})
+	}
+}
+
+func (w *ruleWalk) returned(body ast.Node, visit func(ast.Expr)) {
+	ast.Walk(body, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.Closure, *ast.ArrowFunction, *ast.ClassDecl, *ast.FunctionDecl, *ast.New:
+			return false
+		case *ast.Return:
+			if n.Value != nil {
+				visit(n.Value)
+			}
+			return false
+		}
+		return w.keep(n.Bounds())
+	})
 }
 
 func (w *ruleWalk) methodRulesArg(call *ast.MethodCall) int {
@@ -244,17 +297,21 @@ func (w *ruleWalk) rules(rules *ast.Array) {
 		if item == nil || item.Key == nil || item.Unpack || !w.keep(item.Span) {
 			continue
 		}
-		switch value := item.Value.(type) {
-		case *ast.Literal:
-			w.ruleString(value, true)
-		case *ast.Array:
-			for _, rule := range value.Items {
-				if rule == nil || rule.Key != nil || rule.Unpack {
-					continue
-				}
-				if lit, ok := rule.Value.(*ast.Literal); ok {
-					w.ruleString(lit, false)
-				}
+		w.fieldRules(item.Value)
+	}
+}
+
+func (w *ruleWalk) fieldRules(value ast.Expr) {
+	switch value := value.(type) {
+	case *ast.Literal:
+		w.ruleString(value, true)
+	case *ast.Array:
+		for _, rule := range value.Items {
+			if rule == nil || rule.Key != nil || rule.Unpack {
+				continue
+			}
+			if lit, ok := rule.Value.(*ast.Literal); ok {
+				w.ruleString(lit, false)
 			}
 		}
 	}

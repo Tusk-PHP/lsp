@@ -163,7 +163,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		return nil
 	}
 	file := ctx.File
-	if ctx.InString && frameworklaravel.MayValidate(doc.Tokens()) {
+	if class, method := ctx.ScopeMethod(); ctx.InString && p.validation.MayHoldRules(doc.Tokens(), class, method) {
 		if items, ok := p.completeValidationRules(source, pos, file); ok {
 			return sanitizeCompletions(items)
 		}

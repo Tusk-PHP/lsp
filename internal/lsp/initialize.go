@@ -131,7 +131,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.providers = frameworklaravel.NewProviders(s.rootPath, s.index)
 	viewResolver.SetProviders(s.providers)
 	s.components = frameworklaravel.NewComponents(s.rootPath, s.index, s.providers, s.getDocumentReader())
-	validationRules := frameworklaravel.NewValidationRules(s.index, s.workspace.ValidationExtensions, s.getDocumentReader())
+	validationRules := frameworklaravel.NewValidationRules(s.index, s.workspace.ValidationExtensions, s.workspace.ValidationHelpers, s.getDocumentReader())
 	s.completion.SetValidationRules(validationRules)
 	s.hover.SetValidationRules(validationRules)
 	s.bladeFeatures = &blade.Features{Views: viewResolver, Components: s.components, Read: s.getDocumentReader(), Custom: s.providers.Custom}

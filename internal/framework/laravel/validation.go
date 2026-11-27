@@ -94,6 +94,7 @@ func Snake(s string) string {
 type ValidationRules struct {
 	index      *symbols.Index
 	extensions *ValidationExtensions
+	helpers    *ValidationHelpers
 	read       func(uri string) string
 
 	mu         sync.Mutex
@@ -107,11 +108,11 @@ type validationCatalog struct {
 	byKey map[string]int
 }
 
-// NewValidationRules returns the validation rules of the app whose index
-// and custom rule registrations are given; read returns a file's source by
-// URI.
-func NewValidationRules(index *symbols.Index, extensions *ValidationExtensions, read func(uri string) string) *ValidationRules {
-	return &ValidationRules{index: index, extensions: extensions, read: read}
+// NewValidationRules returns the validation rules of the app whose index,
+// custom rule registrations and rule helper methods are given; read
+// returns a file's source by URI.
+func NewValidationRules(index *symbols.Index, extensions *ValidationExtensions, helpers *ValidationHelpers, read func(uri string) string) *ValidationRules {
+	return &ValidationRules{index: index, extensions: extensions, helpers: helpers, read: read}
 }
 
 // All returns every rule, sorted by name. The slice is shared: read only.

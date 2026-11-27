@@ -20,7 +20,7 @@ func TestValidationExtensionsFollowIndexing(t *testing.T) {
 	})
 	ws := New(Options{RootPath: root, Framework: "laravel", Config: config.DefaultConfig(), Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
 	ws.IndexWorkspace()
-	rules := frameworklaravel.NewValidationRules(ws.Index, ws.ValidationExtensions, func(string) string { return "" })
+	rules := frameworklaravel.NewValidationRules(ws.Index, ws.ValidationExtensions, ws.ValidationHelpers, func(string) string { return "" })
 	for _, name := range []string{"slug", "isbn"} {
 		if _, ok := rules.Lookup(name); !ok {
 			t.Errorf("%s is registered outside the providers", name)
