@@ -19,13 +19,10 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/coverage"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
-	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/models"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/session"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/symquery"
@@ -711,43 +708,21 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt := &serviceRuntime{Workspace: ws}
 	rt.Session = session.New(ws, session.Options{Read: readFile, Logger: newStdLogger(nil)})
 
-	arrayResolver := models.NewFrameworkArrayResolver(ws.Index, s.RootPath, s.Framework)
-	viewResolver := rt.Session.Views()
-	translationResolver := frameworklaravel.NewTranslationResolver(s.RootPath)
-	symfonyTranslations := frameworksymfony.NewTranslationResolver(s.RootPath)
-
-	rt.Completion = completion.NewProvider(ws.Index, ws.Container, s.Framework)
-	rt.Completion.SetArrayResolver(arrayResolver)
-	rt.Completion.SetAutoImportAliasStyle(ws.Config.AutoImport.AliasStyle)
-	if ws.RouteIndex != nil {
-		rt.Completion.SetLaravelRouteIndex(ws.RouteIndex)
-	}
-	rt.Completion.SetViewResolver(viewResolver)
-	rt.Completion.SetTranslationResolver(translationResolver)
-	rt.Completion.SetSymfonyTranslationResolver(symfonyTranslations)
-	rt.Completion.SetSymfonyCommands(ws.SymfonyCommands)
+	rt.Completion = rt.Session.Completion()
+	rt.Hover = rt.Session.Hover()
 
 	rt.InlayHint = inlayhint.NewProvider(ws.Index, ws.Container)
-	rt.InlayHint.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return rt.Completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	})
-
-	rt.Hover = hover.NewProvider(ws.Index, ws.Container, s.Framework)
-	rt.Hover.SetArrayResolver(arrayResolver)
-	rt.Hover.SetConfig(ws.Config)
-	rt.Hover.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return rt.Completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	})
+	rt.InlayHint.SetTypedChainResolver(rt.Session.TypedExpression)
 
 	rt.Analyzer = analyzer.NewAnalyzer(ws.Index, ws.Container)
 	if ws.RouteIndex != nil {
 		rt.Analyzer.SetLaravelRouteIndex(ws.RouteIndex)
 	}
-	rt.Analyzer.SetChainResolver(rt.Completion.ResolveExpressionType)
-	rt.Analyzer.SetTypedChainResolver(rt.Completion.ResolveExpressionTypeTyped)
-	rt.Analyzer.SetViewResolver(viewResolver)
-	rt.Analyzer.SetTranslationResolver(translationResolver)
-	rt.Analyzer.SetSymfonyTranslationResolver(symfonyTranslations)
+	rt.Analyzer.SetChainResolver(rt.Session.Expression)
+	rt.Analyzer.SetTypedChainResolver(rt.Session.TypedExpression)
+	rt.Analyzer.SetViewResolver(rt.Session.Views())
+	rt.Analyzer.SetTranslationResolver(rt.Session.Translations())
+	rt.Analyzer.SetSymfonyTranslationResolver(rt.Session.SymfonyTranslations())
 	rt.Analyzer.SetSymfonyCommands(ws.SymfonyCommands)
 
 	return rt
