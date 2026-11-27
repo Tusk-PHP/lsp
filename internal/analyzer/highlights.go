@@ -32,7 +32,8 @@ func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Positi
 	}
 	tokens := doc.Significant()
 	var interpolated interpolatedStrings
-	var highlights []protocol.DocumentHighlight
+	var candidates []highlightCandidate
+	var resolved []protocol.Position
 	for i, tok := range tokens {
 		if interpolated.skip(tok.Kind) {
 			continue
@@ -43,15 +44,28 @@ func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Positi
 		}
 		rng := doc.Range(name.Start, name.End)
 		if tok.Kind == token.Variable && !follows(tokens, i, token.DoubleColon) {
-			if !sameRange(rng, decl) {
-				continue
+			if sameRange(rng, decl) {
+				candidates = append(candidates, highlightCandidate{rng: rng, name: -1})
 			}
-		} else if !sameSymbol(a.resolveSymbolAt(r, doc.NameAt(rng.Start), source), target) {
 			continue
 		}
-		highlights = append(highlights, protocol.DocumentHighlight{Range: rng, Kind: highlightKind(rng, decl, pos)})
+		candidates = append(candidates, highlightCandidate{rng: rng, name: len(resolved)})
+		resolved = append(resolved, rng.Start)
+	}
+	names := doc.NamesAt(resolved)
+	var highlights []protocol.DocumentHighlight
+	for _, c := range candidates {
+		if c.name >= 0 && !sameSymbol(a.resolveSymbolAt(r, names[c.name], source), target) {
+			continue
+		}
+		highlights = append(highlights, protocol.DocumentHighlight{Range: c.rng, Kind: highlightKind(c.rng, decl, pos)})
 	}
 	return highlights
+}
+
+type highlightCandidate struct {
+	rng  protocol.Range
+	name int
 }
 
 func (a *Analyzer) mayBeLocalVariable(ctx *sourcectx.NameContext) bool {
