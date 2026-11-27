@@ -912,7 +912,7 @@ func (s *Service) projectDiagnostics(path string) (DiagnosticsOutput, error) {
 		diags := rt.Session.AnalyzeAll(uri, string(data))
 		out.Files = append(out.Files, FileDiagnostics{
 			Path:        normalizedRelativePath(s.RootPath, absPath),
-			Diagnostics: lspDiagnostics(diags),
+			Diagnostics: session.LSPDiagnostics(diags),
 		})
 	}
 	sort.Slice(out.Files, func(i, j int) bool { return out.Files[i].Path < out.Files[j].Path })

@@ -3,6 +3,8 @@ package lsp
 import (
 	"strings"
 	"sync"
+
+	"github.com/Tusk-PHP/lsp/internal/session"
 )
 
 // Background work on open documents has to keep up with edits: a result
@@ -132,7 +134,7 @@ func (s *Server) docIndexIdle(uri string) bool {
 // the send one step, so an older version's diagnostics never arrive after a
 // newer version's.
 func (s *Server) publishDiagnostics(uri, source string) {
-	diagnostics := s.positionsOf(uri, source).diagnosticsOut(uri, lspDiagnostics(s.analysis.Analyze(uri, source)))
+	diagnostics := s.positionsOf(uri, source).diagnosticsOut(uri, session.LSPDiagnostics(s.analysis.Analyze(uri, source)))
 	s.publishMu.Lock()
 	defer s.publishMu.Unlock()
 	if !s.isCurrentDocument(uri, source) {
