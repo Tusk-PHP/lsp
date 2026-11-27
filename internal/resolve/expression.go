@@ -145,6 +145,8 @@ func (r *Resolver) typeOf(t *syntaxTree, e ast.Expr, expected *ResolvedType, ctx
 		return r.operatorType(t, n, ctx)
 	case *ast.Ternary:
 		return r.ternaryType(t, n, ctx)
+	case *ast.Match:
+		return r.matchType(t, n, ctx)
 	case *ast.Call:
 		return r.callType(t, n, ctx)
 	case *ast.MethodCall, *ast.PropertyFetch, *ast.StaticCall, *ast.StaticPropertyFetch:

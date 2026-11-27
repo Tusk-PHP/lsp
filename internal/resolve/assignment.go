@@ -37,7 +37,7 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 		if gen := r.enclosingReturnType(lines, pos, file); gen.FQN == "Generator" && len(gen.Params) >= 3 {
 			return gen.Params[2], true
 		}
-	case *ast.Binary, *ast.Unary, *ast.Postfix, *ast.InstanceOf, *ast.Ternary:
+	case *ast.Binary, *ast.Unary, *ast.Postfix, *ast.InstanceOf, *ast.Ternary, *ast.Match:
 		rt := r.typeOf(t, n, nil, ctx)
 		return rt, !rt.IsEmpty()
 	case *ast.ClassConstFetch:
@@ -153,7 +153,7 @@ func (r *Resolver) assignedPlainType(t *syntaxTree, v assignedValue) (string, bo
 		return typ, true
 	}
 	switch v.expr.(type) {
-	case *ast.Binary, *ast.Unary, *ast.Postfix, *ast.InstanceOf, *ast.Ternary:
+	case *ast.Binary, *ast.Unary, *ast.Postfix, *ast.InstanceOf, *ast.Ternary, *ast.Match:
 		return "", true
 	}
 	return "", v.called || r.ChainResolver != nil && isMemberChain(v.expr)
@@ -207,6 +207,21 @@ func (r *Resolver) ternaryType(t *syntaxTree, n *ast.Ternary, ctx ExprContext) R
 		return ResolvedType{}
 	}
 	return MakeUnion([]ResolvedType{then, els}, false)
+}
+
+func (r *Resolver) matchType(t *syntaxTree, n *ast.Match, ctx ExprContext) ResolvedType {
+	parts := make([]ResolvedType, 0, len(n.Arms))
+	for _, arm := range n.Arms {
+		if isThrow(arm.Body) {
+			continue
+		}
+		vt := r.valueType(t, arm.Body, ctx)
+		if vt.IsEmpty() && !vt.Nullable {
+			return ResolvedType{}
+		}
+		parts = append(parts, vt)
+	}
+	return MakeUnion(parts, false)
 }
 
 func (r *Resolver) eitherType(t *syntaxTree, left, right ast.Expr, ctx ExprContext) ResolvedType {
