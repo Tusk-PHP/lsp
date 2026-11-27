@@ -84,6 +84,23 @@ wp-content/plugins/woocommerce/includes/admin/meta-boxes/class-wc-meta-box-produ
 wp-content/plugins/woocommerce/includes/admin/meta-boxes/class-wc-meta-box-product-data.php	unused-private-method	Private method 'WC_Meta_Box_Product_Data::get_product_data_tabs' is never used
 wp-content/plugins/woocommerce/includes/admin/meta-boxes/class-wc-meta-box-product-data.php	unused-private-method	Private method 'WC_Meta_Box_Product_Data::get_product_type_options' is never used
 wp-content/plugins/woocommerce/includes/admin/meta-boxes/class-wc-meta-box-product-data.php	unused-private-method	Private method 'WC_Meta_Box_Product_Data::output_tabs' is never used
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_product' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_product_id' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_subtotal' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_subtotal' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_subtotal' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_subtotal' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_taxes' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_total' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_total' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_total' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_total' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_total' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_total' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_variation_id' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_variation_id' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_variation_id' on 'WC_Order_Item'
+wp-content/plugins/woocommerce/includes/admin/meta-boxes/views/html-order-item.php	unknown-member	Unknown member 'get_variation_id' on 'WC_Order_Item'
 wp-content/plugins/woocommerce/includes/admin/notes/class-wc-notes-run-db-update.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/admin/plugin-updates/class-wc-plugin-updates.php	unused-import	Unused import 'Automattic\Jetpack\Constants'
 wp-content/plugins/woocommerce/includes/admin/plugin-updates/class-wc-plugins-screen-updates.php	unknown-class	Unknown class 'Constants'
@@ -341,7 +358,6 @@ wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version3/class-wc-r
 wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version3/class-wc-rest-products-controller.php	unknown-member	Unknown member 'set_children' on 'WC_Product'
 wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version3/class-wc-rest-products-controller.php	unknown-member	Unknown member 'set_product_url' on 'WC_Product'
 wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version3/class-wc-rest-products-controller.php	unused-variable	Variable $featured_image is assigned but never read
-wp-content/plugins/woocommerce/includes/rest-api/Controllers/Version3/class-wc-rest-report-sales-controller.php	unknown-member	Unknown member 'get_report_data' on 'WC_Admin_Report'
 wp-content/plugins/woocommerce/includes/rest-api/Utilities/ImageAttachment.php	undefined-variable	Undefined variable $images
 wp-content/plugins/woocommerce/includes/shipping/legacy-flat-rate/class-wc-shipping-legacy-flat-rate.php	argument-count-mismatch	Too many arguments to remove_shortcode(): 2 passed, at most 1 expected
 wp-content/plugins/woocommerce/includes/theme-support/class-wc-twenty-nineteen.php	unknown-class	Unknown class 'Constants'
@@ -506,10 +522,6 @@ wp-content/plugins/woocommerce/src/Blocks/BlockTypes/MiniCartProductsTableBlock.
 wp-content/plugins/woocommerce/src/Blocks/BlockTypes/NextPreviousButtons.php	unused-import	Unused import 'Automattic\WooCommerce\Blocks\Utils\ProductGalleryUtils'
 wp-content/plugins/woocommerce/src/Blocks/BlockTypes/OrderConfirmation/CreateAccount.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Features\Features'
 wp-content/plugins/woocommerce/src/Blocks/BlockTypes/ProductCollection/Utils.php	unused-import	Unused import 'Automattic\WooCommerce\Blocks\Utils\CartCheckoutUtils'
-wp-content/plugins/woocommerce/src/Blocks/BlockTypes/ProductPrice.php	unknown-member	Unknown member 'get_variation_regular_price' on 'WC_Product'
-wp-content/plugins/woocommerce/src/Blocks/BlockTypes/ProductPrice.php	unknown-member	Unknown member 'get_variation_regular_price' on 'WC_Product'
-wp-content/plugins/woocommerce/src/Blocks/BlockTypes/ProductPrice.php	unknown-member	Unknown member 'get_variation_sale_price' on 'WC_Product'
-wp-content/plugins/woocommerce/src/Blocks/BlockTypes/ProductPrice.php	unknown-member	Unknown member 'get_variation_sale_price' on 'WC_Product'
 wp-content/plugins/woocommerce/src/Blocks/BlockTypes/ProductStockIndicator.php	unknown-class	Unknown class 'WC_Product'
 wp-content/plugins/woocommerce/src/Blocks/BlockTypes/ProductStockIndicator.php	unused-variable	Variable $watch_attribute is assigned but never read
 wp-content/plugins/woocommerce/src/Blocks/BlockTypes/Reviews/ProductReviewsTitle.php	unused-variable	Variable $reviews_count is assigned but never read
@@ -548,7 +560,6 @@ wp-content/plugins/woocommerce/src/Blocks/Utils/CartCheckoutUtils.php	unknown-cl
 wp-content/plugins/woocommerce/src/Blocks/Utils/ProductAvailabilityUtils.php	unknown-member	Unknown member 'has_purchasable_variations' on 'WC_Product'
 wp-content/plugins/woocommerce/src/Blocks/Utils/ProductAvailabilityUtils.php	unused-import	Unused import 'Automattic\WooCommerce\Blocks\Templates\ProductStockIndicator'
 wp-content/plugins/woocommerce/src/Caches/OrderCacheController.php	unused-private-property	Private property 'OrderCacheController::$features_controller' is never used
-wp-content/plugins/woocommerce/src/Checkout/Helpers/ReserveStock.php	unknown-member	Unknown member 'get_product' on 'WC_Order_Item'
 wp-content/plugins/woocommerce/src/Database/Migrations/CustomOrderTable/CLIRunner.php	unknown-class	Unknown class 'WP_CLI'
 wp-content/plugins/woocommerce/src/Database/Migrations/CustomOrderTable/CLIRunner.php	unknown-class	Unknown class 'WP_CLI'
 wp-content/plugins/woocommerce/src/Database/Migrations/CustomOrderTable/CLIRunner.php	unknown-class	Unknown class 'WP_CLI'

@@ -152,7 +152,6 @@ vendor/mage-os/framework/Setup/Declaration/Schema/Db/MySQL/DbSchemaWriter.php	un
 vendor/mage-os/framework/Setup/Declaration/Schema/Db/MySQL/Definition/Columns/Comment.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Columns\ColumnNullableAwareInterface'
 vendor/mage-os/framework/Setup/Declaration/Schema/Db/MySQL/Definition/Constraints/Internal.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Column'
 vendor/mage-os/framework/Setup/Declaration/Schema/Db/MySQL/Definition/Index.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Column'
-vendor/mage-os/framework/Setup/Declaration/Schema/Declaration/ValidationRules/IncosistentReferenceDefinition.php	unknown-member	Unknown member 'getLength' on 'Column'
 vendor/mage-os/framework/Setup/Declaration/Schema/Diff/Diff.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Constraints\Reference'
 vendor/mage-os/framework/Setup/Declaration/Schema/Dto/Factories/Index.php	unused-import	Unused import 'Magento\Framework\DB\Adapter\AdapterInterface'
 vendor/mage-os/framework/Setup/Declaration/Schema/Operations/DropElement.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Db\AdapterMediator'
@@ -667,7 +666,6 @@ vendor/mage-os/module-related-product-graph-ql/Model/Resolver/Batch/CrossSellPro
 vendor/mage-os/module-related-product-graph-ql/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Config\Element\Field'
 vendor/mage-os/module-related-product-graph-ql/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Query\Resolver\BatchResponse'
 vendor/mage-os/module-related-product-graph-ql/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Query\Resolver\ContextInterface'
-vendor/mage-os/module-remote-storage/Model/File/Uploader.php	unknown-member	Unknown member 'getDirectoryWrite' on 'FileSystem'
 vendor/mage-os/module-reports/Controller/Report/Product/View.php	unused-private-property	Private property 'View::$context' is never used
 vendor/mage-os/module-reports/Setup/Patch/Data/InitializeReportEntityTypesAndPages.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 vendor/mage-os/module-review-graph-ql/Mapper/ReviewDataMapper.php	unused-import	Unused import 'Magento\Catalog\Model\Product'
