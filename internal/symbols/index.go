@@ -160,6 +160,7 @@ type Index struct {
 	optionalNamespaces   []string                   // lowercase prefixes of optional packages that aren't installed; see SetOptionalNamespaces
 	callForwards         map[string][]string        // class FQN → types it forwards unknown calls to; see SetCallForwards
 	scopeConventions     map[string]ScopeConvention // builder class FQN → how it finds its model's scopes; see SetScopeConventions
+	collectionFactories  map[string]string          // collection class FQN → its item class's factory method; see SetCollectionFactories
 	inheritanceMap       map[string]string
 	childrenMap          map[string][]string // lowercase parent FQN → direct subclass FQNs, the reverse of inheritanceMap
 	implementsMap        map[string][]string // class → interfaces it implements
@@ -1616,13 +1617,19 @@ func (idx *Index) RefineProperty(fqn, fallbackType string, readonly bool) bool {
 }
 
 // RefineMethodReturnType sets the return type of the method fqn when it
-// declares none.
+// declares none, or when returnType's class extends the one it declares.
 func (idx *Index) RefineMethodReturnType(fqn, returnType string) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	existing := idx.symbols[fqn]
-	if existing == nil || existing.Kind != KindMethod || existing.ReturnType != "" {
+	if existing == nil || existing.Kind != KindMethod {
 		return
+	}
+	if existing.ReturnType != "" {
+		class, _, _ := strings.Cut(returnType, "<")
+		if !idx.isDescendantOf(class, strings.TrimPrefix(existing.ReturnType, "\\"), map[string]bool{}) {
+			return
+		}
 	}
 	refined := *existing
 	refined.ReturnType = returnType

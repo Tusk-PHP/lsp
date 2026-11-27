@@ -91,6 +91,7 @@ func New(opts Options) *Bootstrapped {
 	if opts.Framework == "laravel" {
 		index.SetCallForwards(frameworklaravel.CallForwards())
 		index.SetScopeConventions(frameworklaravel.ScopeConventions())
+		index.SetCollectionFactories(frameworklaravel.CollectionFactories())
 		routeIndex = frameworklaravel.NewRouteIndex(opts.RootPath, index.Grammars)
 		viewData = frameworklaravel.NewViewData(opts.RootPath)
 		aliases = frameworklaravel.NewAliases(opts.RootPath, index.Grammars)
