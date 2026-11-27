@@ -12,6 +12,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 )
 
 // lockedBuffer collects the server's output from several goroutines.
@@ -45,11 +46,11 @@ func slowDiagnosticsServer(t *testing.T) (s *Server, out *lockedBuffer, release 
 	var mu sync.Mutex
 	seen := map[string]bool{}
 	var order []string
-	s.diag.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
+	s.diag.TypeResolver = func(file *parser.FileNode, _ ast.Expr) string {
 		mu.Lock()
-		if !seen[source] {
-			seen[source] = true
-			order = append(order, source)
+		if !seen[file.Source] {
+			seen[file.Source] = true
+			order = append(order, file.Source)
 		}
 		mu.Unlock()
 		<-release

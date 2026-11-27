@@ -1,14 +1,14 @@
 package completion
 
 import (
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
-	"strings"
 	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -19,8 +19,8 @@ func TestChainReturnTypeResolution(t *testing.T) {
 	p, _ := setupEloquentCompletionTest(t)
 
 	resolve := func(expr, source string) string {
-		file := parser.ParseFile(source)
-		return p.ResolveExpressionType(expr, source, protocol.Position{Line: 5}, file)
+		file := parser.ParseFile(source, token.Latest)
+		return p.plainExprTypeAt(expr, source, protocol.Position{Line: 5}, file)
 	}
 
 	preamble := "<?php\nuse App\\Models\\Category;\nuse App\\Models\\Product;\n\n\n"
@@ -108,9 +108,10 @@ func TestChainReturnTypeResolution(t *testing.T) {
 	})
 
 	t.Run("full chain: query->with->get->map", func(t *testing.T) {
-		// Collection::map() returns static → Collection
+		// These stubs declare no generics, as Laravel before 9 didn't, so the
+		// Laravel template fallbacks type map() as a base collection.
 		typ := resolve("Category::query()->with(['products'])->get(['id'])->map(fn($x) => $x)", preamble)
-		if typ != "Illuminate\\Database\\Eloquent\\Collection" {
+		if typ != "Illuminate\\Support\\Collection" {
 			t.Errorf("expected Collection, got %q", typ)
 		}
 	})
@@ -122,6 +123,7 @@ func setupRealisticEloquentTest(t *testing.T) *Provider {
 	t.Helper()
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
+	idx.SetTemplateFallbacks(laravel.TemplateFallbacks())
 
 	idx.IndexFile("file:///vendor/Model.php", `<?php
 namespace Illuminate\Database\Eloquent;
@@ -249,8 +251,8 @@ func TestRealisticChainResolution(t *testing.T) {
 	p := setupRealisticEloquentTest(t)
 
 	resolve := func(expr, source string) string {
-		file := parser.ParseFile(source)
-		return p.ResolveExpressionType(expr, source, protocol.Position{Line: 5}, file)
+		file := parser.ParseFile(source, token.Latest)
+		return p.plainExprTypeAt(expr, source, protocol.Position{Line: 5}, file)
 	}
 
 	preamble := "<?php\nuse App\\Models\\Category;\n\n\n\n"
@@ -350,31 +352,21 @@ func TestMultiLineChainResolution(t *testing.T) {
 
 	t.Run("multi-line: query->with->get resolves type via joined line", func(t *testing.T) {
 		source := "<?php\nuse App\\Models\\Category;\nCategory::query()\n    ->with('rel')\n    ->get()\n    ->all()"
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		// ResolveExpressionType works with single-line expressions, so join first
-		typ := p.ResolveExpressionType("Category::query()->with('rel')->get()", source, protocol.Position{Line: 4}, file)
+		typ := p.plainExprTypeAt("Category::query()->with('rel')->get()", source, protocol.Position{Line: 4}, file)
 		if typ != "Illuminate\\Database\\Eloquent\\Collection" {
 			t.Errorf("expected Collection, got %q", typ)
 		}
 	})
 
-	t.Run("multi-line: hover on get() after with() shows Builder member", func(t *testing.T) {
-		source := "<?php\nuse App\\Models\\Category;\nCategory::query()\n    ->with('rel')\n    ->get()"
-		// Line 4: "    ->get()", cursor on "get" at character 6
-		lines := strings.Split(source, "\n")
-		joined, wordStart := resolve.JoinChainLines(lines, 4, 6)
-
-		// The joined line should contain the full chain
-		if !strings.Contains(joined, "Category::query()") {
-			t.Errorf("joined line should contain chain origin, got: %q", joined)
+	t.Run("multi-line: a name typed on a continuation line after a comment", func(t *testing.T) {
+		source := "<?php\nuse App\\Models\\Category;\nCategory::query()\n    // with(\n    ->with('rel')\n    ->ord"
+		items := p.GetCompletions("file:///test.php", source, protocol.Position{Line: 5, Character: 9})
+		labels := collectLabels(items)
+		if !labels["orderBy"] || labels["get"] {
+			t.Errorf("expected Builder methods starting with ord, got: %v", labels)
 		}
-		if !strings.Contains(joined, "->with") {
-			t.Errorf("joined line should contain ->with, got: %q", joined)
-		}
-		if !strings.Contains(joined, "->get") {
-			t.Errorf("joined line should contain ->get, got: %q", joined)
-		}
-		_ = wordStart
 	})
 
 	t.Run("multi-line: completions after get()-> on continuation line", func(t *testing.T) {

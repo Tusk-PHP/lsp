@@ -8,12 +8,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/analyzer"
 	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -21,9 +23,19 @@ import (
 
 // corpusEntry holds a collected PHP file with its URI and source.
 type corpusEntry struct {
-	path   string // absolute filesystem path
-	uri    string // file:// URI used for indexing
-	source string // raw PHP source
+	path    string // absolute filesystem path
+	uri     string // file:// URI used for indexing
+	source  string // raw PHP source
+	project *corpusProject
+}
+
+type corpusProject struct {
+	root    string
+	profile symbols.BuiltinProfile
+}
+
+func (e corpusEntry) grammars() phpparser.GrammarRange {
+	return e.project.profile.Grammars
 }
 
 // skippedTestdataDir reports whether dir, under the testdata root, holds code
@@ -60,6 +72,22 @@ func collectCorpus() ([]corpusEntry, error) {
 
 	var entries []corpusEntry
 	seen := make(map[string]bool)
+	projects := make(map[string]*corpusProject)
+	projectOf := func(root, path string) *corpusProject {
+		dir := root
+		if rel, err := filepath.Rel(root, path); err == nil {
+			if first, _, nested := strings.Cut(filepath.ToSlash(rel), "/"); nested {
+				dir = filepath.Join(root, first)
+			}
+		}
+		if p, ok := projects[dir]; ok {
+			return p
+		}
+		profile, _ := workspace.ResolveBuiltinProfileWithConfig(dir, "", 2*time.Second, nil, nil)
+		p := &corpusProject{root: dir, profile: profile}
+		projects[dir] = p
+		return p
+	}
 
 	for _, root := range roots {
 		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -88,9 +116,10 @@ func collectCorpus() ([]corpusEntry, error) {
 			}
 			uri := pathToURI(path)
 			entries = append(entries, corpusEntry{
-				path:   path,
-				uri:    uri,
-				source: string(src),
+				path:    path,
+				uri:     uri,
+				source:  string(src),
+				project: projectOf(root, path),
 			})
 			return nil
 		})
@@ -111,14 +140,20 @@ func pathToURI(path string) string {
 	return "file://" + path
 }
 
-// buildIndex constructs a symbols.Index over the provided corpus entries.
-func buildIndex(entries []corpusEntry) *symbols.Index {
-	idx := symbols.NewIndex()
-	idx.RegisterBuiltins()
+// buildIndexes constructs one symbols.Index per corpus project, with the
+// project's own builtin profile and PHP grammars.
+func buildIndexes(entries []corpusEntry) map[*corpusProject]*symbols.Index {
+	indexes := make(map[*corpusProject]*symbols.Index)
 	for _, e := range entries {
+		idx, ok := indexes[e.project]
+		if !ok {
+			idx = symbols.NewIndexFor(e.project.profile.Grammars)
+			idx.RegisterBuiltinsForProfile(e.project.profile)
+			indexes[e.project] = idx
+		}
 		idx.IndexFile(e.uri, e.source)
 	}
-	return idx
+	return indexes
 }
 
 // providers bundles all the LSP providers exercised by the harness.
@@ -285,7 +320,7 @@ func runOperations(uri, source string, pos protocol.Position, kind anchorKind, p
 	// member-access anchors (->, ?->, ::). The chain-resolver re-entrancy guard
 	// (C1, fixed in internal/resolve) prevents the fatal stack overflow that
 	// previously occurred when resolveAccessChain ↔ ResolveVariableType cycled
-	// via ChainResolver on self/mutually-referential assignments.
+	// on self/mutually-referential assignments.
 	if kind == anchorUseImport || kind == anchorArrow || kind == anchorNullsafe || kind == anchorDoubleColon {
 		res.hover = prov.hov.GetHover(uri, source, pos)
 		res.completions = prov.comp.GetCompletions(uri, source, pos)

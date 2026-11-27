@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -25,7 +28,7 @@ class Handler
     }
 }`
 
-	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 11, Character: 14})
+	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 11, Character: 14}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
@@ -41,8 +44,8 @@ class Handler
 	if ctx.AccessKind != AccessInstance {
 		t.Fatalf("AccessKind = %q, want %q", ctx.AccessKind, AccessInstance)
 	}
-	if ctx.SubjectExpr != "$user            ->profile()" {
-		t.Fatalf("SubjectExpr = %q", ctx.SubjectExpr)
+	if _, ok := ctx.Member.Access.(*ast.MethodCall); !ok || !ctx.Member.Call || ctx.Member.Filter != "" {
+		t.Fatalf("Member = %#v, want the name() call with no filter", ctx.Member)
 	}
 	if ctx.EnclosingFQN != "App\\Services\\Handler" {
 		t.Fatalf("EnclosingFQN = %q", ctx.EnclosingFQN)
@@ -69,30 +72,46 @@ func TestWordAtHandlesVariableCursorOnDollar(t *testing.T) {
 	}
 }
 
-func TestDetectMemberContext(t *testing.T) {
+func TestAnalyzeReadsTheMemberAccessFromTheTree(t *testing.T) {
 	tests := []struct {
 		name   string
-		input  string
-		prefix string
-		filter string
+		source string
 		kind   AccessKind
+		filter string
+		call   bool
 	}{
-		{name: "instance", input: "$user->pro", prefix: "$user->", filter: "pro", kind: AccessInstance},
-		{name: "nullsafe", input: "$user?->pro", prefix: "$user?->", filter: "pro", kind: AccessNullsafe},
-		{name: "static", input: "User::cre", prefix: "User::", filter: "cre", kind: AccessStatic},
+		{name: "instance", source: "$user->pro|", kind: AccessInstance, filter: "pro"},
+		{name: "nullsafe", source: "$user?->pro|", kind: AccessNullsafe, filter: "pro"},
+		{name: "nullsafe call", source: "$user?->pro|();", kind: AccessNullsafe, filter: "pro", call: true},
+		{name: "static", source: "User::cre|", kind: AccessStatic, filter: "cre"},
+		{name: "static property", source: "User::$ins|", kind: AccessStatic, filter: "$ins"},
+		{name: "static call", source: "User::cre|ate();", kind: AccessStatic, filter: "cre", call: true},
+		{name: "missing name", source: "$user->|", kind: AccessInstance},
+		{name: "missing static name before a closing brace", source: "function f() {\n    User::|\n}", kind: AccessStatic},
+		{name: "cursor in the middle of a call's name", source: "$user->pro|file();", kind: AccessInstance, filter: "pro", call: true},
+		{name: "cursor before a name on the next line", source: "$user->|\n    profile();", kind: AccessInstance},
+		{name: "chain across lines and a comment", source: "$user\n    // ->x\n    ->profile()\n    ->na|", kind: AccessInstance, filter: "na"},
+		{name: "inside the call's arguments", source: "$user->profile($a|);", kind: AccessNone},
+		{name: "on the receiver", source: "$us|er->profile();", kind: AccessNone},
+		{name: "in a comment", source: "// $user->pro|", kind: AccessNone},
+		{name: "in a string", source: "'$user->pro|';", kind: AccessNone},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := DetectMemberContext(tt.input)
-			if !ok {
-				t.Fatal("expected member context")
-			}
-			if got.Prefix != tt.prefix || got.Filter != tt.filter || got.AccessKind != tt.kind {
-				t.Fatalf("DetectMemberContext() = %#v", got)
+			source, pos := cursorIn("<?php\n" + tt.source)
+			ctx := Analyze("file:///a.php", source, pos, phpparser.OnlyGrammar(token.Latest))
+			if ctx.AccessKind != tt.kind || ctx.Member.Filter != tt.filter || ctx.Member.Call != tt.call {
+				t.Fatalf("AccessKind %q, Member %#v; want %q, filter %q, call %v", ctx.AccessKind, ctx.Member, tt.kind, tt.filter, tt.call)
 			}
 		})
 	}
+}
+
+func cursorIn(marked string) (string, protocol.Position) {
+	at := strings.Index(marked, "|")
+	before := marked[:at]
+	line := strings.Count(before, "\n")
+	return before + marked[at+1:], protocol.Position{Line: line, Character: at - strings.LastIndex(before, "\n") - 1}
 }
 
 func TestAnalyzeBuildsFunctionScopeOutsideClass(t *testing.T) {
@@ -107,7 +126,7 @@ function formatUser(User $user): string
 }
 `
 
-	ctx := Analyze("file:///helpers.php", source, protocol.Position{Line: 7, Character: 18})
+	ctx := Analyze("file:///helpers.php", source, protocol.Position{Line: 7, Character: 18}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
@@ -140,7 +159,7 @@ class Handler
 }
 `
 
-	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 8, Character: 31})
+	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 8, Character: 31}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
@@ -172,7 +191,7 @@ class Handler
 }
 `
 
-	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 8, Character: 49})
+	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 8, Character: 49}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
@@ -211,7 +230,7 @@ namespace App\Two {
 }
 `
 
-	firstCtx := Analyze("file:///multi.php", source, protocol.Position{Line: 5, Character: 21})
+	firstCtx := Analyze("file:///multi.php", source, protocol.Position{Line: 5, Character: 21}, phpparser.OnlyGrammar(token.Latest))
 	if firstCtx == nil {
 		t.Fatal("expected first cursor context")
 	}
@@ -222,7 +241,7 @@ namespace App\Two {
 		t.Fatalf("first uses = %#v, want Thing import", firstCtx.Uses)
 	}
 
-	secondCtx := Analyze("file:///multi.php", source, protocol.Position{Line: 13, Character: 20})
+	secondCtx := Analyze("file:///multi.php", source, protocol.Position{Line: 13, Character: 20}, phpparser.OnlyGrammar(token.Latest))
 	if secondCtx == nil {
 		t.Fatal("expected second cursor context")
 	}
@@ -249,7 +268,7 @@ class BeforeImports
 use App\Later\Thing;
 `
 
-	ctx := Analyze("file:///imports.php", source, protocol.Position{Line: 4, Character: 20})
+	ctx := Analyze("file:///imports.php", source, protocol.Position{Line: 4, Character: 20}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
@@ -276,10 +295,10 @@ $f = function ($a) use ($b) {
 };
 $after = 1;
 `
-	if ctx := Analyze("file:///c.php", source, positionAfter(t, source, "return $")); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure || ctx.Scope.StartLine != 1 || ctx.Scope.EndLine != 3 {
+	if ctx := Analyze("file:///c.php", source, positionAfter(t, source, "return $"), phpparser.OnlyGrammar(token.Latest)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure || ctx.Scope.StartLine != 1 || ctx.Scope.EndLine != 3 {
 		t.Errorf("inside the closure body: Scope = %#v, want a closure on lines 1-3", ctx.Scope)
 	}
-	if ctx := Analyze("file:///c.php", source, positionAfter(t, source, "$aft")); ctx.Scope != nil {
+	if ctx := Analyze("file:///c.php", source, positionAfter(t, source, "$aft"), phpparser.OnlyGrammar(token.Latest)); ctx.Scope != nil {
 		t.Errorf("after the closure: Scope = %#v, want none", ctx.Scope)
 	}
 }
@@ -294,13 +313,13 @@ func TestAnalyzeArrowFunctionScopeEndsWhereItsExpressionDoes(t *testing.T) {
 		{"running to the end of the file", "<?php\n$f = fn($x) => $x / 4", "/ ", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if ctx := Analyze("file:///a.php", tc.source, positionAfter(t, tc.source, tc.inside)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure {
+			if ctx := Analyze("file:///a.php", tc.source, positionAfter(t, tc.source, tc.inside), phpparser.OnlyGrammar(token.Latest)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure {
 				t.Errorf("inside the arrow function: Scope = %#v, want a closure", ctx.Scope)
 			}
 			if tc.outside == "" {
 				return
 			}
-			if ctx := Analyze("file:///a.php", tc.source, positionAfter(t, tc.source, tc.outside)); ctx.Scope != nil && ctx.Scope.Kind == ScopeClosure {
+			if ctx := Analyze("file:///a.php", tc.source, positionAfter(t, tc.source, tc.outside), phpparser.OnlyGrammar(token.Latest)); ctx.Scope != nil && ctx.Scope.Kind == ScopeClosure {
 				t.Errorf("after the arrow function: Scope = %#v, want no closure", ctx.Scope)
 			}
 		})
@@ -315,7 +334,7 @@ use const App\Support\LIMIT;
 use App\Models\User as Account;
 $x = 1;
 `
-	ctx := Analyze("file:///u.php", source, positionAfter(t, source, "$x"))
+	ctx := Analyze("file:///u.php", source, positionAfter(t, source, "$x"), phpparser.OnlyGrammar(token.Latest))
 	want := []parser.UseNode{
 		{FullName: "App\\Support\\helper", Alias: "helper", Kind: "function", StartLine: 2},
 		{FullName: "App\\Support\\LIMIT", Alias: "LIMIT", Kind: "const", StartLine: 3},
@@ -336,7 +355,7 @@ func BenchmarkNewDocument(b *testing.B) {
 	source := src.String()
 	b.ReportAllocs()
 	for b.Loop() {
-		if NewDocument("file:///a.php", source).File() == nil {
+		if NewDocument("file:///a.php", source, phpparser.OnlyGrammar(token.Latest)).File() == nil {
 			b.Fatal("the file parses")
 		}
 	}
@@ -344,18 +363,18 @@ func BenchmarkNewDocument(b *testing.B) {
 
 func TestDocumentOutsideItsLines(t *testing.T) {
 	source := "<?php\nnamespace App;\nclass Shop {}\n"
-	doc := NewDocument("file:///a.php", source)
+	doc := NewDocument("file:///a.php", source, phpparser.OnlyGrammar(token.Latest))
 	if file := doc.File(); file == nil || len(file.Classes) != 1 || file.Classes[0].Name != "Shop" {
 		t.Fatalf("the document's declarations are the parsed file's: %+v", file)
 	}
-	if name := Analyze("file:///a.php", source, protocol.Position{Line: 2, Character: 7}).Name(); name == nil || name.SymbolText != "Shop" {
+	if name := Analyze("file:///a.php", source, protocol.Position{Line: 2, Character: 7}, phpparser.OnlyGrammar(token.Latest)).Name(); name == nil || name.SymbolText != "Shop" {
 		t.Errorf("the name under the cursor is Shop, got %+v", name)
 	}
 	for _, pos := range []protocol.Position{{Line: -1}, {Line: 10}} {
 		if ctx := doc.At(pos); ctx != nil {
 			t.Errorf("At(%v) = %+v, want nil", pos, ctx)
 		}
-		if name := Analyze("file:///a.php", source, pos).Name(); name != nil {
+		if name := Analyze("file:///a.php", source, pos, phpparser.OnlyGrammar(token.Latest)).Name(); name != nil {
 			t.Errorf("Analyze(%v).Name() = %+v, want nil", pos, name)
 		}
 	}

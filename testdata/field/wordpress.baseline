@@ -19,9 +19,6 @@ src/wp-admin/includes/class-pclzip.php	unused-variable	Variable $v_list_detail i
 src/wp-admin/includes/class-pclzip.php	unused-variable	Variable $v_list_detail is assigned but never read
 src/wp-admin/includes/class-pclzip.php	unused-variable	Variable $v_result is assigned but never read
 src/wp-admin/includes/class-pclzip.php	unused-variable	Variable $v_result is assigned but never read
-src/wp-admin/includes/class-theme-upgrader.php	unknown-member	Unknown member 'display' on 'WP_Upgrader'
-src/wp-admin/includes/class-theme-upgrader.php	unknown-member	Unknown member 'display' on 'WP_Upgrader'
-src/wp-admin/includes/class-theme-upgrader.php	unknown-member	Unknown member 'errors' on 'WP_Upgrader'
 src/wp-admin/includes/class-wp-internal-pointers.php	unused-private-method	Private method 'WP_Internal_Pointers::print_js' is never used
 src/wp-admin/includes/class-wp-list-table.php	unused-variable	Variable $abbr is assigned but never read
 src/wp-admin/includes/class-wp-list-table.php	unused-variable	Variable $desc_first is assigned but never read

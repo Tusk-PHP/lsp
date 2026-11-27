@@ -6,10 +6,36 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 )
 
-func TestExtractBuilderArgContext(t *testing.T) {
+func callArgAt(t *testing.T, marked string) (sourcectx.CallArg, bool) {
+	t.Helper()
+	return cursorContextAt(t, marked).CallArg()
+}
+
+func cursorContextAt(t *testing.T, marked string) *sourcectx.CursorContext {
+	t.Helper()
+	at := strings.Index(marked, "|")
+	if at < 0 {
+		at = len(marked)
+	} else {
+		marked = marked[:at] + marked[at+1:]
+	}
+	before := marked[:at]
+	pos := protocol.Position{Line: strings.Count(before, "\n"), Character: at - strings.LastIndex(before, "\n") - 1}
+	ctx := sourcectx.Analyze("file:///test.php", marked, pos, phpparser.OnlyGrammar(token.Latest))
+	if ctx == nil {
+		t.Fatalf("no cursor context in %q", marked)
+	}
+	return ctx
+}
+
+func TestBuilderArgContext(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -30,8 +56,11 @@ func TestExtractBuilderArgContext(t *testing.T) {
 		{"select", "Category::select('", true, "select", "", "'"},
 		{"pluck", "$q->pluck('", true, "pluck", "", "'"},
 		{"latest", "Category::latest('", true, "latest", "", "'"},
+		{"closed string", "Category::where('na|')", true, "where", "na", "'"},
+		{"closed call, cursor in its parentheses", "Category::where(|);", true, "where", "", ""},
+		{"argument on the next line", "Category::query()\n    ->where(\n        'na|'\n    );", true, "where", "na", "'"},
+		{"unterminated string before more code", "function f() {\n    Category::where('na|\n}\nfunction g() { return 'x'; }", true, "where", "na", "'"},
 
-		// Array arguments
 		{"array first element quoted", "Category::with(['", true, "with", "", "'"},
 		{"array first element partial", "Category::with(['pro", true, "with", "pro", "'"},
 		{"array after comma", "Category::select(['id', '", true, "select", "", "'"},
@@ -40,35 +69,41 @@ func TestExtractBuilderArgContext(t *testing.T) {
 		{"array after comma no quote", "Category::select(['id', ", true, "select", "", ""},
 		{"array double quote", `Category::with(["pro`, true, "with", "pro", "\""},
 		{"get with array", "Category::get(['", true, "get", "", "'"},
+		{"array between elements", "Category::select(['id', |'name']);", true, "select", "", ""},
 
-		// Should NOT match
 		{"closed paren", "Category::where('name')", false, "", "", ""},
 		{"second arg", "Category::where('name', ", false, "", "", ""},
+		{"after the first argument without a comma", "Category::where('name' |);", false, "", "", ""},
+		{"comma in a comment is not a separator", "Category::where('name' /* , */ |);", false, "", "", ""},
 		{"unknown method", "$foo->someCustomMethod('", false, "", "", ""},
 		{"variable arg", "Category::where($col", false, "", "", ""},
 		{"closure arg", "Category::where(function", false, "", "", ""},
 		{"where array not supported", "Category::where(['", false, "", "", ""},
 		{"closed array", "Category::with(['products'])", false, "", "", ""},
+		{"closed array inside open call", "Category::with(['products']|", false, "", "", ""},
 		{"assoc array", "Category::where(['name' =>", false, "", "", ""},
+		{"function call", "where('", false, "", "", ""},
+		{"inner call closed", "Category::where(trim()|", false, "", "", ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			method, partial, quote, ok := extractBuilderArgContext(tt.input)
+			arg, ok := callArgAt(t, "<?php\n"+tt.input)
+			ok = ok && isBuilderArg(arg)
 			if ok != tt.wantOk {
-				t.Fatalf("ok = %v, want %v", ok, tt.wantOk)
+				t.Fatalf("ok = %v, want %v (%#v)", ok, tt.wantOk, arg)
 			}
 			if !tt.wantOk {
 				return
 			}
-			if method != tt.wantMeth {
-				t.Errorf("method = %q, want %q", method, tt.wantMeth)
+			if arg.Method != tt.wantMeth {
+				t.Errorf("method = %q, want %q", arg.Method, tt.wantMeth)
 			}
-			if partial != tt.wantPart {
-				t.Errorf("partial = %q, want %q", partial, tt.wantPart)
+			if arg.Partial != tt.wantPart {
+				t.Errorf("partial = %q, want %q", arg.Partial, tt.wantPart)
 			}
-			if quote != tt.wantQt {
-				t.Errorf("quote = %q, want %q", quote, tt.wantQt)
+			if arg.Quote != tt.wantQt {
+				t.Errorf("quote = %q, want %q", arg.Quote, tt.wantQt)
 			}
 		})
 	}
@@ -277,22 +312,62 @@ func TestBuilderRelationCompletion(t *testing.T) {
 	})
 }
 
+func receiverNode(t *testing.T, file *parser.FileNode, receiver string) ast.Expr {
+	t.Helper()
+	start := uint32(strings.LastIndex(file.Source, receiver))
+	e := ast.ExprSpanning(file.Tree, ast.Span{Start: start, End: start + uint32(len(receiver))})
+	if e == nil {
+		t.Fatalf("no node %q in %q", receiver, file.Source)
+	}
+	return e
+}
+
 // TestResolveBuilderModelForDiagnostics checks the model the unknown-column
-// and unknown-relation diagnostics get for a call, from the line up to the
-// call's opening parenthesis.
+// and unknown-relation diagnostics get for a call's receiver.
 func TestResolveBuilderModelForDiagnostics(t *testing.T) {
 	p, _ := setupEloquentCompletionTest(t)
-	source := "<?php\nuse App\\Models\\Category;\nCategory::query()->where('name', 1)->with('products');\n"
-	file := parser.ParseFile(source)
-	for _, tc := range []struct{ prefix, method, want string }{
-		{"Category::query()->where(", "where", `App\Models\Category`},
-		{"Category::query()->where('name', 1)->with(", "with", `App\Models\Category`},
-		{"$unknown->where(", "where", ""},
-		{"where(", "where", ""},
-		{"::where(", "where", ""},
+	source := "<?php\nuse App\\Models\\Category;\nCategory::query()->where('name', 1)->with('products');\n$unknown->where('a');\n"
+	file := parser.ParseFile(source, token.Latest)
+	for _, tc := range []struct{ receiver, want string }{
+		{"Category::query()", `App\Models\Category`},
+		{"Category::query()->where('name', 1)", `App\Models\Category`},
+		{"$unknown", ""},
 	} {
-		if got := p.ResolveBuilderModel(tc.prefix, tc.method, source, 2, file).FQN; got != tc.want {
-			t.Errorf("%s: got %q, want %q", tc.prefix, got, tc.want)
+		if got := p.ResolveBuilderModel(file, receiverNode(t, file, tc.receiver)).FQN; got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.receiver, got, tc.want)
+		}
+	}
+}
+
+func TestBuilderModelOfACallOnAContinuationLine(t *testing.T) {
+	p, _ := setupEloquentCompletionTest(t)
+	source := "<?php\nuse App\\Models\\Category;\nCategory::query()\n    // ->with(\n    ->where('name', 1);\n"
+	file := parser.ParseFile(source, token.Latest)
+	if got := p.ResolveBuilderModel(file, receiverNode(t, file, "Category::query()")).FQN; got != `App\Models\Category` {
+		t.Errorf("diagnostics model = %q", got)
+	}
+
+	items := p.GetCompletions("file:///test.php", "<?php\nuse App\\Models\\Category;\nCategory::query()\n    ->with([\n        'products',\n        'pro'\n    ])\n    ->get();", protocol.Position{Line: 5, Character: 12})
+	if labels := collectLabels(items); !labels["products"] {
+		t.Errorf("expected the products relation in a multi-line with([...]), got %v", labels)
+	}
+}
+
+func TestBuilderModelOfTheCallsReceiver(t *testing.T) {
+	p, _ := setupEloquentCompletionTest(t)
+	file := func(body string) (string, *parser.FileNode) {
+		source := "<?php\nuse App\\Models\\Category;\n" + body
+		return source, parser.ParseFile(source, token.Latest)
+	}
+	for _, tc := range []struct{ body, receiver, want string }{
+		{"Unknown::where('name');", "Unknown", ""},
+		{"$q = Category::query();\n$q->where('name');", "$q", `App\Models\Category`},
+		{"Category::query()->where('a', 1)->where('name');", "Category::query()->where('a', 1)", `App\Models\Category`},
+		{"Category::query()->toBase()->where('name');", "Category::query()->toBase()", ""},
+	} {
+		_, f := file(tc.body)
+		if got := p.ResolveBuilderModel(f, receiverNode(t, f, tc.receiver)).FQN; got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.body, got, tc.want)
 		}
 	}
 }
@@ -361,6 +436,51 @@ func TestBuilderColumnCompletionOnABuilderOrRelationHeldElsewhere(t *testing.T) 
 		if items := p.GetCompletions("file:///test.php", source, protocol.Position{Line: last, Character: len(lines[last])}); len(items) != 0 {
 			t.Errorf("%q has no model to take columns from, got %v", source, collectLabels(items))
 		}
+	}
+}
+
+func TestBuilderArgCompletionThroughStaticPropertiesArrayElementsAndUseFunction(t *testing.T) {
+	p, _ := setupEloquentCompletionTest(t)
+	p.index.IndexFile("file:///app/Support/Holder.php", `<?php
+namespace App\Support;
+use App\Models\Category;
+use Illuminate\Database\Eloquent\Builder;
+class Holder {
+    /** @var Builder<Category> */
+    public static $shared;
+    /** @var array<string, Builder<Category>> */
+    public array $builders;
+    public static function own(): void {
+        self::$shared->where('');
+    }
+}
+/** @return Builder<Category> */
+function categoryQuery() {}
+`)
+	prefix := "<?php\nnamespace App\\Http;\nuse App\\Support\\Holder;\nuse function App\\Support\\categoryQuery;\nfunction run(Holder $holder): void {\n    "
+	for _, receiver := range []string{
+		"Holder::$shared",
+		"$holder->builders['x']",
+		"categoryQuery()",
+	} {
+		for _, tc := range []struct{ call, want string }{
+			{"where('", "slug"},
+			{"orderBy('", "name"},
+			{"with('", "products"},
+		} {
+			source := prefix + receiver + "->" + tc.call
+			lines := strings.Split(source, "\n")
+			last := len(lines) - 1
+			if labels := collectLabels(p.GetCompletions("file:///run.php", source, protocol.Position{Line: last, Character: len(lines[last])})); !labels[tc.want] {
+				t.Errorf("%s->%s offers Category's %s, got %v", receiver, tc.call, tc.want, labels)
+			}
+		}
+	}
+	holder := p.index.GetFileSource("file:///app/Support/Holder.php")
+	end := strings.Index(holder, "where('") + len("where('")
+	pos := protocol.Position{Line: strings.Count(holder[:end], "\n"), Character: end - strings.LastIndex(holder[:end], "\n") - 1}
+	if labels := collectLabels(p.GetCompletions("file:///app/Support/Holder.php", holder, pos)); !labels["slug"] {
+		t.Errorf("self::$shared->where(' offers Category's slug, got %v", labels)
 	}
 }
 
