@@ -26,14 +26,9 @@ func (vs variableScope) assignedValue(t *syntaxTree, line int, varName string) (
 	return a.value, true
 }
 
-func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, lines []string, pos textpos.Position, file *parser.FileNode, line int) (ResolvedType, bool) {
-	if v.declared != nil {
-		return r.resolveDocType(t.text(v.declared), file), true
-	}
-	if declared := varDocAbove(lines, line, varName); declared != "" {
-		if rt := r.declaredVarType(declared, pos, file); !rt.IsEmpty() {
-			return rt, true
-		}
+func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, lines []string, pos textpos.Position, file *parser.FileNode) (ResolvedType, bool) {
+	if rt, ok := r.documentedAssignment(varName, t, v, pos, file); ok {
+		return rt, true
 	}
 	ctx := ExprContext{Lines: lines, Pos: pos, File: file}
 	text := t.text(v.expr)
@@ -166,9 +161,23 @@ func (r *Resolver) firstArgType(t *syntaxTree, arg ast.Expr, ctx ExprContext) Re
 	return ResolvedType{}
 }
 
-func (r *Resolver) assignedPlainType(varName string, t *syntaxTree, v assignedValue, lines []string, pos textpos.Position, file *parser.FileNode) (string, bool) {
+// documentedAssignment returns the type an assignment declares: the closure
+// return type it was reduced from, or the @var of its statement's doc comment.
+func (r *Resolver) documentedAssignment(varName string, t *syntaxTree, v assignedValue, pos textpos.Position, file *parser.FileNode) (ResolvedType, bool) {
 	if v.declared != nil {
-		return r.resolveDocType(t.text(v.declared), file).String(), true
+		return r.resolveDocType(t.text(v.declared), file), true
+	}
+	if declared := t.statementVarDoc(v.expr.Bounds().Start, varName); declared != "" {
+		if rt := r.declaredVarType(declared, pos, file); !rt.IsEmpty() {
+			return rt, true
+		}
+	}
+	return ResolvedType{}, false
+}
+
+func (r *Resolver) assignedPlainType(varName string, t *syntaxTree, v assignedValue, lines []string, pos textpos.Position, file *parser.FileNode) (string, bool) {
+	if rt, ok := r.documentedAssignment(varName, t, v, pos, file); ok {
+		return rt.String(), true
 	}
 	text := t.text(v.expr)
 	if v.called {

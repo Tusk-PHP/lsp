@@ -175,12 +175,11 @@ func (r *Resolver) IsLocalVariable(varName string, lines []string, pos textpos.P
 	return vs.isLocal
 }
 
-// closureParamType returns a closure parameter's type: from a docblock above the
-// statement it's in, as `@param` tags aren't attached to closures by the parser,
-// or else from its declaration.
+// closureParamType returns a closure parameter's type: from the doc comment
+// of the closure or of the statement it's in, as `@param` tags aren't attached
+// to closures by the parser, or else from its declaration.
 func (r *Resolver) closureParamType(param *scope.Binding, lines []string, file *parser.FileNode) ResolvedType {
-	doc := parser.ParseDocBlock(docBlockAbove(lines, param.Scope.Range.Start.Line))
-	if docType := resolveDocParam(doc, param.Name); docType != "" {
+	if docType := resolveDocParam(r.closureDoc(param, lines, file), param.Name); docType != "" {
 		if rt := r.resolveDocType(docType, file); !rt.IsEmpty() {
 			return rt
 		}
@@ -206,39 +205,6 @@ func (r *Resolver) closureParamType(param *scope.Binding, lines []string, file *
 		return ResolvedType{FQN: declared}
 	}
 	return r.resolveDocType(declared, file)
-}
-
-// varDocAbove returns the type a docblock right above line i gives varName
-// with `@var Type $name`, or with a bare `@var Type`.
-func varDocAbove(lines []string, i int, varName string) string {
-	raw := docBlockAbove(lines, i)
-	if raw == "" || !strings.Contains(raw, "var") {
-		return ""
-	}
-	doc := parser.ParseDocBlock(raw)
-	if doc == nil {
-		return ""
-	}
-	for _, v := range doc.Vars {
-		if v.Name == varName || v.Name == "" {
-			return v.Type
-		}
-	}
-	return ""
-}
-
-// docBlockAbove returns the docblock ending on the line above, if there is one.
-func docBlockAbove(lines []string, line int) string {
-	end := line - 1
-	if end < 0 || end >= len(lines) || !strings.HasSuffix(strings.TrimSpace(lines[end]), "*/") {
-		return ""
-	}
-	for i := end; i >= 0; i-- {
-		if strings.HasPrefix(strings.TrimSpace(lines[i]), "/**") {
-			return strings.Join(lines[i:end+1], "\n")
-		}
-	}
-	return ""
 }
 
 // declaredParamType extracts the type from the text before a parameter's name,
