@@ -28,6 +28,7 @@ type Provider struct {
 	translations        *frameworklaravel.TranslationResolver
 	symfonyTranslations *frameworksymfony.TranslationResolver
 	symfonyCommands     *frameworksymfony.CommandIndex
+	validation          *frameworklaravel.ValidationRules
 	// lazyDocumentation and lazyDetail leave those properties of member
 	// items to completionItem/resolve, for clients that ask for them later.
 	lazyDocumentation, lazyDetail bool
@@ -156,11 +157,17 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 	}
 
-	ctx := sourcectx.Analyze(uri, source, pos)
+	doc := sourcectx.NewDocument(uri, source)
+	ctx := doc.At(pos)
 	if ctx == nil {
 		return nil
 	}
 	file := ctx.File
+	if ctx.InString && frameworklaravel.MayValidate(doc.Tokens()) {
+		if items, ok := p.completeValidationRules(source, pos, file); ok {
+			return sanitizeCompletions(items)
+		}
+	}
 	rk := newNameRanker(ctx.Namespace, ctx.Uses)
 
 	if strings.HasSuffix(trimmed, "->") || strings.HasSuffix(trimmed, "?->") {
