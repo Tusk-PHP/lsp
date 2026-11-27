@@ -3,10 +3,12 @@ package completion
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/container"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
+	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -100,4 +102,44 @@ return [
 	}
 
 	return root
+}
+
+func TestSymfonyTranslationCompletion(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "translations")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "messages.en.yaml"), []byte("user:\n    title: Title\nnav:\n    home: Home\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "validators.en.yaml"), []byte("user:\n    required: Required\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	idx := symbols.NewIndex()
+	p := NewProvider(idx, container.NewContainerAnalyzer(idx, root, "symfony"), "symfony")
+	p.SetSymfonyTranslationResolver(frameworksymfony.NewTranslationResolver(root))
+
+	source := "<?php\n$translator->trans('user.ti"
+	items := p.GetCompletions("file:///test.php", source, protocol.Position{Line: 1, Character: len("$translator->trans('user.ti")})
+	var got []string
+	for _, item := range items {
+		got = append(got, item.Label+" | "+item.InsertText+" | "+item.Detail)
+	}
+	want := []string{"user.title | tle | messages (en) - messages.en.yaml"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestTranslationItemInsertsTheRestOfTheKey(t *testing.T) {
+	for _, c := range []struct{ key, partial, want string }{
+		{"messages.welcome", "mes", "sages.welcome"},
+		{"Messages.welcome", "mes", "Messages.welcome"},
+		{"nav.home", "", "nav.home"},
+	} {
+		if got := translationItem(c.key, c.partial, "").InsertText; got != c.want {
+			t.Errorf("translationItem(%q, %q).InsertText = %q, want %q", c.key, c.partial, got, c.want)
+		}
+	}
 }

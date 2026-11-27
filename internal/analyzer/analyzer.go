@@ -322,7 +322,7 @@ func (a *Analyzer) definitionForTranslationKey(line string, character int) *prot
 	if ctx == nil {
 		return nil
 	}
-	return a.translations.Definition(ctx.Key)
+	return translationLocation(a.translations.Definition(ctx.Key))
 }
 
 func (a *Analyzer) definitionForRouteName(line string, character int) *protocol.Location {
@@ -408,9 +408,9 @@ func (a *Analyzer) definitionForSymfonyTranslationKey(source string, pos protoco
 		return nil
 	}
 	if ctx.Domain != "" {
-		return a.symfonyTranslations.DefinitionInDomain(ctx.Key, ctx.Domain)
+		return symfonyTranslationLocation(a.symfonyTranslations.DefinitionInDomain(ctx.Key, ctx.Domain))
 	}
-	return a.symfonyTranslations.Definition(ctx.Key)
+	return symfonyTranslationLocation(a.symfonyTranslations.Definition(ctx.Key))
 }
 
 // definitionForVariable resolves a $variable to its type's definition.
@@ -519,6 +519,23 @@ func (a *Analyzer) resolveContainerCallType(r *resolve.Resolver, expr string, so
 		return arg
 	}
 	return ""
+}
+
+// translationLocation is where a Laravel translation entry is defined, or nil.
+func translationLocation(entry *frameworklaravel.TranslationEntry) *protocol.Location {
+	if entry == nil {
+		return nil
+	}
+	return &protocol.Location{URI: entry.URI, Range: entry.Range}
+}
+
+// symfonyTranslationLocation is where a Symfony translation entry is
+// defined, or nil.
+func symfonyTranslationLocation(entry *frameworksymfony.TranslationEntry) *protocol.Location {
+	if entry == nil {
+		return nil
+	}
+	return &protocol.Location{URI: entry.URI, Range: entry.Range}
 }
 
 func symbolLocation(sym *symbols.Symbol) *protocol.Location {

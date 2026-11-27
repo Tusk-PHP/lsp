@@ -90,14 +90,14 @@ func TestTranslationResolverYAML(t *testing.T) {
 
 	// Test completion with no partial — should return all entries
 	ctx := &TranslationContext{Partial: ""}
-	items := r.Complete(ctx)
+	items := r.Matching(ctx)
 	if len(items) == 0 {
 		t.Fatal("expected completion items")
 	}
 
 	labels := map[string]bool{}
 	for _, item := range items {
-		labels[item.Label] = true
+		labels[item.Key] = true
 	}
 
 	for _, key := range []string{"user.profile.title", "user.profile.bio", "nav.home", "button.save"} {
@@ -112,10 +112,10 @@ func TestTranslationResolverYAMLPartialFilter(t *testing.T) {
 	r := NewTranslationResolver(root)
 
 	ctx := &TranslationContext{Partial: "user."}
-	items := r.Complete(ctx)
+	items := r.Matching(ctx)
 	for _, item := range items {
-		if !strings.HasPrefix(item.Label, "user.") {
-			t.Errorf("unexpected key %q not starting with 'user.'", item.Label)
+		if !strings.HasPrefix(item.Key, "user.") {
+			t.Errorf("unexpected key %q not starting with 'user.'", item.Key)
 		}
 	}
 	if len(items) == 0 {
@@ -129,10 +129,10 @@ func TestTranslationResolverDomainFilter(t *testing.T) {
 
 	// Filter by validators domain
 	ctx := &TranslationContext{Partial: "", Domain: "validators"}
-	items := r.Complete(ctx)
+	items := r.Matching(ctx)
 	for _, item := range items {
-		if !strings.HasPrefix(item.Label, "field.") {
-			t.Errorf("unexpected key %q for validators domain", item.Label)
+		if !strings.HasPrefix(item.Key, "field.") {
+			t.Errorf("unexpected key %q for validators domain", item.Key)
 		}
 	}
 	if len(items) == 0 {
@@ -183,7 +183,7 @@ func TestTranslationResolverMissingDir(t *testing.T) {
 	// A root without a translations directory should return nil without panicking.
 	r := NewTranslationResolver(t.TempDir())
 	ctx := &TranslationContext{Partial: ""}
-	items := r.Complete(ctx)
+	items := r.Matching(ctx)
 	if items != nil {
 		t.Errorf("expected nil for missing translations dir, got %v", items)
 	}
@@ -198,7 +198,7 @@ func TestTranslationResolverMalformedXLIFF(t *testing.T) {
 
 	r := NewTranslationResolver(root)
 	ctx := &TranslationContext{Partial: ""}
-	items := r.Complete(ctx) // must not panic
+	items := r.Matching(ctx) // must not panic
 	_ = items
 }
 

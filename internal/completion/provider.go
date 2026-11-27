@@ -220,7 +220,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 	}
 	if p.framework == "laravel" && p.translations != nil {
 		if txCtx := frameworklaravel.DetectTranslationContext(line, pos.Character); txCtx != nil {
-			return sanitizeCompletions(p.translations.Complete(txCtx))
+			return sanitizeCompletions(p.completeLaravelTranslations(txCtx))
 		}
 	}
 	if p.framework == "symfony" {
@@ -235,7 +235,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 		if p.symfonyTranslations != nil {
 			if txCtx := frameworksymfony.DetectSymfonyTranslationContext(line, pos.Character); txCtx != nil {
-				return sanitizeCompletions(p.symfonyTranslations.Complete(txCtx))
+				return sanitizeCompletions(p.completeSymfonyTranslations(txCtx))
 			}
 		}
 	}
