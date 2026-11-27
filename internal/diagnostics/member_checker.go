@@ -5,6 +5,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -116,26 +117,17 @@ func (c *indexMemberChecker) IsDBColumn(modelFQN, name string) bool {
 }
 
 func (c *indexMemberChecker) RelatedModelFQN(modelFQN, relationName string) string {
-	// Look at the virtual property for this relation — for singular relations
-	// the Type is "?RelatedModelFQN", for plural it's "Collection" (lost).
 	for _, m := range c.index.GetClassMembers(modelFQN) {
-		if m.Kind != symbols.KindProperty {
+		if m.Kind != symbols.KindProperty || !m.IsVirtual || !strings.HasSuffix(m.DocComment, " relation") || strings.TrimPrefix(m.Name, "$") != relationName {
 			continue
 		}
-		propName := strings.TrimPrefix(m.Name, "$")
-		if propName != relationName {
-			continue
+		related := resolve.ParseGenericType(m.Type)
+		if n := len(related.Params); n > 0 {
+			return related.Params[n-1].FQN
 		}
-		if !m.IsVirtual || !strings.HasSuffix(m.DocComment, " relation") {
-			continue
+		if related.Nullable {
+			return related.FQN
 		}
-		typ := m.Type
-		// Singular relations: "?App\Models\Product" → "App\Models\Product"
-		if strings.HasPrefix(typ, "?") {
-			return typ[1:]
-		}
-		// Plural relations: Type is "Illuminate\Database\Eloquent\Collection"
-		// Can't determine related model from this — return ""
 		return ""
 	}
 	return ""

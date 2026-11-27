@@ -239,14 +239,13 @@ Category::where('bad_col', 'x');
 		}
 	})
 
-	t.Run("dot notation validates first segment", func(t *testing.T) {
+	t.Run("dot notation validates every segment", func(t *testing.T) {
 		source := `<?php
 use App\Models\Category;
-Category::with('products.tags');
+Category::with('products.category');
 `
 		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
-		// 'products' exists as relation, so first segment is valid
 		assertNoFindings(t, findings)
 	})
 
@@ -308,6 +307,35 @@ Category::orderBy('relation.column');
 // TestInvalidBuilderArgRuleStaysQuietWhenUnsure covers code the rule can't
 // judge: calls in comments and strings, arguments that are not plain names,
 // and models whose columns or relations aren't all known.
+func TestInvalidBuilderArgRuleFollowsRelationPaths(t *testing.T) {
+	checker := setupBuilderArgRule()
+	members := checker.Members.(*mockMemberChecker)
+	members.relatedModel["App\\Models\\Category"]["unknownTarget"] = ""
+	members.relations["App\\Models\\Category"]["unknownTarget"] = true
+	members.columns["App\\Models\\Partial"] = map[string]bool{}
+	members.partial = map[string]bool{"App\\Models\\Partial": true}
+	members.relatedModel["App\\Models\\Category"]["partial"] = "App\\Models\\Partial"
+	members.relations["App\\Models\\Category"]["partial"] = true
+	for source, want := range map[string]string{
+		"Category::with('products.category');":                   "",
+		"Category::with('products.category.products:id,title');": "",
+		"Category::with('products.missing');":                    "Unknown relation 'missing' on model 'Product'",
+		"Category::whereHas('products.category.missing');":       "Unknown relation 'missing' on model 'Category'",
+		"Category::with('unknownTarget.anything');":              "",
+		"Category::with('partial.anything');":                    "",
+		"Category::with('products.');":                           "",
+	} {
+		src := "<?php\nuse App\\Models\\Category;\n" + source + "\n"
+		var got []string
+		for _, f := range checker.Check(parser.ParseFile(src, token.Latest), src, nil) {
+			got = append(got, f.Message)
+		}
+		if strings.Join(got, "\n") != want {
+			t.Errorf("%s: got %v, want %q", source, got, want)
+		}
+	}
+}
+
 func TestInvalidBuilderArgRuleStaysQuietWhenUnsure(t *testing.T) {
 	checker := setupBuilderArgRule()
 	checker.Members.(*mockMemberChecker).columns["App\\Models\\Draft"] = map[string]bool{"id": true}

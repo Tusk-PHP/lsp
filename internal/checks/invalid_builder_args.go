@@ -237,30 +237,29 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 		return nil
 	}
 
-	// For dot-notation, validate the first segment only
-	segments := strings.SplitN(argValue, ".", 2)
-	checkName := segments[0]
-
-	// Column methods with dot-notation are join-qualified — skip
-	if len(segments) > 1 && !isRelMethod {
-		return nil
-	}
-
 	// Handle closure-based array syntax: 'products' => function($q) {...}
 	// The regex captures 'products' before '=>', strip anything after =>
-	if idx := strings.Index(checkName, " =>"); idx >= 0 {
-		checkName = checkName[:idx]
+	if idx := strings.Index(argValue, " =>"); idx >= 0 {
+		argValue = argValue[:idx]
 	}
 	// `with('posts:id,title')` loads only those columns of the relation.
 	if isRelMethod {
-		if idx := strings.IndexByte(checkName, ':'); idx >= 0 {
-			checkName = checkName[:idx]
+		if idx := strings.IndexByte(argValue, ':'); idx >= 0 {
+			argValue = argValue[:idx]
 		}
 	}
-	checkName = strings.TrimSpace(checkName)
-	if !isPlainName(checkName) {
+	path := strings.Split(strings.TrimSpace(argValue), ".")
+
+	// Column methods with dot-notation are join-qualified — skip
+	if len(path) > 1 && !isRelMethod {
 		return nil
 	}
+	for _, name := range path {
+		if !isPlainName(name) {
+			return nil
+		}
+	}
+	checkName := path[0]
 
 	// Resolve the model from the line up to the method call
 	model := r.ModelResolver(call.prefix, method, source, call.line, file)
@@ -274,10 +273,7 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 
 	var msg string
 	if isRelMethod {
-		if !r.Members.IsRelation(modelFQN, checkName) {
-			short := shortName(modelFQN)
-			msg = fmt.Sprintf("Unknown relation '%s' on model '%s'", checkName, short)
-		}
+		msg = r.unknownRelationInPath(modelFQN, path)
 	} else if isDBColMethod {
 		if !r.Members.IsDBColumn(modelFQN, checkName) {
 			short := shortName(modelFQN)
@@ -311,6 +307,26 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 		Code:      code,
 		Message:   msg,
 	}
+}
+
+// unknownRelationInPath follows a relation path such as products.reviews
+// from model and describes the first name that isn't a relation of the
+// model reached so far. It stops quietly at a relation whose model it can't
+// tell or whose relations it doesn't all know.
+func (r *InvalidBuilderArgRule) unknownRelationInPath(modelFQN string, path []string) string {
+	current := modelFQN
+	for i, name := range path {
+		if i > 0 {
+			current = r.Members.RelatedModelFQN(current, path[i-1])
+			if current == "" || !r.Members.KnowsRelations(current) {
+				return ""
+			}
+		}
+		if !r.Members.IsRelation(current, name) {
+			return fmt.Sprintf("Unknown relation '%s' on model '%s'", name, shortName(current))
+		}
+	}
+	return ""
 }
 
 // stripAlias removes " as alias" from a string (e.g., "products as cnt" → "products").
