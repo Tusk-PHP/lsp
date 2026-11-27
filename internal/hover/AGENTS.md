@@ -23,7 +23,7 @@ Resolves the symbol under the cursor and formats it. Hover handles:
 ## Conventions
 
 - Type resolution goes through `internal/resolve/` (don't reparse PHPDoc here). If you need a new type form, add it to `resolve/` and consume it.
-- Generic substitution is applied in `format.go` via the `resolve/templates.go` mapping — keep substitution at format time, not at lookup time.
+- Generic substitution is applied in `format.go` with the types `resolve` reads from PHPDoc generics — keep substitution at format time, not at lookup time.
 - Hover must be cheap — never block on PHPStan/Pint or anything from `diagnostics/`.
 - New behavior gets a `*_test.go` next to the existing pattern (`facade_test.go`, `arraykeys_test.go`, `generics_coverage_test.go`).
 

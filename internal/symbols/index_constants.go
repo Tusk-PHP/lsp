@@ -13,7 +13,7 @@ func (idx *Index) indexConstants(uri string, parent *Symbol, parentFQN string, c
 			fqn, owner = parentFQN+"::"+co.Name, parentFQN
 		}
 		cs := &Symbol{Name: co.Name, FQN: fqn, Kind: KindConstant, URI: uri, ParentFQN: owner,
-			Value: co.Value, Type: resolve(co.Type.Name), Visibility: co.Visibility,
+			Value: co.Value, ValueType: co.ValueType, Type: resolve(co.Type.Name), Visibility: co.Visibility,
 			Attributes: indexAttributes(co.Attributes, resolve), DocComment: qualifyDocTypes(co.DocComment, uses),
 			Range: symRange(co.StartLine, co.StartCol, len(co.Name))}
 		if parent != nil {

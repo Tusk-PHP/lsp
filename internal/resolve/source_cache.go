@@ -57,5 +57,5 @@ func (r *Resolver) setSourceLocked(source string, lines []string) {
 		r.cachedLines = lines
 		return
 	}
-	r.scopeSource, r.cachedLines, r.scopeDoc = source, lines, nil
+	r.scopeSource, r.cachedLines, r.scopeDoc, r.scopeTree = source, lines, nil, nil
 }

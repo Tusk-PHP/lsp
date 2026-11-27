@@ -139,6 +139,7 @@ class K {
             ->name();
         $cast = (int) $chained;
         $shadowed = $cast + 1;
+        $compared = 5 > $cast;
         return [$chained, $cast, $shadowed];
     }
     public function closures(Other $param) {
@@ -194,7 +195,8 @@ class K {
 		{"return function (Other $typed", "$documented", "array<string> $documented"},
 		{"$inner = fn", "$arrow", "Other $arrow"},
 		{"$inner = fn", "$param", "Other $param"},
-		{"$shadowed = $cast", "$shadowed", "mixed $shadowed"},
+		{"$shadowed = $cast", "$shadowed", "int $shadowed"},
+		{"$compared = 5", "$compared", "bool $compared"},
 	}
 	for _, c := range cases {
 		if got := hoverAt(c.line, c.variable); !strings.Contains(got, c.want) {

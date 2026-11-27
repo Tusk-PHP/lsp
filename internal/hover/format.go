@@ -128,7 +128,7 @@ func (p *Provider) formatHoverDeclaration(sym *symbols.Symbol, doc *parser.DocBl
 	case symbols.KindEnumCase:
 		sb.WriteString("case " + sym.Name)
 		if sym.Value != "" {
-			sb.WriteString(" = " + sym.Value)
+			sb.WriteString(" = " + valuePreview(sym.Value))
 		}
 	case symbols.KindConstant:
 		sb.WriteString("const ")
@@ -137,7 +137,7 @@ func (p *Provider) formatHoverDeclaration(sym *symbols.Symbol, doc *parser.DocBl
 		}
 		sb.WriteString(sym.Name)
 		if sym.Value != "" {
-			sb.WriteString(" = " + sym.Value)
+			sb.WriteString(" = " + valuePreview(sym.Value))
 		}
 	case symbols.KindTrait:
 		sb.WriteString("trait " + sym.Name)
@@ -159,7 +159,7 @@ func formatAttributes(attrs []symbols.Attribute) string {
 	for _, attr := range attrs {
 		sb.WriteString("#[" + attr.Name)
 		if len(attr.Args) > 0 {
-			sb.WriteString("(" + strings.Join(attr.Args, ", ") + ")")
+			sb.WriteString("(" + attr.Args.String() + ")")
 		}
 		sb.WriteString("]\n")
 	}

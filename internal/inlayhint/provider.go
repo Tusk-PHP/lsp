@@ -56,7 +56,7 @@ func (p *Provider) GetInlayHints(uri, source string, cfg *config.InlayHintsConfi
 		return nil
 	}
 
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, p.index.GrammarOf(uri))
 	result := parser.New().Parse(source)
 	lines := resolve.SplitLines(source)
 	r := p.engine.Resolver()
