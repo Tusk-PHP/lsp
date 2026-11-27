@@ -8,6 +8,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 )
 
 // Semantic token type indices (must match the advertised legend order)
@@ -67,7 +68,8 @@ func (s *Server) handleSemanticTokensFull(msg *jsonRPCMessage) {
 	source := s.getDocument(uri)
 	pr := parser.New().Parse(source)
 
-	data := buildSemanticTokens(pr, document.NewColumns(source, s.encoding), namespaceDeclarationTokens(source, parser.ParseTreeIn(source, s.index.GrammarOf(uri))))
+	tree, _ := sourcectx.IndexedTree(s.index, uri, source)
+	data := buildSemanticTokens(pr, document.NewColumns(source, s.encoding), namespaceDeclarationTokens(source, tree))
 	s.sendResponse(msg.ID, protocol.SemanticTokens{Data: data})
 }
 

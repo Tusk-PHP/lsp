@@ -117,6 +117,13 @@ func IndexedFile(idx *symbols.Index, uri, source string) *parser.FileNode {
 	return file
 }
 
+// IndexedTree is the syntax tree and declarations of IndexedDocument(idx,
+// uri, source).
+func IndexedTree(idx *symbols.Index, uri, source string) (*ast.File, *parser.FileNode) {
+	parsed, file := indexedParse(idx, uri, source)
+	return parsed.Tree, file
+}
+
 func indexedParse(idx *symbols.Index, uri, source string) (phpparser.Parsed, *parser.FileNode) {
 	if parsed, file, ok := idx.IndexedParse(uri, source); ok {
 		return parsed, file

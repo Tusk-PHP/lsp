@@ -8,8 +8,8 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	"github.com/Tusk-PHP/lsp/internal/introspect"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -112,7 +112,7 @@ func (s *Server) debugDocument(uri string) string {
 		bufferState = "live-buffer"
 	}
 
-	file := parser.ParseFileIn(source, s.index.GrammarOf(uri))
+	file := sourcectx.IndexedFile(s.index, uri, source)
 	var typeRes diagnostics.TypeResolverFunc
 	var builtinRule *checks.BuiltinUnavailableRule
 	if s.diag != nil {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/parser"
 	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -76,6 +77,10 @@ func TestIndexedDocumentAnswersAsAFreshParse(t *testing.T) {
 			}
 			indexed := IndexedDocument(idx, "file:///room.php", tc.source)
 			fresh := NewDocument("file:///room.php", tc.source, idx.GrammarOf("file:///room.php"))
+			tree, file := IndexedTree(idx, "file:///room.php", tc.source)
+			if want := parser.ParseTreeIn(tc.source, idx.GrammarOf("file:///room.php")); !reflect.DeepEqual(tree, want) || !reflect.DeepEqual(file, parser.FileNodeOf(tc.source, want)) {
+				t.Fatal("the indexed syntax tree or declarations differ from a fresh parse")
+			}
 			if !reflect.DeepEqual(indexed.File(), fresh.File()) {
 				t.Fatal("the indexed document's declarations differ from a fresh parse")
 			}
@@ -94,4 +99,22 @@ func TestIndexedDocumentAnswersAsAFreshParse(t *testing.T) {
 
 func analyzeText(uri, source string, pos protocol.Position, grammars phpparser.GrammarRange) *CursorContext {
 	return NewDocument(uri, source, grammars).At(pos)
+}
+
+func BenchmarkSemanticTokensTree(b *testing.B) {
+	source := strings.Repeat(indexedRoom, 60)
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///room.php", source)
+	b.Run("FreshParse", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			parser.ParseTreeIn(source, idx.GrammarOf("file:///room.php"))
+		}
+	})
+	b.Run("IndexedTree", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			IndexedTree(idx, "file:///room.php", source)
+		}
+	})
 }
