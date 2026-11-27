@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing! This document is the source of truth for how changes get into Tusk PHP: setup, the pull request checklist, review and releases. [AGENTS.md](AGENTS.md) holds the code's principles (structure, performance, correctness) and points AI agents back here for the process.
 
-Questions and ideas go to [Discussions](https://github.com/Tusk-PHP/lsp/discussions); bugs and agreed work go to [issues](https://github.com/Tusk-PHP/lsp/issues).
+Questions and ideas go to [Discussions](https://github.com/Tusk-PHP/lsp/discussions); bugs and agreed work go to [issues](https://github.com/Tusk-PHP/lsp/issues). Issues about diagnostics go to [Tusk-PHP/diagnostics](https://github.com/Tusk-PHP/diagnostics/issues) instead: see [Where an issue goes](#where-an-issue-goes).
 
 ## Code of Conduct
 
@@ -187,14 +187,21 @@ Tests use `testdata/project/` which contains a mock PHP project with `composer.j
 
 Issues are organised two ways, and each answers a different question:
 
-- **Goals say why.** The project's goals are the open issues with the [`roadmap`](https://github.com/Tusk-PHP/lsp/issues?q=is%3Aissue%20state%3Aopen%20label%3Aroadmap) label, such as #116 Fewer false warnings or #378 Laravel awareness, and every other issue is a sub-issue of one goal. A goal is open-ended. When you open an issue, say which goal it belongs to if you know; the maintainers link it.
+- **Goals say why.** The project's goals are the open issues with the [`roadmap`](https://github.com/Tusk-PHP/lsp/issues?q=is%3Aissue%20state%3Aopen%20label%3Aroadmap) label, such as #378 Laravel awareness or #379 Right answers in every editor feature, and every other issue is a sub-issue of one goal. A goal is open-ended. When you open an issue, say which goal it belongs to if you know; the maintainers link it.
 - **Milestones say when.** There is one milestone per version, named like its tag (`x.y.z`). An issue or pull request in a milestone is planned for, or has shipped in, that release, and one without a milestone is in the backlog. Only maintainers set milestones. A goal has no milestone unless a release depends on it: the goals the first stable release needs are in the [1.0.0](https://github.com/Tusk-PHP/lsp/milestone/9) milestone, whose description says what that release has to pass.
 
-Each issue also gets a type (**Bug**, **Feature** or **Task**) and, where one fits, an `area:` label (`area: diagnostics`, `area: navigation`, `area: parser`, `area: indexing`, `area: tooling`).
+Each issue also gets a type (**Bug**, **Feature** or **Task**) and, where one fits, an `area:` label (`area: navigation`, `area: parser`, `area: indexing`, `area: tooling`).
+
+### Where an issue goes
+
+- **[Tusk-PHP/diagnostics](https://github.com/Tusk-PHP/diagnostics/issues)**: anything whose result is a diagnostic. That covers a new rule, a wrong or missing warning, rule configuration and suppression, PHPStan and Pint runs, and `tusk-php check` and its output. Its goals, such as [Fewer false warnings](https://github.com/Tusk-PHP/diagnostics/issues/4), live there too.
+- **Here**: editor features (completion, hover, navigation, refactors, code actions), the LSP and MCP servers, and the shared core (parser, index, types, framework knowledge), even when a rule depends on it.
+
+The diagnostics code still lives in this repository until it's extracted ([Tusk-PHP/diagnostics#1](https://github.com/Tusk-PHP/diagnostics/issues/1)), so a fix for a diagnostics issue is still a pull request here, saying `Fixes Tusk-PHP/diagnostics#N`.
 
 ## Reporting Bugs
 
-- Use the [GitHub issue tracker](https://github.com/Tusk-PHP/lsp/issues)
+- Use the [GitHub issue tracker](https://github.com/Tusk-PHP/lsp/issues); a wrong or missing warning goes to [Tusk-PHP/diagnostics](https://github.com/Tusk-PHP/diagnostics/issues)
 - Include your editor, OS, PHP version, and steps to reproduce
 - Attach the server log (`--log /tmp/tusk-php.log`) if relevant
 - Security vulnerabilities don't go in public issues: see [SECURITY.md](SECURITY.md)
