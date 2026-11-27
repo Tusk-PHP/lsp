@@ -100,13 +100,14 @@ func (r *Resolver) typeOf(t *syntaxTree, e ast.Expr, expected *ResolvedType, ctx
 		}
 		return ResolvedType{FQN: "string"}
 	case *ast.Unary:
-		if lit, ok := n.Operand.(*ast.Literal); ok && (n.Op == token.Minus || n.Op == token.Plus) {
-			if rt := literalType(t, lit); rt.Literal != "" {
-				rt.Literal = t.src[n.Start:lit.End]
-				return rt
-			}
-			return literalType(t, lit)
+		if lit, ok := n.Operand.(*ast.Literal); ok && (n.Op == token.Minus || n.Op == token.Plus) && (lit.Kind == token.IntegerLiteral || lit.Kind == token.FloatLiteral) {
+			rt := literalType(t, lit)
+			rt.Literal = t.src[n.Start:lit.End]
+			return rt
 		}
+		return r.operatorType(t, n, ctx)
+	case *ast.InstanceOf:
+		return r.operatorType(t, n, ctx)
 	case *ast.Cast:
 		return ResolvedType{FQN: parser.CastType(n.Kind)}
 	case *ast.ConstFetch:
@@ -131,13 +132,12 @@ func (r *Resolver) typeOf(t *syntaxTree, e ast.Expr, expected *ResolvedType, ctx
 		return r.closureType(t, arrowOf(n), expected, ctx)
 	case *ast.Binary:
 		switch n.Op {
-		case token.Dot:
-			return ResolvedType{FQN: "string"}
 		case token.Coalesce:
 			return r.eitherType(t, n.Left, n.Right, ctx)
 		case token.Pipe:
 			return r.InvokeType(r.typeOf(t, n.Right, nil, ctx))
 		}
+		return r.operatorType(t, n, ctx)
 	case *ast.Ternary:
 		return r.ternaryType(t, n, ctx)
 	case *ast.Call:
@@ -160,6 +160,45 @@ func (r *Resolver) typeOf(t *syntaxTree, e ast.Expr, expected *ResolvedType, ctx
 		return r.OffsetType(base, t.text(n.Dim))
 	}
 	return ResolvedType{}
+}
+
+func (r *Resolver) operatorType(t *syntaxTree, e ast.Expr, ctx ExprContext) ResolvedType {
+	return scalarsType(parser.OperatorType(e, t.src, func(operand ast.Expr) parser.Scalars {
+		return scalarsOf(r.typeOf(t, operand, nil, ctx))
+	}))
+}
+
+func scalarsOf(rt ResolvedType) parser.Scalars {
+	if rt.IsEmpty() || len(rt.Intersection) > 0 || rt.Conditional != nil {
+		return 0
+	}
+	var s parser.Scalars
+	if rt.Nullable {
+		s = parser.ScalarNull
+	}
+	for _, part := range rt.Parts() {
+		ps := parser.ScalarOf(part.FQN)
+		if ps == 0 {
+			return 0
+		}
+		s |= ps
+	}
+	return s
+}
+
+func scalarsType(s parser.Scalars) ResolvedType {
+	if s == 0 {
+		return ResolvedType{}
+	}
+	names := s.Names()
+	if len(names) == 1 {
+		return ResolvedType{FQN: names[0]}
+	}
+	parts := make([]ResolvedType, len(names))
+	for i, name := range names {
+		parts[i] = ResolvedType{FQN: name}
+	}
+	return MakeUnion(parts, false)
 }
 
 func (r *Resolver) variableType(name string, ctx ExprContext) ResolvedType {

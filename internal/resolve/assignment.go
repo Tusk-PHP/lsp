@@ -6,7 +6,6 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
-	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -41,16 +40,8 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 		if gen := r.enclosingReturnType(lines, pos, file); gen.FQN == "Generator" && len(gen.Params) >= 3 {
 			return gen.Params[2], true
 		}
-	case *ast.Binary:
-		switch n.Op {
-		case token.Dot:
-			return ResolvedType{FQN: "string"}, true
-		case token.Coalesce:
-			rt := r.eitherType(t, n.Left, n.Right, ctx)
-			return rt, !rt.IsEmpty()
-		}
-	case *ast.Ternary:
-		rt := r.ternaryType(t, n, ctx)
+	case *ast.Binary, *ast.Unary, *ast.InstanceOf, *ast.Ternary:
+		rt := r.typeOf(t, n, nil, ctx)
 		return rt, !rt.IsEmpty()
 	case *ast.ClassConstFetch:
 		if strings.EqualFold(t.text(n.Name), "class") {
@@ -184,12 +175,8 @@ func (r *Resolver) assignedPlainType(varName string, t *syntaxTree, v assignedVa
 		return PlainTypeName(r.InvokeType(r.typeOf(t, v.expr, nil, ExprContext{Lines: lines, Pos: pos, File: file}))), true
 	}
 	switch n := v.expr.(type) {
-	case *ast.Binary:
-		if n.Op == token.Coalesce {
-			return PlainTypeName(r.eitherType(t, n.Left, n.Right, ExprContext{Lines: lines, Pos: pos, File: file})), true
-		}
-	case *ast.Ternary:
-		return PlainTypeName(r.ternaryType(t, n, ExprContext{Lines: lines, Pos: pos, File: file})), true
+	case *ast.Binary, *ast.Unary, *ast.InstanceOf, *ast.Ternary:
+		return PlainTypeName(r.typeOf(t, n, nil, ExprContext{Lines: lines, Pos: pos, File: file})), true
 	case *ast.New:
 		if name, ok := n.Class.(*ast.ConstFetch); ok && n.Anonymous == nil {
 			className := t.text(name)

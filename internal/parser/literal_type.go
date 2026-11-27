@@ -63,7 +63,7 @@ func scalarType(e ast.Expr, src string) (general, literal string) {
 	case *ast.Unary:
 		lit, ok := n.Operand.(*ast.Literal)
 		if !ok || n.Op != token.Minus && n.Op != token.Plus || lit.Kind != token.IntegerLiteral && lit.Kind != token.FloatLiteral {
-			return "", ""
+			return literalScalars(n, src).String(), ""
 		}
 		general, literal := scalarType(lit, src)
 		if literal != "" && n.Op == token.Minus {
@@ -79,6 +79,8 @@ func scalarType(e ast.Expr, src string) (general, literal string) {
 		case "null":
 			return "null", "null"
 		}
+	case *ast.Binary, *ast.InstanceOf:
+		return literalScalars(n, src).String(), ""
 	case *ast.Cast:
 		return CastType(n.Kind), ""
 	case *ast.ClassConstFetch:
@@ -87,6 +89,17 @@ func scalarType(e ast.Expr, src string) (general, literal string) {
 		}
 	}
 	return "", ""
+}
+
+func literalScalars(e ast.Expr, src string) Scalars {
+	switch e.(type) {
+	case *ast.Array:
+		return ScalarArray
+	case *ast.Binary, *ast.Unary, *ast.InstanceOf:
+		return OperatorType(e, src, func(operand ast.Expr) Scalars { return literalScalars(operand, src) })
+	}
+	general, _ := scalarType(e, src)
+	return ScalarOf(general)
 }
 
 func decimal(text string) string {

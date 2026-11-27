@@ -26,7 +26,7 @@ func TestLiteralTypesAreReadFromTheNode(t *testing.T) {
 		"3.14":                             {"3.14", "float"},
 		"-1e10":                            {"float", "float"},
 		"-$x":                              {"", ""},
-		"!true":                            {"", ""},
+		"!true":                            {"bool", "bool"},
 		"(int) $x":                         {"int", "int"},
 		"(object) []":                      {"object", "object"},
 		"self::class":                      {"string", "string"},
