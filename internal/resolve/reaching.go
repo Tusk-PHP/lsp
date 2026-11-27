@@ -257,6 +257,13 @@ func passesThrough(t *syntaxTree, e ast.Expr, name string) bool {
 			then = n.Cond
 		}
 		return passesThrough(t, then, name) && passesThrough(t, n.Else, name)
+	case *ast.Match:
+		for _, arm := range n.Arms {
+			if !isThrow(arm.Body) && !passesThrough(t, arm.Body, name) {
+				return false
+			}
+		}
+		return true
 	}
 	return !readsVariable(t, e, name)
 }
