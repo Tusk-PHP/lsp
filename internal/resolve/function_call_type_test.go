@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -39,7 +40,7 @@ foreach (orphans() as $stray) {
     echo $stray;
 }
 `
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	lines := SplitLines(src)
 	r := NewResolver(idx)
 	for variable, want := range map[string]string{
@@ -95,7 +96,7 @@ foreach (unknown() ?: [] as $unknown) {
     echo $unknown;
 }
 `
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	lines := SplitLines(src)
 	r := NewResolver(idx)
 	for variable, want := range map[string]string{
@@ -138,7 +139,7 @@ function run($checked, $unchecked): void {
     });
 }
 `
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	lines := SplitLines(src)
 	r := NewResolver(idx)
 	for _, c := range []struct{ variable, line, want string }{
@@ -174,7 +175,7 @@ foreach (items() ?: [] as $fallback) {
     echo $fallback;
 }
 `
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	lines := SplitLines(src)
 	r := NewResolver(idx)
 	for _, variable := range []string{"$item", "$fallback"} {

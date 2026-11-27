@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 )
@@ -37,7 +38,7 @@ func findLine(source, substr string) int {
 func TestE2ELaravelEloquentChains(t *testing.T) {
 	p := setupLaravelE2E(t)
 	source := laravelControllerSource(t)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	uri := "file:///app/Http/Controllers/CategoryController.php"
 	p.index.IndexFile(uri, source)
 
@@ -138,7 +139,7 @@ func TestE2ELaravelEloquentChains(t *testing.T) {
 func TestE2ELaravelArrayShapes(t *testing.T) {
 	p := setupLaravelE2E(t)
 	source := laravelControllerSource(t)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	uri := "file:///app/Http/Controllers/CategoryController.php"
 	p.index.IndexFile(uri, source)
 
@@ -236,4 +237,24 @@ func TestE2ELaravelCompletions(t *testing.T) {
 			t.Errorf("expected Collection methods, got: %v", mapKeys(labels, 10))
 		}
 	})
+}
+
+func TestE2ELaravelCollectionCallsFollowTheInstalledDocblocks(t *testing.T) {
+	p := setupLaravelE2E(t)
+	src := "<?php\nuse App\\Models\\Category;\n\n\n\n"
+	file := parser.ParseFile(src, token.Latest)
+	typed := func(expr string) string {
+		return p.ResolveExpressionTypeTyped(expr, src, protocol.Position{Line: 4}, file).FullString()
+	}
+	for expr, want := range map[string]string{
+		"Category::query()->get()->map(fn ($c) => $c)":                   "Illuminate\\Support\\Collection<int, App\\Models\\Category>|Illuminate\\Database\\Eloquent\\Collection<int, App\\Models\\Category>",
+		"Category::query()->get()->map(fn (Category $c): int => $c->id)": "Illuminate\\Support\\Collection<int, int>|Illuminate\\Database\\Eloquent\\Collection<int, int>",
+		"Category::query()->get()->map(fn ($c) => $c)->first()":          "?App\\Models\\Category",
+		"Category::query()->get()->filter()":                             "Illuminate\\Database\\Eloquent\\Collection<int, App\\Models\\Category>",
+		"collect([1, 2])->map(fn ($x) => (string) $x)":                   "Illuminate\\Support\\Collection<int, string>",
+	} {
+		if got := typed(expr); got != want {
+			t.Errorf("%s:\n got %s\nwant %s", expr, got, want)
+		}
+	}
 }
