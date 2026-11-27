@@ -290,3 +290,32 @@ func TestParseComposerAutoload(t *testing.T) {
 		}
 	})
 }
+
+func TestSymfonyClassesInSrcAreBoundWithTheirInterfaces(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "src", "Service", "Mailer.php")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("<?php\nnamespace App\\Service;\nuse App\\Contract\\SendsMail;\nclass Mailer implements SendsMail {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ca := NewContainerAnalyzer(symbols.NewIndex(), dir, "symfony")
+	ca.Analyze()
+
+	for _, service := range []string{`App\Service\Mailer`, `App\Contract\SendsMail`} {
+		if b := ca.LookupBinding(service); b == nil || b.Concrete != `App\Service\Mailer` {
+			t.Errorf("%s is bound to the class in src/: %+v", service, b)
+		}
+	}
+}
+
+func TestSymfonyClassesBindTheirImportedInterfaces(t *testing.T) {
+	ca := NewContainerAnalyzer(symbols.NewIndex(), "/tmp", "symfony")
+	ca.parseSymfonyAttributes("/app/src/Mailer.php", "<?php\nnamespace App;\nuse Vendor\\Contracts\\MailerInterface;\nclass Mailer implements MailerInterface, Local {}\n")
+	for abstract, concrete := range map[string]string{`Vendor\Contracts\MailerInterface`: `App\Mailer`, `App\Local`: `App\Mailer`} {
+		if b := ca.bindings[abstract]; b == nil || b.Concrete != concrete {
+			t.Errorf("%s: %+v", abstract, b)
+		}
+	}
+}

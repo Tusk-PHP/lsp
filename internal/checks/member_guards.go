@@ -1,16 +1,11 @@
 package checks
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 )
-
-// memberGuardHintRe is a cheap test for whether a file may call one of the
-// guard functions at all, before it's read as tokens. Function names ignore
-// case in PHP, so it does too.
-var memberGuardHintRe = regexp.MustCompile(`(?i)_exists|is_callable`)
 
 // memberGuardFuncs are the calls code makes to ask whether an object has a
 // member before using it, lowercased.
@@ -46,62 +41,30 @@ type memberGuards struct {
 	byName map[string][]memberGuard
 }
 
-// collect records the guards among tokens: `method_exists($x, 'name')`,
+// collect records the guards in the file: `method_exists($x, 'name')`,
 // `property_exists($x, 'name')` and `is_callable([$x, 'name'])`, in any case
 // and over any number of lines.
-func (g *memberGuards) collect(tokens []parser.Token) {
-	for i, tok := range tokens {
-		if tok.Kind != parser.TokenIdentifier {
+func (g *memberGuards) collect(syntax *fileSyntax) {
+	for _, call := range syntax.references().calls {
+		fn := strings.ToLower(strings.TrimPrefix(syntax.text(call.name), "\\"))
+		if !memberGuardFuncs[fn] {
 			continue
 		}
-		fn := strings.ToLower(tok.Value)
-		if !memberGuardFuncs[fn] || !isGlobalFunctionCall(tokens, i) {
-			continue
-		}
-		open := parser.NextSignificant(tokens, i+1)
-		if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
-			continue
-		}
-		start, closer := open+1, parser.TokenCloseParen
-		if fn == "is_callable" {
-			bracket := parser.NextSignificant(tokens, start)
-			if bracket < 0 || tokens[bracket].Kind != parser.TokenOpenBracket {
-				continue
-			}
-			start, closer = bracket+1, parser.TokenCloseBracket
-		}
-		receiver, name, ok := guardArguments(tokens, start, closer)
+		receiver, name, ok := guardArguments(syntax, fn, call.args.Args)
 		if !ok {
 			continue
 		}
-		guard := memberGuard{receiver: receiver, name: name, method: fn != "property_exists", line: tok.Line, col: tok.Column}
+		line, col := syntax.lines.Position(call.name.Start)
+		guard := memberGuard{receiver: receiver, name: name, method: fn != "property_exists", line: line, col: col}
 		if guard.method {
 			guard.name = strings.ToLower(name)
 		}
-		guard.scope = g.scopeAt(tok.Line)
+		guard.scope = g.scopeAt(line)
 		if g.byName == nil {
 			g.byName = map[string][]memberGuard{}
 		}
 		g.byName[guard.name] = append(g.byName[guard.name], guard)
 	}
-}
-
-// isGlobalFunctionCall reports whether the name at tokens[i] calls a global
-// function: not a method or static method of that name, a declaration, or a
-// function in another namespace (`Foo\method_exists()`).
-func isGlobalFunctionCall(tokens []parser.Token, i int) bool {
-	prev := parser.PrevSignificant(tokens, i-1)
-	if prev < 0 {
-		return true
-	}
-	switch tokens[prev].Kind {
-	case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenFunction, parser.TokenNew:
-		return false
-	case parser.TokenBackslash:
-		before := parser.PrevSignificant(tokens, prev-1)
-		return before < 0 || tokens[before].Kind != parser.TokenIdentifier
-	}
-	return true
 }
 
 // covers reports whether a guard before the access at lineNum:col checks for
@@ -139,59 +102,33 @@ func (g *memberGuards) covers(ownerExpr, member string, isCall, isStatic bool, l
 	return false
 }
 
-// guardArguments reads `receiver, 'name'` followed by closer from tokens[start].
-// The receiver must be a variable, a property chain or a class reference
-// (`$x`, `$this->items`, `static::class`, `$x::class`, `Foo::class`); the name
-// must be a plain string literal naming a member.
-func guardArguments(tokens []parser.Token, start int, closer parser.TokenKind) (receiver, name string, ok bool) {
-	var b strings.Builder
-	depth := 0
-	comma := -1
-	for i := start; i < len(tokens) && comma < 0; i++ {
-		switch tokens[i].Kind {
-		case parser.TokenOpenParen, parser.TokenOpenBracket:
-			depth++
-		case parser.TokenCloseParen, parser.TokenCloseBracket:
-			if depth == 0 {
-				return "", "", false
-			}
-			depth--
-		case parser.TokenComma:
-			if depth == 0 {
-				comma = i
-				continue
-			}
-		case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace, parser.TokenEOF:
+// guardArguments reads the receiver and member name of a guard call. The
+// receiver must be a variable, a property chain or a class reference (`$x`,
+// `$this->items`, `static::class`, `$x::class`, `Foo::class`); the name must
+// be a plain string literal naming a member.
+func guardArguments(syntax *fileSyntax, fn string, args []*ast.Arg) (receiver, name string, ok bool) {
+	var parts []ast.Expr
+	switch {
+	case fn != "is_callable" && len(args) == 2:
+		parts = []ast.Expr{args[0].Value, args[1].Value}
+	case fn == "is_callable" && len(args) == 1:
+		array, isArray := args[0].Value.(*ast.Array)
+		if !isArray || len(array.Items) != 2 || array.Items[0].Key != nil || array.Items[1].Key != nil {
 			return "", "", false
-		case parser.TokenComment, parser.TokenDocComment:
-			continue
 		}
-		b.WriteString(tokens[i].Value)
-	}
-	if comma < 0 {
+		parts = []ast.Expr{array.Items[0].Value, array.Items[1].Value}
+	default:
 		return "", "", false
 	}
-	receiver = normalizeGuardReceiver(b.String())
+	if parts[0] == nil || parts[1] == nil {
+		return "", "", false
+	}
+	receiver = normalizeGuardReceiver(syntax.text(parts[0]))
 	if !isGuardReceiver(receiver) {
 		return "", "", false
 	}
-	lit := parser.NextSignificant(tokens, comma+1)
-	if lit < 0 || tokens[lit].Kind != parser.TokenStringLiteral {
-		return "", "", false
-	}
-	name, ok = plainMemberName(tokens[lit].Value)
-	if !ok {
-		return "", "", false
-	}
-	end := parser.NextSignificant(tokens, lit+1)
-	// A trailing comma, as in `[$x, 'name',]` written over several lines.
-	if end >= 0 && tokens[end].Kind == parser.TokenComma {
-		end = parser.NextSignificant(tokens, end+1)
-	}
-	if end < 0 || tokens[end].Kind != closer {
-		return "", "", false
-	}
-	return receiver, name, true
+	name, ok = plainMemberName(syntax.text(parts[1]))
+	return receiver, name, ok
 }
 
 // plainMemberName returns the member a quoted string literal names, as
@@ -216,9 +153,9 @@ func plainMemberName(lit string) (string, bool) {
 // same form: no blanks, `?->` as `->`, `X::class` as `X`, and `static` (the
 // class of `$this`) as `$this`.
 func normalizeGuardReceiver(expr string) string {
-	if strings.ContainsAny(expr, " \t") {
+	if strings.ContainsAny(expr, " \t\r\n") {
 		expr = strings.Map(func(r rune) rune {
-			if r == ' ' || r == '\t' {
+			if r == ' ' || r == '\t' || r == '\r' || r == '\n' {
 				return -1
 			}
 			return r

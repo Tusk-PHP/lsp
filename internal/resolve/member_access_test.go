@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -24,7 +25,7 @@ class Room {
 func memberAccessResolver() (*Resolver, *parser.FileNode) {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///room.php", memberAccessSource)
-	return NewResolver(idx), parser.ParseFile(memberAccessSource)
+	return NewResolver(idx), parser.ParseFile(memberAccessSource, token.Latest)
 }
 
 func TestMemberAccessOfReadsTheAccessForm(t *testing.T) {
@@ -182,7 +183,7 @@ class Extra {
 `
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///room.php", source)
-	r, file := NewResolver(idx), parser.ParseFile(source)
+	r, file := NewResolver(idx), parser.ParseFile(source, token.Latest)
 	room := ResolvedType{FQN: `App\Room`}
 	if m, owner := r.FindMemberOn(room, "ONLY", ConstantAccess); m != nil {
 		t.Errorf("Room::ONLY names a constant of Room, and a mixin can't provide one: got %+v on %s", m, owner.FQN)
