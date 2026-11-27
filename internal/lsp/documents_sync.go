@@ -31,7 +31,7 @@ func (s *Server) indexDocumentMaybeAsync(uri, source string) {
 	q.mu.Lock()
 	if !q.running[uri] && strings.Count(source, "\n") <= largeDocThreshold {
 		q.mu.Unlock()
-		s.workspace.IndexFile(uri, source)
+		s.refreshModelsInBackground(s.workspace.IndexFile(uri, source))
 		return
 	}
 	start := q.queueLocked(uri, source)
@@ -85,7 +85,16 @@ func (s *Server) drainDocIndex(uri string) {
 
 func (s *Server) indexDocumentVersion(uri, source string) {
 	defer s.recoverPanic("indexFileByURI:" + uri)
-	s.workspace.IndexFile(uri, source)
+	s.workspace.RefreshModels(s.workspace.IndexFile(uri, source))
+}
+
+// refreshModelsInBackground re-analyses the model files uris, whose cast
+// types an edit to another file may have changed, off the message loop.
+func (s *Server) refreshModelsInBackground(uris []string) {
+	if len(uris) == 0 {
+		return
+	}
+	s.goSafe("refreshModels", func() { s.workspace.RefreshModels(uris) })
 }
 
 func (q *docIndexQueue) doneLocked(uri string) func() {

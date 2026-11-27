@@ -110,12 +110,14 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 			}
 		}
 	}
+	var castDependents []string
 	for _, path := range sources {
 		if r.editorOwns(path) {
 			continue
 		}
 		uri := symbols.PathToURI(path)
-		changed, err := ws.refreshFile(path, uri)
+		changed, dependents, err := ws.refreshFile(path, uri)
+		castDependents = append(castDependents, dependents...)
 		if err != nil {
 			errs = append(errs, err)
 			out.Failed = append(out.Failed, path)
@@ -128,6 +130,7 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 			out.EditorOpened = append(out.EditorOpened, uri)
 		}
 	}
+	ws.RefreshModels(notIn(castDependents, out.Files))
 	if out.Composer {
 		ws.rereadAutoload()
 	}
@@ -189,22 +192,43 @@ func (ws *Bootstrapped) sourcesAt(path string) ([]string, error) {
 	return paths, nil
 }
 
-func (ws *Bootstrapped) refreshFile(path, uri string) (bool, error) {
+// refreshFile re-indexes path from disk. castDependents are as for
+// IndexFile.
+func (ws *Bootstrapped) refreshFile(path, uri string) (changed bool, castDependents []string, err error) {
 	content, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		if !ws.Index.HasFile(uri) {
-			return false, nil
+			return false, nil, nil
 		}
-		ws.RemoveFile(uri)
+		castDependents = ws.RemoveFile(uri)
 		ws.projectFiles.release(path)
-		return true, nil
+		return true, castDependents, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("re-index %s: %w", path, err)
+		return false, nil, fmt.Errorf("re-index %s: %w", path, err)
 	}
 	if !ws.Index.HasFile(uri) && !ws.projectFiles.admitCreated(path) {
-		return false, nil
+		return false, nil, nil
 	}
-	ws.IndexFile(uri, string(content))
-	return true, nil
+	return true, ws.IndexFile(uri, string(content)), nil
+}
+
+// notIn returns uris without those in done or repeated, sorted.
+func notIn(uris, done []string) []string {
+	if len(uris) == 0 {
+		return nil
+	}
+	skip := make(map[string]bool, len(done)+len(uris))
+	for _, uri := range done {
+		skip[uri] = true
+	}
+	out := make([]string, 0, len(uris))
+	for _, uri := range uris {
+		if !skip[uri] {
+			skip[uri] = true
+			out = append(out, uri)
+		}
+	}
+	slices.Sort(out)
+	return out
 }

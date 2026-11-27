@@ -21,28 +21,40 @@ const (
 // injectCasts gives each attribute model's $casts and casts() name the type
 // Eloquent casts it to. casts() is merged over $casts, and a later entry
 // over an earlier one, as HasAttributes does; members the model already has
-// (an accessor, a @property, an IDE helper entry) are left as they are.
-func injectCasts(index *symbols.Index, model *symbols.Symbol, source modelSource, decl *ast.ClassDecl, methods map[string]*ast.Method) {
+// (an accessor, a @property, an IDE helper entry) are left as they are, and
+// a property an earlier analysis made from the same cast takes the type the
+// cast has now. It returns the classes those types were read from.
+func injectCasts(index *symbols.Index, model *symbols.Symbol, source modelSource, decl *ast.ClassDecl, methods map[string]*ast.Method) (dependsOn []string) {
 	items := source.castItems(decl, methods)
 	if len(items) == 0 {
-		return
+		return nil
 	}
 	r := resolve.NewResolver(index)
 	lines := ast.NewLines(source.src)
+	seen := make(map[string]bool, len(items))
 	for i := len(items) - 1; i >= 0; i-- {
 		item := items[i]
 		name, ok := source.stringValue(item.Key)
-		if !ok || name == "" {
+		if !ok || name == "" || seen[name] {
 			continue
 		}
-		phpType, ok := source.castType(r, item.Value)
+		seen[name] = true
+		phpType, classes, ok := source.castType(r, item.Value)
+		dependsOn = append(dependsOn, classes...)
 		if !ok {
 			continue
 		}
 		propName := "$" + name
+		fqn := model.FQN + "::" + propName
+		if existing := index.Lookup(fqn); existing != nil {
+			if isCastProperty(existing) {
+				index.SetPropertyType(fqn, phpType)
+			}
+			continue
+		}
 		index.AddVirtualMember(model.FQN, &symbols.Symbol{
 			Name:       propName,
-			FQN:        model.FQN + "::" + propName,
+			FQN:        fqn,
 			Kind:       symbols.KindProperty,
 			URI:        model.URI,
 			Visibility: "public",
@@ -52,6 +64,7 @@ func injectCasts(index *symbols.Index, model *symbols.Symbol, source modelSource
 			Range:      spanRange(lines, item.Key.Bounds()),
 		})
 	}
+	return dependsOn
 }
 
 func isCastProperty(sym *symbols.Symbol) bool {
@@ -91,23 +104,25 @@ func (m modelSource) castItems(decl *ast.ClassDecl, methods map[string]*ast.Meth
 	return items
 }
 
-func (m modelSource) castType(r *resolve.Resolver, value ast.Expr) (string, bool) {
-	if cast, ok := m.stringValue(value); ok {
-		if phpType, builtin := frameworklaravel.BuiltinCastType(cast); builtin {
-			return phpType, true
+func (m modelSource) castType(r *resolve.Resolver, value ast.Expr) (phpType string, dependsOn []string, ok bool) {
+	if cast, isString := m.stringValue(value); isString {
+		if builtin, isBuiltin := frameworklaravel.BuiltinCastType(cast); isBuiltin {
+			return builtin, nil, true
 		}
 		class, arguments, _ := strings.Cut(cast, ":")
 		class = strings.TrimPrefix(class, "\\")
 		if r.Index.Lookup(class) == nil {
-			return "", false
+			return "", []string{class}, false
 		}
-		return frameworklaravel.ClassCastType(r, class, splitCastArguments(arguments)), true
+		phpType, dependsOn = frameworklaravel.ClassCastType(r, class, splitCastArguments(arguments))
+		return phpType, dependsOn, true
 	}
-	class, args, ok := m.classCast(value)
-	if !ok {
-		return "", false
+	class, args, isClass := m.classCast(value)
+	if !isClass {
+		return "", nil, false
 	}
-	return frameworklaravel.ClassCastType(r, class, args), true
+	phpType, dependsOn = frameworklaravel.ClassCastType(r, class, args)
+	return phpType, dependsOn, true
 }
 
 func (m modelSource) classCast(value ast.Expr) (class string, args []string, ok bool) {

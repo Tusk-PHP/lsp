@@ -72,44 +72,60 @@ func BuiltinCastType(cast string) (phpType string, ok bool) {
 // for a Castable class what the caster its castUsing() gives returns, with
 // args, the class names the cast passes as its arguments (AsEnumCollection's
 // enum, AsCollection::using()'s collection), binding castUsing()'s templates.
-// It is "mixed" when the class or what it returns is unknown.
-func ClassCastType(r *resolve.Resolver, class string, args []string) string {
-	if rt := classCastType(r, class, args, 0); !rt.IsEmpty() {
-		return rt.FullString()
+// It is "mixed" when the class or what it returns is unknown. dependsOn are
+// the classes the type was read from, with their ancestors: an edit to any
+// of them can change it.
+func ClassCastType(r *resolve.Resolver, class string, args []string) (phpType string, dependsOn []string) {
+	t := castTyping{r: r}
+	dependsOn = append(dependsOn, args...)
+	rt := t.classCastType(class, args, 0)
+	dependsOn = append(dependsOn, t.read...)
+	if rt.IsEmpty() {
+		return "mixed", dependsOn
 	}
-	return "mixed"
+	return rt.FullString(), dependsOn
 }
 
-func classCastType(r *resolve.Resolver, class string, args []string, depth int) resolve.ResolvedType {
-	sym := r.Index.Lookup(class)
-	if sym == nil || depth > maxCastDepth {
+type castTyping struct {
+	r    *resolve.Resolver
+	read []string
+}
+
+func (t *castTyping) classCastType(class string, args []string, depth int) resolve.ResolvedType {
+	if depth > maxCastDepth {
 		return resolve.ResolvedType{}
 	}
+	t.read = append(t.read, class)
+	sym := t.r.Index.Lookup(class)
+	if sym == nil {
+		return resolve.ResolvedType{}
+	}
+	t.read = append(t.read, t.r.Index.GetInheritanceChain(class)...)
 	if sym.Kind == symbols.KindEnum {
 		return resolve.ResolvedType{FQN: class}
 	}
-	if castUsing := method(r.Index, class, "castUsing"); castUsing != nil && castUsing.IsStatic {
-		return casterType(r, castUsing, args, depth)
+	if castUsing := method(t.r.Index, class, "castUsing"); castUsing != nil && castUsing.IsStatic {
+		return t.casterType(castUsing, args, depth)
 	}
-	if !r.Index.IsSubtypeOf(class, castsAttributesInterface) {
+	if !t.r.Index.IsSubtypeOf(class, castsAttributesInterface) {
 		return resolve.ResolvedType{}
 	}
-	get := method(r.Index, class, "get")
+	get := method(t.r.Index, class, "get")
 	if get == nil {
 		return resolve.ResolvedType{}
 	}
-	return known(r.MemberTypeForCall(get, nil, class, nil, nil))
+	return known(t.r.MemberTypeForCall(get, nil, class, nil, nil))
 }
 
-func casterType(r *resolve.Resolver, castUsing *symbols.Symbol, args []string, depth int) resolve.ResolvedType {
-	caster := r.MemberTypeForCall(castUsing, nil, castUsing.ParentFQN, nil, castArguments(args))
+func (t *castTyping) casterType(castUsing *symbols.Symbol, args []string, depth int) resolve.ResolvedType {
+	caster := t.r.MemberTypeForCall(castUsing, nil, castUsing.ParentFQN, nil, castArguments(args))
 	caster = resolve.ClassStringTarget(caster)
 	if strings.EqualFold(caster.FQN, castsAttributesInterface) {
 		if len(caster.Params) == 0 {
 			return resolve.ResolvedType{}
 		}
 		get := known(caster.Params[0])
-		if len(args) > 0 && !get.IsEmpty() && r.Index.IsSubtypeOf(args[0], get.FQN) {
+		if len(args) > 0 && !get.IsEmpty() && t.r.Index.IsSubtypeOf(args[0], get.FQN) {
 			return resolve.ResolvedType{FQN: args[0], Nullable: get.Nullable}
 		}
 		return get
@@ -117,7 +133,7 @@ func casterType(r *resolve.Resolver, castUsing *symbols.Symbol, args []string, d
 	if caster.IsEmpty() || len(caster.Union) > 0 {
 		return resolve.ResolvedType{}
 	}
-	return classCastType(r, caster.FQN, nil, depth+1)
+	return t.classCastType(caster.FQN, nil, depth+1)
 }
 
 func castArguments(args []string) *resolve.CallSite {
