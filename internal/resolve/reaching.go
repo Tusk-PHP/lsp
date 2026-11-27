@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -40,15 +42,31 @@ func (r *Resolver) reachingType(varName string, lines []string, pos textpos.Posi
 	if reach.Latest == scope.NoWrite {
 		return ResolvedType{}, inRHS
 	}
+	if asserted, ok := r.assertedAfterWrite(varName, lines, pos, file, b, reach.Latest); ok {
+		return r.narrowVariable(varName, asserted, lines, pos, file), true
+	}
 	rt := r.writeValueType(varName, lines, file, b, reach.Latest)
 	if rt.IsEmpty() && !rt.Nullable {
 		// The line scan would read the same assignment, only with the wrong
 		// values for the variables on its right; and for a destructuring it
 		// would find an earlier write instead, as a foreach over the same
 		// variable before `[$a, $route] = $route;`.
-		return ResolvedType{}, inRHS || readableWrite(lines, b, reach.Latest) || b.Site(reach.Latest).Destructure
+		return ResolvedType{}, inRHS || readableWrite(r.syntaxTree(lines, file), b, reach.Latest) || b.Site(reach.Latest).Destructure
 	}
 	return r.narrowVariable(varName, rt, lines, pos, file), true
+}
+
+func (r *Resolver) assertedAfterWrite(varName string, lines []string, pos textpos.Position, file *parser.FileNode, b *scope.Binding, w int) (ResolvedType, bool) {
+	t := r.syntaxTree(lines, file)
+	after, ok := t.offset(b.Site(w).At)
+	if !ok {
+		return ResolvedType{}, false
+	}
+	off, ok := t.offset(pos)
+	if !ok {
+		return ResolvedType{}, false
+	}
+	return r.varAssertion(varName, pos, file, t, after, off)
 }
 
 // reachingValuesType is the type of a variable that may hold the value of any
@@ -82,12 +100,12 @@ func (r *Resolver) reachingValuesType(varName string, lines []string, pos textpo
 
 // readableWrite reports whether write w is an assignment its value can be
 // read from, so the line scan from a read would find nothing else.
-func readableWrite(lines []string, b *scope.Binding, w int) bool {
+func readableWrite(t *syntaxTree, b *scope.Binding, w int) bool {
 	site := b.Site(w)
 	if site.RHS == site.End || w == scope.DeclWrite && b.Kind == scope.BindingParameter {
 		return false
 	}
-	_, _, ok := writeScope(b, w, &site).assignmentValue(lines, site.At.Line, b.Name)
+	_, ok := writeScope(b, w, &site).assignedValue(t, site.At.Line, b.Name)
 	return ok
 }
 
@@ -191,7 +209,7 @@ func (r *Resolver) feedsItself(varName string, lines []string, file *parser.File
 	if reach.TooMany {
 		return ResolvedType{}
 	}
-	if !slices.Contains(reach.Writes, w) {
+	if !slices.Contains(reach.Writes, w) || r.passesItselfThrough(lines, file, b, w) {
 		return t
 	}
 	var others []string
@@ -211,6 +229,54 @@ func (r *Resolver) feedsItself(varName string, lines []string, file *parser.File
 		}
 	}
 	return t
+}
+
+// passesItselfThrough reports whether write w reads its own variable only
+// where the value read becomes the value written, as the right of
+// `$usage = $chunk->getUsage() ?? $usage` does, or a branch of a ternary.
+// The next iteration then adds only the value it already had, so the value
+// worked out without it stands.
+func (r *Resolver) passesItselfThrough(lines []string, file *parser.FileNode, b *scope.Binding, w int) bool {
+	site := b.Site(w)
+	tree := r.syntaxTree(lines, file)
+	value, ok := writeScope(b, w, &site).assignedValue(tree, site.At.Line, b.Name)
+	return ok && passesThrough(tree, value, b.Name)
+}
+
+func passesThrough(t *syntaxTree, e ast.Expr, name string) bool {
+	switch n := e.(type) {
+	case *ast.Variable:
+		return true
+	case *ast.Binary:
+		if n.Op == token.Coalesce {
+			return passesThrough(t, n.Left, name) && passesThrough(t, n.Right, name)
+		}
+	case *ast.Ternary:
+		then := n.Then
+		if then == nil {
+			then = n.Cond
+		}
+		return passesThrough(t, then, name) && passesThrough(t, n.Else, name)
+	case *ast.Match:
+		for _, arm := range n.Arms {
+			if !isThrow(arm.Body) && !passesThrough(t, arm.Body, name) {
+				return false
+			}
+		}
+		return true
+	}
+	return !readsVariable(t, e, name)
+}
+
+func readsVariable(t *syntaxTree, e ast.Expr, name string) bool {
+	found := false
+	ast.Walk(e, func(n ast.Node) bool {
+		if v, ok := n.(*ast.Variable); ok && t.text(v) == name {
+			found = true
+		}
+		return !found
+	})
+	return found
 }
 
 // namedClasses returns the classes a type names, also those of a union kept

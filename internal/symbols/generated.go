@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 // ClassGenerator supplies classes a framework writes at build time, such as
@@ -56,7 +57,7 @@ func (idx *Index) ensureGenerated(fqn string) bool {
 	if !ok {
 		return false
 	}
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	if file == nil {
 		return false
 	}

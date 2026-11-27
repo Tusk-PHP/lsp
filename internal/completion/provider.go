@@ -156,7 +156,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 	}
 
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, p.index.GrammarOf(uri))
 	if ctx == nil {
 		return nil
 	}
@@ -360,16 +360,11 @@ func (p *Provider) completeSymfonyCommandNames(partial, quote string) []protocol
 }
 
 func (p *Provider) completeMemberAccess(r *resolve.Resolver, uri, source string, pos protocol.Position, prefix string, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
-	// Use typed resolver first to get generic context
-	resolved := p.resolveChainTypeTyped(r, source, prefix, "->", pos, file)
+	resolved := r.ReceiverTypeAt(source, pos, file)
 	if resolved.FQN == "object" && len(resolved.Fields) > 0 {
 		return objectShapeCompletions(resolved)
 	}
 	typeName := resolved.MemberOwner()
-	if typeName == "" {
-		// Fall back to standard resolver
-		typeName = p.resolveChainType(r, source, prefix, "->", pos, file)
-	}
 	if typeName == "" {
 		return nil
 	}
@@ -488,12 +483,11 @@ func objectShapeCompletions(rt resolve.ResolvedType) []protocol.CompletionItem {
 }
 
 func (p *Provider) completeStaticAccess(r *resolve.Resolver, source, prefix string, pos protocol.Position, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
-	typeName := p.resolveChainType(r, source, prefix, "::", pos, file)
+	recv, _ := r.ReceiverAt(source, pos, file)
+	typeName := ""
 	// $class:: where $class is a class-string<Foo>.
-	if strings.HasPrefix(strings.TrimSpace(extractClassBefore(prefix, "::")), "$") || typeName == "" || typeName == "string" || strings.HasPrefix(typeName, "class-string") {
-		if t := resolve.ClassStringTarget(p.resolveChainTypeTyped(r, source, prefix, "::", pos, file)); t.FQN != "" && !resolve.IsBuiltinTypeName(t.FQN) {
-			typeName = t.FQN
-		}
+	if t := resolve.ClassStringTarget(recv.Type); t.FQN != "" && !resolve.IsBuiltinTypeName(t.FQN) {
+		typeName = t.FQN
 	}
 	if typeName == "" {
 		return nil
@@ -509,7 +503,7 @@ func (p *Provider) completeStaticAccess(r *resolve.Resolver, source, prefix stri
 	// keep $this. Private members of another class stay out of reach.
 	instanceCalls := false
 	enclosing := ""
-	if op := strings.LastIndex(prefix, "::"); op >= 0 && resolve.ForwardsCallingClass(prefix[:op+2]) {
+	if recv.ForwardsCaller {
 		enclosing = resolve.FindEnclosingClass(file, pos)
 		if m := resolve.FindEnclosingMethod(file, pos); m != nil && !m.IsStatic {
 			instanceCalls = true
@@ -586,29 +580,6 @@ func (p *Provider) completeStaticAccess(r *resolve.Resolver, source, prefix stri
 		}
 	}
 	return items
-}
-
-// resolveChainTypeTyped resolves the type of the expression before op (-> or ::)
-// preserving generic context.
-func (p *Provider) resolveChainTypeTyped(r *resolve.Resolver, source, prefix, op string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-	idx := strings.LastIndex(prefix, op)
-	if idx < 0 {
-		return resolve.ResolvedType{}
-	}
-	return r.AccessOwnerType(prefix, idx+len(op), source, pos, file)
-}
-
-// resolveChainType resolves the class FQN from the expression before op (-> or ::).
-// Handles: $var->, $this->, self::, static::, parent::, ClassName::,
-// $var::, new ClassName()->, (new ClassName)->, method chains, and
-// container calls: app('request')->, app(Request::class)->, resolve(...)->
-func (p *Provider) resolveChainType(r *resolve.Resolver, source, prefix, op string, pos protocol.Position, file *parser.FileNode) string {
-	idx := strings.LastIndex(prefix, op)
-	if idx < 0 {
-		return ""
-	}
-	// wordStart is after the operator (where the member name would be)
-	return r.AccessChainClass(prefix, idx+len(op), source, pos, file)
 }
 
 func (p *Provider) completeNew(prefix, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {
@@ -909,21 +880,6 @@ func extractVariableBefore(prefix, op string) string {
 		}
 	}
 	return ""
-}
-
-func extractClassBefore(prefix, op string) string {
-	idx := strings.LastIndex(prefix, op)
-	if idx < 0 {
-		return ""
-	}
-	before := strings.TrimSpace(prefix[:idx])
-	for i := len(before) - 1; i >= 0; i-- {
-		ch := before[i]
-		if !(ch >= 'a' && ch <= 'z') && !(ch >= 'A' && ch <= 'Z') && !(ch >= '0' && ch <= '9') && ch != '_' && ch != '\\' {
-			return before[i+1:]
-		}
-	}
-	return before
 }
 
 func symKind(kind symbols.SymbolKind) protocol.CompletionItemKind {

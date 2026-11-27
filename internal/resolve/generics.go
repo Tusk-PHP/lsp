@@ -283,18 +283,11 @@ func (r *Resolver) classConstantType(class, name string, static ResolvedType) (R
 			}
 		}
 	}
-	if sym == nil || sym.Value == "" {
+	if sym == nil {
 		return ResolvedType{}, false
 	}
-	v := strings.TrimSpace(sym.Value)
-	if strings.HasPrefix(v, "[") || strings.HasPrefix(strings.ToLower(v), "array(") {
-		rt := InferArrayLiteralType(v)
-		return rt, !rt.IsEmpty()
-	}
-	if lit := literalExprType(v); !lit.IsEmpty() {
-		return lit, true
-	}
-	return ResolvedType{}, false
+	rt := r.indexedValueType(sym.ValueType)
+	return rt, !rt.IsEmpty()
 }
 
 // qualifyDocName resolves a class name written in the PHPDoc of owner. The
@@ -335,7 +328,7 @@ func (r *Resolver) templatesOf(classFQN string) []symbols.TemplateParam {
 			return sym.Templates
 		}
 	}
-	if tmpl, ok := knownTemplates[classFQN]; ok {
+	if tmpl, ok := r.fallbackTemplates(classFQN); ok {
 		out := make([]symbols.TemplateParam, len(tmpl.Params))
 		for i, name := range tmpl.Params {
 			out[i] = symbols.TemplateParam{Name: name}

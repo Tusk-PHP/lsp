@@ -12,26 +12,14 @@ import (
 // is the callee's signature as a Closure(…): T, so calling the closure or
 // passing it to a callable(…) parameter reads like a written closure.
 
-// IsFirstClassCallableArgs reports whether args, the text between a call's
-// parentheses, is the `...` of first-class callable syntax. A spread,
-// f(...$args), is an ordinary call.
-func IsFirstClassCallableArgs(args string) bool {
-	return strings.TrimSpace(args) == "..."
+// isFirstClassCallableArgs reports whether args are the lone `...` of
+// first-class callable syntax. A spread, f(...$args), is an ordinary call.
+func isFirstClassCallableArgs(args []CallArg) bool {
+	return len(args) == 1 && isRestPlaceholder(args[0])
 }
 
-// IsFirstClassCallable reports whether expr ends in first-class callable
-// syntax: `strlen(...)`, `$this->format(...)`.
-func IsFirstClassCallable(expr string) bool {
-	s := strings.TrimRight(strings.TrimSpace(expr), "; \t")
-	if !strings.HasSuffix(s, ")") {
-		return false
-	}
-	s = strings.TrimRight(s[:len(s)-1], " \t\r\n")
-	if !strings.HasSuffix(s, "...") {
-		return false
-	}
-	s = strings.TrimRight(s[:len(s)-3], " \t\r\n")
-	return strings.HasSuffix(s, "(")
+func isRestPlaceholder(a CallArg) bool {
+	return a.Spread && a.node == nil && a.Expr == ""
 }
 
 // plainClosure is a Closure whose signature isn't known.
@@ -103,21 +91,6 @@ func ClosureCallType(rt ResolvedType, name string) (ResolvedType, bool) {
 	return *rt.Callable.Return, true
 }
 
-// invokedVariableType types an assigned `$fn(…)`, what calling the variable
-// gives, and `$fn(...)`, a Closure of it. ok is false for anything else, and
-// for a variable assigned from calling itself.
-func (r *Resolver) invokedVariableType(rhs, varName string, ctx ExprContext) (ResolvedType, bool) {
-	if rhs == "" || rhs[0] != '$' {
-		return ResolvedType{}, false
-	}
-	steps, origin, ok := parseChain(rhs)
-	if !ok || len(steps) == 0 || steps[0].op != "()" || origin.text == varName {
-		return ResolvedType{}, false
-	}
-	rt := r.ExpressionType(rhs, ctx)
-	return rt, !rt.IsEmpty()
-}
-
 // callableParams is the parameter types of a method or function as a
 // callable signature lists them, read in env; an untyped one is mixed.
 func (r *Resolver) callableParams(sym *symbols.Symbol, env typeEnv) []ResolvedType {
@@ -141,14 +114,11 @@ func (r *Resolver) callableParams(sym *symbols.Symbol, env typeEnv) []ResolvedTy
 // the `?` placeholders leave open, plus every parameter not given when a
 // `...` placeholder ends the list. f(...) is the case where nothing is given.
 
-// IsPartialApplicationArgs reports whether args, the text between a call's
-// parentheses, has a `?` or bare `...` placeholder, so the call makes a
-// Closure. f(...) on its own is first-class callable syntax and counts too.
-func IsPartialApplicationArgs(args string) bool {
-	if !strings.Contains(args, "?") && !strings.Contains(args, "...") {
-		return false
-	}
-	for _, a := range ParseCallArgs(args) {
+// isCallableArgs reports whether a call with these arguments makes a Closure
+// rather than calling: first-class callable syntax or partial application,
+// which has a `?` or a trailing `...` placeholder.
+func isCallableArgs(args []CallArg) bool {
+	for _, a := range args {
 		if isPlaceholderArg(a) {
 			return true
 		}
@@ -156,41 +126,23 @@ func IsPartialApplicationArgs(args string) bool {
 	return false
 }
 
-// IsCallableArgs reports whether a call with these arguments makes a Closure
-// rather than calling: first-class callable syntax or partial application.
-func IsCallableArgs(args string) bool {
-	return IsFirstClassCallableArgs(args) || IsPartialApplicationArgs(args)
-}
-
-// isPartialApplicationCall reports whether expr is a single call whose
-// arguments are a partial application: `greet('Hi', ?)`.
-func isPartialApplicationCall(expr string) bool {
-	s := strings.TrimRight(strings.TrimSpace(expr), "; \t")
-	open := strings.IndexByte(s, '(')
-	if open < 0 || !strings.Contains(s, "?") && !strings.Contains(s, "...") {
-		return false
-	}
-	end := matchingParen(s, open)
-	return end == len(s)-1 && IsPartialApplicationArgs(s[open+1:end])
-}
-
 func isPlaceholderArg(a CallArg) bool {
-	return (!a.Spread && a.Expr == "?") || (a.Spread && a.Expr == "")
+	return !a.Spread && a.node == nil && a.Expr == "?" || isRestPlaceholder(a)
 }
 
 // PartialClosure narrows full, the Closure of the whole callee sym, to the
 // parameters a partial application's args leave open. A first-class
 // callable, or a callee or signature that isn't known, keeps full.
-func PartialClosure(full ResolvedType, sym *symbols.Symbol, args string) ResolvedType {
-	if IsFirstClassCallableArgs(args) || sym == nil || full.Callable == nil || len(full.Callable.Params) != len(sym.Params) {
+func PartialClosure(full ResolvedType, sym *symbols.Symbol, args []CallArg) ResolvedType {
+	if isFirstClassCallableArgs(args) || sym == nil || full.Callable == nil || len(full.Callable.Params) != len(sym.Params) {
 		return full
 	}
 	open := make([]bool, len(sym.Params))
 	given := make([]bool, len(sym.Params))
 	rest := false
 	pos := 0
-	for _, a := range ParseCallArgs(args) {
-		if a.Spread && a.Expr == "" {
+	for _, a := range args {
+		if isRestPlaceholder(a) {
 			rest = true
 			continue
 		}
@@ -209,7 +161,7 @@ func PartialClosure(full ResolvedType, sym *symbols.Symbol, args string) Resolve
 		if i < 0 {
 			continue
 		}
-		if a.Expr == "?" {
+		if isPlaceholderArg(a) {
 			open[i] = true
 		} else {
 			given[i] = true
