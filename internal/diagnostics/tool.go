@@ -22,8 +22,9 @@ type externalTool struct {
 }
 
 func newExternalTool(label, bin, rootPath, configuredPath string, enabled *bool, timeout time.Duration, logger *log.Logger) externalTool {
-	t := externalTool{label: label, rootPath: rootPath, timeout: timeout, logger: logger, enabled: enabled == nil || *enabled}
+	t := externalTool{label: label, rootPath: rootPath, timeout: timeout, logger: logger, enabled: toolEnabled(startsProcesses, enabled)}
 	switch {
+	case !t.enabled:
 	case configuredPath != "":
 		t.binPath = configuredPath
 	case fileExists(filepath.Join(rootPath, "vendor", "bin", bin)):
@@ -36,6 +37,10 @@ func newExternalTool(label, bin, rootPath, configuredPath string, enabled *bool,
 		}
 	}
 	return t
+}
+
+func toolEnabled(startsProcesses bool, configured *bool) bool {
+	return startsProcesses && (configured == nil || *configured)
 }
 
 func fileExists(path string) bool {

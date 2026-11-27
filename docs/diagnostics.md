@@ -11,7 +11,8 @@ Tusk PHP reports problems in your code from three sources:
 | **Laravel Pint** | Code that Pint would reformat | On save, on the file you saved | `pint` |
 
 All three are on by default. PHPStan and Pint run only when the server can find
-them, so a project without them just gets the built-in checks.
+them, so a project without them just gets the built-in checks. The WebAssembly
+build (vscode.dev) can't start processes, so it never runs them.
 
 ## Built-in checks
 

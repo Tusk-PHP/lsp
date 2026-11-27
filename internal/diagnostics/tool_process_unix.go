@@ -9,6 +9,8 @@ import (
 	"syscall"
 )
 
+const startsProcesses = true
+
 func stopProcessTreeOnCancel(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
