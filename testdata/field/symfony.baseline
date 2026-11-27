@@ -286,15 +286,6 @@ src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown cl
 src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'ProxyInterface'
 src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'StatelessInvocation'
 src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'Stub'
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::addElementToGhost' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::dumpExceptionProperties' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::fileExcerpt' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatArgsAsText' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatFileFromText' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatLogContext' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatLogMessage' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::isVendorExceptionClass' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::showExceptionProperties' is never used
 src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
 src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
 src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'

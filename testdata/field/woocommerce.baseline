@@ -41,7 +41,6 @@ wp-content/plugins/woocommerce/includes/admin/class-wc-admin-brands.php	unknown-
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-brands.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-brands.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-dashboard-setup.php	unknown-class	Unknown class 'Constants'
-wp-content/plugins/woocommerce/includes/admin/class-wc-admin-dashboard-setup.php	unused-private-property	Private property 'WC_Admin_Dashboard_Setup::$completed_tasks_count' is never used
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-dashboard.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-dashboard.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-dashboard.php	unknown-class	Unknown class 'Constants'
@@ -63,7 +62,6 @@ wp-content/plugins/woocommerce/includes/admin/class-wc-admin-post-types.php	unkn
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-settings.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-setup-wizard.php	unknown-function	Unknown function 'fastcgi_finish_request'
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-setup-wizard.php	unused-import	Unused import 'Automattic\Jetpack\Constants'
-wp-content/plugins/woocommerce/includes/admin/class-wc-admin-setup-wizard.php	unused-private-property	Private property 'WC_Admin_Setup_Wizard::$tweets' is never used
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-status.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-status.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-status.php	unused-variable	Variable $has_newer_version is assigned but never read
@@ -78,10 +76,6 @@ wp-content/plugins/woocommerce/includes/admin/list-tables/class-wc-admin-list-ta
 wp-content/plugins/woocommerce/includes/admin/list-tables/class-wc-admin-list-table-orders.php	unknown-member	Unknown member 'get_total' on 'WC_Order_Item'
 wp-content/plugins/woocommerce/includes/admin/list-tables/class-wc-admin-list-table-orders.php	unknown-member	Unknown member 'get_total' on 'WC_Order_Item'
 wp-content/plugins/woocommerce/includes/admin/meta-boxes/class-wc-meta-box-order-actions.php	unknown-member	Unknown member 'trigger' on 'WC_Email'
-wp-content/plugins/woocommerce/includes/admin/meta-boxes/class-wc-meta-box-product-data.php	unused-private-method	Private method 'WC_Meta_Box_Product_Data::filter_non_variation_attributes' is never used
-wp-content/plugins/woocommerce/includes/admin/meta-boxes/class-wc-meta-box-product-data.php	unused-private-method	Private method 'WC_Meta_Box_Product_Data::get_product_data_tabs' is never used
-wp-content/plugins/woocommerce/includes/admin/meta-boxes/class-wc-meta-box-product-data.php	unused-private-method	Private method 'WC_Meta_Box_Product_Data::get_product_type_options' is never used
-wp-content/plugins/woocommerce/includes/admin/meta-boxes/class-wc-meta-box-product-data.php	unused-private-method	Private method 'WC_Meta_Box_Product_Data::output_tabs' is never used
 wp-content/plugins/woocommerce/includes/admin/notes/class-wc-notes-run-db-update.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/admin/plugin-updates/class-wc-plugin-updates.php	unused-import	Unused import 'Automattic\Jetpack\Constants'
 wp-content/plugins/woocommerce/includes/admin/plugin-updates/class-wc-plugins-screen-updates.php	unknown-class	Unknown class 'Constants'
@@ -824,9 +818,6 @@ wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Core/WooCommerceProduct
 wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Core/WooCommerceProductImporter.php	unknown-class	Unknown class 'WP_CLI'
 wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Core/WooCommerceProductImporter.php	unknown-class	Unknown class 'WP_CLI'
 wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Core/WooCommerceProductImporter.php	unused-import	Unused import 'WP_Error'
-wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Core/WooCommerceProductImporter.php	unused-private-method	Private method 'WooCommerceProductImporter::create_product_variations' is never used
-wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Core/WooCommerceProductImporter.php	unused-private-method	Private method 'WooCommerceProductImporter::import_image_with_mapping' is never used
-wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Core/WooCommerceProductImporter.php	unused-private-method	Private method 'WooCommerceProductImporter::set_product_attributes' is never used
 wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Core/WooCommerceProductImporter.php	unused-variable	Variable $image_desc is assigned but never read
 wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Core/WooCommerceProductImporter.php	unused-variable	Variable $product_id is assigned but never read
 wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Lib/ImportSession.php	unknown-function	Unknown function 'get_all_post_meta_flat'
@@ -890,7 +881,6 @@ wp-content/plugins/woocommerce/src/Internal/PushNotifications/Traits/ConvertsExc
 wp-content/plugins/woocommerce/src/Internal/PushNotifications/Traits/ConvertsExceptionsToWpError.php	unknown-member	Unknown member 'getErrorData' on 'Exception'
 wp-content/plugins/woocommerce/src/Internal/ReceiptRendering/ReceiptRenderingEngine.php	unknown-member	Unknown member 'get_product' on 'WC_Order_Item'
 wp-content/plugins/woocommerce/src/Internal/ReceiptRendering/ReceiptRenderingEngine.php	unknown-member	Unknown member 'get_subtotal' on 'WC_Order_Item'
-wp-content/plugins/woocommerce/src/Internal/ReceiptRendering/ReceiptRenderingEngine.php	unused-private-constant	Private constant 'ReceiptRenderingEngine::KNOWN_CARD_TYPES' is never used
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/AbstractCollectionQuery.php	unused-import	Unused import 'WC_Order'
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/OrderNotes/CollectionQuery.php	argument-count-mismatch	Too many arguments to remove_filter(): 4 passed, at most 3 expected
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/OrderNotes/CollectionQuery.php	unused-import	Unused import 'WC_Order'
