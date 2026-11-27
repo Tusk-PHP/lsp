@@ -48,9 +48,11 @@ type Middleware struct {
 
 // Authorization knows the Gate abilities and middleware names of a Laravel
 // app. The app's registrations are read per file as the workspace indexes
-// app/Providers, bootstrap/app.php and app/Http/Kernel.php; Laravel's own
-// defaults and the policy namespaces are read again after Composer changes.
-// Policy methods come from the symbol index.
+// the project's PHP files: app/Providers, bootstrap/app.php and
+// app/Http/Kernel.php always, any other file when its tokens show a Gate or
+// middleware registration. Laravel's own defaults and the policy namespaces
+// are read again after Composer changes. Policy methods come from the symbol
+// index.
 type Authorization struct {
 	rootPath string
 	index    *symbols.Index
@@ -84,24 +86,15 @@ func NewAuthorization(rootPath string, index *symbols.Index, grammars func() php
 	return &Authorization{rootPath: rootPath, index: index, grammars: grammars, files: map[string]authFile{}}
 }
 
-// ScanWorkspace reads the app's registrations from disk, then what Composer
-// installed.
-func (a *Authorization) ScanWorkspace(autoload []composer.AutoloadEntry) {
-	var paths []string
-	if entries, err := os.ReadDir(filepath.Join(a.rootPath, "app", "Providers")); err == nil {
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".php") {
-				paths = append(paths, filepath.Join(a.rootPath, "app", "Providers", e.Name()))
-			}
-		}
-	}
-	paths = append(paths, filepath.Join(a.rootPath, "bootstrap", "app.php"), filepath.Join(a.rootPath, "app", "Http", "Kernel.php"))
-	for _, path := range paths {
+// ScanWorkspace reads what Composer installed, then the registrations of
+// the project's PHP files, given by path, from disk.
+func (a *Authorization) ScanWorkspace(autoload []composer.AutoloadEntry, projectFiles []string) {
+	a.ComposerChanged(autoload)
+	for _, path := range projectFiles {
 		if data, err := os.ReadFile(path); err == nil {
 			a.IndexFile(symbols.PathToURI(path), string(data))
 		}
 	}
-	a.ComposerChanged(autoload)
 }
 
 // ComposerChanged reads again what depends on the installed packages and the
@@ -116,15 +109,20 @@ func (a *Authorization) ComposerChanged(autoload []composer.AutoloadEntry) {
 	a.changedLocked()
 }
 
-// IndexFile reads what source registers when uri is one of the files
-// registrations are read from, and forgets it when source is empty.
+// IndexFile reads what a project file registers, and forgets it when
+// source is empty. Vendor files and Blade views register nothing.
 func (a *Authorization) IndexFile(uri, source string) {
-	if a == nil || !a.reads(uri) {
+	if a == nil {
+		return
+	}
+	rel, ok := a.projectPath(uri)
+	if !ok {
 		return
 	}
 	var file authFile
-	if source != "" {
-		file = readAuthFile(uri, source, a.grammars())
+	grammars := a.grammars()
+	if source != "" && (alwaysReads(rel) || mayRegisterNames(source, grammars.Newest())) {
+		file = readAuthFile(uri, source, grammars)
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -144,15 +142,19 @@ func (a *Authorization) changedLocked() {
 	a.names = nil
 }
 
-func (a *Authorization) reads(uri string) bool {
+func (a *Authorization) projectPath(uri string) (string, bool) {
 	rel, err := filepath.Rel(a.rootPath, symbols.URIToPath(uri))
 	if err != nil {
-		return false
+		return "", false
 	}
 	rel = filepath.ToSlash(rel)
-	if !strings.HasSuffix(rel, ".php") {
-		return false
+	if !strings.HasSuffix(rel, ".php") || strings.HasSuffix(rel, ".blade.php") || strings.HasPrefix(rel, "../") || strings.HasPrefix(rel, "vendor/") {
+		return "", false
 	}
+	return rel, true
+}
+
+func alwaysReads(rel string) bool {
 	return path.Dir(rel) == "app/Providers" || rel == "bootstrap/app.php" || rel == "app/Http/Kernel.php"
 }
 

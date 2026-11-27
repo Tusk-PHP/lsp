@@ -36,7 +36,7 @@ func setupLaravelAuthHover(t *testing.T) *Provider {
 	}
 	idx.IndexFile(symbols.PathToURI(filepath.Join(root, "app", "Policies", "PostPolicy.php")), "<?php\nnamespace App\\Policies;\n\nclass PostPolicy\n{\n    public function publish($user, $post) {}\n}\n")
 	auth := frameworklaravel.NewAuthorization(root, idx, func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
-	auth.ScanWorkspace(composer.GetAutoloadPaths(root))
+	auth.ScanWorkspace(composer.GetAutoloadPaths(root), nil)
 	auth.IndexFile(symbols.PathToURI(filepath.Join(root, "app", "Providers", "AuthServiceProvider.php")), `<?php
 namespace App\Providers;
 

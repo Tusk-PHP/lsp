@@ -46,7 +46,7 @@ func setupLaravelAuthCompletion(t testing.TB) *Provider {
 	}
 	idx.IndexFile(symbols.PathToURI(filepath.Join(root, "app", "Policies", "ProductPolicy.php")), authTestPolicy)
 	auth := frameworklaravel.NewAuthorization(root, idx, func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
-	auth.ScanWorkspace(composer.GetAutoloadPaths(root))
+	auth.ScanWorkspace(composer.GetAutoloadPaths(root), nil)
 	auth.IndexFile(symbols.PathToURI(filepath.Join(root, "app", "Providers", "AuthServiceProvider.php")), authTestProvider)
 	p := NewProvider(idx, ca, "laravel")
 	p.SetLaravelAuthorization(auth)

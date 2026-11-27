@@ -3,17 +3,22 @@ package laravel
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
 	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
-const gateFacade = `Illuminate\Support\Facades\Gate`
+const (
+	gateFacade = `Illuminate\Support\Facades\Gate`
+	gateAlias  = "Gate"
+)
 
 type authFile struct {
 	abilities  []Ability
@@ -53,16 +58,35 @@ func newAuthReader(uri, src string, grammars phpparser.GrammarRange) (authReader
 	return authReader{uri: uri, src: src, file: parser.FileNodeOf(src, tree), lines: ast.NewLines(src)}, tree
 }
 
+var (
+	gateRegistrations       = []string{"define", "resource", "policy"}
+	middlewareRegistrations = []string{"aliasMiddleware", "middlewareGroup", "pushMiddlewareToGroup", "prependMiddlewareToGroup"}
+	instanceRegistrations   = append([]string{"define", "withMiddleware"}, middlewareRegistrations...)
+)
+
+func isOneOf(name string, names []string) bool {
+	return slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(n, name) })
+}
+
 func readAuthFile(uri, src string, grammars phpparser.GrammarRange) authFile {
 	r, tree := newAuthReader(uri, src, grammars)
 	var out authFile
 	ast.Walk(tree, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.StaticCall:
-			r.gateCall(n, &out)
+			if r.isGate(n) {
+				r.gateCall(n, &out)
+			} else {
+				r.routerCall(ast.MethodName(r.src, n), n.Args, &out)
+			}
 		case *ast.MethodCall:
-			if strings.EqualFold(ast.MethodName(r.src, n), "withMiddleware") {
+			switch name := ast.MethodName(r.src, n); {
+			case strings.EqualFold(name, "withMiddleware"):
 				r.middlewareConfiguration(n.Args, &out)
+			case strings.EqualFold(name, "define"):
+				r.instanceDefine(n.Args, &out)
+			default:
+				r.routerCall(name, n.Args, &out)
 			}
 		case *ast.PropertyItem:
 			r.property(n, &out)
@@ -72,9 +96,41 @@ func readAuthFile(uri, src string, grammars phpparser.GrammarRange) authFile {
 	return out
 }
 
-func (r authReader) gateCall(call *ast.StaticCall, out *authFile) {
+func (r authReader) isGate(call *ast.StaticCall) bool {
 	class, ok := call.Class.(*ast.ConstFetch)
-	if !ok || !strings.EqualFold(r.file.ResolveClassName(r.text(class)), gateFacade) || call.Args == nil {
+	if !ok {
+		return false
+	}
+	resolved := r.file.ResolveClassName(r.text(class))
+	return strings.EqualFold(resolved, gateFacade) || strings.EqualFold(resolved, gateAlias)
+}
+
+func (r authReader) instanceDefine(args *ast.ArgList, out *authFile) {
+	if args == nil {
+		return
+	}
+	if name, lit, ok := r.argString(args.Args, 0); ok {
+		out.abilities = append(out.abilities, Ability{Name: name, URI: r.uri, Range: r.literalRange(lit)})
+	}
+}
+
+func (r authReader) routerCall(method string, args *ast.ArgList, out *authFile) {
+	if args == nil || !isOneOf(method, middlewareRegistrations) {
+		return
+	}
+	name, lit, ok := r.argString(args.Args, 0)
+	if !ok {
+		return
+	}
+	m := Middleware{Name: name, Kind: MiddlewareGroup, URI: r.uri, Range: r.literalRange(lit)}
+	if strings.EqualFold(method, "aliasMiddleware") {
+		m.Kind, m.Class = MiddlewareAlias, r.argClass(args.Args, 1)
+	}
+	out.middleware = append(out.middleware, m)
+}
+
+func (r authReader) gateCall(call *ast.StaticCall, out *authFile) {
+	if call.Args == nil {
 		return
 	}
 	args := call.Args.Args
@@ -287,4 +343,50 @@ func readVendorFile(path string, grammars phpparser.GrammarRange) (authReader, *
 	}
 	r, tree := newAuthReader(symbols.PathToURI(path), string(data), grammars)
 	return r, tree, true
+}
+
+func mayRegisterNames(src string, version token.Version) bool {
+	tokens := significantTokens(lexer.Lex(src, version))
+	gateAliased := false
+	for i := 0; i+1 < len(tokens); i++ {
+		if tokens[i+1].Kind == token.As && isGateName(tokens[i], src) {
+			gateAliased = true
+		}
+	}
+	for i := 1; i+1 < len(tokens); i++ {
+		next := tokens[i+1]
+		if next.Kind != token.Identifier {
+			continue
+		}
+		name := next.Text(src)
+		switch tokens[i].Kind {
+		case token.DoubleColon:
+			if isOneOf(name, middlewareRegistrations) || isOneOf(name, gateRegistrations) && (gateAliased || isGateName(tokens[i-1], src)) {
+				return true
+			}
+		case token.ObjectOperator, token.NullsafeObjectOperator:
+			if isOneOf(name, instanceRegistrations) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func significantTokens(tokens []lexer.Token) []lexer.Token {
+	out := tokens[:0]
+	for _, tok := range tokens {
+		if tok.Kind != token.Whitespace && tok.Kind != token.Comment && tok.Kind != token.DocComment {
+			out = append(out, tok)
+		}
+	}
+	return out
+}
+
+func isGateName(tok lexer.Token, src string) bool {
+	switch tok.Kind {
+	case token.Identifier, token.NameQualified, token.NameFullyQualified:
+		return ast.LastSegment(tok.Text(src)) == "Gate"
+	}
+	return false
 }

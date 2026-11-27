@@ -27,7 +27,7 @@ func setupLaravelAuthAnalyzer(t *testing.T) (*Analyzer, string) {
 		a.index.IndexFile(symbols.PathToURI(filepath.Join(root, "app", "Policies", name)), src)
 	}
 	auth := frameworklaravel.NewAuthorization(root, a.index, func() phpparser.GrammarRange { return phpparser.OnlyGrammar(token.Latest) })
-	auth.ScanWorkspace(composer.GetAutoloadPaths(root))
+	auth.ScanWorkspace(composer.GetAutoloadPaths(root), nil)
 	auth.IndexFile(symbols.PathToURI(filepath.Join(root, "app", "Providers", "AuthServiceProvider.php")), `<?php
 namespace App\Providers;
 

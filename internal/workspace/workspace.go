@@ -314,7 +314,14 @@ func (ws *Bootstrapped) ScanAuthorization() {
 	if ws == nil || ws.Authorization == nil {
 		return
 	}
-	ws.Authorization.ScanWorkspace(ws.autoload())
+	var files []string
+	ws.WalkSources(ws.RootPath, func(path string, _ fs.FileInfo) error {
+		if IsPHPSource(path) && !IsBlade(path) {
+			files = append(files, path)
+		}
+		return nil
+	})
+	ws.Authorization.ScanWorkspace(ws.autoload(), files)
 }
 
 func (ws *Bootstrapped) ScanRoutes() error {

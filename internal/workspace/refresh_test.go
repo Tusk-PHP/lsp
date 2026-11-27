@@ -372,11 +372,15 @@ func TestRefreshKeepsLaravelsAbilitiesAndMiddlewareCurrent(t *testing.T) {
 		"composer.json":                         `{"name": "app/app", "autoload": {"psr-4": {"App\\": "app/"}}}`,
 		"composer.lock":                         `{"packages": []}`,
 		"app/Providers/AuthServiceProvider.php": strings.Replace(provider, "%s", "view-dashboard", 1),
+		"tests/Feature/AuthTest.php":            "<?php\nuse Illuminate\\Support\\Facades\\Gate;\nGate::define('from-a-test', fn () => true);\n",
 		"vendor/laravel/framework/src/Illuminate/Foundation/Configuration/Middleware.php": strings.Replace(middleware, "%s", "auth", 1),
 	})
 	ws := New(Options{RootPath: root, Framework: "laravel", Config: config.DefaultConfig(), Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
 	ws.IndexWorkspace()
 	ws.ScanAuthorization()
+	if !slices.Contains(ws.Authorization.AbilityNames(), "from-a-test") {
+		t.Errorf("a test file's Gate::define is read at startup: %v", ws.Authorization.AbilityNames())
+	}
 	if !slices.Contains(ws.Authorization.AbilityNames(), "view-dashboard") || !slices.Contains(ws.Authorization.MiddlewareNames(), "auth") {
 		t.Fatalf("the provider and Laravel's defaults are read at startup: %v %v", ws.Authorization.AbilityNames(), ws.Authorization.MiddlewareNames())
 	}
@@ -387,7 +391,7 @@ func TestRefreshKeepsLaravelsAbilitiesAndMiddlewareCurrent(t *testing.T) {
 		"vendor/laravel/framework/src/Illuminate/Foundation/Configuration/Middleware.php": strings.Replace(middleware, "%s", "auth.basic", 1),
 	})
 	refreshPaths(t, ws, root, "app/Providers/AuthServiceProvider.php", "app/Policies/PostPolicy.php")
-	if names := ws.Authorization.AbilityNames(); !slices.Equal(names, []string{"manage-team", "publish"}) {
+	if names := ws.Authorization.AbilityNames(); !slices.Equal(names, []string{"from-a-test", "manage-team", "publish"}) {
 		t.Errorf("an edited provider and a created policy change the abilities: %v", names)
 	}
 	if names := ws.Authorization.MiddlewareNames(); !slices.Equal(names, []string{"auth"}) {
