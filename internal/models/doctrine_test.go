@@ -454,3 +454,32 @@ class Tag
 		t.Errorf("the property is listed once: %d", members)
 	}
 }
+
+func TestDoctrineStringClassNames(t *testing.T) {
+	idx, rootPath := setupDoctrineIndex(t, `<?php
+namespace App\Entity;
+
+use Doctrine\ORM\Mapping as ORM;
+
+/** @ORM\Entity(repositoryClass="App\Repository\UserRepository") */
+class User
+{
+    #[ORM\ManyToOne(targetEntity: 'Team')]
+    private $team;
+}
+`)
+	idx.IndexFile("file:///UserRepository.php", `<?php
+namespace App\Repository;
+
+class UserRepository {}
+`)
+
+	AnalyzeDoctrineEntities(idx, rootPath)
+
+	if got := idx.Lookup(`App\Repository\UserRepository::find`); got == nil || got.ReturnType != `?App\Entity\User` {
+		t.Errorf("the repository named by a string gets the entity's finders: %+v", got)
+	}
+	if got := idx.Lookup(`App\Entity\User::$team`); got == nil || got.Type != `?App\Entity\Team` {
+		t.Errorf("a bare target entity is read in the entity's namespace: %+v", got)
+	}
+}

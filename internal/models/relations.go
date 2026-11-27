@@ -7,6 +7,7 @@ import (
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -78,7 +79,7 @@ func laravelRelations(index *symbols.Index) []Relation {
 	var relations []Relation
 
 	for _, model := range models {
-		rels := extractEloquentRelations(model)
+		rels := extractEloquentRelations(model, index.GrammarOf(model.URI))
 		relations = append(relations, rels...)
 	}
 
@@ -88,7 +89,7 @@ func laravelRelations(index *symbols.Index) []Relation {
 
 // extractEloquentRelations mirrors the relation-detection portion of analyzeModel,
 // but collects Relation structs instead of injecting virtual members.
-func extractEloquentRelations(model *symbols.Symbol) (result []Relation) {
+func extractEloquentRelations(model *symbols.Symbol, grammars phpparser.GrammarRange) (result []Relation) {
 	defer func() {
 		// Panic-safe: skip the model on any unexpected error.
 		if r := recover(); r != nil {
@@ -104,7 +105,7 @@ func extractEloquentRelations(model *symbols.Symbol) (result []Relation) {
 	source := string(content)
 	lines := strings.Split(source, "\n")
 
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, grammars)
 	if file == nil {
 		return nil
 	}
@@ -178,166 +179,64 @@ func extractEloquentRelations(model *symbols.Symbol) (result []Relation) {
 
 // --- Symfony / Doctrine ---
 
-func symfonyEntityClasses(index *symbols.Index) []*symbols.Symbol {
-	uris := index.GetAllFileURIs()
+type indexedEntity struct {
+	symbol *symbols.Symbol
+	doctrineEntity
+}
+
+func symfonyEntities(index *symbols.Index) []indexedEntity {
 	seen := make(map[string]bool)
-	var result []*symbols.Symbol
-
-	for _, uri := range uris {
-		path := symbols.URIToPath(uri)
-		content, err := os.ReadFile(path)
-		if err != nil {
+	var result []indexedEntity
+	for _, uri := range index.GetAllFileURIs() {
+		content, err := os.ReadFile(symbols.URIToPath(uri))
+		if err != nil || !strings.Contains(string(content), doctrineMapping[:len(doctrineMapping)-1]) {
 			continue
 		}
-		source := string(content)
-
-		// Fast pre-check: skip files without any ORM entity marker.
-		if !strings.Contains(source, "ORM\\Entity") {
-			continue
-		}
-
-		file := parser.ParseFile(source)
-		if file == nil {
-			continue
-		}
-
-		for i := range file.Classes {
-			cls := &file.Classes[i]
-			fqn := file.Namespace + "\\" + cls.Name
-			if file.Namespace == "" {
-				fqn = cls.Name
-			}
-
-			if seen[fqn] {
+		for _, entity := range doctrineEntities(parser.ParseFileIn(string(content), index.GrammarOf(uri))) {
+			sym := index.Lookup(entity.fqn)
+			if sym == nil || seen[entity.fqn] {
 				continue
 			}
-
-			classSource := extractClassSource(source, cls)
-			if !isDoctrineEntity(classSource, cls.DocComment) {
-				continue
-			}
-
-			sym := index.Lookup(fqn)
-			if sym == nil {
-				continue
-			}
-
-			seen[fqn] = true
-			result = append(result, sym)
+			seen[entity.fqn] = true
+			result = append(result, indexedEntity{symbol: sym, doctrineEntity: entity})
 		}
 	}
+	sort.Slice(result, func(i, j int) bool { return result[i].symbol.FQN < result[j].symbol.FQN })
+	return result
+}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].FQN < result[j].FQN
-	})
+func symfonyEntityClasses(index *symbols.Index) []*symbols.Symbol {
+	entities := symfonyEntities(index)
+	result := make([]*symbols.Symbol, len(entities))
+	for i, entity := range entities {
+		result[i] = entity.symbol
+	}
 	return result
 }
 
 func symfonyRelations(index *symbols.Index) []Relation {
-	entities := symfonyEntityClasses(index)
 	var relations []Relation
-
-	for _, entity := range entities {
-		rels := extractDoctrineRelations(entity)
-		relations = append(relations, rels...)
+	for _, entity := range symfonyEntities(index) {
+		for _, prop := range entity.class.Properties {
+			relation, ok := entity.relation(prop)
+			if !ok || relation.target == "" {
+				continue
+			}
+			cardinality := "one"
+			if doctrinePluralRelations[relation.kind] {
+				cardinality = "many"
+			}
+			relations = append(relations, Relation{
+				SourceModel:  entity.symbol.FQN,
+				TargetModel:  relation.target,
+				RelationType: relation.kind,
+				Cardinality:  cardinality,
+				MethodName:   strings.TrimPrefix(relation.name, "$"),
+			})
+		}
 	}
-
 	sortRelations(relations)
 	return relations
-}
-
-// extractDoctrineRelations scans property attributes on a Doctrine entity for
-// ORM relation attributes and returns the corresponding Relation edges.
-func extractDoctrineRelations(entity *symbols.Symbol) (result []Relation) {
-	defer func() {
-		if r := recover(); r != nil {
-			result = nil
-		}
-	}()
-
-	path := symbols.URIToPath(entity.URI)
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	source := string(content)
-
-	file := parser.ParseFile(source)
-	if file == nil {
-		return nil
-	}
-
-	// Find the class node for this entity.
-	var classNode *parser.ClassNode
-	for i := range file.Classes {
-		fqn := file.Namespace + "\\" + file.Classes[i].Name
-		if file.Namespace == "" {
-			fqn = file.Classes[i].Name
-		}
-		if fqn == entity.FQN {
-			classNode = &file.Classes[i]
-			break
-		}
-	}
-	if classNode == nil {
-		return nil
-	}
-
-	resolve := func(name string) string {
-		return resolveWithUses(name, file.Namespace, file.Uses)
-	}
-
-	lines := strings.Split(source, "\n")
-
-	// Scan property lines within the class body for ORM relation attributes.
-	for i := classNode.StartLine; i < len(lines); i++ {
-		line := strings.TrimSpace(lines[i])
-		if line == "}" {
-			break
-		}
-
-		// Only look at property declaration lines.
-		m := phpPropertyDeclRe.FindStringSubmatch(line)
-		if m == nil {
-			continue
-		}
-		propName := strings.TrimPrefix(m[2], "$") // strip leading $
-
-		attrBlock := propertyAttributeBlock(lines, i, classNode.StartLine)
-
-		rm := ormRelationRe.FindStringSubmatch(attrBlock)
-		if rm == nil {
-			continue
-		}
-
-		relType := rm[1] // OneToOne | OneToMany | ManyToOne | ManyToMany
-		args := rm[2]
-
-		// Extract targetEntity; skip if missing (polymorphic / unresolvable).
-		te := targetEntityRe.FindStringSubmatch(args)
-		if te == nil {
-			continue
-		}
-		target := resolve(te[1])
-		if target == "" {
-			continue
-		}
-
-		cardinality := "one"
-		if doctrinePluralRelations[relType] {
-			cardinality = "many"
-		}
-
-		result = append(result, Relation{
-			SourceModel:  entity.FQN,
-			TargetModel:  target,
-			RelationType: relType,
-			Cardinality:  cardinality,
-			MethodName:   propName,
-		})
-	}
-
-	return result
 }
 
 // sortRelations sorts a slice of Relation deterministically by

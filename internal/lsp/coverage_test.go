@@ -164,7 +164,7 @@ class Foo {
 		if !ok {
 			continue
 		}
-		if diag["code"] == "syntax-error" && diag["message"] == "expected ')'" {
+		if diag["code"] == "syntax-error" && diag["message"] == "syntax error, unexpected 'return', expected an identifier" {
 			found = true
 			break
 		}
