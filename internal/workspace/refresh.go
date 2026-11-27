@@ -136,8 +136,10 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 			errs = append(errs, err)
 		}
 	}
-	if len(out.Files) > 0 || out.Composer {
-		ws.Container.Analyze()
+	for _, path := range sources {
+		if err := ws.Container.Update(path); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	return out, errors.Join(errs...)
 }
