@@ -39,8 +39,10 @@ make bench-install    # once: install the other servers for comparison
 make bench-self       # benchmark this server only
 make bench            # benchmark against the other servers
 make field-run ROOT=../framework PATHS=src   # diagnostics over a real project, as the server reports them
-make field-baseline   # Laravel, Symfony, WordPress, Magento 2 against testdata/field/*.baseline (NAME=laravel for one)
+make field-baseline   # frameworks and reference apps against testdata/field/*.baseline (NAME=laravel for one)
 make field-baseline-update   # rewrite those baselines after an intended change
+make reference-apps   # fetch the reference apps: Filament demo, Sylius, WooCommerce, Mage-OS
+make bench-reference  # benchmark this server on them against bench/passmarks.json
 
 go test -v -race -run TestHoverMethodChain ./internal/hover/   # one test
 TUSK_PHP_TOKENIZERS='php;docker run --rm -i -v /tmp:/tmp:ro php:7.4-cli php' go test ./internal/php/lexer/   # lexer against each PHP's token_get_all
@@ -228,7 +230,8 @@ cross-file answer on a 9,700-file Laravel app. Every change must keep it.
   reports, not only at the tests. `tusk-php check` (or `make field-run`) reports
   what the server would: run it before and after, or keep a `--write-baseline`
   from `main` and check against it with `--baseline`. CI holds Laravel,
-  Symfony, WordPress and Magento 2 at pinned commits to the baselines in
+  Symfony, WordPress and Magento 2, and a reference app for each (the Filament
+  demo, Sylius, WooCommerce, Mage-OS), at pinned versions to the baselines in
   `testdata/field/`: when a change adds or removes findings there, look at
   each one, then run `make field-baseline-update` and commit the result.
 - The parser must stay fault-tolerant: bail-out conditions, progress guards,

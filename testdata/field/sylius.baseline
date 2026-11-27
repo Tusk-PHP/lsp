@@ -1,0 +1,94 @@
+vendor/sylius/sylius/src/Sylius/Abstraction/StateMachine/src/WinzouStateMachineAdapter.php	unknown-class	Unknown class 'SMException'
+vendor/sylius/sylius/src/Sylius/Abstraction/StateMachine/src/WinzouStateMachineAdapter.php	unknown-class	Unknown class 'SMException'
+vendor/sylius/sylius/src/Sylius/Abstraction/StateMachine/src/WinzouStateMachineAdapter.php	unknown-class	Unknown class 'SMException'
+vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Admin/ManagingCatalogPromotionsContext.php	undefined-variable	Undefined variable $configuration
+vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Admin/ManagingCatalogPromotionsContext.php	undefined-variable	Undefined variable $type
+vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Admin/ManagingCatalogPromotionsContext.php	unknown-member	Unknown member 'changeFirstScopeConfigurationTo' on 'ManagingCatalogPromotionsContext'
+vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Admin/ManagingProductsContext.php	argument-count-mismatch	Too few arguments to getTranslationValue(): 2 passed, at least 3 required
+vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Admin/ManagingPromotionCouponsContext.php	unused-private-property	Private property 'ManagingPromotionCouponsContext::$iriConverter' is never used
+vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Admin/ManagingPromotionCouponsContext.php	unused-private-property	Private property 'ManagingPromotionCouponsContext::$requestFactory' is never used
+vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Admin/ResettingPasswordContext.php	unused-import	Unused import 'Symfony\Component\HttpFoundation\Request'
+vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Shop/CheckoutContext.php	unused-private-method	Private method 'CheckoutContext::selectShippingMethod' is never used
+vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Shop/CheckoutContext.php	unused-variable	Variable $response is assigned but never read
+vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Shop/CustomerContext.php	unused-variable	Variable $response is assigned but never read
+vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Shop/LoginContext.php	unused-import	Unused import 'Symfony\Component\HttpFoundation\Request'
+vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Shop/PaymentRequestContext.php	unused-import	Unused import 'Symfony\Component\HttpFoundation\Request'
+vendor/sylius/sylius/src/Sylius/Behat/Context/Cli/InstallerContext.php	unknown-member	Unknown member 'add' on 'Application'
+vendor/sylius/sylius/src/Sylius/Behat/Context/Setup/ProductContext.php	unused-private-method	Private method 'ProductContext::removeProductTranslation' is never used
+vendor/sylius/sylius/src/Sylius/Behat/Context/Setup/PromotionContext.php	unused-variable	Variable $rule is assigned but never read
+vendor/sylius/sylius/src/Sylius/Behat/Context/Transform/ExchangeRateContext.php	unused-private-property	Private property 'ExchangeRateContext::$currencyRepository' is never used
+vendor/sylius/sylius/src/Sylius/Behat/Context/Ui/Admin/ManagingShippingMethodsContext.php	unused-variable	Variable $channel is assigned but never read
+vendor/sylius/sylius/src/Sylius/Behat/Context/Ui/Shop/Checkout/CheckoutThankYouContext.php	unused-private-property	Private property 'CheckoutThankYouContext::$orderDetails' is never used
+vendor/sylius/sylius/src/Sylius/Behat/Context/Ui/Shop/Checkout/RegistrationAfterCheckoutContext.php	unused-private-property	Private property 'RegistrationAfterCheckoutContext::$sharedStorage' is never used
+vendor/sylius/sylius/src/Sylius/Behat/Page/Admin/Product/UpdateConfigurableProductPage.php	unknown-member	Unknown member 'changeTab' on 'UpdateConfigurableProductPage'
+vendor/sylius/sylius/src/Sylius/Behat/Service/Clock.php	unknown-member	Unknown member 'timezone' on 'Clock'
+vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Notification/HubNotificationProvider.php	unused-private-property	Private property 'HubNotificationProvider::$clock' is never used
+vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/Serializer/Denormalizer/ChannelPriceHistoryConfigDenormalizer.php	unused-private-property	Private property 'ChannelPriceHistoryConfigDenormalizer::$channelPriceHistoryConfigFactory' is never used
+vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/Serializer/Denormalizer/ProductAttributeValueDenormalizer.php	unused-import	Unused import 'Sylius\Component\Attribute\AttributeType\DatetimeAttributeType'
+vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/Serializer/Normalizer/ProductAttributeValueNormalizer.php	unused-import	Unused import 'Sylius\Component\Attribute\AttributeType\DatetimeAttributeType'
+vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Doctrine/ORM/Promotion/Modifier/AtomicOrderPromotionsUsageModifier.php	unused-private-property	Private property 'AtomicOrderPromotionsUsageModifier::$decoratedModifier' is never used
+vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Migrations/Version20251126120000.php	unknown-member	Unknown member 'getSchemaManager' on 'Connection'
+vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Migrations/Version20251126120001.php	unknown-member	Unknown member 'getSchemaManager' on 'Connection'
+vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/OAuth/UserProvider.php	unknown-class	Unknown class 'AccountConnectorInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/OAuth/UserProvider.php	unknown-class	Unknown class 'OAuthAwareUserProviderInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Resources/config/services/order_pay.php	unused-variable	Variable $services is assigned but never read
+vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Resources/config/services/price_history.php	unused-variable	Variable $services is assigned but never read
+vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Resources/config/test_services.php	unused-variable	Variable $parameters is assigned but never read
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/AuthorizePaymentAction.php	unknown-class	Unknown class 'ArrayObject'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/AuthorizePaymentAction.php	unknown-class	Unknown class 'Authorize'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/AuthorizePaymentAction.php	unknown-class	Unknown class 'Convert'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/AuthorizePaymentAction.php	unknown-class	Unknown class 'Convert'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/AuthorizePaymentAction.php	unknown-class	Unknown class 'GatewayAwareAction'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/AuthorizePaymentAction.php	unknown-class	Unknown class 'PayumPayment'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/AuthorizePaymentAction.php	unknown-class	Unknown class 'RequestNotSupportedException'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/CapturePaymentAction.php	unknown-class	Unknown class 'ArrayObject'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/CapturePaymentAction.php	unknown-class	Unknown class 'Capture'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/CapturePaymentAction.php	unknown-class	Unknown class 'Convert'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/CapturePaymentAction.php	unknown-class	Unknown class 'Convert'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/CapturePaymentAction.php	unknown-class	Unknown class 'GatewayAwareAction'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/CapturePaymentAction.php	unknown-class	Unknown class 'PayumPayment'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/CapturePaymentAction.php	unknown-class	Unknown class 'RequestNotSupportedException'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/ExecuteSameRequestWithPaymentDetailsAction.php	unknown-class	Unknown class 'ArrayObject'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/ExecuteSameRequestWithPaymentDetailsAction.php	unknown-class	Unknown class 'GatewayAwareAction'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/ExecuteSameRequestWithPaymentDetailsAction.php	unknown-class	Unknown class 'Generic'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/ExecuteSameRequestWithPaymentDetailsAction.php	unknown-class	Unknown class 'RequestNotSupportedException'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/ConvertPaymentAction.php	unknown-class	Unknown class 'ActionInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/ConvertPaymentAction.php	unknown-class	Unknown class 'Constants'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/ConvertPaymentAction.php	unknown-class	Unknown class 'Convert'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/ConvertPaymentAction.php	unknown-class	Unknown class 'PaymentInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/ConvertPaymentAction.php	unknown-class	Unknown class 'RequestNotSupportedException'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/ResolveNextRouteAction.php	unknown-class	Unknown class 'ActionInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/StatusAction.php	unknown-class	Unknown class 'ActionInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/StatusAction.php	unknown-class	Unknown class 'ArrayObject'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/StatusAction.php	unknown-class	Unknown class 'Constants'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/StatusAction.php	unknown-class	Unknown class 'Constants'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/StatusAction.php	unknown-class	Unknown class 'Constants'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/StatusAction.php	unknown-class	Unknown class 'Constants'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/StatusAction.php	unknown-class	Unknown class 'Constants'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/StatusAction.php	unknown-class	Unknown class 'Constants'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/StatusAction.php	unknown-class	Unknown class 'Constants'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/StatusAction.php	unknown-class	Unknown class 'Constants'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/StatusAction.php	unknown-class	Unknown class 'Constants'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/StatusAction.php	unknown-class	Unknown class 'GetStatusInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/Offline/StatusAction.php	unknown-class	Unknown class 'RequestNotSupportedException'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Action/ResolveNextRouteAction.php	unknown-class	Unknown class 'ActionInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Checker/PayumGatewayConfigEncryptionChecker.php	unknown-class	Unknown class 'CryptedInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Client/PaypalHeaderInjectingClient.php	unknown-class	Unknown class 'HttpClientInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Extension/UpdatePaymentStateExtension.php	unknown-class	Unknown class 'ExtensionInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Extension/UpdatePaymentStateExtension.php	unknown-class	Unknown class 'Generic'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Extension/UpdatePaymentStateExtension.php	unknown-class	Unknown class 'GetStatusInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Extension/UpdatePaymentStateExtension.php	unknown-class	Unknown class 'Notify'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Factory/AuthorizeFactory.php	unknown-class	Unknown class 'Authorize'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Factory/CaptureFactory.php	unknown-class	Unknown class 'Capture'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/HttpClient/HttpClient.php	unknown-class	Unknown class 'HttpClientInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Model/PaymentSecurityToken.php	unknown-class	Unknown class 'Random'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/PaymentRequest/Action/SyliusGetHttpRequestAction.php	unknown-class	Unknown class 'ActionInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/PaymentRequest/Action/SyliusGetHttpRequestAction.php	unknown-class	Unknown class 'GetHttpRequest'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/PaymentRequest/Action/SyliusGetHttpRequestAction.php	unknown-class	Unknown class 'RequestNotSupportedException'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/PaymentRequest/Action/SyliusRenderTemplateAction.php	unknown-class	Unknown class 'ActionInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/PaymentRequest/Action/SyliusRenderTemplateAction.php	unknown-class	Unknown class 'RenderTemplate'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/PaymentRequest/Action/SyliusRenderTemplateAction.php	unknown-class	Unknown class 'RequestNotSupportedException'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/PaymentRequest/Processor/RequestProcessor.php	unknown-class	Unknown class 'TokenAggregateInterface'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Request/GetStatus.php	unknown-class	Unknown class 'BaseGetStatus'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Request/ResolveNextRoute.php	unknown-class	Unknown class 'Generic'
+vendor/sylius/sylius/src/Sylius/Bundle/PayumBundle/Storage/DoctrineStorage.php	unknown-class	Unknown class 'BaseDoctrineStorage'

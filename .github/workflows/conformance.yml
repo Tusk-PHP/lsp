@@ -60,7 +60,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [laravel, symfony, wordpress, magento]
+        name: [laravel, symfony, wordpress, magento, filament, sylius, woocommerce, mageos]
 
     steps:
       - name: Checkout repository
@@ -81,14 +81,59 @@ jobs:
       - name: Cache checkout and dependencies
         uses: actions/cache@v4
         with:
-          path: testdata/field/_repos/${{ matrix.name }}
-          key: field-${{ matrix.name }}-${{ hashFiles('testdata/field/manifest.json', 'testdata/field/locks/**') }}
+          # Framework sources live in _repos/; reference apps in testdata/<name>.
+          path: |
+            testdata/field/_repos/${{ matrix.name }}
+            testdata/${{ matrix.name }}
+          key: field-${{ matrix.name }}-${{ hashFiles('testdata/field/manifest.json', 'testdata/field/locks/**', format('scripts/fetch-{0}.sh', matrix.name), 'scripts/lib/reference-app.sh') }}
 
       - name: Build
         run: make build
 
       - name: Check against the baseline
         run: bash scripts/field-baseline.sh ${{ matrix.name }}
+
+  # ---------------------------------------------------------------------------
+  # Reference apps: one real project per framework, benchmarked for this server
+  # and held to the pass marks in bench/passmarks.json (correct answers,
+  # readiness, peak memory, p95 latency).
+  # ---------------------------------------------------------------------------
+  reference-bench:
+    name: Reference app benchmark (${{ matrix.name }})
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [filament, sylius, woocommerce, mageos]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          coverage: none
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Cache the reference app
+        uses: actions/cache@v4
+        with:
+          path: testdata/${{ matrix.name }}
+          key: field-${{ matrix.name }}-${{ hashFiles('testdata/field/manifest.json', 'testdata/field/locks/**', format('scripts/fetch-{0}.sh', matrix.name), 'scripts/lib/reference-app.sh') }}
+
+      - name: Fetch the reference app
+        run: bash scripts/fetch-${{ matrix.name }}.sh
+
+      - name: Benchmark against the pass marks
+        run: make bench-reference WORKSPACES=${{ matrix.name }}
 
   # ---------------------------------------------------------------------------
   # Nightly / manual job: full corpus + fuzz targets

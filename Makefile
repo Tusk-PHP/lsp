@@ -1,4 +1,4 @@
-.PHONY: build install test clean dev cross-build wasm conformance conformance-pr bench bench-install bench-self field-run field-baseline field-baseline-update filament-workspace
+.PHONY: build install test clean dev cross-build wasm conformance conformance-pr bench bench-install bench-self field-run field-baseline field-baseline-update filament-workspace reference-apps bench-reference
 
 VERSION ?= 0.17.0
 BINARY  := tusk-php
@@ -48,7 +48,8 @@ field-run: build
 	./build/$(BINARY) check --root $(ROOT) $(if $(BASELINE),--baseline $(BASELINE)) $(PATHS)
 
 # Diagnostics over Laravel, Symfony, WordPress and Magento 2 at pinned commits,
-# compared with testdata/field/*.baseline. NAME=laravel checks one.
+# and over the reference apps, compared with testdata/field/*.baseline.
+# NAME=laravel checks one.
 field-baseline: build
 	bash scripts/field-baseline.sh $(NAME)
 
@@ -58,3 +59,16 @@ field-baseline-update: build
 # Fetch the Filament demo app into testdata/filament (pinned; reused when current).
 filament-workspace:
 	bash scripts/fetch-filament.sh
+
+# Fetch the reference apps (one per framework, pinned) into testdata/: the
+# Filament demo, Sylius, WooCommerce on WordPress and Mage-OS.
+reference-apps:
+	bash scripts/fetch-filament.sh
+	bash scripts/fetch-sylius.sh
+	bash scripts/fetch-woocommerce.sh
+	bash scripts/fetch-mageos.sh
+
+# Benchmark this server on the reference apps and hold it to bench/passmarks.json.
+# WORKSPACES=sylius runs one.
+bench-reference: build
+	go run ./bench/lspbench -servers tusk-php -workspaces $(or $(WORKSPACES),filament,sylius,woocommerce,mageos) -passmarks bench/passmarks.json
