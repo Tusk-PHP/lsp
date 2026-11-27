@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
-	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/lexer"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -22,29 +21,7 @@ const urlTrailingPunctuation = ".,;:!?"
 
 var includeKeywords = map[token.Kind]bool{token.Require: true, token.RequireOnce: true, token.Include: true, token.IncludeOnce: true}
 
-type linkTokens struct {
-	src   string
-	lines ast.Lines
-	all   []lexer.Token
-}
-
-func (t linkTokens) kind(i int) token.Kind {
-	if i < 0 || i >= len(t.all) {
-		return token.Invalid
-	}
-	return t.all[i].Kind
-}
-
-func (t linkTokens) text(i int) string {
-	return t.all[i].Text(t.src)
-}
-
-func (t linkTokens) position(offset uint32) protocol.Position {
-	line, col := t.lines.Position(offset)
-	return protocol.Position{Line: line, Character: col}
-}
-
-func (t linkTokens) globalName(i int) (string, bool) {
+func (t codeTokens) globalName(i int) (string, bool) {
 	switch t.kind(i) {
 	case token.Identifier:
 		return t.text(i), true
@@ -58,7 +35,7 @@ func (t linkTokens) globalName(i int) (string, bool) {
 func (a *Analyzer) DocumentLinks(uri, source, root string, exists func(path string) bool) []protocol.DocumentLink {
 	links := make([]protocol.DocumentLink, 0)
 	all := lexer.Lex(source, token.Latest)
-	toks := linkTokens{src: source, lines: ast.NewLines(source), all: lexer.WholeLiterals(lexer.Significant(all))}
+	toks := newCodeTokens(source, all)
 	for _, tok := range all {
 		if (tok.Kind == token.Comment || tok.Kind == token.DocComment) && strings.Contains(tok.Text(source), "://") {
 			links = append(links, commentURLLinks(toks, tok)...)
@@ -84,7 +61,7 @@ func (a *Analyzer) DocumentLinks(uri, source, root string, exists func(path stri
 	return links
 }
 
-func commentURLLinks(toks linkTokens, tok lexer.Token) []protocol.DocumentLink {
+func commentURLLinks(toks codeTokens, tok lexer.Token) []protocol.DocumentLink {
 	text := tok.Text(toks.src)
 	if strings.HasPrefix(text, "/*") {
 		text = strings.TrimSuffix(text, "*/")
@@ -112,7 +89,7 @@ func trimURL(url string) string {
 	}
 }
 
-func includeLink(toks linkTokens, from int, file string, exists func(string) bool) (protocol.DocumentLink, bool) {
+func includeLink(toks codeTokens, from int, file string, exists func(string) bool) (protocol.DocumentLink, bool) {
 	e := pathExpr{toks: toks, i: from, file: file}
 	path, ok := e.concat()
 	path = filepath.Clean(path)
@@ -122,7 +99,7 @@ func includeLink(toks linkTokens, from int, file string, exists func(string) boo
 	return fileLink(toks, from, e.i-1, path), true
 }
 
-func pathHelperLink(toks linkTokens, at int, root string, exists func(string) bool) (protocol.DocumentLink, bool) {
+func pathHelperLink(toks codeTokens, at int, root string, exists func(string) bool) (protocol.DocumentLink, bool) {
 	name, ok := toks.globalName(at)
 	if !ok || isMemberOrDeclaration(toks.kind(at-1)) || toks.kind(at+1) != token.LeftParen {
 		return protocol.DocumentLink{}, false
@@ -148,14 +125,14 @@ func isMemberOrDeclaration(kind token.Kind) bool {
 	return kind == token.ObjectOperator || kind == token.NullsafeObjectOperator || kind == token.DoubleColon || kind == token.Function
 }
 
-func existingFileLink(toks linkTokens, first, last int, path string, exists func(string) bool) (protocol.DocumentLink, bool) {
+func existingFileLink(toks codeTokens, first, last int, path string, exists func(string) bool) (protocol.DocumentLink, bool) {
 	if !exists(path) {
 		return protocol.DocumentLink{}, false
 	}
 	return fileLink(toks, first, last, path), true
 }
 
-func fileLink(toks linkTokens, first, last int, path string) protocol.DocumentLink {
+func fileLink(toks codeTokens, first, last int, path string) protocol.DocumentLink {
 	return protocol.DocumentLink{
 		Range:  protocol.Range{Start: toks.position(toks.all[first].Start), End: toks.position(toks.all[last].End)},
 		Target: symbols.PathToURI(path),
@@ -163,7 +140,7 @@ func fileLink(toks linkTokens, first, last int, path string) protocol.DocumentLi
 }
 
 type pathExpr struct {
-	toks linkTokens
+	toks codeTokens
 	i    int
 	file string
 }
