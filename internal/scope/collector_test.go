@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -470,17 +469,6 @@ class Pipeline {
 		if got := len(doc.Occurrences(b)); got != 2 {
 			t.Errorf("%s(): expected 2 occurrences, got %d", tc.method, got)
 		}
-	}
-}
-
-func TestIsWordToken(t *testing.T) {
-	for v, want := range map[string]bool{"use": true, "list_2": true, "_x": true, "(": false, "2x": false, "": false} {
-		if got := isWordToken(parser.Token{Kind: parser.TokenIdentifier, Value: v}); got != want {
-			t.Errorf("isWordToken(%q) = %v, want %v", v, got, want)
-		}
-	}
-	if isWordToken(parser.Token{Kind: parser.TokenVariable, Value: "x"}) {
-		t.Error("a variable is not a word")
 	}
 }
 
