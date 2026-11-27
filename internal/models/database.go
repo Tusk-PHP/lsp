@@ -13,6 +13,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -292,28 +293,55 @@ func injectDoctrineSchemaSource(index *symbols.Index, schema *Schema, content st
 
 func injectColumnsAsProperties(index *symbols.Index, classSym *symbols.Symbol, cols []SchemaColumn) {
 	for _, col := range cols {
-		propName := "$" + col.Name
-		phpType := mapSQLTypeToPhp(col.DataType, col.ColumnType)
-		if col.IsNullable && phpType != "mixed" {
-			phpType = "?" + phpType
-		}
+		injectColumn(index, classSym, col.Name, mapSQLTypeToPhp(col.DataType, col.ColumnType), col.IsNullable,
+			fmt.Sprintf("(database column) %s — %s", col.DataType, col.ColumnType))
+	}
+}
 
-		existing := index.Lookup(classSym.FQN + "::" + propName)
-		if existing != nil {
-			// Don't overwrite — other sources have priority
-			continue
+// injectColumn adds the column name to class as a virtual property, unless
+// class already has that property. A property an attribute cast gave it
+// keeps the cast's type, made nullable when the column is: Eloquent casts
+// null to null.
+func injectColumn(index *symbols.Index, class *symbols.Symbol, name, phpType string, nullable bool, doc string) {
+	fqn := class.FQN + "::$" + name
+	if existing := index.Lookup(fqn); existing != nil {
+		if nullable && isCastProperty(existing) {
+			index.SetPropertyType(fqn, nullableType(existing.Type))
 		}
+		return
+	}
+	index.AddVirtualMember(class.FQN, &symbols.Symbol{
+		Name:       "$" + name,
+		FQN:        fqn,
+		Kind:       symbols.KindProperty,
+		URI:        class.URI,
+		Visibility: "public",
+		Type:       ifNullable(phpType, nullable),
+		IsVirtual:  true,
+		DocComment: doc,
+	})
+}
 
-		index.AddVirtualMember(classSym.FQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        classSym.FQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        classSym.URI,
-			Visibility: "public",
-			Type:       phpType,
-			IsVirtual:  true,
-			DocComment: fmt.Sprintf("(database column) %s — %s", col.DataType, col.ColumnType),
-		})
+func ifNullable(phpType string, nullable bool) string {
+	if !nullable {
+		return phpType
+	}
+	return nullableType(phpType)
+}
+
+// nullableType is phpType or null.
+func nullableType(phpType string) string {
+	rt := resolve.ParseGenericType(phpType)
+	if rt.IsEmpty() || rt.Nullable || rt.FQN == "mixed" || rt.FQN == "null" {
+		return phpType
+	}
+	switch {
+	case len(rt.Union) > 0:
+		return phpType + "|null"
+	case len(rt.Intersection) > 0:
+		return "(" + phpType + ")|null"
+	default:
+		return "?" + phpType
 	}
 }
 

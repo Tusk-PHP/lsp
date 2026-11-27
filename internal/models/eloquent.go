@@ -165,7 +165,14 @@ func (m modelSource) classArgument(call *ast.MethodCall, position int) string {
 		return ""
 	}
 	fetch, ok := call.Args.Args[position].Value.(*ast.ClassConstFetch)
-	if !ok || !strings.EqualFold(m.text(fetch.Name), "class") {
+	if !ok {
+		return ""
+	}
+	return m.classConst(fetch)
+}
+
+func (m modelSource) classConst(fetch *ast.ClassConstFetch) string {
+	if !strings.EqualFold(m.text(fetch.Name), "class") {
 		return ""
 	}
 	class, ok := fetch.Class.(*ast.ConstFetch)
@@ -228,8 +235,8 @@ var relationCallClasses = map[string]string{
 
 var throughRelations = map[string]bool{"HasOneThrough": true, "HasManyThrough": true}
 
-// analyzeModelSource injects the relations and accessors model declares in
-// source, the text of the file that declares it.
+// analyzeModelSource injects the relations, accessors and attribute casts
+// model declares in source, the text of the file that declares it.
 func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source modelSource) {
 	classNode, decls := source.class(model.FQN)
 	if classNode == nil {
@@ -288,6 +295,7 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source mode
 			})
 		}
 	}
+	injectCasts(index, model, source, source.classes[model.FQN], decls)
 }
 
 func hasDocReturn(method parser.MethodNode) bool {
