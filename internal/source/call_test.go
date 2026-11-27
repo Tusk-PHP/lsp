@@ -95,7 +95,7 @@ func TestCallAtFindsTheCalleeAndArgumentFromTokens(t *testing.T) {
 			if !ok {
 				return
 			}
-			if call.Name != tc.callee || call.Argument != tc.argument || call.Function != tc.function {
+			if call.Name != tc.callee || call.Argument != tc.argument || (call.Callee == CalleeFunction) != tc.function {
 				t.Errorf("callee %q, argument %d; want %q, %d", call.Name, call.Argument, tc.callee, tc.argument)
 			}
 		})
@@ -168,14 +168,14 @@ func TestCallAtFromADeclarationLexesOnlyFromThere(t *testing.T) {
 			if !ok {
 				t.Fatal("no call")
 			}
-			if call.Name != tc.callee || call.Argument != tc.argument || call.Function != tc.function {
+			if call.Name != tc.callee || call.Argument != tc.argument || (call.Callee == CalleeFunction) != tc.function {
 				t.Errorf("got %+v, want %q argument %d function %v", call, tc.callee, tc.argument, tc.function)
 			}
 			whole, _, _ := callBefore(src[:offset], 0)
 			if tc.unsure {
-				whole.Function = false
+				whole.Callee = CalleeName
 			}
-			if whole.Name != call.Name || whole.Offset != call.Offset || whole.Argument != call.Argument || whole.Function != call.Function {
+			if whole.Name != call.Name || whole.Offset != call.Offset || whole.Argument != call.Argument || whole.Callee != call.Callee {
 				t.Errorf("lexing the whole file gives %+v, from the declaration %+v", whole, call)
 			}
 		})
@@ -217,7 +217,7 @@ func TestCallAtReadsTheNamespaceOfTheCall(t *testing.T) {
 			offset := strings.Index(tc.source, "1, ") + len("1, ")
 			pos := protocol.Position{Line: strings.Count(tc.source[:offset], "\n"), Character: offset - strings.LastIndex(tc.source[:offset], "\n") - 1}
 			call, ok := CallAt(idx, uri, tc.source, pos)
-			if !ok || call.Name != "g" || call.Argument != 1 || !call.Function {
+			if !ok || call.Name != "g" || call.Argument != 1 || call.Callee != CalleeFunction {
 				t.Fatalf("got %+v, want g's second argument", call)
 			}
 			if call.Namespace.Name != "A" || len(call.Namespace.Uses) != 1 || call.Namespace.Uses[0].Alias != "g" {
@@ -225,6 +225,55 @@ func TestCallAtReadsTheNamespaceOfTheCall(t *testing.T) {
 			}
 			if want := (protocol.Position{Line: pos.Line, Character: pos.Character - len("g(1, ")}); call.Position != want {
 				t.Errorf("callee at %v, want %v", call.Position, want)
+			}
+		})
+	}
+}
+
+func TestCallAtReadsConstructionsAndNamedArguments(t *testing.T) {
+	cases := []struct {
+		src      string
+		ok       bool
+		callee   string
+		kind     Callee
+		argument int
+		named    string
+	}{
+		{"new Room(|", true, "Room", CalleeName, 0, ""},
+		{"new \\App\\Room($a, |", true, `\App\Room`, CalleeName, 1, ""},
+		{"new static(|", true, "static", CalleeName, 0, ""},
+		{"new self(1, |", true, "self", CalleeName, 1, ""},
+		{"new parent(|", true, "parent", CalleeName, 0, ""},
+		{"new class(1, |", true, "class", CalleeAnonymousClass, 1, ""},
+		{"new readonly class(|", true, "class", CalleeAnonymousClass, 0, ""},
+		{"#[ORM\\Table(name: 'x', |", true, `ORM\Table`, CalleeName, 1, ""},
+		{"#[ORM\\Table(schema: |", true, `ORM\Table`, CalleeName, 0, "schema"},
+		{"new Room(size: [1, |", true, "Room", CalleeName, 0, "size"},
+		{"area(1, open: f(2), size: |", true, "area", CalleeFunction, 2, "size"},
+		{"area(1, /* x */ class : |", true, "area", CalleeFunction, 1, "class"},
+		{"area($a ? b : |", true, "area", CalleeFunction, 0, ""},
+		{"area(A::B, |", true, "area", CalleeFunction, 1, ""},
+		{"area(size|", true, "area", CalleeFunction, 0, ""},
+		{"static(|", false, "", CalleeName, 0, ""},
+		{"$x = static fn() => static(|", false, "", CalleeName, 0, ""},
+		{"class(|", false, "", CalleeName, 0, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.src, func(t *testing.T) {
+			src := "<?php\n" + tc.src + "\n"
+			offset := strings.Index(src, "|")
+			src = src[:offset] + src[offset+1:]
+			pos := protocol.Position{Line: strings.Count(src[:offset], "\n"), Character: offset - strings.LastIndex(src[:offset], "\n") - 1}
+			call, ok := CallAt(symbols.NewIndex(), "file:///a.php", src, pos)
+			if ok != tc.ok {
+				t.Fatalf("ok = %v, want %v (%+v)", ok, tc.ok, call)
+			}
+			if !ok {
+				return
+			}
+			if call.Name != tc.callee || call.Callee != tc.kind || call.Argument != tc.argument || call.Named != tc.named {
+				t.Errorf("got %q kind %d argument %d named %q; want %q kind %d argument %d named %q",
+					call.Name, call.Callee, call.Argument, call.Named, tc.callee, tc.kind, tc.argument, tc.named)
 			}
 		})
 	}

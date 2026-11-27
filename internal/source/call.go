@@ -14,9 +14,25 @@ type Call struct {
 	Offset    uint32
 	Position  protocol.Position
 	Argument  int
-	Function  bool
+	Named     string
+	Callee    Callee
 	Namespace Namespace
 }
+
+// Callee is what the name before a call's parenthesis stands for, as far as
+// the tokens before the cursor tell.
+type Callee uint8
+
+const (
+	// CalleeName is a name the cursor context resolves: a method, a class
+	// constructed with `new` or an attribute, or a function the tokens can't
+	// be sure of.
+	CalleeName Callee = iota
+	// CalleeFunction is a name called as a function.
+	CalleeFunction
+	// CalleeAnonymousClass is the `class` keyword of `new class(...)`.
+	CalleeAnonymousClass
+)
 
 type callSearch int
 
@@ -40,7 +56,7 @@ func CallAt(idx *symbols.Index, uri, src string, pos protocol.Position) (Call, b
 		Line:      pos.Line - strings.Count(src[call.Offset:end], "\n"),
 		Character: int(call.Offset) - strings.LastIndexByte(src[:call.Offset], '\n') - 1,
 	}
-	if call.Function {
+	if call.Callee == CalleeFunction {
 		call.Namespace = r.namespaces(idx, uri, src, call.Offset).At(call.Offset)
 	}
 	return call, true
@@ -83,7 +99,7 @@ type callReader struct {
 
 func (r *callReader) call() (Call, callSearch) {
 	r.lex()
-	depth, argument := 0, 0
+	depth, argument, delimiter := 0, 0, -1
 	for k := len(r.tokens) - 1; k >= 0; k-- {
 		switch r.tokens[k].Kind {
 		case token.RightParen, token.RightBracket, token.RightBrace:
@@ -93,7 +109,7 @@ func (r *callReader) call() (Call, callSearch) {
 				depth--
 				continue
 			}
-			argument = 0
+			argument, delimiter = 0, -1
 		case token.LeftBrace, token.CurlyOpen, token.DollarOpenCurlyBraces:
 			if depth == 0 {
 				return Call{}, callNone
@@ -104,11 +120,18 @@ func (r *callReader) call() (Call, callSearch) {
 				depth--
 				continue
 			}
-			return r.callee(r.prev(k), argument)
-		case token.Comma:
-			if depth == 0 {
-				argument++
+			if delimiter < 0 {
+				delimiter = k
 			}
+			return r.callee(r.prev(k), argument, r.named(delimiter))
+		case token.Comma:
+			if depth > 0 {
+				continue
+			}
+			if delimiter < 0 {
+				delimiter = k
+			}
+			argument++
 		case token.Semicolon, token.OpenTag, token.OpenTagWithEcho, token.CloseTag:
 			if depth == 0 {
 				return Call{}, callNone
@@ -136,6 +159,23 @@ func (r *callReader) prev(k int) int {
 	return k
 }
 
+func (r *callReader) next(k int) int {
+	for k++; k < len(r.tokens) && r.tokens[k].Kind.IsTrivia(); k++ {
+	}
+	return k
+}
+
+func (r *callReader) named(delimiter int) string {
+	name := r.next(delimiter)
+	if name >= len(r.tokens) || !r.tokens[name].Kind.IsSemiReserved() {
+		return ""
+	}
+	if colon := r.next(name); colon >= len(r.tokens) || r.tokens[colon].Kind != token.Colon {
+		return ""
+	}
+	return r.tokens[name].Text(r.src)
+}
+
 func (r *callReader) exhausted() (Call, callSearch) {
 	if r.from > 0 {
 		return Call{}, callUnknown
@@ -143,17 +183,35 @@ func (r *callReader) exhausted() (Call, callSearch) {
 	return Call{}, callNone
 }
 
-func (r *callReader) callee(k, argument int) (Call, callSearch) {
+func (r *callReader) callee(k, argument int, named string) (Call, callSearch) {
 	if k < 0 {
 		return r.exhausted()
 	}
 	name := r.tokens[k]
+	call := Call{Name: name.Text(r.src), Offset: name.Start, Argument: argument, Named: named}
 	switch name.Kind {
 	case token.Identifier, token.NameQualified, token.NameFullyQualified, token.NameRelative:
+		if r.calledAsFunction(k) {
+			call.Callee = CalleeFunction
+		}
+	case token.Static, token.Class:
+		before := r.prev(k)
+		if before >= 0 && name.Kind == token.Class && r.tokens[before].Kind == token.Readonly {
+			before = r.prev(before)
+		}
+		if before < 0 {
+			return r.exhausted()
+		}
+		if r.tokens[before].Kind != token.New {
+			return Call{}, callNone
+		}
+		if name.Kind == token.Class {
+			call.Callee = CalleeAnonymousClass
+		}
 	default:
 		return Call{}, callNone
 	}
-	return Call{Name: name.Text(r.src), Offset: name.Start, Argument: argument, Function: r.calledAsFunction(k)}, callFound
+	return call, callFound
 }
 
 func (r *callReader) calledAsFunction(k int) bool {
