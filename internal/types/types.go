@@ -938,3 +938,51 @@ func splitOffsetAccess(raw string) (base, key string, ok bool) {
 	}
 	return "", "", false
 }
+
+// MapNames returns expr with the name of every named and generic type in
+// it, at any depth, replaced by what fn gives for it. Names are passed as
+// written, with any leading backslash. expr is never modified.
+func (expr TypeExpr) MapNames(fn func(string) string) TypeExpr {
+	out := expr
+	if expr.Kind == TypeKindNamed || expr.Kind == TypeKindGeneric {
+		out.Name = fn(expr.Name)
+	}
+	out.Params = mapNamesIn(expr.Params, fn)
+	out.Types = mapNamesIn(expr.Types, fn)
+	out.ParamTypes = mapNamesIn(expr.ParamTypes, fn)
+	if len(expr.ShapeFields) > 0 {
+		out.ShapeFields = make([]ShapeExprField, len(expr.ShapeFields))
+		for i, field := range expr.ShapeFields {
+			field.Type = field.Type.MapNames(fn)
+			out.ShapeFields[i] = field
+		}
+	}
+	if expr.Element != nil {
+		element := expr.Element.MapNames(fn)
+		out.Element = &element
+	}
+	if expr.ReturnType != nil {
+		ret := expr.ReturnType.MapNames(fn)
+		out.ReturnType = &ret
+	}
+	if expr.Condition != nil {
+		out.Condition = &ConditionalType{
+			Subject: expr.Condition.Subject,
+			Target:  expr.Condition.Target.MapNames(fn),
+			IfTrue:  expr.Condition.IfTrue.MapNames(fn),
+			IfFalse: expr.Condition.IfFalse.MapNames(fn),
+		}
+	}
+	return out
+}
+
+func mapNamesIn(exprs []TypeExpr, fn func(string) string) []TypeExpr {
+	if len(exprs) == 0 {
+		return exprs
+	}
+	out := make([]TypeExpr, len(exprs))
+	for i, e := range exprs {
+		out[i] = e.MapNames(fn)
+	}
+	return out
+}
