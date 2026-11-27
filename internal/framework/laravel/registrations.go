@@ -54,6 +54,12 @@ type Registrations struct {
 	// UnknownNamespaces holds view and component namespaces registered
 	// with a directory the server can't read.
 	UnknownNamespaces map[string]bool
+	// ValidationRules are the rules registered with the validator's
+	// extend(), extendImplicit() and extendDependent(), by ValidationRuleKey.
+	ValidationRules map[string]Registration
+	// UnknownValidationRules is set when a provider registers a validation
+	// rule under a name the server can't read.
+	UnknownValidationRules bool
 }
 
 // Custom returns the directives and conditionals Blade should know.
@@ -145,6 +151,7 @@ func (p *Providers) read() *Registrations {
 		Directives: map[string]Registration{}, Conditionals: map[string]Registration{},
 		ComponentAliases: map[string]string{}, ComponentNamespaces: map[string]string{},
 		ViewNamespaces: map[string][]string{}, UnknownNamespaces: map[string]bool{},
+		ValidationRules: map[string]Registration{},
 	}
 	var files []string
 	if entries, err := os.ReadDir(filepath.Join(p.rootPath, "app", "Providers")); err == nil {
@@ -179,7 +186,7 @@ func (p *Providers) read() *Registrations {
 		}
 		src := string(data)
 		if !strings.Contains(src, "Blade") && !strings.Contains(src, "blade.compiler") && !strings.Contains(src, "View") &&
-			!strings.Contains(src, "loadView") && !strings.Contains(src, "hasViews") {
+			!strings.Contains(src, "loadView") && !strings.Contains(src, "hasViews") && !strings.Contains(src, "extend") {
 			continue
 		}
 		(&providerScan{root: p.rootPath, path: path, regs: r}).scan(src)
@@ -279,6 +286,15 @@ func (ps *providerScan) scan(src string) {
 			ps.regs.AnonymousPaths = append(ps.regs.AnonymousPaths, AnonymousPath{Prefix: prefix, Dir: dir})
 		case "loadViewComponentsAs":
 			ps.viewComponentsAs(toks, args)
+		case "extend", "extendImplicit", "extendDependent":
+			if !ps.validatorExtension(toks, i) {
+				continue
+			}
+			if name, ok := argString(toks, args, 0); ok {
+				ps.regs.ValidationRules[ValidationRuleKey(name)] = reg
+			} else {
+				ps.regs.UnknownValidationRules = true
+			}
 		case "loadViewsFrom", "addNamespace":
 			// loadViewsFrom($path, 'ns'); View::addNamespace('ns', $path).
 			nsArg, pathArg := 1, 0
@@ -390,6 +406,45 @@ func (ps *providerScan) viewComponentsAs(toks []parser.Token, args []tokenSpan) 
 		base := class[strings.LastIndexByte(class, '\\')+1:]
 		ps.regs.ComponentAliases[prefix+"-"+blade.Kebab(base)] = class
 	}
+}
+
+const validatorFacade = `Illuminate\Support\Facades\Validator`
+
+func (ps *providerScan) validatorExtension(toks []parser.Token, i int) bool {
+	if i < 2 {
+		return false
+	}
+	if toks[i-1].Kind == parser.TokenDoubleColon {
+		class := ps.scan_.resolveClass(nameEndingAt(toks, i-2))
+		return class == validatorFacade || class == "Validator"
+	}
+	if toks[i].Value != "extend" {
+		return true
+	}
+	receiver := toks[i-2]
+	switch {
+	case receiver.Kind == parser.TokenVariable:
+		return receiver.Value == "$validator"
+	case receiver.Kind == parser.TokenCloseBracket && i >= 4:
+		name, ok := literalString(toks, tokenSpan{i - 3, i - 2})
+		return ok && name == "validator" && toks[i-4].Kind == parser.TokenOpenBracket
+	case receiver.Kind == parser.TokenCloseParen && i >= 5:
+		name, ok := literalString(toks, tokenSpan{i - 3, i - 2})
+		return ok && name == "validator" && toks[i-4].Kind == parser.TokenOpenParen && toks[i-5].Value == "app"
+	}
+	return false
+}
+
+func nameEndingAt(toks []parser.Token, end int) string {
+	start := end
+	for start > 0 && (toks[start-1].Kind == parser.TokenIdentifier || toks[start-1].Kind == parser.TokenBackslash) {
+		start--
+	}
+	name, _ := qualifiedName(toks, start)
+	if toks[start].Kind == parser.TokenBackslash {
+		return `\` + name
+	}
+	return name
 }
 
 // classArg reads `X::class` or a class name string.
