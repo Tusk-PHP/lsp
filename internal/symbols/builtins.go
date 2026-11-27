@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/stubs"
 )
 
@@ -111,6 +112,7 @@ var builtinClasses = []struct{ Name, Doc string }{
 type BuiltinProfile struct {
 	PHPVersion string
 	Extensions []string
+	Grammars   phpparser.GrammarRange
 }
 
 // BuiltinAvailability records the version and optional extension constraint
@@ -284,7 +286,7 @@ func (idx *Index) RegisterBuiltins() {
 // DefaultBuiltinProfile returns the broadest bundled built-in profile.
 func DefaultBuiltinProfile() BuiltinProfile {
 	profile := stubs.DefaultProfile()
-	return BuiltinProfile{PHPVersion: profile.PHPVersion, Extensions: profile.Extensions}
+	return BuiltinProfile{PHPVersion: profile.PHPVersion, Extensions: profile.Extensions, Grammars: phpparser.AnyGrammar()}
 }
 
 // RegisterBuiltinsForProfile populates the index with built-in symbols

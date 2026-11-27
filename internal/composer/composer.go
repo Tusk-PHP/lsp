@@ -59,7 +59,7 @@ type installedPackage struct {
 
 // Platform describes the PHP platform constraints declared by composer.json.
 type Platform struct {
-	PHPVersion  string
+	PHP         *PHPRange
 	Extensions  []string
 	HasComposer bool
 }
@@ -80,10 +80,12 @@ func GetPlatform(rootPath string) Platform {
 		return platform
 	}
 
-	if phpConstraint, ok := cj.Config.Platform["php"].(string); ok && phpConstraint != "" {
-		platform.PHPVersion = minimumPHPVersion(phpConstraint)
-	} else if requireConstraint, ok := cj.Require["php"]; ok {
-		platform.PHPVersion = minimumPHPVersion(requireConstraint)
+	constraint, ok := cj.Config.Platform["php"].(string)
+	if !ok || constraint == "" {
+		constraint = cj.Require["php"]
+	}
+	if php, ok := ParsePHPConstraint(constraint); ok {
+		platform.PHP = &php
 	}
 
 	extensions := make(map[string]struct{})
@@ -370,35 +372,12 @@ func parsePSR4(psr4 map[string]interface{}, basePath string, isVendor bool) []Au
 	return entries
 }
 
-var phpConstraintVersionRe = regexp.MustCompile(`\d+(?:\.\d+){0,2}`)
-
 func minimumPHPVersion(constraint string) string {
-	matches := phpConstraintVersionRe.FindAllString(constraint, -1)
-	if len(matches) == 0 {
+	php, ok := ParsePHPConstraint(constraint)
+	if !ok {
 		return ""
 	}
-
-	bestMajor := 0
-	bestMinor := 0
-	found := false
-
-	for _, match := range matches {
-		major, minor, ok := parseMajorMinor(match)
-		if !ok {
-			continue
-		}
-		if !found || major < bestMajor || (major == bestMajor && minor < bestMinor) {
-			bestMajor = major
-			bestMinor = minor
-			found = true
-		}
-	}
-
-	if !found {
-		return ""
-	}
-
-	return strconv.Itoa(bestMajor) + "." + strconv.Itoa(bestMinor)
+	return php.Oldest.String()
 }
 
 func parseMajorMinor(version string) (int, int, bool) {
