@@ -387,7 +387,7 @@ func (p *Provider) completeBuilderRelations(modelFQN, partial, quote string) []p
 		}
 
 		// Check if the return type is a relation class
-		retType := m.ReturnType
+		retType, _, _ := strings.Cut(m.ReturnType, "<")
 		if retType == "" {
 			continue
 		}

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 func kinds(nodes []Node, src string) []string {
@@ -96,7 +97,7 @@ func TestCompileIsValidPHP(t *testing.T) {
 	if !doc.Structured {
 		t.Fatal("balanced template compiled flat")
 	}
-	file := parser.ParseFile(doc.PHP)
+	file := parser.ParseFile(doc.PHP, token.Latest)
 	if len(file.Errors) > 0 {
 		t.Fatalf("virtual PHP has syntax errors %v:\n%s", file.Errors, doc.PHP)
 	}
@@ -110,7 +111,7 @@ func TestCompileUnbalancedIsFlat(t *testing.T) {
 	if doc.Structured {
 		t.Fatal("unbalanced template should compile flat")
 	}
-	if file := parser.ParseFile(doc.PHP); len(file.Errors) > 0 {
+	if file := parser.ParseFile(doc.PHP, token.Latest); len(file.Errors) > 0 {
 		t.Fatalf("flat PHP has syntax errors %v:\n%s", file.Errors, doc.PHP)
 	}
 }

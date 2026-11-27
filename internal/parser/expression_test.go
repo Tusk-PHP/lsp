@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"strings"
 	"testing"
 	"time"
@@ -779,7 +780,7 @@ func TestParseResultNeverNilWithExpressions(t *testing.T) {
 		"<?php strlen(...);",
 	}
 	for _, src := range inputs {
-		file := ParseFile(src)
+		file := ParseFile(src, token.Latest)
 		if file == nil {
 			t.Errorf("ParseFile returned nil for input %q", truncate(src, 50))
 		}

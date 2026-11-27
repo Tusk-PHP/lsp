@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -38,7 +39,7 @@ class Plain {
 }`
 	idx.IndexFile("file:///Gzip.php", src)
 	var got []string
-	for _, f := range (&UnusedPrivateRule{}).Check(parser.ParseFile(src), src, idx) {
+	for _, f := range (&UnusedPrivateRule{}).Check(parser.ParseFile(src, token.Latest), src, idx) {
 		got = append(got, f.Message)
 	}
 	want := []string{
@@ -65,7 +66,7 @@ class ExampleTest extends TestCase {
 }`
 	idx.IndexFile("file:///test.php", src)
 	var got []string
-	for _, f := range (&InvalidOverrideRule{}).Check(parser.ParseFile(src), src, idx) {
+	for _, f := range (&InvalidOverrideRule{}).Check(parser.ParseFile(src, token.Latest), src, idx) {
 		got = append(got, f.Message)
 	}
 	// The parent's trait method is overridden; the class's own trait method
@@ -78,6 +79,7 @@ class ExampleTest extends TestCase {
 // PHP 8.6: #[\Override] on a class constant or enum case must override one.
 func TestOverrideOnConstants(t *testing.T) {
 	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
 	parentSrc := `<?php
 namespace App;
 interface HasLimit { const LIMIT = 1; }
@@ -105,7 +107,7 @@ enum Size: int implements HasLimit {
 `
 	idx.IndexFile("file:///child.php", src)
 	var got []string
-	for _, f := range (&InvalidOverrideRule{}).Check(parser.ParseFile(src), src, idx) {
+	for _, f := range (&InvalidOverrideRule{}).Check(parser.ParseFile(src, token.Latest), src, idx) {
 		got = append(got, f.Message)
 	}
 	want := []string{

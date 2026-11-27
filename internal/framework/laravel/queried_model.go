@@ -8,9 +8,12 @@ import (
 )
 
 const (
-	EloquentModel    = `Illuminate\Database\Eloquent\Model`
-	EloquentBuilder  = `Illuminate\Database\Eloquent\Builder`
-	EloquentRelation = `Illuminate\Database\Eloquent\Relations\Relation`
+	EloquentModel      = `Illuminate\Database\Eloquent\Model`
+	EloquentBuilder    = `Illuminate\Database\Eloquent\Builder`
+	EloquentCollection = `Illuminate\Database\Eloquent\Collection`
+	EloquentRelations  = `Illuminate\Database\Eloquent\Relations\`
+	EloquentRelation   = EloquentRelations + `Relation`
+	EloquentAttribute  = `Illuminate\Database\Eloquent\Casts\Attribute`
 )
 
 var tableJoiningRelations = []string{

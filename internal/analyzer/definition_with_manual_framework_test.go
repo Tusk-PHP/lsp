@@ -8,6 +8,8 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/container"
 	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -32,9 +34,9 @@ func TestOpenManualKeepsSymfonyCommandRouteAndTranslationDefinitions(t *testing.
 		idx := symbols.NewIndex()
 		idx.RegisterBuiltins()
 		a := NewAnalyzer(idx, container.NewContainerAnalyzer(idx, "/project", "symfony"))
-		commands := frameworksymfony.NewCommandIndex()
+		commands := frameworksymfony.NewCommandIndex(phpparser.OnlyGrammar(token.Latest))
 		const cmdURI = "file:///project/src/Command/SyncCommand.php"
-		commands.UpdateFile(cmdURI, "<?php\nnamespace App\\Command;\n#[AsCommand(name: 'app:sync')]\nclass SyncCommand {}\n")
+		commands.UpdateFile(cmdURI, "<?php\nnamespace App\\Command;\nuse Symfony\\Component\\Console\\Attribute\\AsCommand;\n#[AsCommand(name: 'app:sync')]\nclass SyncCommand {}\n")
 		a.SetSymfonyCommands(commands)
 		a.SetChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) string {
 			if expr == "$application" {
@@ -43,7 +45,7 @@ func TestOpenManualKeepsSymfonyCommandRouteAndTranslationDefinitions(t *testing.
 			return ""
 		})
 		src := "<?php\n$application->find('app:sync');\n"
-		assertEveryDefinitionPathFinds(t, a, "file:///project/src/x.php", src, posOf(t, src, "sync"), cmdURI, 2)
+		assertEveryDefinitionPathFinds(t, a, "file:///project/src/x.php", src, posOf(t, src, "sync"), cmdURI, 4)
 	})
 
 	t.Run("route", func(t *testing.T) {

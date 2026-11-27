@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -26,7 +27,7 @@ func firstClassCallableResolver(t *testing.T) (*Resolver, *parser.FileNode) {
 	t.Helper()
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///app/Box.php", firstClassCallableSource)
-	return NewResolver(idx), parser.ParseFile(firstClassCallableSource)
+	return NewResolver(idx), parser.ParseFile(firstClassCallableSource, token.Latest)
 }
 
 func TestFirstClassCallableExpressionType(t *testing.T) {
@@ -70,7 +71,7 @@ func TestFirstClassCallableVariable(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///app/Box.php", src)
 	r := NewResolver(idx)
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	lines := SplitLines(src)
 	end := textpos.Position{Line: len(lines) - 2}
 	for name, want := range map[string]string{

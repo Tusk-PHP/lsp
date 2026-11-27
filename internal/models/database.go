@@ -13,6 +13,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -152,7 +153,7 @@ func InjectDatabaseSchema(index *symbols.Index, rootPath, framework string, sche
 
 	switch framework {
 	case "laravel":
-		injectLaravelSchemaProperties(index, schema, rootPath)
+		injectLaravelSchemaProperties(index, schema)
 	case "symfony":
 		injectSymfonySchemaProperties(index, schema, rootPath)
 	}
@@ -244,10 +245,10 @@ func (s *Schema) TableNames() []string {
 }
 
 // injectLaravelSchemaProperties resolves table names for Laravel models and injects columns.
-func injectLaravelSchemaProperties(index *symbols.Index, schema *Schema, rootPath string) {
+func injectLaravelSchemaProperties(index *symbols.Index, schema *Schema) {
 	models := index.GetDescendants(frameworklaravel.EloquentModel)
 	for _, model := range models {
-		tableName := ResolveModelTableName(index, model, rootPath)
+		tableName := ResolveModelTableName(index, model)
 		if tableName == "" {
 			continue
 		}
@@ -276,105 +277,83 @@ func injectSymfonySchemaProperties(index *symbols.Index, schema *Schema, rootPat
 // injectDoctrineSchemaSource adds the schema's columns to the Doctrine
 // entities declared in source, one file's text.
 func injectDoctrineSchemaSource(index *symbols.Index, schema *Schema, content string) {
-	if !strings.Contains(content, "ORM\\Entity") {
+	if !strings.Contains(content, doctrineMapping[:len(doctrineMapping)-1]) {
 		return
 	}
-
-	file := parser.ParseFile(content)
-	if file == nil {
-		return
-	}
-
-	for _, cls := range file.Classes {
-		fqn := file.Namespace + "\\" + cls.Name
-		if file.Namespace == "" {
-			fqn = cls.Name
-		}
-		sym := index.Lookup(fqn)
+	for _, entity := range doctrineEntities(parser.ParseFileIn(content, index.Grammars())) {
+		sym := index.Lookup(entity.fqn)
 		if sym == nil {
 			continue
 		}
-
-		tableName := resolveDoctrineTableName(content, &cls, fqn)
-		if tableName == "" {
-			continue
+		if table := schema.Table(entity.tableName()); table != nil {
+			injectColumnsAsProperties(index, sym, table.Columns)
 		}
-
-		table := schema.Table(tableName)
-		if table == nil {
-			continue
-		}
-		injectColumnsAsProperties(index, sym, table.Columns)
 	}
 }
 
 func injectColumnsAsProperties(index *symbols.Index, classSym *symbols.Symbol, cols []SchemaColumn) {
 	for _, col := range cols {
-		propName := "$" + col.Name
-		phpType := mapSQLTypeToPhp(col.DataType, col.ColumnType)
-		if col.IsNullable && phpType != "mixed" {
-			phpType = "?" + phpType
-		}
+		injectColumn(index, classSym, col.Name, mapSQLTypeToPhp(col.DataType, col.ColumnType), col.IsNullable,
+			fmt.Sprintf("(database column) %s — %s", col.DataType, col.ColumnType))
+	}
+}
 
-		existing := index.Lookup(classSym.FQN + "::" + propName)
-		if existing != nil {
-			// Don't overwrite — other sources have priority
-			continue
+// injectColumn adds the column name to class as a virtual property, unless
+// class already has that property. A property an attribute cast gave it
+// keeps the cast's type, made nullable when the column is: Eloquent casts
+// null to null.
+func injectColumn(index *symbols.Index, class *symbols.Symbol, name, phpType string, nullable bool, doc string) {
+	fqn := class.FQN + "::$" + name
+	if existing := index.Lookup(fqn); existing != nil {
+		if nullable && isCastProperty(existing) {
+			index.SetPropertyType(fqn, nullableType(existing.Type))
 		}
+		return
+	}
+	index.AddVirtualMember(class.FQN, &symbols.Symbol{
+		Name:       "$" + name,
+		FQN:        fqn,
+		Kind:       symbols.KindProperty,
+		URI:        class.URI,
+		Visibility: "public",
+		Type:       ifNullable(phpType, nullable),
+		IsVirtual:  true,
+		DocComment: doc,
+	})
+}
 
-		index.AddVirtualMember(classSym.FQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        classSym.FQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        classSym.URI,
-			Visibility: "public",
-			Type:       phpType,
-			IsVirtual:  true,
-			DocComment: fmt.Sprintf("(database column) %s — %s", col.DataType, col.ColumnType),
-		})
+func ifNullable(phpType string, nullable bool) string {
+	if !nullable {
+		return phpType
+	}
+	return nullableType(phpType)
+}
+
+// nullableType is phpType or null.
+func nullableType(phpType string) string {
+	rt := resolve.ParseGenericType(phpType)
+	if rt.IsEmpty() || rt.Nullable || rt.FQN == "mixed" || rt.FQN == "null" {
+		return phpType
+	}
+	switch {
+	case len(rt.Union) > 0:
+		return phpType + "|null"
+	case len(rt.Intersection) > 0:
+		return "(" + phpType + ")|null"
+	default:
+		return "?" + phpType
 	}
 }
 
 // ResolveModelTableName determines the database table name for a Laravel Eloquent model.
-func ResolveModelTableName(index *symbols.Index, model *symbols.Symbol, rootPath string) string {
-	// Check for explicit $table property
-	tableProp := index.Lookup(model.FQN + "::$table")
-	if tableProp != nil && tableProp.Value != "" {
-		return strings.Trim(tableProp.Value, "'\"")
-	}
-
-	// Read source file and look for $table = 'name'
-	path := symbols.URIToPath(model.URI)
-	content, err := readFileQuick(path)
-	if err != nil {
-		content = ""
-	}
-	return modelTableName(model, content)
-}
-
-// modelTableName is the table of model, given the source of the file that
-// declares it and once an indexed $table default has been ruled out.
-func modelTableName(model *symbols.Symbol, source string) string {
-	if m := tablePropertyRe.FindStringSubmatch(source); m != nil {
-		return m[1]
-	}
-	// Convention: snake_case plural of class name
-	return pluralize(toSnakeCase(model.Name))
-}
-
-// resolveDoctrineTableName determines the table name for a Doctrine entity.
-func resolveDoctrineTableName(source string, cls *parser.ClassNode, fqn string) string {
-	// Check #[ORM\Table(name: 'tablename')]
-	if m := ormTableRe.FindStringSubmatch(source); m != nil {
-		if nm := nameArgRe.FindStringSubmatch(m[1]); nm != nil {
-			return nm[1]
+func ResolveModelTableName(index *symbols.Index, model *symbols.Symbol) string {
+	if tableProp := index.Lookup(model.FQN + "::$table"); tableProp != nil {
+		if table, ok := parser.StringLiteral(tableProp.Value); ok && table != "" {
+			return table
 		}
 	}
-	// Convention: snake_case of class name
-	return toSnakeCase(cls.Name)
+	return pluralize(toSnakeCase(model.Name))
 }
-
-var tablePropertyRe = regexp.MustCompile(`\$table\s*=\s*['"]([^'"]+)['"]`)
 
 // toSnakeCase converts CamelCase to snake_case.
 func toSnakeCase(s string) string {

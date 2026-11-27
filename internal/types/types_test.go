@@ -130,3 +130,19 @@ func TestExtractDocTypeString(t *testing.T) {
 		})
 	}
 }
+
+func TestMapNames(t *testing.T) {
+	expr := ParseTypeExpr(`?Collection<int, \App\Money|Money[]>`)
+	got := expr.MapNames(func(name string) string {
+		if name == "int" {
+			return name
+		}
+		return "[" + name + "]"
+	}).String()
+	if want := `?[Collection]<int, [\App\Money] | [Money][]>`; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if expr.Name != "Collection" {
+		t.Errorf("MapNames modified its receiver: %q", expr.Name)
+	}
+}

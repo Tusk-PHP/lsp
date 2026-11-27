@@ -1,19 +1,10 @@
 package checks
 
 import (
-	"regexp"
 	"strings"
+
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 )
-
-// extensionGuardRe finds the checks code makes before using something that may
-// not be installed: extension_loaded('imagick'), class_exists('Imagick'),
-// function_exists('ssh2_connect') and their interface/trait/enum variants.
-var extensionGuardRe = regexp.MustCompile(`(?i)\b(extension_loaded|class_exists|interface_exists|trait_exists|enum_exists|function_exists)\s*\(\s*['"]\\?([A-Za-z_][A-Za-z0-9_\\]*)['"]`)
-
-// classConstGuardRe finds the same checks written with a class constant,
-// class_exists(Foo::class), and keeps the name as written: the file's imports
-// resolve it the same way at the guard and where the class is used.
-var classConstGuardRe = regexp.MustCompile(`(?i)\b(?:class_exists|interface_exists|trait_exists|enum_exists)\s*\(\s*\\?([A-Za-z_][A-Za-z0-9_\\]*)\s*::\s*class\b`)
 
 // extensionGuards holds what a file checks for before using it. Code guarded
 // that way runs only where the extension or symbol exists, so a name it
@@ -23,17 +14,22 @@ type extensionGuards struct {
 	names      map[string]bool // lowercase class and function names from *_exists()
 }
 
-// findExtensionGuards scans a whole file once. A guard anywhere in the file
+// extensionGuards reads the file's guards once. A guard anywhere in the file
 // counts for all of it: WordPress checks extension_loaded('imagick') in one
 // method and uses Imagick in every other method of the class.
-func findExtensionGuards(source string) extensionGuards {
+func (f *fileSyntax) extensionGuards() extensionGuards {
 	var g extensionGuards
-	if !strings.Contains(source, "_exists") && !strings.Contains(source, "extension_loaded") {
-		return g
-	}
-	for _, m := range extensionGuardRe.FindAllStringSubmatch(source, -1) {
-		name := strings.ToLower(m[2])
-		if strings.EqualFold(m[1], "extension_loaded") {
+	for _, call := range f.references().calls {
+		fn := strings.ToLower(strings.TrimPrefix(f.text(call.name), "\\"))
+		if !extensionGuardFuncs[fn] || len(call.args.Args) == 0 {
+			continue
+		}
+		name, ok := f.guardedName(call.args.Args[0].Value, fn != "extension_loaded")
+		if !ok {
+			continue
+		}
+		name = strings.ToLower(strings.TrimPrefix(name, "\\"))
+		if fn == "extension_loaded" {
 			g.extensions = append(g.extensions, name)
 			continue
 		}
@@ -42,13 +38,27 @@ func findExtensionGuards(source string) extensionGuards {
 		}
 		g.names[name] = true
 	}
-	for _, m := range classConstGuardRe.FindAllStringSubmatch(source, -1) {
-		if g.names == nil {
-			g.names = map[string]bool{}
-		}
-		g.names[strings.ToLower(m[1])] = true
-	}
 	return g
+}
+
+var extensionGuardFuncs = map[string]bool{
+	"extension_loaded": true, "class_exists": true, "interface_exists": true,
+	"trait_exists": true, "enum_exists": true, "function_exists": true,
+}
+
+func (f *fileSyntax) guardedName(arg ast.Expr, classConst bool) (string, bool) {
+	if name, ok := f.stringLiteral(arg); ok {
+		return name, name != ""
+	}
+	fetch, ok := arg.(*ast.ClassConstFetch)
+	if !classConst || !ok || !strings.EqualFold(f.text(fetch.Name), "class") {
+		return "", false
+	}
+	class, ok := fetch.Class.(*ast.ConstFetch)
+	if !ok || class.Name == nil {
+		return "", false
+	}
+	return f.text(class.Name), true
 }
 
 // covers reports whether a class or function name is guarded in this file:

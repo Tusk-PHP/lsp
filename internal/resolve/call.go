@@ -245,12 +245,19 @@ func (r *Resolver) MemberTypeForCall(member *symbols.Symbol, file *parser.FileNo
 	}
 	// A method without a PHPDoc return type inherits the one its parent,
 	// interface or trait documents, read with the arguments passed up to it.
+	// The native return type is kept when the inherited one is vaguer or
+	// contradicts it, as it is for a method's own PHPDoc.
 	if member.Kind == symbols.KindMethod && !strings.Contains(member.DocComment, "return") {
 		if inh := r.inheritedDocMethod(member); inh != nil {
-			if callerFQN == "" {
-				callerFQN = member.ParentFQN
+			caller := callerFQN
+			if caller == "" {
+				caller = member.ParentFQN
 			}
-			member = inh
+			inherited := r.MemberTypeForCall(inh, file, caller, typeContext, call)
+			native := strings.TrimSpace(member.ReturnType)
+			if native == "" || r.preferDocType(native, inherited.FullString(), nil, member.ParentFQN) != native {
+				return inherited
+			}
 		}
 	}
 	raw := r.rawMemberReturnType(member)
