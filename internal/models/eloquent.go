@@ -133,8 +133,10 @@ func (m modelSource) resolve(name string) string {
 }
 
 type modelRelationMethod struct {
-	kind   string
-	target string
+	kind    string
+	target  string
+	through string
+	class   string
 }
 
 func (m modelSource) relation(method parser.MethodNode, decl *ast.Method) (modelRelationMethod, bool) {
@@ -150,14 +152,45 @@ func (m modelSource) relation(method parser.MethodNode, decl *ast.Method) (model
 		return modelRelationMethod{}, false
 	}
 	relation := modelRelationMethod{kind: kind}
-	if call != nil && len(call.Args.Args) > 0 {
-		if fetch, ok := call.Args.Args[0].Value.(*ast.ClassConstFetch); ok && strings.EqualFold(m.text(fetch.Name), "class") {
-			if class, ok := fetch.Class.(*ast.ConstFetch); ok && class.Name != nil {
-				relation.target = m.resolve(m.text(class.Name))
-			}
-		}
+	if call != nil {
+		relation.target = m.classArgument(call, 0)
+		relation.through = m.classArgument(call, 1)
+		relation.class = relationCallClasses[m.text(call.Name)]
 	}
 	return relation, true
+}
+
+func (m modelSource) classArgument(call *ast.MethodCall, position int) string {
+	if len(call.Args.Args) <= position {
+		return ""
+	}
+	fetch, ok := call.Args.Args[position].Value.(*ast.ClassConstFetch)
+	if !ok || !strings.EqualFold(m.text(fetch.Name), "class") {
+		return ""
+	}
+	class, ok := fetch.Class.(*ast.ConstFetch)
+	if !ok || class.Name == nil {
+		return ""
+	}
+	return m.resolve(m.text(class.Name))
+}
+
+func (r modelRelationMethod) returnType(declaring string) string {
+	if r.class == "" {
+		return ""
+	}
+	fqn := frameworklaravel.EloquentRelations + r.class
+	switch {
+	case r.target == "":
+		return fqn
+	case throughRelations[r.class]:
+		if r.through == "" {
+			return fqn
+		}
+		return fqn + "<" + r.target + ", " + r.through + ", " + declaring + ">"
+	default:
+		return fqn + "<" + r.target + ", " + declaring + ">"
+	}
 }
 
 func (m modelSource) text(n ast.Node) string {
@@ -178,7 +211,7 @@ func (m modelSource) relationCall(decl *ast.Method) *ast.MethodCall {
 			return true
 		}
 		name, named := call.Name.(*ast.IdentifierExpr)
-		if owner, isVar := call.Object.(*ast.Variable); named && isVar && m.text(owner) == "$this" && relationCallMethods[m.text(name)] {
+		if owner, isVar := call.Object.(*ast.Variable); named && isVar && m.text(owner) == "$this" && relationCallClasses[m.text(name)] != "" {
 			found = call
 			return false
 		}
@@ -187,10 +220,13 @@ func (m modelSource) relationCall(decl *ast.Method) *ast.MethodCall {
 	return found
 }
 
-var relationCallMethods = map[string]bool{
-	"hasOne": true, "hasMany": true, "belongsTo": true, "belongsToMany": true, "morphOne": true, "morphMany": true,
-	"morphTo": true, "morphToMany": true, "morphedByMany": true, "hasOneThrough": true, "hasManyThrough": true,
+var relationCallClasses = map[string]string{
+	"hasOne": "HasOne", "hasMany": "HasMany", "belongsTo": "BelongsTo", "belongsToMany": "BelongsToMany",
+	"morphOne": "MorphOne", "morphMany": "MorphMany", "morphTo": "MorphTo", "morphToMany": "MorphToMany",
+	"morphedByMany": "MorphToMany", "hasOneThrough": "HasOneThrough", "hasManyThrough": "HasManyThrough",
 }
+
+var throughRelations = map[string]bool{"HasOneThrough": true, "HasManyThrough": true}
 
 // analyzeModelSource injects the relations and accessors model declares in
 // source, the text of the file that declares it.
@@ -202,6 +238,9 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source mode
 	for _, method := range classNode.Methods {
 		if relation, ok := source.relation(method, decls[method.Name]); ok {
 			injectRelation(index, model, method.Name, methodNameRange(method), relation)
+			if returnType := relation.returnType(model.FQN); returnType != "" && method.ReturnType.Name == "" && !hasDocReturn(method) {
+				index.RefineMethodReturnType(model.FQN+"::"+method.Name, returnType)
+			}
 			continue
 		}
 		if name, ok := legacyAccessorName(method.Name); ok {
@@ -249,6 +288,14 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source mode
 			})
 		}
 	}
+}
+
+func hasDocReturn(method parser.MethodNode) bool {
+	if method.DocComment == "" {
+		return false
+	}
+	doc := parser.ParseDocBlock(method.DocComment)
+	return doc != nil && doc.Return.Type != ""
 }
 
 func legacyAccessorName(method string) (string, bool) {

@@ -400,3 +400,40 @@ class Category extends Model
 		}
 	}
 }
+
+func TestEloquentUntypedRelationMethodsReturnTheRelation(t *testing.T) {
+	src := `<?php
+namespace App\Models;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+class Category extends Model
+{
+    public function products() { return $this->hasMany(Product::class); }
+    public function followers() { return $this->morphedByMany(Follower::class, 'followable'); }
+    public function orders() { return $this->hasManyThrough(Order::class, Product::class); }
+    public function owner() { return $this->morphTo(); }
+    public function typed(): HasMany { return $this->hasMany(Product::class); }
+    /** @return HasMany<Product, $this> */
+    public function documented() { return $this->hasMany(Product::class); }
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "Category.php")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx := symbols.NewIndex()
+	idx.IndexFile("file://"+path, src)
+	analyzeModelSource(idx, idx.Lookup(`App\Models\Category`), newModelSource(src, phpparser.OnlyGrammar(token.Latest)))
+	for method, want := range map[string]string{
+		"products":   `Illuminate\Database\Eloquent\Relations\HasMany<App\Models\Product, App\Models\Category>`,
+		"followers":  `Illuminate\Database\Eloquent\Relations\MorphToMany<App\Models\Follower, App\Models\Category>`,
+		"orders":     `Illuminate\Database\Eloquent\Relations\HasManyThrough<App\Models\Order, App\Models\Product, App\Models\Category>`,
+		"owner":      `Illuminate\Database\Eloquent\Relations\MorphTo`,
+		"typed":      `Illuminate\Database\Eloquent\Relations\HasMany`,
+		"documented": "",
+	} {
+		if sym := idx.Lookup(`App\Models\Category::` + method); sym == nil || sym.ReturnType != want {
+			t.Errorf("%s(): %+v, want return type %q", method, sym, want)
+		}
+	}
+}

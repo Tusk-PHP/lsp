@@ -19,7 +19,7 @@ type toManyRelation struct {
 
 var laravelToManyRelations = []toManyRelation{
 	{"products", "productSku", "saveMany"},
-	{"untypedProducts", "productSku", ""},
+	{"untypedProducts", "productSku", "saveMany"},
 	{"tags", "tagColor", "attach"},
 	{"comments", "commentBody", "saveMany"},
 	{"labels", "labelText", "attach"},
@@ -95,14 +95,21 @@ func TestToManyRelationItemsAreTheRelatedModel(t *testing.T) {
 			if labels := completeAtMarker(p, first); !labels[rel.relatedMethod] {
 				t.Errorf("$category->%s->first() should be the related model with %s(), got %v", rel.property, rel.relatedMethod, mapKeys(labels, 20))
 			}
-			if rel.builderMethod == "" {
-				return
-			}
 			call := "<?php\nuse App\\Models\\Category;\nfunction f(Category $category) {\n    $category->" + rel.property + "()->|\n}\n"
 			if labels := completeAtMarker(p, call); !labels[rel.builderMethod] {
 				t.Errorf("$category->%s() should stay the relation with %s(), got %v", rel.property, rel.builderMethod, mapKeys(labels, 20))
 			}
 		})
+	}
+}
+
+func TestUntypedRelationIsOfferedAsAnEagerLoad(t *testing.T) {
+	p := setupToManyRelations(t)
+	labels := completeAtMarker(p, "<?php\nuse App\\Models\\Category;\nCategory::with('|');\n")
+	for _, rel := range laravelToManyRelations {
+		if !labels[rel.property] {
+			t.Errorf("with() should offer the %s relation, got %v", rel.property, mapKeys(labels, 20))
+		}
 	}
 }
 
