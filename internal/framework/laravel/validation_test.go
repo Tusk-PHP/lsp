@@ -216,7 +216,7 @@ func validationFixture(t *testing.T) *ValidationRules {
 	}
 	ext := NewValidationExtensions()
 	ext.IndexFile(symbols.PathToURI(filepath.Join(root, "app/Providers/AppServiceProvider.php")), validationProvider)
-	return NewValidationRules(idx, ext, read)
+	return NewValidationRules(idx, ext, nil, read)
 }
 
 func TestValidationRulesCatalog(t *testing.T) {

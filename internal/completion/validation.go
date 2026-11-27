@@ -19,7 +19,7 @@ func (p *Provider) completeValidationRules(source string, pos protocol.Position,
 	if p.framework != "laravel" || p.validation == nil {
 		return nil, false
 	}
-	syn := frameworklaravel.ValidationSyntaxOf(p.index, p.engine.Resolver(), source, file)
+	syn := p.validation.SyntaxOf(p.engine.Resolver(), source, file)
 	slot, ok := frameworklaravel.ValidationRuleSlotAt(source, pos, syn)
 	if !ok {
 		return nil, false

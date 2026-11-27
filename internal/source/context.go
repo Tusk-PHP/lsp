@@ -71,6 +71,15 @@ type CursorContext struct {
 	Scope     *Scope
 }
 
+// ScopeMethod returns the class and method the cursor is in, or "" when
+// it is in neither.
+func (c *CursorContext) ScopeMethod() (class, method string) {
+	if c == nil || c.Scope == nil || c.Scope.Kind != ScopeMethod {
+		return "", ""
+	}
+	return c.Scope.ClassFQN, c.Scope.MethodName
+}
+
 func (c *CursorContext) Name() *NameContext {
 	if c == nil {
 		return nil

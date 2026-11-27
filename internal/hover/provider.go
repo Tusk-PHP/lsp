@@ -86,7 +86,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		return hover
 	}
 
-	if ctx.InString && frameworklaravel.MayValidate(doc.Tokens()) {
+	if class, method := ctx.ScopeMethod(); ctx.InString && p.validation.MayHoldRules(doc.Tokens(), class, method) {
 		if hover := p.hoverValidationRule(source, pos, file); hover != nil {
 			return hover
 		}

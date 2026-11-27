@@ -7,7 +7,6 @@ import (
 	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
-	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -27,10 +26,11 @@ type ValidationRuleSlot struct {
 	NameRange, TypedRange textpos.Range
 }
 
-// ValidationSyntaxOf answers ValidationSyntax for src from the index and
-// the resolver.
-func ValidationSyntaxOf(index *symbols.Index, r *resolve.Resolver, src string, file *parser.FileNode) ValidationSyntax {
+// SyntaxOf answers ValidationSyntax for src from the index, the resolver
+// and the project's rule helper methods.
+func (v *ValidationRules) SyntaxOf(r *resolve.Resolver, src string, file *parser.FileNode) ValidationSyntax {
 	var starts []int
+	index := v.index
 	return ValidationSyntax{
 		ClassName: func(name string) string { return r.ResolveClassName(name, file) },
 		ExprClass: func(start, end uint32) string {
@@ -40,6 +40,9 @@ func ValidationSyntaxOf(index *symbols.Index, r *resolve.Resolver, src string, f
 			return r.ChainType(src[start:end], src, offsetPosition(starts, int(end)), file).BaseFQN()
 		},
 		IsSubtype: index.IsSubtypeOf,
+		Helper: func(class, method string) (RulesForm, bool) {
+			return v.helpers.Form(index, class, method)
+		},
 	}
 }
 
@@ -56,6 +59,21 @@ func MayValidate(tokens []parser.Token) bool {
 		}
 	}
 	return false
+}
+
+// MayHoldRules reports whether a file can hold rule strings worth parsing
+// it for: its tokens name a call or method that takes rules (MayValidate),
+// or the cursor is in a method of class whose returned value the project
+// uses as rules.
+func (v *ValidationRules) MayHoldRules(tokens []parser.Token, class, method string) bool {
+	if v == nil {
+		return false
+	}
+	if MayValidate(tokens) {
+		return true
+	}
+	_, ok := v.helpers.Form(v.index, class, method)
+	return ok
 }
 
 // ValidationRuleSlotAt returns the rule under the cursor when it is in a

@@ -68,9 +68,16 @@ class AppServiceProvider
 
 func validationProvider(t testing.TB) *Provider {
 	t.Helper()
+	p, _ := validationProviderWithHelpers(t)
+	return p
+}
+
+func validationProviderWithHelpers(t testing.TB) (*Provider, *frameworklaravel.ValidationHelpers) {
+	t.Helper()
 	root := t.TempDir()
 	idx := symbols.NewIndex()
 	ext := frameworklaravel.NewValidationExtensions()
+	helpers := frameworklaravel.NewValidationHelpers()
 	idx.RegisterBuiltins()
 	for rel, src := range validationStubs {
 		path := filepath.Join(root, filepath.FromSlash(rel))
@@ -82,6 +89,7 @@ func validationProvider(t testing.TB) *Provider {
 		}
 		idx.IndexFileWithSource(symbols.PathToURI(path), src, symbols.SourceProject)
 		ext.IndexFile(symbols.PathToURI(path), src)
+		helpers.IndexFile(symbols.PathToURI(path), src)
 	}
 	idx.MarkReady()
 	read := func(uri string) string {
@@ -92,8 +100,8 @@ func validationProvider(t testing.TB) *Provider {
 		return string(data)
 	}
 	p := NewProvider(idx, nil, "laravel")
-	p.SetValidationRules(frameworklaravel.NewValidationRules(idx, ext, read))
-	return p
+	p.SetValidationRules(frameworklaravel.NewValidationRules(idx, ext, helpers, read))
+	return p, helpers
 }
 
 func completeAtMarker(t testing.TB, p *Provider, src string) []protocol.CompletionItem {
@@ -271,7 +279,7 @@ func TestValidationRulesFromTheInstalledFramework(t *testing.T) {
 		}
 		return string(data)
 	}
-	rules := frameworklaravel.NewValidationRules(idx, frameworklaravel.NewValidationExtensions(), read)
+	rules := frameworklaravel.NewValidationRules(idx, frameworklaravel.NewValidationExtensions(), nil, read)
 	if n := len(rules.All()); n < 100 {
 		t.Errorf("%d built-in rules", n)
 	}
@@ -296,5 +304,55 @@ func TestValidationRulesFromTheInstalledFramework(t *testing.T) {
 		if r.TakesParameters && len(r.Parameters) == 0 {
 			t.Errorf("%s takes parameters Laravel's documentation doesn't name here", r.Name)
 		}
+	}
+}
+
+func TestValidationRuleCompletionInHelperMethods(t *testing.T) {
+	p, helpers := validationProviderWithHelpers(t)
+	app := filepath.Join("..", "..", "testdata", "laravel", "app")
+	files := map[string]string{}
+	err := filepath.WalkDir(app, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || filepath.Ext(path) != ".php" {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return err
+		}
+		uri := symbols.PathToURI(abs)
+		files[filepath.ToSlash(path[len(app)+1:])] = uri
+		p.index.IndexFileWithSource(uri, string(data), symbols.SourceProject)
+		helpers.IndexFile(uri, string(data))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	complete := func(rel, from, to string) string {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(app, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		src := strings.Replace(string(data), from, to, 1)
+		i := strings.Index(src, "|^")
+		src = src[:i] + src[i+2:]
+		line := strings.Count(src[:i], "\n")
+		col := i - strings.LastIndex(src[:i], "\n") - 1
+		p.index.IndexFileWithSource(files[rel], src, symbols.SourceProject)
+		return labels(p.GetCompletions(files[rel], src, protocol.Position{Line: line, Character: col}))
+	}
+	if got := complete("Concerns/PasswordValidationRules.php", "['required', 'string', Password::default(), 'confirmed']", "['required', 'str|^', Password::default(), 'confirmed']"); got != "string" {
+		t.Errorf("passwordRules(), used as a field's rules: %q", got)
+	}
+	if got := complete("Concerns/ProfileValidationRules.php", "['required', 'string', 'max:255']", "['required', 'str|^', 'max:255']"); got != "string" {
+		t.Errorf("nameRules(), a field of profileRules() spread into the rules: %q", got)
+	}
+	if got := complete("Concerns/PasswordValidationRules.php", "['required', 'string', 'current_password']", "['required', 'str|^', 'current_password']"); got == "string" {
+		t.Errorf("currentPasswordRules() is used nowhere: %q", got)
 	}
 }
