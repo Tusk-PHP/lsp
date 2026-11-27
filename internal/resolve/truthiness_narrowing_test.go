@@ -13,7 +13,7 @@ class Order {}
 class Refund {}
 /** @return false|Order|Refund */
 function find_order(int $id) {}
-function run(?Store $store, bool $b, ?Store $g, ?Store $w, ?Store $e, ?Store $q, string|null $s): void {
+function run(?Store $store, bool $b, ?Store $g, ?Store $w, ?Store $e, ?Store $q, string|null $s, ?Store $c): void {
     if ($store) {
         echo $store; // then
     } else {
@@ -39,6 +39,11 @@ function run(?Store $store, bool $b, ?Store $g, ?Store $w, ?Store $e, ?Store $q,
     if ($s) {
         echo $s; // string
     }
+    switch (true) {
+        case $c:
+            echo $c; // case
+            break;
+    }
 }
 `
 	at := narrowedAt(t, src)
@@ -52,6 +57,7 @@ function run(?Store $store, bool $b, ?Store $g, ?Store $w, ?Store $e, ?Store $q,
 		{"$q", "ternary", `App\Store`},
 		{"$e", "while", `App\Store`},
 		{"$s", "string", `string`},
+		{"$c", "case", `App\Store`},
 	} {
 		if got := at(c.v, c.marker); got != c.want {
 			t.Errorf("%s at %q: got %q, want %q", c.v, c.marker, got, c.want)

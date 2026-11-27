@@ -207,6 +207,8 @@ func (n narrowing) mayNarrow(path []ast.Node) bool {
 			found = n.isVar(node.Cond)
 		case *ast.Ternary:
 			found = n.isVar(node.Cond)
+		case *ast.Case:
+			found = node.Cond != nil && n.isVar(node.Cond)
 		case *ast.Call:
 			if name, ok := node.Callee.(*ast.ConstFetch); ok && n.narrowsByName(n.t.text(name)) {
 				found = true
@@ -604,6 +606,9 @@ func (n narrowing) switchCase(t ResolvedType, path []ast.Node) ResolvedType {
 }
 
 func (n narrowing) testsVar(cond ast.Expr) bool {
+	if n.isVar(cond) {
+		return true
+	}
 	switch c := cond.(type) {
 	case *ast.InstanceOf:
 		_, named := c.Class.(*ast.ConstFetch)
