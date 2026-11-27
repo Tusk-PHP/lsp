@@ -161,7 +161,7 @@ func runCheck(args []string, stdout, stderr io.Writer) (int, error) {
 // checkTargets lists the files to check, from the project's indexed source
 // files: all of them outside vendor/ when no paths are given; otherwise each
 // file, each directory's indexed files, and each glob's matches, relative to
-// root.
+// root. A path that names no file to check is an error.
 func checkTargets(root string, args []string, indexed []string) ([]string, error) {
 	under := func(dir string) []string {
 		var out []string
@@ -175,13 +175,14 @@ func checkTargets(root string, args []string, indexed []string) ([]string, error
 	}
 	seen := map[string]bool{}
 	var files []string
-	add := func(paths ...string) {
+	add := func(paths ...string) int {
 		for _, p := range paths {
 			if !seen[p] {
 				seen[p] = true
 				files = append(files, p)
 			}
 		}
+		return len(paths)
 	}
 	if len(args) == 0 {
 		vendor := filepath.Join(root, "vendor") + string(filepath.Separator)
@@ -203,6 +204,7 @@ func checkTargets(root string, args []string, indexed []string) ([]string, error
 				return nil, fmt.Errorf("bad pattern %q: %w", arg, err)
 			}
 		}
+		found := 0
 		for _, m := range matches {
 			info, err := os.Stat(m)
 			if err != nil {
@@ -214,10 +216,13 @@ func checkTargets(root string, args []string, indexed []string) ([]string, error
 			}
 			switch {
 			case info.IsDir():
-				add(under(resolved)...)
+				found += add(under(resolved)...)
 			case workspace.IsPHPSource(resolved), workspace.IsBlade(resolved):
-				add(resolved)
+				found += add(resolved)
 			}
+		}
+		if found == 0 {
+			return nil, fmt.Errorf("%s: no PHP file or Blade view of the project to check", arg)
 		}
 	}
 	sort.Strings(files)

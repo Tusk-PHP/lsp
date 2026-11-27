@@ -191,6 +191,7 @@ func symlinkedProject(t *testing.T) (root, link string) {
 		"vendor/acme/lib/src/Lib.php":    "<?php\nnamespace Acme;\nclass Lib { public function run() { return $nope; } }\n",
 		"src/Uses.php":                   "<?php\nnamespace App;\nclass Uses {\n    public function run(): int\n    {\n        new \\Acme\\Lib();\n        new \\Acme\\Missing();\n        return $missing;\n    }\n}\n",
 		"src/Clean.php":                  "<?php\nnamespace App;\nclass Clean { public function run(): int { return 1; } }\n",
+		"empty/readme.txt":               "nothing to check\n",
 	})
 	link = filepath.Join(t.TempDir(), "app")
 	if err := os.Symlink(root, link); err != nil {
@@ -217,6 +218,17 @@ func TestCheckThroughASymlinkedRoot(t *testing.T) {
 		}
 		if strings.HasPrefix(summary, "0 files") {
 			t.Errorf("check %v checked no files: %s", args, summary)
+		}
+	}
+}
+
+func TestCheckFailsWhenAPathNamesNoFile(t *testing.T) {
+	_, link := symlinkedProject(t)
+	for _, arg := range []string{"empty", "src/*.inc"} {
+		var out, errOut bytes.Buffer
+		code, err := runCheck([]string{"--root", link, arg}, &out, &errOut)
+		if code != 2 || err == nil || !strings.Contains(err.Error(), arg) {
+			t.Errorf("check %s: exit %d, error %v", arg, code, err)
 		}
 	}
 }
