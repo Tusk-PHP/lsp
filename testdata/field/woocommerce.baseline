@@ -896,8 +896,6 @@ wp-content/plugins/woocommerce/src/Internal/ProductAttributesLookup/CLIRunner.ph
 wp-content/plugins/woocommerce/src/Internal/ProductDownloads/ApprovedDirectories/Admin/Table.php	unused-import	Unused import 'WP_Screen'
 wp-content/plugins/woocommerce/src/Internal/ProductFilters/FilterData.php	unused-import	Unused import 'Automattic\WooCommerce\Enums\ProductStatus'
 wp-content/plugins/woocommerce/src/Internal/PushNotifications/Dispatchers/WpcomNotificationDispatcher.php	unknown-class	Unknown class 'Jetpack_Connection_Client'
-wp-content/plugins/woocommerce/src/Internal/PushNotifications/Traits/ConvertsExceptionsToWpError.php	unknown-member	Unknown member 'getErrorCode' on 'Exception'
-wp-content/plugins/woocommerce/src/Internal/PushNotifications/Traits/ConvertsExceptionsToWpError.php	unknown-member	Unknown member 'getErrorData' on 'Exception'
 wp-content/plugins/woocommerce/src/Internal/PushNotifications/Validators/PushTokenValidator.php	unused-private-method	Private method 'PushTokenValidator::validate_device_locale' is never used
 wp-content/plugins/woocommerce/src/Internal/PushNotifications/Validators/PushTokenValidator.php	unused-private-method	Private method 'PushTokenValidator::validate_device_uuid' is never used
 wp-content/plugins/woocommerce/src/Internal/PushNotifications/Validators/PushTokenValidator.php	unused-private-method	Private method 'PushTokenValidator::validate_id' is never used
