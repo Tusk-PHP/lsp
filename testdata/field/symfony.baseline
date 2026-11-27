@@ -412,8 +412,6 @@ src/Symfony/Component/Mailer/Test/AbstractTransportFactoryTestCase.php	unknown-c
 src/Symfony/Component/Mailer/Test/Constraint/EmailCount.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/Mailer/Test/Constraint/EmailIsQueued.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/Mailer/Test/IncompleteDsnTestTrait.php	unknown-class	Unknown attribute 'DataProvider'
-src/Symfony/Component/Mailer/Transport/Transports.php	unknown-member	Unknown member 'getHeaders' on 'RawMessage'
-src/Symfony/Component/Mailer/Transport/Transports.php	unknown-member	Unknown member 'getHeaders' on 'RawMessage'
 src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpFactory.php	unknown-class	Unknown class 'AMQPChannel'
 src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpFactory.php	unknown-class	Unknown class 'AMQPConnection'
 src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpFactory.php	unknown-class	Unknown class 'AMQPExchange'
