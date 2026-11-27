@@ -61,12 +61,17 @@ func main() {
 		benchDirFlag = flag.String("bench-dir", "", "path to the bench/ directory (default: auto-detect)")
 		serversFile  = flag.String("servers-file", "", "path to servers.json (default: <bench-dir>/servers.json)")
 		suiteDirFlag = flag.String("suite-dir", "", "path to the suite directory (default: <bench-dir>/suite)")
+		passFlag     = flag.String("passmarks", "", "fail unless the run meets the pass marks in this file (bench/passmarks.json)")
 	)
 	flag.Parse()
 
 	if *renderFlag != "" {
-		if err := rerender(*renderFlag, *outFlag); err != nil {
+		rep, err := rerender(*renderFlag, *outFlag)
+		if err != nil {
 			fatal(err)
+		}
+		if *passFlag != "" {
+			enforcePassMarks(rep, *passFlag, splitCSV(*wsFlag))
 		}
 		return
 	}
@@ -166,6 +171,9 @@ func main() {
 	}
 	printConsole(rep)
 	fmt.Printf("\nresults: %s\nreport:  %s\n", jsonPath, mdPath)
+	if *passFlag != "" {
+		enforcePassMarks(rep, *passFlag, opts.workspaceFilter)
+	}
 }
 
 // runServer launches one server against one workspace and runs the suite.
@@ -685,25 +693,25 @@ func resolveBenchDir(explicit string) (string, error) {
 
 // rerender rebuilds report.md from a stored results.json, so the report format
 // can change without re-running an hour of benchmarks.
-func rerender(resultsPath, outDir string) error {
+func rerender(resultsPath, outDir string) (Report, error) {
+	var rep Report
 	b, err := os.ReadFile(resultsPath)
 	if err != nil {
-		return err
+		return rep, err
 	}
-	var rep Report
 	if err := json.Unmarshal(b, &rep); err != nil {
-		return fmt.Errorf("%s: %w", resultsPath, err)
+		return rep, fmt.Errorf("%s: %w", resultsPath, err)
 	}
 	if outDir == "" {
 		outDir = filepath.Dir(resultsPath)
 	}
 	_, mdPath, err := writeReport(outDir, rep)
 	if err != nil {
-		return err
+		return rep, err
 	}
 	printConsole(rep)
 	fmt.Printf("\nreport: %s\n", mdPath)
-	return nil
+	return rep, nil
 }
 
 func msSince(t time.Time) float64 { return float64(time.Since(t).Microseconds()) / 1000 }
