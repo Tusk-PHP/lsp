@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 )
@@ -44,7 +46,7 @@ func TestFunctionCallMarksOnlyANameCalledAsAFunction(t *testing.T) {
 			src = src[:offset] + src[offset+1:]
 			line := strings.Count(src[:offset], "\n")
 			char := offset - strings.LastIndex(src[:offset], "\n") - 1
-			ctx := Analyze("file:///a.php", src, protocol.Position{Line: line, Character: char})
+			ctx := Analyze("file:///a.php", src, protocol.Position{Line: line, Character: char}, phpparser.OnlyGrammar(token.Latest))
 			if ctx == nil {
 				t.Fatal("expected cursor context")
 			}
@@ -86,7 +88,7 @@ func TestCallAtFindsTheCalleeAndArgumentFromTokens(t *testing.T) {
 			offset := strings.Index(src, "|")
 			src = src[:offset] + src[offset+1:]
 			pos := protocol.Position{Line: strings.Count(src[:offset], "\n"), Character: offset - strings.LastIndex(src[:offset], "\n") - 1}
-			callee, argument, ok := CallAt("file:///a.php", src, pos)
+			callee, argument, ok := CallAt("file:///a.php", src, pos, phpparser.OnlyGrammar(token.Latest))
 			if ok != tc.ok {
 				t.Fatalf("ok = %v, want %v", ok, tc.ok)
 			}
@@ -116,7 +118,7 @@ func TestCalledMarksAnyNameFollowedByItsArguments(t *testing.T) {
 		offset := strings.Index(full, "|")
 		full = full[:offset] + full[offset+1:]
 		pos := protocol.Position{Line: strings.Count(full[:offset], "\n"), Character: offset - strings.LastIndex(full[:offset], "\n") - 1}
-		if got := Analyze("file:///a.php", full, pos).Called; got != want {
+		if got := Analyze("file:///a.php", full, pos, phpparser.OnlyGrammar(token.Latest)).Called; got != want {
 			t.Errorf("%s: Called = %v, want %v", src, got, want)
 		}
 	}
@@ -135,7 +137,7 @@ func TestMemberAccessReadsTheFormOfTheAccess(t *testing.T) {
 		offset := strings.Index(full, "|")
 		full = full[:offset] + full[offset+1:]
 		pos := protocol.Position{Line: strings.Count(full[:offset], "\n"), Character: offset - strings.LastIndex(full[:offset], "\n") - 1}
-		if got := Analyze("file:///a.php", full, pos).MemberAccess(); got != want {
+		if got := Analyze("file:///a.php", full, pos, phpparser.OnlyGrammar(token.Latest)).MemberAccess(); got != want {
 			t.Errorf("%s: MemberAccess = %v, want %v", src, got, want)
 		}
 	}

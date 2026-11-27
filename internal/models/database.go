@@ -280,7 +280,7 @@ func injectDoctrineSchemaSource(index *symbols.Index, schema *Schema, content st
 		return
 	}
 
-	file := parser.ParseFile(content)
+	file := parser.ParseFileIn(content, index.Grammars())
 	if file == nil {
 		return
 	}

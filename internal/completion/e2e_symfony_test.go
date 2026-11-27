@@ -8,6 +8,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -80,7 +81,7 @@ func symfonyControllerSource(t *testing.T) string {
 func TestE2ESymfonyTypeResolution(t *testing.T) {
 	p := setupSymfonyE2E(t)
 	source := symfonyControllerSource(t)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	uri := "file:///src/Controller/ProductController.php"
 	p.index.IndexFile(uri, source)
 
