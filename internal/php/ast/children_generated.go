@@ -74,6 +74,12 @@ func Children(n Node, visit func(Node)) {
 				visit(c)
 			}
 		}
+	case *BadExpr:
+		for _, c := range n.Attrs {
+			if c != nil {
+				visit(c)
+			}
+		}
 	case *Binary:
 		if n.Left != nil {
 			visit(n.Left)

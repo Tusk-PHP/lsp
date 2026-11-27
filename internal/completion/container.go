@@ -2,7 +2,11 @@ package completion
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -53,29 +57,29 @@ func ExtractContainerCallArg(expr string) string {
 	return resolve.ExtractContainerCallArg(expr)
 }
 
-// extractContainerArgContext detects whether the cursor is inside a container
-// resolution call like app(...), $container->get(...), $container->make(...),
-// resolve(...). Returns the partial argument text, the quote character used
-// (empty string if no quote), and true if matched.
-func extractContainerArgContext(trimmed string) (string, string, bool) {
-	patterns := []string{"app(", "resolve(", "$container->get(", "$container->make(", "$this->app->make("}
-	for _, pat := range patterns {
-		idx := strings.LastIndex(trimmed, pat)
-		if idx < 0 {
-			continue
-		}
-		after := trimmed[idx+len(pat):]
-		if strings.Contains(after, ")") {
-			continue
-		}
-		quote := ""
-		if len(after) > 0 && (after[0] == '\'' || after[0] == '"') {
-			quote = string(after[0])
-			after = after[1:]
-		}
-		return after, quote, true
+var (
+	containerFunctions = []string{"app", "resolve"}
+	containerMethods   = []string{"get", "make"}
+)
+
+func isContainerArg(arg sourcectx.CallArg, src string) bool {
+	if arg.Index != 0 || arg.InArray {
+		return false
 	}
-	return "", "", false
+	if slices.Contains(containerFunctions, arg.Function) {
+		return true
+	}
+	if arg.Static || !slices.Contains(containerMethods, arg.Method) {
+		return false
+	}
+	switch recv := arg.Receiver.(type) {
+	case *ast.Variable:
+		return recv.Bounds().Text(src) == "$container"
+	case *ast.PropertyFetch:
+		this, ok := recv.Object.(*ast.Variable)
+		return arg.Method == "make" && ok && this.Bounds().Text(src) == "$this" && recv.Name.Bounds().Text(src) == "app"
+	}
+	return false
 }
 
 // completeContainerResolve returns completion items for container resolution calls.

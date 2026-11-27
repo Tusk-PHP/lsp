@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 // A Magento-style .phtml template: $block and $escaper come from the renderer.
@@ -42,7 +43,7 @@ func undefinedNames(t *testing.T, src string, included bool) map[string]int {
 	t.Helper()
 	got := map[string]int{}
 	checker := &UndefinedVariableRule{IncludedFile: included}
-	for _, f := range checker.Check(parser.ParseFile(src), src, nil) {
+	for _, f := range checker.Check(parser.ParseFile(src, token.Latest), src, nil) {
 		got[strings.TrimPrefix(f.Message, "Undefined variable ")]++
 	}
 	return got

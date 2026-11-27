@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -28,7 +29,7 @@ function render_page( $title ) {
 `
 
 func TestRulesIgnoreInlineHTMLAndScripts(t *testing.T) {
-	file := parser.ParseFile(inlineHTMLTemplate)
+	file := parser.ParseFile(inlineHTMLTemplate, token.Latest)
 	idx := symbols.NewIndex()
 	idx.IndexFileWithSource("file:///page.php", inlineHTMLTemplate, symbols.SourceProject)
 

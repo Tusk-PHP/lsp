@@ -67,9 +67,11 @@ func (typ) typeNode() {}
 
 type File struct {
 	Span
-	Shebang Span
-	Stmts   []Stmt
-	Errors  []Error
+	Shebang  Span
+	Stmts    []Stmt
+	Errors   []Error
+	Warnings []Error
+	Version  token.Version
 }
 
 type Error struct {
@@ -151,6 +153,7 @@ type ArgList struct {
 	Span
 	Args            []*Arg
 	RestPlaceholder bool
+	Unclosed        bool
 }
 
 type Variable struct {
@@ -204,7 +207,8 @@ type ArrayItem struct {
 
 type Array struct {
 	Span
-	Short bool
+	Short    bool
+	Unclosed bool
 	expr
 	Items []*ArrayItem
 }
@@ -388,6 +392,7 @@ type ClassConstFetch struct {
 
 type ArrayDimFetch struct {
 	expr
+	Unclosed bool
 	Span
 	Array Expr
 	Dim   Expr
@@ -443,6 +448,7 @@ type Match struct {
 type BadExpr struct {
 	expr
 	Span
+	Attrs []*AttributeGroup
 }
 
 type InlineHTML struct {
@@ -654,6 +660,7 @@ type Const struct {
 	stmt
 	Span
 	Attrs []*AttributeGroup
+	Doc   Span
 	Items []*ConstItem
 }
 

@@ -1,10 +1,7 @@
 package models
 
 import (
-	"strings"
-
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -36,21 +33,13 @@ func analyzeEloquentFile(index *symbols.Index, uri, source string, schema *Schem
 	if len(models) == 0 {
 		return
 	}
-	file := parser.ParseFile(source)
-	if file == nil {
-		return
-	}
+	parsed := newModelSource(source, index.GrammarOf(uri))
 	for _, model := range models {
 		injectEloquentStaticMethods(index, model)
-		analyzeModelSource(index, model, source, file)
+		analyzeModelSource(index, model, parsed)
 		// The same order as the workspace analysis: the schema's columns,
 		// then those only migrations know.
-		table := ""
-		if tableProp := index.Lookup(model.FQN + "::$table"); tableProp != nil && tableProp.Value != "" {
-			table = strings.Trim(tableProp.Value, "'\"")
-		} else {
-			table = modelTableName(model, source)
-		}
+		table := ResolveModelTableName(index, model)
 		if schema != nil {
 			if t := schema.Table(table); t != nil {
 				injectColumnsAsProperties(index, model, t.Columns)

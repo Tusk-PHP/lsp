@@ -1,10 +1,10 @@
 package resolve
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -53,7 +53,7 @@ func TestResolveClassName(t *testing.T) {
 namespace App;
 use Monolog\Logger;
 class Foo {}
-`)
+`, token.Latest)
 
 	tests := []struct {
 		name, input, want string
@@ -88,7 +88,7 @@ class Foo {
     public function bar() {}
 }
 class Baz {}
-`)
+`, token.Latest)
 
 	t.Run("inside class", func(t *testing.T) {
 		fqn := FindEnclosingClass(file, protocol.Position{Line: 3})
@@ -119,7 +119,7 @@ class Foo {
     }
     public function baz() {}
 }
-`)
+`, token.Latest)
 
 	t.Run("inside method", func(t *testing.T) {
 		m := FindEnclosingMethod(file, protocol.Position{Line: 3})
@@ -178,7 +178,7 @@ func TestMemberType(t *testing.T) {
 	file := parser.ParseFile(`<?php
 namespace App;
 use Monolog\Logger;
-`)
+`, token.Latest)
 
 	t.Run("return type from hint", func(t *testing.T) {
 		m := r.FindMember("App\\Service", "run")
@@ -253,7 +253,7 @@ namespace App;
 class Service {
     public function foo() { $this->bar(); }
 }
-`)
+`, token.Latest)
 		lines := SplitLines(`<?php
 namespace App;
 class Service {
@@ -276,7 +276,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		lines := SplitLines(source)
 		typ := r.ResolveVariableType("$log", lines, protocol.Position{Line: 5}, file)
 		if typ != "Monolog\\Logger" {
@@ -290,7 +290,7 @@ use Monolog\Logger;
 $x = new Logger();
 $x->info("test");
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		lines := SplitLines(source)
 		typ := r.ResolveVariableType("$x", lines, protocol.Position{Line: 3}, file)
 		if typ != "Monolog\\Logger" {
@@ -313,7 +313,7 @@ $provider = new stdClass();
 $providerClass = get_class($provider);
 echo $providerClass;
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		lines := SplitLines(source)
 		typ := r2.ResolveVariableType("$providerClass", lines, protocol.Position{Line: 3}, file)
 		if typ != "string" {
@@ -330,7 +330,7 @@ $provider = new stdClass();
 $providerClass = get_class($provider);
 echo $providerClass;
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		lines := SplitLines(source)
 		rt := r2.ResolveVariableTypeTyped("$providerClass", lines, protocol.Position{Line: 3}, file)
 		if rt.FQN != "string" {
@@ -365,69 +365,6 @@ func TestInferLiteralType(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestJoinChainLines(t *testing.T) {
-	t.Run("single line no-op", func(t *testing.T) {
-		lines := []string{"Category::query()->get()"}
-		joined, offset := JoinChainLines(lines, 0, 24)
-		if joined != "Category::query()->get()" || offset != 24 {
-			t.Errorf("got %q offset %d", joined, offset)
-		}
-	})
-
-	t.Run("two-line chain", func(t *testing.T) {
-		lines := []string{"Category::query()", "    ->get()"}
-		joined, _ := JoinChainLines(lines, 1, 6)
-		if joined != "Category::query()    ->get()" {
-			t.Errorf("got %q", joined)
-		}
-	})
-
-	t.Run("three-line chain", func(t *testing.T) {
-		lines := []string{"Category::query()", "    ->with('rel')", "    ->get()"}
-		joined, _ := JoinChainLines(lines, 2, 6)
-		if joined != "Category::query()    ->with('rel')    ->get()" {
-			t.Errorf("got %q", joined)
-		}
-	})
-
-	t.Run("argument list of hundreds of lines with brackets in strings", func(t *testing.T) {
-		lines := []string{"$x = 1;", "Collection::make(["}
-		for i := 0; i < 400; i++ {
-			lines = append(lines, `    ['form' => '[{"a":[1]}]'],`)
-		}
-		lines = append(lines, "])->each(fn ($i) => $i);")
-		last := len(lines) - 1
-		joined, offset := JoinChainLines(lines, last, 4)
-		if !strings.HasPrefix(joined, "Collection::make([") || !strings.HasPrefix(joined[offset:], "each(") {
-			t.Errorf("joined starts %q, at offset %q", joined[:min(30, len(joined))], joined[offset:min(offset+10, len(joined))])
-		}
-	})
-
-	t.Run("non-chain line not joined", func(t *testing.T) {
-		lines := []string{"$x = 1;", "$y = 2;"}
-		joined, offset := JoinChainLines(lines, 1, 3)
-		if joined != "$y = 2;" || offset != 3 {
-			t.Errorf("got %q offset %d", joined, offset)
-		}
-	})
-
-	t.Run("out of bounds", func(t *testing.T) {
-		lines := []string{"hello"}
-		joined, offset := JoinChainLines(lines, 5, 0)
-		if joined != "" || offset != 0 {
-			t.Errorf("got %q offset %d", joined, offset)
-		}
-	})
-
-	t.Run("nullsafe chain", func(t *testing.T) {
-		lines := []string{"$user", "    ?->getName()"}
-		joined, _ := JoinChainLines(lines, 1, 6)
-		if joined != "$user    ?->getName()" {
-			t.Errorf("got %q", joined)
-		}
-	})
 }
 
 func TestBuildFQN(t *testing.T) {
@@ -584,7 +521,7 @@ class Product {}
 	caller := parser.ParseFile(`<?php
 namespace App\Http;
 use App\Product;
-`)
+`, token.Latest)
 	for _, name := range []string{"initialize", "$current"} {
 		m := r.FindMember("Magento\\Catalog\\Helper\\Helper", name)
 		if m == nil {
@@ -624,7 +561,7 @@ function run(): void {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///a.php", src)
 	r := NewResolver(idx)
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	lines := SplitLines(src)
 	at := func(v string, line int) string {
 		return r.ResolveVariableTypeTyped(v, lines, protocol.Position{Line: line, Character: 9}, file).String()

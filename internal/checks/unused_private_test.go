@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
@@ -19,7 +20,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unused-private-method"})
 		if findings[0].Message != "Private method 'Foo::unusedMethod' is never used" {
@@ -36,7 +37,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -50,7 +51,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -64,7 +65,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unused-private-property"})
 	})
@@ -78,7 +79,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -91,7 +92,7 @@ class Foo {
     private function __clone(): void {}
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -105,7 +106,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -117,7 +118,7 @@ class Foo {
     public function publicUnused(): void {}
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -129,7 +130,7 @@ class Foo {
     private function unusedMethod(): void {}
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		if len(findings) != 2 {
 			t.Fatalf("expected 2 findings, got %d", len(findings))
@@ -154,7 +155,7 @@ class Foo {
     }
 }
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -178,7 +179,7 @@ class WP_Block_Processor {
     }
 }
 `
-	if got := (&UnusedPrivateRule{}).Check(parser.ParseFile(src), src, nil); len(got) != 0 {
+	if got := (&UnusedPrivateRule{}).Check(parser.ParseFile(src, token.Latest), src, nil); len(got) != 0 {
 		t.Errorf("used private members reported unused: %+v", got)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -53,7 +54,7 @@ strlen(string: 'x');
 	}
 	r := &UnknownNamedArgumentRule{TypeResolver: resolver}
 	var got []string
-	for _, f := range r.Check(parser.ParseFile(source), source, idx) {
+	for _, f := range r.Check(parser.ParseFile(source, token.Latest), source, idx) {
 		if f.Code != rule.UnknownNamedArgument || f.Severity != rule.SeverityError {
 			t.Errorf("finding %+v", f)
 		}
@@ -73,7 +74,7 @@ strlen(string: 'x');
 	if !slices.Equal(r.Codes(), []rule.Code{rule.UnknownNamedArgument}) {
 		t.Errorf("codes %v", r.Codes())
 	}
-	if r.Check(parser.ParseFile("<?php greet('a');"), "<?php greet('a');", idx) != nil {
+	if r.Check(parser.ParseFile("<?php greet('a');", token.Latest), "<?php greet('a');", idx) != nil {
 		t.Error("a file without a colon has no named arguments to check")
 	}
 }
@@ -95,7 +96,7 @@ greet(/* why */ nmae: 'x');
 greet(nmae: 'x'
 `
 	var got []string
-	for _, f := range (&UnknownNamedArgumentRule{}).Check(parser.ParseFile(source), source, idx) {
+	for _, f := range (&UnknownNamedArgumentRule{}).Check(parser.ParseFile(source, token.Latest), source, idx) {
 		got = append(got, f.Message)
 	}
 	if !slices.Equal(got, []string{"Unknown named argument 'nmae' to greet()"}) {
@@ -103,7 +104,7 @@ greet(nmae: 'x'
 	}
 }
 
-func TestArgumentCountIgnoresConstructorsAndCallsInsideCheckedCalls(t *testing.T) {
+func TestArgumentCountIgnoresConstructorsButChecksCallsInsideCheckedCalls(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
 	idx.IndexFile("file:///lib.php", `<?php
@@ -113,11 +114,11 @@ class Box { public function __construct(int $size) {} }
 `)
 	source := "<?php\nnew Box();\none(two(1));\ntwo(1);\n"
 	var got []int
-	for _, f := range (&ArgumentCountRule{}).Check(parser.ParseFile(source), source, idx) {
+	for _, f := range (&ArgumentCountRule{}).Check(parser.ParseFile(source, token.Latest), source, idx) {
 		got = append(got, f.StartLine)
 	}
-	if !slices.Equal(got, []int{3}) {
-		t.Errorf("only two(1) on line 3 is reported, as before the walker was shared: %v", got)
+	if !slices.Equal(got, []int{2, 3}) {
+		t.Errorf("new Box() isn't checked; two(1) is, inside one(...) as on its own: %v", got)
 	}
 }
 
@@ -156,7 +157,7 @@ $dup->run(a: 1);
 $dup->run(z: 1);
 `
 	var got []int
-	for _, f := range (&UnknownNamedArgumentRule{TypeResolver: dupResolver}).Check(parser.ParseFile(source), source, idx) {
+	for _, f := range (&UnknownNamedArgumentRule{TypeResolver: dupResolver}).Check(parser.ParseFile(source, token.Latest), source, idx) {
 		got = append(got, f.StartLine)
 	}
 	if !slices.Equal(got, []int{3, 5, 7, 9}) {
@@ -173,7 +174,7 @@ func TestUnknownNamedArgumentWhenOneDeclarationForwardsOrLacksTheMethod(t *testi
 	resolver := func(expr, _ string, _, _ int, _ *parser.FileNode) string {
 		return map[string]string{"$dup": "Dup", "$gap": "Gap"}[expr]
 	}
-	if got := (&UnknownNamedArgumentRule{TypeResolver: resolver}).Check(parser.ParseFile(source), source, idx); len(got) != 0 {
+	if got := (&UnknownNamedArgumentRule{TypeResolver: resolver}).Check(parser.ParseFile(source, token.Latest), source, idx); len(got) != 0 {
 		t.Errorf("a declaration with __call, or without the method, may accept anything: %+v", got)
 	}
 }
@@ -186,7 +187,7 @@ func TestUnknownNamedArgumentUsesEachDeclarationsOwnTraits(t *testing.T) {
 	idx.IndexFile("file:///b.php", "<?php\nclass Dup extends P {}\n")
 	source := "<?php\n$dup->m(a: 1);\n$dup->m(x: 1);\n$dup->m(z: 1);\n"
 	var got []int
-	for _, f := range (&UnknownNamedArgumentRule{TypeResolver: dupResolver}).Check(parser.ParseFile(source), source, idx) {
+	for _, f := range (&UnknownNamedArgumentRule{TypeResolver: dupResolver}).Check(parser.ParseFile(source, token.Latest), source, idx) {
 		got = append(got, f.StartLine)
 	}
 	if !slices.Equal(got, []int{3}) {

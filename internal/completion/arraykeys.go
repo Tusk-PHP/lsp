@@ -3,10 +3,12 @@ package completion
 import (
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
+
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/phparray"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
@@ -18,102 +20,12 @@ type arrayKeyContext struct {
 	Quote      string
 }
 
-func extractArrayKeyContext(prefix string) (varName, partial, quote string, ok bool) {
-	ctx := parseArrayKeyContext(prefix)
-	if ctx == nil {
-		return
+func arrayKeyContextOf(src string, dim sourcectx.StringDim) (*arrayKeyContext, bool) {
+	v, ok := dim.Base.(*ast.Variable)
+	if !ok {
+		return nil, false
 	}
-	return ctx.VarName, ctx.Partial, ctx.Quote, true
-}
-
-func parseArrayKeyContext(prefix string) *arrayKeyContext {
-	i := len(prefix) - 1
-
-	partialStart := i + 1
-	for i >= 0 && prefix[i] != '\'' && prefix[i] != '"' && prefix[i] != '[' {
-		i--
-	}
-	if i < 0 {
-		return nil
-	}
-
-	var partial, quote string
-	if prefix[i] == '\'' || prefix[i] == '"' {
-		quote = string(prefix[i])
-		partial = prefix[i+1 : partialStart]
-		i--
-	} else if prefix[i] == '[' {
-		partial = ""
-	}
-
-	for i >= 0 && (prefix[i] == ' ' || prefix[i] == '\t') {
-		i--
-	}
-	if i < 0 {
-		return nil
-	}
-	if prefix[i] == '[' {
-		i--
-	} else if quote != "" {
-		return nil
-	}
-
-	var accessKeys []string
-	for i >= 0 {
-		for i >= 0 && (prefix[i] == ' ' || prefix[i] == '\t') {
-			i--
-		}
-		if i < 0 || prefix[i] != ']' {
-			break
-		}
-		i--
-		if i < 0 || (prefix[i] != '\'' && prefix[i] != '"') {
-			break
-		}
-		closeQuote := prefix[i]
-		i--
-
-		keyEnd := i + 1
-		for i >= 0 && prefix[i] != closeQuote {
-			i--
-		}
-		if i < 0 {
-			break
-		}
-		key := prefix[i+1 : keyEnd]
-		i--
-
-		for i >= 0 && (prefix[i] == ' ' || prefix[i] == '\t') {
-			i--
-		}
-		if i < 0 || prefix[i] != '[' {
-			break
-		}
-		i--
-
-		accessKeys = append([]string{key}, accessKeys...)
-	}
-
-	for i >= 0 && (prefix[i] == ' ' || prefix[i] == '\t') {
-		i--
-	}
-	if i < 0 {
-		return nil
-	}
-
-	end := i + 1
-	for i >= 0 && resolve.IsWordChar(prefix[i]) {
-		i--
-	}
-	if i >= 0 && prefix[i] == '$' {
-		return &arrayKeyContext{
-			VarName:    prefix[i:end],
-			AccessKeys: accessKeys,
-			Partial:    partial,
-			Quote:      quote,
-		}
-	}
-	return nil
+	return &arrayKeyContext{VarName: v.Bounds().Text(src), AccessKeys: dim.Keys, Partial: dim.Partial, Quote: dim.Quote}, true
 }
 
 func (p *Provider) completeArrayKeys(source string, pos protocol.Position, ctx *arrayKeyContext, file *parser.FileNode) []protocol.CompletionItem {
