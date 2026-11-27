@@ -50,6 +50,12 @@ type Bootstrapped struct {
 	SymfonyCommands *frameworksymfony.CommandIndex
 	SchemaCache     *models.SchemaCache
 	Schema          *models.Schema
+	// Views, Translations and ArrayKeys read what a Laravel app names outside
+	// its classes: views, translation keys and config files. Refresh forgets
+	// what they read when it changes.
+	Views        *frameworklaravel.Views
+	Translations *frameworklaravel.TranslationResolver
+	ArrayKeys    *models.FrameworkArrayResolver
 
 	exclude excludeRules
 
@@ -109,6 +115,9 @@ func New(opts Options) *Bootstrapped {
 		Aliases:         aliases,
 		SymfonyCommands: commands,
 		SchemaCache:     models.NewSchemaCache(),
+		Views:           frameworklaravel.NewViews(opts.RootPath),
+		Translations:    frameworklaravel.NewTranslationResolver(opts.RootPath),
+		ArrayKeys:       models.NewFrameworkArrayResolver(index, opts.RootPath, opts.Framework),
 		exclude:         newExcludeRules(cfg.ExcludePaths),
 		projectFiles:    newProjectFiles(cfg.MaxIndexFiles),
 	}

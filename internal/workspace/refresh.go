@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -69,14 +70,15 @@ func (ws *Bootstrapped) ConfigPath() string {
 }
 
 func WatchGlobs() []string {
-	globs := make([]string, 0, len(phpSourceExtensions)+len(composerStateFiles)+1)
+	laravelGlobs := frameworklaravel.WatchGlobs()
+	globs := make([]string, 0, len(phpSourceExtensions)+len(composerStateFiles)+1+len(laravelGlobs))
 	for _, ext := range phpSourceExtensions {
 		globs = append(globs, "**/*"+ext)
 	}
 	for _, name := range append(slices.Clone(composerStateFiles), config.FileName) {
 		globs = append(globs, "**/"+name)
 	}
-	return globs
+	return append(globs, laravelGlobs...)
 }
 
 func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
@@ -128,6 +130,7 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 			out.EditorOpened = append(out.EditorOpened, uri)
 		}
 	}
+	ws.NamesChanged(r.Paths)
 	if out.Composer {
 		ws.rereadAutoload()
 	}
@@ -140,6 +143,20 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 		ws.Container.Analyze()
 	}
 	return out, errors.Join(errs...)
+}
+
+// NamesChanged forgets the views, translation keys and package config files
+// read, when paths, created, changed or deleted, can change them. Refresh
+// calls it; a transport calls it alone for files it learns changed without a
+// refresh, such as a file the editor saved.
+func (ws *Bootstrapped) NamesChanged(paths []string) {
+	ws.Views.FilesChanged(paths)
+	ws.Translations.FilesChanged(paths)
+	vendorState := ws.VendorStatePaths()
+	if slices.ContainsFunc(paths, func(path string) bool { return slices.Contains(vendorState, filepath.Clean(path)) }) {
+		ws.Views.Invalidate()
+		ws.ArrayKeys.InvalidateVendorConfigs()
+	}
 }
 
 func (ws *Bootstrapped) refreshProfile(load func() (*config.Config, error), out *Refreshed) error {

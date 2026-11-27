@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 )
@@ -15,13 +16,19 @@ type View struct {
 	URI  string
 }
 
+// Views finds the views of a Laravel app. What it reads from disk is kept
+// until FilesChanged reports a change to it, or Invalidate.
 type Views struct {
 	rootPath string
 	// providers registers view namespaces (`courier::mail`).
 	providers *Providers
-	nsMu      sync.Mutex
-	nsNames   map[string][]string // namespace → its view names, once listed
-	nsRegs    *Registrations      // what nsNames was listed from
+	cache     atomic.Pointer[viewCache]
+}
+
+type viewCache struct {
+	nsMu    sync.Mutex
+	nsNames map[string][]string // namespace → its view names, once listed
+	nsRegs  *Registrations      // what nsNames was listed from
 
 	mu     sync.RWMutex
 	loaded bool
@@ -36,22 +43,58 @@ type Views struct {
 }
 
 func NewViews(rootPath string) *Views {
-	return &Views{rootPath: rootPath}
+	v := &Views{rootPath: rootPath}
+	v.Invalidate()
+	return v
+}
+
+// Invalidate forgets every view read, after the installed packages changed.
+func (v *Views) Invalidate() {
+	if v != nil {
+		v.cache.Store(&viewCache{})
+	}
+}
+
+// FilesChanged forgets the views read when one of paths, created, changed or
+// deleted, can change which views exist or where they are: a file under a
+// view directory, or the view and Livewire config.
+func (v *Views) FilesChanged(paths []string) {
+	if v == nil {
+		return
+	}
+	watched := append(v.cache.Load().viewDirs(v.rootPath),
+		filepath.Join(v.rootPath, "config", "view.php"),
+		filepath.Join(v.rootPath, "config", "livewire.php"))
+	for _, path := range paths {
+		if touchesAny(path, watched) {
+			v.Invalidate()
+			return
+		}
+	}
+}
+
+func (c *viewCache) viewDirs(rootPath string) []string {
+	c.dirsOnce.Do(func() {
+		// Livewire 4 adds view locations after resources/views.
+		extra, _ := livewireLocations(rootPath)
+		c.dirs = append([]string{filepath.Join(rootPath, "resources", "views")}, extra...)
+	})
+	return c.dirs
 }
 
 func (v *Views) Search(prefix string) []View {
 	if v == nil {
 		return nil
 	}
-	v.load()
+	c := v.load()
 
-	v.mu.RLock()
-	defer v.mu.RUnlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	lowerPrefix := strings.ToLower(prefix)
 	wantsNamespace := strings.Contains(prefix, "::")
 	var matches []View
-	for _, view := range v.views {
+	for _, view := range c.views {
 		if wantsNamespace != strings.Contains(view.Name, "::") {
 			continue
 		}
@@ -66,25 +109,26 @@ func (v *Views) Find(name string) *View {
 	if v == nil || name == "" {
 		return nil
 	}
-	v.load()
+	c := v.load()
 
-	v.mu.RLock()
-	defer v.mu.RUnlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
-	if view, ok := v.byName[name]; ok {
+	if view, ok := c.byName[name]; ok {
 		copy := view
 		return &copy
 	}
 	return nil
 }
 
-func (v *Views) load() {
-	v.mu.RLock()
-	if v.loaded {
-		v.mu.RUnlock()
-		return
+func (v *Views) load() *viewCache {
+	c := v.cache.Load()
+	c.mu.RLock()
+	if c.loaded {
+		c.mu.RUnlock()
+		return c
 	}
-	v.mu.RUnlock()
+	c.mu.RUnlock()
 
 	viewsPath := filepath.Join(v.rootPath, "resources", "views")
 	entries := collectViews(viewsPath)
@@ -93,14 +137,14 @@ func (v *Views) load() {
 		byName[view.Name] = view
 	}
 
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	if v.loaded {
-		return
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.loaded {
+		c.views = entries
+		c.byName = byName
+		c.loaded = true
 	}
-	v.views = entries
-	v.byName = byName
-	v.loaded = true
+	return c
 }
 
 func collectViews(root string) []View {
@@ -295,12 +339,7 @@ func (v *Views) ViewURI(name string) (string, bool) {
 		return "", false
 	}
 	rel := filepath.FromSlash(strings.ReplaceAll(name, ".", "/"))
-	v.dirsOnce.Do(func() {
-		// Livewire 4 adds view locations after resources/views.
-		extra, _ := livewireLocations(v.rootPath)
-		v.dirs = append([]string{filepath.Join(v.rootPath, "resources", "views")}, extra...)
-	})
-	for _, dir := range v.dirs {
+	for _, dir := range v.cache.Load().viewDirs(v.rootPath) {
 		if uri, ok := v.addFromDisk(name, filepath.Join(dir, rel)); ok {
 			return uri, true
 		}
@@ -313,15 +352,16 @@ func (v *Views) addFromDisk(name, base string) (string, bool) {
 	for _, ext := range []string{".blade.php", ".php"} {
 		if info, err := os.Stat(base + ext); err == nil && !info.IsDir() {
 			view := View{Name: name, URI: "file://" + filepath.ToSlash(base+ext)}
-			v.mu.Lock()
-			if _, ok := v.byName[name]; ok {
-				v.mu.Unlock()
+			c := v.load()
+			c.mu.Lock()
+			if _, ok := c.byName[name]; ok {
+				c.mu.Unlock()
 				return view.URI, true
 			}
-			v.byName[name] = view
-			v.views = append(v.views, view)
-			sort.Slice(v.views, func(i, j int) bool { return v.views[i].Name < v.views[j].Name })
-			v.mu.Unlock()
+			c.byName[name] = view
+			c.views = append(c.views, view)
+			sort.Slice(c.views, func(i, j int) bool { return c.views[i].Name < c.views[j].Name })
+			c.mu.Unlock()
 			return view.URI, true
 		}
 	}
@@ -359,12 +399,13 @@ func (v *Views) NamespaceKnown(ns string) bool {
 // namespaceNames lists a namespace's views once, for completion.
 func (v *Views) namespaceNames(ns string) []string {
 	regs := v.providers.Get()
-	v.nsMu.Lock()
-	defer v.nsMu.Unlock()
-	if v.nsRegs != regs || v.nsNames == nil {
-		v.nsNames, v.nsRegs = map[string][]string{}, regs
+	c := v.cache.Load()
+	c.nsMu.Lock()
+	defer c.nsMu.Unlock()
+	if c.nsRegs != regs || c.nsNames == nil {
+		c.nsNames, c.nsRegs = map[string][]string{}, regs
 	}
-	if names, ok := v.nsNames[ns]; ok {
+	if names, ok := c.nsNames[ns]; ok {
 		return names
 	}
 	seen := map[string]bool{}
@@ -378,7 +419,7 @@ func (v *Views) namespaceNames(ns string) []string {
 		}
 	}
 	sort.Strings(names)
-	v.nsNames[ns] = names
+	c.nsNames[ns] = names
 	return names
 }
 
@@ -411,7 +452,8 @@ func (v *Views) ViewsKnown() bool {
 	if v == nil {
 		return false
 	}
-	v.knownOnce.Do(func() {
+	c := v.cache.Load()
+	c.knownOnce.Do(func() {
 		info, err := os.Stat(filepath.Join(v.rootPath, "resources", "views"))
 		if err != nil || !info.IsDir() {
 			return
@@ -421,12 +463,12 @@ func (v *Views) ViewsKnown() bool {
 		}
 		cfg, err := os.ReadFile(filepath.Join(v.rootPath, "config", "view.php"))
 		if err != nil {
-			v.known = true
+			c.known = true
 			return
 		}
-		v.known = onlyDefaultViewPath(string(cfg))
+		c.known = onlyDefaultViewPath(string(cfg))
 	})
-	return v.known
+	return c.known
 }
 
 // onlyDefaultViewPath reports whether a config/view.php lists no view path
