@@ -53,6 +53,7 @@ disappear a moment later.
 | `redundant-nullsafe` | `?->` on a value that can't be null (*on save*) | Info |
 | `unknown-column` | An Eloquent query naming a column the model doesn't have, such as `where('nmae', …)` (*on save*) | Warning |
 | `unknown-relation` | An Eloquent query naming a relation the model doesn't have, such as `with('comments')` (*on save*) | Warning |
+| `unknown-validation-rule` | A Laravel validation rule name that neither the framework nor your service providers define, such as `'requierd\|email'` in `$request->validate()`, `Validator::make()` or a form request's `rules()`. Rules built at run time are not checked, and nothing is reported while a provider registers a rule under a name the server can't read (*on save*) | Warning |
 | `unclosed-directive` | In a Blade view, a block directive such as `@if` or `@foreach` with no matching `@end…` | Error |
 | `unknown-view` | In a Blade view, an `@include`, `@extends` or other view name that has no view file | Warning |
 | `unknown-component` | In a Blade view, an `<x-…>` component that the project and its packages don't define | Warning |

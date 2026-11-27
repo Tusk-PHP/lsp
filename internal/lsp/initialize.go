@@ -134,6 +134,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	validationRules := frameworklaravel.NewValidationRules(s.index, s.workspace.ValidationExtensions, s.getDocumentReader())
 	s.completion.SetValidationRules(validationRules)
 	s.hover.SetValidationRules(validationRules)
+	s.diag.ValidationRules = validationRules
 	s.bladeFeatures = &blade.Features{Views: viewResolver, Components: s.components, Read: s.getDocumentReader(), Custom: s.providers.Custom}
 	s.diag.Blade = s.bladeFeatures
 	if s.workspace.ViewData != nil {

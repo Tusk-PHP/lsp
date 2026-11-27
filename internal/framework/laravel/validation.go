@@ -14,7 +14,10 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-const validatesAttributes = `Illuminate\Validation\Concerns\ValidatesAttributes`
+const (
+	validatesAttributes  = `Illuminate\Validation\Concerns\ValidatesAttributes`
+	validationRuleParser = `Illuminate\Validation\ValidationRuleParser`
+)
 
 // ValidationRule is a rule a validation rule string can name.
 type ValidationRule struct {
@@ -89,8 +92,8 @@ func Snake(s string) string {
 
 // ValidationRules are the validation rules of a Laravel app: the built-in
 // rules of its installed framework and the custom rules its files register.
-// They are read again when the framework's rule trait is re-indexed or a
-// file's registrations change.
+// They are read again when the framework's rule trait or rule parser is
+// re-indexed or a file's registrations change.
 type ValidationRules struct {
 	index      *symbols.Index
 	extensions *ValidationExtensions
@@ -98,13 +101,16 @@ type ValidationRules struct {
 
 	mu         sync.Mutex
 	trait      *symbols.Symbol
+	parser     *symbols.Symbol
 	extVersion uint64
 	catalog    *validationCatalog
 }
 
 type validationCatalog struct {
-	rules []ValidationRule
-	byKey map[string]int
+	rules   []ValidationRule
+	byKey   map[string]int
+	builtin bool
+	unread  bool
 }
 
 // NewValidationRules returns the validation rules of the app whose index
@@ -119,7 +125,18 @@ func (v *ValidationRules) All() []ValidationRule {
 	return v.current().rules
 }
 
-// Lookup returns the rule a name in a rule string stands for.
+// Complete reports whether every rule the app can use is known: the
+// index is built, the framework's rules are in it, and no indexed file
+// registers rules under a name the server can't read. Only then is a name
+// missing from them no rule.
+func (v *ValidationRules) Complete() bool {
+	c := v.current()
+	return v.index.Ready() && c.builtin && !c.unread
+}
+
+// Lookup returns the rule a name in a rule string stands for, including
+// the short names ValidationRuleParser::normalizeRule() expands, such as
+// `int` for `integer`.
 func (v *ValidationRules) Lookup(name string) (ValidationRule, bool) {
 	c := v.current()
 	i, ok := c.byKey[ValidationRuleKey(name)]
@@ -131,23 +148,25 @@ func (v *ValidationRules) Lookup(name string) (ValidationRule, bool) {
 
 func (v *ValidationRules) current() *validationCatalog {
 	trait := v.index.Lookup(validatesAttributes)
+	ruleParser := v.index.Lookup(validationRuleParser)
 	v.mu.Lock()
-	if v.catalog != nil && v.trait == trait && v.extVersion == v.extensions.currentVersion() {
+	if v.catalog != nil && v.trait == trait && v.parser == ruleParser && v.extVersion == v.extensions.currentVersion() {
 		c := v.catalog
 		v.mu.Unlock()
 		return c
 	}
 	v.mu.Unlock()
-	version, custom := v.extensions.snapshot()
-	c := v.build(trait, custom)
+	version, custom, unread := v.extensions.snapshot()
+	c := v.build(trait, ruleParser, custom)
+	c.unread = unread
 	v.mu.Lock()
-	v.trait, v.extVersion, v.catalog = trait, version, c
+	v.trait, v.parser, v.extVersion, v.catalog = trait, ruleParser, version, c
 	v.mu.Unlock()
 	return c
 }
 
-func (v *ValidationRules) build(trait *symbols.Symbol, custom []Registration) *validationCatalog {
-	c := &validationCatalog{byKey: map[string]int{}}
+func (v *ValidationRules) build(trait, ruleParser *symbols.Symbol, custom []Registration) *validationCatalog {
+	c := &validationCatalog{byKey: map[string]int{}, builtin: trait != nil}
 	if trait != nil {
 		required := requiredParameters(v.read(trait.URI))
 		for _, m := range trait.Children {
@@ -181,7 +200,50 @@ func (v *ValidationRules) build(trait *symbols.Symbol, custom []Registration) *v
 	for i, r := range c.rules {
 		c.byKey[ValidationRuleKey(r.Name)] = i
 	}
+	if ruleParser != nil {
+		for alias, target := range ruleAliases(v.read(ruleParser.URI)) {
+			if i, ok := c.byKey[ValidationRuleKey(target)]; ok {
+				c.byKey[ValidationRuleKey(alias)] = i
+			}
+		}
+	}
 	return c
+}
+
+func ruleAliases(src string) map[string]string {
+	if src == "" {
+		return nil
+	}
+	aliases := map[string]string{}
+	ast.Walk(phpparser.Parse(src, token.Latest), func(n ast.Node) bool {
+		method, ok := n.(*ast.Method)
+		if !ok {
+			return true
+		}
+		if method.Body == nil || method.Name.Text(src) != "normalizeRule" {
+			return false
+		}
+		ast.Walk(method.Body, func(n ast.Node) bool {
+			match, ok := n.(*ast.Match)
+			if !ok {
+				return true
+			}
+			for _, arm := range match.Arms {
+				target, ok := constantString(src, arm.Body)
+				if !ok {
+					continue
+				}
+				for _, cond := range arm.Conds {
+					if alias, ok := constantString(src, cond); ok {
+						aliases[alias] = target
+					}
+				}
+			}
+			return false
+		})
+		return false
+	})
+	return aliases
 }
 
 func (c *validationCatalog) add(r ValidationRule) {

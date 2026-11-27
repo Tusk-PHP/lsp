@@ -45,6 +45,9 @@ type Provider struct {
 	// ViewTypes types the variables Blade views receive, and says when all
 	// of them are known. Set by the server for a Laravel app.
 	ViewTypes *frameworklaravel.ViewTypes
+	// ValidationRules are the Laravel validation rules unknown-validation-rule
+	// checks rule strings against.
+	ValidationRules *frameworklaravel.ValidationRules
 
 	mu          sync.RWMutex
 	toolResults map[string][]Diagnostic
@@ -127,6 +130,7 @@ func (p *Provider) ruleOptions(bladePHP, includedFile bool) NativeRulesOptions {
 		BuiltinUnavailableRule: p.BuiltinUnavailableRule(),
 		BuilderModelResolver:   p.BuilderModelResolver,
 		BuilderMemberChecker:   p.BuilderMemberChecker,
+		ValidationRules:        p.ValidationRules,
 		BladePHP:               bladePHP,
 		IncludedFile:           includedFile,
 	}

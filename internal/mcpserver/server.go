@@ -769,6 +769,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	validationRules := frameworklaravel.NewValidationRules(ws.Index, ws.ValidationExtensions, readFile)
 	rt.Completion.SetValidationRules(validationRules)
 	rt.Hover.SetValidationRules(validationRules)
+	rt.Diagnostics.ValidationRules = validationRules
 	rt.Diagnostics.Blade = &blade.Features{
 		Views:      viewResolver,
 		Components: frameworklaravel.NewComponents(s.RootPath, ws.Index, providers, readFile),

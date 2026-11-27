@@ -11,6 +11,7 @@ type NativeRulesOptions struct {
 	BuiltinUnavailableRule *checks.BuiltinUnavailableRule
 	BuilderModelResolver   checks.ModelResolverFunc
 	BuilderMemberChecker   checks.MemberChecker
+	ValidationRules        *frameworklaravel.ValidationRules
 	BladePHP               bool
 	IncludedFile           bool
 }
@@ -61,6 +62,9 @@ func SaveRules(opts NativeRulesOptions) []checks.Rule {
 	}
 	if opts.BuilderModelResolver != nil && opts.BuilderMemberChecker != nil {
 		rules = append(rules, &checks.InvalidBuilderArgRule{ModelResolver: opts.BuilderModelResolver, Members: opts.BuilderMemberChecker})
+	}
+	if opts.TypeResolver != nil && opts.ValidationRules != nil {
+		rules = append(rules, &checks.UnknownValidationRuleRule{Rules: opts.ValidationRules, TypeResolver: opts.TypeResolver})
 	}
 	return rules
 }
