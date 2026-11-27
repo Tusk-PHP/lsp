@@ -12,8 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tusk-PHP/lsp/internal/config"
-	"github.com/Tusk-PHP/lsp/internal/diagnostics"
+	"github.com/Tusk-PHP/lsp/internal/session"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
@@ -98,8 +97,8 @@ func TestBackgroundIndexingKeepsTheNewestVersion(t *testing.T) {
 // document that has closed, aren't published.
 func TestDiagnosticsArePublishedOnlyForTheCurrentVersion(t *testing.T) {
 	var out bytes.Buffer
-	s := NewServer(strings.NewReader(""), &out, log.New(io.Discard, "", 0))
-	s.diag = diagnostics.NewProvider(s.index, "", "", log.New(io.Discard, "", 0), config.DefaultConfig())
+	s := newServerWithWorkspace(t, &out)
+	s.analysis = session.New(s.workspace, session.Options{})
 	uri := "file:///a.php"
 	old, current := "<?php\necho $a;\n", "<?php\necho 1;\n"
 	s.documents[uri] = current

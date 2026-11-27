@@ -290,3 +290,11 @@ func findingToDiagnostic(f checks.Finding) Diagnostic {
 	d.Tags = append(d.Tags, f.Tags...)
 	return d
 }
+
+// NativeFindings returns what every native rule finds in a PHP file's
+// source, with nothing filtered by the configuration or suppressed: the raw
+// findings introspection shows.
+func (p *Provider) NativeFindings(source string) []checks.Finding {
+	rules := NativeRules(p.ruleOptions(false, false))
+	return checks.CheckFile(parser.ParseFile(source), source, p.index, rules)
+}

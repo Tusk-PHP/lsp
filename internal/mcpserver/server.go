@@ -13,15 +13,12 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/analyzer"
 	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/coverage"
-	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
@@ -29,6 +26,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
+	"github.com/Tusk-PHP/lsp/internal/session"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/symquery"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -56,12 +54,13 @@ type Service struct {
 
 	// Workspace is kept for tests and compatibility, but serving reads go
 	// through runtime() so reindex can atomically swap the full immutable state.
-	Workspace    *workspace.Bootstrapped
-	Analyzer     *analyzer.Analyzer
-	Completion   *completion.Provider
-	Hover        *hover.Provider
-	InlayHint    *inlayhint.Provider
-	Diagnostics  *diagnostics.Provider
+	Workspace  *workspace.Bootstrapped
+	Analyzer   *analyzer.Analyzer
+	Completion *completion.Provider
+	Hover      *hover.Provider
+	InlayHint  *inlayhint.Provider
+	// Session is the project's analysis; diagnostics come through it.
+	Session      *session.Session
 	Server       *mcp.Server
 	runtimeState atomic.Pointer[serviceRuntime]
 	coverage     *coverage.Store
@@ -75,12 +74,12 @@ type Service struct {
 }
 
 type serviceRuntime struct {
-	Workspace   *workspace.Bootstrapped
-	Analyzer    *analyzer.Analyzer
-	Completion  *completion.Provider
-	Hover       *hover.Provider
-	InlayHint   *inlayhint.Provider
-	Diagnostics *diagnostics.Provider
+	Workspace  *workspace.Bootstrapped
+	Analyzer   *analyzer.Analyzer
+	Completion *completion.Provider
+	Hover      *hover.Provider
+	InlayHint  *inlayhint.Provider
+	Session    *session.Session
 }
 
 type ReindexOutput struct {
@@ -710,9 +709,10 @@ func (s *Service) projectSummaryMarkdown() string {
 
 func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt := &serviceRuntime{Workspace: ws}
+	rt.Session = session.New(ws, session.Options{Read: readFile, Logger: newStdLogger(nil)})
 
 	arrayResolver := models.NewFrameworkArrayResolver(ws.Index, s.RootPath, s.Framework)
-	viewResolver := frameworklaravel.NewViews(s.RootPath)
+	viewResolver := rt.Session.Views()
 	translationResolver := frameworklaravel.NewTranslationResolver(s.RootPath)
 	symfonyTranslations := frameworksymfony.NewTranslationResolver(s.RootPath)
 
@@ -750,28 +750,6 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.Analyzer.SetSymfonyTranslationResolver(symfonyTranslations)
 	rt.Analyzer.SetSymfonyCommands(ws.SymfonyCommands)
 
-	rt.Diagnostics = diagnostics.NewProvider(ws.Index, s.Framework, s.RootPath, newStdLogger(nil), ws.Config)
-	rt.Diagnostics.ResolveTypes(ws.Container)
-	rt.Diagnostics.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(ws.Index, ws.SchemaIsLive)
-	rt.Diagnostics.Profile = ws.Profile
-	if ws.ViewData != nil {
-		rt.Diagnostics.ViewTypes = &frameworklaravel.ViewTypes{
-			Data:  ws.ViewData,
-			Index: ws.Index,
-			Read:  readFile,
-			Resolve: func(expr, source string, file *parser.FileNode, line, col int) string {
-				return rt.Completion.ResolveExpressionType(expr, source, protocol.Position{Line: line, Character: col}, file)
-			},
-		}
-	}
-	providers := frameworklaravel.NewProviders(s.RootPath, ws.Index)
-	viewResolver.SetProviders(providers)
-	rt.Diagnostics.Blade = &blade.Features{
-		Views:      viewResolver,
-		Components: frameworklaravel.NewComponents(s.RootPath, ws.Index, providers, readFile),
-		Read:       readFile,
-		Custom:     providers.Custom,
-	}
 	return rt
 }
 
@@ -781,7 +759,7 @@ func (s *Service) installRuntime(rt *serviceRuntime) {
 	s.Completion = rt.Completion
 	s.Hover = rt.Hover
 	s.InlayHint = rt.InlayHint
-	s.Diagnostics = rt.Diagnostics
+	s.Session = rt.Session
 	s.runtimeState.Store(rt)
 }
 
@@ -947,7 +925,7 @@ func (s *Service) findReferences(fqn string) ([]ReferenceLocation, error) {
 
 func (s *Service) projectDiagnostics(path string) (DiagnosticsOutput, error) {
 	rt := s.runtime()
-	if rt.Diagnostics == nil {
+	if rt.Session == nil {
 		return DiagnosticsOutput{}, nil
 	}
 
@@ -969,7 +947,7 @@ func (s *Service) projectDiagnostics(path string) (DiagnosticsOutput, error) {
 			continue
 		}
 		uri := "file://" + absPath
-		diags := rt.Diagnostics.AnalyzeAll(uri, string(data))
+		diags := rt.Session.AnalyzeAll(uri, string(data))
 		out.Files = append(out.Files, FileDiagnostics{
 			Path:        normalizedRelativePath(s.RootPath, absPath),
 			Diagnostics: lspDiagnostics(diags),
@@ -1237,22 +1215,14 @@ func loadConfig(rootPath string, logger *slog.Logger) (*config.Config, error) {
 }
 
 func loadProjectMetadata(rootPath string, logger *slog.Logger) (*config.Config, string, symbols.BuiltinProfile, string, error) {
-	cfg, err := loadConfig(rootPath, logger)
+	project, err := workspace.LoadProject(rootPath, func(msg string) { logger.Info(msg) })
 	if err != nil {
 		return nil, "", symbols.BuiltinProfile{}, "", err
 	}
-
-	framework := cfg.Framework
-	if framework == "" || framework == "auto" {
-		framework = config.DetectFramework(rootPath)
+	for _, problem := range project.Config.Problems() {
+		logger.Warn("skipped part of the configuration", "problem", problem)
 	}
-
-	timeout := time.Duration(cfg.PHPDetectTimeoutMs) * time.Millisecond
-	profile, source := workspace.ResolveBuiltinProfileWithConfig(rootPath, cfg.PHPBinary, timeout, cfg, func(msg string) {
-		logger.Info(msg)
-	})
-
-	return cfg, framework, profile, source, nil
+	return project.Config, project.Framework, project.Profile, project.ProfileSource, nil
 }
 
 func jsonResource(uri string, value any) (*mcp.ReadResourceResult, error) {

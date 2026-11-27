@@ -16,13 +16,12 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/coverage"
-	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	"github.com/Tusk-PHP/lsp/internal/document"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/models"
+	"github.com/Tusk-PHP/lsp/internal/session"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
@@ -49,27 +48,21 @@ type Server struct {
 	coverage      *coverage.Store
 	composerHover *cardhover.Provider
 	inlayHint     *inlayhint.Provider
-	diag          *diagnostics.Provider
-	analyzer      *analyzer.Analyzer
-	routeIndex    *frameworklaravel.RouteIndex
-	schemaCache   *models.SchemaCache
-	docMu         sync.RWMutex
-	documents     map[string]string
-	openPaths     map[string]string
-	unsaved       map[string]bool
+	// session is the project's analysis: diagnostics and Blade; set by
+	// initialize.
+	session *session.Session
+	// analysis is where diagnostics come from: the session, or a stand-in in
+	// tests.
+	analysis    fileAnalysis
+	analyzer    *analyzer.Analyzer
+	routeIndex  *frameworklaravel.RouteIndex
+	schemaCache *models.SchemaCache
+	docMu       sync.RWMutex
+	documents   map[string]string
+	openPaths   map[string]string
+	unsaved     map[string]bool
 	// blade keeps the compiled PHP of open Blade views (see blade.go).
 	blade bladeViews
-	// viewTypes types the variables Blade views receive (see blade_vars.go).
-	viewTypes *frameworklaravel.ViewTypes
-	// bladeFeatures answers requests about Blade itself: directives and the
-	// views, sections and stacks they name.
-	bladeFeatures *blade.Features
-	// components finds the app's Blade components; forgotten when a
-	// component or provider is saved.
-	components *frameworklaravel.Components
-	// providers reads what service providers register with Blade and the
-	// view factory.
-	providers *frameworklaravel.Providers
 	// writeMu keeps frames whole on the output stream (see writeMessage).
 	writeMu sync.Mutex
 	// publishMu orders diagnostics publishes (see publishDiagnostics).

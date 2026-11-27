@@ -85,7 +85,7 @@ func (s *Server) phpRequest(uri string, pos protocol.Position) (bladeRequest, bo
 	}
 	in := s.viewVars(uri)
 	vars := in.Vars
-	doc := s.blade.get(uri, source, in.BladeVars(), s.providers.Custom())
+	doc := s.blade.get(uri, source, in.BladeVars(), s.bladeCustom())
 	line, col, ok := doc.PHPPosition(pos.Line, pos.Character)
 	if !ok {
 		return bladeRequest{}, false
@@ -104,7 +104,7 @@ func (s *Server) phpDocument(uri string) bladeRequest {
 	}
 	in := s.viewVars(uri)
 	vars := in.Vars
-	doc := s.blade.get(uri, source, in.BladeVars(), s.providers.Custom())
+	doc := s.blade.get(uri, source, in.BladeVars(), s.bladeCustom())
 	return bladeRequest{uri: uri, source: doc.PHP, doc: doc, template: source, vars: vars}
 }
 

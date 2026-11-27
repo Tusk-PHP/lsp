@@ -9,18 +9,16 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"time"
 
-	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/composer/lockfile"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/deps"
-	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	"github.com/Tusk-PHP/lsp/internal/graph"
 	"github.com/Tusk-PHP/lsp/internal/introspect"
 	"github.com/Tusk-PHP/lsp/internal/lsp"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/session"
 	"github.com/Tusk-PHP/lsp/internal/strict"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/unuseddeps"
@@ -113,28 +111,17 @@ func main() {
 	}
 }
 
-// loadProjectMetadata loads config and detects the PHP builtin profile for a
-// given root path. It mirrors the unexported helper in internal/mcpserver.
-// config.LoadFromFile returns a default-merged config on missing file, so no
-// special not-exist handling is needed here.
+// loadProjectMetadata loads a root's configuration, framework and PHP
+// profile, reporting the configuration's problems on stderr.
 func loadProjectMetadata(rootPath string, stderr io.Writer) (*config.Config, string, symbols.BuiltinProfile, error) {
-	cfgPath := filepath.Join(rootPath, config.FileName)
-	cfg, err := config.LoadFromFile(cfgPath)
+	project, err := workspace.LoadProject(rootPath, nil)
 	if err != nil {
 		return nil, "", symbols.BuiltinProfile{}, err
 	}
-	for _, problem := range cfg.Problems() {
+	for _, problem := range project.Config.Problems() {
 		fmt.Fprintln(stderr, "tusk-php: skipped part of the configuration:", problem)
 	}
-
-	framework := cfg.Framework
-	if framework == "" || framework == "auto" {
-		framework = config.DetectFramework(rootPath)
-	}
-
-	timeout := time.Duration(cfg.PHPDetectTimeoutMs) * time.Millisecond
-	profile, _ := workspace.ResolveBuiltinProfileWithConfig(rootPath, cfg.PHPBinary, timeout, cfg, nil)
-	return cfg, framework, profile, nil
+	return project.Config, project.Framework, project.Profile, nil
 }
 
 // emitGraph renders g to stdout according to format (json/mermaid/dot).
@@ -234,10 +221,9 @@ func runIntrospect(args []string) error {
 	// produces "file:///abs/path/file.php".
 	uri := "file://" + absFile
 
-	// Parse and run native checks synchronously for a self-consistent dump.
-	file := parser.ParseFile(source)
-	rules := diagnostics.NativeRules(diagnostics.NativeRulesOptions{})
-	findings := checks.CheckFile(file, source, ws.Index, rules)
+	// Run the native rules synchronously, wired as the server wires them, for
+	// a self-consistent dump.
+	findings := session.New(ws, session.Options{}).NativeFindings(source)
 
 	v := introspect.ParseVerbosity(*verbosityFlag)
 	in := introspect.Input{

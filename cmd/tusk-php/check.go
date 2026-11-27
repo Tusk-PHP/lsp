@@ -9,7 +9,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -17,9 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Tusk-PHP/lsp/internal/mcpserver"
 	"github.com/Tusk-PHP/lsp/internal/rule"
-	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/session"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
@@ -80,15 +78,14 @@ func runCheck(args []string, stdout, stderr io.Writer) (int, error) {
 	}
 
 	start := time.Now()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc, err := mcpserver.New(context.Background(), root, logger)
+	sess, err := session.Open(context.Background(), root, session.Options{})
 	if err != nil {
 		return 2, fmt.Errorf("building workspace: %w", err)
 	}
-	for _, problem := range svc.Config.Problems() {
+	for _, problem := range sess.Config().Problems() {
 		fmt.Fprintln(stderr, "skipped part of the configuration:", problem)
 	}
-	files, err := checkTargets(root, fs.Args(), svc.Workspace.Index)
+	files, err := checkTargets(root, fs.Args(), sess.SourceFiles())
 	if err != nil {
 		return 2, err
 	}
@@ -102,7 +99,7 @@ func runCheck(args []string, stdout, stderr io.Writer) (int, error) {
 			continue
 		}
 		rel := relativePath(root, path)
-		for _, d := range svc.Diagnostics.AnalyzeAll("file://"+path, string(data)) {
+		for _, d := range sess.AnalyzeAll("file://"+path, string(data)) {
 			all = append(all, finding{
 				Path:     rel,
 				Line:     d.Range.Start.Line + 1,
@@ -166,22 +163,11 @@ func runCheck(args []string, stdout, stderr io.Writer) (int, error) {
 	return 0, nil
 }
 
-// checkTargets lists the files to check: the project's own indexed files and
-// Blade views (not vendor/) when no paths are given; otherwise each file, each directory's
-// indexed files, and each glob's matches, relative to root.
-func checkTargets(root string, args []string, index *symbols.Index) ([]string, error) {
-	var indexed []string
-	for _, uri := range index.GetAllFileURIs() {
-		if path := symbols.URIToPath(uri); path != "" && workspace.IsPHPSource(path) {
-			indexed = append(indexed, path)
-		}
-	}
-	// Blade views declare no symbols, but they are checked like the rest.
-	for _, uri := range index.TemplateFileURIs() {
-		if path := symbols.URIToPath(uri); path != "" && workspace.IsBlade(path) {
-			indexed = append(indexed, path)
-		}
-	}
+// checkTargets lists the files to check, from the project's indexed source
+// files: all of them outside vendor/ when no paths are given; otherwise each
+// file, each directory's indexed files, and each glob's matches, relative to
+// root.
+func checkTargets(root string, args []string, indexed []string) ([]string, error) {
 	under := func(dir string) []string {
 		var out []string
 		prefix := strings.TrimSuffix(dir, string(filepath.Separator)) + string(filepath.Separator)

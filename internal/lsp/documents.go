@@ -82,7 +82,9 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 	s.docMu.Unlock()
 	s.blade.forget(uri)
 	s.cancelDiagnostics(uri)
-	s.diag.ClearCache(uri)
+	if s.analysis != nil {
+		s.analysis.Closed(uri)
+	}
 	if s.workspace == nil || !isPHPDocument(uri) {
 		return
 	}
@@ -117,7 +119,7 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 		return
 	}
 	if affectsComponents(s.rootPath, uri) {
-		s.components.Invalidate()
+		s.session.Components().Invalidate()
 	}
 	s.goSafe("container.Analyze", s.container.Analyze)
 	if s.cfg.DiagnosticsEnabled {
@@ -126,10 +128,10 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 			// PHPStan and Pint run on .php files only: Pint would reformat a
 			// template, and PHPStan doesn't analyse .phtml unless configured to.
 			if !workspace.IsTemplate(uri) {
-				s.diag.RunTools(uri, filePath)
+				s.analysis.RunTools(uri, filePath)
 			}
 			source := s.getDocument(uri)
-			s.diag.AnalyzeOnSave(uri, source)
+			s.analysis.Saved(uri, source)
 			s.publishDiagnostics(uri, source)
 		})
 	}

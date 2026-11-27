@@ -16,7 +16,7 @@ import (
 // answered through the view's virtual PHP (see blade.go).
 
 func (s *Server) bladeCompletion(uri string, pos protocol.Position) ([]protocol.CompletionItem, bool) {
-	if s.bladeFeatures == nil {
+	if s.session == nil {
 		return nil, false
 	}
 	src := s.getDocument(uri)
@@ -25,7 +25,7 @@ func (s *Server) bladeCompletion(uri string, pos protocol.Position) ([]protocol.
 	if offset < 0 || offset > len(src) {
 		return nil, false
 	}
-	found, ok := s.bladeFeatures.Complete(uri, src, offset)
+	found, ok := s.session.Blade().Complete(uri, src, offset)
 	if !ok {
 		return nil, false
 	}
@@ -60,7 +60,7 @@ func (s *Server) bladeCompletion(uri string, pos protocol.Position) ([]protocol.
 }
 
 func (s *Server) bladeHover(uri string, pos protocol.Position) (*protocol.Hover, bool) {
-	if s.bladeFeatures == nil || !workspace.IsBlade(uri) {
+	if s.session == nil || !workspace.IsBlade(uri) {
 		return nil, false
 	}
 	src := s.getDocument(uri)
@@ -69,7 +69,7 @@ func (s *Server) bladeHover(uri string, pos protocol.Position) (*protocol.Hover,
 	if offset < 0 || offset > len(src) {
 		return nil, false
 	}
-	h, ok := s.bladeFeatures.Hover(src, offset)
+	h, ok := s.session.Blade().Hover(src, offset)
 	if !ok {
 		return nil, false
 	}
@@ -78,7 +78,7 @@ func (s *Server) bladeHover(uri string, pos protocol.Position) (*protocol.Hover,
 }
 
 func (s *Server) bladeDefinition(uri string, pos protocol.Position) ([]protocol.Location, bool) {
-	if s.bladeFeatures == nil || !workspace.IsBlade(uri) {
+	if s.session == nil || !workspace.IsBlade(uri) {
 		return nil, false
 	}
 	src := s.getDocument(uri)
@@ -87,7 +87,7 @@ func (s *Server) bladeDefinition(uri string, pos protocol.Position) ([]protocol.
 	if offset < 0 || offset > len(src) {
 		return nil, false
 	}
-	found, ok := s.bladeFeatures.Definition(uri, src, offset)
+	found, ok := s.session.Blade().Definition(uri, src, offset)
 	if !ok {
 		return nil, false
 	}

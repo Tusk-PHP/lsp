@@ -89,7 +89,9 @@ above it in this list**, never from a later one:
 5. **Features:** `completion`, `hover`, `analyzer` (definition, references,
    symbols, rename, signature help), `inlayhint`, `checks` (native rules, testable
    without LSP types), `diagnostics` (runs `checks`, plus PHPStan and Pint),
-   `symquery`, `introspect`, `deps`, `unuseddeps`, `graph`, `composer/cardhover`.
+   `symquery`, `introspect`, `deps`, `unuseddeps`, `graph`, `composer/cardhover`,
+   `session` (wires the diagnostics and the Blade pieces they need over a
+   workspace once, for the LSP, MCP and CLI alike).
 6. **Transports:** `lsp`, `mcpserver`.
 7. **Tests across everything:** `conformance`.
 
@@ -126,8 +128,10 @@ What each piece owns once it exists:
 - **`session`** is the only place that constructs providers and wires resolvers
   between them. `lsp` and `mcpserver` ask it for providers and add only
   transport-specific parts (client commands, notifications, tool registration).
-  Until it exists, any wiring change must be made in both
-  `lsp/initialize.go` (`handleInitialize`) and `mcpserver/server.go` (`buildRuntime`).
+  Diagnostics already come only from it, and `tusk-php check` and `introspect`
+  use it too; completion, hover, inlay hints and the analyzer are still wired
+  in both `lsp/initialize.go` (`handleInitialize`) and `mcpserver/server.go`
+  (`buildRuntime`), so a change to their wiring is made in both.
 - **`document`** owns the latest text of each open file and its version. Analysis
   runs on an immutable snapshot and its result is dropped if a newer version
   arrived meanwhile. It also converts columns between the byte offsets the core
