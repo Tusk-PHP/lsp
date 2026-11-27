@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/lexer"
@@ -21,14 +22,16 @@ const (
 )
 
 type authFile struct {
-	abilities  []Ability
-	resources  []resourceRegistration
-	policies   []policyRegistration
-	middleware []Middleware
+	abilities     []Ability
+	resources     []resourceRegistration
+	policies      []policyRegistration
+	middleware    []Middleware
+	open          authOpen
+	kernelAliases bool
 }
 
 func (f authFile) empty() bool {
-	return len(f.abilities)+len(f.resources)+len(f.policies)+len(f.middleware) == 0
+	return len(f.abilities)+len(f.resources)+len(f.policies)+len(f.middleware) == 0 && f.open == (authOpen{}) && !f.kernelAliases
 }
 
 type resourceAbility struct {
@@ -59,17 +62,19 @@ func newAuthReader(uri, src string, grammars phpparser.GrammarRange) (authReader
 }
 
 var (
-	gateRegistrations       = []string{"define", "resource", "policy"}
+	gateHooks               = []string{"before", "after", "guessPolicyNamesUsing"}
+	gateRegistrations       = []string{"define", "resource", "policy", "before", "after", "guessPolicyNamesUsing"}
 	middlewareRegistrations = []string{"aliasMiddleware", "middlewareGroup", "pushMiddlewareToGroup", "prependMiddlewareToGroup"}
-	instanceRegistrations   = append([]string{"define", "withMiddleware"}, middlewareRegistrations...)
+	instanceRegistrations   = append([]string{"define", "withMiddleware", "guessPolicyNamesUsing"}, middlewareRegistrations...)
 )
 
 func isOneOf(name string, names []string) bool {
 	return slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(n, name) })
 }
 
-func readAuthFile(uri, src string, grammars phpparser.GrammarRange) authFile {
+func readAuthFile(uri, src, rel string, grammars phpparser.GrammarRange, projectNamespaces []string) authFile {
 	r, tree := newAuthReader(uri, src, grammars)
+	provider := isProvider(rel)
 	var out authFile
 	ast.Walk(tree, func(n ast.Node) bool {
 		switch n := n.(type) {
@@ -84,7 +89,11 @@ func readAuthFile(uri, src string, grammars phpparser.GrammarRange) authFile {
 			case strings.EqualFold(name, "withMiddleware"):
 				r.middlewareConfiguration(n.Args, &out)
 			case strings.EqualFold(name, "define"):
-				r.instanceDefine(n.Args, &out)
+				if !r.instanceDefine(n.Args, &out) && provider {
+					out.open.abilities = true
+				}
+			case strings.EqualFold(name, "guessPolicyNamesUsing"), provider && isOneOf(name, gateRegistrations):
+				out.open.abilities = true
 			default:
 				r.routerCall(name, n.Args, &out)
 			}
@@ -93,7 +102,46 @@ func readAuthFile(uri, src string, grammars phpparser.GrammarRange) authFile {
 		}
 		return true
 	})
+	if (rel == configApp || rel == bootstrapProviders) && r.registersForeignProviders(tree, rel == configApp, projectNamespaces) {
+		out.open = authOpen{abilities: true, middleware: true}
+	}
 	return out
+}
+
+func (r authReader) registersForeignProviders(tree *ast.File, onlyProvidersKey bool, projectNamespaces []string) bool {
+	foreign := false
+	visit := func(root ast.Node) {
+		ast.Walk(root, func(n ast.Node) bool {
+			e, ok := n.(ast.Expr)
+			if !ok {
+				return true
+			}
+			class := r.class(e)
+			if class == "" {
+				return true
+			}
+			if !strings.HasPrefix(class, `Illuminate\`) && !slices.ContainsFunc(projectNamespaces, func(ns string) bool { return strings.HasPrefix(class, ns) }) {
+				foreign = true
+			}
+			return false
+		})
+	}
+	if !onlyProvidersKey {
+		visit(tree)
+		return foreign
+	}
+	ast.Walk(tree, func(n ast.Node) bool {
+		item, ok := n.(*ast.ArrayItem)
+		if !ok {
+			return true
+		}
+		if key, _, isString := r.stringOf(item.Key); isString && key == "providers" && item.Value != nil {
+			visit(item.Value)
+			return false
+		}
+		return true
+	})
+	return foreign
 }
 
 func (r authReader) isGate(call *ast.StaticCall) bool {
@@ -105,10 +153,12 @@ func (r authReader) isGate(call *ast.StaticCall) bool {
 	return strings.EqualFold(resolved, gateFacade) || strings.EqualFold(resolved, gateAlias)
 }
 
-func (r authReader) instanceDefine(args *ast.ArgList, out *authFile) {
-	if name, lit, ok := r.argString(args.Args, 0); ok {
+func (r authReader) instanceDefine(args *ast.ArgList, out *authFile) bool {
+	name, lit, ok := r.argString(args.Args, 0)
+	if ok {
 		out.abilities = append(out.abilities, Ability{Name: name, URI: r.uri, Range: r.literalRange(lit)})
 	}
+	return ok
 }
 
 func (r authReader) routerCall(method string, args *ast.ArgList, out *authFile) {
@@ -117,6 +167,7 @@ func (r authReader) routerCall(method string, args *ast.ArgList, out *authFile) 
 	}
 	name, lit, ok := r.argString(args.Args, 0)
 	if !ok {
+		out.open.middleware = true
 		return
 	}
 	m := Middleware{Name: name, Kind: MiddlewareGroup, URI: r.uri, Range: r.literalRange(lit)}
@@ -127,31 +178,44 @@ func (r authReader) routerCall(method string, args *ast.ArgList, out *authFile) 
 }
 
 func (r authReader) gateCall(call *ast.StaticCall, out *authFile) {
+	method := ast.MethodName(r.src, call)
+	if isOneOf(method, gateHooks) || method == "" {
+		out.open.abilities = true
+		return
+	}
 	args := call.Args.Args
-	switch strings.ToLower(ast.MethodName(r.src, call)) {
+	switch strings.ToLower(method) {
 	case "define":
-		if name, lit, ok := r.argString(args, 0); ok {
-			out.abilities = append(out.abilities, Ability{Name: name, URI: r.uri, Range: r.literalRange(lit)})
+		name, lit, ok := r.argString(args, 0)
+		if !ok {
+			out.open.abilities = true
+			return
 		}
+		out.abilities = append(out.abilities, Ability{Name: name, URI: r.uri, Range: r.literalRange(lit)})
 	case "resource":
 		name, lit, ok := r.argString(args, 0)
 		policy := r.argClass(args, 1)
 		if !ok || policy == "" {
+			out.open.abilities = true
 			return
 		}
 		res := resourceRegistration{name: name, policy: policy, uri: r.uri, rng: r.literalRange(lit)}
 		if len(args) > 2 {
 			array, isArray := args[2].Value.(*ast.Array)
 			if !isArray {
+				out.open.abilities = true
 				return
 			}
-			res.abilities = r.resourceMap(array)
+			res.abilities = r.resourceMap(array, &out.open)
 		}
 		out.resources = append(out.resources, res)
 	case "policy":
-		if model, policy := r.argClass(args, 0), r.argClass(args, 1); model != "" && policy != "" {
-			out.policies = append(out.policies, policyRegistration{model: model, policy: policy})
+		model, policy := r.argClass(args, 0), r.argClass(args, 1)
+		if model == "" || policy == "" {
+			out.open.abilities = true
+			return
 		}
+		out.policies = append(out.policies, policyRegistration{model: model, policy: policy})
 	}
 }
 
@@ -163,15 +227,19 @@ func (r authReader) middlewareConfiguration(args *ast.ArgList, out *authFile) {
 		}
 		switch strings.ToLower(ast.MethodName(r.src, call)) {
 		case "alias":
-			if len(call.Args.Args) > 0 {
-				if array, ok := call.Args.Args[0].Value.(*ast.Array); ok {
-					out.middleware = append(out.middleware, r.middlewareArray(array, MiddlewareAlias)...)
-				}
+			array, ok := r.argArray(call.Args.Args, 0)
+			if !ok {
+				out.open.middleware = true
+				return true
 			}
+			out.middleware = append(out.middleware, r.middlewareArray(array, MiddlewareAlias, &out.open)...)
 		case "group", "appendtogroup", "prependtogroup":
-			if name, lit, ok := r.argString(call.Args.Args, 0); ok {
-				out.middleware = append(out.middleware, Middleware{Name: name, Kind: MiddlewareGroup, URI: r.uri, Range: r.literalRange(lit)})
+			name, lit, ok := r.argString(call.Args.Args, 0)
+			if !ok {
+				out.open.middleware = true
+				return true
 			}
+			out.middleware = append(out.middleware, Middleware{Name: name, Kind: MiddlewareGroup, URI: r.uri, Range: r.literalRange(lit)})
 		}
 		return true
 	})
@@ -184,22 +252,26 @@ func (r authReader) property(item *ast.PropertyItem, out *authFile) {
 	}
 	switch r.text(item.Var) {
 	case "$middlewareAliases", "$routeMiddleware":
-		out.middleware = append(out.middleware, r.middlewareArray(array, MiddlewareAlias)...)
+		out.kernelAliases = true
+		out.middleware = append(out.middleware, r.middlewareArray(array, MiddlewareAlias, &out.open)...)
 	case "$middlewareGroups":
-		out.middleware = append(out.middleware, r.middlewareArray(array, MiddlewareGroup)...)
+		out.middleware = append(out.middleware, r.middlewareArray(array, MiddlewareGroup, &out.open)...)
 	case "$policies":
 		for _, entry := range array.Items {
 			if entry == nil {
 				continue
 			}
-			if model, policy := r.class(entry.Key), r.class(entry.Value); model != "" && policy != "" {
-				out.policies = append(out.policies, policyRegistration{model: model, policy: policy})
+			model, policy := r.class(entry.Key), r.class(entry.Value)
+			if model == "" || policy == "" {
+				out.open.abilities = true
+				continue
 			}
+			out.policies = append(out.policies, policyRegistration{model: model, policy: policy})
 		}
 	}
 }
 
-func (r authReader) middlewareArray(array *ast.Array, kind MiddlewareKind) []Middleware {
+func (r authReader) middlewareArray(array *ast.Array, kind MiddlewareKind, open *authOpen) []Middleware {
 	out := make([]Middleware, 0, len(array.Items))
 	for _, entry := range array.Items {
 		if entry == nil {
@@ -207,6 +279,7 @@ func (r authReader) middlewareArray(array *ast.Array, kind MiddlewareKind) []Mid
 		}
 		name, lit, ok := r.stringOf(entry.Key)
 		if !ok {
+			open.middleware = true
 			continue
 		}
 		m := Middleware{Name: name, Kind: kind, URI: r.uri, Range: r.literalRange(lit)}
@@ -218,7 +291,7 @@ func (r authReader) middlewareArray(array *ast.Array, kind MiddlewareKind) []Mid
 	return out
 }
 
-func (r authReader) resourceMap(array *ast.Array) []resourceAbility {
+func (r authReader) resourceMap(array *ast.Array, open *authOpen) []resourceAbility {
 	out := make([]resourceAbility, 0, len(array.Items))
 	for _, entry := range array.Items {
 		if entry == nil {
@@ -226,11 +299,21 @@ func (r authReader) resourceMap(array *ast.Array) []resourceAbility {
 		}
 		ability, _, okKey := r.stringOf(entry.Key)
 		method, _, okValue := r.stringOf(entry.Value)
-		if okKey && okValue {
-			out = append(out, resourceAbility{ability: ability, method: method})
+		if !okKey || !okValue {
+			open.abilities = true
+			continue
 		}
+		out = append(out, resourceAbility{ability: ability, method: method})
 	}
 	return out
+}
+
+func (r authReader) argArray(args []*ast.Arg, i int) (*ast.Array, bool) {
+	if i >= len(args) || args[i].Name != nil {
+		return nil, false
+	}
+	array, ok := args[i].Value.(*ast.Array)
+	return array, ok
 }
 
 func (r authReader) argString(args []*ast.Arg, i int) (string, *ast.Literal, bool) {
@@ -312,16 +395,20 @@ func readFrameworkAuth(rootPath string, grammars phpparser.GrammarRange) framewo
 	src := filepath.Join(rootPath, "vendor", "laravel", "framework", "src", "Illuminate")
 	var out frameworkAuth
 	if r, tree, ok := readVendorFile(filepath.Join(src, "Foundation", "Configuration", "Middleware.php"), grammars); ok {
-		if array := r.methodArray(tree, "defaultAliases"); array != nil {
-			out.middleware = append(out.middleware, r.middlewareArray(array, MiddlewareAlias)...)
-		}
-		if array := r.methodArray(tree, "getMiddlewareGroups"); array != nil {
-			out.middleware = append(out.middleware, r.middlewareArray(array, MiddlewareGroup)...)
+		var open authOpen
+		aliases := r.methodArray(tree, "defaultAliases")
+		groups := r.methodArray(tree, "getMiddlewareGroups")
+		if aliases != nil && groups != nil {
+			out.middleware = append(r.middlewareArray(aliases, MiddlewareAlias, &open), r.middlewareArray(groups, MiddlewareGroup, &open)...)
+			out.defaults = !open.middleware
 		}
 	}
 	if r, tree, ok := readVendorFile(filepath.Join(src, "Auth", "Access", "Gate.php"), grammars); ok {
 		if array := r.methodArray(tree, "resource"); array != nil {
-			out.resource = r.resourceMap(array)
+			var open authOpen
+			if resource := r.resourceMap(array, &open); !open.abilities {
+				out.resource = resource
+			}
 		}
 	}
 	return out
@@ -380,4 +467,55 @@ func isGateName(tok lexer.Token, src string) bool {
 		return ast.LastSegment(tok.Text(src)) == "Gate"
 	}
 	return false
+}
+
+func readPackageProvider(src string, grammars phpparser.GrammarRange) authOpen {
+	r, tree := newAuthReader("", src, grammars)
+	var open authOpen
+	ast.Walk(tree, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.StaticCall:
+			method := ast.MethodName(r.src, n)
+			if r.isGate(n) {
+				open.abilities = true
+			}
+			if isOneOf(method, middlewareRegistrations) {
+				open.middleware = true
+			}
+		case *ast.MethodCall:
+			method := ast.MethodName(r.src, n)
+			if isOneOf(method, gateRegistrations) {
+				open.abilities = true
+			}
+			if isOneOf(method, middlewareRegistrations) {
+				open.middleware = true
+			}
+		}
+		return true
+	})
+	return open
+}
+
+func readPackageProviders(rootPath string, autoload []composer.AutoloadEntry, grammars phpparser.GrammarRange) authOpen {
+	if _, err := os.Stat(filepath.Join(rootPath, "vendor", "composer", "installed.json")); err != nil {
+		return authOpen{abilities: true, middleware: true}
+	}
+	var open authOpen
+	for _, provider := range composer.LaravelPackageProviders(rootPath) {
+		src, ok := readClassFile(provider, autoload)
+		if !ok {
+			return authOpen{abilities: true, middleware: true}
+		}
+		open.add(readPackageProvider(src, grammars))
+	}
+	return open
+}
+
+func readClassFile(fqn string, autoload []composer.AutoloadEntry) (string, bool) {
+	for _, file := range composer.ClassFiles(fqn, autoload) {
+		if data, err := os.ReadFile(file.Path()); err == nil {
+			return string(data), true
+		}
+	}
+	return "", false
 }

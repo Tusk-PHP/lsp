@@ -367,7 +367,7 @@ func TestIDEHelperUnderAPathWithASpaceIsIndexedUnderItsFileURI(t *testing.T) {
 func TestRefreshKeepsLaravelsAbilitiesAndMiddlewareCurrent(t *testing.T) {
 	root := t.TempDir()
 	provider := "<?php\nnamespace App\\Providers;\nuse Illuminate\\Support\\Facades\\Gate;\nclass AuthServiceProvider {\n    public function boot() { Gate::define('%s', fn () => true); }\n}\n"
-	middleware := "<?php\nnamespace Illuminate\\Foundation\\Configuration;\nclass Middleware {\n    protected function defaultAliases() { $aliases = ['%s' => Auth::class]; return $aliases; }\n}\n"
+	middleware := "<?php\nnamespace Illuminate\\Foundation\\Configuration;\nclass Middleware {\n    protected function defaultAliases() { $aliases = ['%s' => Auth::class]; return $aliases; }\n    public function getMiddlewareGroups() { return []; }\n}\n"
 	writeFiles(t, root, map[string]string{
 		"composer.json":                         `{"name": "app/app", "autoload": {"psr-4": {"App\\": "app/"}}}`,
 		"composer.lock":                         `{"packages": []}`,

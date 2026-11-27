@@ -175,6 +175,20 @@ func (cur cursor) callArg(tree *File) (CallArg, bool) {
 	if call == nil {
 		return CallArg{}, false
 	}
+	return cur.argOf(call, args)
+}
+
+// CallArgOf reads the argument of call, a call in tree, that holds offset
+// off, as CallArgAt reads the one of the innermost call there.
+func CallArgOf(tree *File, src string, call Expr, off uint32) (CallArg, bool) {
+	args := argList(call)
+	if args == nil {
+		return CallArg{}, false
+	}
+	return cursor{src: src, off: off, grammar: tree.Version}.argOf(call, args)
+}
+
+func (cur cursor) argOf(call Expr, args *ArgList) (CallArg, bool) {
 	slots := make([]Node, len(args.Args))
 	for i, a := range args.Args {
 		slots[i] = a

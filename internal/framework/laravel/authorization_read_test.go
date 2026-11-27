@@ -26,7 +26,7 @@ class Kernel {
     public $routeMiddleware;
 }
 `
-	out := readAuthFile("file:///p.php", src, phpparser.OnlyGrammar(token.Latest))
+	out := readAuthFile("file:///p.php", src, "app/p.php", phpparser.OnlyGrammar(token.Latest), nil)
 	if len(out.abilities) != 0 {
 		t.Errorf("abilities = %+v, want none", out.abilities)
 	}

@@ -31,6 +31,8 @@ const (
 	UnknownNamedArgument  Code = "unknown-named-argument"
 	UnknownColumn         Code = "unknown-column"
 	UnknownRelation       Code = "unknown-relation"
+	UnknownAbility        Code = "unknown-ability"
+	UnknownMiddleware     Code = "unknown-middleware"
 	UnknownView           Code = "unknown-view"
 	UnknownComponent      Code = "unknown-component"
 	UnclosedDirective     Code = "unclosed-directive"
@@ -59,6 +61,8 @@ var All = []Code{
 	UnknownNamedArgument,
 	UnknownColumn,
 	UnknownRelation,
+	UnknownAbility,
+	UnknownMiddleware,
 	UnknownView,
 	UnknownComponent,
 	UnclosedDirective,

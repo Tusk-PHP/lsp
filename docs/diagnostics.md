@@ -53,6 +53,8 @@ disappear a moment later.
 | `redundant-nullsafe` | `?->` on a value that can't be null (*on save*) | Info |
 | `unknown-column` | An Eloquent query naming a column the model doesn't have, such as `where('nmae', …)` (*on save*) | Warning |
 | `unknown-relation` | An Eloquent query naming a relation the model doesn't have, such as `with('comments')` (*on save*) | Warning |
+| `unknown-ability` | In a Laravel app, a Gate ability no `Gate::define()`, `Gate::resource()` or policy defines, such as `Gate::allows('edti-post')`, `$user->can(…)`, `@can(…)` or `can:…` middleware. Abilities registered in any of the project's files count, tests included. Stays quiet while abilities may come from somewhere it can't read: a computed name, `Gate::before()`/`after()`/`guessPolicyNamesUsing()`, a package's provider, or a model whose class or policy it can't tell (*on save*) | Warning |
+| `unknown-middleware` | In a Laravel app, a `->middleware(…)` or `withoutMiddleware(…)` name that is no alias or group from `bootstrap/app.php`, the HTTP kernel, a router call anywhere in the project or Laravel's defaults. Class names aren't checked, and it stays quiet while middleware may be registered somewhere it can't read, such as a package's provider (*on save*) | Warning |
 | `unclosed-directive` | In a Blade view, a block directive such as `@if` or `@foreach` with no matching `@end…` | Error |
 | `unknown-view` | In a Blade view, an `@include`, `@extends` or other view name that has no view file | Warning |
 | `unknown-component` | In a Blade view, an `<x-…>` component that the project and its packages don't define | Warning |

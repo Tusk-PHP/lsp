@@ -9,7 +9,16 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/rule"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
+
+type stubAuthNames struct{}
+
+func (stubAuthNames) AuthName(*parser.FileNode, ast.CallArg) (frameworklaravel.AuthName, bool) {
+	return frameworklaravel.AuthName{}, false
+}
+
+func (stubAuthNames) ModelClass(*parser.FileNode, ast.Expr) string { return "" }
 
 func TestEveryRuleCodeIsEmittedByARule(t *testing.T) {
 	rules := NativeRules(NativeRulesOptions{
@@ -17,6 +26,8 @@ func TestEveryRuleCodeIsEmittedByARule(t *testing.T) {
 		BuiltinUnavailableRule: &checks.BuiltinUnavailableRule{},
 		BuilderModelResolver:   func(*parser.FileNode, ast.Expr) frameworklaravel.QueriedModel { return frameworklaravel.QueriedModel{} },
 		BuilderMemberChecker:   &stubMemberChecker{},
+		Authorization:          frameworklaravel.NewAuthorization("", symbols.NewIndex(), nil),
+		AuthNames:              stubAuthNames{},
 	})
 	emitted := map[rule.Code]bool{}
 	for _, r := range rules {

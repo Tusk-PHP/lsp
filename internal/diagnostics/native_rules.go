@@ -10,6 +10,8 @@ type NativeRulesOptions struct {
 	BuiltinUnavailableRule *checks.BuiltinUnavailableRule
 	BuilderModelResolver   checks.ModelResolverFunc
 	BuilderMemberChecker   checks.MemberChecker
+	Authorization          *frameworklaravel.Authorization
+	AuthNames              checks.AuthNames
 	BladePHP               bool
 	IncludedFile           bool
 }
@@ -62,6 +64,9 @@ func SaveRules(opts NativeRulesOptions) []checks.Rule {
 	}
 	if opts.BuilderModelResolver != nil && opts.BuilderMemberChecker != nil {
 		rules = append(rules, &checks.InvalidBuilderArgRule{ModelResolver: opts.BuilderModelResolver, Members: opts.BuilderMemberChecker, Shared: &checks.Shared{}})
+	}
+	if opts.Authorization != nil && opts.AuthNames != nil {
+		rules = append(rules, &checks.UnknownAuthNameRule{Authorization: opts.Authorization, Names: opts.AuthNames})
 	}
 	return rules
 }

@@ -37,6 +37,11 @@ type Provider struct {
 	// Set by the LSP server after initialization.
 	BuilderMemberChecker checks.MemberChecker
 
+	// Authorization and AuthNames check the Gate abilities and middleware
+	// names a Laravel app uses. Set by the server for a Laravel app.
+	Authorization *frameworklaravel.Authorization
+	AuthNames     checks.AuthNames
+
 	Profile func() symbols.BuiltinProfile
 
 	// Blade checks a Blade view's own structure and the views it names. Set
@@ -127,6 +132,8 @@ func (p *Provider) ruleOptions(bladePHP, includedFile bool) NativeRulesOptions {
 		BuiltinUnavailableRule: p.BuiltinUnavailableRule(),
 		BuilderModelResolver:   p.BuilderModelResolver,
 		BuilderMemberChecker:   p.BuilderMemberChecker,
+		Authorization:          p.Authorization,
+		AuthNames:              p.AuthNames,
 		BladePHP:               bladePHP,
 		IncludedFile:           includedFile,
 	}

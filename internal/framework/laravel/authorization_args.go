@@ -28,6 +28,9 @@ type AuthName struct {
 	Partial string
 	Quote   string
 	Model   ast.Expr
+	// ModelParam is the model parameter of a `can:` middleware, the text
+	// after the ability.
+	ModelParam string
 }
 
 type calleeShape uint8
@@ -152,26 +155,38 @@ func authName(kind AuthNameKind, arg ast.CallArg) (AuthName, bool) {
 		name.Model = arg.Arg(arg.Index + 1)
 		return name, true
 	}
-	alias, params, hasParams := strings.Cut(arg.Text, middlewareParamsStart)
+	alias, _, hasParams := strings.Cut(arg.Text, middlewareParamsStart)
 	if !hasParams || len(arg.Partial) <= len(alias) {
 		name.Name = alias
 		return name, true
 	}
-	typed := arg.Partial[len(alias)+len(middlewareParamsStart):]
-	if alias != canMiddleware || strings.Contains(typed, middlewareParamsSep) {
+	ability, at, model, isCan := CanMiddleware(arg.Text)
+	if !isCan || strings.Contains(arg.Partial[at:], middlewareParamsSep) {
 		return AuthName{}, false
 	}
-	ability, _, _ := strings.Cut(params, middlewareParamsSep)
-	return AuthName{Kind: AbilityName, Name: ability, Partial: typed, Quote: arg.Quote}, true
+	return AuthName{Kind: AbilityName, Name: ability, Partial: arg.Partial[at:], Quote: arg.Quote, ModelParam: model}, true
+}
+
+// CanMiddleware reads a `can:ability,model` middleware string: the ability,
+// the offset it starts at and the model parameter.
+func CanMiddleware(text string) (ability string, at int, model string, ok bool) {
+	alias, params, hasParams := strings.Cut(text, middlewareParamsStart)
+	if !hasParams || alias != canMiddleware {
+		return "", 0, "", false
+	}
+	ability, model, _ = strings.Cut(params, middlewareParamsSep)
+	return ability, len(alias) + len(middlewareParamsStart), model, true
 }
 
 // AbilityOf returns the definition of the ability name holds, preferring the
 // policy of the model it is checked against.
 func (a *Authorization) AbilityOf(r *resolve.Resolver, file *parser.FileNode, name AuthName) (Ability, bool) {
-	return a.AbilityFor(name.Name, modelClass(r, file, name.Model))
+	return a.AbilityFor(name.Name, ModelClass(r, file, name.Model))
 }
 
-func modelClass(r *resolve.Resolver, file *parser.FileNode, e ast.Expr) string {
+// ModelClass returns the class of the model e names: the class of
+// `Post::class`, or the type of an expression. It is "" for nil.
+func ModelClass(r *resolve.Resolver, file *parser.FileNode, e ast.Expr) string {
 	if e == nil || ast.IsMissing(e) {
 		return ""
 	}

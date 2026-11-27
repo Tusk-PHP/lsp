@@ -120,6 +120,9 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	}
 	s.diag = diagnostics.NewProvider(s.index, s.framework, s.rootPath, s.logger, s.cfg)
 	s.diag.ResolveTypes(s.container)
+	if s.workspace.Authorization != nil {
+		s.diag.Authorization, s.diag.AuthNames = s.workspace.Authorization, s.completion
+	}
 	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(s.index, s.workspace.SchemaIsLive)
 	s.diag.Profile = s.workspace.Profile
 	s.providers = frameworklaravel.NewProviders(s.rootPath, s.index)

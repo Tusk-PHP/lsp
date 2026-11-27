@@ -50,25 +50,42 @@ type Middleware struct {
 // app. The app's registrations are read per file as the workspace indexes
 // the project's PHP files: app/Providers, bootstrap/app.php and
 // app/Http/Kernel.php always, any other file when its tokens show a Gate or
-// middleware registration. Laravel's own defaults and the policy namespaces
-// are read again after Composer changes. Policy methods come from the symbol
-// index.
+// middleware registration, and bootstrap/providers.php and config/app.php
+// for the providers they list. Laravel's own defaults, the policy namespaces
+// and what the packages' providers register are read again after Composer
+// changes. Policy methods come from the symbol index.
+//
+// It also knows whether its lists are complete: a name registered in a way
+// it can't read (a computed name, Gate::before(), a package's provider)
+// makes the list it belongs to open.
 type Authorization struct {
 	rootPath string
 	index    *symbols.Index
 	grammars func() phpparser.GrammarRange
 
-	mu         sync.Mutex
-	files      map[string]authFile
-	framework  frameworkAuth
-	policyDirs []string
-	generation uint64
-	names      *authNames
+	mu                sync.Mutex
+	files             map[string]authFile
+	framework         frameworkAuth
+	packages          authOpen
+	policyDirs        []string
+	projectNamespaces []string
+	generation        uint64
+	names             *authNames
 }
 
 type frameworkAuth struct {
 	middleware []Middleware
 	resource   []resourceAbility
+	defaults   bool
+}
+
+type authOpen struct {
+	abilities, middleware bool
+}
+
+func (o *authOpen) add(other authOpen) {
+	o.abilities = o.abilities || other.abilities
+	o.middleware = o.middleware || other.middleware
 }
 
 type authNames struct {
@@ -78,6 +95,7 @@ type authNames struct {
 	middleware      map[string][]Middleware
 	middlewareNames []string
 	policies        map[string]string
+	open            authOpen
 }
 
 // NewAuthorization returns the authorization names of the Laravel app at
@@ -99,13 +117,16 @@ func (a *Authorization) ScanWorkspace(autoload []composer.AutoloadEntry, project
 
 // ComposerChanged reads again what depends on the installed packages and the
 // autoload map: Laravel's default middleware, the abilities Gate::resource()
-// defines and the namespaces policies are discovered in.
+// defines, the namespaces policies are discovered in and what the packages'
+// providers register.
 func (a *Authorization) ComposerChanged(autoload []composer.AutoloadEntry) {
-	framework := readFrameworkAuth(a.rootPath, a.grammars())
+	grammars := a.grammars()
+	framework := readFrameworkAuth(a.rootPath, grammars)
 	dirs := policyNamespaces(a.rootPath, autoload)
+	packages := readPackageProviders(a.rootPath, autoload, grammars)
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.framework, a.policyDirs = framework, dirs
+	a.framework, a.policyDirs, a.packages, a.projectNamespaces = framework, dirs, packages, projectNamespaces(autoload)
 	a.changedLocked()
 }
 
@@ -122,7 +143,10 @@ func (a *Authorization) IndexFile(uri, source string) {
 	var file authFile
 	grammars := a.grammars()
 	if source != "" && (alwaysReads(rel) || mayRegisterNames(source, grammars.Newest())) {
-		file = readAuthFile(uri, source, grammars)
+		a.mu.Lock()
+		namespaces := a.projectNamespaces
+		a.mu.Unlock()
+		file = readAuthFile(uri, source, rel, grammars, namespaces)
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -154,8 +178,71 @@ func (a *Authorization) projectPath(uri string) (string, bool) {
 	return rel, true
 }
 
+const (
+	bootstrapApp       = "bootstrap/app.php"
+	bootstrapProviders = "bootstrap/providers.php"
+	configApp          = "config/app.php"
+	httpKernel         = "app/Http/Kernel.php"
+)
+
 func alwaysReads(rel string) bool {
-	return path.Dir(rel) == "app/Providers" || rel == "bootstrap/app.php" || rel == "app/Http/Kernel.php"
+	switch rel {
+	case bootstrapApp, bootstrapProviders, configApp, httpKernel:
+		return true
+	}
+	return isProvider(rel)
+}
+
+func isProvider(rel string) bool {
+	return path.Dir(rel) == "app/Providers"
+}
+
+func projectNamespaces(autoload []composer.AutoloadEntry) []string {
+	var namespaces []string
+	for _, entry := range autoload {
+		if !entry.IsVendor && !entry.IsFile && entry.Namespace != "" {
+			namespaces = append(namespaces, strings.Trim(entry.Namespace, `\`)+`\`)
+		}
+	}
+	return namespaces
+}
+
+// UnknownAbility reports whether name is surely no ability of the app: its
+// abilities are all known and none of them, nor a method of the policy of
+// model, is called name.
+func (a *Authorization) UnknownAbility(name string, model ModelArg) bool {
+	names := a.current()
+	if names.open.abilities || name == "" {
+		return false
+	}
+	if model.Given {
+		if model.Class == "" {
+			return false
+		}
+		if policy := a.policyFor(names, model.Class); policy != "" {
+			if a.policyMethod(policy, name) != nil || !a.policyKnown(policy) {
+				return false
+			}
+		}
+	}
+	return len(names.abilities[name]) == 0
+}
+
+// UnknownMiddleware reports whether name is surely no middleware alias or
+// group of the app. A class name is never reported.
+func (a *Authorization) UnknownMiddleware(name string) bool {
+	names := a.current()
+	if names.open.middleware || name == "" || strings.Contains(name, `\`) {
+		return false
+	}
+	return len(names.middleware[name]) == 0
+}
+
+// ModelArg is the argument an ability is checked against: Given when the
+// call passes one, with its class when that is known.
+type ModelArg struct {
+	Given bool
+	Class string
 }
 
 // AbilityNames lists every ability name, sorted.
@@ -261,9 +348,10 @@ func (a *Authorization) current() *authNames {
 	for i, uri := range uris {
 		files[i] = a.files[uri]
 	}
-	framework, dirs := a.framework, a.policyDirs
+	framework, dirs, packages := a.framework, a.policyDirs, a.packages
 	a.mu.Unlock()
 	names := a.build(files, framework, dirs)
+	names.open.add(packages)
 	names.indexGeneration = indexGeneration
 	a.mu.Lock()
 	if a.generation == generation {
@@ -279,7 +367,10 @@ func (a *Authorization) build(files []authFile, framework frameworkAuth, policyD
 		names.abilities[ability.Name] = append(names.abilities[ability.Name], ability)
 	}
 	var policies []string
+	kernelAliases := false
 	for _, file := range files {
+		names.open.add(file.open)
+		kernelAliases = kernelAliases || file.kernelAliases
 		for _, ability := range file.abilities {
 			addAbility(ability)
 		}
@@ -294,8 +385,14 @@ func (a *Authorization) build(files []authFile, framework frameworkAuth, policyD
 	for _, m := range framework.middleware {
 		names.middleware[m.Name] = append(names.middleware[m.Name], m)
 	}
+	if !framework.defaults && !kernelAliases {
+		names.open.middleware = true
+	}
 	for _, file := range files {
 		for _, res := range file.resources {
+			if res.abilities == nil && framework.resource == nil {
+				names.open.abilities = true
+			}
 			for _, ability := range a.resourceAbilities(res, framework.resource) {
 				addAbility(ability)
 			}
@@ -310,6 +407,9 @@ func (a *Authorization) build(files []authFile, framework frameworkAuth, policyD
 	}
 	slices.Sort(policies)
 	for _, policy := range slices.Compact(policies) {
+		if !a.policyKnown(policy) {
+			names.open.abilities = true
+		}
 		for _, ability := range a.policyAbilities(policy) {
 			addAbility(ability)
 		}
@@ -342,6 +442,24 @@ func (a *Authorization) policyMethod(policy, method string) *symbols.Symbol {
 		}
 	}
 	return nil
+}
+
+func (a *Authorization) policyKnown(policy string) bool {
+	sym := a.index.Lookup(policy)
+	if sym == nil || len(a.index.ClassMembersNamed(policy, "__call")) > 0 {
+		return false
+	}
+	for _, parent := range a.index.GetInheritanceChain(policy) {
+		if a.index.Lookup(parent) == nil {
+			return false
+		}
+	}
+	for _, trait := range sym.Traits {
+		if a.index.Lookup(trait) == nil {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *Authorization) policyAbilities(policy string) []Ability {

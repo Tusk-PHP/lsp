@@ -745,6 +745,9 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 
 	rt.Diagnostics = diagnostics.NewProvider(ws.Index, s.Framework, s.RootPath, newStdLogger(nil), ws.Config)
 	rt.Diagnostics.ResolveTypes(ws.Container)
+	if ws.Authorization != nil {
+		rt.Diagnostics.Authorization, rt.Diagnostics.AuthNames = ws.Authorization, rt.Completion
+	}
 	rt.Diagnostics.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(ws.Index, ws.SchemaIsLive)
 	rt.Diagnostics.Profile = ws.Profile
 	if ws.ViewData != nil {

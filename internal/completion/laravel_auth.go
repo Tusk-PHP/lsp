@@ -4,8 +4,21 @@ import (
 	"strings"
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
+
+// AuthName reads the Gate ability or middleware name arg holds, typing its
+// receiver with the provider's resolver.
+func (p *Provider) AuthName(file *parser.FileNode, arg ast.CallArg) (frameworklaravel.AuthName, bool) {
+	return frameworklaravel.AuthNameArg(p.engine.Resolver(), p.index, file, arg)
+}
+
+// ModelClass types the model an ability is checked against.
+func (p *Provider) ModelClass(file *parser.FileNode, e ast.Expr) string {
+	return frameworklaravel.ModelClass(p.engine.Resolver(), file, e)
+}
 
 func (p *Provider) completeAuthNames(name frameworklaravel.AuthName, pos protocol.Position) []protocol.CompletionItem {
 	names := p.authorization.MiddlewareNames()
