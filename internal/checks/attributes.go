@@ -154,15 +154,8 @@ func hasOverrideAttribute(attrs []parser.AttributeDef, file *parser.FileNode) bo
 // attributeMessage returns the `message` argument of #[\Deprecated] or
 // #[\NoDiscard], which is the first one unless it's passed by name.
 func attributeMessage(attr *symbols.Attribute) string {
-	for i, arg := range attr.Args {
-		if value, ok := strings.CutPrefix(arg, "message:"); ok {
-			return strings.Trim(strings.TrimSpace(value), `'"`)
-		}
-		if i == 0 && !strings.Contains(arg, ":") {
-			return strings.Trim(arg, `'"`)
-		}
-	}
-	return ""
+	message, _ := attr.Args.Get("message", 0)
+	return strings.Trim(message, `'"`)
 }
 
 // memberUse is a function, method or constant used in the source.

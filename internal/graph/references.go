@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/types"
@@ -235,120 +236,86 @@ func BuildReferences(idx *symbols.Index, opts Options) *Graph {
 // refEdgeKey is the de-dup key for reference graph edges.
 type refEdgeKey struct{ from, to, kind string }
 
-// scanNewExpressions performs a token-level scan of each indexed file to find
+// scanNewExpressions walks the syntax tree of each indexed file to find
 // 'new ClassName' instantiations and emit "new" edges to the enclosing class.
 // This is the only heuristic part of BuildReferences; all other edges are
 // derived directly from the symbol index.
 //
-// Conservative approach: only a TokenNew immediately followed by a TokenIdentifier
-// (not TokenVariable, TokenOpenParen, or the keywords "self"/"static"/"class")
-// produces an edge. Fully dynamic or anonymous-class new expressions are skipped.
+// Only a new with a written class name produces an edge: variables,
+// expressions, anonymous classes and self/static/parent are skipped.
 func scanNewExpressions(
 	idx *symbols.Index,
 	nodeMap map[string]Node,
 	edgeSet map[refEdgeKey]struct{},
 	addNode func(string),
 ) {
-
-	// Build a local resolver once; used for all files.
 	r := resolve.NewResolver(idx)
-
 	for _, uri := range idx.GetAllFileURIs() {
 		src := idx.GetFileSource(uri)
 		if src == "" {
 			continue
 		}
-
-		// Parse to get tokens and class line ranges.
-		pr := parser.New().Parse(src)
-		if pr == nil {
-			continue
-		}
-
-		// Build a FileNode for use-statement resolution.
-		file := parser.ParseFile(src)
-		if file == nil {
-			continue
-		}
-
-		tokens := pr.Tokens
-
-		// Build sorted list of (startLine, endLine, FQN) for enclosing-class lookup.
-		type classRange struct {
-			start, end int
-			fqn        string
-		}
-		var classRanges []classRange
-		for _, cls := range pr.Classes {
-			fqn := cls.FullName
-			if fqn == "" {
-				ns := pr.Namespace
-				if ns != "" {
-					fqn = ns + "\\" + cls.Name
-				} else {
-					fqn = cls.Name
-				}
-			}
-			classRanges = append(classRanges, classRange{cls.Line, cls.EndLine, fqn})
-		}
-
-		enclosingClass := func(line int) string {
-			// Find the innermost class range that contains this line.
-			best := ""
-			bestStart := -1
-			for _, cr := range classRanges {
-				if line >= cr.start && (cr.end == 0 || line <= cr.end) {
-					if cr.start > bestStart {
-						best = cr.fqn
-						bestStart = cr.start
-					}
-				}
-			}
-			return best
-		}
-
-		for i := 0; i < len(tokens); i++ {
-			tok := tokens[i]
-			if tok.Kind != parser.TokenNew {
-				continue
-			}
-
-			j := parser.NextSignificant(tokens, i+1)
-			if j < 0 {
-				continue
-			}
-
-			next := tokens[j]
-
-			// Only accept plain identifiers — skip variables, open parens (dynamic),
-			// and the pseudo-class keywords self/static/parent/$this.
-			if next.Kind != parser.TokenIdentifier {
-				continue
-			}
-			name := next.Value
-			lower := strings.ToLower(name)
-			if lower == "self" || lower == "static" || lower == "parent" || lower == "class" {
-				continue
-			}
-
-			// Resolve the name to an FQN via use statements + namespace.
-			// ResolveClassName handles leading \, use aliases, and namespace prefix.
-			resolved := r.ResolveClassName(name, file)
+		tree := parser.ParseTreeIn(src, idx.GrammarOf(uri))
+		file := parser.FileNodeOf(src, tree)
+		for _, inst := range instantiations(src, tree) {
+			resolved := r.ResolveClassName(inst.name, file)
 			if resolved == "" || isBuiltinType(resolved) {
 				continue
 			}
-
-			// Attribute edge to the class whose line range contains this token.
-			enclosing := enclosingClass(tok.Line)
-			if enclosing == "" {
-				continue
-			}
-
 			addNode(resolved)
-			k := refEdgeKey{enclosing, resolved, "new"}
-			if _, ok := edgeSet[k]; !ok {
-				edgeSet[k] = struct{}{}
+			edgeSet[refEdgeKey{inst.enclosing, resolved, "new"}] = struct{}{}
+		}
+	}
+}
+
+type instantiation struct {
+	enclosing string
+	name      string
+}
+
+func instantiations(src string, tree *ast.File) []instantiation {
+	var found []instantiation
+	namespace := ""
+	for _, stmt := range tree.Stmts {
+		stmts := []ast.Stmt{stmt}
+		if ns, ok := stmt.(*ast.Namespace); ok {
+			namespace = ""
+			if ns.Name != nil {
+				namespace = ns.Name.Text(src)
+			}
+			stmts = ns.Stmts
+		}
+		for _, s := range stmts {
+			found = appendInstantiations(found, src, namespace, "", s)
+		}
+	}
+	return found
+}
+
+func appendInstantiations(found []instantiation, src, namespace, enclosing string, n ast.Node) []instantiation {
+	switch n := n.(type) {
+	case *ast.ClassDecl:
+		if n.Name != nil {
+			enclosing = qualified(namespace, n.Name.Text(src))
+		}
+	case *ast.New:
+		if class, ok := n.Class.(*ast.ConstFetch); ok && enclosing != "" && n.Anonymous == nil {
+			switch text := class.Name.Text(src); strings.ToLower(text) {
+			case "self", "static", "parent":
+			default:
+				found = append(found, instantiation{enclosing: enclosing, name: text})
 			}
 		}
 	}
+	ast.Children(n, func(c ast.Node) {
+		found = appendInstantiations(found, src, namespace, enclosing, c)
+	})
+	return found
+}
+
+func qualified(namespace, name string) string {
+	if namespace == "" {
+		return name
+	}
+	return namespace + "\\" + name
 }

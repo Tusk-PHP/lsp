@@ -573,7 +573,7 @@ func (p *parser) staticMember(class ast.Expr, start uint32) ast.Expr {
 		}
 		p.requires(token.PHP83, nameStart, "dynamic class constant fetch")
 		return &ast.ClassConstFetch{Class: class, Name: name, Span: p.span(start)}
-	case isSemiReserved(k):
+	case k.IsSemiReserved():
 		p.next()
 		name := &ast.IdentifierExpr{Span: p.span(nameStart)}
 		if p.peek() == token.LeftParen {
@@ -690,7 +690,7 @@ func (p *parser) arg() *ast.Arg {
 	switch {
 	case p.accept(token.Ellipsis):
 		arg.Unpack = true
-	case isSemiReserved(p.peek()) && p.peekAt(1) == token.Colon:
+	case p.peek().IsSemiReserved() && p.peekAt(1) == token.Colon:
 		arg.Name = p.memberName()
 		p.next()
 		p.requires(token.PHP80, start, "named arguments")

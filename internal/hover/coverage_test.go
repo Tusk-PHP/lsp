@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -203,5 +204,16 @@ func TestFormatHoverClass(t *testing.T) {
 	content := p.formatHover(sym)
 	if !strings.Contains(content, "Service") {
 		t.Errorf("expected class name, got: %s", content)
+	}
+}
+
+func TestFormatHoverAttributesWithArguments(t *testing.T) {
+	p := setupCoverageHover()
+	sym := &symbols.Symbol{
+		Name: "$id", FQN: "App\\Service::$id", Kind: symbols.KindProperty, ParentFQN: "App\\Service", Visibility: "public", Type: "int",
+		Attributes: []symbols.Attribute{{Name: "ORM\\Column", Args: parser.AttributeArgs{{Value: "'id'"}, {Name: "type", Value: "'integer'"}}}, {Name: "ORM\\Id"}},
+	}
+	if content := p.formatHover(sym); !strings.Contains(content, "#[ORM\\Column('id', type:'integer')]\n#[ORM\\Id]\n") {
+		t.Errorf("got %s", content)
 	}
 }

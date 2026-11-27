@@ -5,10 +5,15 @@ package conformance
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -42,7 +47,7 @@ func checkParserNeverNil(entry corpusEntry) *violation {
 	var result *parser.FileNode
 	func() {
 		defer func() { recover() }()
-		result = parser.ParseFile(entry.source)
+		result = parser.ParseFileIn(entry.source, entry.grammars())
 	}()
 	if result == nil {
 		v := fileViolation(entry.path, "ParseFile returned nil")
@@ -60,7 +65,7 @@ func checkParserNoPanic(entry corpusEntry) *violation {
 				panicked = true
 			}
 		}()
-		parser.ParseFile(entry.source)
+		parser.ParseFileIn(entry.source, entry.grammars())
 	}()
 	if panicked {
 		v := fileViolation(entry.path, "ParseFile panicked")
@@ -72,8 +77,8 @@ func checkParserNoPanic(entry corpusEntry) *violation {
 // checkParserDeterministic verifies that parsing the same source twice gives
 // identical structure (same number of classes, interfaces, traits, enums, functions).
 func checkParserDeterministic(entry corpusEntry) *violation {
-	file1 := parser.ParseFile(entry.source)
-	file2 := parser.ParseFile(entry.source)
+	file1 := parser.ParseFileIn(entry.source, entry.grammars())
+	file2 := parser.ParseFileIn(entry.source, entry.grammars())
 	if file1 == nil && file2 == nil {
 		return nil
 	}
@@ -96,7 +101,7 @@ func checkParserDeterministic(entry corpusEntry) *violation {
 
 // checkParserErrorPositions verifies all parse error positions are non-negative.
 func checkParserErrorPositions(entry corpusEntry) []violation {
-	file := parser.ParseFile(entry.source)
+	file := parser.ParseFileIn(entry.source, entry.grammars())
 	if file == nil {
 		return nil
 	}
@@ -118,11 +123,31 @@ func checkParserErrorPositions(entry corpusEntry) []violation {
 	return vs
 }
 
+func checkNamespaceBlocksFromTokens(entry corpusEntry) *violation {
+	if !parser.HasOpenTag(entry.source) {
+		return nil
+	}
+	tree := parser.ParseTreeIn(entry.source, entry.grammars())
+	fromTree := sourcectx.NamespacesOf(entry.source, ast.NewLines(entry.source), tree)
+	fromTokens := sourcectx.LexNamespaces(entry.source[:parser.FileNodeOf(entry.source, tree).ImportsEnd])
+	for _, tok := range lexer.Lex(entry.source, token.Latest) {
+		if tok.Kind.IsTrivia() {
+			continue
+		}
+		got, want := fromTokens.At(tok.Start), fromTree.At(tok.Start)
+		if got.Name != want.Name || !slices.Equal(got.Uses, want.Uses) {
+			v := fileViolation(entry.path, fmt.Sprintf("at offset %d the lexer's namespace block is %+v, the syntax tree's %+v", tok.Start, got, want))
+			return &v
+		}
+	}
+	return nil
+}
+
 // --- Index invariants ---
 
 // checkIndexNoPanic verifies IndexFile does not panic.
 func checkIndexNoPanic(entry corpusEntry, idx *symbols.Index) *violation {
-	freshIdx := symbols.NewIndex()
+	freshIdx := symbols.NewIndexFor(entry.grammars())
 	panicked := false
 	func() {
 		defer func() {
@@ -144,7 +169,7 @@ func checkIndexNoPanic(entry corpusEntry, idx *symbols.Index) *violation {
 // set of symbols (same names and FQNs, no duplication).
 func checkIndexIdempotent(entry corpusEntry) *violation {
 	// First indexing.
-	idx1 := symbols.NewIndex()
+	idx1 := symbols.NewIndexFor(entry.grammars())
 	idx1.IndexFile(entry.uri, entry.source)
 	syms1 := idx1.GetFileSymbols(entry.uri)
 
@@ -519,7 +544,7 @@ func checkDeterminism(entry corpusEntry, prov *providers, pos protocol.Position,
 // checkUseImportSpotCheck verifies that a `use Foo\Bar;` import resolves via
 // FindDefinition on Bar to a symbol whose short name is Bar (when in corpus).
 func checkUseImportSpotCheck(entry corpusEntry, idx *symbols.Index, prov *providers) []violation {
-	file := parser.ParseFile(entry.source)
+	file := parser.ParseFileIn(entry.source, entry.grammars())
 	if file == nil {
 		return nil
 	}

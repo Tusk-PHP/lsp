@@ -6,7 +6,9 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/document"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 )
 
 // Semantic token type indices (must match the advertised legend order)
@@ -66,12 +68,13 @@ func (s *Server) handleSemanticTokensFull(msg *jsonRPCMessage) {
 	source := s.getDocument(uri)
 	pr := parser.New().Parse(source)
 
-	data := buildSemanticTokens(pr, document.NewColumns(source, s.encoding))
+	tree, _ := sourcectx.IndexedTree(s.index, uri, source)
+	data := buildSemanticTokens(pr, document.NewColumns(source, s.encoding), namespaceDeclarationTokens(source, tree))
 	s.sendResponse(msg.ID, protocol.SemanticTokens{Data: data})
 }
 
 // buildSemanticTokens builds the LSP relative-encoded semantic token data from a ParseResult.
-func buildSemanticTokens(pr *parser.ParseResult, cols *document.Columns) []uint32 {
+func buildSemanticTokens(pr *parser.ParseResult, cols *document.Columns, namespaces []semToken) []uint32 {
 	var tokens []semToken
 
 	// Track ranges already covered by declaration tokens to avoid duplicates.
@@ -180,30 +183,9 @@ func buildSemanticTokens(pr *parser.ParseResult, cols *document.Columns) []uint3
 		return pos
 	}
 
-	// Namespace
-	if pr.Namespace != "" {
-		for _, tok := range pr.Tokens {
-			if tok.Kind == parser.TokenNamespace {
-				col := findIdentCol(tok.Line, "namespace")
-				if col > 0 {
-					nsName := pr.Namespace
-					// Only the last segment as identifier
-					if idx := strings.LastIndex(nsName, "\\"); idx >= 0 {
-						nsName = nsName[idx+1:]
-					}
-					t := semToken{
-						line:      tok.Line,
-						startChar: col,
-						length:    len(nsName),
-						tokenType: semTokNamespace,
-						modifiers: semModDeclaration,
-					}
-					covered[coveredKey{t.line, t.startChar, t.startChar + t.length}] = true
-					tokens = append(tokens, t)
-					break
-				}
-			}
-		}
+	for _, t := range namespaces {
+		covered[coveredKey{t.line, t.startChar, t.startChar + t.length}] = true
+		tokens = append(tokens, t)
 	}
 
 	// Classes
@@ -469,4 +451,20 @@ func findParamCol(pr *parser.ParseResult, startLine, endLine int, name string) i
 		}
 	}
 	return -1
+}
+
+func namespaceDeclarationTokens(src string, tree *ast.File) []semToken {
+	lines := ast.NewLines(src)
+	var tokens []semToken
+	for _, stmt := range tree.Stmts {
+		ns, ok := stmt.(*ast.Namespace)
+		if !ok || ns.Name == nil {
+			continue
+		}
+		name := ns.Name.Text(src)
+		last := ns.Name.Start + uint32(strings.LastIndexByte(name, '\\')+1)
+		line, col := lines.Position(last)
+		tokens = append(tokens, semToken{line: line, startChar: col, length: int(ns.Name.End - last), tokenType: semTokNamespace, modifiers: semModDeclaration})
+	}
+	return tokens
 }

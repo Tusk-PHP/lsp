@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -30,7 +31,7 @@ class Manager {
 `
 
 func TestUnknownClassSkipsOptionalPackagesAndClassConstGuards(t *testing.T) {
-	file := parser.ParseFile(optionalPackagesSource)
+	file := parser.ParseFile(optionalPackagesSource, token.Latest)
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.2"})
 	idx.SetOptionalNamespaces([]string{`ably\`, `pusher\`})

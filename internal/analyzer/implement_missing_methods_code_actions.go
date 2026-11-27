@@ -11,21 +11,18 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func (a *Analyzer) implementMissingMethodsCodeActions(uri, source string, result *parser.ParseResult, only []protocol.CodeActionKind, pos protocol.Position) []protocol.CodeAction {
+func (a *Analyzer) implementMissingMethodsCodeActions(uri, source string, file *parser.FileNode, only []protocol.CodeActionKind, pos protocol.Position) []protocol.CodeAction {
 	r := a.engine.Resolver()
 	if !protocol.CodeActionRefactor.In(only) {
 		return nil
 	}
-	if result == nil {
-		return nil
-	}
 
-	target := findImplementMissingMethodsTarget(result, pos.Line)
+	target := findImplementMissingMethodsTarget(file, pos)
 	if target == nil || target.endLine <= target.startLine {
 		return nil
 	}
 
-	methods := a.collectImplementMissingMethods(r, source, target)
+	methods := a.collectImplementMissingMethods(r, source, file, target)
 	if len(methods) == 0 {
 		return nil
 	}
@@ -45,39 +42,45 @@ func (a *Analyzer) implementMissingMethodsCodeActions(uri, source string, result
 type implementMissingMethodsTarget struct {
 	fqn        string
 	startLine  int
+	startCol   int
 	endLine    int
-	methods    []parser.MethodDef
+	methods    []parser.MethodNode
 	extends    string
 	implements []string
 }
 
-func findImplementMissingMethodsTarget(result *parser.ParseResult, cursorLine int) *implementMissingMethodsTarget {
-	for _, cls := range result.Classes {
-		if cls.Line != cursorLine {
-			continue
+func findImplementMissingMethodsTarget(file *parser.FileNode, pos protocol.Position) *implementMissingMethodsTarget {
+	var target *implementMissingMethodsTarget
+	consider := func(candidate implementMissingMethodsTarget) {
+		if candidate.startLine != pos.Line {
+			return
 		}
-		return &implementMissingMethodsTarget{
+		if target == nil || candidate.startCol <= pos.Character && candidate.startCol > target.startCol {
+			target = &candidate
+		}
+	}
+	for _, cls := range file.Classes {
+		consider(implementMissingMethodsTarget{
 			fqn:        cls.FullName,
-			startLine:  cls.Line,
+			startLine:  cls.StartLine,
+			startCol:   cls.StartCol,
 			endLine:    cls.EndLine,
 			methods:    cls.Methods,
 			extends:    cls.Extends,
 			implements: append([]string(nil), cls.Implements...),
-		}
+		})
 	}
-	for _, en := range result.Enums {
-		if en.Line != cursorLine {
-			continue
-		}
-		return &implementMissingMethodsTarget{
+	for _, en := range file.Enums {
+		consider(implementMissingMethodsTarget{
 			fqn:        en.FullName,
-			startLine:  en.Line,
+			startLine:  en.StartLine,
+			startCol:   en.StartCol,
 			endLine:    en.EndLine,
 			methods:    en.Methods,
 			implements: append([]string(nil), en.Implements...),
-		}
+		})
 	}
-	return nil
+	return target
 }
 
 type implementMissingMethodCandidate struct {
@@ -85,16 +88,12 @@ type implementMissingMethodCandidate struct {
 	signatureKey string
 }
 
-func (a *Analyzer) collectImplementMissingMethods(r *resolve.Resolver, source string, target *implementMissingMethodsTarget) []string {
+func (a *Analyzer) collectImplementMissingMethods(r *resolve.Resolver, source string, file *parser.FileNode, target *implementMissingMethodsTarget) []string {
 	if target == nil || target.fqn == "" {
 		return nil
 	}
 
 	methodIndent := implementMissingMethodsIndent(source, target.startLine)
-	targetFile := parser.ParseFile(source)
-	if targetFile == nil {
-		return nil
-	}
 
 	implementedConcrete := make(map[string]bool)
 	for _, member := range a.index.GetClassMembers(target.fqn) {
@@ -138,12 +137,12 @@ func (a *Analyzer) collectImplementMissingMethods(r *resolve.Resolver, source st
 	}
 
 	for _, ifaceName := range target.implements {
-		a.collectInterfaceMethodRequirements(r, r.ResolveClassName(ifaceName, targetFile), addRequirement, make(map[string]bool))
+		a.collectInterfaceMethodRequirements(r, r.ResolveClassName(ifaceName, file), addRequirement, make(map[string]bool))
 	}
 
 	parentFQN := ""
 	if target.extends != "" {
-		parentFQN = r.ResolveClassName(target.extends, targetFile)
+		parentFQN = r.ResolveClassName(target.extends, file)
 	}
 	if parentFQN == "" {
 		if sym := a.index.Lookup(target.fqn); sym != nil {
@@ -211,7 +210,7 @@ func (a *Analyzer) interfaceExtendedFQNs(r *resolve.Resolver, iface *symbols.Sym
 	if source == "" {
 		return nil
 	}
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(iface.URI))
 	if file == nil {
 		return nil
 	}

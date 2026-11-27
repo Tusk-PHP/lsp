@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"testing"
 )
 
@@ -171,7 +172,7 @@ class CategoryController {
 }
 `
 
-	file := ParseFile(source)
+	file := ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}
@@ -196,7 +197,7 @@ class Foo {
     public string $name;
 }
 `
-	file := ParseFile(source)
+	file := ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected non-nil FileNode")
 	}
@@ -217,15 +218,15 @@ $x = "hello world
 class Foo {}
 `
 
-	file := ParseFile(source)
+	file := ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected non-nil FileNode")
 	}
 	if len(file.Errors) == 0 {
 		t.Fatal("expected ParseFile to expose tokenizer errors")
 	}
-	if file.Errors[0].Message != "unterminated string" {
-		t.Fatalf("expected unterminated string error, got %#v", file.Errors[0])
+	if want := (ParseError{Message: "unterminated string", Line: 1, Column: 5}); file.Errors[0] != want {
+		t.Fatalf("expected %#v, got %#v", want, file.Errors[0])
 	}
 }
 
@@ -238,15 +239,15 @@ class Foo {
 }
 `
 
-	file := ParseFile(source)
+	file := ParseFile(source, token.Latest)
 	if file == nil {
 		t.Fatal("expected non-nil FileNode")
 	}
 	if len(file.Errors) == 0 {
 		t.Fatal("expected ParseFile to expose structural errors")
 	}
-	if file.Errors[0].Message != "expected ')'" {
-		t.Fatalf("expected missing paren error, got %#v", file.Errors[0])
+	if want := (ParseError{Message: "syntax error, unexpected 'return', expected an identifier", Line: 3, Column: 8}); file.Errors[0] != want {
+		t.Fatalf("expected %#v, got %#v", want, file.Errors[0])
 	}
 }
 
@@ -701,7 +702,7 @@ func TestParseDocBlockStructuredTypeAliases(t *testing.T) {
 func TestParseReferenceParameters(t *testing.T) {
 	file := ParseFile(`<?php
 function f(&$a, array &$b, ?array &$c, A&B &$d, A&B $e, int &...$f, $g) {}
-`)
+`, token.Latest)
 	if len(file.Functions) != 1 {
 		t.Fatalf("want one function, got %d", len(file.Functions))
 	}
@@ -731,7 +732,7 @@ class A {
     public function getValues(/* bool $raw = false */): array { return []; }
     public static function isValid(string $ulid/* , int $format = 1 */): bool { return true; }
 }
-`)
+`, token.Latest)
 	if len(file.Classes) != 1 || len(file.Classes[0].Methods) != 2 {
 		t.Fatalf("parse: %+v", file.Classes)
 	}
