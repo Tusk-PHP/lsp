@@ -675,3 +675,39 @@ class Category { public $status; public function status() {} public function sco
 		t.Errorf("AccessedMemberOn(Builder, missing) = %s, want nil", m.FQN)
 	}
 }
+
+func TestNativeParameterTypesAreReadAsTypes(t *testing.T) {
+	src := `<?php
+namespace App;
+class User {}
+class Repo {
+    public function find(?User $u, int|string $s, User|int $m): void {
+        echo $u, $s, $m;
+    }
+}
+function run(?User $u, int|string $s): void {
+    echo $u, $s;
+}
+`
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///a.php", src)
+	r := NewResolver(idx)
+	file := parser.ParseFile(src)
+	lines := SplitLines(src)
+	for _, c := range []struct {
+		line int
+		v    string
+		want string
+	}{
+		{5, "$u", `?App\User`},
+		{5, "$s", `int|string`},
+		{5, "$m", `App\User|int`},
+		{9, "$u", `?App\User`},
+		{9, "$s", `int|string`},
+	} {
+		col := strings.Index(lines[c.line], c.v) + 1
+		if got := r.ResolveVariableTypeTyped(c.v, lines, textpos.Position{Line: c.line, Character: col}, file).FullString(); got != c.want {
+			t.Errorf("%s on line %d: got %q, want %q", c.v, c.line, got, c.want)
+		}
+	}
+}

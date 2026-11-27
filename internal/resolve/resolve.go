@@ -594,7 +594,7 @@ func (r *Resolver) resolveMethodParamTypeTyped(method *parser.MethodNode, varNam
 				return rt
 			}
 		}
-		return ResolvedType{FQN: r.ResolveClassName(paramTypeName(param), file)}
+		return r.resolveDocType(paramTypeName(param), file)
 	}
 	return ResolvedType{}
 }
@@ -609,7 +609,7 @@ func (r *Resolver) resolveFunctionParamTypeTyped(fn *parser.FunctionNode, varNam
 				return rt
 			}
 		}
-		return ResolvedType{FQN: r.ResolveClassName(paramTypeName(param), file)}
+		return r.resolveDocType(paramTypeName(param), file)
 	}
 	return ResolvedType{}
 }
