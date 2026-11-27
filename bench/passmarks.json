@@ -9,7 +9,7 @@
       "maxP95Ms": { "completion": 50, "hover": 50, "definition": 50, "signatureHelp": 50, "references": 1000 }
     },
     "sylius": {
-      "minPass": 40,
+      "minPass": 41,
       "maxReadyMs": 5000,
       "maxPeakRssMB": 800,
       "maxP95Ms": { "completion": 50, "hover": 50, "definition": 50, "signatureHelp": 50, "references": 1000 }

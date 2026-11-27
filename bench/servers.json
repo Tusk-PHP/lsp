@@ -10,6 +10,10 @@
       { "type": "logMessage", "pattern": "Indexed [0-9]+ files" }
     ],
     "readyTimeoutSec": 180,
+    "indexDone": {
+      "type": "logMessage",
+      "pattern": "^PHP LSP: Index ready$"
+    },
     "initializationOptions": {
       "phpstanEnabled": false,
       "pintEnabled": false

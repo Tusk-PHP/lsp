@@ -3,6 +3,7 @@
   "root": "testdata/woocommerce",
   "description": "WooCommerce 11.3.1 on WordPress 7.1.5, laid out as a real site (core at the root, the plugin under wp-content/plugins/woocommerce with its shipped vendor/); ~5.2k PHP files",
   "readyProbe": "wsym.namespaced-class",
+  "waitForIndex": true,
   "comment": "Cases tagged hooks, template, rest-api or framework-depth need WordPress knowledge; the rest ask plain PHP questions of WordPress-style code (docblock-typed, global functions, `global $wpdb`). WooCommerce targets PHP 7.4, so its own code has no enums, match, nullsafe, readonly, promoted properties or first-class callables, and neither does WordPress core: those syntax tags are deliberately absent from this suite. Each anchor occurs once in its file.",
   "openFiles": [
     "wp-content/plugins/woocommerce/includes/class-woocommerce.php",

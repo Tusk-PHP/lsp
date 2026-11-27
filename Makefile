@@ -70,5 +70,7 @@ reference-apps:
 
 # Benchmark this server on the reference apps and hold it to bench/passmarks.json.
 # WORKSPACES=sylius runs one.
+REFERENCE_APPS := filament,sylius,woocommerce,mageos
+
 bench-reference: build
-	go run ./bench/lspbench -servers tusk-php -workspaces $(or $(WORKSPACES),filament,sylius,woocommerce,mageos) -passmarks bench/passmarks.json
+	go run ./bench/lspbench -servers tusk-php -workspaces $(or $(WORKSPACES),$(REFERENCE_APPS)) -passmarks bench/passmarks.json

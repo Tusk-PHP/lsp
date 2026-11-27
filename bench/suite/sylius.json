@@ -3,6 +3,7 @@
   "root": "testdata/sylius",
   "description": "Sylius-Standard v2.3.1 (Symfony 7, Doctrine ORM, API Platform, Symfony UX) with a full vendor/; the app's src/ holds the entity overrides, the rest of the code lives in vendor/sylius/sylius and the Sylius plugins; fetched with `make reference-apps`",
   "readyProbe": "wsym.vendor-enum",
+  "waitForIndex": true,
   "comment": "Most cases sit in the Sylius bundles a developer opens from vendor/, because the app's own src/ only overrides entities. Cases tagged symfony, doctrine, container, routing, twig, translation, api-platform or framework-depth need framework knowledge; the rest ask plain PHP questions of a large codebase. Every expected target was checked against the code; each anchor occurs once in its file unless `occurrence` is set.",
   "openFiles": [
     "src/Entity/Order/Order.php",
