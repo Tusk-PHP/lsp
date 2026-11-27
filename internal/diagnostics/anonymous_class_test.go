@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -71,9 +70,9 @@ class AsCollection
 	idx.IndexFile("file:///AsCollection.php", src)
 	idx.MarkReady()
 	p := NewProvider(idx, "none", "/tmp", nil, config.DefaultConfig())
-	comp := completion.NewProvider(idx, nil, "none")
+	engine := TypeEngine(idx, nil)
 	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		return comp.ResolveExpressionType(expr, source, protocol.Position{Line: line}, file)
+		return engine.Resolver().ExpressionClass(expr, source, protocol.Position{Line: line}, file)
 	}
 	var got []string
 	for _, d := range p.Analyze("file:///AsCollection.php", src) {

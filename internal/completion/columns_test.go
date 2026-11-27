@@ -277,10 +277,10 @@ func TestBuilderRelationCompletion(t *testing.T) {
 	})
 }
 
-// TestResolveBuilderModelForDiagnostics checks the model the unknown-column
+// TestBuilderModelForDiagnostics checks the model the unknown-column
 // and unknown-relation diagnostics get for a call, from the line up to the
 // call's opening parenthesis.
-func TestResolveBuilderModelForDiagnostics(t *testing.T) {
+func TestBuilderModelForDiagnostics(t *testing.T) {
 	p, _ := setupEloquentCompletionTest(t)
 	source := "<?php\nuse App\\Models\\Category;\nCategory::query()->where('name', 1)->with('products');\n"
 	file := parser.ParseFile(source)
@@ -291,7 +291,7 @@ func TestResolveBuilderModelForDiagnostics(t *testing.T) {
 		{"where(", "where", ""},
 		{"::where(", "where", ""},
 	} {
-		if got := p.ResolveBuilderModel(tc.prefix, tc.method, source, 2, file).FQN; got != tc.want {
+		if got := laravel.BuilderModel(p.engine.Resolver(), p.index, tc.prefix, tc.method, source, protocol.Position{Line: 2, Character: len(tc.prefix)}, file).FQN; got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.prefix, got, tc.want)
 		}
 	}

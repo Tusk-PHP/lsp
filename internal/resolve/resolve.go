@@ -1287,7 +1287,7 @@ func IsWordChar(ch byte) bool {
 // JoinChainLines joins the current line with preceding continuation lines
 // that form a method chain. When a line's meaningful content starts with
 // -> or ::, the previous line is prepended (trimmed) to form a single
-// expression. This allows resolveAccessChain to walk multi-line chains.
+// expression. This allows AccessChainClass to walk multi-line chains.
 // Returns the joined line and the adjusted character offset within it.
 func JoinChainLines(lines []string, lineNum, character int) (string, int) {
 	if lineNum < 0 || lineNum >= len(lines) {

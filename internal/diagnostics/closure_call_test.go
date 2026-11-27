@@ -4,10 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/config"
-	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -18,10 +15,7 @@ func analyzeUnknowns(t *testing.T, src string) []string {
 	idx.IndexFile("file:///Cases.php", src)
 	idx.MarkReady()
 	p := NewProvider(idx, "none", "/tmp", nil, config.DefaultConfig())
-	comp := completion.NewProvider(idx, nil, "none")
-	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		return comp.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
-	}
+	p.ResolveTypes(nil)
 	var got []string
 	for _, d := range p.Analyze("file:///Cases.php", src) {
 		if strings.HasPrefix(d.Message, "Unknown") || strings.HasPrefix(d.Message, "Undefined") {

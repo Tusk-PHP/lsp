@@ -5,10 +5,10 @@ package resolve
 // TypedChainResolver callbacks.
 //
 // The cycle (from CURRENT_ISSUES.md):
-//   resolveExpressionType (hover/completion)
-//     → resolveAccessChain
+//   Resolver.ExpressionClass (hover/completion)
+//     → AccessChainClass
 //       → Resolver.ResolveVariableType / ResolveVariableTypeTyped
-//         → ChainResolver / TypedChainResolver  (calls back into resolveExpressionType)
+//         → ChainResolver / TypedChainResolver  (calls back into ExpressionClass)
 //
 // Inputs like "$x = $x->foo();" or mutual "$a = $b->x(); $b = $a->y();" used to
 // overflow the goroutine stack — a fatal, unrecoverable runtime error. After the
