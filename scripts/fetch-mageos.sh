@@ -60,4 +60,7 @@ cp "${PINNED}/composer.json" "${PINNED}/composer.lock" "${DEST}/"
 # Plugins stay on: magento/magento-composer-installer deploys the base files
 # (app/, bin/, pub/, setup/) every Magento project has. Scripts stay off.
 composer_install "${DEST}" --no-scripts
+# The project's composer.json states no PHP version (the framework packages
+# do, with ~8.3, ~8.4 or ~8.5); 8.4 matches the PHP the CI jobs run.
+pin_php "${DEST}" "8.4"
 log "done"

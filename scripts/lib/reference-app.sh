@@ -67,3 +67,11 @@ composer_install() {
     --ignore-platform-reqs --quiet "$@"
   echo "${stamp}" > "${dir}/vendor/.fetch-lock"
 }
+
+# pin_php <dir> <version> writes a .tusk-php.json that sets the PHP version,
+# for an app whose composer.json doesn't state one: without it the server
+# falls back to the local php, and findings like deprecations would differ
+# between machines.
+pin_php() {
+  printf '{\n  "phpVersion": "%s"\n}\n' "$2" > "$1/.tusk-php.json"
+}
