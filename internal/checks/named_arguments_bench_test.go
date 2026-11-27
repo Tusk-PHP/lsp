@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -26,9 +26,9 @@ class User { public function rename(string $name): void {} public function repo(
 	src.WriteString("        $this->user->rename(name: 'y');\n    }\n}\n")
 	source := src.String()
 	file := parser.ParseFile(source)
-	types := completion.NewProvider(idx, nil, "")
+	types := resolve.NewChainEngine(idx)
 	resolver := func(expr, source string, line, col int, file *parser.FileNode) string {
-		return types.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
+		return types.DiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
 	}
 	b.ReportAllocs()
 	for b.Loop() {

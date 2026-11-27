@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	frameworkmagento "github.com/Tusk-PHP/lsp/internal/framework/magento"
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -64,9 +63,9 @@ class Save {
 	idx.IndexFile("file:///Save.php", src)
 	idx.MarkReady()
 	p := NewProvider(idx, "magento", "/tmp", nil, config.DefaultConfig())
-	comp := completion.NewProvider(idx, nil, "magento")
+	engine := TypeEngine(idx, nil)
 	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		return comp.ResolveExpressionType(expr, source, protocol.Position{Line: line}, file)
+		return engine.Resolver().ExpressionClass(expr, source, protocol.Position{Line: line}, file)
 	}
 	var got []string
 	for _, d := range p.Analyze("file:///Save.php", src) {

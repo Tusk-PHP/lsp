@@ -125,10 +125,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		})
 	}
 	s.diag = diagnostics.NewProvider(s.index, s.framework, s.rootPath, s.logger, s.cfg)
-	s.diag.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		return s.completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
-	}
-	s.diag.BuilderModelResolver = s.completion.ResolveBuilderModel
+	s.diag.ResolveTypes(s.container)
 	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(s.index, s.workspace.SchemaIsLive)
 	s.diag.Profile = s.workspace.Profile
 	s.providers = frameworklaravel.NewProviders(s.rootPath, s.index)

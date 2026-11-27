@@ -751,10 +751,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.Analyzer.SetSymfonyCommands(ws.SymfonyCommands)
 
 	rt.Diagnostics = diagnostics.NewProvider(ws.Index, s.Framework, s.RootPath, newStdLogger(nil), ws.Config)
-	rt.Diagnostics.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		return rt.Completion.ResolveDiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
-	}
-	rt.Diagnostics.BuilderModelResolver = rt.Completion.ResolveBuilderModel
+	rt.Diagnostics.ResolveTypes(ws.Container)
 	rt.Diagnostics.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(ws.Index, ws.SchemaIsLive)
 	rt.Diagnostics.Profile = ws.Profile
 	if ws.ViewData != nil {

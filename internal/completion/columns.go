@@ -243,7 +243,7 @@ func extractStringAtEnd(inner string) (string, string, bool) {
 
 // completeBuilderArg dispatches to column or relation completion based on the method.
 func (p *Provider) completeBuilderArg(r *resolve.Resolver, method, partial, quote, prefix, source string, pos protocol.Position, file *parser.FileNode) []protocol.CompletionItem {
-	modelFQN := p.resolveBuilderModel(r, prefix, method, source, pos, file).FQN
+	modelFQN := frameworklaravel.BuilderModel(r, p.index, prefix, method, source, pos, file).FQN
 	if modelFQN == "" {
 		return nil
 	}
@@ -255,62 +255,6 @@ func (p *Provider) completeBuilderArg(r *resolve.Resolver, method, partial, quot
 		return p.completeBuilderColumns(modelFQN, partial, quote)
 	}
 	return p.completeBuilderRelations(modelFQN, partial, quote)
-}
-
-// ResolveBuilderModel returns the Eloquent model a builder call on line is
-// made on, for the unknown-column and unknown-relation diagnostics: prefix is
-// the line up to the call, method the called method.
-func (p *Provider) ResolveBuilderModel(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
-	return p.resolveBuilderModel(p.engine.Resolver(), prefix, method, source, protocol.Position{Line: line, Character: len(prefix)}, file)
-}
-
-// resolveBuilderModel finds the Eloquent model FQN from the expression before
-// the Builder method call. Works for both static calls (Category::where) and
-// chained calls (Category::query()->where, $query->where).
-func (p *Provider) resolveBuilderModel(r *resolve.Resolver, prefix, method, source string, pos protocol.Position, file *parser.FileNode) frameworklaravel.QueriedModel {
-	// Find the method call in the prefix to get everything before it
-	// We need to find ->method( or ::method( and resolve the chain before it
-	trimmed := strings.TrimSpace(prefix)
-
-	// Find the last occurrence of the method call pattern
-	patterns := []string{"->" + method + "(", "::" + method + "("}
-	bestIdx := -1
-	bestOp := ""
-	for _, pat := range patterns {
-		idx := strings.LastIndex(trimmed, pat)
-		if idx > bestIdx {
-			bestIdx = idx
-			if strings.HasPrefix(pat, "::") {
-				bestOp = "::"
-			} else {
-				bestOp = "->"
-			}
-		}
-	}
-	if bestIdx < 0 {
-		return frameworklaravel.QueriedModel{}
-	}
-
-	// Get the expression before the method call
-	beforeMethod := trimmed[:bestIdx]
-
-	if bestOp == "->" {
-		return frameworklaravel.ModelQueriedBy(p.index, r.ChainType(beforeMethod, source, pos, file))
-	}
-
-	end := len(beforeMethod)
-	i := end - 1
-	for i >= 0 && (resolve.IsWordChar(beforeMethod[i]) || beforeMethod[i] == '\\') {
-		i--
-	}
-	className := beforeMethod[i+1 : end]
-	if className == "" {
-		return frameworklaravel.QueriedModel{}
-	}
-	if fqn := r.ResolveClassNameLoose(className, file); frameworklaravel.IsModel(p.index, fqn) {
-		return frameworklaravel.QueriedModel{FQN: fqn}
-	}
-	return frameworklaravel.QueriedModel{}
 }
 
 // isDBColumn returns true if the symbol represents an actual database column

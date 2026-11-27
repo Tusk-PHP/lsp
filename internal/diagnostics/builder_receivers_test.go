@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -136,7 +135,8 @@ func analyzeBuilderArgs(t *testing.T, body string) []string {
 	idx.IndexFile("file:///app/Http/Run.php", src)
 	idx.MarkReady()
 	p := NewProvider(idx, "laravel", "/tmp", nil, config.DefaultConfig())
-	p.BuilderModelResolver = completion.NewProvider(idx, nil, "laravel").ResolveBuilderModel
+	p.ResolveTypes(nil)
+	p.TypeResolver = nil
 	p.BuilderMemberChecker = NewIndexMemberChecker(idx, func() bool { return true })
 	var got []string
 	for _, d := range p.AnalyzeAll("file:///app/Http/Run.php", src) {
