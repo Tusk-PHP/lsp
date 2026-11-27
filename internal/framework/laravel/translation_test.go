@@ -7,53 +7,6 @@ import (
 	"testing"
 )
 
-func TestDetectTranslationContext(t *testing.T) {
-	tests := []struct {
-		name   string
-		line   string
-		cursor int
-		key    string
-		part   string
-	}{
-		{
-			name:   "php helper",
-			line:   "{{ __('messages.we') }}",
-			cursor: len("{{ __('messages.we"),
-			key:    "messages.we",
-			part:   "messages.we",
-		},
-		{
-			name:   "blade directive",
-			line:   "@lang('Welcome')",
-			cursor: len("@lang('Wel"),
-			key:    "Welcome",
-			part:   "Wel",
-		},
-		{
-			name:   "trans choice",
-			line:   "trans_choice('messages.count', $count)",
-			cursor: len("trans_choice('messages.count"),
-			key:    "messages.count",
-			part:   "messages.count",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := DetectTranslationContext(tt.line, tt.cursor)
-			if ctx == nil {
-				t.Fatal("expected translation context")
-			}
-			if ctx.Key != tt.key {
-				t.Fatalf("Key = %q, want %q", ctx.Key, tt.key)
-			}
-			if ctx.Partial != tt.part {
-				t.Fatalf("Partial = %q, want %q", ctx.Partial, tt.part)
-			}
-		})
-	}
-}
-
 func TestTranslationResolverPrefersConfiguredLocale(t *testing.T) {
 	root := setupTranslationFixture(t)
 	resolver := NewTranslationResolver(root)

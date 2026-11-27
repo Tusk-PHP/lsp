@@ -1,10 +1,13 @@
 package checks
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -12,7 +15,7 @@ import (
 
 // DeprecatedUsageRule flags uses of what's marked with PHP 8.4's #[\Deprecated].
 type DeprecatedUsageRule struct {
-	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
+	TypeResolver TypeResolver
 	// Uses, when set, shares the attribute uses found in a file with the
 	// other rules run over it.
 	Uses *MemberUseCache
@@ -39,7 +42,7 @@ func (r *DeprecatedUsageRule) Check(file *parser.FileNode, source string, index 
 // UnusedResultRule flags calls to what's marked with PHP 8.5's #[\NoDiscard]
 // whose result is thrown away. A `(void)` cast is the way to do that on purpose.
 type UnusedResultRule struct {
-	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
+	TypeResolver TypeResolver
 	// Uses, when set, shares the attribute uses found in a file with the
 	// other rules run over it.
 	Uses *MemberUseCache
@@ -154,21 +157,14 @@ func hasOverrideAttribute(attrs []parser.AttributeDef, file *parser.FileNode) bo
 // attributeMessage returns the `message` argument of #[\Deprecated] or
 // #[\NoDiscard], which is the first one unless it's passed by name.
 func attributeMessage(attr *symbols.Attribute) string {
-	for i, arg := range attr.Args {
-		if value, ok := strings.CutPrefix(arg, "message:"); ok {
-			return strings.Trim(strings.TrimSpace(value), `'"`)
-		}
-		if i == 0 && !strings.Contains(arg, ":") {
-			return strings.Trim(arg, `'"`)
-		}
-	}
-	return ""
+	message, _ := attr.Args.Get("message", 0)
+	return strings.Trim(message, `'"`)
 }
 
 // memberUse is a function, method or constant used in the source.
 type memberUse struct {
 	symbol      *symbols.Symbol
-	token       parser.Token
+	site        Finding
 	isCall      bool
 	isStatement bool // nothing takes its result
 }
@@ -177,7 +173,7 @@ type memberUse struct {
 // that read them (deprecated, unused-result) find them once. A nil cache
 // finds them every time.
 type MemberUseCache struct {
-	// Shared, when set, shares the file's parse with the other rules.
+	// Shared, when set, shares the file's syntax tree with the other rules.
 	Shared *Shared
 	source string
 	file   *parser.FileNode
@@ -185,7 +181,7 @@ type MemberUseCache struct {
 	done   bool
 }
 
-func (c *MemberUseCache) get(file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string) []memberUse {
+func (c *MemberUseCache) get(file *parser.FileNode, source string, index *symbols.Index, typeResolver TypeResolver) []memberUse {
 	if c == nil {
 		return memberUses(file, source, index, typeResolver, nil)
 	}
@@ -197,19 +193,12 @@ func (c *MemberUseCache) get(file *parser.FileNode, source string, index *symbol
 }
 
 func (u memberUse) finding(code rule.Code, message string, tags []Tag) Finding {
-	return Finding{
-		StartLine: u.token.Line,
-		StartCol:  u.token.Column,
-		EndLine:   u.token.Line,
-		EndCol:    u.token.Column + len(u.token.Value),
-		Severity:  rule.SeverityWarning,
-		Code:      code,
-		Message:   message,
-		Tags:      tags,
-	}
+	f := u.site
+	f.Severity, f.Code, f.Message, f.Tags = rule.SeverityWarning, code, message, tags
+	return f
 }
 
-func memberUses(file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string, shared *Shared) []memberUse {
+func memberUses(file *parser.FileNode, source string, index *symbols.Index, typeResolver TypeResolver, shared *Shared) []memberUse {
 	if file == nil || index == nil {
 		return nil
 	}
@@ -217,76 +206,44 @@ func memberUses(file *parser.FileNode, source string, index *symbols.Index, type
 	if !index.HasAttributedSymbols() {
 		return nil
 	}
-	result := shared.parse(source)
-	if result == nil {
-		return nil
-	}
-	tokens := parser.SignificantTokens(result.Tokens)
-	lines := strings.Split(source, "\n")
-
+	syntax := shared.tree(source, file)
+	refs := syntax.references()
 	var uses []memberUse
-	for i, tok := range tokens {
-		if tok.Kind != parser.TokenIdentifier {
-			continue
+	add := func(sym *symbols.Symbol, name ast.Node, isCall, isStatement bool) {
+		if sym != nil && len(sym.Attributes) > 0 {
+			uses = append(uses, memberUse{symbol: sym, site: syntax.at(name, Finding{}), isCall: isCall, isStatement: isCall && isStatement})
 		}
-		isCall := i+1 < len(tokens) && tokens[i+1].Kind == parser.TokenOpenParen
-		var sym *symbols.Symbol
-		prev := parser.TokenEOF
-		if i > 0 {
-			prev = tokens[i-1].Kind
-		}
-		switch {
-		case prev == parser.TokenArrow || prev == parser.TokenDoubleColon:
-			if typeResolver == nil || tok.Line >= len(lines) {
-				continue
-			}
-			var mask maskState
-			line := maskPHPLine(lines[tok.Line], &mask)
-			opStart := tokens[i-1].Column
-			if i > 1 && tokens[i-2].Kind == parser.TokenQuestion {
-				opStart = tokens[i-2].Column
-			}
-			if opStart > len(line) {
-				continue
-			}
-			ownerExpr := strings.TrimSpace(line[backwardExprStart(line, opStart):opStart])
-			if ownerExpr == "" {
-				continue
-			}
-			ownerFQN := resolveMemberOwner(ownerExpr, tok.Line, backwardExprStart(line, opStart), source, file, index, typeResolver)
-			if ownerFQN == "" {
-				continue
-			}
-			for _, member := range index.GetClassMembers(ownerFQN) {
-				if member.Name == tok.Value && member.Kind != symbols.KindProperty {
-					sym = member
-					break
-				}
-			}
-		case isCall && i > 0 && (tokens[i-1].Kind == parser.TokenFunction || strings.EqualFold(tokens[i-1].Value, "new")):
-			continue
-		case isCall:
-			sym = lookupCalledFunction(tok.Value, file, index)
-		}
-		if sym == nil || len(sym.Attributes) == 0 {
-			continue
-		}
-		uses = append(uses, memberUse{symbol: sym, token: tok, isCall: isCall, isStatement: isCall && isExpressionStatement(tokens, i)})
 	}
+	for _, call := range refs.calls {
+		add(lookupCalledFunction(syntax.text(call.name), file, index), call.name, true, call.statement)
+	}
+	for _, ref := range refs.members {
+		if !ref.static && !ref.call() {
+			continue
+		}
+		recv, ok := syntax.receiverOf(ref)
+		if !ok {
+			continue
+		}
+		owners := recv.classLikes(file, index, typeResolver)
+		if len(owners) == 0 {
+			continue
+		}
+		add(classMember(index, owners[0], syntax.text(ref.name), ref.call()), ref.name, ref.call(), ref.statement)
+	}
+	slices.SortFunc(uses, func(a, b memberUse) int {
+		return cmp.Or(cmp.Compare(a.site.StartLine, b.site.StartLine), cmp.Compare(a.site.StartCol, b.site.StartCol))
+	})
 	return uses
 }
 
-// resolveMemberOwner returns the class-like a member is accessed on.
-func resolveMemberOwner(ownerExpr string, line, col int, source string, file *parser.FileNode, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string) string {
-	if !strings.HasPrefix(ownerExpr, "$") && !strings.HasSuffix(ownerExpr, ")") && !strings.HasSuffix(ownerExpr, "]") {
-		if fqn, ok := resolveClassLikeName(ownerExpr, line, file); ok && index.Lookup(fqn).IsClassLike() {
-			return fqn
+func classMember(index *symbols.Index, class, name string, isCall bool) *symbols.Symbol {
+	for _, member := range index.GetClassMembers(class) {
+		if member.Name == name && member.Kind != symbols.KindProperty && (member.Kind == symbols.KindMethod) == isCall {
+			return member
 		}
 	}
-	if owners := resolvedClassLikes(typeResolver(ownerExpr, source, line, col, file), file, index); len(owners) > 0 {
-		return owners[0]
-	}
-	return ""
+	return nil
 }
 
 func lookupCalledFunction(name string, file *parser.FileNode, index *symbols.Index) *symbols.Symbol {
@@ -297,53 +254,4 @@ func lookupCalledFunction(name string, file *parser.FileNode, index *symbols.Ind
 		}
 	}
 	return nil
-}
-
-// isExpressionStatement reports whether the call named at i is a whole statement:
-// `foo();`, `$a->b()->foo();`, but not `return foo();` or `(void) foo();`.
-func isExpressionStatement(tokens []parser.Token, i int) bool {
-	close := parser.MatchingClose(tokens, i+1)
-	if close < 0 || close+1 >= len(tokens) || tokens[close+1].Kind != parser.TokenSemicolon {
-		return false
-	}
-	start := i
-	for start > 1 {
-		k := tokens[start-1].Kind
-		if k != parser.TokenArrow && k != parser.TokenDoubleColon {
-			break
-		}
-		start -= 2
-		if start >= 0 && tokens[start].Kind == parser.TokenQuestion {
-			start--
-		}
-		// Step over `(...)` to the name it follows, as in `new Foo()->bar()`.
-		if start >= 0 && tokens[start].Kind == parser.TokenCloseParen {
-			depth := 0
-			for ; start >= 0; start-- {
-				if tokens[start].Kind == parser.TokenCloseParen {
-					depth++
-				} else if tokens[start].Kind == parser.TokenOpenParen {
-					depth--
-					if depth == 0 {
-						break
-					}
-				}
-			}
-			start--
-		}
-		if start < 0 {
-			return false
-		}
-	}
-	if start > 0 && strings.EqualFold(tokens[start-1].Value, "new") {
-		start--
-	}
-	if start == 0 {
-		return true
-	}
-	switch tokens[start-1].Kind {
-	case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace:
-		return true
-	}
-	return false
 }

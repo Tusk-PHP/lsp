@@ -8,6 +8,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -80,7 +81,7 @@ func symfonyControllerSource(t *testing.T) string {
 func TestE2ESymfonyTypeResolution(t *testing.T) {
 	p := setupSymfonyE2E(t)
 	source := symfonyControllerSource(t)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	uri := "file:///src/Controller/ProductController.php"
 	p.index.IndexFile(uri, source)
 
@@ -89,13 +90,13 @@ func TestE2ESymfonyTypeResolution(t *testing.T) {
 		if line < 0 {
 			t.Fatalf("line containing %q not found", lineSubstr)
 		}
-		return p.ResolveExpressionTypeTyped(varName, source, protocol.Position{Line: line + 1}, file)
+		return p.exprTypeAt(varName, source, protocol.Position{Line: line + 1}, file)
 	}
 
 	t.Run("$this->repo resolves to ProductRepository", func(t *testing.T) {
 		r := rt("$this->repo", "$allProducts = $this->repo->findAll()")
 		// $this->repo is a property access, resolve via expression
-		r2 := p.ResolveExpressionTypeTyped("$this->repo", source, protocol.Position{Line: findLine(source, "$allProducts = $this->repo->findAll()")}, file)
+		r2 := p.exprTypeAt("$this->repo", source, protocol.Position{Line: findLine(source, "$allProducts = $this->repo->findAll()")}, file)
 		if r2.BaseFQN() != "App\\Repository\\ProductRepository" && !r2.IsEmpty() {
 			t.Errorf("got %q", r2.String())
 		}

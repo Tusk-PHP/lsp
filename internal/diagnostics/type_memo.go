@@ -1,39 +1,32 @@
 package diagnostics
 
 import (
-	"strconv"
-
+	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 )
-
-// TypeResolverFunc types a PHP expression read at a line of a file. col is
-// the byte column where the expression starts on that line, or 0 when only
-// the line is known.
-type TypeResolverFunc = func(expr string, source string, line, col int, file *parser.FileNode) string
 
 // MemoizeTypeResolver returns a type resolver that remembers its answers for
 // one run of the rules over one version of a file. Several rules ask about
 // the same receivers (unknown-member, deprecated, unused-result all type
 // every `->` and `::`), and the answer doesn't change within a run. The memo
 // belongs to the run: make a new one for each analysis.
-func MemoizeTypeResolver(resolve TypeResolverFunc) TypeResolverFunc {
+func MemoizeTypeResolver(resolve checks.TypeResolver) checks.TypeResolver {
 	if resolve == nil {
 		return nil
 	}
-	memo := make(map[string]string)
-	var memoSource string
-	return func(expr string, source string, line, col int, file *parser.FileNode) string {
-		if source != memoSource {
-			// Another file (or version): what was learnt doesn't apply.
+	memo := make(map[ast.Expr]string)
+	var memoFile *parser.FileNode
+	return func(file *parser.FileNode, e ast.Expr) string {
+		if file != memoFile {
 			clear(memo)
-			memoSource = source
+			memoFile = file
 		}
-		key := strconv.Itoa(line) + ":" + strconv.Itoa(col) + "\x00" + expr
-		if t, ok := memo[key]; ok {
+		if t, ok := memo[e]; ok {
 			return t
 		}
-		t := resolve(expr, source, line, col, file)
-		memo[key] = t
+		t := resolve(file, e)
+		memo[e] = t
 		return t
 	}
 }

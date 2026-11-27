@@ -74,7 +74,7 @@ func New(opts Options) *Bootstrapped {
 		cfg = config.DefaultConfig()
 	}
 
-	index := symbols.NewIndex()
+	index := symbols.NewIndexFor(opts.BuiltinProfile.Grammars)
 	index.RegisterBuiltinsForProfile(opts.BuiltinProfile)
 	index.SetOptionalNamespaces(composer.SuggestedNamespaces(opts.RootPath))
 	if opts.Framework == "magento" {
@@ -86,14 +86,15 @@ func New(opts Options) *Bootstrapped {
 	var viewData *frameworklaravel.ViewData
 	var commands *frameworksymfony.CommandIndex
 	if opts.Framework == "symfony" {
-		commands = frameworksymfony.NewCommandIndex()
+		commands = frameworksymfony.NewCommandIndex(index.Grammars())
 	}
 	if opts.Framework == "laravel" {
 		index.SetCallForwards(frameworklaravel.CallForwards())
 		index.SetScopeConventions(frameworklaravel.ScopeConventions())
-		routeIndex = frameworklaravel.NewRouteIndex(opts.RootPath)
+		index.SetTemplateFallbacks(frameworklaravel.TemplateFallbacks())
+		routeIndex = frameworklaravel.NewRouteIndex(opts.RootPath, index.Grammars)
 		viewData = frameworklaravel.NewViewData(opts.RootPath)
-		aliases = frameworklaravel.NewAliases(opts.RootPath)
+		aliases = frameworklaravel.NewAliases(opts.RootPath, index.Grammars)
 		index.SetClassGenerator(aliases)
 	}
 
@@ -341,7 +342,7 @@ func (ws *Bootstrapped) AnalyzeModelSchema() {
 	var migrationColumns map[string]map[string]*models.MigrationColumn
 	if ws.Framework == "laravel" && (schema == nil || schema.Source != models.SchemaSourceMigrations) {
 		migrationColumns = models.ScanMigrationColumns(ws.RootPath)
-		models.InjectMigrationColumns(ws.Index, ws.RootPath, migrationColumns)
+		models.InjectMigrationColumns(ws.Index, migrationColumns)
 	}
 	ws.modelMu.Lock()
 	ws.Schema = schema

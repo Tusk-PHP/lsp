@@ -10,6 +10,7 @@ import (
 	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
@@ -37,50 +38,20 @@ type Provider struct {
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
-	p := &Provider{index: index, container: ca, engine: resolve.NewEngine(index), framework: framework}
-	// Wire up chain resolution so ResolveVariableType can handle $var = Class::method()->chain()
-	p.engine.ChainResolver = p.resolveExpressionType
-	if ca != nil {
-		p.engine.ContainerCall = p.resolveContainerCallType
-	}
-	return p
+	return &Provider{index: index, container: ca, engine: container.NewEngine(index, ca), framework: framework}
 }
 
-// ResolveExpressionType resolves the type of an expression like "Category::first()"
-// or "$foo->bar()->baz()". Used as the ChainResolver callback and exposed for
-// diagnostics type resolution.
-func (p *Provider) ResolveExpressionType(expr string, source string, pos protocol.Position, file *parser.FileNode) string {
-	return p.resolveExpressionType(p.engine.Resolver(), expr, source, pos, file)
+// Resolver starts a request on completion's resolver, for the providers
+// that type the same expressions.
+func (p *Provider) Resolver() *resolve.Resolver {
+	return p.engine.Resolver()
 }
 
-func (p *Provider) resolveExpressionType(r *resolve.Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) string {
-	expr = strings.TrimSpace(expr)
-	if expr == "" {
-		return ""
-	}
-	// Append a dummy "->" so resolveAccessChain can walk the chain up to the last member
-	// and return the type of the final call/access.
-	dummyLine := expr + "->__dummy__"
-	// wordStart points to "__dummy__" which is after "->"
-	wordStart := len(expr) + 2
-	return p.resolveAccessChain(r, dummyLine, wordStart, source, pos, file)
-}
-
-// ResolveDiagnosticType returns the type diagnostics check an expression
-// against: the generic-aware type, written out in full ("?Foo",
-// "Foo|Bar", "Collection<int, User>"), the same one hover and completion
-// see. It falls back to the plain chain type when that can't be worked out.
-func (p *Provider) ResolveDiagnosticType(expr string, source string, pos protocol.Position, file *parser.FileNode) string {
-	if rt := p.ResolveExpressionTypeTyped(expr, source, pos, file); !rt.IsEmpty() {
-		return rt.FullString()
-	}
-	return p.ResolveExpressionType(expr, source, pos, file)
-}
-
-// ResolveExpressionTypeTyped resolves the type of an expression preserving
-// generic parameters (e.g., returns Collection<int, Category> instead of bare Collection).
-func (p *Provider) ResolveExpressionTypeTyped(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-	return p.engine.Resolver().ChainType(expr, source, pos, file)
+// DiagnosticType returns the type diagnostics check an expression node of
+// file against, written out in full ("?Foo", "Foo|Bar",
+// "Collection<int, User>"), the same one hover and completion see.
+func (p *Provider) DiagnosticType(file *parser.FileNode, e ast.Expr) string {
+	return p.engine.Resolver().NodeType(file, e).FullString()
 }
 
 // SetArrayResolver sets the framework array resolver for config/request/model key completion.
@@ -154,119 +125,81 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 	if pos.Character <= len(line) {
 		prefix = line[:pos.Character]
 	}
-
-	// Join multi-line chains: if the current line is a continuation (starts with ->),
-	// prepend previous lines so the chain resolver can see the full expression.
-	joinedLine, joinedChar := resolve.JoinChainLines(lines, pos.Line, pos.Character)
-	if joinedChar > pos.Character && joinedChar <= len(joinedLine) {
-		prefix = joinedLine[:joinedChar]
-	}
-
-	trimmed := strings.TrimSpace(prefix)
-
-	// Check if there's already a '(' after the cursor (skip remaining identifier chars)
-	parenAfterCursor := false
-	if pos.Character < len(line) {
-		rest := line[pos.Character:]
-		for i := 0; i < len(rest); i++ {
-			if resolve.IsWordChar(rest[i]) || rest[i] == '$' {
-				continue
-			}
-			parenAfterCursor = rest[i] == '('
-			break
-		}
-	}
-	if p.framework == "laravel" && p.views != nil {
-		if viewCtx, ok := frameworklaravel.ExtractViewCompletionContext(trimmed); ok {
-			return sanitizeCompletions(p.completeLaravelViews(viewCtx))
-		}
-	}
-
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(uri, source, pos, p.index.GrammarOf(uri))
 	if ctx == nil {
 		return nil
 	}
 	file := ctx.File
+	arg, inArg := ctx.CallArg()
+	if inArg && p.framework == "laravel" && p.views != nil {
+		if viewCtx, ok := frameworklaravel.ViewNameArg(arg); ok {
+			return sanitizeCompletions(p.completeLaravelViews(viewCtx))
+		}
+	}
 	rk := newNameRanker(ctx.Namespace, ctx.Uses)
 
-	if strings.HasSuffix(trimmed, "->") || strings.HasSuffix(trimmed, "?->") {
-		return sanitizeCompletions(p.completeMemberAccess(r, uri, source, pos, prefix, file, parenAfterCursor))
+	switch ctx.AccessKind {
+	case sourcectx.AccessStatic:
+		items := p.completeStaticAccess(r, source, pos, file, ctx.Member.Call)
+		return sanitizeCompletions(filterByPrefix(items, ctx.Member.Filter))
+	case sourcectx.AccessInstance, sourcectx.AccessNullsafe:
+		items := p.completeMemberAccess(r, source, pos, file, ctx.Member.Call)
+		return sanitizeCompletions(filterByPrefix(items, ctx.Member.Filter))
 	}
-	// Container argument context takes priority over :: detection
-	// (e.g. app(Request::class) should not trigger static access)
-	if _, _, isContainer := extractContainerArgContext(trimmed); !isContainer {
-		if strings.HasSuffix(trimmed, "::") {
-			return sanitizeCompletions(p.completeStaticAccess(r, source, prefix, pos, file, parenAfterCursor))
+	if slot, ok := ctx.NameSlot(); ok {
+		switch slot.Kind {
+		case sourcectx.NamePipe:
+			return sanitizeCompletions(p.completePipe(rk))
+		case sourcectx.NameAttribute:
+			return sanitizeCompletions(p.completeAttribute(slot.Partial, source, rk, file))
+		case sourcectx.NameNew:
+			return sanitizeCompletions(p.completeNew(slot.Partial, source, rk, file))
+		case sourcectx.NameUse:
+			return sanitizeCompletions(p.completeUse(slot.Partial, rk))
 		}
-		// Typing after -> or :: (e.g. "$foo->ba" or "Foo::cr")
-		if memberCtx, ok := sourcectx.DetectMemberContext(trimmed); ok {
-			if memberCtx.AccessKind == sourcectx.AccessStatic {
-				items := p.completeStaticAccess(r, source, memberCtx.Prefix, pos, file, parenAfterCursor)
-				return sanitizeCompletions(filterByPrefix(items, memberCtx.Filter))
-			}
-			items := p.completeMemberAccess(r, uri, source, pos, memberCtx.Prefix, file, parenAfterCursor)
-			return sanitizeCompletions(filterByPrefix(items, memberCtx.Filter))
-		}
 	}
-	if strings.HasSuffix(trimmed, "|>") {
-		return sanitizeCompletions(p.completePipe(rk))
-	}
-	if strings.Contains(trimmed, "#[") && !strings.Contains(trimmed, "]") {
-		return sanitizeCompletions(p.completeAttribute(attributeNamePrefix(trimmed), source, rk, file))
-	}
-	words := strings.Fields(trimmed)
-	if len(words) >= 1 && (words[len(words)-1] == "new" || (len(words) >= 2 && words[len(words)-2] == "new")) {
-		return sanitizeCompletions(p.completeNew(prefix, source, rk, file))
-	}
-	if len(words) >= 1 && words[0] == "use" {
-		return sanitizeCompletions(p.completeUse(prefix, rk))
-	}
-	// Builder column/relation argument completion: ->where('col, ->with('rel
-	if method, partial, quote, ok := extractBuilderArgContext(trimmed); ok {
-		if items := p.completeBuilderArg(r, method, partial, quote, prefix, source, pos, file); items != nil {
+	if inArg && isBuilderArg(arg) {
+		if items := p.completeBuilderArg(r, arg, file); items != nil {
 			return sanitizeCompletions(items)
 		}
 	}
-	// Array key completion: $var['partial or $var['key1']['partial (nested)
-	if ctx := parseArrayKeyContext(prefix); ctx != nil {
-		return sanitizeCompletions(p.completeArrayKeys(source, pos, ctx, file))
-	}
-	// Config result array access: config('database')['connections']['
-	if ctx := parseConfigResultArrayContext(prefix); ctx != nil {
-		return sanitizeCompletions(p.completeConfigResultKeys(ctx))
-	}
-	// Config key completion: config('database.|') with dot-notation navigation
-	if configPath, partial, quote, ok := extractConfigArgContext(trimmed); ok {
-		return sanitizeCompletions(p.completeConfigKeys(configPath, partial, quote))
-	}
-	if p.framework == "laravel" && p.routes != nil {
-		if partial, quote, ok := frameworklaravel.ExtractRouteNameArgContext(trimmed); ok {
-			return sanitizeCompletions(p.completeLaravelRouteNames(partial, quote))
+	if dim, ok := ctx.StringDim(); ok {
+		if keys, ok := arrayKeyContextOf(dim); ok {
+			return sanitizeCompletions(p.completeArrayKeys(r, file, keys))
+		}
+		if configCtx := configResultContext(ctx.File.Source, dim); configCtx != nil {
+			return sanitizeCompletions(p.completeConfigResultKeys(configCtx))
 		}
 	}
-	if p.framework == "laravel" && p.translations != nil {
-		if txCtx := frameworklaravel.DetectTranslationContext(line, pos.Character); txCtx != nil {
-			return sanitizeCompletions(p.translations.Complete(txCtx))
+	if inArg {
+		if configPath, partial, quote, ok := configArgContext(arg); ok {
+			return sanitizeCompletions(p.completeConfigKeys(configPath, partial, quote))
 		}
-	}
-	if p.framework == "symfony" {
-		if partial, quote, ok := frameworksymfony.ExtractRouteNameContext(trimmed); ok {
-			return sanitizeCompletions(p.completeSymfonyRouteNames(partial, quote))
+		if p.framework == "laravel" && p.routes != nil && frameworklaravel.IsRouteNameArg(arg) {
+			return sanitizeCompletions(p.completeLaravelRouteNames(arg.Partial, arg.Quote))
 		}
-		if p.symfonyCommands != nil {
-			if receiver, partial, quote, ok := frameworksymfony.CommandNameCall(trimmed); ok &&
-				frameworksymfony.IsConsoleApplication(p.index, p.resolveExpressionType(r, receiver, source, pos, file)) {
-				return sanitizeCompletions(p.completeSymfonyCommandNames(partial, quote))
+		if p.framework == "laravel" && p.translations != nil {
+			if txCtx, ok := frameworklaravel.TranslationKeyArg(arg); ok {
+				return sanitizeCompletions(p.translations.Complete(txCtx))
 			}
 		}
+	}
+	if p.framework == "symfony" && inArg {
+		if frameworksymfony.IsRouteNameArg(arg) {
+			return sanitizeCompletions(p.completeSymfonyRouteNames(arg.Partial, arg.Quote))
+		}
+		if p.symfonyCommands != nil && frameworksymfony.IsCommandNameArg(arg) &&
+			frameworksymfony.IsConsoleApplication(p.index, resolve.PlainTypeName(r.NodeType(file, arg.Receiver))) {
+			return sanitizeCompletions(p.completeSymfonyCommandNames(arg.Partial, arg.Quote))
+		}
 		if p.symfonyTranslations != nil {
-			if txCtx := frameworksymfony.DetectSymfonyTranslationContext(line, pos.Character); txCtx != nil {
+			if txCtx, ok := frameworksymfony.TranslationKeyArg(arg); ok {
 				return sanitizeCompletions(p.symfonyTranslations.Complete(txCtx))
 			}
 		}
 	}
-	if filter, quoteCtx, ok := extractContainerArgContext(trimmed); ok {
-		return sanitizeCompletions(p.completeContainerResolve(source, filter, quoteCtx, file, rk))
+	if inArg && isContainerArg(arg, source) {
+		return sanitizeCompletions(p.completeContainerResolve(source, arg.Partial, arg.Quote, file, rk))
 	}
 	// Variables in scope: `$` or `$na`
 	if typed, ok := typedVariablePrefix(prefix); ok {
@@ -385,17 +318,12 @@ func (p *Provider) completeSymfonyCommandNames(partial, quote string) []protocol
 	return items
 }
 
-func (p *Provider) completeMemberAccess(r *resolve.Resolver, uri, source string, pos protocol.Position, prefix string, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
-	// Use typed resolver first to get generic context
-	resolved := p.resolveChainTypeTyped(r, source, prefix, "->", pos, file)
+func (p *Provider) completeMemberAccess(r *resolve.Resolver, source string, pos protocol.Position, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
+	resolved := r.ReceiverTypeAt(source, pos, file)
 	if resolved.FQN == "object" && len(resolved.Fields) > 0 {
 		return objectShapeCompletions(resolved)
 	}
 	typeName := resolved.MemberOwner()
-	if typeName == "" {
-		// Fall back to standard resolver
-		typeName = p.resolveChainType(r, source, prefix, "->", pos, file)
-	}
 	if typeName == "" {
 		return nil
 	}
@@ -513,13 +441,12 @@ func objectShapeCompletions(rt resolve.ResolvedType) []protocol.CompletionItem {
 	return items
 }
 
-func (p *Provider) completeStaticAccess(r *resolve.Resolver, source, prefix string, pos protocol.Position, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
-	typeName := p.resolveChainType(r, source, prefix, "::", pos, file)
+func (p *Provider) completeStaticAccess(r *resolve.Resolver, source string, pos protocol.Position, file *parser.FileNode, parenAfterCursor bool) []protocol.CompletionItem {
+	recv, _ := r.ReceiverAt(source, pos, file)
+	typeName := ""
 	// $class:: where $class is a class-string<Foo>.
-	if strings.HasPrefix(strings.TrimSpace(extractClassBefore(prefix, "::")), "$") || typeName == "" || typeName == "string" || strings.HasPrefix(typeName, "class-string") {
-		if t := resolve.ClassStringTarget(p.resolveChainTypeTyped(r, source, prefix, "::", pos, file)); t.FQN != "" && !resolve.IsBuiltinTypeName(t.FQN) {
-			typeName = t.FQN
-		}
+	if t := resolve.ClassStringTarget(recv.Type); t.FQN != "" && !resolve.IsBuiltinTypeName(t.FQN) {
+		typeName = t.FQN
 	}
 	if typeName == "" {
 		return nil
@@ -535,7 +462,7 @@ func (p *Provider) completeStaticAccess(r *resolve.Resolver, source, prefix stri
 	// keep $this. Private members of another class stay out of reach.
 	instanceCalls := false
 	enclosing := ""
-	if op := strings.LastIndex(prefix, "::"); op >= 0 && resolve.ForwardsCallingClass(prefix[:op+2]) {
+	if recv.ForwardsCaller {
 		enclosing = resolve.FindEnclosingClass(file, pos)
 		if m := resolve.FindEnclosingMethod(file, pos); m != nil && !m.IsStatic {
 			instanceCalls = true
@@ -614,226 +541,8 @@ func (p *Provider) completeStaticAccess(r *resolve.Resolver, source, prefix stri
 	return items
 }
 
-// resolveChainTypeTyped resolves the type of the expression before op (-> or ::)
-// preserving generic context.
-func (p *Provider) resolveChainTypeTyped(r *resolve.Resolver, source, prefix, op string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-	idx := strings.LastIndex(prefix, op)
-	if idx < 0 {
-		return resolve.ResolvedType{}
-	}
-	return r.AccessOwnerType(prefix, idx+len(op), source, pos, file)
-}
-
-// resolveChainType resolves the class FQN from the expression before op (-> or ::).
-// Handles: $var->, $this->, self::, static::, parent::, ClassName::,
-// $var::, new ClassName()->, (new ClassName)->, method chains, and
-// container calls: app('request')->, app(Request::class)->, resolve(...)->
-func (p *Provider) resolveChainType(r *resolve.Resolver, source, prefix, op string, pos protocol.Position, file *parser.FileNode) string {
-	idx := strings.LastIndex(prefix, op)
-	if idx < 0 {
-		return ""
-	}
-	// wordStart is after the operator (where the member name would be)
-	return p.resolveAccessChain(r, prefix, idx+len(op), source, pos, file)
-}
-
-// resolveAccessChain walks left through a chain of -> and :: accesses in the
-// line text and returns the FQN of the class at that point. wordStart is the
-// position immediately before the operator (-> or ::) to resolve.
-// Handles recursive chains like Category::query()->with('form')->.
-func (p *Provider) resolveAccessChain(r *resolve.Resolver, line string, wordStart int, source string, pos protocol.Position, file *parser.FileNode) string {
-	i := wordStart
-
-	// Skip whitespace before the operator
-	for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {
-		i--
-	}
-	if i < 2 {
-		return ""
-	}
-
-	// Detect operator type
-	op := ""
-	if line[i-2] == '-' && line[i-1] == '>' {
-		op = "->"
-		i -= 2
-		if i > 0 && line[i-1] == '?' {
-			i-- // ?->
-		}
-	} else if line[i-2] == ':' && line[i-1] == ':' {
-		op = "::"
-		i -= 2
-	} else {
-		return ""
-	}
-
-	// Skip whitespace before operator
-	for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {
-		i--
-	}
-
-	// Skip past a method call's closing paren: $foo->bar()->baz
-	parenEnd := 0
-	if i > 0 && line[i-1] == ')' {
-		parenEnd = i
-		depth := 1
-		i--
-		for i > 0 && depth > 0 {
-			i--
-			if line[i] == ')' {
-				depth++
-			} else if line[i] == '(' {
-				depth--
-			}
-		}
-
-		// Check for container call pattern (only for ->)
-		if op == "->" && p.container != nil {
-			callExpr := strings.TrimSpace(line[:parenEnd])
-			if concrete := p.resolveContainerCallType(r, callExpr, source, file); concrete != "" {
-				if concrete == "-" {
-					return ""
-				}
-				return concrete
-			}
-		}
-
-		// Check for "new ClassName(...)" pattern
-		if op == "->" {
-			callExpr := strings.TrimSpace(line[:parenEnd])
-			if newClass := resolve.ExtractNewClass(callExpr); newClass != "" {
-				return r.ResolveClassNameLoose(newClass, file)
-			}
-		}
-		if line[i] == '(' && resolve.IsCallableArgs(line[i+1:parenEnd-1]) {
-			return "Closure" // f(...), $obj->m(...), f(?, 1): a Closure, not a call
-		}
-
-		// Skip whitespace before paren
-		for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {
-			i--
-		}
-	}
-
-	// Extract the target word
-	end := i
-	for i > 0 && resolve.IsWordChar(line[i-1]) {
-		i--
-	}
-	// Include $ for variables
-	if i > 0 && line[i-1] == '$' {
-		i--
-	}
-	if i >= end {
-		return ""
-	}
-	target := line[i:end]
-
-	// Resolve the target to a class FQN
-	switch resolve.ClassKeyword(target) {
-	case "$this", "self", "static":
-		if file != nil {
-			return resolve.FindEnclosingClass(file, pos)
-		}
-		return ""
-	case "parent":
-		if file != nil {
-			classFQN := resolve.FindEnclosingClass(file, pos)
-			if classFQN != "" {
-				chain := p.index.GetInheritanceChain(classFQN)
-				if len(chain) > 0 {
-					return chain[0]
-				}
-			}
-		}
-		return ""
-	}
-
-	// $variable-> or $variable::
-	if strings.HasPrefix(target, "$") {
-		if parenEnd > 0 && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "->") && !strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::") {
-			// $fn(…)->: what calling it gives, not the closure itself. A
-			// Closure or callable without a signature gives nothing known.
-			if file == nil {
-				return ""
-			}
-			rt := r.ResolveVariableTypeTyped(target, r.Lines(source), pos, file)
-			return resolve.PlainTypeName(r.InvokeType(rt))
-		}
-		return r.ResolveVariableType(target, r.Lines(source), pos, file)
-	}
-
-	// Try as a class name (for static access or direct use). A word after
-	// -> or :: is a member (UserRole::Client, $x->Client), never a class.
-	if fqn := r.ChainOriginClassName(line, i, target, file); fqn != "" {
-		if sym := p.index.Lookup(fqn); sym != nil {
-			switch sym.Kind {
-			case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
-				return fqn
-			}
-			// sym exists but is a method/property — don't return a member FQN as a class
-		} else if fqn != target && !strings.Contains(fqn, "::") {
-			// Resolved to a different name (via use statement/namespace) but not in index yet — trust it
-			// Skip if it contains "::" (it's a member FQN, not a class)
-			return fqn
-		}
-	}
-
-	// Not a class — must be a method/property in a chain.
-	// Recursively resolve the owner, then look up the target as a member.
-	if file == nil {
-		return ""
-	}
-	ownerFQN := p.resolveAccessChain(r, line, i, source, pos, file)
-	if ownerFQN == "" {
-		return ""
-	}
-	access := resolve.MemberAccessOf(parenEnd > 0, strings.HasSuffix(strings.TrimRight(line[:i], " \t"), "::"), target)
-	member := r.FindAccessedMember(ownerFQN, target, access)
-	if member == nil {
-		// Category::where() runs on Builder<Category>, and a fluent builder
-		// method gives back the builder.
-		fwd, ok := r.ForwardedReceiver(resolve.ResolvedType{FQN: ownerFQN}, target, access)
-		if !ok {
-			return ""
-		}
-		member, _ = r.FindMemberOn(fwd, target, access)
-		if member == nil {
-			if parenEnd > 0 && r.ScopeMethod(fwd, target) != nil {
-				return fwd.BaseFQN() // Category::active() is the builder
-			}
-			return ""
-		}
-		if r.ReturnsCallingClass(member) {
-			return fwd.BaseFQN()
-		}
-		return resolve.PlainTypeName(r.MemberTypeResolved(member, file, fwd.BaseFQN(), fwd.Params))
-	}
-	// A method returning static/$this/self gives back the class it was called
-	// on, not the one that declares it: Child::create() is a Child. Calls through
-	// self::, parent:: and static:: pass the calling class along, which here is
-	// the class being edited.
-	if r.ReturnsCallingClass(member) {
-		if resolve.ForwardsCallingClass(line[:i]) {
-			if enclosing := p.resolveAccessChain(r, "static->__dummy__", len("static->"), source, pos, file); enclosing != "" {
-				return enclosing
-			}
-		}
-		return ownerFQN
-	}
-	return r.MemberType(member, file)
-}
-
-func (p *Provider) completeNew(prefix, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {
+func (p *Provider) completeNew(search, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {
 	var items []protocol.CompletionItem
-	words := strings.Fields(prefix)
-	search := ""
-	if len(words) > 1 {
-		search = words[len(words)-1]
-		if search == "new" {
-			search = ""
-		}
-	}
 	imports := p.newImportPlanner(source, file)
 	for _, sym := range p.index.SearchByPrefix(search) {
 		if sym.Kind != symbols.KindClass {
@@ -847,12 +556,7 @@ func (p *Provider) completeNew(prefix, source string, rk nameRanker, file *parse
 	return items
 }
 
-func (p *Provider) completeUse(prefix string, rk nameRanker) []protocol.CompletionItem {
-	parts := strings.Fields(prefix)
-	search := ""
-	if len(parts) > 1 {
-		search = parts[len(parts)-1]
-	}
+func (p *Provider) completeUse(search string, rk nameRanker) []protocol.CompletionItem {
 	// If typing a namespace path, use namespace-aware completion
 	if strings.Contains(search, "\\") {
 		return p.completeNamespacePath(search, rk)
@@ -889,22 +593,6 @@ func (p *Provider) completePipe(rk nameRanker) []protocol.CompletionItem {
 		}
 	}
 	return items
-}
-
-// attributeNamePrefix extracts the partial attribute class name the user is
-// typing after the last `#[` on the line, e.g. `#[Ch` -> "Ch" and
-// `#[Unique(...), Ro` -> "Ro". Returns "" when no name has been started yet.
-func attributeNamePrefix(trimmed string) string {
-	idx := strings.LastIndex(trimmed, "#[")
-	if idx < 0 {
-		return ""
-	}
-	tail := trimmed[idx+2:]
-	// A new attribute starts after the last top-level comma in the group.
-	if comma := strings.LastIndex(tail, ","); comma >= 0 {
-		tail = tail[comma+1:]
-	}
-	return strings.TrimSpace(tail)
 }
 
 func (p *Provider) completeAttribute(prefix, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {
@@ -1122,21 +810,6 @@ func extractVariableBefore(prefix, op string) string {
 		}
 	}
 	return ""
-}
-
-func extractClassBefore(prefix, op string) string {
-	idx := strings.LastIndex(prefix, op)
-	if idx < 0 {
-		return ""
-	}
-	before := strings.TrimSpace(prefix[:idx])
-	for i := len(before) - 1; i >= 0; i-- {
-		ch := before[i]
-		if !(ch >= 'a' && ch <= 'z') && !(ch >= 'A' && ch <= 'Z') && !(ch >= '0' && ch <= '9') && ch != '_' && ch != '\\' {
-			return before[i+1:]
-		}
-	}
-	return before
 }
 
 func symKind(kind symbols.SymbolKind) protocol.CompletionItemKind {

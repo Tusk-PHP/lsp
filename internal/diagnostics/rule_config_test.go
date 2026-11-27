@@ -5,6 +5,7 @@ import (
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -97,7 +98,7 @@ User::where('missing_column', 1)->with('missingRelation')->get();
 
 func builderProvider(t *testing.T, rules string) *Provider {
 	p := providerWithRules(t, rules)
-	p.BuilderModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
+	p.BuilderModelResolver = func(*parser.FileNode, ast.Expr) frameworklaravel.QueriedModel {
 		return frameworklaravel.QueriedModel{FQN: `App\Models\User`}
 	}
 	p.BuilderMemberChecker = &missingMembers{}
