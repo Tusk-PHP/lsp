@@ -19,3 +19,7 @@ testdata/filament/
 bench/.tools/
 bench/.work/
 bench/results/
+testdata/sylius/
+testdata/woocommerce/
+testdata/mageos/
+testdata/.downloads/
