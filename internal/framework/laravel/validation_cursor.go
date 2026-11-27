@@ -43,16 +43,21 @@ func ValidationSyntaxOf(index *symbols.Index, r *resolve.Resolver, src string, f
 	}
 }
 
-// MayValidate reports whether a file's tokens name a call or method that
-// takes validation rules, so a file without one is never parsed for them.
+// MayValidate reports whether a file's tokens name a call, method,
+// property or attribute that takes validation rules, so a file without one
+// is never parsed for them.
 func MayValidate(tokens []parser.Token) bool {
 	for _, t := range tokens {
-		if t.Kind != parser.TokenIdentifier {
-			continue
-		}
-		switch strings.ToLower(t.Value) {
-		case "validate", "validatewithbag", "validator", "rules":
-			return true
+		switch {
+		case t.Kind == parser.TokenVariable:
+			if t.Value == "$rules" {
+				return true
+			}
+		case t.Kind == parser.TokenIdentifier:
+			switch strings.ToLower(t.Value) {
+			case "validate", "validatewithbag", "validateonly", "validator", "rules", "rule":
+				return true
+			}
 		}
 	}
 	return false

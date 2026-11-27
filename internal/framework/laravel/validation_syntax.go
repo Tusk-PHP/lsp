@@ -13,6 +13,8 @@ const (
 	formRequest       = `Illuminate\Foundation\Http\FormRequest`
 	httpRequest       = `Illuminate\Http\Request`
 	validatesRequests = `Illuminate\Foundation\Validation\ValidatesRequests`
+	livewireComponent = `Livewire\Component`
+	livewireForm      = `Livewire\Form`
 )
 
 // ValidationSyntax is what finding the validation rules of a file needs to
@@ -81,7 +83,9 @@ func (r RuleString) Segments(src string) []RuleSegment {
 // ValidationRuleStrings visits every rule string of a file: in the rules of
 // $request->validate(), $this->validate($request, …), validateWithBag(),
 // Validator::make(), Validator::validate(), validator() and the array a
-// form request's rules() returns. A rule built at run time, by
+// form request's rules() returns; and in a Livewire component or form, the
+// rules of $this->validate() and validateOnly(), the array rules() returns,
+// the $rules property and #[Validate] and #[Rule] attributes. A rule built at run time, by
 // concatenation, interpolation or from a variable, is not visited.
 func ValidationRuleStrings(src string, file *ast.File, syn ValidationSyntax, visit func(RuleString)) {
 	w := ruleWalk{src: src, syn: syn, visit: visit, keep: func(ast.Span) bool { return true }}
@@ -125,7 +129,7 @@ func (w *ruleWalk) walk(root ast.Node) {
 		}
 		switch n := n.(type) {
 		case *ast.ClassDecl:
-			w.formRequest(n)
+			w.rulesClass(n)
 		case *ast.MethodCall:
 			w.rulesArg(n.Args, w.methodRulesArg(n))
 		case *ast.StaticCall:
@@ -137,51 +141,124 @@ func (w *ruleWalk) walk(root ast.Node) {
 	})
 }
 
-func (w *ruleWalk) formRequest(class *ast.ClassDecl) {
-	if class.Extends == nil || !w.syn.IsSubtype(w.syn.ClassName(class.Extends.Text(w.src)), formRequest) {
+func (w *ruleWalk) rulesClass(class *ast.ClassDecl) {
+	for _, m := range class.Members {
+		if prop, ok := m.(*ast.Property); ok && w.keep(prop.Span) {
+			w.validateAttributes(prop.Attrs)
+		}
+	}
+	if class.Extends == nil {
+		return
+	}
+	parent := w.syn.ClassName(class.Extends.Text(w.src))
+	livewire := w.syn.IsSubtype(parent, livewireComponent) || w.syn.IsSubtype(parent, livewireForm)
+	if !livewire && !w.syn.IsSubtype(parent, formRequest) {
 		return
 	}
 	for _, m := range class.Members {
-		method, ok := m.(*ast.Method)
-		if !ok || method.Body == nil || !strings.EqualFold(method.Name.Text(w.src), "rules") || !w.keep(method.Span) {
+		if !w.keep(m.Bounds()) {
 			continue
 		}
-		ast.Walk(method.Body, func(n ast.Node) bool {
-			switch n := n.(type) {
-			case *ast.Closure, *ast.ArrowFunction, *ast.ClassDecl, *ast.FunctionDecl, *ast.New:
-				return false
-			case *ast.Return:
-				if rules, ok := n.Value.(*ast.Array); ok {
+		switch m := m.(type) {
+		case *ast.Method:
+			if m.Body != nil && strings.EqualFold(m.Name.Text(w.src), "rules") {
+				w.returnedRules(m.Body)
+			}
+		case *ast.Property:
+			if !livewire {
+				continue
+			}
+			for _, item := range m.Items {
+				if rules, ok := item.Default.(*ast.Array); ok && item.Var.Text(w.src) == "$rules" {
 					w.rules(rules)
 				}
-				return false
 			}
-			return w.keep(n.Bounds())
-		})
+		}
 	}
+}
+
+func (w *ruleWalk) validateAttributes(groups []*ast.AttributeGroup) {
+	for _, group := range groups {
+		for _, attr := range group.Attrs {
+			switch w.syn.ClassName(attr.Name.Text(w.src)) {
+			case `Livewire\Attributes\Validate`, `Livewire\Attributes\Rule`:
+			default:
+				continue
+			}
+			if attr.Args == nil || !w.keep(attr.Span) {
+				continue
+			}
+			for i, arg := range attr.Args.Args {
+				if arg.Unpack || (arg.Name == nil && i != 0) || (arg.Name != nil && arg.Name.Text(w.src) != "rule") {
+					continue
+				}
+				if rules, ok := arg.Value.(*ast.Array); ok && keyed(rules) {
+					w.rules(rules)
+				} else {
+					w.fieldRules(arg.Value)
+				}
+			}
+		}
+	}
+}
+
+func keyed(a *ast.Array) bool {
+	for _, item := range a.Items {
+		if item != nil && item.Key != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *ruleWalk) returnedRules(body ast.Node) {
+	ast.Walk(body, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.Closure, *ast.ArrowFunction, *ast.ClassDecl, *ast.FunctionDecl, *ast.New:
+			return false
+		case *ast.Return:
+			if rules, ok := n.Value.(*ast.Array); ok {
+				w.rules(rules)
+			}
+			return false
+		}
+		return w.keep(n.Bounds())
+	})
 }
 
 func (w *ruleWalk) methodRulesArg(call *ast.MethodCall) int {
 	name, ok := call.Name.(*ast.IdentifierExpr)
-	if !ok {
+	if !ok || len(call.Args.Args) == 0 {
 		return -1
 	}
-	shift := 0
-	switch strings.ToLower(name.Text(w.src)) {
-	case "validate":
-	case "validatewithbag":
-		shift = 1
+	method := strings.ToLower(name.Text(w.src))
+	switch method {
+	case "validate", "validatewithbag", "validateonly":
 	default:
-		return -1
-	}
-	if len(call.Args.Args) == 0 {
 		return -1
 	}
 	object := call.Object.Bounds()
 	class := w.syn.ExprClass(object.Start, object.End)
-	switch {
-	case class == "":
+	if class == "" {
 		return -1
+	}
+	if w.syn.IsSubtype(class, livewireComponent) || w.syn.IsSubtype(class, livewireForm) {
+		switch method {
+		case "validate":
+			return 0
+		case "validateonly":
+			return 1
+		}
+		return -1
+	}
+	shift := 0
+	switch method {
+	case "validateonly":
+		return -1
+	case "validatewithbag":
+		shift = 1
+	}
+	switch {
 	case w.syn.IsSubtype(class, httpRequest):
 		return shift
 	case w.syn.IsSubtype(class, validatesRequests):
@@ -243,17 +320,21 @@ func (w *ruleWalk) rules(rules *ast.Array) {
 		if item == nil || item.Key == nil || item.Unpack || !w.keep(item.Span) {
 			continue
 		}
-		switch value := item.Value.(type) {
-		case *ast.Literal:
-			w.ruleString(value, true)
-		case *ast.Array:
-			for _, rule := range value.Items {
-				if rule == nil || rule.Key != nil || rule.Unpack {
-					continue
-				}
-				if lit, ok := rule.Value.(*ast.Literal); ok {
-					w.ruleString(lit, false)
-				}
+		w.fieldRules(item.Value)
+	}
+}
+
+func (w *ruleWalk) fieldRules(value ast.Expr) {
+	switch value := value.(type) {
+	case *ast.Literal:
+		w.ruleString(value, true)
+	case *ast.Array:
+		for _, rule := range value.Items {
+			if rule == nil || rule.Key != nil || rule.Unpack {
+				continue
+			}
+			if lit, ok := rule.Value.(*ast.Literal); ok {
+				w.ruleString(lit, false)
 			}
 		}
 	}

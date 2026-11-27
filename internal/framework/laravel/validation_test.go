@@ -316,8 +316,13 @@ var rulesFixture = ruleFixture{
 
 func ruleStrings(t *testing.T, src string) []string {
 	t.Helper()
+	return ruleStringsWith(t, rulesFixture, src)
+}
+
+func ruleStringsWith(t *testing.T, f ruleFixture, src string) []string {
+	t.Helper()
 	var out []string
-	ValidationRuleStrings(src, phpparser.Parse(src, token.Latest), rulesFixture.syntax(src), func(r RuleString) {
+	ValidationRuleStrings(src, phpparser.Parse(src, token.Latest), f.syntax(src), func(r RuleString) {
 		var segs []string
 		for _, s := range r.Segments(src) {
 			segs = append(segs, s.Name(src)+"["+src[s.NameEnd:s.End]+"]")
@@ -549,6 +554,58 @@ func TestValidationRuleSlotAt(t *testing.T) {
 	} {
 		if slot, ok := ValidationRuleSlotAt(src, at, syn); ok {
 			t.Errorf("%s: %+v", name, slot)
+		}
+	}
+}
+
+var livewireFixture = ruleFixture{
+	classes: map[string]string{
+		"Component": livewireComponent,
+		"Form":      livewireForm,
+		"Validate":  `Livewire\Attributes\Validate`,
+		"Rule":      `Livewire\Attributes\Rule`,
+		"Other":     `App\Other`,
+	},
+	exprs: map[string]string{
+		"$this":    `App\Livewire\CreatePost`,
+		"$request": httpRequest,
+	},
+	parents: map[string][]string{
+		`App\Livewire\CreatePost`: {livewireComponent},
+	},
+}
+
+func TestValidationRuleStringsInLivewire(t *testing.T) {
+	for name, tc := range map[string]struct{ src, want string }{
+		"rules method": {`class CreatePost extends Component { public function rules() { return ['title' => 'required|min:3', 'tags' => ['array']]; } }`,
+			"piped:required[],min[:3] | array:array[]"},
+		"rules property":  {`class CreatePost extends Component { protected $rules = ['title' => 'required']; protected $messages = ['title.required' => 'Needed']; }`, "piped:required[]"},
+		"form object":     {`class PostForm extends Form { protected $rules = ['body' => 'string']; }`, "piped:string[]"},
+		"validate string": {`class CreatePost extends Component { #[Validate('required|min:3')] public $title = ''; }`, "piped:required[],min[:3]"},
+		"validate list":   {`class CreatePost extends Component { #[Validate(['required', 'min:3'], message: 'Too short')] public $title = ''; }`, "array:required[] | array:min[:3]"},
+		"validate keyed": {`class CreatePost extends Component { #[Validate(['todos' => 'required', 'todos.*' => ['required', 'min:3']])] public $todos = []; }`,
+			"piped:required[] | array:required[] | array:min[:3]"},
+		"named rule":       {`class CreatePost extends Component { #[Validate(as: 'title', rule: 'max:5')] public $title = ''; }`, "piped:max[:5]"},
+		"rule attribute":   {`class CreatePost extends Component { #[Rule('email')] public $email = ''; }`, "piped:email[]"},
+		"other attribute":  {`class CreatePost extends Component { #[Other('nope')] public $title = ''; }`, ""},
+		"this validate":    {`class CreatePost extends Component { public function save() { $this->validate(['title' => 'required'], ['title.required' => 'Needed']); } }`, "piped:required[]"},
+		"validateOnly":     {`class CreatePost extends Component { public function updated($p) { $this->validateOnly($p, ['title' => 'max:5']); } }`, "piped:max[:5]"},
+		"not a component":  {`class Service extends Other { protected $rules = ['title' => 'nope']; public function rules() { return ['a' => 'nope']; } }`, ""},
+		"request has none": {`$request->validateOnly('a', ['a' => 'nope']);`, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := strings.Join(ruleStringsWith(t, livewireFixture, "<?php\n"+tc.src), " | ")
+			if got != tc.want {
+				t.Errorf("got  %q\nwant %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMayValidateLivewire(t *testing.T) {
+	for _, src := range []string{"<?php class A { protected $rules = []; }", "<?php #[Rule('x')] class A {}", "<?php $this->validateOnly('a');"} {
+		if !MayValidate(parser.Tokenize(src)) {
+			t.Errorf("MayValidate(%q)", src)
 		}
 	}
 }
