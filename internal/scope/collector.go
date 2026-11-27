@@ -2,6 +2,7 @@ package scope
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
@@ -111,9 +112,11 @@ type Document struct {
 	Properties []textpos.Range
 	root       *Scope
 	// The control flow ReachingWrites reads, in the order it appears.
-	blocks []block
-	jumps  []flowMark
-	labels map[int][]textpos.Position // block → the case labels directly in it, in order
+	blocks     []block
+	jumps      []flowMark
+	labels     map[int][]textpos.Position // block → the case labels directly in it, in order
+	byLine     [][]*Scope
+	byLineOnce sync.Once
 }
 
 type Collector struct {
@@ -423,8 +426,12 @@ func (d *Document) BindingAt(pos textpos.Position) *Binding {
 }
 
 func (d *Document) ScopeAt(pos textpos.Position) *Scope {
+	d.byLineOnce.Do(d.indexScopesByLine)
+	if pos.Line < 0 || pos.Line >= len(d.byLine) {
+		return nil
+	}
 	var best *Scope
-	for _, scope := range d.Scopes {
+	for _, scope := range d.byLine[pos.Line] {
 		if !containsPos(scope.Range, pos) {
 			continue
 		}
@@ -433,6 +440,19 @@ func (d *Document) ScopeAt(pos textpos.Position) *Scope {
 		}
 	}
 	return best
+}
+
+func (d *Document) indexScopesByLine() {
+	lines := 0
+	for _, scope := range d.Scopes {
+		lines = max(lines, scope.Range.End.Line+1)
+	}
+	d.byLine = make([][]*Scope, lines)
+	for _, scope := range d.Scopes {
+		for line := max(scope.Range.Start.Line, 0); line <= scope.Range.End.Line; line++ {
+			d.byLine[line] = append(d.byLine[line], scope)
+		}
+	}
 }
 
 func (d *Document) Occurrences(binding *Binding) []textpos.Range {

@@ -10,6 +10,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -80,7 +81,7 @@ func BenchmarkResolveGenericVariable(b *testing.B) {
 func BenchmarkTypeGenericChain(b *testing.B) {
 	p := benchLaravelProvider(b)
 	source := "<?php\nuse App\\Models\\Category;\n\nfunction run(): void {\n    $cats = Category::query()->get();\n    foreach ($cats as $cat) {\n        $x = 1;\n    }\n}\n"
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	pos := protocol.Position{Line: 6, Character: 8}
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -97,7 +98,7 @@ func TestBenchGenericChainsResolve(t *testing.T) {
 	p := setupLaravelE2E(t)
 	source := "<?php\nuse App\\Models\\Category;\n\nfunction run(): void {\n    $cats = Category::query()->get();\n    foreach ($cats as $cat) {\n        $cat->\n    }\n}\n"
 	t.Logf("items: %d", len(p.GetCompletions("file:///s.php", source, protocol.Position{Line: 6, Character: 14})))
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	t.Logf("$cat: %s", p.ResolveExpressionTypeTyped("$cat", source, protocol.Position{Line: 6, Character: 8}, file).String())
 }
 

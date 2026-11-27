@@ -558,7 +558,7 @@ func (p *parser) adaptation() *ast.TraitAdaptation {
 			a.Modifier = &ast.Modifier{Span: ast.Span{Start: t.Start, End: t.End}, Kind: k}
 			p.checkModifiers([]*ast.Modifier{a.Modifier}, onMethod)
 		}
-		if a.Modifier == nil || isSemiReserved(p.peek()) {
+		if a.Modifier == nil || p.peek().IsSemiReserved() {
 			a.Alias = p.memberName()
 		}
 	}

@@ -23,6 +23,7 @@ type parser struct {
 	prevEnd   uint32
 	emptyAt   uint32
 	errors    []ast.Error
+	warnings  []ast.Error
 	truncated bool
 
 	depth   int
@@ -41,16 +42,21 @@ const (
 	internalErrorPrefix = "internal parser error: "
 )
 
+type Parsed struct {
+	Tree        *ast.File
+	Significant []lexer.Token
+}
+
 func Parse(src string, version token.Version) *ast.File {
-	return parse(src, version, lexer.Lex(src, version))
+	return parse(src, version, lexer.Lex(src, version)).Tree
 }
 
 func ParseCode(src string, version token.Version) *ast.File {
-	return parse(src, version, lexer.LexCode(src, version))
+	return parse(src, version, lexer.LexCode(src, version)).Tree
 }
 
-func parse(src string, version token.Version, all []lexer.Token) *ast.File {
-	file := &ast.File{Span: ast.Span{End: uint32(len(src))}}
+func parse(src string, version token.Version, all []lexer.Token) Parsed {
+	file := &ast.File{Span: ast.Span{End: uint32(len(src))}, Version: version}
 	all, file.Shebang = skipShebang(src, all)
 	p := &parser{src: src, version: version, toks: all[:0]}
 	var doc ast.Span
@@ -73,7 +79,8 @@ func parse(src string, version token.Version, all []lexer.Token) *ast.File {
 	p.guard(func() { p.file(file) })
 	slices.SortStableFunc(p.errors, func(a, b ast.Error) int { return cmp.Compare(a.Start, b.Start) })
 	file.Errors = p.errors
-	return file
+	file.Warnings = p.warnings
+	return Parsed{Tree: file, Significant: p.toks}
 }
 
 func skipShebang(src string, toks []lexer.Token) ([]lexer.Token, ast.Span) {
@@ -135,13 +142,16 @@ func (p *parser) enter() bool {
 func noStop(token.Kind) bool { return false }
 
 func (p *parser) unterminated(comment lexer.Token) {
-	if p.version < token.PHP80 {
+	text := comment.Text(p.src)
+	if !strings.HasPrefix(text, "/*") || len(text) >= 4 && strings.HasSuffix(text, "*/") {
 		return
 	}
-	text := comment.Text(p.src)
-	if strings.HasPrefix(text, "/*") && (len(text) < 4 || !strings.HasSuffix(text, "*/")) {
-		p.unterminatedAt(ast.Span{Start: comment.Start, End: comment.Start + 2}, "unterminated comment")
+	start := ast.Span{Start: comment.Start, End: comment.Start + 2}
+	if p.version < token.PHP80 {
+		p.warnings = append(p.warnings, ast.Error{Span: start, Message: "unterminated comment"})
+		return
 	}
+	p.unterminatedAt(start, "unterminated comment")
 }
 
 func (p *parser) unterminatedAt(span ast.Span, message string) {
@@ -377,7 +387,7 @@ func (p *parser) identifier() *ast.Identifier {
 }
 
 func (p *parser) memberName() *ast.Identifier {
-	if !isSemiReserved(p.peek()) {
+	if !p.peek().IsSemiReserved() {
 		p.unexpected("expected a name")
 		return nil
 	}
@@ -481,8 +491,4 @@ func isName(k token.Kind) bool {
 		return true
 	}
 	return false
-}
-
-func isSemiReserved(k token.Kind) bool {
-	return k == token.Identifier || k >= token.Abstract && k <= token.TraitConst
 }

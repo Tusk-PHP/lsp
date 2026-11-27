@@ -3,7 +3,8 @@ package analyzer
 import (
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -11,7 +12,7 @@ import (
 
 func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Position) []protocol.DocumentHighlight {
 	r := a.engine.Resolver()
-	doc := sourcectx.NewDocument(uri, source)
+	doc := sourcectx.IndexedDocument(a.index, uri, source)
 	ctx := doc.NameAt(pos)
 	if ctx == nil || ctx.SymbolText == "" {
 		return nil
@@ -29,23 +30,42 @@ func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Positi
 	if target.URI == uri {
 		decl = target.Range
 	}
-	tokens := doc.Tokens()
-	var highlights []protocol.DocumentHighlight
+	tokens := doc.Significant()
+	var interpolated interpolatedStrings
+	var candidates []highlightCandidate
+	var resolved []protocol.Position
 	for i, tok := range tokens {
-		if !mayName(tokens, i, target) {
+		if interpolated.skip(tok.Kind) {
 			continue
 		}
-		rng := tokenRange(tok)
-		if tok.Kind == parser.TokenVariable && !follows(tokens, i, parser.TokenDoubleColon) {
-			if !sameRange(rng, decl) {
-				continue
+		name, ok := mayName(tokens, i, source, target)
+		if !ok {
+			continue
+		}
+		rng := doc.Range(name.Start, name.End)
+		if tok.Kind == token.Variable && !follows(tokens, i, token.DoubleColon) {
+			if sameRange(rng, decl) {
+				candidates = append(candidates, highlightCandidate{rng: rng, name: -1})
 			}
-		} else if !sameSymbol(a.resolveSymbolAt(r, doc.NameAt(rng.Start), source), target) {
 			continue
 		}
-		highlights = append(highlights, protocol.DocumentHighlight{Range: rng, Kind: highlightKind(rng, decl, pos)})
+		candidates = append(candidates, highlightCandidate{rng: rng, name: len(resolved)})
+		resolved = append(resolved, rng.Start)
+	}
+	names := doc.NamesAt(resolved)
+	var highlights []protocol.DocumentHighlight
+	for _, c := range candidates {
+		if c.name >= 0 && !sameSymbol(a.resolveSymbolAt(r, names[c.name], source), target) {
+			continue
+		}
+		highlights = append(highlights, protocol.DocumentHighlight{Range: c.rng, Kind: highlightKind(c.rng, decl, pos)})
 	}
 	return highlights
+}
+
+type highlightCandidate struct {
+	rng  protocol.Range
+	name int
 }
 
 func (a *Analyzer) mayBeLocalVariable(ctx *sourcectx.NameContext) bool {
@@ -53,37 +73,75 @@ func (a *Analyzer) mayBeLocalVariable(ctx *sourcectx.NameContext) bool {
 		a.index.MemberDeclaredAt(ctx.URI, ctx.Position, ctx.SymbolText) == nil
 }
 
-func mayName(tokens []parser.Token, i int, target *symbols.Symbol) bool {
+func mayName(tokens []lexer.Token, i int, src string, target *symbols.Symbol) (lexer.Token, bool) {
 	tok := tokens[i]
 	name := strings.TrimPrefix(target.Name, "$")
 	switch tok.Kind {
-	case parser.TokenVariable:
-		return target.Kind == symbols.KindProperty && tok.Value[1:] == name
-	case parser.TokenIdentifier:
+	case token.Variable:
+		return tok, target.Kind == symbols.KindProperty && src[tok.Start+1:tok.End] == name
+	case token.NameQualified, token.NameFullyQualified, token.NameRelative:
+		tok.Start += uint32(strings.LastIndexByte(tok.Text(src), '\\') + 1)
+	case token.Identifier:
 		if namedArgumentLabel(tokens, i) {
-			return false
+			return tok, false
 		}
-		switch target.Kind {
-		case symbols.KindFunction, symbols.KindMethod, symbols.KindClass, symbols.KindInterface, symbols.KindTrait, symbols.KindEnum:
-			return strings.EqualFold(tok.Value, name)
-		}
-		return tok.Value == name
+	default:
+		return tok, false
 	}
-	return false
+	switch target.Kind {
+	case symbols.KindFunction, symbols.KindMethod, symbols.KindClass, symbols.KindInterface, symbols.KindTrait, symbols.KindEnum:
+		return tok, strings.EqualFold(tok.Text(src), name)
+	}
+	return tok, tok.Text(src) == name
 }
 
-func namedArgumentLabel(tokens []parser.Token, i int) bool {
-	next := parser.NextSignificant(tokens, i+1)
-	if next < 0 || tokens[next].Kind != parser.TokenColon {
-		return false
-	}
-	prev := parser.PrevSignificant(tokens, i-1)
-	return prev >= 0 && (tokens[prev].Kind == parser.TokenOpenParen || tokens[prev].Kind == parser.TokenComma)
+func namedArgumentLabel(tokens []lexer.Token, i int) bool {
+	return i > 0 && i+1 < len(tokens) && tokens[i+1].Kind == token.Colon && (tokens[i-1].Kind == token.LeftParen || tokens[i-1].Kind == token.Comma)
 }
 
-func follows(tokens []parser.Token, i int, kind parser.TokenKind) bool {
-	prev := parser.PrevSignificant(tokens, i-1)
-	return prev >= 0 && tokens[prev].Kind == kind
+func follows(tokens []lexer.Token, i int, kind token.Kind) bool {
+	return i > 0 && tokens[i-1].Kind == kind
+}
+
+type interpolatedStrings struct {
+	open []interpolationFrame
+}
+
+type interpolationFrame struct {
+	closer token.Kind
+	braces int
+}
+
+func (s *interpolatedStrings) skip(kind token.Kind) bool {
+	n := len(s.open)
+	if n > 0 && s.open[n-1].closer != token.RightBrace {
+		switch kind {
+		case s.open[n-1].closer:
+			s.open = s.open[:n-1]
+		case token.CurlyOpen, token.DollarOpenCurlyBraces:
+			s.open = append(s.open, interpolationFrame{closer: token.RightBrace})
+		}
+		return true
+	}
+	switch kind {
+	case token.DoubleQuote:
+		s.open = append(s.open, interpolationFrame{closer: kind})
+	case token.StartHeredoc:
+		s.open = append(s.open, interpolationFrame{closer: token.EndHeredoc})
+	case token.LeftBrace:
+		if n > 0 {
+			s.open[n-1].braces++
+		}
+	case token.RightBrace:
+		switch {
+		case n == 0:
+		case s.open[n-1].braces == 0:
+			s.open = s.open[:n-1]
+		default:
+			s.open[n-1].braces--
+		}
+	}
+	return n > 0 || len(s.open) > 0
 }
 
 func sameSymbol(sym, target *symbols.Symbol) bool {

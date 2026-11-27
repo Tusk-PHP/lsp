@@ -3,6 +3,10 @@ package parser
 import (
 	"slices"
 	"strings"
+
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 type FoldingRangeKind string
@@ -19,7 +23,7 @@ type FoldingRange struct {
 }
 
 type foldEntry struct {
-	openKind  TokenKind
+	opener    token.Kind
 	startLine int
 	kind      FoldingRangeKind
 }
@@ -29,97 +33,27 @@ type pendingFold struct {
 	kind      FoldingRangeKind
 }
 
+type folder struct {
+	src        string
+	lines      []string
+	offsets    ast.Lines
+	at         int
+	toks       []lexer.Token
+	ranges     []FoldingRange
+	namespaces []int
+	stack      []foldEntry
+	pending    *pendingFold
+}
+
 // ExtractFoldingRanges returns foldable regions derived from declarations,
-// balanced delimiters, and multi-line comments in the current lightweight parser.
+// balanced delimiters, and multi-line comments.
 func ExtractFoldingRanges(source string) []FoldingRange {
-	result := New().Parse(source)
-	if result == nil {
-		return nil
+	f := &folder{src: source, lines: strings.Split(source, "\n"), offsets: ast.NewLines(source), toks: significantTokens(lexer.Lex(source, token.Latest))}
+	for i := 0; i < len(f.toks); i++ {
+		i = f.token(i)
 	}
-
-	var ranges []FoldingRange
-	var namespaceStarts []int
-	var stack []foldEntry
-	var pending *pendingFold
-
-	for i := 0; i < len(result.Tokens); i++ {
-		tok := result.Tokens[i]
-		switch tok.Kind {
-		case TokenDocComment:
-			appendFoldRange(&ranges, result.Lines, tok.Line, tok.Line+strings.Count(tok.Value, "\n"), FoldingRangeKindComment)
-		case TokenComment:
-			if strings.HasPrefix(tok.Value, "/*") {
-				appendFoldRange(&ranges, result.Lines, tok.Line, tok.Line+strings.Count(tok.Value, "\n"), FoldingRangeKindComment)
-				continue
-			}
-			if !isLineCommentToken(tok.Value) {
-				continue
-			}
-			startLine, endLine := tok.Line, tok.Line
-			for i+1 < len(result.Tokens) {
-				next := result.Tokens[i+1]
-				if next.Kind != TokenComment || !isLineCommentToken(next.Value) || next.Line != endLine+1 {
-					break
-				}
-				endLine = next.Line
-				i++
-			}
-			appendFoldRange(&ranges, result.Lines, startLine, endLine, FoldingRangeKindComment)
-		case TokenNamespace:
-			if tokenSequenceContains(result.Tokens, i+1, TokenOpenBrace, TokenSemicolon) == TokenOpenBrace {
-				pending = &pendingFold{startLine: tok.Line}
-			} else {
-				namespaceStarts = append(namespaceStarts, tok.Line)
-			}
-		case TokenClass:
-			if prev := PrevSignificant(result.Tokens, i-1); prev >= 0 && result.Tokens[prev].Kind == TokenNew {
-				continue
-			}
-			pending = &pendingFold{startLine: tok.Line}
-		case TokenInterface, TokenTrait, TokenEnum:
-			pending = &pendingFold{startLine: tok.Line}
-		case TokenFunction:
-			if !isNamedFunctionToken(result.Tokens, i) {
-				continue
-			}
-			pending = &pendingFold{startLine: tok.Line}
-		case TokenOpenBrace:
-			entry := foldEntry{openKind: TokenOpenBrace, startLine: tok.Line, kind: FoldingRangeKindRegion}
-			if pending != nil {
-				entry.startLine = pending.startLine
-				entry.kind = pending.kind
-				pending = nil
-			}
-			stack = append(stack, entry)
-		case TokenCloseBrace:
-			entry, ok := popFoldEntry(&stack, TokenOpenBrace)
-			if !ok {
-				pending = nil
-				continue
-			}
-			appendFoldRange(&ranges, result.Lines, entry.startLine, tok.Line, entry.kind)
-			pending = nil
-		case TokenOpenBracket:
-			if prev := PrevSignificant(result.Tokens, i-1); prev >= 0 && result.Tokens[prev].Kind == TokenHash {
-				stack = append(stack, foldEntry{openKind: TokenOpenBracket, startLine: tok.Line, kind: ""})
-				continue
-			}
-			stack = append(stack, foldEntry{openKind: TokenOpenBracket, startLine: tok.Line, kind: FoldingRangeKindRegion})
-		case TokenCloseBracket:
-			entry, ok := popFoldEntry(&stack, TokenOpenBracket)
-			if !ok {
-				continue
-			}
-			if entry.kind == "" {
-				continue
-			}
-			appendFoldRange(&ranges, result.Lines, entry.startLine, tok.Line, entry.kind)
-		}
-	}
-
-	appendNamespaceFolds(&ranges, result.Lines, namespaceStarts)
-
-	slices.SortFunc(ranges, func(a, b FoldingRange) int {
+	appendNamespaceFolds(&f.ranges, f.lines, f.namespaces)
+	slices.SortFunc(f.ranges, func(a, b FoldingRange) int {
 		if a.StartLine != b.StartLine {
 			return a.StartLine - b.StartLine
 		}
@@ -128,8 +62,141 @@ func ExtractFoldingRanges(source string) []FoldingRange {
 		}
 		return strings.Compare(string(a.Kind), string(b.Kind))
 	})
+	return compactFoldingRanges(f.ranges)
+}
 
-	return compactFoldingRanges(ranges)
+func significantTokens(all []lexer.Token) []lexer.Token {
+	toks := all[:0]
+	for _, tok := range all {
+		switch tok.Kind {
+		case token.Whitespace, token.OpenTag, token.OpenTagWithEcho, token.CloseTag, token.InlineHTML:
+		default:
+			toks = append(toks, tok)
+		}
+	}
+	return toks
+}
+
+func (f *folder) line(offset uint32) int {
+	if offset < f.offsets[f.at] {
+		f.at = 0
+	}
+	for f.at+1 < len(f.offsets) && f.offsets[f.at+1] <= offset {
+		f.at++
+	}
+	return f.at
+}
+
+func (f *folder) token(i int) int {
+	tok := f.toks[i]
+	line := f.line(tok.Start)
+	switch tok.Kind {
+	case token.DocComment:
+		f.fold(line, f.line(tok.End-1), FoldingRangeKindComment)
+	case token.Comment:
+		if f.isBlockComment(tok) {
+			f.fold(line, f.line(tok.End-1), FoldingRangeKindComment)
+			return i
+		}
+		end := line
+		for i+1 < len(f.toks) && f.toks[i+1].Kind == token.Comment && !f.isBlockComment(f.toks[i+1]) && f.line(f.toks[i+1].Start) == end+1 {
+			end++
+			i++
+		}
+		f.fold(line, end, FoldingRangeKindComment)
+	case token.Namespace:
+		if f.namespaceIsBraced(i) {
+			f.pending = &pendingFold{startLine: line}
+		} else {
+			f.namespaces = append(f.namespaces, line)
+		}
+	case token.Class:
+		if f.previousKind(i) != token.New {
+			f.pending = &pendingFold{startLine: line}
+		}
+	case token.Interface, token.Trait, token.Enum:
+		f.pending = &pendingFold{startLine: line}
+	case token.Function:
+		if f.functionIsNamed(i) {
+			f.pending = &pendingFold{startLine: line}
+		}
+	case token.LeftBrace, token.CurlyOpen, token.DollarOpenCurlyBraces:
+		entry := foldEntry{opener: token.LeftBrace, startLine: line, kind: FoldingRangeKindRegion}
+		if f.pending != nil {
+			entry.startLine, entry.kind = f.pending.startLine, f.pending.kind
+			f.pending = nil
+		}
+		f.stack = append(f.stack, entry)
+	case token.RightBrace:
+		entry, ok := f.pop(token.LeftBrace)
+		f.pending = nil
+		if ok {
+			f.fold(entry.startLine, line, entry.kind)
+		}
+	case token.Attribute:
+		f.stack = append(f.stack, foldEntry{opener: token.LeftBracket, startLine: line})
+	case token.LeftBracket:
+		f.stack = append(f.stack, foldEntry{opener: token.LeftBracket, startLine: line, kind: FoldingRangeKindRegion})
+	case token.RightBracket:
+		if entry, ok := f.pop(token.LeftBracket); ok && entry.kind != "" {
+			f.fold(entry.startLine, line, entry.kind)
+		}
+	}
+	return i
+}
+
+func (f *folder) isBlockComment(tok lexer.Token) bool {
+	return strings.HasPrefix(tok.Text(f.src), "/*")
+}
+
+func (f *folder) fold(startLine, endLine int, kind FoldingRangeKind) {
+	appendFoldRange(&f.ranges, f.lines, startLine, endLine, kind)
+}
+
+func (f *folder) pop(opener token.Kind) (foldEntry, bool) {
+	for i := len(f.stack) - 1; i >= 0; i-- {
+		if f.stack[i].opener != opener {
+			continue
+		}
+		entry := f.stack[i]
+		f.stack = append(f.stack[:i], f.stack[i+1:]...)
+		return entry, true
+	}
+	return foldEntry{}, false
+}
+
+func (f *folder) previousKind(i int) token.Kind {
+	for i--; i >= 0; i-- {
+		if k := f.toks[i].Kind; k != token.Comment && k != token.DocComment {
+			return k
+		}
+	}
+	return token.Invalid
+}
+
+func (f *folder) functionIsNamed(i int) bool {
+	for i++; i < len(f.toks); i++ {
+		switch f.toks[i].Kind {
+		case token.Comment, token.DocComment, token.Ampersand, token.AmpersandFollowedByVarOrVararg, token.AmpersandNotFollowedByVarOrVararg:
+		case token.LeftParen:
+			return false
+		default:
+			return true
+		}
+	}
+	return false
+}
+
+func (f *folder) namespaceIsBraced(i int) bool {
+	for i++; i < len(f.toks); i++ {
+		switch f.toks[i].Kind {
+		case token.LeftBrace:
+			return true
+		case token.Semicolon:
+			return false
+		}
+	}
+	return false
 }
 
 func appendNamespaceFolds(ranges *[]FoldingRange, lines []string, starts []int) {
@@ -189,48 +256,6 @@ func lastNonBlankLine(lines []string, start, end int) int {
 		}
 	}
 	return start - 1
-}
-
-func popFoldEntry(stack *[]foldEntry, kind TokenKind) (foldEntry, bool) {
-	for i := len(*stack) - 1; i >= 0; i-- {
-		if (*stack)[i].openKind != kind {
-			continue
-		}
-		entry := (*stack)[i]
-		*stack = append((*stack)[:i], (*stack)[i+1:]...)
-		return entry, true
-	}
-	return foldEntry{}, false
-}
-
-func tokenSequenceContains(tokens []Token, start int, stopKinds ...TokenKind) TokenKind {
-	for i := start; i < len(tokens); i++ {
-		tok := tokens[i]
-		for _, stop := range stopKinds {
-			if tok.Kind == stop {
-				return tok.Kind
-			}
-		}
-	}
-	return TokenUnknown
-}
-
-func isNamedFunctionToken(tokens []Token, index int) bool {
-	for i := index + 1; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case TokenComment, TokenDocComment, TokenAmpersand:
-			continue
-		case TokenIdentifier:
-			return true
-		default:
-			return isKeywordToken(tokens[i].Kind)
-		}
-	}
-	return false
-}
-
-func isLineCommentToken(value string) bool {
-	return strings.HasPrefix(value, "//") || (strings.HasPrefix(value, "#") && !strings.HasPrefix(value, "#["))
 }
 
 func compactFoldingRanges(ranges []FoldingRange) []FoldingRange {
