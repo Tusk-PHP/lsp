@@ -260,25 +260,83 @@ class Foo {
 
 func TestUnusedPrivateStaysQuietOnDynamicAccess(t *testing.T) {
 	for name, body := range map[string]string{
-		"dynamic method":                      "$this->$name();",
-		"braced dynamic method":               "$this->{$name}();",
-		"variable variable":                   "$this->$$name;",
-		"static variable call":                "static::$name();",
-		"braced static access":                "static::{$name}();",
-		"variable callable":                   "call_user_func([$this, $name]);",
-		"array() callable":                    "call_user_func(array($this, $name));",
-		"class-name callable":                 "call_user_func([self::class, $name]);",
-		"__CLASS__ callable":                  "call_user_func([__CLASS__, $name]);",
-		"computed callable name":              "call_user_func([static::class, 'run' . $name]);",
-		"interpolated callable name":          `call_user_func([$this, "run$name"]);`,
-		"dangling access in an interpolation": `echo "{$this->}";`,
-		"constant callable name":              "call_user_func([$this, M]);",
+		"dynamic method":             "$this->$name();",
+		"braced dynamic method":      "$this->{$name}();",
+		"nullsafe dynamic method":    "$this?->$name();",
+		"static variable call":       "static::$name();",
+		"self variable call":         "self::$name();",
+		"own class variable call":    "Foo::$name();",
+		"braced static access":       "static::{$name}();",
+		"variable callable":          "call_user_func([$this, $name]);",
+		"array() callable":           "call_user_func(array($this, $name));",
+		"class-name callable":        "call_user_func([self::class, $name]);",
+		"own class-name callable":    "call_user_func([Foo::class, $name]);",
+		"__CLASS__ callable":         "call_user_func([__CLASS__, $name]);",
+		"computed callable name":     "call_user_func([static::class, 'help' . $name]);",
+		"interpolated callable name": `call_user_func([$this, "help$name"]);`,
+		"braced interpolated name":   `$this->{"help{$name}"}();`,
+		"computed callable":          "call_user_func([$this, $this->pick()]);",
+		"constant callable name":     "call_user_func([$this, M]);",
+		"included file":              "include __DIR__ . '/view.php';",
+		"required file":              "require_once 'view.php';",
 	} {
 		src := "<?php\nclass Foo {\n    private function helper(): void {}\n    private string $value = '';\n    public function run(string $name): void { " + body + " }\n}\n"
 		for _, msg := range unusedPrivateMessages(src, nil) {
 			if msg == "Private method 'Foo::helper' is never used" {
 				t.Errorf("%s: %s", name, msg)
 			}
+		}
+	}
+}
+
+// Only a dynamic call that can reach the class's own methods says nothing
+// about which of them are used: a dynamic property read, a call on another
+// object or class, or a name with a different literal prefix doesn't.
+func TestUnusedPrivateDynamicAccessThatCantReachTheMethod(t *testing.T) {
+	for name, body := range map[string]string{
+		"dynamic property read":               "return $this->$name;",
+		"variable variable":                   "return $this->$$name;",
+		"braced property read on an other":    "return $theme->{'Author URI'};",
+		"call on another object":              "$other->$name();",
+		"call on a property":                  "$this->items->$name();",
+		"call on another class":               "Other::$name();",
+		"parent call":                         "parent::$name();",
+		"callable of another object":          "call_user_func([$other, $name]);",
+		"callable of another class":           "call_user_func([Other::class, $name]);",
+		"another literal prefix":              "call_user_func([$this, 'format_' . $name]);",
+		"another interpolated prefix":         `$this->{"format_$name"}();`,
+		"a method named include":              "$this->include();",
+		"dangling access in an interpolation": `echo "{$this->}";`,
+	} {
+		src := "<?php\nclass Foo {\n    private function helper(): void {}\n    public function run(string $name, $other, $theme) { " + body + " }\n}\n"
+		if got := unusedPrivateMessages(src, nil); !slices.Equal(got, []string{"Private method 'Foo::helper' is never used"}) {
+			t.Errorf("%s: got %q", name, got)
+		}
+	}
+}
+
+// A variable used as a method name has the literal prefixes of the values
+// assigned to it; one it may get otherwise could name any method.
+func TestUnusedPrivateMethodNameVariables(t *testing.T) {
+	for _, c := range []struct {
+		name, body string
+		want       []string
+	}{
+		{"one literal prefix", "$m = 'format_' . $key; return self::$m();", []string{"Private method 'Foo::helper' is never used"}},
+		{"a matching prefix", "$m = 'help' . $key; return $this->$m();", nil},
+		{"one of several prefixes matches", "$m = 'format_' . $key; $m = 'helper'; return $this->$m();", nil},
+		{"a whole literal", "$m = 'format_x'; return call_user_func([$this, $m]);", []string{"Private method 'Foo::helper' is never used"}},
+		{"a computed value", "$m = strtolower($key); return $this->$m();", nil},
+		{"a parameter", "return $this->$key();", nil},
+		{"a foreach target", "$m = 'format_'; foreach ($keys as $m) { $this->$m(); }", nil},
+		{"a destructuring", "$m = 'format_'; [$m] = $keys; return $this->$m();", nil},
+		{"a reference", "$m = 'format_'; fill($keys, &$m); return $this->$m();", nil},
+	} {
+		src := "<?php\nclass Foo {\n    private function helper(): void {}\n    private function format_x(): void {}\n    public function run(string $key, array $keys) { " + c.body + " }\n}\n"
+		got := unusedPrivateMessages(src, nil)
+		got = slices.DeleteFunc(got, func(m string) bool { return m == "Private method 'Foo::format_x' is never used" })
+		if !slices.Equal(got, c.want) {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
 		}
 	}
 }

@@ -9,12 +9,13 @@ import (
 )
 
 type privateMemberUses struct {
-	methods     map[string]bool
-	properties  map[string]bool
-	constants   map[string]bool
-	anyMethod   bool
-	anyProperty bool
-	anyConstant bool
+	methods        map[string]bool
+	methodPrefixes []string
+	properties     map[string]bool
+	constants      map[string]bool
+	anyMethod      bool
+	anyProperty    bool
+	anyConstant    bool
 }
 
 func newPrivateMemberUses() *privateMemberUses {
@@ -22,7 +23,16 @@ func newPrivateMemberUses() *privateMemberUses {
 }
 
 func (u *privateMemberUses) usesMethod(name string) bool {
-	return u.anyMethod || u.methods[strings.ToLower(name)]
+	lower := strings.ToLower(name)
+	if u.anyMethod || u.methods[lower] {
+		return true
+	}
+	for _, prefix := range u.methodPrefixes {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (u *privateMemberUses) usesProperty(name string) bool {
@@ -59,6 +69,13 @@ var reflectionClasses = map[string]bool{
 	"reflectionobject": true,
 }
 
+var includes = map[string]bool{
+	"include":      true,
+	"include_once": true,
+	"require":      true,
+	"require_once": true,
+}
+
 var constantLookupFunctions = map[string]bool{
 	"constant": true,
 	"defined":  true,
@@ -71,26 +88,237 @@ func classTokens(tokens []parser.Token, startLine, endLine int) []parser.Token {
 	return tokens[first:last]
 }
 
-func (u *privateMemberUses) collect(tokens []parser.Token, decl declarations) {
+// collect reads the uses in the tokens of class, or of a trait it uses.
+func (u *privateMemberUses) collect(tokens []parser.Token, decl declarations, class string) {
+	c := &useCollector{u: u, scope: tokens, class: class, methodVars: map[string]bool{}}
+	c.collect(tokens, decl)
+	for name := range c.methodVars {
+		u.collectMethodVariable(tokens, name)
+	}
+}
+
+// useCollector reads one class's or trait's tokens. A dynamic call on the
+// class's own methods through a variable, `$this->$m()`, is resolved from the
+// variable's assignments in scope once every token is read.
+type useCollector struct {
+	u          *privateMemberUses
+	scope      []parser.Token
+	class      string
+	methodVars map[string]bool
+}
+
+func (c *useCollector) collect(tokens []parser.Token, decl declarations) {
+	u := c.u
 	for i, tok := range tokens {
 		switch tok.Kind {
 		case parser.TokenStringLiteral:
 			u.collectLiteral(tok.Value)
-			u.collect(parser.InterpolatedTokens(tok), decl)
+			c.collect(parser.InterpolatedTokens(tok), decl)
 		case parser.TokenIdentifier:
-			u.collectCall(tokens, i)
+			c.collectCall(tokens, i)
 		case parser.TokenOpenBracket:
-			u.collectCallable(tokens, i)
+			c.collectCallable(tokens, i)
 		case parser.TokenArrow:
-			u.collectInstanceAccess(significantAt(tokens, i+1))
+			c.collectInstanceAccess(tokens, i)
 		case parser.TokenDoubleColon:
-			u.collectStaticAccess(tokens, i)
+			c.collectStaticAccess(tokens, i)
 		case parser.TokenFunction:
 			if name := significantAt(tokens, i+1); decl == declarationsAreUses && isWordToken(name) {
 				u.methods[strings.ToLower(name.Value)] = true
 			}
 		}
 	}
+}
+
+// dynamicMethod records a call on one of the class's own methods whose name
+// starts at tokens[at]: a variable, a string with a literal prefix, or a
+// concatenation that starts with one. Any other name may be any method.
+func (c *useCollector) dynamicMethod(tokens []parser.Token, at int) {
+	tok := tokenAt(tokens, at)
+	if tok.Kind == parser.TokenVariable && endsName(tokens, at) {
+		c.methodVars[tok.Value] = true
+		return
+	}
+	if prefix, ok := literalPrefix(tokens, at); ok {
+		c.u.methodPrefixes = append(c.u.methodPrefixes, strings.ToLower(prefix))
+		return
+	}
+	c.u.anyMethod = true
+}
+
+// isMemberName reports whether the name at tokens[i] follows `->`, `::` or
+// `function`, so it names a member rather than a language construct.
+func isMemberName(tokens []parser.Token, i int) bool {
+	prev := parser.PrevSignificant(tokens, i-1)
+	if prev < 0 {
+		return false
+	}
+	switch tokens[prev].Kind {
+	case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenFunction:
+		return true
+	}
+	return false
+}
+
+// collectMethodVariable records what a variable used as a method name may
+// hold: the literal prefix of every value assigned to it, or any method when
+// one of them has none or it's never assigned.
+func (u *privateMemberUses) collectMethodVariable(tokens []parser.Token, name string) {
+	assigned := false
+	for i, tok := range tokens {
+		if tok.Kind != parser.TokenVariable || tok.Value != name {
+			continue
+		}
+		if boundOtherwise(tokens, i) {
+			u.anyMethod = true
+			return
+		}
+		if tokenAt(tokens, i+1).Kind != parser.TokenEquals || tokenAt(tokens, i+2).Kind == parser.TokenEquals {
+			continue
+		}
+		prefix, ok := literalPrefix(tokens, nextSignificant(tokens, i+2))
+		if !ok {
+			u.anyMethod = true
+			return
+		}
+		u.methodPrefixes = append(u.methodPrefixes, strings.ToLower(prefix))
+		assigned = true
+	}
+	if !assigned {
+		u.anyMethod = true
+	}
+}
+
+// boundOtherwise reports whether the variable at tokens[i] may get a value
+// other than by a plain assignment: as a parameter, a foreach target, a
+// reference, a global or static, or inside a destructuring.
+func boundOtherwise(tokens []parser.Token, i int) bool {
+	prev := parser.PrevSignificant(tokens, i-1)
+	if prev >= 0 {
+		p := tokens[prev]
+		if p.Kind == parser.TokenAmpersand || p.Kind == parser.TokenStatic || (p.Kind == parser.TokenIdentifier && (strings.EqualFold(p.Value, "as") || strings.EqualFold(p.Value, "global"))) {
+			return true
+		}
+	}
+	open := enclosingOpen(tokens, i)
+	if open < 0 {
+		return false
+	}
+	switch tokens[open].Kind {
+	case parser.TokenOpenBracket:
+		return significantAt(tokens, matchingClose(tokens, open)+1).Kind == parser.TokenEquals
+	case parser.TokenOpenParen:
+		before := parser.PrevSignificant(tokens, open-1)
+		if before < 0 {
+			return false
+		}
+		if strings.EqualFold(tokens[before].Value, "list") {
+			return true
+		}
+		if tokens[before].Kind == parser.TokenFunction || strings.EqualFold(tokens[before].Value, "fn") || tokens[before].Kind == parser.TokenUse {
+			return true
+		}
+		fn := parser.PrevSignificant(tokens, before-1)
+		return fn >= 0 && tokens[fn].Kind == parser.TokenFunction
+	}
+	return false
+}
+
+// enclosingOpen returns the `(` or `[` that the token at tokens[i] is inside,
+// or -1 when it isn't inside either.
+func enclosingOpen(tokens []parser.Token, i int) int {
+	depth := 0
+	for j := i - 1; j >= 0; j-- {
+		switch tokens[j].Kind {
+		case parser.TokenCloseParen, parser.TokenCloseBracket:
+			depth++
+		case parser.TokenOpenParen, parser.TokenOpenBracket:
+			if depth == 0 {
+				return j
+			}
+			depth--
+		case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace:
+			if depth == 0 {
+				return -1
+			}
+		}
+	}
+	return -1
+}
+
+func matchingClose(tokens []parser.Token, open int) int {
+	depth := 0
+	for i := open; i < len(tokens); i++ {
+		switch tokens[i].Kind {
+		case parser.TokenOpenParen, parser.TokenOpenBracket:
+			depth++
+		case parser.TokenCloseParen, parser.TokenCloseBracket:
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return len(tokens)
+}
+
+// literalPrefix returns the literal start of the method name that starts at
+// tokens[at]: a whole literal, the literal before `.`, or the text before the
+// first variable of an interpolated string. ok is false when the name doesn't
+// start with a literal.
+func literalPrefix(tokens []parser.Token, at int) (string, bool) {
+	tok := tokenAt(tokens, at)
+	if tok.Kind != parser.TokenStringLiteral {
+		return "", false
+	}
+	if value, ok := plainStringLiteral(tok.Value); ok {
+		if endsName(tokens, at) || significantAt(tokens, at+1).Value == "." {
+			return value, value != ""
+		}
+		return "", false
+	}
+	if !endsName(tokens, at) || len(tok.Value) < 2 || tok.Value[0] != '"' {
+		return "", false
+	}
+	body := tok.Value[1 : len(tok.Value)-1]
+	end := strings.IndexByte(body, '$')
+	if end <= 0 || strings.ContainsRune(body[:end], '\\') {
+		return "", false
+	}
+	return strings.TrimSuffix(body[:end], "{"), true
+}
+
+// endsName reports whether the name at tokens[at] is all of it: what follows
+// closes the call's name, its argument or the statement.
+func endsName(tokens []parser.Token, at int) bool {
+	switch significantAt(tokens, at+1).Kind {
+	case parser.TokenOpenParen, parser.TokenCloseBrace, parser.TokenCloseBracket, parser.TokenCloseParen, parser.TokenComma, parser.TokenSemicolon:
+		return true
+	}
+	return false
+}
+
+// ownReceiver reports whether the access at tokens[arrow] is on $this.
+func ownReceiver(tokens []parser.Token, arrow int) bool {
+	before := parser.PrevSignificant(tokens, arrow-1)
+	if before >= 0 && tokens[before].Kind == parser.TokenQuestion {
+		before = parser.PrevSignificant(tokens, before-1)
+	}
+	if before < 0 || !isThis(tokens[before]) {
+		return false
+	}
+	prev := parser.PrevSignificant(tokens, before-1)
+	return prev < 0 || (tokens[prev].Kind != parser.TokenArrow && tokens[prev].Kind != parser.TokenDoubleColon)
+}
+
+// ownClassName reports whether tok names the class itself: self, static or
+// its own name.
+func (c *useCollector) ownClassName(tok parser.Token) bool {
+	if !isWordToken(tok) {
+		return false
+	}
+	name := tok.Value[strings.LastIndexByte(tok.Value, '\\')+1:]
+	return strings.EqualFold(name, "self") || strings.EqualFold(name, "static") || strings.EqualFold(name, c.class)
 }
 
 func nextSignificant(tokens []parser.Token, from int) int {
@@ -118,28 +346,69 @@ func isWordToken(tok parser.Token) bool {
 	return parser.IsIdentByte(tok.Value[0])
 }
 
-func (u *privateMemberUses) collectInstanceAccess(name parser.Token) {
-	if !isWordToken(name) {
-		u.anyMethod, u.anyProperty = true, true
+func (c *useCollector) collectInstanceAccess(tokens []parser.Token, arrow int) {
+	u := c.u
+	at := nextSignificant(tokens, arrow+1)
+	name := tokenAt(tokens, at)
+	if isWordToken(name) {
+		u.methods[strings.ToLower(name.Value)] = true
+		u.properties[name.Value] = true
 		return
 	}
-	u.methods[strings.ToLower(name.Value)] = true
-	u.properties[name.Value] = true
+	u.anyProperty = true
+	if !ownReceiver(tokens, arrow) {
+		return
+	}
+	switch {
+	case name.Kind == parser.TokenVariable && significantAt(tokens, at+1).Kind == parser.TokenOpenParen:
+		c.dynamicMethod(tokens, at)
+	case name.Kind == parser.TokenOpenBrace:
+		closing := matchingBrace(tokens, at)
+		if significantAt(tokens, closing+1).Kind == parser.TokenOpenParen {
+			c.dynamicMethod(tokens, nextSignificant(tokens, at+1))
+		}
+	}
 }
 
-func (u *privateMemberUses) collectStaticAccess(tokens []parser.Token, colons int) {
+func matchingBrace(tokens []parser.Token, open int) int {
+	depth := 0
+	for i := open; i < len(tokens); i++ {
+		switch tokens[i].Kind {
+		case parser.TokenOpenBrace:
+			depth++
+		case parser.TokenCloseBrace:
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return len(tokens)
+}
+
+func (c *useCollector) collectStaticAccess(tokens []parser.Token, colons int) {
+	u := c.u
 	at := nextSignificant(tokens, colons+1)
 	name := tokenAt(tokens, at)
+	own := false
+	if class := parser.PrevSignificant(tokens, colons-1); class >= 0 {
+		own = c.ownClassName(tokens[class])
+	}
 	switch {
 	case isWordToken(name):
 		u.methods[strings.ToLower(name.Value)] = true
 		u.constants[name.Value] = true
 	case name.Kind == parser.TokenVariable && significantAt(tokens, at+1).Kind == parser.TokenOpenParen:
-		u.anyMethod = true
+		if own {
+			c.dynamicMethod(tokens, at)
+		}
 	case name.Kind == parser.TokenVariable:
 		u.properties[name.Value[1:]] = true
 	default:
-		u.anyMethod, u.anyProperty, u.anyConstant = true, true, true
+		u.anyProperty, u.anyConstant = true, true
+		if own {
+			u.anyMethod = true
+		}
 	}
 }
 
@@ -169,12 +438,15 @@ func isIdentifierName(s string) bool {
 	return true
 }
 
-func (u *privateMemberUses) collectCall(tokens []parser.Token, i int) {
+func (c *useCollector) collectCall(tokens []parser.Token, i int) {
+	u := c.u
 	name := strings.ToLower(tokens[i].Value[strings.LastIndexByte(tokens[i].Value, '\\')+1:])
 	switch {
+	case includes[name] && !isMemberName(tokens, i):
+		u.anyMethod, u.anyProperty, u.anyConstant = true, true, true
 	case name == "array":
 		if open := nextSignificant(tokens, i+1); tokenAt(tokens, open).Kind == parser.TokenOpenParen {
-			u.collectCallable(tokens, open)
+			c.collectCallable(tokens, open)
 		} else if isArrayCastOfThis(tokens, i) {
 			u.anyProperty = true
 		}
@@ -241,21 +513,29 @@ func (u *privateMemberUses) collectPropertyExists(tokens []parser.Token, open in
 	}
 }
 
-func (u *privateMemberUses) collectCallable(tokens []parser.Token, open int) {
-	comma := classReferenceEnd(tokens, nextSignificant(tokens, open+1))
+func (c *useCollector) collectCallable(tokens []parser.Token, open int) {
+	target := nextSignificant(tokens, open+1)
+	comma := c.ownClassReferenceEnd(tokens, target)
 	if tokenAt(tokens, comma).Kind != parser.TokenComma {
 		return
 	}
 	method := nextSignificant(tokens, comma+1)
-	if _, ok := plainStringLiteral(tokenAt(tokens, method).Value); !ok {
-		u.anyMethod = true
+	if _, ok := plainStringLiteral(tokenAt(tokens, method).Value); ok && endsName(tokens, method) {
 		return
 	}
-	switch significantAt(tokens, method+1).Kind {
-	case parser.TokenCloseBracket, parser.TokenCloseParen, parser.TokenComma:
-	default:
-		u.anyMethod = true
+	c.dynamicMethod(tokens, method)
+}
+
+// ownClassReferenceEnd returns where a reference to the class itself that
+// starts at tokens[target] ends: $this, __CLASS__, or self::class,
+// static::class or its own name with ::class. It's len(tokens) for anything
+// else.
+func (c *useCollector) ownClassReferenceEnd(tokens []parser.Token, target int) int {
+	tok := tokenAt(tokens, target)
+	if isWordToken(tok) && tok.Value != "__CLASS__" && !c.ownClassName(tok) {
+		return len(tokens)
 	}
+	return classReferenceEnd(tokens, target)
 }
 
 func classReferenceEnd(tokens []parser.Token, target int) int {
