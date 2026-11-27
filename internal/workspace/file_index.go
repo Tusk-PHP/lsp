@@ -24,6 +24,6 @@ func (ws *Bootstrapped) RemoveFile(uri string) {
 	ws.ViewData.IndexFile(uri, "")
 	ws.SymfonyCommands.UpdateFile(uri, "")
 	if ws.RouteIndex != nil {
-		ws.RouteIndex.IndexFile(uri, "")
+		ws.RouteIndex.RemoveFile(uri)
 	}
 }
