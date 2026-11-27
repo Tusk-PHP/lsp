@@ -6,6 +6,8 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/container"
 	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -17,9 +19,9 @@ namespace Symfony\Component\Console;
 class Application { public function find(string $name) {} }
 `)
 	p := NewProvider(idx, container.NewContainerAnalyzer(idx, "/project", "symfony"), "symfony")
-	commands := frameworksymfony.NewCommandIndex()
-	commands.UpdateFile("file:///project/src/Command/SyncCommand.php", "<?php\n#[AsCommand(name: 'app:sync', description: 'Sync things')]\nclass SyncCommand {}\n")
-	commands.UpdateFile("file:///project/src/Command/OtherCommand.php", "<?php\n#[AsCommand(name: 'other:thing')]\nclass OtherCommand {}\n")
+	commands := frameworksymfony.NewCommandIndex(phpparser.OnlyGrammar(token.Latest))
+	commands.UpdateFile("file:///project/src/Command/SyncCommand.php", "<?php\nuse Symfony\\Component\\Console\\Attribute\\AsCommand;\n#[AsCommand(name: 'app:sync', description: 'Sync things')]\nclass SyncCommand {}\n")
+	commands.UpdateFile("file:///project/src/Command/OtherCommand.php", "<?php\nuse Symfony\\Component\\Console\\Attribute\\AsCommand;\n#[AsCommand(name: 'other:thing')]\nclass OtherCommand {}\n")
 	p.SetSymfonyCommands(commands)
 
 	src := `<?php

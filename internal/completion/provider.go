@@ -156,12 +156,12 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 	}
 
-	ctx := sourcectx.Analyze(uri, source, pos)
+	ctx := sourcectx.Analyze(p.index, uri, source, pos)
 	if ctx == nil {
 		return nil
 	}
 	file := ctx.File
-	rk := newNameRanker(ctx.Namespace, ctx.Uses)
+	rk := newNameRanker(file.Namespace, file.Uses)
 
 	if strings.HasSuffix(trimmed, "->") || strings.HasSuffix(trimmed, "?->") {
 		return sanitizeCompletions(p.completeMemberAccess(r, uri, source, pos, prefix, file, parenAfterCursor))
@@ -186,11 +186,11 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		return sanitizeCompletions(p.completePipe(rk))
 	}
 	if strings.Contains(trimmed, "#[") && !strings.Contains(trimmed, "]") {
-		return sanitizeCompletions(p.completeAttribute(attributeNamePrefix(trimmed), source, rk, file))
+		return sanitizeCompletions(p.completeAttribute(attributeNamePrefix(trimmed), rk, file, ctx.NewUse))
 	}
 	words := strings.Fields(trimmed)
 	if len(words) >= 1 && (words[len(words)-1] == "new" || (len(words) >= 2 && words[len(words)-2] == "new")) {
-		return sanitizeCompletions(p.completeNew(prefix, source, rk, file))
+		return sanitizeCompletions(p.completeNew(prefix, rk, file, ctx.NewUse))
 	}
 	if len(words) >= 1 && words[0] == "use" {
 		return sanitizeCompletions(p.completeUse(prefix, rk))
@@ -251,7 +251,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 	if strings.Contains(search, "\\") {
 		return sanitizeCompletions(p.completeNamespacePath(search, rk))
 	}
-	items := p.completeGlobal(prefix, source, rk, file)
+	items := p.completeGlobal(prefix, rk, file, ctx.NewUse)
 	// Add $this if inside a class method
 	lastWord := ""
 	if w := strings.Fields(strings.TrimSpace(prefix)); len(w) > 0 {
@@ -611,7 +611,7 @@ func (p *Provider) resolveChainType(r *resolve.Resolver, source, prefix, op stri
 	return r.AccessChainClass(prefix, idx+len(op), source, pos, file)
 }
 
-func (p *Provider) completeNew(prefix, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {
+func (p *Provider) completeNew(prefix string, rk nameRanker, file *parser.FileNode, site sourcectx.UseSite) []protocol.CompletionItem {
 	var items []protocol.CompletionItem
 	words := strings.Fields(prefix)
 	search := ""
@@ -621,7 +621,7 @@ func (p *Provider) completeNew(prefix, source string, rk nameRanker, file *parse
 			search = ""
 		}
 	}
-	imports := p.newImportPlanner(source, file)
+	imports := p.newImportPlanner(file, site)
 	for _, sym := range p.index.SearchByPrefix(search) {
 		if sym.Kind != symbols.KindClass {
 			continue
@@ -694,7 +694,7 @@ func attributeNamePrefix(trimmed string) string {
 	return strings.TrimSpace(tail)
 }
 
-func (p *Provider) completeAttribute(prefix, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {
+func (p *Provider) completeAttribute(prefix string, rk nameRanker, file *parser.FileNode, site sourcectx.UseSite) []protocol.CompletionItem {
 	attrs := [][2]string{
 		{"Override", "PHP 8.3"}, {"Deprecated", "PHP 8.4"}, {"SensitiveParameter", "Sensitive in stack traces"}, {"AllowDynamicProperties", "Allow dynamic props"},
 	}
@@ -710,7 +710,7 @@ func (p *Provider) completeAttribute(prefix, source string, rk nameRanker, file 
 	// Once the user starts typing a name, surface matching attribute classes
 	// from the index (user-defined and vendor attributes like `Char`, `Unique`).
 	if prefix != "" && p.index != nil {
-		imports := p.newImportPlanner(source, file)
+		imports := p.newImportPlanner(file, site)
 		for _, sym := range p.index.SearchByPrefix(prefix) {
 			if sym == nil || sym.Kind != symbols.KindClass || seen[sym.Name] {
 				continue
@@ -831,7 +831,7 @@ func extractLastWord(prefix string) string {
 	return words[len(words)-1]
 }
 
-func (p *Provider) completeGlobal(prefix, source string, rk nameRanker, file *parser.FileNode) []protocol.CompletionItem {
+func (p *Provider) completeGlobal(prefix string, rk nameRanker, file *parser.FileNode, site sourcectx.UseSite) []protocol.CompletionItem {
 	var items []protocol.CompletionItem
 	words := strings.Fields(strings.TrimSpace(prefix))
 	search := ""
@@ -879,7 +879,7 @@ func (p *Provider) completeGlobal(prefix, source string, rk nameRanker, file *pa
 			// Only show type-level symbols when user is actively typing a name
 			if search != "" {
 				if imports == nil {
-					imports = p.newImportPlanner(source, file)
+					imports = p.newImportPlanner(file, site)
 				}
 				item := protocol.CompletionItem{Label: sym.Name, Kind: symKind(sym.Kind), Detail: sym.FQN, SortText: rk.key(sym, sym.Name)}
 				name, edits := imports.class(sym.FQN)

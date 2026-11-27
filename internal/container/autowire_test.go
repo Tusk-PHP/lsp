@@ -3,104 +3,52 @@ package container
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func TestParseConstructorAutowireAttrs_ServiceForm(t *testing.T) {
+func TestConstructorAutowire(t *testing.T) {
 	source := `<?php
+namespace App\Service;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Other\Autowire as NotSymfony;
 class MyService {
     public function __construct(
         #[Autowire(service: 'app.notifier')]
         private NotificationService $notifier,
         private LoggerInterface $logger,
-    ) {}
-}
-`
-	result := parseConstructorAutowireAttrs(source)
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	aw, ok := result["$notifier"]
-	if !ok {
-		t.Fatal("expected $notifier in autowire map")
-	}
-	if aw.kind != "service" {
-		t.Errorf("kind = %q, want 'service'", aw.kind)
-	}
-	if aw.value != "app.notifier" {
-		t.Errorf("value = %q, want 'app.notifier'", aw.value)
-	}
-	// $logger has no Autowire attribute
-	if _, ok := result["$logger"]; ok {
-		t.Error("$logger should not have an Autowire attr")
-	}
-}
-
-func TestParseConstructorAutowireAttrs_ParamForm(t *testing.T) {
-	source := `<?php
-class MyService {
-    public function __construct(
-        #[Autowire(param: 'app.some_param')]
-        private string $param,
-    ) {}
-}
-`
-	result := parseConstructorAutowireAttrs(source)
-	aw, ok := result["$param"]
-	if !ok {
-		t.Fatal("expected $param")
-	}
-	if aw.kind != "param" {
-		t.Errorf("kind = %q, want 'param'", aw.kind)
-	}
-	if aw.value != "app.some_param" {
-		t.Errorf("value = %q", aw.value)
-	}
-}
-
-func TestParseConstructorAutowireAttrs_PercentParamForm(t *testing.T) {
-	source := `<?php
-class MyService {
-    public function __construct(
+        #[Autowire(param: 'app.some_param')] private string $param,
         #[Autowire('%app.secret%')]
         private string $secret,
-    ) {}
-}
-`
-	result := parseConstructorAutowireAttrs(source)
-	aw, ok := result["$secret"]
-	if !ok {
-		t.Fatal("expected $secret")
-	}
-	if aw.kind != "param" {
-		t.Errorf("kind = %q, want 'param'", aw.kind)
-	}
-	if aw.value != "app.secret" {
-		t.Errorf("value = %q, want 'app.secret'", aw.value)
-	}
-}
-
-func TestParseConstructorAutowireAttrs_EnvForm(t *testing.T) {
-	source := `<?php
-class MyService {
-    public function __construct(
         #[Autowire(env: 'APP_SECRET')]
         private string $appSecret,
+        #[Autowire(null, 'positional.service')]
+        private $positional,
+        #[Autowire('plain value')]
+        private string $plain,
+        #[NotSymfony(service: 'other')]
+        private $other,
     ) {}
 }
+class Other { public function __construct(#[Autowire(service: 'x')] $x) {} }
 `
-	result := parseConstructorAutowireAttrs(source)
-	aw, ok := result["$appSecret"]
-	if !ok {
-		t.Fatal("expected $appSecret")
+	got := constructorAutowire(source, `App\Service\MyService`, phpparser.OnlyGrammar(token.Latest))
+	want := []autowireAttr{
+		{"service", "app.notifier"}, {}, {"param", "app.some_param"}, {"param", "app.secret"},
+		{"env", "APP_SECRET"}, {"service", "positional.service"}, {}, {},
 	}
-	if aw.kind != "env" {
-		t.Errorf("kind = %q, want 'env'", aw.kind)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %+v", got)
 	}
-	if aw.value != "APP_SECRET" {
-		t.Errorf("value = %q, want 'APP_SECRET'", aw.value)
+	if got := constructorAutowire(source, `App\Service\Missing`, phpparser.OnlyGrammar(token.Latest)); got != nil {
+		t.Errorf("a class not in the file: %+v", got)
+	}
+	if got := constructorAutowire("<?php\nnamespace App;\nclass NoCtor { function f() {} }\n", `App\NoCtor`, phpparser.OnlyGrammar(token.Latest)); got != nil {
+		t.Errorf("no constructor: %+v", got)
 	}
 }
 
@@ -163,7 +111,6 @@ class AutowiredService {
 	}
 
 	// Verify by Autowire position.
-	// The positional slice from parseConstructorAutowireAttrsByPosition is:
 	// [0] service:app.notifier, [1] param:app.name, [2] env:APP_ENV, [3] (none)
 	// deps length from index may vary if parser skips attributed params, so we
 	// verify the AutowireKind/Value attributes on whichever deps we got.
@@ -225,59 +172,6 @@ class Controller {
 	for _, dep := range deps {
 		if dep.AutowireKind != "" {
 			t.Errorf("expected empty AutowireKind for Laravel, got %q", dep.AutowireKind)
-		}
-	}
-}
-
-func TestParseAutowireAttributeLine(t *testing.T) {
-	tests := []struct {
-		line     string
-		wantKind string
-		wantVal  string
-		wantNil  bool
-	}{
-		{"        #[Autowire(service: 'app.notifier')]", "service", "app.notifier", false},
-		{"        #[Autowire(param: 'app.name')]", "param", "app.name", false},
-		{"        #[Autowire(env: 'APP_ENV')]", "env", "APP_ENV", false},
-		{"        #[Autowire('%app.secret%')]", "param", "app.secret", false},
-		{"        #[Route('/foo')]", "", "", true},
-		{"        #[Autowire]", "", "", true}, // no args
-	}
-	for _, tt := range tests {
-		result := parseAutowireAttributeLine(tt.line)
-		if tt.wantNil {
-			if result != nil {
-				t.Errorf("line=%q: expected nil, got %+v", tt.line, result)
-			}
-			continue
-		}
-		if result == nil {
-			t.Errorf("line=%q: expected non-nil", tt.line)
-			continue
-		}
-		if result.kind != tt.wantKind {
-			t.Errorf("line=%q: kind=%q want=%q", tt.line, result.kind, tt.wantKind)
-		}
-		if result.value != tt.wantVal {
-			t.Errorf("line=%q: value=%q want=%q", tt.line, result.value, tt.wantVal)
-		}
-	}
-}
-
-func TestExtractParamName(t *testing.T) {
-	tests := []struct {
-		line string
-		want string
-	}{
-		{"        private NotificationService $notifier,", "$notifier"},
-		{"        private string $appName,", "$appName"},
-		{"        LoggerInterface $logger", "$logger"},
-		{"    ) {", ""},
-	}
-	for _, tt := range tests {
-		got := extractParamName(tt.line)
-		if got != tt.want {
-			t.Errorf("line=%q: got %q, want %q", tt.line, got, tt.want)
 		}
 	}
 }

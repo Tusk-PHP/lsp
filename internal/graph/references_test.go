@@ -315,3 +315,28 @@ func TestBuildReferences_Sorted(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildReferences_NewEdgeBelongsToTheClassAroundIt(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFileWithSource("file:///t/adjacent.php", `<?php
+namespace App;
+namespace\helper();
+class A {
+    public function a() { return new F(); }
+}
+$outside = new H();
+class B { public function b() { return new G(); } }
+class F {}
+class G {}
+class H {}
+`, symbols.SourceProject)
+	g := BuildReferences(idx, Options{Deps: DepsFull})
+	for _, want := range [][2]string{{`App\A`, `App\F`}, {`App\B`, `App\G`}} {
+		if !findEdge(g, want[0], want[1], "new") {
+			t.Errorf("expected new edge %s → %s, not found in %v", want[0], want[1], g.Edges)
+		}
+	}
+	if findEdge(g, `App\A`, `App\G`, "new") || findEdge(g, `App\A`, `App\H`, "new") {
+		t.Errorf("an instantiation outside A was attributed to it: %v", g.Edges)
+	}
+}

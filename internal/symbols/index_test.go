@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -788,5 +789,33 @@ class Assert {
 	idx.IndexFile("file:///a.php", `<?php class Assert {}`)
 	if idx.MayNarrow("notNull") {
 		t.Fatal("a removed method should no longer narrow")
+	}
+}
+
+func TestImportsEndIsKeptForTheIndexedText(t *testing.T) {
+	const src = "<?php\nnamespace A;\nuse X;\nclass C {}\n"
+	end := uint32(len("<?php\nnamespace A;\nuse X;"))
+	idx := NewIndex()
+	idx.IndexFile("file:///a.php", src)
+	idx.IndexIDEHelperFile("file:///_ide_helper.php", src)
+	edited := src + "class D {}\n"
+	for _, tc := range []struct {
+		name, uri, source string
+		upTo              uint32
+		want              uint32
+		ok                bool
+	}{
+		{"indexed text", "file:///a.php", src, uint32(len(src)), end, true},
+		{"IDE helper file", "file:///_ide_helper.php", src, uint32(len(src)), end, true},
+		{"edited after the offset", "file:///a.php", edited, uint32(len(src)), end, true},
+		{"offset inside the imports", "file:///a.php", src, 10, 10, true},
+		{"edited before the offset", "file:///a.php", edited, uint32(len(edited)), 0, false},
+		{"changed text", "file:///a.php", strings.Replace(src, "X", "Y", 1), uint32(len(src)), 0, false},
+		{"not indexed", "file:///b.php", src, uint32(len(src)), 0, false},
+	} {
+		got, ok := idx.ImportsEnd(tc.uri, tc.source, tc.upTo)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("%s: ImportsEnd = %d, %v, want %d, %v", tc.name, got, ok, tc.want, tc.ok)
+		}
 	}
 }
