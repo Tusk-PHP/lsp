@@ -12,8 +12,8 @@ that package; read it before changing the package.
 ## What this is
 
 Tusk PHP is a PHP language server written in Go, with deep Laravel and Symfony
-awareness; WordPress and Magento 2 support are in progress (see the pinned
-[Roadmap](https://github.com/Tusk-PHP/lsp/issues/39)). One binary, `tusk-php`,
+awareness; WordPress and Magento 2 support are in progress (see the
+[1.0.0 milestone](https://github.com/Tusk-PHP/lsp/milestone/9)). One binary, `tusk-php`,
 serves:
 
 - the Language Server Protocol over stdio (the default),
@@ -250,9 +250,8 @@ description instead, and the maintainers write the changelog from it when they r
 ## Opening an issue
 
 Follow [CONTRIBUTING.md › Issues, goals and milestones](CONTRIBUTING.md#issues-goals-and-milestones).
-An issue you open is a sub-issue of one goal on the
-[Roadmap](https://github.com/Tusk-PHP/lsp/issues/39) (the Roadmap's sub-issues are the
-goals), has a type (Bug, Feature or Task) and an `area:` label where one fits. Link it
+An issue you open is a sub-issue of one goal (the open issues with the
+[`roadmap`](https://github.com/Tusk-PHP/lsp/issues?q=is%3Aissue%20state%3Aopen%20label%3Aroadmap) label), has a type (Bug, Feature or Task) and an `area:` label where one fits. Link it
 to its goal after creating it:
 
 ```bash
