@@ -47,5 +47,52 @@
     "exclude": [
       "Test"
     ]
+  },
+  {
+    "name": "filament",
+    "fetch": "scripts/fetch-filament.sh",
+    "root": "testdata/filament",
+    "paths": [
+      "app"
+    ],
+    "exclude": []
+  },
+  {
+    "name": "sylius",
+    "fetch": "scripts/fetch-sylius.sh",
+    "root": "testdata/sylius",
+    "paths": [
+      "src",
+      "vendor/sylius/sylius/src/Sylius"
+    ],
+    "exclude": [
+      "Tests",
+      "tests",
+      "spec"
+    ]
+  },
+  {
+    "name": "woocommerce",
+    "fetch": "scripts/fetch-woocommerce.sh",
+    "root": "testdata/woocommerce",
+    "paths": [
+      "wp-content/plugins/woocommerce"
+    ],
+    "exclude": [
+      "vendor",
+      "tests",
+      "packages"
+    ]
+  },
+  {
+    "name": "mageos",
+    "fetch": "scripts/fetch-mageos.sh",
+    "root": "testdata/mageos",
+    "paths": [
+      "vendor/mage-os"
+    ],
+    "exclude": [
+      "Test"
+    ]
   }
 ]

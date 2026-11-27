@@ -1,0 +1,1 @@
+app/Filament/Resources/HR/Timesheets/Widgets/TimesheetStats.php	unused-variable	Variable $avgHoursPerDay is assigned but never read

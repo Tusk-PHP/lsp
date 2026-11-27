@@ -7,7 +7,8 @@
 # For each codebase in testdata/field/manifest.json (or only the names given),
 # the script checks out the pinned commit into testdata/field/_repos/<name>,
 # installs its Composer dependencies from the pinned lock file, and runs
-# `tusk-php check` over the listed paths.
+# `tusk-php check` over the listed paths. A reference app (an entry with
+# `fetch` and `root`) is put in place by its own fetch script instead.
 #
 # Without --update it compares the findings with testdata/field/<name>.baseline
 # and fails when they differ: new findings are printed with their positions,
@@ -88,10 +89,17 @@ while IFS= read -r entry; do
   if [[ ${#NAMES[@]} -gt 0 && ! " ${NAMES[*]} " =~ " ${name} " ]]; then
     continue
   fi
-  fetch "${name}" "$(jq -r '.repo' <<<"${entry}")" "$(jq -r '.sha' <<<"${entry}")"
-  install "${name}" "$(jq -r '.lock' <<<"${entry}")" "$(jq -r '.rootVersion' <<<"${entry}")"
+  fetch_script="$(jq -r '.fetch // empty' <<<"${entry}")"
+  if [[ -n "${fetch_script}" ]]; then
+    bash "${REPO_ROOT}/${fetch_script}"
+    root="${REPO_ROOT}/$(jq -r '.root' <<<"${entry}")"
+  else
+    fetch "${name}" "$(jq -r '.repo' <<<"${entry}")" "$(jq -r '.sha' <<<"${entry}")"
+    install "${name}" "$(jq -r '.lock' <<<"${entry}")" "$(jq -r '.rootVersion' <<<"${entry}")"
+    root="${REPOS_DIR}/${name}"
+  fi
 
-  args=(check --root "${REPOS_DIR}/${name}")
+  args=(check --root "${root}")
   while IFS= read -r pattern; do args+=(--exclude "${pattern}"); done < <(jq -r '.exclude[]' <<<"${entry}")
   baseline="${FIELD_DIR}/${name}.baseline"
   if [[ ${UPDATE} -eq 1 ]]; then
