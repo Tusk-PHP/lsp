@@ -389,6 +389,22 @@ func tokenize(source string) ([]Token, []ParseError) {
 	return tokenizeFrom(source, HasOpenTag(source))
 }
 
+func blockCommentEnd(source string, offset, line, col int) (int, int, int) {
+	for offset < len(source) {
+		if source[offset] == '*' && offset+1 < len(source) && source[offset+1] == '/' {
+			return offset + 2, line, col + 2
+		}
+		if source[offset] == '\n' {
+			line++
+			col = 0
+		} else {
+			col++
+		}
+		offset++
+	}
+	return offset, line, col
+}
+
 func tokenizeFrom(source string, inHTML bool) ([]Token, []ParseError) {
 	var errors []ParseError
 	tokens := make([]Token, 0, len(source)/4+2)
@@ -445,22 +461,7 @@ func tokenizeFrom(source string, inHTML bool) ([]Token, []ParseError) {
 		if offset+2 < len(source) && source[offset:offset+3] == "/**" {
 			start := offset
 			startLine, startCol := line, col
-			offset += 3
-			col += 3
-			for offset+1 < len(source) {
-				if source[offset] == '*' && source[offset+1] == '/' {
-					offset += 2
-					col += 2
-					break
-				}
-				if source[offset] == '\n' {
-					line++
-					col = 0
-				} else {
-					col++
-				}
-				offset++
-			}
+			offset, line, col = blockCommentEnd(source, offset+3, line, col+3)
 			tokens = append(tokens, Token{TokenDocComment, source[start:offset], startLine, startCol, start})
 			if !strings.HasSuffix(source[start:offset], "*/") {
 				errors = append(errors, ParseError{Message: "unterminated doc comment", Line: startLine, Column: startCol})
@@ -472,22 +473,7 @@ func tokenizeFrom(source string, inHTML bool) ([]Token, []ParseError) {
 		if offset+1 < len(source) && source[offset:offset+2] == "/*" {
 			start := offset
 			startLine, startCol := line, col
-			offset += 2
-			col += 2
-			for offset+1 < len(source) {
-				if source[offset] == '*' && source[offset+1] == '/' {
-					offset += 2
-					col += 2
-					break
-				}
-				if source[offset] == '\n' {
-					line++
-					col = 0
-				} else {
-					col++
-				}
-				offset++
-			}
+			offset, line, col = blockCommentEnd(source, offset+2, line, col+2)
 			tokens = append(tokens, Token{TokenComment, source[start:offset], startLine, startCol, start})
 			if !strings.HasSuffix(source[start:offset], "*/") {
 				errors = append(errors, ParseError{Message: "unterminated comment", Line: startLine, Column: startCol})
