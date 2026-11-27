@@ -201,10 +201,23 @@ func TestBuilderArgsAfterAJoinLeaveUnqualifiedColumnsAlone(t *testing.T) {
     $tapped = Post::query();
     $tapped->tap(function ($q) { $q->leftJoin('users', 'users.id', '=', 'posts.user_id'); });
     $tapped->where('email', $email);
+    $original = Post::query();
+    $alias = $original;
+    $alias->join('users', 'users.id', '=', 'posts.user_id');
+    $original->where('email', $email);
+    $joined = Post::query();
+    $joined->join('users', 'users.id', '=', 'posts.user_id');
+    $copy = $joined;
+    $copy->where('email', $email);
     $plain = Post::query();
     $plain->where('email', $email);
+    $unrelated = Post::query();
+    $aliased = $plain;
+    $aliased->join('users', 'users.id', '=', 'posts.user_id');
+    $unrelated->where('email', $email);
 `,
 		"Unknown relation 'missingRelation' on model 'Post'",
+		"Unknown column 'email' on model 'Post'",
 		"Unknown column 'email' on model 'Post'",
 	)
 }

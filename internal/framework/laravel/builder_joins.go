@@ -30,22 +30,84 @@ func BuilderMayBeJoined(tokens []parser.Token, doc *scope.Document, line, col in
 	if tokens[head].Kind != parser.TokenVariable || doc == nil {
 		return false
 	}
-	at := textpos.Position{Line: tokens[head].Line, Character: tokens[head].Column}
+	at := tokenPosition(tokens[head])
 	binding := doc.BindingAt(at)
 	if binding == nil {
 		return false
 	}
-	since := lastValueWritten(binding, at)
-	for _, occurrence := range doc.Occurrences(binding) {
-		start := occurrence.Start
-		if before(start, since) || !before(start, at) {
+	return valueJoined(tokens, doc, valueSpan{binding, lastValueWritten(binding, at), at})
+}
+
+type valueSpan struct {
+	binding  *scope.Binding
+	from, to textpos.Position
+}
+
+func valueJoined(tokens []parser.Token, doc *scope.Document, start valueSpan) bool {
+	pending := []valueSpan{start}
+	seen := map[valueSpan]bool{}
+	for len(pending) > 0 {
+		span := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		if seen[span] {
 			continue
 		}
-		if i := tokenAt(tokens, start); i >= 0 && (chainJoins(tokens, i) || assignedJoined(tokens, i)) {
+		seen[span] = true
+		for _, occurrence := range doc.Occurrences(span.binding) {
+			pos := occurrence.Start
+			if before(pos, span.from) || !before(pos, span.to) || span != start && overwritten(span.binding, span.from, pos) {
+				continue
+			}
+			i := tokenAt(tokens, pos)
+			if i >= 0 && (chainJoins(tokens, i) || assignedJoined(tokens, i)) {
+				return true
+			}
+			if alias, ok := aliasSpan(tokens, doc, i, start.to); ok {
+				pending = append(pending, alias)
+			}
+		}
+	}
+	return false
+}
+
+func aliasSpan(tokens []parser.Token, doc *scope.Document, variable int, until textpos.Position) (valueSpan, bool) {
+	if lhs, rhs, ok := variableAssignment(tokens, parser.NextSignificant(tokens, variable+1)); ok && lhs == variable {
+		read := tokenPosition(tokens[rhs])
+		source := doc.BindingAt(read)
+		return valueSpan{source, lastValueWritten(source, read), until}, source != nil
+	}
+	if lhs, rhs, ok := variableAssignment(tokens, parser.PrevSignificant(tokens, variable-1)); ok && rhs == variable {
+		written := tokenPosition(tokens[lhs])
+		target := doc.BindingAt(written)
+		return valueSpan{target, written, until}, target != nil
+	}
+	return valueSpan{}, false
+}
+
+func variableAssignment(tokens []parser.Token, eq int) (lhs, rhs int, ok bool) {
+	if eq < 0 || tokens[eq].Kind != parser.TokenEquals {
+		return -1, -1, false
+	}
+	lhs, rhs = parser.PrevSignificant(tokens, eq-1), parser.NextSignificant(tokens, eq+1)
+	if lhs < 0 || rhs < 0 || tokens[lhs].Kind != parser.TokenVariable || tokens[rhs].Kind != parser.TokenVariable {
+		return -1, -1, false
+	}
+	end := parser.NextSignificant(tokens, rhs+1)
+	return lhs, rhs, end >= 0 && tokens[end].Kind == parser.TokenSemicolon
+}
+
+func overwritten(binding *scope.Binding, from, pos textpos.Position) bool {
+	for i := range binding.Rebinds {
+		rebind := &binding.Rebinds[i]
+		if before(from, rebind.At) && before(rebind.At, pos) && rebind.HoldsAt(pos) && !binding.ReadsItself(i) {
 			return true
 		}
 	}
 	return false
+}
+
+func tokenPosition(t parser.Token) textpos.Position {
+	return textpos.Position{Line: t.Line, Character: t.Column}
 }
 
 func callChainFrom(tokens []parser.Token, head, end int) bool {
