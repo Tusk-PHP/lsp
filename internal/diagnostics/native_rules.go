@@ -12,27 +12,30 @@ type NativeRulesOptions struct {
 	BuilderModelResolver   checks.ModelResolverFunc
 	BuilderMemberChecker   checks.MemberChecker
 	BladePHP               bool
+	BladeControlFlow       bool
 	IncludedFile           bool
 }
 
 func EditRules(opts NativeRulesOptions, shared *checks.Shared) []checks.Rule {
 	typeResolver := MemoizeTypeResolver(opts.TypeResolver)
 	uses := &checks.MemberUseCache{Shared: shared}
-	deprecatedFunctions := &checks.DeprecatedFunctionRule{}
+	deprecatedFunctions := &checks.DeprecatedFunctionRule{Shared: shared}
 	if opts.BuiltinUnavailableRule != nil {
 		deprecatedFunctions.PHPVersion = opts.BuiltinUnavailableRule.PHPVersion
 	}
 	rules := []checks.Rule{
 		&checks.SyntaxErrorRule{},
 		&checks.AbstractInConcreteRule{},
-		&checks.UnknownClassRule{},
-		&checks.UnknownFunctionRule{},
+		&checks.UnknownClassRule{Shared: shared},
+		&checks.UnknownFunctionRule{Shared: shared},
 	}
 	if opts.TypeResolver != nil {
 		rules = append(rules, &checks.UnknownMemberRule{TypeResolver: typeResolver, ConventionMethod: frameworklaravel.ConventionMethod, Shared: shared})
 	}
 	if opts.BuiltinUnavailableRule != nil {
-		rules = append(rules, opts.BuiltinUnavailableRule)
+		builtins := *opts.BuiltinUnavailableRule
+		builtins.Shared = shared
+		rules = append(rules, &builtins)
 	}
 	rules = append(rules,
 		&checks.UnusedImportsRule{},
@@ -43,6 +46,9 @@ func EditRules(opts NativeRulesOptions, shared *checks.Shared) []checks.Rule {
 	)
 	if !opts.BladePHP {
 		rules = append(rules, &checks.UnusedVariableRule{Shared: shared})
+	}
+	if !opts.BladePHP || opts.BladeControlFlow {
+		rules = append(rules, &checks.CompileErrorRule{Shared: shared, View: opts.BladePHP})
 	}
 	return append(rules,
 		&checks.DeprecatedUsageRule{TypeResolver: typeResolver, Uses: uses},
@@ -60,7 +66,7 @@ func SaveRules(opts NativeRulesOptions) []checks.Rule {
 		rules = append(rules, &checks.RedundantNullsafeRule{TypeResolver: opts.TypeResolver})
 	}
 	if opts.BuilderModelResolver != nil && opts.BuilderMemberChecker != nil {
-		rules = append(rules, &checks.InvalidBuilderArgRule{ModelResolver: opts.BuilderModelResolver, Members: opts.BuilderMemberChecker})
+		rules = append(rules, &checks.InvalidBuilderArgRule{ModelResolver: opts.BuilderModelResolver, Members: opts.BuilderMemberChecker, Shared: &checks.Shared{}})
 	}
 	return rules
 }

@@ -4,6 +4,8 @@
 package checks
 
 import (
+	"cmp"
+
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -27,6 +29,10 @@ type Finding struct {
 	Code      rule.Code
 	Message   string // human-readable description
 	Tags      []Tag  // optional LSP diagnostic tags (Unnecessary, Deprecated)
+}
+
+func compareFindingStarts(a, b Finding) int {
+	return cmp.Or(cmp.Compare(a.StartLine, b.StartLine), cmp.Compare(a.StartCol, b.StartCol))
 }
 
 // Rule is a single diagnostic check that can be enabled/disabled.
