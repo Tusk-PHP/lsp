@@ -173,7 +173,7 @@ func saveMessage(t *testing.T, uri, text string) *jsonRPCMessage {
 	return &jsonRPCMessage{JSONRPC: "2.0", Method: "textDocument/didSave", Params: params}
 }
 
-func newServerWithWorkspace(t *testing.T, out io.Writer) *Server {
+func newServerWithWorkspace(t testing.TB, out io.Writer) *Server {
 	t.Helper()
 	s := NewServer(strings.NewReader(""), out, log.New(io.Discard, "", 0))
 	s.workspace = workspace.New(workspace.Options{RootPath: t.TempDir(), Framework: "none", Logger: log.New(io.Discard, "", 0)})

@@ -27,7 +27,7 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 	s.docIndex.reopened(uri)
 	s.indexDocumentMaybeAsync(uri, text)
 	if s.cfg.DiagnosticsEnabled {
-		s.publishDiagnostics(doc)
+		s.publishDiagnosticsInBackground(doc)
 	}
 }
 
