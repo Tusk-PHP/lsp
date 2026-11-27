@@ -209,6 +209,10 @@ func TestBuilderArgsAfterAJoinLeaveUnqualifiedColumnsAlone(t *testing.T) {
     $joined->join('users', 'users.id', '=', 'posts.user_id');
     $copy = $joined;
     $copy->where('email', $email);
+    $referenced = Post::query();
+    $reference = &$referenced;
+    $reference->join('users', 'users.id', '=', 'posts.user_id');
+    $referenced->where('email', $email);
     $plain = Post::query();
     $plain->where('email', $email);
     $unrelated = Post::query();

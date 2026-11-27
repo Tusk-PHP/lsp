@@ -76,7 +76,7 @@ func aliasSpan(tokens []parser.Token, doc *scope.Document, variable int, until t
 		source := doc.BindingAt(read)
 		return valueSpan{source, lastValueWritten(source, read), until}, source != nil
 	}
-	if lhs, rhs, ok := variableAssignment(tokens, parser.PrevSignificant(tokens, variable-1)); ok && rhs == variable {
+	if lhs, rhs, ok := variableAssignment(tokens, assignmentBefore(tokens, variable)); ok && rhs == variable {
 		written := tokenPosition(tokens[lhs])
 		target := doc.BindingAt(written)
 		return valueSpan{target, written, until}, target != nil
@@ -84,11 +84,22 @@ func aliasSpan(tokens []parser.Token, doc *scope.Document, variable int, until t
 	return valueSpan{}, false
 }
 
+func assignmentBefore(tokens []parser.Token, variable int) int {
+	eq := parser.PrevSignificant(tokens, variable-1)
+	if eq >= 0 && tokens[eq].Kind == parser.TokenAmpersand {
+		return parser.PrevSignificant(tokens, eq-1)
+	}
+	return eq
+}
+
 func variableAssignment(tokens []parser.Token, eq int) (lhs, rhs int, ok bool) {
 	if eq < 0 || tokens[eq].Kind != parser.TokenEquals {
 		return -1, -1, false
 	}
 	lhs, rhs = parser.PrevSignificant(tokens, eq-1), parser.NextSignificant(tokens, eq+1)
+	if rhs >= 0 && tokens[rhs].Kind == parser.TokenAmpersand {
+		rhs = parser.NextSignificant(tokens, rhs+1)
+	}
 	if lhs < 0 || rhs < 0 || tokens[lhs].Kind != parser.TokenVariable || tokens[rhs].Kind != parser.TokenVariable {
 		return -1, -1, false
 	}
