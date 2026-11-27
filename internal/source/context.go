@@ -1,6 +1,7 @@
 package sourcectx
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -58,6 +59,9 @@ type NameContext struct {
 	File            *parser.FileNode
 	Called          bool
 	FunctionCall    bool
+	// InString says whether the cursor is inside a string literal, between
+	// its quotes.
+	InString bool
 }
 
 type CursorContext struct {
@@ -65,6 +69,15 @@ type CursorContext struct {
 	Namespace string
 	Uses      []parser.UseNode
 	Scope     *Scope
+}
+
+// ScopeMethod returns the class and method the cursor is in, or "" when
+// it is in neither.
+func (c *CursorContext) ScopeMethod() (class, method string) {
+	if c == nil || c.Scope == nil || c.Scope.Kind != ScopeMethod {
+		return "", ""
+	}
+	return c.Scope.ClassFQN, c.Scope.MethodName
 }
 
 func (c *CursorContext) Name() *NameContext {
@@ -143,7 +156,21 @@ func (d *Document) NameAt(pos protocol.Position) *NameContext {
 		File:            d.file,
 		Called:          called,
 		FunctionCall:    called && accessKind == AccessNone,
+		InString:        inString(d.result.Tokens, d.lines, pos),
 	}
+}
+
+func inString(tokens []parser.Token, lines []string, pos protocol.Position) bool {
+	offset := pos.Character
+	for _, l := range lines[:pos.Line] {
+		offset += len(l) + 1
+	}
+	i := sort.Search(len(tokens), func(i int) bool { return tokens[i].Offset >= offset }) - 1
+	if i < 0 {
+		return false
+	}
+	t := tokens[i]
+	return t.Kind == parser.TokenStringLiteral && offset < t.Offset+len(t.Value)
 }
 
 func WordAt(source string, pos protocol.Position) (string, protocol.Range) {
