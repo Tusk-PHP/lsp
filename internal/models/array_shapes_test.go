@@ -413,3 +413,30 @@ func mustReadFile(t *testing.T, path string) []byte {
 	}
 	return data
 }
+
+func TestLaravelFormRequestKeysFromAParentsRules(t *testing.T) {
+	dir, idx := setupTestProject(t)
+	files := map[string]string{
+		"BaseRequest.php":      "<?php\nnamespace App\\Http\\Requests;\nclass BaseRequest {\n    public function rules(): array {\n        return ['title' => 'required', 'body' => 'string'];\n    }\n}\n",
+		"StorePostRequest.php": "<?php\nnamespace App\\Http\\Requests;\nclass StorePostRequest extends BaseRequest {}\n",
+	}
+	for name, content := range files {
+		path := filepath.Join(dir, "app", "Http", "Requests", name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		idx.IndexFile("file://"+path, content)
+	}
+
+	fields := NewFrameworkArrayResolver(idx, dir, "laravel").ResolveMethodReturnKeys(`App\Http\Requests\StorePostRequest`, "validated")
+	keys := map[string]bool{}
+	for _, f := range fields {
+		keys[f.Key] = true
+	}
+	if len(keys) != 2 || !keys["title"] || !keys["body"] {
+		t.Errorf("a request without its own rules() takes its parent's keys, got %v", keys)
+	}
+}

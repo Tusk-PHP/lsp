@@ -1,9 +1,8 @@
 package resolve
 
 import (
-	"strings"
-
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -37,66 +36,30 @@ func (r *Resolver) enclosingReturnType(lines []string, pos textpos.Position, fil
 	return r.resolveDocTypeIn(raw, owner, file)
 }
 
-// resolveForeachValueType looks backward for a foreach loop that binds varPrefix
-// as its value or key variable and returns the value or key type of what it
-// iterates. Handles both "foreach ($x as $v)" and "foreach ($x as $k => $v)".
+// resolveForeachValueType finds the nearest foreach before pos that binds
+// varPrefix as its value or key variable and returns the value or key type
+// of what it iterates.
 func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos textpos.Position, file *parser.FileNode, firstLine int) ResolvedType {
-	var source string
-	for i := pos.Line; i >= firstLine && i >= pos.Line-200; i-- {
-		if i >= len(lines) {
+	t := r.syntaxTree(lines, file)
+	off, ok := t.offset(pos)
+	if !ok {
+		return ResolvedType{}
+	}
+	ctx := ExprContext{Lines: lines, Pos: pos, File: file}
+	for i := len(t.foreaches) - 1; i >= 0; i-- {
+		f := t.foreaches[i]
+		if f.Start > off {
 			continue
 		}
-		line := strings.TrimSpace(lines[i])
-		if !strings.Contains(line, "foreach") || !strings.Contains(line, " as ") {
+		line, _ := t.lines.Position(f.Start)
+		if line < firstLine || line < pos.Line-200 {
+			break
+		}
+		isKey := f.Key != nil && t.isVariable(f.Key, varPrefix)
+		if !isKey && !t.isVariable(f.Value, varPrefix) {
 			continue
 		}
-		foreachIdx := strings.Index(line, "foreach")
-		openParen := strings.IndexByte(line[foreachIdx:], '(')
-		if openParen < 0 {
-			continue
-		}
-		openParen += foreachIdx
-		asIdx := strings.Index(line[openParen:], " as ")
-		if asIdx < 0 {
-			continue
-		}
-		asIdx += openParen
-		afterAs := line[asIdx+4:]
-		keyVar, valueVar := "", ""
-		if arrowIdx := strings.Index(afterAs, "=>"); arrowIdx >= 0 {
-			keyVar = strings.TrimSpace(afterAs[:arrowIdx])
-			valueVar = strings.TrimSpace(afterAs[arrowIdx+2:])
-		} else {
-			valueVar = strings.TrimSpace(afterAs)
-		}
-		valueVar = strings.TrimPrefix(strings.TrimRight(valueVar, ") {:;\t "), "&")
-		isKey := keyVar == varPrefix
-		if valueVar != varPrefix && !isKey {
-			continue
-		}
-		iterableExpr := strings.TrimSpace(line[openParen+1 : asIdx])
-		if iterableExpr == "" {
-			continue
-		}
-
-		var iterableType ResolvedType
-		hasChain := strings.Contains(iterableExpr, "->") || strings.Contains(iterableExpr, "::")
-		if source == "" && hasChain {
-			source = r.JoinLines(lines)
-		}
-		switch {
-		case hasChain:
-			iterableType = r.ChainType(iterableExpr, source, pos, file)
-		case strings.HasPrefix(iterableExpr, "$") && extractLeadingVariable(iterableExpr) == iterableExpr:
-			iterableType = r.ResolveVariableTypeTyped(iterableExpr, lines, pos, file)
-		default:
-			iterableType = r.ExpressionType(iterableExpr, ExprContext{Lines: lines, Pos: pos, File: file})
-			if iterableType.IsEmpty() {
-				if funcName := extractFunctionCallName(iterableExpr); funcName != "" && r.Index != nil {
-					iterableType = r.FunctionTypeForCall(r.typedFunction(funcName, file), file, nil)
-				}
-			}
-		}
+		iterableType := r.iterableType(t, f.Subject, ctx)
 		if iterableType.IsEmpty() {
 			continue
 		}
@@ -112,4 +75,27 @@ func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos
 		return arrayElementType(iterableType)
 	}
 	return ResolvedType{}
+}
+
+func (t *syntaxTree) isVariable(e ast.Expr, name string) bool {
+	v, ok := e.(*ast.Variable)
+	return ok && t.text(v) == name
+}
+
+func (r *Resolver) iterableType(t *syntaxTree, e ast.Expr, ctx ExprContext) ResolvedType {
+	if isMemberChain(e) {
+		return r.delegatedType(t, e, ctx)
+	}
+	if rt := r.typeOf(t, e, nil, ctx); !rt.IsEmpty() {
+		return rt
+	}
+	call, ok := e.(*ast.Call)
+	if !ok || r.Index == nil {
+		return ResolvedType{}
+	}
+	name, ok := call.Callee.(*ast.ConstFetch)
+	if !ok {
+		return ResolvedType{}
+	}
+	return r.FunctionTypeForCall(r.typedFunction(t.text(name), ctx.File), ctx.File, nil)
 }

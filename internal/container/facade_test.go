@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -45,7 +47,7 @@ func TestParseFacadeAccessorReturn(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseFacadeAccessorReturn(tt.source)
+			got := parseFacadeAccessorReturn("<?php\nclass F extends Facade {\n"+tt.source+"\n}\n", phpparser.OnlyGrammar(token.Latest))
 			if got != tt.want {
 				t.Errorf("parseFacadeAccessorReturn() = %q, want %q", got, tt.want)
 			}
@@ -186,5 +188,20 @@ class MyService {
 	concrete := ca.ResolveFacade(`App\Facades\MyFacade`)
 	if concrete != `App\Services\MyService` {
 		t.Errorf("ResolveFacade(MyFacade) = %q, want App\\Services\\MyService", concrete)
+	}
+}
+
+func TestFacadeAccessorNeedsAStringReturn(t *testing.T) {
+	for _, src := range []string{
+		"<?php\nabstract class F { abstract protected static function getFacadeAccessor(); }\n",
+		"<?php\nclass F { protected static function getFacadeAccessor() { $x = 1; return self::NAME; } }\n",
+		"<?php\nclass F { protected static function getFacadeAccessor() { return; } }\n",
+	} {
+		if got := parseFacadeAccessorReturn(src, phpparser.OnlyGrammar(token.Latest)); got != "" {
+			t.Errorf("%q: %q", src, got)
+		}
+	}
+	if got := parseFacadeAccessorReturn("<?php\nclass A { function x() {} }\nclass F { protected static function getFacadeAccessor() { return 'a'; } }\nclass G { protected static function getFacadeAccessor() { return 'b'; } }\n", phpparser.OnlyGrammar(token.Latest)); got != "a" {
+		t.Errorf("first accessor: %q", got)
 	}
 }
