@@ -4,9 +4,9 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // inferClassStringBinding attempts to bind @template parameters for a generic
@@ -19,7 +19,7 @@ import (
 //
 // Variables from parameters or with multiple assignments are not bound —
 // kept restrictive to avoid false positives.
-func (r *Resolver) inferClassStringBinding(classFQN, argStr string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) inferClassStringBinding(classFQN, argStr string, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	sym := r.Index.Lookup(classFQN)
 	if sym == nil || len(sym.Templates) == 0 {
 		return ResolvedType{}
@@ -199,7 +199,7 @@ func splitArgList(argStr string) []string {
 //   - `$var` → traces single unambiguous ::class assignment in enclosing scope
 //
 // Returns "" if the argument cannot be resolved to a class name.
-func (r *Resolver) resolveClassStringArg(arg string, lines []string, pos protocol.Position, file *parser.FileNode) string {
+func (r *Resolver) resolveClassStringArg(arg string, lines []string, pos textpos.Position, file *parser.FileNode) string {
 	arg = strings.TrimSpace(arg)
 
 	// String literal: 'App\\MyModel' or "App\\MyModel"
@@ -236,7 +236,7 @@ func (r *Resolver) resolveClassStringArg(arg string, lines []string, pos protoco
 // exactly one assignment from a ClassName::class expression in the enclosing
 // function. Returns "" if the variable is a parameter, reassigned, or the
 // assignment RHS is not a ::class form.
-func (r *Resolver) traceVariableToClassString(varName string, lines []string, pos protocol.Position, file *parser.FileNode) string {
+func (r *Resolver) traceVariableToClassString(varName string, lines []string, pos textpos.Position, file *parser.FileNode) string {
 	source := r.JoinLines(lines)
 	doc := r.scopeDocument(lines)
 
@@ -279,7 +279,7 @@ func (r *Resolver) traceVariableToClassString(varName string, lines []string, po
 }
 
 // extractRangeText extracts the substring from source covered by rng.
-func extractRangeText(source string, rng protocol.Range) string {
+func extractRangeText(source string, rng textpos.Range) string {
 	lines := strings.Split(source, "\n")
 	if rng.Start.Line >= len(lines) {
 		return ""
@@ -319,7 +319,7 @@ func extractRangeText(source string, rng protocol.Range) string {
 }
 
 // scopeCoversOrPrecedesPos returns true if pos is within or before the end of rng.
-func scopeCoversOrPrecedesPos(rng protocol.Range, pos protocol.Position) bool {
+func scopeCoversOrPrecedesPos(rng textpos.Range, pos textpos.Position) bool {
 	if pos.Line > rng.End.Line {
 		return false
 	}

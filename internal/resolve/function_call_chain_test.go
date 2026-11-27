@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // mapperChainSource mirrors open-southeners/laravel-data-mapper: a function
@@ -41,16 +41,16 @@ class Service {
 // what the function alone returns.
 func TestFunctionCallChainBindsMethodTemplate(t *testing.T) {
 	r, file, lines := setupBoxResolver(t, mapperChainSource)
-	r.TypedChainResolver = func(req *Resolver, expr, _ string, _ protocol.Position, f *parser.FileNode) ResolvedType {
+	r.TypedChainResolver = func(req *Resolver, expr, _ string, _ textpos.Position, f *parser.FileNode) ResolvedType {
 		return req.ExpressionType(expr, ExprContext{File: f})
 	}
 
-	pos := protocol.Position{Line: lineContaining(t, lines, "$data =")}
+	pos := textpos.Position{Line: lineContaining(t, lines, "$data =")}
 	if got := r.ResolveVariableTypeTyped("$data", lines, pos, file).FullString(); got != "App\\CreateProjectData" {
 		t.Fatalf("$data = %q, want App\\CreateProjectData", got)
 	}
 
-	pos = protocol.Position{Line: lineContaining(t, lines, "$plain =")}
+	pos = textpos.Position{Line: lineContaining(t, lines, "$plain =")}
 	if got := r.ResolveVariableTypeTyped("$plain", lines, pos, file).FullString(); got != "App\\Mapper" {
 		t.Fatalf("$plain = %q, want App\\Mapper", got)
 	}

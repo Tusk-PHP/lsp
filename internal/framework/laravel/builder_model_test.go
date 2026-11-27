@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func TestBuilderModel(t *testing.T) {
@@ -25,7 +25,7 @@ func TestBuilderModel(t *testing.T) {
 		{"::where(", "where", ""},
 		{"$unknown->where(", "where", ""},
 	} {
-		pos := protocol.Position{Line: line, Character: len(c.prefix)}
+		pos := textpos.Position{Line: line, Character: len(c.prefix)}
 		if got := BuilderModel(r, idx, c.prefix, c.method, src, pos, file).FQN; got != c.want {
 			t.Errorf("BuilderModel(%q, %q) = %q, want %q", c.prefix, c.method, got, c.want)
 		}

@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // buildRecursionResolver creates a Resolver whose ChainResolver and
@@ -36,7 +36,7 @@ func buildRecursionResolver(t *testing.T, idx *symbols.Index, lines []string, fi
 	t.Helper()
 	r := NewResolver(idx)
 
-	r.ChainResolver = func(req *Resolver, expr, source string, pos protocol.Position, f *parser.FileNode) string {
+	r.ChainResolver = func(req *Resolver, expr, source string, pos textpos.Position, f *parser.FileNode) string {
 		if chainHook != nil {
 			chainHook()
 		}
@@ -62,7 +62,7 @@ func buildRecursionResolver(t *testing.T, idx *symbols.Index, lines []string, fi
 		return ""
 	}
 
-	r.TypedChainResolver = func(req *Resolver, expr, source string, pos protocol.Position, f *parser.FileNode) ResolvedType {
+	r.TypedChainResolver = func(req *Resolver, expr, source string, pos textpos.Position, f *parser.FileNode) ResolvedType {
 		if chainHook != nil {
 			chainHook()
 		}
@@ -109,7 +109,7 @@ $y = $x->bar();
 
 	// Position the cursor on the "$y = $x->bar();" line, resolving $x.
 	// This will hit $x = $x->foo() on the line above and recurse.
-	pos := protocol.Position{Line: 2}
+	pos := textpos.Position{Line: 2}
 	got := r.ResolveVariableType("$x", lines, pos, file)
 
 	// We don't assert a specific type — any return (including "") is a pass.
@@ -130,7 +130,7 @@ $x = $x->foo();
 	var calls int
 	r := buildRecursionResolver(t, idx, lines, file, func() { calls++ })
 
-	pos := protocol.Position{Line: 1}
+	pos := textpos.Position{Line: 1}
 	got := r.ResolveVariableTypeTyped("$x", lines, pos, file)
 
 	t.Logf("ResolveVariableTypeTyped returned %v after %d chain calls", got, calls)
@@ -155,7 +155,7 @@ $b = $a->y();
 	var calls int
 	r := buildRecursionResolver(t, idx, lines, file, func() { calls++ })
 
-	pos := protocol.Position{Line: 2}
+	pos := textpos.Position{Line: 2}
 	gotA := r.ResolveVariableType("$a", lines, pos, file)
 	gotB := r.ResolveVariableType("$b", lines, pos, file)
 
@@ -176,7 +176,7 @@ $b = $a->y();
 	var calls int
 	r := buildRecursionResolver(t, idx, lines, file, func() { calls++ })
 
-	pos := protocol.Position{Line: 2}
+	pos := textpos.Position{Line: 2}
 	gotA := r.ResolveVariableTypeTyped("$a", lines, pos, file)
 	gotB := r.ResolveVariableTypeTyped("$b", lines, pos, file)
 
@@ -199,7 +199,7 @@ $c = $a->z();
 	var calls int
 	r := buildRecursionResolver(t, idx, lines, file, func() { calls++ })
 
-	pos := protocol.Position{Line: 3}
+	pos := textpos.Position{Line: 3}
 	got := r.ResolveVariableType("$a", lines, pos, file)
 
 	t.Logf("deep cycle $a → %q after %d chain calls", got, calls)
@@ -232,7 +232,7 @@ class Logger {
 	r := buildRecursionResolver(t, idx, lines, file, nil)
 
 	// $logger is assigned from "new Logger()" — must resolve to Monolog\Logger.
-	pos := protocol.Position{Line: 6}
+	pos := textpos.Position{Line: 6}
 	got := r.ResolveVariableType("$logger", lines, pos, file)
 	if got != "Monolog\\Logger" {
 		t.Errorf("expected Monolog\\Logger, got %q (regression: depth guard triggered prematurely)", got)
@@ -263,7 +263,7 @@ class Logger {}
 
 	r := buildRecursionResolver(t, idx, lines, file, nil)
 
-	pos := protocol.Position{Line: 1}
+	pos := textpos.Position{Line: 1}
 
 	// First call: self-referential, guard should fire and return ""
 	_ = r.ResolveVariableType("$x", lines, pos, file)
@@ -273,7 +273,7 @@ class Logger {}
 	}
 
 	// Second call: normal resolution must still work.
-	pos2 := protocol.Position{Line: 2}
+	pos2 := textpos.Position{Line: 2}
 	got2 := r.ResolveVariableType("$logger", lines, pos2, file)
 	if got2 != "Monolog\\Logger" {
 		t.Errorf("after guarded call, normal resolution got %q, want Monolog\\Logger", got2)
@@ -291,7 +291,7 @@ $result = Factory::make();
 	}
 
 	e := NewEngine(symbols.NewIndex())
-	e.TypedChainResolver = func(_ *Resolver, expr, source string, pos protocol.Position, f *parser.FileNode) ResolvedType {
+	e.TypedChainResolver = func(_ *Resolver, expr, source string, pos textpos.Position, f *parser.FileNode) ResolvedType {
 		if expr == "Factory::make()" {
 			time.Sleep(20 * time.Millisecond)
 			return ResolvedType{FQN: "App\\Logger"}
@@ -302,7 +302,7 @@ $result = Factory::make();
 	const workers = 64
 	var wg sync.WaitGroup
 	results := make(chan string, workers)
-	pos := protocol.Position{Line: 1}
+	pos := textpos.Position{Line: 1}
 
 	for range workers {
 		wg.Add(1)

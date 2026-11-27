@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // ChainType gives the type of an expression such as "Category::query()->first()"
@@ -14,7 +14,7 @@ import (
 // account. Every feature asks it, so hover, completion, go-to-definition,
 // inlay hints and diagnostics agree on a chain's type. A resolver wired to
 // another one through TypedChainResolver asks that one.
-func (r *Resolver) ChainType(expr, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) ChainType(expr, source string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	if r.TypedChainResolver != nil {
 		return r.TypedChainResolver(r, expr, source, pos, file)
 	}
@@ -22,7 +22,7 @@ func (r *Resolver) ChainType(expr, source string, pos protocol.Position, file *p
 }
 
 // chainType is ChainType with this resolver's own walker.
-func (r *Resolver) chainType(expr, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) chainType(expr, source string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	expr = strings.TrimSpace(expr)
 	if expr == "" {
 		return ResolvedType{}
@@ -36,7 +36,7 @@ func (r *Resolver) chainType(expr, source string, pos protocol.Position, file *p
 // AccessOwnerType gives the type of the receiver of the member that starts at
 // line[wordStart], after its -> or ::, as ChainType types it: for
 // "$a->b()->c" with wordStart at c, the type $a->b() gives.
-func (r *Resolver) AccessOwnerType(line string, wordStart int, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) AccessOwnerType(line string, wordStart int, source string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	if r.TypedChainResolver == nil {
 		return r.accessOwnerType(line, wordStart, source, pos, file)
 	}
@@ -57,7 +57,7 @@ func (r *Resolver) AccessOwnerType(line string, wordStart int, source string, po
 
 // resolveChainWithContext is the generic-aware chain resolver. It walks backward
 // through the chain and tracks generic type parameters at each step.
-func (r *Resolver) accessOwnerType(line string, wordStart int, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) accessOwnerType(line string, wordStart int, source string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	i := wordStart
 
 	for i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {

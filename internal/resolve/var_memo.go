@@ -1,8 +1,8 @@
 package resolve
 
 import (
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/scope"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // A variable's type is the same everywhere its last write still holds: on
@@ -30,7 +30,7 @@ const maxMemoDistance = 190
 // type might depend on more than its last write: no binding (a global or a
 // captured variable), several writes that may give its value, a read far from
 // the write, or a call in between that may narrow it.
-func (r *Resolver) varMemoKeyAt(vs variableScope, varName string, lines []string, pos protocol.Position) (varMemoKey, bool) {
+func (r *Resolver) varMemoKeyAt(vs variableScope, varName string, lines []string, pos textpos.Position) (varMemoKey, bool) {
 	b := vs.binding
 	if b == nil || b.Kind == scope.BindingImport || !vs.reach.Single() {
 		return varMemoKey{}, false

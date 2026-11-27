@@ -4,12 +4,12 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // enclosingReturnType is the declared return type of the method or function
 // at pos, preferring its PHPDoc where that says more.
-func (r *Resolver) enclosingReturnType(lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) enclosingReturnType(lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	if file == nil {
 		return ResolvedType{}
 	}
@@ -40,7 +40,7 @@ func (r *Resolver) enclosingReturnType(lines []string, pos protocol.Position, fi
 // resolveForeachValueType looks backward for a foreach loop that binds varPrefix
 // as its value or key variable and returns the value or key type of what it
 // iterates. Handles both "foreach ($x as $v)" and "foreach ($x as $k => $v)".
-func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos protocol.Position, file *parser.FileNode, firstLine int) ResolvedType {
+func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos textpos.Position, file *parser.FileNode, firstLine int) ResolvedType {
 	var source string
 	for i := pos.Line; i >= firstLine && i >= pos.Line-200; i-- {
 		if i >= len(lines) {

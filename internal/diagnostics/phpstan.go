@@ -11,6 +11,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 type phpstanRunner struct {
@@ -161,9 +162,9 @@ func (r *phpstanRunner) parseOutput(data []byte, sourceLines []string) []protoco
 			startCol, endCol := diagnosticRange(sourceLines, line, msg.Message)
 
 			diags = append(diags, protocol.Diagnostic{
-				Range: protocol.Range{
-					Start: protocol.Position{Line: line, Character: startCol},
-					End:   protocol.Position{Line: line, Character: endCol},
+				Range: textpos.Range{
+					Start: textpos.Position{Line: line, Character: startCol},
+					End:   textpos.Position{Line: line, Character: endCol},
 				},
 				Severity: protocol.DiagnosticSeverityError,
 				Source:   string(rule.SourcePHPStan),

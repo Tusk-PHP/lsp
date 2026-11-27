@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // instanceof narrowing: `$x instanceof Foo` in an if, an early-return guard,
@@ -268,7 +268,7 @@ func orBefore(s string) bool {
 // statementPrefix is the text of the statement the read at pos is in, up to
 // pos: the read's line, and the lines before it that the statement continues
 // from, joined by spaces.
-func statementPrefix(lines []string, pos protocol.Position) string {
+func statementPrefix(lines []string, pos textpos.Position) string {
 	line := lines[pos.Line]
 	if pos.Character < len(line) {
 		line = line[:pos.Character]
@@ -296,7 +296,7 @@ const maxStatementLines = 6
 
 // switchCaseInstanceof applies `case $x instanceof Foo:` in a
 // `switch (true)` the read is under, with no break between them.
-func (r *Resolver) switchCaseInstanceof(varName string, t ResolvedType, lines []string, from int, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) switchCaseInstanceof(varName string, t ResolvedType, lines []string, from int, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	depth := 0
 	var names []string
 	for i := pos.Line - 1; i > from && i >= pos.Line-maxCaseLines; i-- {

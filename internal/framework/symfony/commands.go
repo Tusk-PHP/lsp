@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // CommandEntry describes a discovered Symfony console command.
@@ -18,7 +18,7 @@ type CommandEntry struct {
 	Description string
 	ClassFQN    string
 	URI         string
-	Range       protocol.Range
+	Range       textpos.Range
 }
 
 // CommandIndex holds all discovered Symfony commands for the project. It is
@@ -240,9 +240,9 @@ func discoverCommandsInFile(uri, source string) []CommandEntry {
 			}
 			name, desc := parseAsCommandBlock(block)
 			if name != "" {
-				rng := protocol.Range{
-					Start: protocol.Position{Line: i, Character: leadingYAMLIndent(line)},
-					End:   protocol.Position{Line: i, Character: leadingYAMLIndent(line) + len(trimmed)},
+				rng := textpos.Range{
+					Start: textpos.Position{Line: i, Character: leadingYAMLIndent(line)},
+					End:   textpos.Position{Line: i, Character: leadingYAMLIndent(line) + len(trimmed)},
 				}
 				entries = append(entries, CommandEntry{
 					Name:        name,
@@ -266,9 +266,9 @@ func discoverCommandsInFile(uri, source string) []CommandEntry {
 						break
 					}
 				}
-				rng := protocol.Range{
-					Start: protocol.Position{Line: i, Character: leadingYAMLIndent(line)},
-					End:   protocol.Position{Line: i, Character: leadingYAMLIndent(line) + len(trimmed)},
+				rng := textpos.Range{
+					Start: textpos.Position{Line: i, Character: leadingYAMLIndent(line)},
+					End:   textpos.Position{Line: i, Character: leadingYAMLIndent(line) + len(trimmed)},
 				}
 				entries = append(entries, CommandEntry{
 					Name:        name,

@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // NewChainEngine returns an Engine over index that resolves method chains in
@@ -19,7 +19,7 @@ func NewChainEngine(index *symbols.Index) *Engine {
 
 // ExpressionClass gives the class an expression such as "Category::first()"
 // or "$foo->bar()->baz()" evaluates to, without type arguments.
-func (r *Resolver) ExpressionClass(expr string, source string, pos protocol.Position, file *parser.FileNode) string {
+func (r *Resolver) ExpressionClass(expr string, source string, pos textpos.Position, file *parser.FileNode) string {
 	expr = strings.TrimSpace(expr)
 	if expr == "" {
 		return ""
@@ -34,7 +34,7 @@ func (r *Resolver) ExpressionClass(expr string, source string, pos protocol.Posi
 // "Collection<int, User>"), the same one hover and completion see. It falls
 // back to ExpressionClass when that can't be worked out. Each lookup is a
 // request of its own.
-func (e *Engine) DiagnosticType(expr string, source string, pos protocol.Position, file *parser.FileNode) string {
+func (e *Engine) DiagnosticType(expr string, source string, pos textpos.Position, file *parser.FileNode) string {
 	if rt := e.Resolver().ChainType(expr, source, pos, file); !rt.IsEmpty() {
 		return rt.FullString()
 	}
@@ -46,7 +46,7 @@ func (e *Engine) DiagnosticType(expr string, source string, pos protocol.Positio
 // just after the operator (-> or ::) to  It handles recursive chains
 // like Category::query()->with('form')->, container calls through
 // ContainerCall, and members forwarded to an Eloquent builder.
-func (r *Resolver) AccessChainClass(line string, wordStart int, source string, pos protocol.Position, file *parser.FileNode) string {
+func (r *Resolver) AccessChainClass(line string, wordStart int, source string, pos textpos.Position, file *parser.FileNode) string {
 	i := wordStart
 
 	// Skip whitespace before the operator

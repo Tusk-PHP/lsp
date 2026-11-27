@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // The collector records enough of a file's control flow to tell which writes
@@ -29,10 +29,10 @@ const (
 
 // block is a pair of braces.
 type block struct {
-	open, close protocol.Position // the `{` and the `}`
+	open, close textpos.Position // the `{` and the `}`
 	// head is a loop's `(`, where a foreach writes its variables again at the
 	// start of each turn; the `{` when there's none.
-	head   protocol.Position
+	head   textpos.Position
 	parent int // the block around it, or -1
 	kind   blockKind
 	// prev and next link the blocks of one if/elseif/else chain, or -1.
@@ -42,7 +42,7 @@ type block struct {
 // flowMark is a jump, with the loop or switch it leaves (-1 when that isn't
 // known).
 type flowMark struct {
-	at    protocol.Position
+	at    textpos.Position
 	block int
 }
 
@@ -108,7 +108,7 @@ func (f *flowState) closeBlock(tokens []parser.Token, i int) {
 }
 
 // closeAll ends the blocks left open at end.
-func (f *flowState) closeAll(end protocol.Position) {
+func (f *flowState) closeAll(end textpos.Position) {
 	for _, idx := range f.open {
 		f.doc.blocks[idx].close = end
 	}
@@ -130,7 +130,7 @@ func (f *flowState) keyword(tokens []parser.Token, i int) {
 	case "case", "default":
 		if idx := f.current(); idx >= 0 {
 			if f.doc.labels == nil {
-				f.doc.labels = map[int][]protocol.Position{}
+				f.doc.labels = map[int][]textpos.Position{}
 			}
 			f.doc.labels[idx] = append(f.doc.labels[idx], tokenRange(tokens[i]).Start)
 		}
@@ -202,7 +202,7 @@ func (f *flowState) chainBefore(tokens []parser.Token, kw int) int {
 }
 
 // containsAt reports whether block idx holds p, -1 being the whole file.
-func (d *Document) containsAt(idx int, p protocol.Position) bool {
+func (d *Document) containsAt(idx int, p textpos.Position) bool {
 	if idx < 0 {
 		return true
 	}
@@ -213,7 +213,7 @@ func (d *Document) containsAt(idx int, p protocol.Position) bool {
 // innermostBlockAt returns the innermost block holding p, or -1. Blocks are
 // recorded in the order they open, so it's the last one opening before p, or
 // one around that.
-func (d *Document) innermostBlockAt(p protocol.Position) int {
+func (d *Document) innermostBlockAt(p textpos.Position) int {
 	i := sort.Search(len(d.blocks), func(i int) bool { return !positionBefore(d.blocks[i].open, p) }) - 1
 	for i >= 0 && !d.containsAt(i, p) {
 		i = d.blocks[i].parent
@@ -228,7 +228,7 @@ const maxJumpsChecked = 32
 // leavesBetween reports whether a jump between from and to may leave that
 // stretch: one that leaves a loop or switch begun before from or ended after
 // to, or one whose target isn't known.
-func (d *Document) leavesBetween(from, to protocol.Position) bool {
+func (d *Document) leavesBetween(from, to textpos.Position) bool {
 	lo := sort.Search(len(d.jumps), func(i int) bool { return positionBefore(from, d.jumps[i].at) })
 	for n, j := range d.jumps[lo:] {
 		if !positionBefore(j.at, to) {
@@ -248,7 +248,7 @@ func (d *Document) leavesBetween(from, to protocol.Position) bool {
 // entersBetween reports whether a case label between from and to lets code in
 // at to without passing from: a label of block idx, which holds from, or of a
 // block around it.
-func (d *Document) entersBetween(idx int, from, to protocol.Position) bool {
+func (d *Document) entersBetween(idx int, from, to textpos.Position) bool {
 	if len(d.labels) == 0 {
 		return false
 	}
@@ -265,7 +265,7 @@ func (d *Document) entersBetween(idx int, from, to protocol.Position) bool {
 // tryBetween reports whether a block from idx outwards, up to the first that
 // holds p, is a try block: an exception there may skip what follows it in the
 // block and still reach p through a catch.
-func (d *Document) tryBetween(idx int, p protocol.Position) bool {
+func (d *Document) tryBetween(idx int, p textpos.Position) bool {
 	for ; idx >= 0 && !d.containsAt(idx, p); idx = d.blocks[idx].parent {
 		if d.blocks[idx].kind == blockTry {
 			return true
@@ -276,8 +276,8 @@ func (d *Document) tryBetween(idx int, p protocol.Position) bool {
 
 // effect is where a write's value comes from and from where on it holds.
 type effect struct {
-	rhs protocol.Position // where the value is read: reads there still see the previous one
-	end protocol.Position // the end of the assignment, where the new value holds
+	rhs textpos.Position // where the value is read: reads there still see the previous one
+	end textpos.Position // the end of the assignment, where the new value holds
 	// statement is set when the assignment is a whole statement ended by `;`.
 	statement bool
 	// destructure is set for a variable written by `[…] = …` or `list(…) = …`,
@@ -381,14 +381,14 @@ func isShortCircuitOperand(tokens []parser.Token, i int) bool {
 }
 
 // takesEffectBy reports whether the value written here is written by pos.
-func (r *Rebind) takesEffectBy(pos protocol.Position) bool {
+func (r *Rebind) takesEffectBy(pos textpos.Position) bool {
 	return !positionBefore(pos, r.effect.end)
 }
 
 // declEffectOrToken is the declaration's effect, which is the variable itself
 // when the declaration isn't an assignment.
 func (b *Binding) declEffectOrToken() effect {
-	if b.declEffect.end == (protocol.Position{}) {
+	if b.declEffect.end == (textpos.Position{}) {
 		return effect{rhs: b.Decl.End, end: b.Decl.End}
 	}
 	return b.declEffect

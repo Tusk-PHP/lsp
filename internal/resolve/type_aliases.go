@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func (r *Resolver) expandTypeAliases(raw, ownerFQN string, file *parser.FileNode) string {
@@ -80,7 +80,7 @@ func (r *Resolver) expandAliasToken(token, ownerFQN string, file *parser.FileNod
 	return r.expandTypeAliasesSeen(alias.Type, ownerFQN, file, seen)
 }
 
-func ownerScopeFQN(member *symbols.Symbol, pos protocol.Position, file *parser.FileNode) string {
+func ownerScopeFQN(member *symbols.Symbol, pos textpos.Position, file *parser.FileNode) string {
 	if member != nil {
 		if member.ParentFQN != "" {
 			return member.ParentFQN

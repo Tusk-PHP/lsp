@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 	internaltypes "github.com/Tusk-PHP/lsp/internal/types"
 )
 
@@ -227,7 +227,7 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 	})
 
 	t.Run("argument and constructor helpers infer generic arrays", func(t *testing.T) {
-		pos := protocol.Position{Line: lineContaining(t, lines, "$collection =")}
+		pos := textpos.Position{Line: lineContaining(t, lines, "$collection =")}
 		argRT := r.inferArgType(`$numbers, $ignored`, lines, pos, file, 0)
 		if argRT.String() != "array<int, int>" {
 			t.Fatalf("got %q", argRT.String())
@@ -260,7 +260,7 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 func TestResolveVariableTypeTypedCoverage(t *testing.T) {
 	r, _, _, file, lines := setupGenericResolverCoverage(t)
 
-	r.TypedChainResolver = func(_ *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+	r.TypedChainResolver = func(_ *Resolver, expr string, source string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 		if expr == "Factory::make()" {
 			return ResolvedType{
 				FQN:    "App\\Collection",
@@ -269,7 +269,7 @@ func TestResolveVariableTypeTypedCoverage(t *testing.T) {
 		}
 		return ResolvedType{}
 	}
-	r.ChainResolver = func(_ *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) string {
+	r.ChainResolver = func(_ *Resolver, expr string, source string, pos textpos.Position, file *parser.FileNode) string {
 		if expr == "Factory::fallback()" {
 			return "App\\Logger"
 		}
@@ -278,7 +278,7 @@ func TestResolveVariableTypeTypedCoverage(t *testing.T) {
 
 	assertType := func(varName, lineNeedle, want string) {
 		t.Helper()
-		pos := protocol.Position{Line: lineContaining(t, lines, lineNeedle)}
+		pos := textpos.Position{Line: lineContaining(t, lines, lineNeedle)}
 		rt := r.ResolveVariableTypeTyped(varName, lines, pos, file)
 		got := rt.String()
 		if got == "" {
@@ -298,7 +298,7 @@ func TestResolveVariableTypeTypedCoverage(t *testing.T) {
 	assertType("$fromChain", "$fromChain =", "App\\Collection<int, App\\Logger>")
 	assertType("$fromFallback", "$fromFallback =", "App\\Logger")
 
-	if got := r.ResolveVariableTypeTyped("$missing", nil, protocol.Position{}, nil); !got.IsEmpty() {
+	if got := r.ResolveVariableTypeTyped("$missing", nil, textpos.Position{}, nil); !got.IsEmpty() {
 		t.Fatalf("expected empty type, got %#v", got)
 	}
 }
@@ -323,7 +323,7 @@ class Service {
 		t.Fatal("expected parsed file")
 	}
 
-	rt := r.ResolveVariableTypeTyped("$this", SplitLines(source), protocol.Position{Line: 5}, file)
+	rt := r.ResolveVariableTypeTyped("$this", SplitLines(source), textpos.Position{Line: 5}, file)
 	if rt.FQN != "App\\Service" {
 		t.Fatalf("got %q", rt.FQN)
 	}
@@ -367,7 +367,7 @@ class Category {}
 		t.Fatal("expected parsed file")
 	}
 
-	pos := protocol.Position{Line: 11}
+	pos := textpos.Position{Line: 11}
 	rt := r.ResolveVariableTypeTyped("$response", SplitLines(source), pos, file)
 	if rt.String() != "OpenSoutheners\\LaravelApiable\\Http\\JsonApiResponse<App\\Models\\Category>" {
 		t.Fatalf("got %q", rt.String())
@@ -439,13 +439,13 @@ func TestAssignmentValue(t *testing.T) {
 
 func TestDelegatedChainsAnswerChainAssignments(t *testing.T) {
 	r, _, _, file, lines := setupGenericResolverCoverage(t)
-	r.DelegateTypedChains(func(expr, _ string, _ protocol.Position, _ *parser.FileNode) ResolvedType {
+	r.DelegateTypedChains(func(expr, _ string, _ textpos.Position, _ *parser.FileNode) ResolvedType {
 		if expr == "Factory::make()" {
 			return ResolvedType{FQN: "App\\Collection", Params: []ResolvedType{{FQN: "int"}, {FQN: "App\\Logger"}}}
 		}
 		return ResolvedType{}
 	})
-	r.DelegateChains(func(expr, _ string, _ protocol.Position, _ *parser.FileNode) string {
+	r.DelegateChains(func(expr, _ string, _ textpos.Position, _ *parser.FileNode) string {
 		if expr == "Factory::fallback()" {
 			return "App\\Logger"
 		}
@@ -456,7 +456,7 @@ func TestDelegatedChainsAnswerChainAssignments(t *testing.T) {
 		{"$fromChain", "$fromChain =", "App\\Collection<int, App\\Logger>"},
 		{"$fromFallback", "$fromFallback =", "App\\Logger"},
 	} {
-		rt := r.ResolveVariableTypeTyped(tc.name, lines, protocol.Position{Line: lineContaining(t, lines, tc.needle)}, file)
+		rt := r.ResolveVariableTypeTyped(tc.name, lines, textpos.Position{Line: lineContaining(t, lines, tc.needle)}, file)
 		if got := rt.String(); got != tc.want {
 			t.Errorf("%s = %q, want the delegate's %q", tc.name, got, tc.want)
 		}

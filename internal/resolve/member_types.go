@@ -3,8 +3,8 @@ package resolve
 import (
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // ReturnsCallingClass reports whether a method returns the class it was called
@@ -29,7 +29,7 @@ func (r *Resolver) ReturnsCallingClass(member *symbols.Symbol) bool {
 // rawMemberReturnType returns a member's return type (or a property's type)
 // as written, choosing between its native type and its PHPDoc type.
 func (r *Resolver) rawMemberReturnType(member *symbols.Symbol) string {
-	ownerFQN := ownerScopeFQN(member, protocol.Position{}, nil)
+	ownerFQN := ownerScopeFQN(member, textpos.Position{}, nil)
 	switch member.Kind {
 	case symbols.KindMethod:
 		var docType string

@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 type ScopeKind string
@@ -35,7 +35,7 @@ const (
 type Scope struct {
 	Kind     ScopeKind
 	Name     string
-	Range    protocol.Range
+	Range    textpos.Range
 	ExprBody bool
 	Parent   *Scope
 	Bindings []*Binding
@@ -44,15 +44,15 @@ type Scope struct {
 type Binding struct {
 	Name        string
 	Kind        BindingKind
-	Decl        protocol.Range
+	Decl        textpos.Range
 	Scope       *Scope
 	Origin      *Binding
 	Assignments []*Assignment
-	References  []protocol.Range
-	Writes      []protocol.Range // later assignments; Decl is the first
-	Rebinds     []Rebind         // the writes that give it a new value, in order
-	declEffect  effect           // where the declaration's value is, when it's a write
-	declCaught  []string         // the classes a catch declaration catches, as written
+	References  []textpos.Range
+	Writes      []textpos.Range // later assignments; Decl is the first
+	Rebinds     []Rebind        // the writes that give it a new value, in order
+	declEffect  effect          // where the declaration's value is, when it's a write
+	declCaught  []string        // the classes a catch declaration catches, as written
 }
 
 // Rebind is a write that gives a binding a new value: `$x = …`, `foreach (… as
@@ -60,10 +60,10 @@ type Binding struct {
 // type. `$x ??= …` is one that may not run: it keeps the value when there is
 // one.
 type Rebind struct {
-	At protocol.Position // where the new value is written
+	At textpos.Position // where the new value is written
 	// Until is the end of the block the write is in, a loop's body for a
 	// foreach variable. Past it, the binding may have an earlier value.
-	Until protocol.Position
+	Until textpos.Position
 	// Conditional is set when the write may not run at all, as the braceless
 	// body of `if (…) $x = …;`.
 	Conditional bool
@@ -75,13 +75,13 @@ type Rebind struct {
 
 // HoldsAt reports whether the value written here is the binding's value at
 // pos, whichever way the code went to get there.
-func (r *Rebind) HoldsAt(pos protocol.Position) bool {
+func (r *Rebind) HoldsAt(pos textpos.Position) bool {
 	return !r.Conditional && r.takesEffectBy(pos) && !positionBefore(r.Until, pos)
 }
 
 // LatestRebindBefore returns the last write before pos that gives the binding a
 // new value, or nil.
-func (b *Binding) LatestRebindBefore(pos protocol.Position) *Rebind {
+func (b *Binding) LatestRebindBefore(pos textpos.Position) *Rebind {
 	var latest *Rebind
 	for i := range b.Rebinds {
 		if b.Rebinds[i].takesEffectBy(pos) {
@@ -91,14 +91,14 @@ func (b *Binding) LatestRebindBefore(pos protocol.Position) *Rebind {
 	return latest
 }
 
-func positionBefore(a, b protocol.Position) bool {
+func positionBefore(a, b textpos.Position) bool {
 	return a.Line < b.Line || (a.Line == b.Line && a.Character < b.Character)
 }
 
 type Assignment struct {
-	Variable           protocol.Range
-	Expression         protocol.Range
-	Statement          protocol.Range
+	Variable           textpos.Range
+	Expression         textpos.Range
+	Statement          textpos.Range
 	RelativeBraceDepth int
 	DirectStatement    bool
 }
@@ -108,12 +108,12 @@ type Document struct {
 	Bindings []*Binding
 	// Properties lists `$name` tokens that are class properties rather than
 	// variables: declarations, and static accesses such as `self::$name`.
-	Properties []protocol.Range
+	Properties []textpos.Range
 	root       *Scope
 	// The control flow ReachingWrites reads, in the order it appears.
 	blocks []block
 	jumps  []flowMark
-	labels map[int][]protocol.Position // block → the case labels directly in it, in order
+	labels map[int][]textpos.Position // block → the case labels directly in it, in order
 }
 
 type Collector struct {
@@ -157,7 +157,7 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 	}
 	root := &Scope{
 		Kind:  ScopeFile,
-		Range: protocol.Range{Start: protocol.Position{}, End: protocol.Position{Line: max(lineCount-1, 0), Character: lineLength(result, lineCount-1)}},
+		Range: textpos.Range{Start: textpos.Position{}, End: textpos.Position{Line: max(lineCount-1, 0), Character: lineLength(result, lineCount-1)}},
 	}
 	doc.root = root
 	doc.Scopes = append(doc.Scopes, root)
@@ -395,7 +395,7 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 		}
 	}
 	for _, ps := range pending {
-		if ps.scope.Range.End == (protocol.Position{}) {
+		if ps.scope.Range.End == (textpos.Position{}) {
 			ps.scope.Range.End = root.Range.End
 		}
 	}
@@ -403,7 +403,7 @@ func (c *Collector) collectResult(result *parser.ParseResult) *Document {
 	return doc
 }
 
-func (d *Document) BindingAt(pos protocol.Position) *Binding {
+func (d *Document) BindingAt(pos textpos.Position) *Binding {
 	for _, binding := range d.Bindings {
 		if containsPos(binding.Decl, pos) {
 			return binding
@@ -422,7 +422,7 @@ func (d *Document) BindingAt(pos protocol.Position) *Binding {
 	return nil
 }
 
-func (d *Document) ScopeAt(pos protocol.Position) *Scope {
+func (d *Document) ScopeAt(pos textpos.Position) *Scope {
 	var best *Scope
 	for _, scope := range d.Scopes {
 		if !containsPos(scope.Range, pos) {
@@ -435,12 +435,12 @@ func (d *Document) ScopeAt(pos protocol.Position) *Scope {
 	return best
 }
 
-func (d *Document) Occurrences(binding *Binding) []protocol.Range {
+func (d *Document) Occurrences(binding *Binding) []textpos.Range {
 	if binding == nil {
 		return nil
 	}
 	root := binding.root()
-	var ranges []protocol.Range
+	var ranges []textpos.Range
 	for _, candidate := range d.Bindings {
 		if candidate.root() != root {
 			continue
@@ -463,7 +463,7 @@ func (b *Binding) root() *Binding {
 	return root
 }
 
-func ensureBinding(doc *Document, scope *Scope, name string, kind BindingKind, decl protocol.Range) *Binding {
+func ensureBinding(doc *Document, scope *Scope, name string, kind BindingKind, decl textpos.Range) *Binding {
 	for _, binding := range scope.Bindings {
 		if binding.Name == name {
 			return binding
@@ -472,7 +472,7 @@ func ensureBinding(doc *Document, scope *Scope, name string, kind BindingKind, d
 	return doc.addBinding(scope, name, kind, decl, nil)
 }
 
-func (d *Document) addBinding(scope *Scope, name string, kind BindingKind, decl protocol.Range, origin *Binding) *Binding {
+func (d *Document) addBinding(scope *Scope, name string, kind BindingKind, decl textpos.Range, origin *Binding) *Binding {
 	binding := &Binding{Name: name, Kind: kind, Decl: decl, Scope: scope, Origin: origin}
 	scope.Bindings = append(scope.Bindings, binding)
 	d.Bindings = append(d.Bindings, binding)
@@ -528,7 +528,7 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 		return nil, nil
 	}
 
-	scope := &Scope{Kind: kind, Name: name, Parent: parent, Range: protocol.Range{Start: tokenRange(tokens[start]).Start}}
+	scope := &Scope{Kind: kind, Name: name, Parent: parent, Range: textpos.Range{Start: tokenRange(tokens[start]).Start}}
 	doc.Scopes = append(doc.Scopes, scope)
 	decls := map[int]*Binding{}
 
@@ -923,9 +923,9 @@ func addInterpolatedReferences(tok parser.Token, active []scopeFrame) {
 			}
 			if end > i+1 {
 				if binding := resolveVariable(active, tok.Value[i:end]); binding != nil {
-					binding.References = append(binding.References, protocol.Range{
-						Start: protocol.Position{Line: line, Character: col},
-						End:   protocol.Position{Line: line, Character: col + end - i},
+					binding.References = append(binding.References, textpos.Range{
+						Start: textpos.Position{Line: line, Character: col},
+						End:   textpos.Position{Line: line, Character: col + end - i},
 					})
 				}
 			}
@@ -1047,7 +1047,7 @@ func isPropertyHook(tokens []parser.Token, i int) bool {
 // parsePropertyHook gives a PHP 8.4 `get` or `set` hook its own scope. A `set`
 // hook has its parameter, which is an implicit $value unless it names its own.
 func parsePropertyHook(tokens []parser.Token, start int, parent *Scope, doc *Document) (*pendingScope, map[int]*Binding) {
-	scope := &Scope{Kind: ScopeMethod, Name: tokens[start].Value, Parent: parent, Range: protocol.Range{Start: tokenRange(tokens[start]).Start}}
+	scope := &Scope{Kind: ScopeMethod, Name: tokens[start].Value, Parent: parent, Range: textpos.Range{Start: tokenRange(tokens[start]).Start}}
 	doc.Scopes = append(doc.Scopes, scope)
 	decls := map[int]*Binding{}
 
@@ -1307,7 +1307,7 @@ func bindArrowCaptures(tokens []parser.Token, bodyStart, bodyEnd int, parent, sc
 	}
 }
 
-func ensureArrowCapture(doc *Document, scope *Scope, origin *Binding, ref protocol.Range) *Binding {
+func ensureArrowCapture(doc *Document, scope *Scope, origin *Binding, ref textpos.Range) *Binding {
 	for _, binding := range scope.Bindings {
 		if binding.Name == origin.Name && binding.Kind == BindingClosureUse && binding.Origin == origin {
 			binding.References = append(binding.References, ref)
@@ -1332,8 +1332,8 @@ func buildAssignment(tokens []parser.Token, variableIdx, equalsIdx, relativeBrac
 
 	return &Assignment{
 		Variable:           tokenRange(tokens[variableIdx]),
-		Expression:         protocol.Range{Start: tokenRange(tokens[exprStart]).Start, End: tokenRange(tokens[exprEnd]).End},
-		Statement:          protocol.Range{Start: tokenRange(tokens[stmtStart]).Start, End: tokenRange(tokens[stmtEnd]).End},
+		Expression:         textpos.Range{Start: tokenRange(tokens[exprStart]).Start, End: tokenRange(tokens[exprEnd]).End},
+		Statement:          textpos.Range{Start: tokenRange(tokens[stmtStart]).Start, End: tokenRange(tokens[stmtEnd]).End},
 		RelativeBraceDepth: relativeBraceDepth,
 		DirectStatement:    stmtStart == variableIdx && tokens[stmtEnd].Kind == parser.TokenSemicolon,
 	}
@@ -1384,7 +1384,7 @@ func findStatementEnd(tokens []parser.Token, start int) int {
 	return -1
 }
 
-func containsPos(r protocol.Range, pos protocol.Position) bool {
+func containsPos(r textpos.Range, pos textpos.Position) bool {
 	if pos.Line < r.Start.Line || pos.Line > r.End.Line {
 		return false
 	}
@@ -1397,10 +1397,10 @@ func containsPos(r protocol.Range, pos protocol.Position) bool {
 	return true
 }
 
-func tokenRange(tok parser.Token) protocol.Range {
-	return protocol.Range{
-		Start: protocol.Position{Line: tok.Line, Character: tok.Column},
-		End:   protocol.Position{Line: tok.Line, Character: tok.Column + len(tok.Value)},
+func tokenRange(tok parser.Token) textpos.Range {
+	return textpos.Range{
+		Start: textpos.Position{Line: tok.Line, Character: tok.Column},
+		End:   textpos.Position{Line: tok.Line, Character: tok.Column + len(tok.Value)},
 	}
 }
 
@@ -1411,14 +1411,14 @@ func lineLength(result *parser.ParseResult, idx int) int {
 	return len(result.Lines[idx])
 }
 
-func dedupeRanges(in []protocol.Range) []protocol.Range {
+func dedupeRanges(in []textpos.Range) []textpos.Range {
 	type key struct {
 		line int
 		col  int
 		end  int
 	}
 	seen := make(map[key]bool, len(in))
-	var out []protocol.Range
+	var out []textpos.Range
 	for _, rng := range in {
 		k := key{line: rng.Start.Line, col: rng.Start.Character, end: rng.End.Character}
 		if seen[k] {
@@ -1455,14 +1455,14 @@ func BindingNames(doc *Document) []string {
 	return names
 }
 
-func scopeContains(outer, inner protocol.Range) bool {
+func scopeContains(outer, inner textpos.Range) bool {
 	if comparePos(outer.Start, inner.Start) > 0 {
 		return false
 	}
 	return comparePos(outer.End, inner.End) >= 0
 }
 
-func comparePos(a, b protocol.Position) int {
+func comparePos(a, b textpos.Position) int {
 	if a.Line != b.Line {
 		if a.Line < b.Line {
 			return -1

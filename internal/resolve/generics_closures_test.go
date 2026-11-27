@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // genericsClosuresSource exercises, in the resolver itself, what the server
@@ -132,7 +132,7 @@ class Usage {
 func setupGenericsClosuresResolver(t *testing.T) (*Resolver, *parser.FileNode, []string) {
 	t.Helper()
 	r, file, lines := setupBoxResolver(t, genericsClosuresSource)
-	r.TypedChainResolver = func(req *Resolver, expr, _ string, _ protocol.Position, f *parser.FileNode) ResolvedType {
+	r.TypedChainResolver = func(req *Resolver, expr, _ string, _ textpos.Position, f *parser.FileNode) ResolvedType {
 		return req.ExpressionType(expr, ExprContext{File: f})
 	}
 	return r, file, lines
@@ -142,9 +142,9 @@ func setupGenericsClosuresResolver(t *testing.T) (*Resolver, *parser.FileNode, [
 // the callable the call expects.
 func TestClosureTypesFromTheCall(t *testing.T) {
 	r, file, lines := setupGenericsClosuresResolver(t)
-	at := func(needle, v string) protocol.Position {
+	at := func(needle, v string) textpos.Position {
 		line := lineContaining(t, lines, needle)
-		return protocol.Position{Line: line, Character: strings.LastIndex(lines[line], v) + 1}
+		return textpos.Position{Line: line, Character: strings.LastIndex(lines[line], v) + 1}
 	}
 	for _, c := range []struct{ v, line, want string }{
 		{"$p", "echo $p, $i;", "App\\Person"},                  // callable(Person, int)

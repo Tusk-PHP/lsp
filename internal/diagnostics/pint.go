@@ -13,6 +13,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 type pintRunner struct {
@@ -128,9 +129,9 @@ func (r *pintRunner) parseOutput(data []byte) []protocol.Diagnostic {
 			// No diff available — report each fixer at file level
 			for _, fixer := range file.AppliedFixers {
 				diags = append(diags, protocol.Diagnostic{
-					Range: protocol.Range{
-						Start: protocol.Position{Line: 0, Character: 0},
-						End:   protocol.Position{Line: 0, Character: 0},
+					Range: textpos.Range{
+						Start: textpos.Position{Line: 0, Character: 0},
+						End:   textpos.Position{Line: 0, Character: 0},
 					},
 					Severity: protocol.DiagnosticSeverityWarning,
 					Source:   string(rule.SourcePint),
@@ -187,9 +188,9 @@ func parseDiffDiagnostics(diff string, fixers []string) []protocol.Diagnostic {
 					col = len(line[1:]) - len(trimmed)
 				}
 				diags = append(diags, protocol.Diagnostic{
-					Range: protocol.Range{
-						Start: protocol.Position{Line: lspLine, Character: col},
-						End:   protocol.Position{Line: lspLine, Character: col + len(strings.TrimSpace(content))},
+					Range: textpos.Range{
+						Start: textpos.Position{Line: lspLine, Character: col},
+						End:   textpos.Position{Line: lspLine, Character: col + len(strings.TrimSpace(content))},
 					},
 					Severity: protocol.DiagnosticSeverityWarning,
 					Source:   string(rule.SourcePint),

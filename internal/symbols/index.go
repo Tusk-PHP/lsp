@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 type SymbolKind int
@@ -42,7 +42,7 @@ type Symbol struct {
 	Kind          SymbolKind
 	Source        SymbolSource
 	URI           string
-	Range         protocol.Range
+	Range         textpos.Range
 	Visibility    string
 	SetVisibility string // PHP 8.4 asymmetric visibility (e.g. "private" in public private(set))
 	IsStatic      bool
@@ -1651,10 +1651,10 @@ func (idx *Index) GetNamespaceMembers(ns string) []*Symbol {
 	return results
 }
 
-func symRange(line, col, nameLen int) protocol.Range {
-	start := protocol.Position{Line: line, Character: col}
-	end := protocol.Position{Line: line, Character: col + nameLen}
-	return protocol.Range{Start: start, End: end}
+func symRange(line, col, nameLen int) textpos.Range {
+	start := textpos.Position{Line: line, Character: col}
+	end := textpos.Position{Line: line, Character: col + nameLen}
+	return textpos.Range{Start: start, End: end}
 }
 
 func buildFQN(namespace, name string) string {

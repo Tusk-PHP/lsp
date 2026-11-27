@@ -4,7 +4,7 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // DeclWrite stands for a binding's declaration among the writes ReachingWrites
@@ -47,7 +47,7 @@ func (r Reach) Single() bool {
 // end of the assignment, where the new value holds. Statement is set when the
 // assignment is a whole statement ended by `;`.
 type WriteSite struct {
-	At, RHS, End protocol.Position
+	At, RHS, End textpos.Position
 	Statement    bool
 	// Destructure is set for a write by `[…] = …` or `list(…) = …`.
 	Destructure bool
@@ -84,7 +84,7 @@ func (b *Binding) ReadsItself(write int) bool {
 // AssignmentAround returns the write to the binding whose right-hand side
 // pos is in, before that write takes effect: in `$x = $x->next()`, the second
 // `$x` is.
-func (b *Binding) AssignmentAround(pos protocol.Position) (WriteSite, bool) {
+func (b *Binding) AssignmentAround(pos textpos.Position) (WriteSite, bool) {
 	k := sort.Search(len(b.Rebinds), func(i int) bool { return !positionBefore(b.Rebinds[i].At, pos) }) - 1
 	if k >= 0 && !b.Rebinds[k].takesEffectBy(pos) {
 		return b.Site(k), true
@@ -96,7 +96,7 @@ func (b *Binding) AssignmentAround(pos protocol.Position) (WriteSite, bool) {
 }
 
 // onWrite returns the write whose variable pos is on, or NoWrite.
-func (b *Binding) onWrite(pos protocol.Position) int {
+func (b *Binding) onWrite(pos textpos.Position) int {
 	if containsPos(b.Decl, pos) {
 		return DeclWrite
 	}
@@ -114,7 +114,7 @@ func (b *Binding) onWrite(pos protocol.Position) int {
 // after which earlier writes no longer reach: those inside block before at,
 // with no jump out between them and end.
 type killer struct {
-	at, end protocol.Position
+	at, end textpos.Position
 	block   int
 }
 
@@ -125,7 +125,7 @@ type killer struct {
 // iteration. A write holds from the end of its assignment, so the right-hand
 // side of `$x = $x->next()` reads the previous value. A shape it can't follow
 // makes a write reach rather than not.
-func (d *Document) ReachingWrites(b *Binding, pos protocol.Position) Reach {
+func (d *Document) ReachingWrites(b *Binding, pos textpos.Position) Reach {
 	reach := Reach{Latest: NoWrite}
 	if b == nil {
 		return reach
@@ -158,7 +158,7 @@ func (d *Document) ReachingWrites(b *Binding, pos protocol.Position) Reach {
 	killers := killerBuf[:0]
 	covered := coveredBuf[:0] // blocks of an if/elseif/else chain written in throughout
 	writes := writeBuf[:0]
-	stopAt, stopped := protocol.Position{}, false
+	stopAt, stopped := textpos.Position{}, false
 	stopForeach := false // the write stopped at is a foreach variable
 	for i, steps := latest, 0; i >= 0 && !stopped; i-- {
 		if steps++; steps > MaxReachingWrites {
@@ -205,7 +205,7 @@ func (d *Document) ReachingWrites(b *Binding, pos protocol.Position) Reach {
 
 // killed reports whether a write at u is overwritten on every way from it to
 // pos by one of killers.
-func (d *Document) killed(u protocol.Position, killers []killer, pos protocol.Position) bool {
+func (d *Document) killed(u textpos.Position, killers []killer, pos textpos.Position) bool {
 	for _, k := range killers {
 		if positionBefore(u, k.at) && d.containsAt(k.block, u) && !d.leavesBetween(u, k.end) && !d.tryBetween(k.block, pos) {
 			return true
@@ -241,8 +241,8 @@ func (d *Document) chainCovered(idx int, covered []int) (head, last int, ok bool
 // a loop that started after the write the walk stopped at. A foreach variable
 // stopped at in the loop's own header is written again at the start of each
 // turn, so nothing later in the body reaches back past it.
-func (d *Document) addLoopWrites(b *Binding, pos protocol.Position, reach Reach, stopAt protocol.Position, stopped, stopForeach bool) Reach {
-	end, inLoop := protocol.Position{}, false
+func (d *Document) addLoopWrites(b *Binding, pos textpos.Position, reach Reach, stopAt textpos.Position, stopped, stopForeach bool) Reach {
+	end, inLoop := textpos.Position{}, false
 	for idx := d.innermostBlockAt(pos); idx >= 0; idx = d.blocks[idx].parent {
 		bl := &d.blocks[idx]
 		if stopped && stopForeach && !positionBefore(stopAt, bl.head) && positionBefore(stopAt, bl.open) {

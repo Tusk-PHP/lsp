@@ -4,11 +4,11 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // superglobals contains variables that are always available in any scope.
@@ -182,11 +182,11 @@ func checkUndefinedVariables(file *parser.FileNode, source string, outArg func(s
 		if isExistenceCheck(result.Tokens, ti) {
 			continue
 		}
-		if includedFile && inIncluderScope(doc.ScopeAt(protocol.Position{Line: tok.Line, Character: tok.Column})) {
+		if includedFile && inIncluderScope(doc.ScopeAt(textpos.Position{Line: tok.Line, Character: tok.Column})) {
 			continue
 		}
 		// Skip variables inside tainted scopes.
-		pos := protocol.Position{Line: tok.Line, Character: tok.Column}
+		pos := textpos.Position{Line: tok.Line, Character: tok.Column}
 		if isScopesTainted(doc, pos, taintedScopes) {
 			continue
 		}
@@ -303,7 +303,7 @@ func findTaintedScopes(doc *scope.Document, tokens []parser.Token) map[*scope.Sc
 		} else {
 			continue
 		}
-		pos := protocol.Position{Line: tok.Line, Character: tok.Column}
+		pos := textpos.Position{Line: tok.Line, Character: tok.Column}
 		s := doc.ScopeAt(pos)
 		if s != nil {
 			tainted[s] = true
@@ -313,7 +313,7 @@ func findTaintedScopes(doc *scope.Document, tokens []parser.Token) map[*scope.Sc
 }
 
 // isScopesTainted checks if the scope containing pos is in the tainted set.
-func isScopesTainted(doc *scope.Document, pos protocol.Position, tainted map[*scope.Scope]bool) bool {
+func isScopesTainted(doc *scope.Document, pos textpos.Position, tainted map[*scope.Scope]bool) bool {
 	s := doc.ScopeAt(pos)
 	return s != nil && tainted[s]
 }

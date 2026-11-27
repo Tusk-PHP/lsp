@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // `$x instanceof Foo` narrows $x where it holds: in the if block, after a
@@ -70,7 +70,7 @@ function run(object $o, Foo|Bar $u, Base $b, Foo $f, $m, object $g, object $h, o
 		for i, l := range lines {
 			if strings.HasSuffix(l, "// "+marker) {
 				col := strings.LastIndex(l, v)
-				return r.ResolveVariableTypeTyped(v, lines, protocol.Position{Line: i, Character: col + 1}, file).FullString()
+				return r.ResolveVariableTypeTyped(v, lines, textpos.Position{Line: i, Character: col + 1}, file).FullString()
 			}
 		}
 		t.Fatalf("no line marked %q", marker)
@@ -163,7 +163,7 @@ function run(object $o, object $p, object $q, Foo|Bar $u, Foo|Bar $v, object $s,
 			if strings.HasSuffix(l, "// "+marker) {
 				code := l[:strings.Index(l, "//")]
 				col := strings.LastIndex(code, v)
-				return r.ResolveVariableTypeTyped(v, lines, protocol.Position{Line: i, Character: col + 1}, file).FullString()
+				return r.ResolveVariableTypeTyped(v, lines, textpos.Position{Line: i, Character: col + 1}, file).FullString()
 			}
 		}
 		t.Fatalf("no line marked %q", marker)

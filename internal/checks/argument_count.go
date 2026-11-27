@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // ArgumentCountRule flags function and method calls where the argument count
@@ -120,7 +120,7 @@ func calledMethod(tokens []parser.Token, arrow int, name parser.Token, lines []s
 
 // inClosure reports whether a token is inside a closure or arrow function.
 func inClosure(doc *scope.Document, tok parser.Token) bool {
-	for s := doc.ScopeAt(protocol.Position{Line: tok.Line, Character: tok.Column}); s != nil; s = s.Parent {
+	for s := doc.ScopeAt(textpos.Position{Line: tok.Line, Character: tok.Column}); s != nil; s = s.Parent {
 		if s.Kind == scope.ScopeClosure {
 			return true
 		}

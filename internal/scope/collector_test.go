@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func TestCollectVariablesAndParameters(t *testing.T) {
@@ -18,7 +18,7 @@ function run($name) {
 
 	doc := Collect(source)
 
-	nameBinding := doc.BindingAt(protocol.Position{Line: 1, Character: 14})
+	nameBinding := doc.BindingAt(textpos.Position{Line: 1, Character: 14})
 	if nameBinding == nil {
 		t.Fatal("expected parameter binding at $name")
 	}
@@ -29,7 +29,7 @@ function run($name) {
 		t.Fatalf("expected 2 occurrences for $name, got %d", got)
 	}
 
-	localBinding := doc.BindingAt(protocol.Position{Line: 2, Character: 5})
+	localBinding := doc.BindingAt(textpos.Position{Line: 2, Character: 5})
 	if localBinding == nil {
 		t.Fatal("expected local binding at $local")
 	}
@@ -61,13 +61,13 @@ function run(array $rows) {
 
 	for _, tc := range []struct {
 		name string
-		pos  protocol.Position
+		pos  textpos.Position
 		kind BindingKind
 		occ  int
 	}{
-		{name: "$key", pos: protocol.Position{Line: 2, Character: 23}, kind: BindingForeachKey, occ: 2},
-		{name: "$left", pos: protocol.Position{Line: 2, Character: 32}, kind: BindingDestructure, occ: 2},
-		{name: "$right", pos: protocol.Position{Line: 2, Character: 39}, kind: BindingDestructure, occ: 2},
+		{name: "$key", pos: textpos.Position{Line: 2, Character: 23}, kind: BindingForeachKey, occ: 2},
+		{name: "$left", pos: textpos.Position{Line: 2, Character: 32}, kind: BindingDestructure, occ: 2},
+		{name: "$right", pos: textpos.Position{Line: 2, Character: 39}, kind: BindingDestructure, occ: 2},
 	} {
 		binding := doc.BindingAt(tc.pos)
 		if binding == nil {
@@ -126,12 +126,12 @@ function run($value) {
 		t.Fatal("expected file import binding for Tool")
 	}
 
-	prefixBinding := doc.BindingAt(protocol.Position{Line: 4, Character: 6})
+	prefixBinding := doc.BindingAt(textpos.Position{Line: 4, Character: 6})
 	if prefixBinding == nil || prefixBinding.Kind != BindingVariable {
 		t.Fatal("expected outer variable binding for $prefix")
 	}
 
-	closureUse := doc.BindingAt(protocol.Position{Line: 5, Character: 32})
+	closureUse := doc.BindingAt(textpos.Position{Line: 5, Character: 32})
 	if closureUse == nil {
 		t.Fatal("expected closure-use binding for $prefix")
 	}
@@ -225,12 +225,12 @@ function run($value) {
 		t.Fatal("expected grouped use import binding for Alias")
 	}
 
-	prefixBinding := doc.BindingAt(protocol.Position{Line: 4, Character: 6})
+	prefixBinding := doc.BindingAt(textpos.Position{Line: 4, Character: 6})
 	if prefixBinding == nil || prefixBinding.Kind != BindingVariable {
 		t.Fatal("expected outer variable binding for $prefix")
 	}
 
-	arrowCapture := doc.BindingAt(protocol.Position{Line: 5, Character: 26})
+	arrowCapture := doc.BindingAt(textpos.Position{Line: 5, Character: 26})
 	if arrowCapture == nil {
 		t.Fatal("expected arrow capture binding for $prefix")
 	}
@@ -241,7 +241,7 @@ function run($value) {
 		t.Fatal("expected arrow capture to link back to outer variable")
 	}
 
-	valueBinding := doc.BindingAt(protocol.Position{Line: 3, Character: 14})
+	valueBinding := doc.BindingAt(textpos.Position{Line: 3, Character: 14})
 	if valueBinding == nil || valueBinding.Kind != BindingParameter {
 		t.Fatal("expected parameter binding for $value")
 	}
@@ -263,10 +263,10 @@ function run() {
 
 	for _, tc := range []struct {
 		name string
-		pos  protocol.Position
+		pos  textpos.Position
 	}{
-		{name: "$first", pos: protocol.Position{Line: 2, Character: 9}},
-		{name: "$second", pos: protocol.Position{Line: 2, Character: 17}},
+		{name: "$first", pos: textpos.Position{Line: 2, Character: 9}},
+		{name: "$second", pos: textpos.Position{Line: 2, Character: 17}},
 	} {
 		binding := doc.BindingAt(tc.pos)
 		if binding == nil {
@@ -299,12 +299,12 @@ class C {
 `
 	doc := Collect(source)
 
-	builder := doc.BindingAt(protocol.Position{Line: 3, Character: 9})
+	builder := doc.BindingAt(textpos.Position{Line: 3, Character: 9})
 	if builder == nil {
 		t.Fatal("expected a binding for the local $builder")
 	}
 	// Its declaration and the constructor argument on line 4, nothing after `::`.
-	if got := doc.Occurrences(builder); len(got) != 2 || got[1].Start != (protocol.Position{Line: 4, Character: 34}) {
+	if got := doc.Occurrences(builder); len(got) != 2 || got[1].Start != (textpos.Position{Line: 4, Character: 34}) {
 		t.Fatalf("local $builder occurrences = %+v", got)
 	}
 	if got := len(doc.Properties); got != 7 {
@@ -320,7 +320,7 @@ function run($m) {
 }
 `
 	doc := Collect(source)
-	m := doc.BindingAt(protocol.Position{Line: 1, Character: 14})
+	m := doc.BindingAt(textpos.Position{Line: 1, Character: 14})
 	if m == nil {
 		t.Fatal("expected a binding for $m")
 	}
@@ -341,7 +341,7 @@ function run($name, $flag) {
 `
 
 	doc := Collect(source)
-	label := doc.BindingAt(protocol.Position{Line: 2, Character: 5})
+	label := doc.BindingAt(textpos.Position{Line: 2, Character: 5})
 	if label == nil {
 		t.Fatal("expected binding for $label")
 	}
@@ -386,10 +386,10 @@ function f(A $x, bool $c, array $list) {
 	if len(x.Rebinds) != 5 || !x.Rebinds[4].Conditional {
 		t.Fatalf("got %d rebinds, want 5, the ??= one conditional (it may keep the value)", len(x.Rebinds))
 	}
-	at := func(line, char int) protocol.Position { return protocol.Position{Line: line, Character: char} }
+	at := func(line, char int) textpos.Position { return textpos.Position{Line: line, Character: char} }
 	tests := []struct {
 		name  string
-		pos   protocol.Position
+		pos   textpos.Position
 		holds bool
 	}{
 		{"after the plain assignment", at(3, 0), true},
@@ -460,7 +460,7 @@ class Pipeline {
 		{2, 31, "use"},
 		{3, 26, "list"},
 	} {
-		b := doc.BindingAt(protocol.Position{Line: tc.line, Character: tc.char})
+		b := doc.BindingAt(textpos.Position{Line: tc.line, Character: tc.char})
 		if b == nil || b.Kind != BindingParameter {
 			t.Fatalf("%s(): expected a parameter binding, got %+v", tc.method, b)
 		}
@@ -493,7 +493,7 @@ func TestScopesLeftOpenRunToTheEndOfTheFile(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			doc := Collect(head + tail)
-			cursor := protocol.Position{Line: 8, Character: 14}
+			cursor := textpos.Position{Line: 8, Character: 14}
 			s := doc.ScopeAt(cursor)
 			if s == nil || s.Kind != ScopeMethod || s.Name != "test" {
 				t.Fatalf("scope at the cursor = %+v, want method test", s)
@@ -501,7 +501,7 @@ func TestScopesLeftOpenRunToTheEndOfTheFile(t *testing.T) {
 			if s.Range.End != doc.root.Range.End {
 				t.Errorf("test() ends at %v, want the end of the file %v", s.Range.End, doc.root.Range.End)
 			}
-			b := doc.BindingAt(protocol.Position{Line: 8, Character: 10})
+			b := doc.BindingAt(textpos.Position{Line: 8, Character: 10})
 			if b == nil || b.Kind != BindingParameter || b.Scope != s {
 				t.Errorf("$post at the cursor = %+v, want test()'s parameter", b)
 			}
@@ -514,7 +514,7 @@ func TestFirstStatementStartsAfterTheOpenTag(t *testing.T) {
 		doc := Collect(source)
 		lines := strings.Split(source, "\n")
 		line := len(lines) - 1
-		at := protocol.Position{Line: line, Character: strings.Index(lines[line], "$total")}
+		at := textpos.Position{Line: line, Character: strings.Index(lines[line], "$total")}
 		b := doc.BindingAt(at)
 		if b == nil || len(b.Assignments) != 1 {
 			t.Fatalf("%q: $total = %+v, want one assignment", source, b)

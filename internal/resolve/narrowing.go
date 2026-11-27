@@ -4,9 +4,9 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // Narrowing: what calls between a variable's last assignment and the cursor
@@ -36,7 +36,7 @@ type narrowingFact struct {
 
 // narrowVariable applies to t what the code between the variable's last
 // assignment and pos says about varName.
-func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	if file == nil || r.Index == nil || pos.Line >= len(lines) {
 		return t
 	}
@@ -89,7 +89,7 @@ func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string
 			// only when its condition was false.
 			if cond, ok := guardCondition(lines, i); ok && i < pos.Line {
 				statements++
-				t = r.applyCondition(varName, t, cond, true, lines, protocol.Position{Line: i}, file)
+				t = r.applyCondition(varName, t, cond, true, lines, textpos.Position{Line: i}, file)
 			}
 			continue
 		}
@@ -103,15 +103,15 @@ func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string
 		}
 		statements++
 		if cond, ok := assertedCondition(stmt); ok {
-			t = r.applyCondition(varName, t, cond, false, lines, protocol.Position{Line: i, Character: 0}, file)
+			t = r.applyCondition(varName, t, cond, false, lines, textpos.Position{Line: i, Character: 0}, file)
 			continue
 		}
-		t = r.applyStatementCall(varName, t, stmt, lines, protocol.Position{Line: i, Character: 0}, file)
+		t = r.applyStatementCall(varName, t, stmt, lines, textpos.Position{Line: i, Character: 0}, file)
 	}
 
 	// The if blocks pos is inside of.
 	for _, h := range enclosingIfConditions(lines, from, pos) {
-		t = r.applyCondition(varName, t, h.cond, h.inElse, lines, protocol.Position{Line: h.line}, file)
+		t = r.applyCondition(varName, t, h.cond, h.inElse, lines, textpos.Position{Line: h.line}, file)
 	}
 	// A switch (true) case the read is under.
 	t = r.switchCaseInstanceof(varName, t, lines, from, pos, file)
@@ -124,7 +124,7 @@ func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string
 // to pos, mentions varName and calls something that narrows types (see
 // symbols.Index.MayNarrow), which is all that can narrow it. It reads the
 // text and does lookups only, so most variables stop here.
-func (r *Resolver) mayNarrow(lines []string, from int, pos protocol.Position, varName string) bool {
+func (r *Resolver) mayNarrow(lines []string, from int, pos textpos.Position, varName string) bool {
 	for i := pos.Line; i >= from; i-- {
 		line := lines[i]
 		if i == pos.Line && pos.Character <= len(line) {
@@ -175,7 +175,7 @@ func (r *Resolver) callsNarrowing(line string) bool {
 
 // lastWriteLine returns the line of the last assignment to varName before
 // pos, or the start of its scope when it's a parameter never written.
-func (r *Resolver) lastWriteLine(varName string, lines []string, pos protocol.Position) int {
+func (r *Resolver) lastWriteLine(varName string, lines []string, pos textpos.Position) int {
 	s := r.scopeDocument(lines).ScopeAt(pos)
 	if s == nil {
 		return -1
@@ -242,7 +242,7 @@ func braceDelta(line string) int {
 
 // applyStatementCall applies what a call statement says: asserts on the
 // argument passed for a parameter, @param-out, and self-out on the receiver.
-func (r *Resolver) applyStatementCall(varName string, t ResolvedType, stmt string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) applyStatementCall(varName string, t ResolvedType, stmt string, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	// Only a call the variable is passed to, or called on, can say anything
 	// about it. Checking that first keeps from resolving every call.
 	if !passesOrCallsOn(stmt, varName) {
@@ -305,13 +305,13 @@ type resolvedCallee struct {
 
 // statementCallee works out what the outermost call of a statement calls:
 // foo($x), $obj->foo($x), Foo::bar($x), $this->assertX($x).
-func (r *Resolver) statementCallee(stmt string, lines []string, pos protocol.Position, file *parser.FileNode) (callee resolvedCallee, receiverExpr string, args []CallArg, ok bool) {
+func (r *Resolver) statementCallee(stmt string, lines []string, pos textpos.Position, file *parser.FileNode) (callee resolvedCallee, receiverExpr string, args []CallArg, ok bool) {
 	return r.statementCalleeWith(stmt, lines, pos, file, nil)
 }
 
 // statementCalleeWith is statementCallee with the types of some variables
 // already known, so they aren't worked out again.
-func (r *Resolver) statementCalleeWith(stmt string, lines []string, pos protocol.Position, file *parser.FileNode, known map[string]ResolvedType) (callee resolvedCallee, receiverExpr string, args []CallArg, ok bool) {
+func (r *Resolver) statementCalleeWith(stmt string, lines []string, pos textpos.Position, file *parser.FileNode, known map[string]ResolvedType) (callee resolvedCallee, receiverExpr string, args []CallArg, ok bool) {
 	steps, origin, parsed := parseChain(stmt)
 	if !parsed {
 		return callee, "", nil, false
@@ -382,7 +382,7 @@ func chainPrefix(stmt string, origin chainOrigin, steps []chainStep) string {
 
 // calleeEnv is what a callee's PHPDoc types mean at a call: its templates
 // bound from the receiver and the arguments.
-func (r *Resolver) calleeEnv(c resolvedCallee, args []CallArg, lines []string, pos protocol.Position, file *parser.FileNode) typeEnv {
+func (r *Resolver) calleeEnv(c resolvedCallee, args []CallArg, lines []string, pos textpos.Position, file *parser.FileNode) typeEnv {
 	owner := c.member.ParentFQN
 	if c.member.Kind == symbols.KindFunction {
 		owner = c.member.FQN
@@ -463,7 +463,7 @@ type ifCondition struct {
 
 // enclosingIfConditions returns the conditions of the if (and else) blocks
 // that pos is inside, from `from` on.
-func enclosingIfConditions(lines []string, from int, pos protocol.Position) []ifCondition {
+func enclosingIfConditions(lines []string, from int, pos textpos.Position) []ifCondition {
 	var out []ifCondition
 	depth := 0
 	for i := pos.Line; i >= from && i >= 0; i-- {
@@ -607,7 +607,7 @@ func hasLeaveKeyword(stmt, kw string) bool {
 
 // applyCondition applies what holds of varName when cond is true, or false
 // when negate is set.
-func (r *Resolver) applyCondition(varName string, t ResolvedType, cond string, negate bool, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) applyCondition(varName string, t ResolvedType, cond string, negate bool, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	conjuncts := splitTopLevel(cond, "&&")
 	if negate && len(conjuncts) > 1 {
 		return t // !(a && b) says nothing about either alone
@@ -687,7 +687,7 @@ func (r *Resolver) applyCondition(varName string, t ResolvedType, cond string, n
 // applyUnresolvedAssertion handles PHPUnit's assertInstanceOf(Foo::class, $x)
 // when PHPUnit itself isn't installed where it can be read (Symfony runs it
 // through simple-phpunit, outside vendor/): the call is what it says.
-func (r *Resolver) applyUnresolvedAssertion(varName string, t ResolvedType, stmt string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) applyUnresolvedAssertion(varName string, t ResolvedType, stmt string, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	steps, origin, ok := parseChain(stmt)
 	if !ok {
 		return t
