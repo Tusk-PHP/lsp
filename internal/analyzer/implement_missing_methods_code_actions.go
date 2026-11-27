@@ -91,7 +91,7 @@ func (a *Analyzer) collectImplementMissingMethods(r *resolve.Resolver, source st
 	}
 
 	methodIndent := implementMissingMethodsIndent(source, target.startLine)
-	targetFile := parser.ParseFile(source)
+	targetFile := parser.ParseFileIn(source, a.index.Grammars())
 	if targetFile == nil {
 		return nil
 	}
@@ -211,7 +211,7 @@ func (a *Analyzer) interfaceExtendedFQNs(r *resolve.Resolver, iface *symbols.Sym
 	if source == "" {
 		return nil
 	}
-	file := parser.ParseFile(source)
+	file := parser.ParseFileIn(source, a.index.GrammarOf(iface.URI))
 	if file == nil {
 		return nil
 	}

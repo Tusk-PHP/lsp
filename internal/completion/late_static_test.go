@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -36,7 +37,7 @@ final class Child extends Base {
 `
 	idx.IndexFile("file:///Child.php", src)
 	p := NewProvider(idx, nil, "none")
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	pos := protocol.Position{Line: 5, Character: 8}
 	for expr, want := range map[string]string{
 		"static::create()":                  "App\\Child",

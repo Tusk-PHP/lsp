@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -67,7 +68,7 @@ func FuzzParseFile(f *testing.F) {
 					t.Errorf("ParseFile panicked: %v", r)
 				}
 			}()
-			result = ParseFile(src)
+			result = ParseFile(src, token.Latest)
 		}()
 		if result == nil {
 			t.Errorf("ParseFile returned nil for input of length %d", len(src))

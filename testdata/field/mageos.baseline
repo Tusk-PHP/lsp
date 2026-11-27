@@ -321,8 +321,6 @@ vendor/mage-os/module-catalog/Model/ResourceModel/Product/Collection.php	unknown
 vendor/mage-os/module-catalog/Model/ResourceModel/Product/Collection.php	unknown-member	Unknown member 'getAttributeForSelect' on 'AbstractEntity'
 vendor/mage-os/module-catalog/Model/ResourceModel/Product/Collection.php	unknown-member	Unknown member 'getAttributeSortColumn' on 'AbstractEntity'
 vendor/mage-os/module-catalog/Model/ResourceModel/Product/Collection.php	unknown-member	Unknown member 'getFlatTableName' on 'AbstractEntity'
-vendor/mage-os/module-catalog/Model/ResourceModel/Product/Compare/Item/Collection.php	unknown-function	Unknown function 'from'
-vendor/mage-os/module-catalog/Model/ResourceModel/Product/Compare/Item/Collection.php	unknown-function	Unknown function 'from'
 vendor/mage-os/module-catalog/Model/ResourceModel/Product/Indexer/Eav/AbstractEav.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
 vendor/mage-os/module-catalog/Model/ResourceModel/Product/Price/SpecialPrice.php	unused-import	Unused import 'Magento\Framework\App\ObjectManager'
 vendor/mage-os/module-catalog/Plugin/CategoryManagementPerformanceOptimizer.php	unused-import	Unused import 'Magento\Catalog\Api\Data\CategoryTreeInterface'
@@ -688,12 +686,9 @@ vendor/mage-os/module-sales-rule/Model/ResourceModel/Report/Rule/Createdat.php	u
 vendor/mage-os/module-sales-rule/Model/ResourceModel/Report/Rule/Createdat.php	unused-private-property	Private property 'Createdat::$logger' is never used
 vendor/mage-os/module-sales-rule/Model/ResourceModel/Report/Rule/Createdat.php	unused-private-property	Private property 'Createdat::$reportsFlagFactory' is never used
 vendor/mage-os/module-sales-rule/Model/ResourceModel/Report/Rule/Createdat.php	unused-private-property	Private property 'Createdat::$timezoneValidator' is never used
-vendor/mage-os/module-sales-rule/Model/Rule/Action/Discount/CartFixed.php	unknown-function	Unknown function 'getShippingDiscountAmount'
 vendor/mage-os/module-sales-rule/Model/ValidateCouponCode.php	unused-import	Unused import 'Magento\Quote\Model\Quote\Address'
-vendor/mage-os/module-sales-rule/Model/Validator.php	unknown-function	Unknown function 'getShippingDiscountAmount'
 vendor/mage-os/module-sales-sample-data/Model/Order/Processor.php	unused-import	Unused import 'Magento\Framework\DataObject'
 vendor/mage-os/module-sales/Block/Adminhtml/Order/Invoice/Totals.php	unused-import	Unused import 'Magento\Framework\DataObject'
-vendor/mage-os/module-sales/Block/Adminhtml/Order/Totals/Item.php	unknown-class	Unknown class 'Magento\Sales\Block\Adminhtml\Order\Totals'
 vendor/mage-os/module-sales/Block/Order/Item/Renderer/DefaultRenderer.php	unused-import	Unused import 'Magento\Sales\Model\Order\Creditmemo\Item'
 vendor/mage-os/module-sales/Controller/Adminhtml/Creditmemo/AbstractCreditmemo/Index.php	unknown-member	Unknown member 'addBreadcrumb' on 'Page'
 vendor/mage-os/module-sales/Controller/Adminhtml/Creditmemo/AbstractCreditmemo/Index.php	unknown-member	Unknown member 'addBreadcrumb' on 'Page'

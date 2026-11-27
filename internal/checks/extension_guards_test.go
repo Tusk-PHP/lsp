@@ -5,16 +5,17 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func TestExtensionGuardsCover(t *testing.T) {
-	g := findExtensionGuards(`<?php
+	g := newFileSyntax(`<?php
 if ( ! extension_loaded( 'imagick' ) || ! class_exists( 'ImagickPixel', false ) ) { return; }
 if ( EXTENSION_LOADED( "ssh2" ) ) {}
 if ( function_exists( 'apcu_fetch' ) && class_exists( '\Redis' ) ) {}
 if ( extension_loaded( 'gd' ) ) {}
-`)
+`, token.Latest).extensionGuards()
 	for _, name := range []string{"Imagick", "ImagickPixel", "ImagickDraw", "\\Imagick", "ssh2_connect", "SSH2_exec", "apcu_fetch", "Redis", "redis", "gd_info", "gdImage"} {
 		if !g.covers(name) {
 			t.Errorf("%s should be covered", name)
@@ -49,7 +50,7 @@ class WP_Image_Editor_Imagick {
 `
 
 func TestUnknownSymbolsSkipGuardedExtensionNames(t *testing.T) {
-	file := parser.ParseFile(guardedImagickSource)
+	file := parser.ParseFile(guardedImagickSource, token.Latest)
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "7.4"})
 	var got []string
@@ -68,5 +69,25 @@ func TestUnknownSymbolsSkipGuardedExtensionNames(t *testing.T) {
 	want := []string{"Unknown class 'NotAnExtensionClass'", "Function 'ssh2_connect' requires ext-ssh2"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestExtensionGuardsComeFromCalls(t *testing.T) {
+	g := newFileSyntax(`<?php
+namespace App;
+if (!\function_exists(u::class) && class_exists(\Vendor\Thing::class) && Foo::class_exists('Method')) {}
+// extension_loaded('commented');
+$s = "class_exists('Quoted')";
+interface_exists($dynamic); trait_exists(Other::CONSTANT); enum_exists($x::class); class_exists('');
+`, token.Latest).extensionGuards()
+	for _, name := range []string{"u", "Vendor\\Thing"} {
+		if !g.covers(name) {
+			t.Errorf("%s should be covered", name)
+		}
+	}
+	for _, name := range []string{"Method", "commented", "Quoted", "Other", "x"} {
+		if g.covers(name) {
+			t.Errorf("%s should not be covered", name)
+		}
 	}
 }

@@ -11,7 +11,7 @@ import (
 
 func (a *Analyzer) GetDocumentHighlights(uri, source string, pos protocol.Position) []protocol.DocumentHighlight {
 	r := a.engine.Resolver()
-	doc := sourcectx.NewDocument(uri, source)
+	doc := sourcectx.NewDocument(uri, source, a.index.GrammarOf(uri))
 	ctx := doc.NameAt(pos)
 	if ctx == nil || ctx.SymbolText == "" {
 		return nil
