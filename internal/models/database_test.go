@@ -64,22 +64,6 @@ func TestPluralize(t *testing.T) {
 	}
 }
 
-func TestToSnakeCase(t *testing.T) {
-	tests := []struct {
-		input, expected string
-	}{
-		{"User", "user"},
-		{"BlogPost", "blog_post"},
-		{"Category", "category"},
-		{"UserProfile", "user_profile"},
-	}
-	for _, tt := range tests {
-		if got := toSnakeCase(tt.input); got != tt.expected {
-			t.Errorf("toSnakeCase(%q) = %q, want %q", tt.input, got, tt.expected)
-		}
-	}
-}
-
 func TestSQLiteSchemaIntrospection(t *testing.T) {
 	// Create a SQLite database with a test table
 	tmpDir := t.TempDir()

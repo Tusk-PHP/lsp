@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
@@ -359,7 +358,7 @@ func modelTableName(model *symbols.Symbol, source string) string {
 		return m[1]
 	}
 	// Convention: snake_case plural of class name
-	return pluralize(toSnakeCase(model.Name))
+	return pluralize(frameworklaravel.Snake(model.Name))
 }
 
 // resolveDoctrineTableName determines the table name for a Doctrine entity.
@@ -371,26 +370,10 @@ func resolveDoctrineTableName(source string, cls *parser.ClassNode, fqn string) 
 		}
 	}
 	// Convention: snake_case of class name
-	return toSnakeCase(cls.Name)
+	return frameworklaravel.Snake(cls.Name)
 }
 
 var tablePropertyRe = regexp.MustCompile(`\$table\s*=\s*['"]([^'"]+)['"]`)
-
-// toSnakeCase converts CamelCase to snake_case.
-func toSnakeCase(s string) string {
-	var b strings.Builder
-	for i, r := range s {
-		if unicode.IsUpper(r) {
-			if i > 0 {
-				b.WriteByte('_')
-			}
-			b.WriteRune(unicode.ToLower(r))
-		} else {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
 
 // pluralize applies simple English pluralization rules.
 func pluralize(s string) string {

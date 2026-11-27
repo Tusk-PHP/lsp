@@ -3,6 +3,7 @@ package models
 import (
 	"strings"
 
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
@@ -360,7 +361,7 @@ func applyColumnCall(toks []parser.Token, method string, args [][2]int, mods []b
 		} else if len(args) == 1 && args[0][1]-args[0][0] >= 3 &&
 			toks[args[0][1]-1].Kind == parser.TokenClass && toks[args[0][1]-2].Kind == parser.TokenDoubleColon {
 			class := toks[args[0][1]-3].Value
-			name = toSnakeCase(class[strings.LastIndex(class, "\\")+1:]) + "_id"
+			name = frameworklaravel.Snake(class[strings.LastIndex(class, "\\")+1:]) + "_id"
 		}
 		add(name, "int", "foreignId", false)
 	case "dropColumn", "dropColumns":
