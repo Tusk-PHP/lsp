@@ -125,10 +125,53 @@ func TestExtractDocTypeString(t *testing.T) {
 		{"Collection<User> $users", "Collection<User>", "$users"},
 		{"callable(string, int): bool $handler", "callable(string, int): bool", "$handler"},
 		{"($input is class-string<T> ? T : object) description", "($input is class-string<T> ? T : object)", "description"},
+		{"array<int, string>[] $rows", "array<int, string>[]", "$rows"},
+		{"T['a b'] $v", "T['a b']", "$v"},
+		{"", "", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			typ, rest := ExtractDocTypeString(tt.input)
+			if typ != tt.wantType {
+				t.Errorf("type = %q, want %q", typ, tt.wantType)
+			}
+			if rest != tt.wantRest {
+				t.Errorf("rest = %q, want %q", rest, tt.wantRest)
+			}
+		})
+	}
+}
+
+func TestExtractParamListType(t *testing.T) {
+	tests := []struct {
+		input    string
+		wantType string
+		wantRest string
+	}{
+		{"string $name, int $n)", "string", "$name, int $n)"},
+		{"array{a: int, b: int} $opts)", "array{a: int, b: int}", "$opts)"},
+		{"Closure(A, B): C $cb)", "Closure(A, B): C", "$cb)"},
+		{"array<int, list<int>> $m", "array<int, list<int>>", "$m"},
+		{"'a, b' $x", "'a, b'", "$x"},
+		{`'it\'s, ok' $x`, `'it\'s, ok'`, "$x"},
+		{"int, string)", "int", ", string)"},
+		{"int)", "int", ")"},
+		{"int &$x", "int", "&$x"},
+		{"int& $x", "int", "& $x"},
+		{"int&$x", "int", "&$x"},
+		{"string &...$xs", "string", "&...$xs"},
+		{"int...$xs", "int", "...$xs"},
+		{"A & B $x", "A & B", "$x"},
+		{"A&B $x", "A&B", "$x"},
+		{"A & $x", "A", "& $x"},
+		{"A &", "A &", ""},
+		{"int[] $xs", "int[]", "$xs"},
+		{"int] $x", "int", "] $x"},
+		{"1.5 $x", "1.5", "$x"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			typ, rest := ExtractParamListType(tt.input)
 			if typ != tt.wantType {
 				t.Errorf("type = %q, want %q", typ, tt.wantType)
 			}

@@ -113,6 +113,7 @@ func TestImportReferencesInDocComments(t *testing.T) {
 		{"callable signature", "/** @param callable(Post $p, User...): Tag $cb */", map[string]bool{"Post": true, "User": true, "Tag": true}},
 		{"generic closure signature", "/** @param string|\\Closure<T of Post, U>(User|Tag, T):(object|null)|null $expr */", map[string]bool{"Post": true, "User": true, "Tag": true}},
 		{"method parameter default", "/** @method $this add(string $type = Post::class, $n = User::LIMIT) */", map[string]bool{"Post": true, "User": true}},
+		{"method parameters with commas", "/** @method void f(array{a: Post, b: int} $x, Closure(User, int): void $cb, array $d = [Tag::A, 2], string $s = 'Comment,x') */", map[string]bool{"Post": true, "User": true, "Tag": true, "Comment": false}},
 		{"closure signature", "/** @param Closure(Post): void $cb */", map[string]bool{"Closure": true, "Post": true}},
 		{"array shape", "/** @return array{post: Post, tags: list<Tag>, 'x'?: User} */", map[string]bool{"Post": true, "Tag": true, "User": true}},
 		{"array shape over lines", "/**\n * @return array{\n *     post: Post,\n *     user: User,\n * }\n */", map[string]bool{"Post": true, "User": true}},

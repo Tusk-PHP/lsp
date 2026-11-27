@@ -291,20 +291,7 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 						if idx.symbols[fqn+"::"+method.Name] != nil {
 							continue
 						}
-						ms := &Symbol{
-							Name:       method.Name,
-							FQN:        fqn + "::" + method.Name,
-							Kind:       KindMethod,
-							URI:        uri,
-							Visibility: "public",
-							ReturnType: resolve(method.ReturnType),
-							ParentFQN:  fqn,
-							IsVirtual:  true,
-							DocComment: method.Description,
-						}
-						if method.Params != "" {
-							ms.Params = parseDocMethodParams(method.Params, resolve)
-						}
+						ms := docMethodSymbol(fqn, uri, method, resolve)
 						existing.Children = append(existing.Children, ms)
 						idx.addSymbolWithSource(uri, ms, SourceProject)
 					}
@@ -967,59 +954,38 @@ func (idx *Index) indexVirtualMembers(uri string, parent *Symbol, src SymbolSour
 		if idx.symbols[fqn+"::"+method.Name] != nil {
 			continue
 		}
-		ms := &Symbol{
-			Name:       method.Name,
-			FQN:        fqn + "::" + method.Name,
-			Kind:       KindMethod,
-			URI:        uri,
-			Visibility: "public",
-			ReturnType: resolve(method.ReturnType),
-			ParentFQN:  fqn,
-			IsVirtual:  true,
-			IsStatic:   method.IsStatic,
-			DocComment: method.Description,
-		}
-		// Parse params string into ParamInfo slice
-		if method.Params != "" {
-			ms.Params = parseDocMethodParams(method.Params, resolve)
-		}
+		ms := docMethodSymbol(fqn, uri, method, resolve)
 		parent.Children = append(parent.Children, ms)
 		idx.addSymbolWithSource(uri, ms, src)
 	}
 }
 
-// parseDocMethodParams parses a comma-separated param string like "string $name, int $age = 0"
-// into a slice of ParamInfo.
-func parseDocMethodParams(raw string, resolve func(string) string) []ParamInfo {
-	var params []ParamInfo
-	for _, part := range strings.Split(raw, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		p := ParamInfo{}
-		fields := strings.Fields(part)
-		for _, f := range fields {
-			if f == "=" {
-				break
-			}
-			if strings.HasPrefix(f, "$") {
-				p.Name = f
-			} else if strings.HasPrefix(f, "...") {
-				p.IsVariadic = true
-				rest := strings.TrimPrefix(f, "...")
-				if strings.HasPrefix(rest, "$") {
-					p.Name = rest
-				} else if rest != "" {
-					p.Type = resolve(rest)
-				}
-			} else if p.Name == "" && p.Type == "" {
-				p.Type = resolve(f)
-			}
-		}
-		params = append(params, p)
+func docMethodSymbol(classFQN, uri string, method parser.DocMethod, resolve func(string) string) *Symbol {
+	sym := &Symbol{
+		Name:       method.Name,
+		FQN:        classFQN + "::" + method.Name,
+		Kind:       KindMethod,
+		URI:        uri,
+		Visibility: "public",
+		ReturnType: resolve(method.ReturnType),
+		ParentFQN:  classFQN,
+		IsVirtual:  true,
+		IsStatic:   method.IsStatic,
+		DocComment: method.Description,
 	}
-	return params
+	if len(method.Params) > 0 {
+		sym.Params = make([]ParamInfo, len(method.Params))
+		for i, p := range method.Params {
+			sym.Params[i] = ParamInfo{
+				Name:         p.Name,
+				Type:         resolveDocTypeString(p.Type, resolve, nil),
+				DefaultValue: p.Default,
+				IsVariadic:   p.IsVariadic,
+				IsReference:  p.IsReference,
+			}
+		}
+	}
+	return sym
 }
 
 func (idx *Index) Lookup(fqn string) *Symbol {

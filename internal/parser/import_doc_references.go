@@ -97,11 +97,10 @@ func docVariableType(value string) string {
 func (c *importCollector) markDocMethod(value string) {
 	method := parseDocMethod(value)
 	c.markDocType(method.ReturnType)
-	for _, param := range types.SplitTopLevelByComma(method.Params) {
-		typ, rest := types.ExtractDocTypeString(param)
-		c.markDocType(typ)
-		if _, value, ok := strings.Cut(rest, "="); ok {
-			tokens, _ := tokenizeFrom(value, false)
+	for _, param := range method.Params {
+		c.markDocType(param.Type)
+		if param.Default != "" {
+			tokens, _ := tokenizeFrom(param.Default, false)
 			c.collect(tokens, nil)
 		}
 	}

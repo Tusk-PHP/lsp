@@ -288,37 +288,65 @@ found:
 // correctly returns ("array{name: string, age: int}", "$var desc").
 func ExtractDocTypeString(value string) (typeStr, rest string) {
 	value = trim(value)
-	if value == "" {
-		return "", ""
-	}
+	end := docTypeEnd(value, false)
+	return value[:end], trim(value[end:])
+}
 
+func ExtractParamListType(value string) (typeStr, rest string) {
+	value = trim(value)
+	end := docTypeEnd(value, true)
+	return trim(value[:end]), trim(value[end:])
+}
+
+func docTypeEnd(value string, inParamList bool) int {
 	depth := 0
 	inString := byte(0)
-	i := 0
-	for i < len(value) {
+	for i := 0; i < len(value); i++ {
 		ch := value[i]
 		if inString != 0 {
-			if ch == inString && (i == 0 || value[i-1] != '\\') {
+			if ch == inString && value[i-1] != '\\' {
 				inString = 0
 			}
-			i++
 			continue
 		}
 		switch ch {
 		case '\'', '"':
 			inString = ch
-		case '{', '<', '(':
+		case '{', '<', '(', '[':
 			depth++
-		case '}', '>', ')':
+		case '}', '>', ')', ']':
+			if depth == 0 && inParamList {
+				return i
+			}
 			depth--
+		case ',':
+			if depth == 0 && inParamList {
+				return i
+			}
+		case '&':
+			if depth == 0 && inParamList && startsByRefParam(value[i:]) {
+				return i
+			}
+		case '.':
+			if depth == 0 && inParamList && strings.HasPrefix(value[i:], "...") {
+				return i
+			}
 		case ' ', '\t':
-			if depth == 0 && !continuesTypeExpr(value, i) {
-				return value[:i], trim(value[i:])
+			if depth == 0 && (inParamList && startsByRefParam(value[i:]) || !continuesTypeExpr(value, i)) {
+				return i
 			}
 		}
-		i++
 	}
-	return value, ""
+	return len(value)
+}
+
+func startsByRefParam(s string) bool {
+	s = trim(s)
+	if !strings.HasPrefix(s, "&") {
+		return false
+	}
+	s = trim(s[1:])
+	return strings.HasPrefix(s, "$") || strings.HasPrefix(s, "...")
 }
 
 func parseTypeExpr(raw string) TypeExpr {
@@ -421,7 +449,7 @@ func parseCallableExpr(raw string, nullable bool) (TypeExpr, bool) {
 	}
 	paramsStr := strings.TrimSpace(raw[open+1 : close])
 	if paramsStr != "" {
-		expr.ParamTypes = parseTypeExprs(SplitTopLevelByComma(paramsStr))
+		expr.ParamTypes = parseTypeExprs(splitTopLevelByComma(paramsStr))
 	}
 
 	rest := strings.TrimSpace(raw[close+1:])
@@ -442,7 +470,7 @@ func callableName(raw string) string {
 }
 
 func parseCallableTemplates(list string) []CallableTemplate {
-	parts := SplitTopLevelByComma(list)
+	parts := splitTopLevelByComma(list)
 	templates := make([]CallableTemplate, 0, len(parts))
 	for _, part := range parts {
 		name, bound, bounded := strings.Cut(part, " of ")
@@ -651,7 +679,7 @@ func parseShapeExpr(raw string, nullable bool) (TypeExpr, bool) {
 }
 
 func parseShapeExprFields(inner string) []ShapeExprField {
-	parts := SplitTopLevelByComma(inner)
+	parts := splitTopLevelByComma(inner)
 	fields := make([]ShapeExprField, 0, len(parts))
 	for _, part := range parts {
 		part = trim(part)
@@ -718,7 +746,7 @@ func parseGenericExpr(raw string) (string, []TypeExpr, bool) {
 	// String() leaves it out.
 	name := strings.TrimSpace(raw[:openIdx])
 	paramsStr := raw[openIdx+1 : len(raw)-1]
-	params := SplitTopLevelByComma(paramsStr)
+	params := splitTopLevelByComma(paramsStr)
 	if len(params) == 0 {
 		return name, nil, true
 	}
@@ -770,7 +798,7 @@ func unwrapOuterParens(raw string) (string, bool) {
 	return strings.TrimSpace(raw[1 : len(raw)-1]), true
 }
 
-func SplitTopLevelByComma(s string) []string {
+func splitTopLevelByComma(s string) []string {
 	var parts []string
 	depth := 0
 	inString := byte(0)

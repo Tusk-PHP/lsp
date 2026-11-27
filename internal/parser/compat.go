@@ -214,9 +214,17 @@ type DocMethod struct {
 	ReturnType  string
 	ParsedType  *types.TypeExpr
 	Name        string
-	Params      string
+	Params      []DocMethodParam
 	Description string
 	IsStatic    bool
+}
+
+type DocMethodParam struct {
+	Type        string
+	Name        string
+	Default     string
+	IsVariadic  bool
+	IsReference bool
 }
 
 // DocTemplate represents a @template tag: @template T of SomeClass
@@ -469,27 +477,9 @@ func parseDocMethod(value string) DocMethod {
 		m.ParsedType = parseDocTypeExprPtr(m.ReturnType)
 	}
 
-	// Extract params between ( and matching )
-	rest := value[firstParen:]
-	depth := 0
-	closeIdx := -1
-	for i, ch := range rest {
-		if ch == '(' {
-			depth++
-		} else if ch == ')' {
-			depth--
-			if depth == 0 {
-				closeIdx = i
-				break
-			}
-		}
-	}
-	if closeIdx >= 0 {
-		m.Params = rest[1:closeIdx]
-		remaining := strings.TrimSpace(rest[closeIdx+1:])
-		if remaining != "" {
-			m.Description = remaining
-		}
+	if params, description, ok := parseDocMethodParams(value[firstParen+1:]); ok {
+		m.Params = params
+		m.Description = description
 	}
 
 	return m

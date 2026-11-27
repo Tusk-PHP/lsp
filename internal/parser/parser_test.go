@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -643,12 +644,12 @@ func TestParseDocBlockPropertyAndMethod(t *testing.T) {
 	}
 
 	m0 := doc.Methods[0]
-	if m0.ReturnType != "Collection" || m0.Name != "all" || m0.Params != "" {
+	if m0.ReturnType != "Collection" || m0.Name != "all" || len(m0.Params) != 0 {
 		t.Errorf("unexpected method 0: %+v", m0)
 	}
 
 	m1 := doc.Methods[1]
-	if m1.ReturnType != "bool" || m1.Name != "save" || m1.Params != "array $options" {
+	if m1.ReturnType != "bool" || m1.Name != "save" || !slices.Equal(m1.Params, []DocMethodParam{{Type: "array", Name: "$options"}}) {
 		t.Errorf("unexpected method 1: %+v", m1)
 	}
 	if m1.Description != "Save the model" {
@@ -659,8 +660,8 @@ func TestParseDocBlockPropertyAndMethod(t *testing.T) {
 	if m2.ReturnType != "void" || m2.Name != "setName" {
 		t.Errorf("unexpected method 2: %+v", m2)
 	}
-	if m2.Params != "string $name, bool $force = false" {
-		t.Errorf("unexpected method 2 params: %q", m2.Params)
+	if want := []DocMethodParam{{Type: "string", Name: "$name"}, {Type: "bool", Name: "$force", Default: "false"}}; !slices.Equal(m2.Params, want) {
+		t.Errorf("unexpected method 2 params: %+v", m2.Params)
 	}
 }
 
