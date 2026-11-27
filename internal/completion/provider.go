@@ -156,7 +156,7 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 	}
 
-	ctx := sourcectx.Analyze(uri, source, pos, p.index.GrammarOf(uri))
+	ctx := sourcectx.Analyze(p.index, uri, source, pos)
 	if ctx == nil {
 		return nil
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -56,7 +57,7 @@ func (p *Provider) GetInlayHints(uri, source string, cfg *config.InlayHintsConfi
 		return nil
 	}
 
-	file := parser.ParseFileIn(source, p.index.GrammarOf(uri))
+	file := sourcectx.IndexedFile(p.index, uri, source)
 	result := parser.New().Parse(source)
 	lines := resolve.SplitLines(source)
 	r := p.engine.Resolver()

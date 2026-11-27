@@ -63,7 +63,7 @@ func (p *Provider) SetConfig(cfg *config.Config) {
 }
 
 func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol.Hover {
-	ctx := sourcectx.Analyze(uri, source, pos, p.index.GrammarOf(uri))
+	ctx := sourcectx.Analyze(p.index, uri, source, pos)
 	if ctx == nil {
 		return nil
 	}

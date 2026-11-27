@@ -23,6 +23,6 @@ func BenchmarkAnalyze(b *testing.B) {
 	grammars := phpparser.OnlyGrammar(token.Latest)
 	b.ReportAllocs()
 	for b.Loop() {
-		Analyze("file:///handler.php", source, pos, grammars)
+		analyzeText("file:///handler.php", source, pos, grammars)
 	}
 }

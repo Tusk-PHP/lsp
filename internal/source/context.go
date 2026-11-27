@@ -104,13 +104,27 @@ func NewDocument(uri, source string, grammars phpparser.GrammarRange) *Document 
 }
 
 // IndexedDocument is the document for source, built from the parse the index
-// made of it when source is the text idx last indexed for uri, and parsed
-// as NewDocument does otherwise.
+// keeps of it when source is the text idx last indexed for uri, and parsed as
+// NewDocument does otherwise. Every request on an open file reads it here.
 func IndexedDocument(idx *symbols.Index, uri, source string) *Document {
+	parsed, file := indexedParse(idx, uri, source)
+	return documentOf(uri, source, parsed, file)
+}
+
+// IndexedFile is the declarations of IndexedDocument(idx, uri, source).
+func IndexedFile(idx *symbols.Index, uri, source string) *parser.FileNode {
+	_, file := indexedParse(idx, uri, source)
+	return file
+}
+
+func indexedParse(idx *symbols.Index, uri, source string) (phpparser.Parsed, *parser.FileNode) {
 	if parsed, file, ok := idx.IndexedParse(uri, source); ok {
-		return documentOf(uri, source, parsed, file)
+		return parsed, file
 	}
-	return NewDocument(uri, source, idx.GrammarOf(uri))
+	parsed := parser.ParseIn(source, idx.GrammarOf(uri))
+	file := parser.FileNodeOf(source, parsed.Tree)
+	idx.KeepParse(uri, source, parsed, file)
+	return parsed, file
 }
 
 func documentOf(uri, source string, parsed phpparser.Parsed, file *parser.FileNode) *Document {
@@ -141,8 +155,8 @@ func (d *Document) File() *parser.FileNode {
 	return d.file
 }
 
-func Analyze(uri, source string, pos protocol.Position, grammars phpparser.GrammarRange) *CursorContext {
-	return NewDocument(uri, source, grammars).At(pos)
+func Analyze(idx *symbols.Index, uri, source string, pos protocol.Position) *CursorContext {
+	return IndexedDocument(idx, uri, source).At(pos)
 }
 
 func (d *Document) At(pos protocol.Position) *CursorContext {

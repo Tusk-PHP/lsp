@@ -29,7 +29,7 @@ func TestCursorInsideAnAnonymousClassIsInThatClass(t *testing.T) {
 	at := func(needle string) *CursorContext {
 		i := strings.Index(anonymousRoom, needle)
 		pos := protocol.Position{Line: strings.Count(anonymousRoom[:i], "\n"), Character: i - strings.LastIndex(anonymousRoom[:i], "\n") - 1}
-		return Analyze("file:///Room.php", anonymousRoom, pos, phpparser.OnlyGrammar(token.Latest))
+		return analyzeText("file:///Room.php", anonymousRoom, pos, phpparser.OnlyGrammar(token.Latest))
 	}
 	inside := at("return 2")
 	if !parser.IsAnonymousClass(inside.EnclosingFQN) {
@@ -61,7 +61,7 @@ $outer = new class(OUTER_SEED) {
 	at := func(needle string) *CursorContext {
 		i := strings.Index(src, needle)
 		pos := protocol.Position{Line: strings.Count(src[:i], "\n"), Character: i - strings.LastIndex(src[:i], "\n") - 1}
-		return Analyze("file:///Nested.php", src, pos, phpparser.OnlyGrammar(token.Latest))
+		return analyzeText("file:///Nested.php", src, pos, phpparser.OnlyGrammar(token.Latest))
 	}
 	property := at("$x = 1")
 	if !strings.Contains(property.EnclosingFQN, "@5@") || property.Scope != nil {

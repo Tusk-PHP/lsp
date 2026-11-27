@@ -39,7 +39,7 @@ func TestAnalyzeTakesTheNamespaceAndImportsOfTheBlockAroundTheCursor(t *testing.
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pos := positionOf(t, tc.source, tc.marker)
-			ctx := Analyze("file:///blocks.php", tc.source, pos, phpparser.OnlyGrammar(token.Latest))
+			ctx := analyzeText("file:///blocks.php", tc.source, pos, phpparser.OnlyGrammar(token.Latest))
 			if ctx.File.Namespace != tc.namespace {
 				t.Errorf("Namespace = %q, want %q", ctx.File.Namespace, tc.namespace)
 			}

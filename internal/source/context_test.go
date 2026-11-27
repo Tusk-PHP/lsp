@@ -27,7 +27,7 @@ class Handler
     }
 }`
 
-	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 11, Character: 14}, phpparser.OnlyGrammar(token.Latest))
+	ctx := analyzeText("file:///handler.php", source, protocol.Position{Line: 11, Character: 14}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
@@ -109,7 +109,7 @@ function formatUser(User $user): string
 }
 `
 
-	ctx := Analyze("file:///helpers.php", source, protocol.Position{Line: 7, Character: 18}, phpparser.OnlyGrammar(token.Latest))
+	ctx := analyzeText("file:///helpers.php", source, protocol.Position{Line: 7, Character: 18}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
@@ -142,7 +142,7 @@ class Handler
 }
 `
 
-	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 8, Character: 31}, phpparser.OnlyGrammar(token.Latest))
+	ctx := analyzeText("file:///handler.php", source, protocol.Position{Line: 8, Character: 31}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
@@ -174,7 +174,7 @@ class Handler
 }
 `
 
-	ctx := Analyze("file:///handler.php", source, protocol.Position{Line: 8, Character: 49}, phpparser.OnlyGrammar(token.Latest))
+	ctx := analyzeText("file:///handler.php", source, protocol.Position{Line: 8, Character: 49}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
@@ -213,7 +213,7 @@ namespace App\Two {
 }
 `
 
-	firstCtx := Analyze("file:///multi.php", source, protocol.Position{Line: 5, Character: 21}, phpparser.OnlyGrammar(token.Latest))
+	firstCtx := analyzeText("file:///multi.php", source, protocol.Position{Line: 5, Character: 21}, phpparser.OnlyGrammar(token.Latest))
 	if firstCtx == nil {
 		t.Fatal("expected first cursor context")
 	}
@@ -224,7 +224,7 @@ namespace App\Two {
 		t.Fatalf("first uses = %#v, want Thing import", firstCtx.File.Uses)
 	}
 
-	secondCtx := Analyze("file:///multi.php", source, protocol.Position{Line: 13, Character: 20}, phpparser.OnlyGrammar(token.Latest))
+	secondCtx := analyzeText("file:///multi.php", source, protocol.Position{Line: 13, Character: 20}, phpparser.OnlyGrammar(token.Latest))
 	if secondCtx == nil {
 		t.Fatal("expected second cursor context")
 	}
@@ -251,7 +251,7 @@ class BeforeImports
 use App\Later\Thing;
 `
 
-	ctx := Analyze("file:///imports.php", source, protocol.Position{Line: 4, Character: 20}, phpparser.OnlyGrammar(token.Latest))
+	ctx := analyzeText("file:///imports.php", source, protocol.Position{Line: 4, Character: 20}, phpparser.OnlyGrammar(token.Latest))
 	if ctx == nil {
 		t.Fatal("expected cursor context")
 	}
@@ -278,10 +278,10 @@ $f = function ($a) use ($b) {
 };
 $after = 1;
 `
-	if ctx := Analyze("file:///c.php", source, positionAfter(t, source, "return $"), phpparser.OnlyGrammar(token.Latest)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure || ctx.Scope.StartLine != 1 || ctx.Scope.EndLine != 3 {
+	if ctx := analyzeText("file:///c.php", source, positionAfter(t, source, "return $"), phpparser.OnlyGrammar(token.Latest)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure || ctx.Scope.StartLine != 1 || ctx.Scope.EndLine != 3 {
 		t.Errorf("inside the closure body: Scope = %#v, want a closure on lines 1-3", ctx.Scope)
 	}
-	if ctx := Analyze("file:///c.php", source, positionAfter(t, source, "$aft"), phpparser.OnlyGrammar(token.Latest)); ctx.Scope != nil {
+	if ctx := analyzeText("file:///c.php", source, positionAfter(t, source, "$aft"), phpparser.OnlyGrammar(token.Latest)); ctx.Scope != nil {
 		t.Errorf("after the closure: Scope = %#v, want none", ctx.Scope)
 	}
 }
@@ -296,13 +296,13 @@ func TestAnalyzeArrowFunctionScopeEndsWhereItsExpressionDoes(t *testing.T) {
 		{"running to the end of the file", "<?php\n$f = fn($x) => $x / 4", "/ ", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if ctx := Analyze("file:///a.php", tc.source, positionAfter(t, tc.source, tc.inside), phpparser.OnlyGrammar(token.Latest)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure {
+			if ctx := analyzeText("file:///a.php", tc.source, positionAfter(t, tc.source, tc.inside), phpparser.OnlyGrammar(token.Latest)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure {
 				t.Errorf("inside the arrow function: Scope = %#v, want a closure", ctx.Scope)
 			}
 			if tc.outside == "" {
 				return
 			}
-			if ctx := Analyze("file:///a.php", tc.source, positionAfter(t, tc.source, tc.outside), phpparser.OnlyGrammar(token.Latest)); ctx.Scope != nil && ctx.Scope.Kind == ScopeClosure {
+			if ctx := analyzeText("file:///a.php", tc.source, positionAfter(t, tc.source, tc.outside), phpparser.OnlyGrammar(token.Latest)); ctx.Scope != nil && ctx.Scope.Kind == ScopeClosure {
 				t.Errorf("after the arrow function: Scope = %#v, want no closure", ctx.Scope)
 			}
 		})
@@ -317,7 +317,7 @@ use const App\Support\LIMIT;
 use App\Models\User as Account;
 $x = 1;
 `
-	ctx := Analyze("file:///u.php", source, positionAfter(t, source, "$x"), phpparser.OnlyGrammar(token.Latest))
+	ctx := analyzeText("file:///u.php", source, positionAfter(t, source, "$x"), phpparser.OnlyGrammar(token.Latest))
 	want := []parser.UseNode{
 		{FullName: "App\\Support\\helper", Alias: "helper", Kind: "function", StartLine: 2},
 		{FullName: "App\\Support\\LIMIT", Alias: "LIMIT", Kind: "const", StartLine: 3},
@@ -358,7 +358,7 @@ func TestAnalyzeAdjacentClassesEndAtTheirClosingBrace(t *testing.T) {
 		{"a class after another on the same line", protocol.Position{Line: 8, Character: 43}, "App\\D", "d"},
 		{"between two classes on one line", protocol.Position{Line: 8, Character: 11}, "", ""},
 	} {
-		ctx := Analyze("file:///classes.php", source, c.pos, phpparser.OnlyGrammar(token.Latest))
+		ctx := analyzeText("file:///classes.php", source, c.pos, phpparser.OnlyGrammar(token.Latest))
 		if ctx.EnclosingFQN != c.enclosing {
 			t.Errorf("%s: EnclosingFQN = %q, want %q", c.name, ctx.EnclosingFQN, c.enclosing)
 		}
@@ -378,22 +378,22 @@ func TestDocumentOutsideItsLines(t *testing.T) {
 	if file := doc.File(); file == nil || len(file.Classes) != 1 || file.Classes[0].Name != "Shop" {
 		t.Fatalf("the document's declarations are the parsed file's: %+v", file)
 	}
-	if name := Analyze("file:///a.php", source, protocol.Position{Line: 2, Character: 7}, phpparser.OnlyGrammar(token.Latest)).Name(); name == nil || name.SymbolText != "Shop" {
+	if name := analyzeText("file:///a.php", source, protocol.Position{Line: 2, Character: 7}, phpparser.OnlyGrammar(token.Latest)).Name(); name == nil || name.SymbolText != "Shop" {
 		t.Errorf("the name under the cursor is Shop, got %+v", name)
 	}
 	for _, pos := range []protocol.Position{{Line: -1}, {Line: 10}} {
 		if ctx := doc.At(pos); ctx != nil {
 			t.Errorf("At(%v) = %+v, want nil", pos, ctx)
 		}
-		if name := Analyze("file:///a.php", source, pos, phpparser.OnlyGrammar(token.Latest)).Name(); name != nil {
-			t.Errorf("Analyze(%v).Name() = %+v, want nil", pos, name)
+		if name := analyzeText("file:///a.php", source, pos, phpparser.OnlyGrammar(token.Latest)).Name(); name != nil {
+			t.Errorf("analyzeText(%v).Name() = %+v, want nil", pos, name)
 		}
 	}
 }
 
 func TestAnalyzeNamespaceOperatorIsNotADeclaration(t *testing.T) {
 	source := "<?php\nnamespace App;\nuse App\\Models\\User;\nnamespace\\foo();\nfunction bar() {}\n"
-	ctx := Analyze("file:///ns.php", source, protocol.Position{Line: 4, Character: 10}, phpparser.OnlyGrammar(token.Latest))
+	ctx := analyzeText("file:///ns.php", source, protocol.Position{Line: 4, Character: 10}, phpparser.OnlyGrammar(token.Latest))
 	if ctx.File.Namespace != "App" {
 		t.Errorf("Namespace after namespace\\foo() = %q, want App", ctx.File.Namespace)
 	}
@@ -412,12 +412,12 @@ func TestAnalyzeCursorAfterAFileLevelArrowFunctionIsInNoScope(t *testing.T) {
 	} {
 		lines := strings.Split(source, "\n")
 		inside := protocol.Position{Line: 1, Character: strings.Index(lines[1], "$x ") + 1}
-		if ctx := Analyze("file:///a.php", source, inside, phpparser.OnlyGrammar(token.Latest)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure {
+		if ctx := analyzeText("file:///a.php", source, inside, phpparser.OnlyGrammar(token.Latest)); ctx.Scope == nil || ctx.Scope.Kind != ScopeClosure {
 			t.Errorf("%q: inside the arrow function, Scope = %#v, want a closure", source, ctx.Scope)
 		}
 		line := len(lines) - 2
 		after := protocol.Position{Line: line, Character: strings.Index(lines[line], "$later") + 2}
-		if ctx := Analyze("file:///a.php", source, after, phpparser.OnlyGrammar(token.Latest)); ctx.Scope != nil {
+		if ctx := analyzeText("file:///a.php", source, after, phpparser.OnlyGrammar(token.Latest)); ctx.Scope != nil {
 			t.Errorf("%q: after the arrow function, Scope = %#v, want none", source, ctx.Scope)
 		}
 	}
@@ -442,7 +442,7 @@ enum Suit {
 		{"NAME", `App\Named`, "name"},
 		{"COLOR", `App\Suit`, "color"},
 	} {
-		ctx := Analyze("file:///shapes.php", source, positionAfter(t, source, tc.needle), phpparser.OnlyGrammar(token.Latest))
+		ctx := analyzeText("file:///shapes.php", source, positionAfter(t, source, tc.needle), phpparser.OnlyGrammar(token.Latest))
 		if ctx.EnclosingFQN != tc.class || ctx.Scope == nil || ctx.Scope.Kind != ScopeMethod || ctx.Scope.ClassFQN != tc.class || ctx.Scope.MethodName != tc.method {
 			t.Errorf("at %s: class %q, scope %+v; want %s::%s", tc.needle, ctx.EnclosingFQN, ctx.Scope, tc.class, tc.method)
 		}
@@ -451,13 +451,13 @@ enum Suit {
 
 func TestAnalyzeWhileTypingADeclarationsName(t *testing.T) {
 	unnamedMethod := "<?php\nnamespace App;\nclass Shop {\n    public function () {\n        return TOTAL;\n    }\n}\n"
-	ctx := Analyze("file:///a.php", unnamedMethod, positionAfter(t, unnamedMethod, "TOTAL"), phpparser.OnlyGrammar(token.Latest))
+	ctx := analyzeText("file:///a.php", unnamedMethod, positionAfter(t, unnamedMethod, "TOTAL"), phpparser.OnlyGrammar(token.Latest))
 	if ctx.Scope == nil || ctx.Scope.Kind != ScopeMethod || ctx.Scope.ClassFQN != `App\Shop` || ctx.Scope.MethodName != "" || ctx.Scope.StartLine != 3 {
 		t.Errorf("in a method without a name yet: scope %+v, want an unnamed method of App\\Shop starting on line 3", ctx.Scope)
 	}
 
 	unnamedInterface := "<?php\nnamespace App;\nfunction make() {\n    interface {\n        const X = LIMIT;\n    }\n}\n"
-	ctx = Analyze("file:///b.php", unnamedInterface, positionAfter(t, unnamedInterface, "LIMIT"), phpparser.OnlyGrammar(token.Latest))
+	ctx = analyzeText("file:///b.php", unnamedInterface, positionAfter(t, unnamedInterface, "LIMIT"), phpparser.OnlyGrammar(token.Latest))
 	if ctx.Scope != nil {
 		t.Errorf("in an interface without a name yet: scope %+v, want none", ctx.Scope)
 	}
