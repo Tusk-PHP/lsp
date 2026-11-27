@@ -195,6 +195,8 @@ func (n narrowing) mayNarrow(path []ast.Node) bool {
 		switch node := node.(type) {
 		case *ast.InstanceOf:
 			found = true
+		case *ast.Binary:
+			found = isIdentity(node.Op) && (n.isVar(node.Left) || n.isVar(node.Right))
 		case *ast.Call:
 			if name, ok := node.Callee.(*ast.ConstFetch); ok && n.narrowsByName(n.t.text(name)) {
 				found = true
@@ -434,6 +436,8 @@ func (n narrowing) applyCondition(t ResolvedType, cond ast.Expr, value, instance
 		case (c.Op == token.BooleanAnd || c.Op == token.And) && value, (c.Op == token.BooleanOr || c.Op == token.Or) && !value:
 			t = n.applyCondition(t, c.Left, value, instanceofOnly)
 			return n.applyCondition(t, c.Right, value, instanceofOnly)
+		case isIdentity(c.Op):
+			return n.applyIdentity(t, c, value == (c.Op == token.IsIdentical))
 		}
 	case *ast.InstanceOf:
 		class, ok := c.Class.(*ast.ConstFetch)
@@ -446,6 +450,45 @@ func (n narrowing) applyCondition(t ResolvedType, cond ast.Expr, value, instance
 		}
 	}
 	return t
+}
+
+func isIdentity(op token.Kind) bool {
+	return op == token.IsIdentical || op == token.IsNotIdentical
+}
+
+// applyIdentity narrows by `$x === lit` or `$x !== lit`, with lit null, true,
+// false, a number or a string: to lit where they're identical, and without
+// lit where they aren't.
+func (n narrowing) applyIdentity(t ResolvedType, c *ast.Binary, identical bool) ResolvedType {
+	other := c.Right
+	if !n.isVar(c.Left) {
+		if !n.isVar(c.Right) {
+			return t
+		}
+		other = c.Left
+	}
+	lit, ok := n.comparedLiteral(other)
+	if !ok {
+		return t
+	}
+	if identical {
+		return n.r.applyFact(t, narrowingFact{typ: lit, equality: true})
+	}
+	return n.r.removeType(t, lit)
+}
+
+// comparedLiteral is the type of a null, true, false, number or string
+// literal, with its value.
+func (n narrowing) comparedLiteral(e ast.Expr) (ResolvedType, bool) {
+	switch e := e.(type) {
+	case *ast.ConstFetch:
+		lit := constantLiteral(n.t.text(e))
+		return lit, !lit.IsEmpty()
+	case *ast.Literal, *ast.Unary:
+		lit := n.r.typeOf(n.t, e, nil, n.ctxAt(e, nil))
+		return lit, lit.Literal != ""
+	}
+	return ResolvedType{}, false
 }
 
 func (n narrowing) applyAssertingCall(t ResolvedType, call ast.Expr, value bool) ResolvedType {
@@ -542,6 +585,9 @@ func (n narrowing) testsVar(cond ast.Expr) bool {
 		_, named := c.Class.(*ast.ConstFetch)
 		return named && n.isVar(c.Operand)
 	case *ast.Binary:
+		if isIdentity(c.Op) {
+			return n.isVar(c.Left) || n.isVar(c.Right)
+		}
 		return (c.Op == token.BooleanAnd || c.Op == token.And) && (n.testsVar(c.Left) || n.testsVar(c.Right))
 	}
 	return false
@@ -649,7 +695,11 @@ func (r *Resolver) removeType(t, remove ResolvedType) ResolvedType {
 	}
 	var kept []ResolvedType
 	for _, p := range t.Parts() {
-		if r.typeMatches(p, remove) != matchYes {
+		switch {
+		case r.typeMatches(p, remove) == matchYes:
+		case remove.FQN == "bool" && remove.Literal != "" && p.FQN == "bool" && p.Literal == "" && len(p.Union) == 0:
+			kept = append(kept, ResolvedType{FQN: "bool", Literal: otherBool(remove.Literal)})
+		default:
 			kept = append(kept, p)
 		}
 	}
@@ -657,4 +707,11 @@ func (r *Resolver) removeType(t, remove ResolvedType) ResolvedType {
 		return t
 	}
 	return MakeUnion(kept, t.Nullable && !remove.Nullable)
+}
+
+func otherBool(lit string) string {
+	if lit == "true" {
+		return "false"
+	}
+	return "true"
 }

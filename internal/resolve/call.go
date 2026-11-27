@@ -509,7 +509,10 @@ func (r *Resolver) typeMatches(subject, target ResolvedType) matchVerdict {
 	// Literal targets: true, false, 'x', 42.
 	if target.Literal != "" {
 		if subject.Literal != "" {
-			if subject.Literal == target.Literal {
+			switch equal, known := literalsEqual(subject, target); {
+			case !known:
+				return matchUnknown
+			case equal:
 				return matchYes
 			}
 			return matchNo
@@ -557,6 +560,57 @@ func (r *Resolver) typeMatches(subject, target ResolvedType) matchVerdict {
 		return matchNo
 	}
 	return matchNo
+}
+
+// literalsEqual reports whether two literal types are the same value, and
+// whether that can be told from how they're written: 'a' and "a" are the
+// same, while "\x61" and 0x1 aren't read.
+func literalsEqual(a, b ResolvedType) (equal, known bool) {
+	if a.FQN != b.FQN {
+		return false, true
+	}
+	if a.Literal == b.Literal {
+		return true, true
+	}
+	switch a.FQN {
+	case "bool":
+		return false, true
+	case "string":
+		av, aok := plainStringValue(a.Literal)
+		bv, bok := plainStringValue(b.Literal)
+		return av == bv, aok && bok
+	case "int":
+		return false, isDecimal(a.Literal) && isDecimal(b.Literal)
+	}
+	return false, false
+}
+
+// plainStringValue is the value of a quoted string literal without escapes
+// or, in double quotes, interpolation.
+func plainStringValue(lit string) (string, bool) {
+	if len(lit) < 2 || lit[0] != lit[len(lit)-1] || lit[0] != '\'' && lit[0] != '"' {
+		return "", false
+	}
+	inner := lit[1 : len(lit)-1]
+	for i := 0; i < len(inner); i++ {
+		if inner[i] == '\\' || lit[0] == '"' && inner[i] == '$' {
+			return "", false
+		}
+	}
+	return inner, true
+}
+
+func isDecimal(lit string) bool {
+	lit = strings.TrimPrefix(lit, "-")
+	if lit == "" || lit != "0" && lit[0] == '0' {
+		return false
+	}
+	for i := 0; i < len(lit); i++ {
+		if lit[i] < '0' || lit[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // literalExprType is the type of a literal written in PHP code, keeping the
