@@ -1,4 +1,4 @@
-package lsp
+package session
 
 import (
 	"reflect"
@@ -11,7 +11,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
-// lspDiagnostics casts severities and tags, so their numbers must be the
+// LSPDiagnostics casts severities and tags, so their numbers must be the
 // LSP's.
 func TestRuleSeveritiesAndTagsAreTheLSPs(t *testing.T) {
 	for severity, want := range map[rule.Severity]protocol.DiagnosticSeverity{
@@ -34,7 +34,7 @@ func TestRuleSeveritiesAndTagsAreTheLSPs(t *testing.T) {
 
 func TestLSPDiagnostics(t *testing.T) {
 	r := textpos.Range{Start: textpos.Position{Line: 1, Character: 2}, End: textpos.Position{Line: 1, Character: 7}}
-	got := lspDiagnostics([]diagnostics.Diagnostic{{
+	got := LSPDiagnostics([]diagnostics.Diagnostic{{
 		Range: r, Severity: rule.SeverityHint, Source: string(rule.SourceTusk), Code: "unused-variable", Message: "unused", Tags: []checks.Tag{checks.TagUnnecessary},
 	}})
 	want := []protocol.Diagnostic{{
@@ -43,7 +43,7 @@ func TestLSPDiagnostics(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
-	if got := lspDiagnostics(nil); got == nil || len(got) != 0 {
+	if got := LSPDiagnostics(nil); got == nil || len(got) != 0 {
 		t.Errorf("no diagnostics publish an empty list, got %#v", got)
 	}
 }

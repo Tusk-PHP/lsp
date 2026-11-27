@@ -1,17 +1,16 @@
-package mcpserver
+package session
 
 import (
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
-// lspDiagnostics gives the engine's diagnostics the LSP's shape, which the
-// diagnostics tool has always returned, with byte columns. nil stays nil.
-// rule.Severity and checks.Tag use the LSP's numbers, so they carry over.
-func lspDiagnostics(diags []diagnostics.Diagnostic) []protocol.Diagnostic {
-	if diags == nil {
-		return nil
-	}
+// LSPDiagnostics gives the engine's diagnostics the LSP's shape, which the
+// language server publishes and the MCP diagnostics tool returns. Columns
+// stay in bytes: a transport converts them to its client's unit. The result
+// is never nil, so a clean file is an empty list. rule.Severity and
+// checks.Tag use the LSP's numbers, so they carry over.
+func LSPDiagnostics(diags []diagnostics.Diagnostic) []protocol.Diagnostic {
 	out := make([]protocol.Diagnostic, 0, len(diags))
 	for _, d := range diags {
 		pd := protocol.Diagnostic{
