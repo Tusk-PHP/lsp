@@ -19,6 +19,33 @@ type routeFile struct {
 	lines    ast.Lines
 	tree     *ast.File
 	includes []string
+	reads    map[routeGroup]*routeFileRead
+}
+
+type routeInclude struct {
+	path  string
+	group routeGroup
+}
+
+type routeFileRead struct {
+	routes   []RouteName
+	includes []routeInclude
+}
+
+func (f *routeFile) read(g routeGroup, rootPath string) *routeFileRead {
+	if read, ok := f.reads[g]; ok {
+		return read
+	}
+	read := &routeFileRead{}
+	r := routeReader{file: f, out: read, rootPath: rootPath}
+	for _, stmt := range f.tree.Stmts {
+		r.node(stmt, g)
+	}
+	if f.reads == nil {
+		f.reads = make(map[routeGroup]*routeFileRead)
+	}
+	f.reads[g] = read
+	return read
 }
 
 func routeFilePath(uri string) string {
@@ -123,7 +150,7 @@ type routeSession struct {
 	rootPath string
 	files    map[string]*routeFile
 	reading  map[string]bool
-	reached  map[string]bool
+	used     map[string]map[routeGroup]bool
 	routes   []RouteName
 }
 
@@ -140,15 +167,22 @@ func readRouteFiles(files map[string]*routeFile, rootPath string) []RouteName {
 	}
 	slices.Sort(paths)
 
-	s := routeSession{rootPath: rootPath, files: files, reading: make(map[string]bool), reached: make(map[string]bool)}
+	s := routeSession{rootPath: rootPath, files: files, reading: make(map[string]bool), used: make(map[string]map[routeGroup]bool)}
 	for _, path := range paths {
 		if !included[path] {
 			s.read(path, routeGroup{})
 		}
 	}
 	for _, path := range paths {
-		if !s.reached[path] {
+		if len(s.used[path]) == 0 {
 			s.read(path, routeGroup{})
+		}
+	}
+	for path, f := range files {
+		for g := range f.reads {
+			if !s.used[path][g] {
+				delete(f.reads, g)
+			}
 		}
 	}
 	return s.routes
@@ -159,20 +193,25 @@ func (s *routeSession) read(path string, g routeGroup) {
 	if f == nil || s.reading[path] {
 		return
 	}
-	s.reading[path], s.reached[path] = true, true
-	r := routeReader{session: s, file: f}
-	for _, stmt := range f.tree.Stmts {
-		r.node(stmt, g)
+	s.reading[path] = true
+	if s.used[path] == nil {
+		s.used[path] = make(map[routeGroup]bool)
+	}
+	s.used[path][g] = true
+	read := f.read(g, s.rootPath)
+	s.routes = append(s.routes, read.routes...)
+	for _, include := range read.includes {
+		s.read(include.path, include.group)
 	}
 	delete(s.reading, path)
 }
 
 func (r *routeReader) include(e ast.Expr, g routeGroup) bool {
-	path, ok := r.file.includePath(e, r.session.rootPath)
+	path, ok := r.file.includePath(e, r.rootPath)
 	if !ok {
 		return false
 	}
-	r.session.read(path, g)
+	r.out.includes = append(r.out.includes, routeInclude{path, g})
 	return true
 }
 

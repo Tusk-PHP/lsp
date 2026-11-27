@@ -121,8 +121,9 @@ func (c routeCall) values() []ast.Expr {
 }
 
 type routeReader struct {
-	session   *routeSession
 	file      *routeFile
+	out       *routeFileRead
+	rootPath  string
 	namespace string
 	imports   map[string]string
 }
@@ -316,7 +317,7 @@ func (r *routeReader) route(verb routeCall, mods []routeCall, g routeGroup) {
 	route.Name = name
 	route.Range = r.literalRange(nameSpan)
 	route.TargetKind, route.Target, route.HandlerFQN, route.HandlerMethod = r.target(verb.name, action, g)
-	r.session.routes = append(r.session.routes, route)
+	r.out.routes = append(r.out.routes, route)
 }
 
 func (r *routeReader) target(method string, action ast.Expr, g routeGroup) (kind, target, handlerFQN, handlerMethod string) {

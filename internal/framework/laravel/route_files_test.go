@@ -175,3 +175,14 @@ func TestRouteIndexScanWorkspaceFollowsIncludes(t *testing.T) {
 		t.Fatalf("admin.users = %+v", r)
 	}
 }
+
+func TestIncludedRouteFileKeepsOnlyTheReadsInUse(t *testing.T) {
+	idx := indexRouteFiles(t, map[string]string{"admin.php": adminRoutes})
+	for _, prefix := range []string{"a", "ad", "adm", "admin."} {
+		idx.IndexFile(routeFileURI("web.php"), routeTestHeader+`Route::name('`+prefix+`')->group(base_path('routes/admin.php'));`)
+	}
+	assertIndexedRoutes(t, idx, map[string]string{"admin.users": "/users admin.php"})
+	if reads := len(idx.files[routeFilesRoot+"/routes/admin.php"].reads); reads != 1 {
+		t.Fatalf("admin.php keeps %d reads, want 1", reads)
+	}
+}
