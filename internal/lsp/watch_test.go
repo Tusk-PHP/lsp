@@ -149,7 +149,7 @@ func TestWatchedFilesAreRegisteredWithClientsThatCanRegisterWatchers(t *testing.
 	if !directories {
 		t.Errorf("a create/delete watcher on **/* reports directories: %v", registration)
 	}
-	for _, want := range []string{"**/*.php", "**/*.phtml", "**/composer.json", "**/composer.lock", "**/vendor/composer/installed.json", "**/.tusk-php.json", "**/lang/*.json"} {
+	for _, want := range []string{"**/*.php", "**/*.phtml", "**/composer.json", "**/composer.lock", "**/vendor/composer/installed.json", "**/.tusk-php.json", "**/lang/*.json", "**/.env", "**/.env.*"} {
 		if !slices.Contains(globs, want) {
 			t.Errorf("the watcher covers %s: %v", want, globs)
 		}

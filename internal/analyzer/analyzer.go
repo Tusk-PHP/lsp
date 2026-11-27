@@ -26,6 +26,7 @@ type Analyzer struct {
 	routes              *frameworklaravel.RouteIndex
 	views               *frameworklaravel.Views
 	translations        *frameworklaravel.TranslationResolver
+	envKeys             *frameworklaravel.EnvKeys
 	symfonyTranslations *frameworksymfony.TranslationResolver
 	symfonyCommands     *frameworksymfony.CommandIndex
 	// clientCommands lists the commands the client handles itself, from the
@@ -69,6 +70,10 @@ func (a *Analyzer) SetTypedChainResolver(fn func(expr string, source string, pos
 
 func (a *Analyzer) SetTranslationResolver(resolver *frameworklaravel.TranslationResolver) {
 	a.translations = resolver
+}
+
+func (a *Analyzer) SetEnvKeys(keys *frameworklaravel.EnvKeys) {
+	a.envKeys = keys
 }
 
 func (a *Analyzer) SetSymfonyTranslationResolver(resolver *frameworksymfony.TranslationResolver) {
@@ -201,9 +206,15 @@ func (a *Analyzer) resolveDefinitionSymbol(r *resolve.Resolver, uri, source stri
 			}
 		}
 	}
-	ctx := sourcectx.Analyze(uri, source, pos)
+	doc := sourcectx.NewDocument(uri, source)
+	ctx := doc.At(pos)
 	if ctx == nil {
 		return definitionTarget{}
+	}
+	if a.framework == "laravel" && a.envKeys != nil {
+		if arg, ok := doc.StringArgumentAt(pos); ok && arg.Argument == 0 && frameworklaravel.ReadsEnv(arg.Called(a.index)) {
+			return definitionTarget{loc: envKeyLocation(a.envKeys.Definition(arg.Text))}
+		}
 	}
 	if l := a.frameworkDefinition(r, source, ctx); l != nil {
 		return definitionTarget{loc: l}
@@ -527,6 +538,14 @@ func translationLocation(entry *frameworklaravel.TranslationEntry) *protocol.Loc
 		return nil
 	}
 	return &protocol.Location{URI: entry.URI, Range: entry.Range}
+}
+
+// envKeyLocation is where a dotenv file assigns an env key, or nil.
+func envKeyLocation(def *frameworklaravel.EnvDefinition) *protocol.Location {
+	if def == nil {
+		return nil
+	}
+	return &protocol.Location{URI: def.URI, Range: def.Range}
 }
 
 // symfonyTranslationLocation is where a Symfony translation entry is

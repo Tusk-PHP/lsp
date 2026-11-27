@@ -71,7 +71,7 @@ Setup for each editor is in [docs/editors.md](docs/editors.md), every setting is
 
 **Laravel**
 - Service container bindings from your providers, plus 25+ core framework bindings.
-- `config()` keys with value preview, routes, views and translations, all with completion and go-to-definition.
+- `config()` keys with value preview, routes, views, translations and `env()` keys from the `.env` files, all with completion and go-to-definition.
 - Eloquent query chains, relations, casts and scopes. Unknown columns and relations are flagged in query builders.
 
 **Symfony**

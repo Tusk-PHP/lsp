@@ -26,6 +26,7 @@ type Provider struct {
 	routes              *frameworklaravel.RouteIndex
 	views               *frameworklaravel.Views
 	translations        *frameworklaravel.TranslationResolver
+	envKeys             *frameworklaravel.EnvKeys
 	symfonyTranslations *frameworksymfony.TranslationResolver
 	symfonyCommands     *frameworksymfony.CommandIndex
 	// lazyDocumentation and lazyDetail leave those properties of member
@@ -72,6 +73,10 @@ func (p *Provider) SetLaravelRouteIndex(routeIndex *frameworklaravel.RouteIndex)
 
 func (p *Provider) SetTranslationResolver(resolver *frameworklaravel.TranslationResolver) {
 	p.translations = resolver
+}
+
+func (p *Provider) SetEnvKeys(keys *frameworklaravel.EnvKeys) {
+	p.envKeys = keys
 }
 
 func (p *Provider) SetSymfonyTranslationResolver(resolver *frameworksymfony.TranslationResolver) {
@@ -156,9 +161,15 @@ func (p *Provider) GetCompletions(uri, source string, pos protocol.Position) []p
 		}
 	}
 
-	ctx := sourcectx.Analyze(uri, source, pos)
+	doc := sourcectx.NewDocument(uri, source)
+	ctx := doc.At(pos)
 	if ctx == nil {
 		return nil
+	}
+	if p.framework == "laravel" && p.envKeys != nil {
+		if arg, ok := doc.StringArgumentAt(pos); ok && arg.Argument == 0 && frameworklaravel.ReadsEnv(arg.Called(p.index)) {
+			return sanitizeCompletions(p.completeEnvKeys(arg))
+		}
 	}
 	file := ctx.File
 	rk := newNameRanker(ctx.Namespace, ctx.Uses)

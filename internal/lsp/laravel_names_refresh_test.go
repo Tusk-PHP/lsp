@@ -88,3 +88,19 @@ func TestATranslationSavedInTheEditorIsCompletedWithoutWatchers(t *testing.T) {
 	h.notify("textDocument/didSave", map[string]interface{}{"textDocument": map[string]interface{}{"uri": lang}})
 	waitForCompletion(t, h, uri, 1, character, func(labels []string) bool { return slices.Contains(labels, "Goodbye") })
 }
+
+func TestAnEnvKeyAddedOutsideTheEditorIsCompleted(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json": laravelComposer,
+		".env":          "APP_NAME=Shop\n",
+	}, watchingClient(), nil)
+	uri := symbols.PathToURI(filepath.Join(root, "config/app.php"))
+	text := "<?php\nreturn ['debug' => env('APP_')];\n"
+	openDocument(h, uri, text)
+	character := len("return ['debug' => env('APP_")
+	waitForCompletion(t, h, uri, 1, character, func(labels []string) bool { return slices.Equal(labels, []string{"APP_NAME"}) })
+
+	writeProjectFiles(t, root, map[string]string{".env": "APP_NAME=Shop\nAPP_DEBUG=true\n"})
+	notifyWatched(h, root, ".env")
+	waitForCompletion(t, h, uri, 1, character, func(labels []string) bool { return slices.Equal(labels, []string{"APP_DEBUG", "APP_NAME"}) })
+}

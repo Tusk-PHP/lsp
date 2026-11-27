@@ -21,6 +21,13 @@ func PathHelperDir(helper string) (string, bool) {
 	return dir, ok
 }
 
+// WatchGlobs are the files besides PHP sources that the Laravel features
+// read and a client should report changes to: JSON translations and dotenv
+// files.
+func WatchGlobs() []string {
+	return []string{"**/lang/*.json", "**/" + envFile, "**/" + envFile + ".*"}
+}
+
 func touchesAny(path string, targets []string) bool {
 	path = filepath.Clean(path)
 	for _, target := range targets {

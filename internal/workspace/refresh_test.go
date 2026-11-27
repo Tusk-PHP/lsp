@@ -199,7 +199,7 @@ func TestRefreshSeparatesConfigErrorsFromFilesItCouldNotRead(t *testing.T) {
 
 func TestWatchGlobsCoverWhatARefreshReads(t *testing.T) {
 	globs := WatchGlobs()
-	for _, want := range []string{"**/*.php", "**/*.phtml", "**/composer.json", "**/composer.lock", "**/vendor/composer/installed.json", "**/" + config.FileName, "**/lang/*.json"} {
+	for _, want := range []string{"**/*.php", "**/*.phtml", "**/composer.json", "**/composer.lock", "**/vendor/composer/installed.json", "**/" + config.FileName, "**/lang/*.json", "**/.env", "**/.env.*"} {
 		if !slices.Contains(globs, want) {
 			t.Errorf("the watchers cover %s: %v", want, globs)
 		}
@@ -378,6 +378,28 @@ func TestRefreshKeepsLaravelsViewTranslationAndConfigNamesCurrent(t *testing.T) 
 	refreshPaths(t, ws, root, "composer.lock")
 	if names := configNames(); !slices.Contains(names, "sanctum") {
 		t.Errorf("an installed package's config is listed after composer.lock changes: %v", names)
+	}
+}
+
+func TestRefreshKeepsTheEnvKeysCurrent(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"composer.json": `{"name": "app/app"}`,
+		".env":          "APP_NAME=Shop\n",
+	})
+	ws := New(Options{RootPath: root, Framework: "laravel", Config: config.DefaultConfig(), Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+	ws.IndexWorkspace()
+	if names := ws.EnvKeys.Names(); !slices.Equal(names, []string{"APP_NAME"}) {
+		t.Fatalf("the keys are read: %v", names)
+	}
+
+	writeFiles(t, root, map[string]string{".env": "APP_NAME=Shop\nAPP_DEBUG=true\n", ".env.example": "MAIL_HOST=smtp\n"})
+	out := refreshPaths(t, ws, root, ".env", ".env.example")
+	if names := ws.EnvKeys.Names(); !slices.Equal(names, []string{"APP_DEBUG", "APP_NAME", "MAIL_HOST"}) {
+		t.Errorf("changed and created dotenv files are read again: %v", names)
+	}
+	if len(out.Files) != 0 || len(out.Failed) != 0 {
+		t.Errorf("a dotenv file is not a source to index: %+v", out)
 	}
 }
 

@@ -145,13 +145,14 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 	return out, errors.Join(errs...)
 }
 
-// NamesChanged forgets the views, translation keys and package config files
-// read, when paths, created, changed or deleted, can change them. Refresh
+// NamesChanged forgets the views, translation keys, package config files and
+// dotenv keys read, when paths, created, changed or deleted, can change them. Refresh
 // calls it; a transport calls it alone for files it learns changed without a
 // refresh, such as a file the editor saved.
 func (ws *Bootstrapped) NamesChanged(paths []string) {
 	ws.Views.FilesChanged(paths)
 	ws.Translations.FilesChanged(paths)
+	ws.EnvKeys.FilesChanged(paths)
 	vendorState := ws.VendorStatePaths()
 	if slices.ContainsFunc(paths, func(path string) bool { return slices.Contains(vendorState, filepath.Clean(path)) }) {
 		ws.Views.Invalidate()

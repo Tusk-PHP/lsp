@@ -715,6 +715,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 
 	rt.Completion = completion.NewProvider(ws.Index, ws.Container, s.Framework)
 	rt.Completion.SetArrayResolver(ws.ArrayKeys)
+	rt.Completion.SetEnvKeys(ws.EnvKeys)
 	rt.Completion.SetAutoImportAliasStyle(ws.Config.AutoImport.AliasStyle)
 	if ws.RouteIndex != nil {
 		rt.Completion.SetLaravelRouteIndex(ws.RouteIndex)
@@ -731,6 +732,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 
 	rt.Hover = hover.NewProvider(ws.Index, ws.Container, s.Framework)
 	rt.Hover.SetArrayResolver(ws.ArrayKeys)
+	rt.Hover.SetEnvKeys(ws.EnvKeys)
 	rt.Hover.SetConfig(ws.Config)
 	rt.Hover.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
 		return rt.Completion.ResolveExpressionTypeTyped(expr, source, pos, file)
@@ -744,6 +746,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.Analyzer.SetTypedChainResolver(rt.Completion.ResolveExpressionTypeTyped)
 	rt.Analyzer.SetViewResolver(ws.Views)
 	rt.Analyzer.SetTranslationResolver(ws.Translations)
+	rt.Analyzer.SetEnvKeys(ws.EnvKeys)
 	rt.Analyzer.SetSymfonyTranslationResolver(symfonyTranslations)
 	rt.Analyzer.SetSymfonyCommands(ws.SymfonyCommands)
 
