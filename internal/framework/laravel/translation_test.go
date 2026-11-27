@@ -72,10 +72,10 @@ func TestTranslationResolverDiscoversPHPAndJSONKeys(t *testing.T) {
 	resolver := NewTranslationResolver(root)
 
 	ctx := &TranslationStringContext{Partial: "mes"}
-	items := resolver.Complete(ctx)
+	items := resolver.Matching(ctx)
 	labels := map[string]bool{}
 	for _, item := range items {
-		labels[item.Label] = true
+		labels[item.Key] = true
 	}
 
 	for _, key := range []string{"messages.welcome", "messages.auth.failed"} {

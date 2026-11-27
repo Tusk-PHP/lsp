@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -114,46 +113,37 @@ func detectTranslationContextAt(line string, cursor, argStart int) *TranslationS
 	}
 }
 
-func (r *TranslationResolver) Complete(ctx *TranslationStringContext) []protocol.CompletionItem {
+// Matching returns the translation keys that start with ctx.Partial,
+// ignoring case: completion offers them.
+func (r *TranslationResolver) Matching(ctx *TranslationStringContext) []TranslationEntry {
 	if r == nil || ctx == nil {
 		return nil
 	}
-
 	entries := r.uniqueEntries()
 	if len(entries) == 0 {
 		return nil
 	}
-
+	// Not nil once there are keys, even when none matches.
 	partial := strings.ToLower(ctx.Partial)
-	items := make([]protocol.CompletionItem, 0, len(entries))
+	matches := make([]TranslationEntry, 0, len(entries))
 	for _, entry := range entries {
 		if partial != "" && !strings.HasPrefix(strings.ToLower(entry.Key), partial) {
 			continue
 		}
-		insertText := entry.Key
-		if strings.HasPrefix(entry.Key, ctx.Partial) {
-			insertText = entry.Key[len(ctx.Partial):]
-		}
-		items = append(items, protocol.CompletionItem{
-			Label:      entry.Key,
-			Kind:       protocol.CompletionItemKindValue,
-			Detail:     entry.Locale + " - " + entry.File,
-			InsertText: insertText,
-			FilterText: entry.Key,
-			SortText:   "0" + entry.Key,
-		})
+		matches = append(matches, entry)
 	}
-	return items
+	return matches
 }
 
-func (r *TranslationResolver) Definition(key string) *protocol.Location {
+// Definition returns the entry that defines key in the preferred locale, or
+// nil.
+func (r *TranslationResolver) Definition(key string) *TranslationEntry {
 	if r == nil || key == "" {
 		return nil
 	}
-
 	for _, entry := range r.uniqueEntries() {
 		if entry.Key == key {
-			return &protocol.Location{URI: entry.URI, Range: entry.Range}
+			return &entry
 		}
 	}
 	return nil

@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -208,65 +207,40 @@ func extractThirdStringArg(rest string) string {
 	return ""
 }
 
-// Complete returns completion items for keys matching ctx.Partial (and
-// optionally ctx.Domain).
-func (r *TranslationResolver) Complete(ctx *TranslationContext) []protocol.CompletionItem {
+// Matching returns the translation keys that start with ctx.Partial,
+// ignoring case, in ctx.Domain when it is set: completion offers them.
+func (r *TranslationResolver) Matching(ctx *TranslationContext) []TranslationEntry {
 	if r == nil || ctx == nil {
 		return nil
 	}
-
-	entries := r.uniqueEntries()
-	if len(entries) == 0 {
-		return nil
-	}
-
 	partial := strings.ToLower(ctx.Partial)
-	var items []protocol.CompletionItem
-	for _, entry := range entries {
+	var matches []TranslationEntry
+	for _, entry := range r.uniqueEntries() {
 		if ctx.Domain != "" && entry.Domain != ctx.Domain {
 			continue
 		}
 		if partial != "" && !strings.HasPrefix(strings.ToLower(entry.Key), partial) {
 			continue
 		}
-		insertText := entry.Key
-		if strings.HasPrefix(entry.Key, ctx.Partial) {
-			insertText = entry.Key[len(ctx.Partial):]
-		}
-		detail := entry.Domain + " (" + entry.Locale + ") - " + entry.File
-		items = append(items, protocol.CompletionItem{
-			Label:      entry.Key,
-			Kind:       protocol.CompletionItemKindValue,
-			Detail:     detail,
-			InsertText: insertText,
-			FilterText: entry.Key,
-			SortText:   "0" + entry.Key,
-		})
+		matches = append(matches, entry)
 	}
-	return items
+	return matches
 }
 
-// Definition returns the location of the definition for the given translation key.
-func (r *TranslationResolver) Definition(key string) *protocol.Location {
-	if r == nil || key == "" {
-		return nil
-	}
-	for _, entry := range r.uniqueEntries() {
-		if entry.Key == key {
-			return &protocol.Location{URI: entry.URI, Range: entry.Range}
-		}
-	}
-	return nil
+// Definition returns the entry that defines key, in any domain, or nil.
+func (r *TranslationResolver) Definition(key string) *TranslationEntry {
+	return r.DefinitionInDomain(key, "")
 }
 
-// DefinitionInDomain is like Definition but restricts to a specific domain.
-func (r *TranslationResolver) DefinitionInDomain(key, domain string) *protocol.Location {
+// DefinitionInDomain is like Definition but restricts to a specific domain
+// when domain isn't empty.
+func (r *TranslationResolver) DefinitionInDomain(key, domain string) *TranslationEntry {
 	if r == nil || key == "" {
 		return nil
 	}
 	for _, entry := range r.uniqueEntries() {
 		if entry.Key == key && (domain == "" || entry.Domain == domain) {
-			return &protocol.Location{URI: entry.URI, Range: entry.Range}
+			return &entry
 		}
 	}
 	return nil
