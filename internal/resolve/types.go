@@ -166,7 +166,7 @@ func (rt ResolvedType) FullString() string {
 		sb.WriteByte(']')
 		return sb.String()
 	}
-	sb.WriteString(rt.FQN)
+	sb.WriteString(rt.name())
 	if rt.Callable != nil {
 		sb.WriteByte('(')
 		for i, p := range rt.Callable.Params {
@@ -193,6 +193,15 @@ func (rt ResolvedType) FullString() string {
 		sb.WriteByte('>')
 	}
 	return sb.String()
+}
+
+// name is the type's name as PHP writes it: the value of true and false,
+// whose FQN is bool, else the FQN.
+func (rt ResolvedType) name() string {
+	if rt.FQN == "bool" && rt.Literal != "" {
+		return rt.Literal
+	}
+	return rt.FQN
 }
 
 // ParseGenericType parses a type string like "Collection<int, Category>" into
@@ -549,6 +558,7 @@ func MakeUnion(parts []ResolvedType, nullable bool) ResolvedType {
 	for _, part := range parts {
 		add(part)
 	}
+	flat = collapseBools(flat)
 	switch len(flat) {
 	case 0:
 		if nullable {
@@ -571,6 +581,43 @@ func MakeUnion(parts []ResolvedType, nullable bool) ResolvedType {
 	best.Nullable = nullable
 	best.Conditional = nil
 	return best
+}
+
+// collapseBools replaces true and false with one bool where the union holds
+// both of them, or bool itself.
+func collapseBools(parts []ResolvedType) []ResolvedType {
+	var hasTrue, hasFalse, hasBool bool
+	for _, p := range parts {
+		switch {
+		case !isPlainBool(p):
+		case p.Literal == "true":
+			hasTrue = true
+		case p.Literal == "false":
+			hasFalse = true
+		default:
+			hasBool = true
+		}
+	}
+	if !hasBool && !(hasTrue && hasFalse) {
+		return parts
+	}
+	out := parts[:0]
+	placed := false
+	for _, p := range parts {
+		if isPlainBool(p) {
+			if placed {
+				continue
+			}
+			placed = true
+			p = ResolvedType{FQN: "bool"}
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+func isPlainBool(rt ResolvedType) bool {
+	return rt.FQN == "bool" && rt.Conditional == nil && len(rt.Union) == 0 && len(rt.Intersection) == 0
 }
 
 func makeIntersection(parts []ResolvedType, nullable bool) ResolvedType {

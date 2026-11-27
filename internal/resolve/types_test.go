@@ -261,3 +261,26 @@ func TestFullStringParenthesisesCallablesInUnions(t *testing.T) {
 		t.Errorf("without a return type: FullString = %q, want %q", got, want)
 	}
 }
+
+func TestFullStringShowsTrueAndFalse(t *testing.T) {
+	for raw, want := range map[string]string{
+		"string|false":      "string|false",
+		"?true":             "?true",
+		"false":             "false",
+		"true|false":        "bool",
+		"false|int|true":    "bool|int",
+		"bool|false":        "bool",
+		"true|null":         "?true",
+		"array<int, false>": "array<int, false>",
+	} {
+		if got := ParseGenericType(raw).FullString(); got != want {
+			t.Errorf("ParseGenericType(%q).FullString() = %q, want %q", raw, got, want)
+		}
+	}
+}
+
+func TestTrueOrFalseIsNotTheLiteralTrue(t *testing.T) {
+	if got := ParseGenericType("true|false"); got.Literal != "" || len(got.Union) != 0 {
+		t.Errorf("true|false is bool, got %+v", got)
+	}
+}
