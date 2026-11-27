@@ -727,10 +727,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.Completion.SetSymfonyTranslationResolver(symfonyTranslations)
 	rt.Completion.SetSymfonyCommands(ws.SymfonyCommands)
 
-	rt.InlayHint = inlayhint.NewProvider(ws.Index, ws.Container)
-	rt.InlayHint.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		return rt.Completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-	})
+	rt.InlayHint = inlayhint.NewProvider(ws.Index)
 
 	rt.Hover = hover.NewProvider(ws.Index, ws.Container, s.Framework)
 	rt.Hover.SetArrayResolver(arrayResolver)
@@ -1123,7 +1120,7 @@ func (s *Service) laravelModelSchema(fqn string) (LaravelModelSchemaOutput, erro
 	if sym == nil {
 		return LaravelModelSchemaOutput{}, fmt.Errorf("model %q not found", fqn)
 	}
-	tableName := models.ResolveModelTableName(ws.Index, sym, s.RootPath)
+	tableName := models.ResolveModelTableName(ws.Index, sym)
 	out := LaravelModelSchemaOutput{
 		Model:       ptrSymbolMatch(toSymbolMatch(sym)),
 		TableName:   tableName,
@@ -1218,7 +1215,7 @@ func (s *Service) laravelModels() []map[string]any {
 	for _, model := range modelsList {
 		record := map[string]any{
 			"symbol":    toSymbolMatch(model),
-			"tableName": models.ResolveModelTableName(ws.Index, model, s.RootPath),
+			"tableName": models.ResolveModelTableName(ws.Index, model),
 		}
 		out = append(out, record)
 	}

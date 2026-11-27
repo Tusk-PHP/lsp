@@ -2,7 +2,6 @@ package checks
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -12,219 +11,37 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
-// UnknownClassRule detects unresolved class-like references in a narrow set of
-// stable runtime and declaration contexts.
-type UnknownClassRule struct{}
+// UnknownClassRule reports class names that resolve to no class-like: in
+// `new`, `instanceof`, `::`, `catch`, `extends`, `implements` and attributes.
+type UnknownClassRule struct {
+	Shared *Shared
+}
 
 func (r *UnknownClassRule) Codes() []rule.Code { return []rule.Code{rule.UnknownClass} }
-
-var unknownClassNewRe = regexp.MustCompile(`\bnew\s+(\\?[A-Za-z_][A-Za-z0-9_\\]*)`)
-var unknownClassSingleRefRe = regexp.MustCompile(`\b(?:extends|instanceof)\s+(\\?[A-Za-z_][A-Za-z0-9_\\]*)`)
-var unknownClassStaticRe = regexp.MustCompile(`(^|[^$A-Za-z0-9_\\])(\\?[A-Za-z_][A-Za-z0-9_\\]*)::`)
-var unknownClassCatchRe = regexp.MustCompile(`\bcatch\s*\(\s*([^)]+)\s+\$[A-Za-z_][A-Za-z0-9_]*`)
-var unknownClassImplementsRe = regexp.MustCompile(`\bimplements\s+([^{]+)`)
 
 func (r *UnknownClassRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	if file == nil {
 		return nil
 	}
-	lines := strings.Split(source, "\n")
+	syntax := r.Shared.tree(source, file)
 	var findings []Finding
-	mask := newMaskState(source)
-
-	prevLine := ""
-	for lineNum, raw := range lines {
-		line := maskPHPLine(raw, &mask)
-		findings = append(findings, checkUnknownClassMatches(line, lineNum, file, index, unknownClassNewRe)...)
-		findings = append(findings, checkUnknownClassMatches(line, lineNum, file, index, unknownClassSingleRefRe)...)
-		findings = append(findings, checkUnknownStaticClassMatches(line, prevLine, lineNum, file, index)...)
-		prevLine = line
-		findings = append(findings, checkUnknownCatchClasses(line, lineNum, file, index)...)
-		findings = append(findings, checkUnknownImplementsClasses(line, lineNum, file, index)...)
-		findings = append(findings, checkUnknownAttributeClasses(line, lineNum, file, index)...)
-	}
-
-	return dropGuarded(findings, lines, findExtensionGuards(source))
-}
-
-func checkUnknownClassMatches(line string, lineNum int, file *parser.FileNode, index *symbols.Index, re *regexp.Regexp) []Finding {
-	var findings []Finding
-	for _, match := range re.FindAllStringSubmatchIndex(line, -1) {
-		if !isKeywordAt(line, match[0]) {
+	for _, ref := range syntax.references().classes {
+		name := syntax.text(ref.name)
+		line := syntax.line(ref.name)
+		if classLikeKnown(name, line, file, index) || ref.attribute && isPHPBuiltinAttribute(name, line, file) {
 			continue
 		}
-		start, end := match[2], match[3]
-		name := line[start:end]
-		if classLikeKnown(name, lineNum, file, index) {
-			continue
+		kind := "class"
+		if ref.attribute {
+			kind = "attribute"
 		}
-		findings = append(findings, Finding{
-			StartLine: lineNum,
-			StartCol:  start,
-			EndLine:   lineNum,
-			EndCol:    end,
-			Severity:  rule.SeverityWarning,
-			Code:      rule.UnknownClass,
-			Message:   fmt.Sprintf("Unknown class '%s'", strings.TrimPrefix(name, "\\")),
-		})
+		findings = append(findings, syntax.at(ref.name, Finding{
+			Severity: rule.SeverityWarning,
+			Code:     rule.UnknownClass,
+			Message:  fmt.Sprintf("Unknown %s '%s'", kind, strings.TrimPrefix(name, "\\")),
+		}))
 	}
-	return findings
-}
-
-// isKeywordAt reports whether the word starting at line[i] is a keyword rather
-// than part of a variable or member name: `$new as`, `$this->extends`,
-// `Foo::catch`. The regexes' \b treats `$` and `>` as word boundaries.
-func isKeywordAt(line string, i int) bool {
-	if i <= 0 {
-		return true
-	}
-	switch line[i-1] {
-	case '$':
-		return false
-	case '>':
-		return i < 2 || line[i-2] != '-'
-	case ':':
-		return i < 2 || line[i-2] != ':'
-	}
-	return true
-}
-
-// checkUnknownStaticClassMatches reports the class in `Foo::bar()`. prevLine is
-// the masked line before, for a `->` that ends it.
-func checkUnknownStaticClassMatches(line, prevLine string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
-	var findings []Finding
-	for _, match := range unknownClassStaticRe.FindAllStringSubmatchIndex(line, -1) {
-		start, end := match[4], match[5]
-		name := line[start:end]
-		// In `$this->type::tryFrom($v)` the name before `::` is a property
-		// holding the class, not a class.
-		if followsObjectOperator(line, prevLine, start) {
-			continue
-		}
-		if classLikeKnown(name, lineNum, file, index) {
-			continue
-		}
-		findings = append(findings, Finding{
-			StartLine: lineNum,
-			StartCol:  start,
-			EndLine:   lineNum,
-			EndCol:    end,
-			Severity:  rule.SeverityWarning,
-			Code:      rule.UnknownClass,
-			Message:   fmt.Sprintf("Unknown class '%s'", strings.TrimPrefix(name, "\\")),
-		})
-	}
-	return findings
-}
-
-// followsObjectOperator reports whether line[i] is preceded by `->` or `?->`,
-// with optional whitespace, which can also close prevLine when line[i] starts
-// its line.
-func followsObjectOperator(line, prevLine string, i int) bool {
-	before := strings.TrimRight(line[:i], " \t\r")
-	if before == "" {
-		before = strings.TrimRight(prevLine, " \t\r")
-	}
-	return strings.HasSuffix(before, "->")
-}
-
-func checkUnknownCatchClasses(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
-	var findings []Finding
-	for _, match := range unknownClassCatchRe.FindAllStringSubmatchIndex(line, -1) {
-		if !isKeywordAt(line, match[0]) {
-			continue
-		}
-		listStart, listEnd := match[2], match[3]
-		list := line[listStart:listEnd]
-		offset := 0
-		for _, part := range strings.Split(list, "|") {
-			trimmed := strings.TrimSpace(part)
-			if trimmed == "" {
-				offset += len(part) + 1
-				continue
-			}
-			rel := strings.Index(part, trimmed)
-			start := listStart + offset + rel
-			end := start + len(trimmed)
-			if classLikeKnown(trimmed, lineNum, file, index) {
-				offset += len(part) + 1
-				continue
-			}
-			findings = append(findings, Finding{
-				StartLine: lineNum,
-				StartCol:  start,
-				EndLine:   lineNum,
-				EndCol:    end,
-				Severity:  rule.SeverityWarning,
-				Code:      rule.UnknownClass,
-				Message:   fmt.Sprintf("Unknown class '%s'", strings.TrimPrefix(trimmed, "\\")),
-			})
-			offset += len(part) + 1
-		}
-	}
-	return findings
-}
-
-func checkUnknownImplementsClasses(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
-	var findings []Finding
-	for _, match := range unknownClassImplementsRe.FindAllStringSubmatchIndex(line, -1) {
-		if !isKeywordAt(line, match[0]) {
-			continue
-		}
-		listStart, listEnd := match[2], match[3]
-		list := line[listStart:listEnd]
-		offset := 0
-		for _, part := range strings.Split(list, ",") {
-			trimmed := strings.TrimSpace(part)
-			if trimmed == "" {
-				offset += len(part) + 1
-				continue
-			}
-			rel := strings.Index(part, trimmed)
-			start := listStart + offset + rel
-			end := start + len(trimmed)
-			if classLikeKnown(trimmed, lineNum, file, index) {
-				offset += len(part) + 1
-				continue
-			}
-			findings = append(findings, Finding{
-				StartLine: lineNum,
-				StartCol:  start,
-				EndLine:   lineNum,
-				EndCol:    end,
-				Severity:  rule.SeverityWarning,
-				Code:      rule.UnknownClass,
-				Message:   fmt.Sprintf("Unknown class '%s'", strings.TrimPrefix(trimmed, "\\")),
-			})
-			offset += len(part) + 1
-		}
-	}
-	return findings
-}
-
-// checkUnknownAttributeClasses resolves each attribute name in `#[A, B(...), \\Ns\\C]`
-// groups. Only the attribute class names are resolved — constructor arguments
-// (including named arguments like `nullable: true` and array literals with
-// their own commas) are skipped by the depth-aware scanner.
-func checkUnknownAttributeClasses(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
-	var findings []Finding
-	for _, g := range scanAttributeGroups(line) {
-		for _, tok := range g.names {
-			if classLikeKnown(tok.name, lineNum, file, index) || isPHPBuiltinAttribute(tok.name, lineNum, file) {
-				continue
-			}
-			findings = append(findings, Finding{
-				StartLine: lineNum,
-				StartCol:  tok.start,
-				EndLine:   lineNum,
-				EndCol:    tok.start + len(tok.name),
-				Severity:  rule.SeverityWarning,
-				Code:      rule.UnknownClass,
-				Message:   fmt.Sprintf("Unknown attribute '%s'", strings.TrimPrefix(tok.name, "\\")),
-			})
-		}
-	}
-	return findings
+	return dropGuarded(findings, strings.Split(source, "\n"), syntax.extensionGuards())
 }
 
 // isPHPBuiltinAttribute reports whether an attribute resolves to one of PHP's
@@ -241,270 +58,36 @@ func isPHPBuiltinAttribute(name string, line int, file *parser.FileNode) bool {
 	return known
 }
 
-// attrToken is an attribute class name and the column where it begins.
-type attrToken struct {
-	name  string
-	start int
+// UnknownFunctionRule reports calls to functions that resolve to nothing.
+type UnknownFunctionRule struct {
+	Shared *Shared
 }
-
-// attrGroup is one PHP 8 attribute group `#[...]` on a line: its byte span
-// (from `#` through the matching `]`) and the class names it declares.
-type attrGroup struct {
-	start int // index of `#`
-	end   int // one past the closing `]` (or end of line if unterminated)
-	names []attrToken
-}
-
-// scanAttributeGroups finds every `#[...]` group on a (string/comment-masked)
-// line and extracts each attribute's class name. Commas, parentheses and
-// brackets inside an attribute's argument list are tracked so that constructor
-// arguments are never mistaken for additional attribute names — a single
-// attribute like `Char("name", nullable: true)` yields just `Char`, and
-// `Unique(["a", "b"])` yields just `Unique`.
-func scanAttributeGroups(line string) []attrGroup {
-	var groups []attrGroup
-	for i := 0; i+1 < len(line); i++ {
-		if line[i] != '#' || line[i+1] != '[' {
-			continue
-		}
-		g := attrGroup{start: i}
-		depth := 1 // inside the opening `[`
-		paren := 0 // depth inside an argument list `(...)`
-		segStart := i + 2
-		flush := func(end int) {
-			if end < segStart {
-				return
-			}
-			seg := line[segStart:end]
-			trimmed := strings.TrimSpace(seg)
-			if trimmed == "" {
-				return
-			}
-			name := trimmed
-			if p := strings.IndexByte(name, '('); p >= 0 {
-				name = strings.TrimSpace(name[:p])
-			}
-			if name == "" {
-				return
-			}
-			rel := strings.Index(seg, name)
-			g.names = append(g.names, attrToken{name: name, start: segStart + rel})
-		}
-		j := i + 2
-		for ; j < len(line); j++ {
-			c := line[j]
-			if paren > 0 {
-				switch c {
-				case '(':
-					paren++
-				case ')':
-					paren--
-				}
-				continue
-			}
-			switch c {
-			case '(':
-				paren++
-			case '[':
-				depth++
-			case ']':
-				depth--
-			case ',':
-				if depth == 1 {
-					flush(j)
-					segStart = j + 1
-				}
-			}
-			if depth == 0 {
-				flush(j)
-				break
-			}
-		}
-		if depth == 0 {
-			g.end = j + 1
-		} else {
-			// Unterminated on this line (multi-line attribute): resolve the
-			// trailing segment and treat the rest of the line as the group span.
-			flush(j)
-			g.end = len(line)
-		}
-		groups = append(groups, g)
-		i = j
-	}
-	return groups
-}
-
-// posInAttributeGroup reports whether byte offset pos falls inside any
-// attribute group span.
-func posInAttributeGroup(pos int, groups []attrGroup) bool {
-	for _, g := range groups {
-		if pos >= g.start && pos < g.end {
-			return true
-		}
-	}
-	return false
-}
-
-// UnknownFunctionRule detects unresolved plain function calls.
-type UnknownFunctionRule struct{}
 
 func (r *UnknownFunctionRule) Codes() []rule.Code { return []rule.Code{rule.UnknownFunction} }
-
-var unknownFunctionCallRe = regexp.MustCompile(`\b([A-Za-z_][A-Za-z0-9_\\]*)\s*\(`)
-
-var skippedFunctionLikeKeywords = map[string]bool{
-	"if": true, "elseif": true, "for": true, "foreach": true, "while": true,
-	"switch": true, "catch": true, "echo": true, "empty": true, "isset": true,
-	"unset": true, "include": true, "include_once": true, "require": true,
-	"require_once": true, "array": true, "match": true, "clone": true,
-	"eval": true, "print": true, "die": true, "exit": true, "function": true,
-	"fn": true, "use": true, "return": true, "list": true, "case": true,
-	"and": true, "or": true, "xor": true, "instanceof": true, "throw": true,
-	"yield": true, "static": true, "declare": true,
-	// `break(2);` and `continue(2);` are legal: the level is an expression.
-	"break": true, "continue": true,
-	// `new ($class)()`, `new\nclass($args)`, and the PHP 8.4 asymmetric
-	// visibility and DNF types of `public private(set)` and
-	// `private (A&B)|null $x` are not calls; none of these names can be a
-	// function.
-	"new": true, "class": true, "public": true, "protected": true, "private": true,
-}
 
 func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	if file == nil {
 		return nil
 	}
-	lines := strings.Split(source, "\n")
+	syntax := r.Shared.tree(source, file)
 	var findings []Finding
-	mask := newMaskState(source)
-
-	for lineNum, raw := range lines {
-		line := maskPHPLine(raw, &mask)
-		attrGroups := scanAttributeGroups(line)
-		for _, match := range unknownFunctionCallRe.FindAllStringSubmatchIndex(line, -1) {
-			start, end := match[2], match[3]
-			name := line[start:end]
-			// `#[Char(...)]` looks like a `Char(` call to the regex; the name is
-			// an attribute class, not a function. Attribute argument lists are
-			// constant expressions and cannot contain real function calls.
-			if posInAttributeGroup(start, attrGroups) {
-				continue
-			}
-			if shouldSkipFunctionCall(line, start, name) {
-				continue
-			}
-			if functionExists(writtenName(line, start, name), file, index) {
-				continue
-			}
-			// A PHP builtin the project's PHP version or extensions don't
-			// have is reported once, by builtin-unavailable.
-			if _, _, builtin := builtinFunctionAvailability(writtenName(line, start, name), file); builtin {
-				continue
-			}
-			findings = append(findings, Finding{
-				StartLine: lineNum,
-				StartCol:  start,
-				EndLine:   lineNum,
-				EndCol:    end,
-				Severity:  rule.SeverityWarning,
-				Code:      rule.UnknownFunction,
-				Message:   fmt.Sprintf("Unknown function '%s'", strings.TrimPrefix(name, "\\")),
-			})
+	for _, call := range syntax.references().calls {
+		name := syntax.text(call.name)
+		if functionExists(name, file, index) {
+			continue
 		}
-	}
-
-	return dropGuarded(findings, lines, findExtensionGuards(source))
-}
-
-func shouldSkipFunctionCall(line string, start int, name string) bool {
-	lower := strings.ToLower(name)
-	if skippedFunctionLikeKeywords[lower] {
-		return true
-	}
-	// `$callback()` calls a variable, not a function named callback.
-	if start >= 1 && line[start-1] == '$' {
-		return true
-	}
-	if start >= 2 && line[start-2:start] == "->" {
-		return true
-	}
-	if start >= 2 && line[start-2:start] == "::" {
-		return true
-	}
-	prefix := strings.TrimSpace(line[:start])
-	// A property hook with a parameter, `set (array $value) { … }` or
-	// `set (array $value) => …`, declares the hook; it doesn't call set().
-	if (lower == "set" || lower == "get") && isHookDeclaration(line, start+len(name)) {
-		return true
-	}
-	if prefix == "" {
-		return false
-	}
-	// `yield from (expr)` delegates to a generator; it doesn't call from().
-	if lower == "from" && hasKeywordSuffix(prefix, "yield") {
-		return true
-	}
-	// `function &get()` declares a function that returns by reference.
-	if trimmed := strings.TrimSuffix(prefix, "&"); trimmed != prefix {
-		prefix = strings.TrimSpace(trimmed)
-	}
-	switch {
-	// A member called with space or a comment after the operator, as in
-	// `$f->/* note */bindTo()`: comments are masked to spaces.
-	case strings.HasSuffix(prefix, "->"),
-		strings.HasSuffix(prefix, "::"),
-		strings.HasSuffix(prefix, "function"),
-		strings.HasSuffix(prefix, "fn"),
-		strings.HasSuffix(prefix, "new"),
-		strings.HasSuffix(prefix, "new \\"),
-		strings.HasSuffix(prefix, "class"),
-		strings.HasSuffix(prefix, "interface"),
-		strings.HasSuffix(prefix, "trait"),
-		strings.HasSuffix(prefix, "enum"):
-		return true
-	default:
-		return false
-	}
-}
-
-// isHookDeclaration reports whether the parenthesised list starting at or
-// after pos (just past a `get`/`set` name) is followed on the same line by a
-// hook body, `{` or `=>`, rather than ending a call.
-func isHookDeclaration(line string, pos int) bool {
-	i := pos
-	for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
-		i++
-	}
-	if i >= len(line) || line[i] != '(' {
-		return false
-	}
-	depth := 0
-	for ; i < len(line); i++ {
-		switch line[i] {
-		case '(':
-			depth++
-		case ')':
-			depth--
-			if depth == 0 {
-				rest := strings.TrimSpace(line[i+1:])
-				return strings.HasPrefix(rest, "{") || strings.HasPrefix(rest, "=>")
-			}
+		// A PHP builtin the project's PHP version or extensions don't have is
+		// reported once, by builtin-unavailable.
+		if _, _, builtin := builtinFunctionAvailability(name, file); builtin {
+			continue
 		}
+		findings = append(findings, syntax.at(call.name, Finding{
+			Severity: rule.SeverityWarning,
+			Code:     rule.UnknownFunction,
+			Message:  fmt.Sprintf("Unknown function '%s'", strings.TrimPrefix(name, "\\")),
+		}))
 	}
-	return false
-}
-
-// hasKeywordSuffix reports whether s ends with the word kw, not with a longer
-// identifier ending in it.
-func hasKeywordSuffix(s, kw string) bool {
-	if !strings.HasSuffix(s, kw) {
-		return false
-	}
-	if len(s) == len(kw) {
-		return true
-	}
-	c := s[len(s)-len(kw)-1]
-	return !(c == '_' || c == '$' || c == '\\' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
+	return dropGuarded(findings, strings.Split(source, "\n"), syntax.extensionGuards())
 }
 
 // UnknownMemberRule detects unresolved method/property/constant accesses when
@@ -516,111 +99,75 @@ type UnknownMemberRule struct {
 	// without the class declaring it, as Laravel does with a notification's
 	// toMail().
 	ConventionMethod func(class, method string) bool
-	// Shared, when set, shares the file's parse with the other rules. The
-	// rule reads tokens only in a file that may check for a member first.
+	// Shared, when set, shares the file's syntax tree with the other rules.
 	Shared *Shared
 }
 
 func (r *UnknownMemberRule) Codes() []rule.Code { return []rule.Code{rule.UnknownMember} }
 
-var unknownMemberAccessRe = regexp.MustCompile(`(\?\->|\->|::)\s*([A-Za-z_][A-Za-z0-9_]*)`)
-
 func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *symbols.Index) []Finding {
 	if file == nil || r.TypeResolver == nil {
 		return nil
 	}
+	syntax := r.Shared.tree(source, file)
 	lines := strings.Split(source, "\n")
 	var findings []Finding
-	mask := newMaskState(source)
 	hierarchies := map[string]*memberHierarchy{}
 	instanceofLines := linesWithInstanceof(lines)
 	guards := memberGuards{file: file}
-	if memberGuardHintRe.MatchString(source) {
-		if result := r.Shared.parse(source); result != nil {
-			guards.collect(result.Tokens)
-		}
-	}
+	guards.collect(syntax)
 
-	for lineNum, raw := range lines {
-		line := maskPHPLine(raw, &mask)
-		for _, match := range unknownMemberAccessRe.FindAllStringSubmatchIndex(line, -1) {
-			opStart, opEnd := match[2], match[3]
-			nameStart, nameEnd := match[4], match[5]
-			member := line[nameStart:nameEnd]
-			isStatic := line[opStart:opEnd] == "::"
-			// `Foo::class` and `$foo::class` are part of the language, not members.
-			if isStatic && strings.EqualFold(member, "class") {
-				continue
-			}
-			ownerExpr := strings.TrimSpace(line[backwardExprStart(line, opStart):opStart])
-			// A line like `})->name('x')->middleware()` continues a chain begun on
-			// an earlier line, so its owner can't be worked out from this line.
-			if ownerExpr == "" || strings.Count(ownerExpr, ")") > strings.Count(ownerExpr, "(") {
-				continue
-			}
-			isCall := isCallAfter(line, nameEnd)
-			// method_exists(), property_exists() and is_callable() are how code
-			// asks whether an object has a member before using it.
-			if guards.covers(ownerExpr, member, isCall, isStatic, lineNum, opStart) {
-				continue
-			}
-
-			owners := r.resolveOwners(ownerExpr, lineNum, backwardExprStart(line, opStart), source, file, index)
-			if len(owners) == 0 {
-				continue
-			}
-			narrowed, ok := instanceofOwners(ownerExpr, lines, instanceofLines, lineNum, file, index)
-			if !ok {
-				continue
-			}
-			owners = appendNewOwners(owners, narrowed)
-			access := memberAccess{name: member, isStatic: isStatic, isCall: isCall}
-			if !access.isCall && !isStatic {
-				// isset(), unset(), empty() and ?? are how code asks whether a
-				// property is there; and a class with #[AllowDynamicProperties]
-				// (or stdClass) has whatever properties code gives it.
-				if propertyCheckedForPresence(line, backwardExprStart(line, opStart), nameEnd) || anyOwnerAllowsDynamicProperties(owners, index) {
-					continue
-				}
-			}
-			if anyOwnerMayHaveMember(owners, access, file, index, hierarchies) || r.conventionMethod(owners, access, hierarchies) {
-				continue
-			}
-			if anyImplementationHasMember(owners, isLateBoundOwner(ownerExpr), access, file, index, hierarchies) {
-				continue
-			}
-			names := make([]string, len(owners))
-			for i, owner := range owners {
-				names[i] = unknownSymbolShortName(owner)
-			}
-			findings = append(findings, Finding{
-				StartLine: lineNum,
-				StartCol:  nameStart,
-				EndLine:   lineNum,
-				EndCol:    nameEnd,
-				Severity:  rule.SeverityWarning,
-				Code:      rule.UnknownMember,
-				Message:   fmt.Sprintf("Unknown member '%s' on '%s'", member, strings.Join(names, "|")),
-			})
+	for _, ref := range syntax.references().members {
+		member := syntax.text(ref.name)
+		// `Foo::class` and `$foo::class` are part of the language, not members.
+		if ref.static && !ref.call() && strings.EqualFold(member, "class") {
+			continue
 		}
+		recv, ok := syntax.receiverOf(ref)
+		if !ok {
+			continue
+		}
+		lineNum, nameCol := syntax.lines.Position(ref.name.Start)
+		ownerExpr := recv.text
+		// method_exists(), property_exists() and is_callable() are how code
+		// asks whether an object has a member before using it.
+		if guards.covers(ownerExpr, member, ref.call(), ref.static, lineNum, nameCol) {
+			continue
+		}
+		owners := recv.classLikes(source, file, index, r.TypeResolver)
+		if len(owners) == 0 {
+			continue
+		}
+		narrowed, ok := instanceofOwners(ownerExpr, lines, instanceofLines, lineNum, file, index)
+		if !ok {
+			continue
+		}
+		owners = appendNewOwners(owners, narrowed)
+		access := memberAccess{name: member, isStatic: ref.static, isCall: ref.call()}
+		// isset(), unset(), empty() and ?? are how code asks whether a property
+		// is there; and a class with #[AllowDynamicProperties] (or stdClass)
+		// has whatever properties code gives it.
+		if !ref.call() && !ref.static && (ref.presence || anyOwnerAllowsDynamicProperties(owners, index)) {
+			continue
+		}
+		if anyOwnerMayHaveMember(owners, access, file, index, hierarchies) || r.conventionMethod(owners, access, hierarchies) {
+			continue
+		}
+		if anyImplementationHasMember(owners, isLateBoundOwner(ownerExpr), access, file, index, hierarchies) {
+			continue
+		}
+		names := make([]string, len(owners))
+		for i, owner := range owners {
+			names[i] = unknownSymbolShortName(owner)
+		}
+		findings = append(findings, syntax.at(ref.name, Finding{
+			Severity: rule.SeverityWarning,
+			Code:     rule.UnknownMember,
+			Message:  fmt.Sprintf("Unknown member '%s' on '%s'", member, strings.Join(names, "|")),
+		}))
 	}
 
 	return findings
-}
-
-// resolveOwners returns every class-like a member may be accessed on. It returns
-// nothing when any part of the type isn't known, since the member could be there.
-func (r *UnknownMemberRule) resolveOwners(ownerExpr string, lineNum, col int, source string, file *parser.FileNode, index *symbols.Index) []string {
-	if !strings.HasPrefix(ownerExpr, "$") && !strings.HasSuffix(ownerExpr, ")") && !strings.HasSuffix(ownerExpr, "]") {
-		fqn, ok := resolveClassLikeName(ownerExpr, lineNum, file)
-		if ok && fqn != "" {
-			if name, found := canonicalClassLike(fqn, file, index); found {
-				return []string{name}
-			}
-		}
-	}
-
-	return resolvedClassLikes(r.TypeResolver(ownerExpr, source, lineNum, col, file), file, index)
 }
 
 // instanceofOwners adds the classes an expression other than a plain
@@ -782,155 +329,6 @@ func collectClassLikes(expr types.TypeExpr, file *parser.FileNode, index *symbol
 	}
 	*owners = append(*owners, name)
 	return true
-}
-
-// maskState carries what maskPHPLine is inside of from one line to the next:
-// inline HTML, a block comment, a quoted string or a heredoc/nowdoc body.
-type maskState struct {
-	inHTML         bool // outside <?php … ?>
-	inBlockComment bool
-	quote          byte   // '\'' or '"' while inside a string spanning lines
-	heredocLabel   string // closing label while inside a heredoc/nowdoc body
-}
-
-// newMaskState returns the state for the first line of source. Text before
-// the first open tag is inline HTML; a source with no open tag is all PHP.
-func newMaskState(source string) maskState {
-	return maskState{inHTML: parser.HasOpenTag(source)}
-}
-
-// maskPHPLine blanks comments and string contents on one line so text
-// scanners only see code. Feed it every line of a file in order with the same
-// state, so strings, heredocs and comments spanning lines stay masked.
-func maskPHPLine(line string, st *maskState) string {
-	if line == "" {
-		return line
-	}
-	buf := []byte(line)
-	i := 0
-
-	if st.heredocLabel != "" {
-		// Heredoc/nowdoc body: masked until a line starting (after
-		// indentation) with the closing label.
-		trimmed := strings.TrimLeft(line, " \t")
-		indent := len(line) - len(trimmed)
-		if strings.HasPrefix(trimmed, st.heredocLabel) &&
-			(len(trimmed) == len(st.heredocLabel) || !parser.IsIdentByte(trimmed[len(st.heredocLabel)])) {
-			for j := 0; j < indent+len(st.heredocLabel); j++ {
-				buf[j] = ' '
-			}
-			i = indent + len(st.heredocLabel)
-			st.heredocLabel = ""
-		} else {
-			for j := range buf {
-				buf[j] = ' '
-			}
-			return string(buf)
-		}
-	}
-
-	escaped := false
-	for ; i < len(buf); i++ {
-		if st.inHTML {
-			// Inline HTML (and any <script> in it) is not PHP: blank it up to
-			// and including the next open tag.
-			if n := parser.OpenTagLen(line, i); n > 0 {
-				for j := i; j < i+n && j < len(buf); j++ {
-					buf[j] = ' '
-				}
-				i += n - 1
-				st.inHTML = false
-				continue
-			}
-			buf[i] = ' '
-			continue
-		}
-		if st.inBlockComment {
-			buf[i] = ' '
-			if i+1 < len(buf) && line[i] == '*' && line[i+1] == '/' {
-				buf[i+1] = ' '
-				st.inBlockComment = false
-				i++
-			}
-			continue
-		}
-		if st.quote != 0 {
-			buf[i] = ' '
-			if escaped {
-				escaped = false
-				continue
-			}
-			if line[i] == '\\' {
-				escaped = true
-				continue
-			}
-			if line[i] == st.quote {
-				st.quote = 0
-			}
-			continue
-		}
-
-		if i+1 < len(buf) && line[i] == '/' && line[i+1] == '*' {
-			buf[i] = ' '
-			buf[i+1] = ' '
-			st.inBlockComment = true
-			i++
-			continue
-		}
-		if line[i] == '?' && i+1 < len(buf) && line[i+1] == '>' {
-			// Close tag: back to inline HTML.
-			buf[i] = ' '
-			buf[i+1] = ' '
-			i++
-			st.inHTML = true
-			continue
-		}
-		if (i+1 < len(buf) && line[i] == '/' && line[i+1] == '/') || (line[i] == '#' && (i+1 >= len(buf) || line[i+1] != '[')) {
-			// `//` and `#` comments run to the end of the line or to a close
-			// tag, whichever comes first. PHP 8 attribute syntax `#[Name]`
-			// stays visible.
-			j := i
-			for ; j < len(buf) && !(line[j] == '?' && j+1 < len(buf) && line[j+1] == '>'); j++ {
-				buf[j] = ' '
-			}
-			i = j - 1
-			continue
-		}
-		if strings.HasPrefix(line[i:], "<<<") {
-			if label, ok := heredocOpenLabel(line[i+3:]); ok {
-				for j := i; j < len(buf); j++ {
-					buf[j] = ' '
-				}
-				st.heredocLabel = label
-				break
-			}
-		}
-		if line[i] == '\'' || line[i] == '"' {
-			buf[i] = ' '
-			st.quote = line[i]
-			continue
-		}
-	}
-
-	return string(buf)
-}
-
-// heredocOpenLabel reads the label after `<<<` (`SQL`, `'SQL'` or `"SQL"`)
-// when it is the last thing on the line.
-func heredocOpenLabel(rest string) (string, bool) {
-	rest = strings.TrimSpace(rest)
-	if len(rest) >= 2 && (rest[0] == '\'' || rest[0] == '"') && rest[len(rest)-1] == rest[0] {
-		rest = rest[1 : len(rest)-1]
-	}
-	if rest == "" || (rest[0] >= '0' && rest[0] <= '9') {
-		return "", false
-	}
-	for k := 0; k < len(rest); k++ {
-		if !parser.IsIdentByte(rest[k]) {
-			return "", false
-		}
-	}
-	return rest, true
 }
 
 // classLikeKnown is classLikeExists for unknown-class: a PHP builtin the
@@ -1238,46 +636,6 @@ func isAbstractClassLike(sym *symbols.Symbol) bool {
 	return sym.Kind == symbols.KindInterface || (sym.Kind == symbols.KindClass && sym.IsAbstract)
 }
 
-// propertyCheckedForPresence reports whether the property access running
-// from exprStart to nameEnd is the argument of isset(), unset() or empty(), or
-// the left side of ??, where PHP doesn't require the property to exist.
-func propertyCheckedForPresence(line string, exprStart, nameEnd int) bool {
-	if rest := strings.TrimLeft(line[nameEnd:], " \t"); strings.HasPrefix(rest, "??") {
-		return true
-	}
-	depth := 0
-	for i := exprStart - 1; i >= 0; i-- {
-		switch line[i] {
-		case ')', ']':
-			depth++
-		case '(', '[':
-			if depth > 0 {
-				depth--
-				continue
-			}
-			if line[i] == '[' {
-				return false
-			}
-			j := i
-			for j > 0 && (line[j-1] == ' ' || line[j-1] == '\t') {
-				j--
-			}
-			k := j
-			for k > 0 && parser.IsIdentByte(line[k-1]) {
-				k--
-			}
-			switch strings.ToLower(line[k:j]) {
-			case "isset", "unset", "empty":
-				return true
-			}
-			return false
-		case ';', '{', '}':
-			return false
-		}
-	}
-	return false
-}
-
 // anyOwnerAllowsDynamicProperties reports whether one of the owners, or a
 // class it extends, is stdClass or has #[AllowDynamicProperties].
 func anyOwnerAllowsDynamicProperties(owners []string, index *symbols.Index) bool {
@@ -1304,11 +662,6 @@ func anyOwnerAllowsDynamicProperties(owners []string, index *symbols.Index) bool
 	return false
 }
 
-func isCallAfter(line string, pos int) bool {
-	rest := strings.TrimLeft(line[pos:], " \t")
-	return strings.HasPrefix(rest, "(")
-}
-
 func resolveClassLikeName(name string, line int, file *parser.FileNode) (string, bool) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -1326,7 +679,7 @@ func resolveClassLikeName(name string, line int, file *parser.FileNode) (string,
 		return "", false
 	case "parent":
 		if cls := enclosingClassAtLine(file, line); cls != nil && cls.Extends != "" {
-			return resolve.ImportedName(cls.Extends, file.Namespace, file.Uses, ""), true
+			return parser.ResolveImportedName(cls.Extends, file.Namespace, file.Uses, "class"), true
 		}
 		return "", false
 	case "class", "readonly":
@@ -1336,16 +689,7 @@ func resolveClassLikeName(name string, line int, file *parser.FileNode) (string,
 	if symbols.IsPHPBuiltinType(lower) {
 		return "", false
 	}
-	return resolve.ImportedName(name, file.Namespace, file.Uses, "class"), true
-}
-
-// writtenName returns a name matched at line[start:] with the leading `\` of a
-// fully qualified name, which the name regexes leave out of the match.
-func writtenName(line string, start int, name string) string {
-	if start > 0 && line[start-1] == '\\' {
-		return "\\" + name
-	}
-	return name
+	return parser.ResolveImportedName(name, file.Namespace, file.Uses, "class"), true
 }
 
 func localClassLikeExists(fqn string, file *parser.FileNode) bool {
@@ -1547,43 +891,6 @@ func functionNodeFQN(fn *parser.FunctionNode, file *parser.FileNode) string {
 		return file.Namespace + "\\" + fn.Name
 	}
 	return fn.Name
-}
-
-func backwardExprStart(line string, end int) int {
-	depthParen := 0
-	depthBracket := 0
-	for i := end - 1; i >= 0; i-- {
-		switch line[i] {
-		case ')':
-			depthParen++
-		case '(':
-			if depthParen == 0 {
-				return i + 1
-			}
-			depthParen--
-		case ']':
-			depthBracket++
-		case '[':
-			if depthBracket == 0 {
-				return i + 1
-			}
-			depthBracket--
-		}
-		if depthParen > 0 || depthBracket > 0 {
-			continue
-		}
-		// The `?` of a nullsafe `?->` is part of the chain, as in `$a?->b->c()`;
-		// a ternary's isn't.
-		if isExprChar(line[i]) || line[i] == '?' && strings.HasPrefix(line[i+1:], "->") {
-			continue
-		}
-		return i + 1
-	}
-	return 0
-}
-
-func isExprChar(b byte) bool {
-	return parser.IsIdentByte(b) || b == '$' || b == '\\' || b == ':' || b == '>' || b == '-' || b == ')' || b == '(' || b == ']' || b == '['
 }
 
 func unknownSymbolShortName(fqn string) string {

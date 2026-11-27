@@ -1,11 +1,13 @@
 package checks
 
 import (
-	"strings"
+	"cmp"
+	"slices"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
-	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -39,104 +41,95 @@ func allCheckable(callees []callee) bool {
 type resolvedCall struct {
 	kind    callKind
 	callees []callee
-	site    parser.Token
-	name    string
-	at      int
-	open    int
-	close   int
-	tokens  []parser.Token
+	name    ast.Node
+	args    *ast.ArgList
 }
 
-func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index, shared *Shared, typeResolver func(string, string, int, int, *parser.FileNode) string, wants func(tokens []parser.Token, open, close int) bool, visit func(resolvedCall)) {
-	tokens := shared.parse(source).Tokens
-	var lines []string
-	var scopes *scope.Document
-	arguments := func(open int) (int, bool) {
-		closeIdx := parser.MatchingClose(tokens, open)
-		return closeIdx, closeIdx >= 0 && (wants == nil || wants(tokens, open, closeIdx))
+type callSite struct {
+	kind   callKind
+	name   ast.Node
+	args   *ast.ArgList
+	member memberReference
+}
+
+func eachResolvedCall(syntax *fileSyntax, file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string, wants func(*ast.ArgList) bool, visit func(resolvedCall)) {
+	refs := syntax.references()
+	sites := make([]callSite, 0, len(refs.calls)+len(refs.constructions)+len(refs.members))
+	for _, c := range refs.calls {
+		sites = append(sites, callSite{kind: callFunction, name: c.name, args: c.args})
 	}
-	emit := func(kind callKind, callees []callee, site parser.Token, name string, at, open, closeIdx int) {
-		if len(callees) > 0 {
-			visit(resolvedCall{kind: kind, callees: callees, site: site, name: name, at: at, open: open, close: closeIdx, tokens: tokens})
+	for _, c := range refs.constructions {
+		sites = append(sites, callSite{kind: callConstructor, name: c.name, args: c.args})
+	}
+	for _, m := range refs.members {
+		if !m.call() {
+			continue
+		}
+		kind := callMethod
+		if m.static {
+			kind = callStatic
+		}
+		sites = append(sites, callSite{kind: kind, name: m.name, args: m.args, member: m})
+	}
+	slices.SortFunc(sites, func(a, b callSite) int { return cmp.Compare(a.name.Bounds().Start, b.name.Bounds().Start) })
+	for _, site := range sites {
+		if !syntax.closed(site.args) || (wants != nil && !wants(site.args)) {
+			continue
+		}
+		if callees := site.callees(syntax, file, source, index, typeResolver); len(callees) > 0 {
+			visit(resolvedCall{kind: site.kind, callees: callees, name: site.name, args: site.args})
 		}
 	}
-	for i := 0; i < len(tokens); i++ {
-		tok := tokens[i]
-		if tok.Kind != parser.TokenIdentifier || isSkippedCallKeyword(tok.Value) {
-			continue
+}
+
+func (s callSite) callees(syntax *fileSyntax, file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string) []callee {
+	name := syntax.text(s.name)
+	switch s.kind {
+	case callFunction:
+		fqns, _ := resolve.FunctionNames(name, file)
+		return functionCallees(fqns, index)
+	case callConstructor:
+		classFQN, ok := classNamed(name, syntax.line(s.name), file, index)
+		if !ok {
+			return nil
 		}
-		next := parser.NextSignificant(tokens, i+1)
-		if tokens[next].Kind == parser.TokenDoubleColon {
-			methodIdx := parser.NextSignificant(tokens, next+1)
-			if tokens[methodIdx].Kind != parser.TokenIdentifier {
-				continue
-			}
-			openIdx := parser.NextSignificant(tokens, methodIdx+1)
-			if tokens[openIdx].Kind != parser.TokenOpenParen {
-				continue
-			}
-			closeIdx, wanted := arguments(openIdx)
-			if !wanted {
-				continue
-			}
-			classFQN, ok := resolveClassLikeName(tok.Value, tok.Line, file)
-			if !ok || classFQN == "" {
-				continue
-			}
-			emit(callStatic, methodCallees(classFQN, tokens[methodIdx].Value, index), tok, tokens[methodIdx].Value, i, openIdx, closeIdx)
-			continue
-		}
-		if tokens[next].Kind != parser.TokenOpenParen {
-			continue
-		}
-		closeIdx, wanted := arguments(next)
-		if !wanted {
-			continue
-		}
-		prev := parser.PrevSignificant(tokens, i-1)
-		if prev >= 0 && tokens[prev].Kind == parser.TokenArrow {
-			if typeResolver == nil {
-				continue
-			}
-			if lines == nil {
-				lines = strings.Split(source, "\n")
-			}
-			callees, receiver := calledMethod(tokens, prev, tok, lines, source, file, index, typeResolver)
-			if len(callees) == 0 {
-				continue
-			}
-			if receiver == "$this" || strings.HasPrefix(receiver, "$this->") || strings.HasPrefix(receiver, "$this?->") {
-				if scopes == nil {
-					scopes = scope.Collect(source)
-				}
-				if inClosure(scopes, tok) {
-					continue
-				}
-			}
-			emit(callMethod, callees, tok, tok.Value, i, next, closeIdx)
-			continue
-		}
-		if prev >= 0 && tokens[prev].Kind == parser.TokenNew {
-			classFQN, ok := resolveClassLikeName(tok.Value, tok.Line, file)
-			if !ok || classFQN == "" {
-				continue
-			}
-			emit(callConstructor, methodCallees(classFQN, "__construct", index), tok, tok.Value, i, next, closeIdx)
-			continue
-		}
-		if prev >= 0 {
-			switch tokens[prev].Kind {
-			case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenFunction:
-				continue
-			case parser.TokenAmpersand:
-				if pp := parser.PrevSignificant(tokens, prev-1); pp >= 0 && tokens[pp].Kind == parser.TokenFunction {
-					continue
-				}
-			}
-		}
-		fqns, _ := resolve.FunctionNames(tok.Value, file)
-		emit(callFunction, functionCallees(fqns, index), tok, tok.Value, i, next, closeIdx)
+		return methodCallees(classFQN, "__construct", index)
 	}
+	recv, ok := syntax.receiverOf(s.member)
+	if !ok {
+		return nil
+	}
+	if s.kind == callStatic {
+		if c, isName := recv.node.(*ast.ConstFetch); !isName || c.Name == nil || c.Name.Kind == token.Static {
+			return nil
+		}
+		classFQN, ok := recv.className(file, index)
+		if !ok {
+			return nil
+		}
+		return methodCallees(classFQN, name, index)
+	}
+	if syntax.onThis(recv.node) && syntax.inClosure(s.name) {
+		return nil
+	}
+	owners := recv.classLikes(source, file, index, typeResolver)
+	if len(owners) != 1 {
+		return nil
+	}
+	callees := methodCallees(owners[0], name, index)
+	for _, c := range callees {
+		if c.sym.IsVirtual {
+			return nil
+		}
+	}
+	return callees
+}
+
+func (f *fileSyntax) closed(args *ast.ArgList) bool {
+	if args.End <= args.Start || f.src[args.End-1] != ')' {
+		return false
+	}
+	return len(args.Args) == 0 || args.Args[len(args.Args)-1].End < args.End
 }
 
 func functionCallees(fqns []string, index *symbols.Index) []callee {
