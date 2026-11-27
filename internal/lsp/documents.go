@@ -123,12 +123,12 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 	}
 	s.goSafe("container.Analyze", s.container.Analyze)
 	if s.config().DiagnosticsEnabled {
+		saved := s.getDocument(uri)
 		s.goSafe("diagnostics.RunTools", func() {
-			filePath := symbols.URIToPath(uri)
 			// PHPStan and Pint run on .php files only: Pint would reformat a
 			// template, and PHPStan doesn't analyse .phtml unless configured to.
-			if !workspace.IsTemplate(uri) {
-				s.analysis.RunTools(uri, filePath)
+			if !workspace.IsTemplate(uri) && !s.analysis.RunTools(uri, symbols.URIToPath(uri), func() bool { return s.isCurrentDocument(uri, saved) }) {
+				return
 			}
 			source := s.getDocument(uri)
 			s.analysis.Saved(uri, source)

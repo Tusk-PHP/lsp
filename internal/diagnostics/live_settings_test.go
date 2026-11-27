@@ -31,6 +31,8 @@ func TestBladeStructureFindingsFollowTheCurrentRules(t *testing.T) {
 	}
 }
 
+func unchanged() bool { return true }
+
 func writeTool(t *testing.T, dir, name, output string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
@@ -55,7 +57,7 @@ func TestRunToolsUsesTheToolsOfTheCurrentSettings(t *testing.T) {
 	pint := writeTool(t, dir, "pint", `{"files": [{"name": "`+file+`", "appliedFixers": ["no_unused_imports"]}]}`)
 
 	p := newTestProvider()
-	p.RunTools(uri, file)
+	p.RunTools(uri, file, unchanged)
 	if got := len(filterBySource(p.Analyze(uri, "<?php\nstrlen(1);\n"), "phpstan")); got != 0 {
 		t.Fatalf("disabled tools report nothing, got %d", got)
 	}
@@ -65,7 +67,7 @@ func TestRunToolsUsesTheToolsOfTheCurrentSettings(t *testing.T) {
 	cfg.PHPStanEnabled, cfg.PHPStanPath = &enabled, phpstan
 	cfg.PintEnabled, cfg.PintPath = &enabled, pint
 	p.SetConfig(&cfg)
-	p.RunTools(uri, file)
+	p.RunTools(uri, file, unchanged)
 	diags := p.Analyze(uri, "<?php\nstrlen(1);\n")
 	stan := filterBySource(diags, "phpstan")
 	if len(stan) != 1 || stan[0].Code != "argument.type" || stan[0].Range.Start.Line != 1 {
@@ -114,7 +116,9 @@ func TestRunToolsDropsFindingsOfToolsTurnedOffDuringTheRun(t *testing.T) {
 	}), "", 0)
 	p.SetConfig(&cfg)
 	armed = true
-	p.RunTools(uri, file)
+	if p.RunTools(uri, file, unchanged) {
+		t.Error("a run outlived by new tool settings reports that it was stopped")
+	}
 	if !changed {
 		t.Fatal("the failing Pint run logs, which turns the tools off")
 	}

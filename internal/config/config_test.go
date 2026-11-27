@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
@@ -672,5 +673,40 @@ func TestLoadFromFileReportsUnreadableFile(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := LoadFromFile(dir); err == nil || !strings.Contains(err.Error(), "reading "+dir) {
 		t.Errorf("got %v", err)
+	}
+}
+
+func TestToolTimeouts(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.PHPStanTimeout() != time.Minute || cfg.PintTimeout() != 30*time.Second {
+		t.Errorf("unset timeouts are 60s for PHPStan and 30s for Pint, got %s and %s", cfg.PHPStanTimeout(), cfg.PintTimeout())
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".tusk-php.json")
+	if err := os.WriteFile(path, []byte(`{"phpstanTimeoutMs": 120000, "pintTimeoutMs": -1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PHPStanTimeout() != 2*time.Minute {
+		t.Errorf("phpstanTimeoutMs from the file applies, got %s", cfg.PHPStanTimeout())
+	}
+	if cfg.PintTimeout() != 30*time.Second {
+		t.Errorf("a negative pintTimeoutMs leaves the default, got %s", cfg.PintTimeout())
+	}
+	if problems := cfg.Problems(); len(problems) != 1 || !strings.Contains(problems[0].Error(), "pintTimeoutMs") {
+		t.Errorf("a negative pintTimeoutMs is reported, got %v", problems)
+	}
+
+	stan, pint := 5000, 2000
+	cfg = cfg.WithClientOptions(&ClientOptions{PHPStanTimeoutMs: &stan, PintTimeoutMs: &pint})
+	if cfg.PHPStanTimeout() != 5*time.Second || cfg.PintTimeout() != 2*time.Second {
+		t.Errorf("client timeouts override the file, got %s and %s", cfg.PHPStanTimeout(), cfg.PintTimeout())
+	}
+	if problems := cfg.Problems(); len(problems) != 0 {
+		t.Errorf("valid timeouts report nothing, got %v", problems)
 	}
 }

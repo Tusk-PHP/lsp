@@ -197,9 +197,16 @@ func (s *Session) Saved(uri, source string) {
 }
 
 // RunTools runs the configured external tools (PHPStan, Pint) over a saved
-// file in the background and keeps their findings for Analyze to report.
-func (s *Session) RunTools(uri, filePath string) {
-	s.diag.RunTools(uri, filePath)
+// file and keeps their findings for Analyze to report, if unchanged still
+// reports true when they end. A newer run for the file, Closed, StopTools or
+// new tool settings stop it, and it then reports false.
+func (s *Session) RunTools(uri, filePath string, unchanged func() bool) bool {
+	return s.diag.RunTools(uri, filePath, unchanged)
+}
+
+// StopTools stops every external tool run in progress.
+func (s *Session) StopTools() {
+	s.diag.StopTools()
 }
 
 // Closed forgets what was kept for a file.

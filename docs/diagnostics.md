@@ -75,6 +75,8 @@ configuration. It never runs while you type.
 - **Level:** your configuration decides. `phpstanLevel` overrides it.
 
 PHPStan's findings are shown as errors and stay until the next save of that file.
+A run is stopped after a minute (`phpstanTimeoutMs`), or when you save the file
+again before it ends; see [PHPStan and Pint runs](configuration.md#phpstan-and-pint-runs).
 
 ## Laravel Pint
 
@@ -83,7 +85,8 @@ what Pint would change. It doesn't change your file: format with Pint as you
 normally do. Blade and other templates are skipped.
 
 It uses `vendor/bin/pint`, otherwise `pint` on your `PATH`, and Pint's own
-`pint.json`. `pintPath` and `pintConfig` point it elsewhere.
+`pint.json`. `pintPath` and `pintConfig` point it elsewhere. A run is stopped
+after 30 seconds (`pintTimeoutMs`), or when you save the file again before it ends.
 
 ## Turning diagnostics off
 

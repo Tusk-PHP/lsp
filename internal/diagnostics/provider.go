@@ -1,6 +1,7 @@
 package diagnostics
 
 import (
+	"context"
 	"log"
 	"slices"
 	"sync"
@@ -47,8 +48,14 @@ type Provider struct {
 
 	mu          sync.RWMutex
 	toolResults map[string][]Diagnostic
+	toolRuns    map[string]*toolRun
 	saveResults map[string]savedFindings
 	saveGen     uint64
+}
+
+type toolRun struct {
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 type savedFindings struct {
@@ -65,6 +72,7 @@ func NewProvider(index *symbols.Index, framework, rootPath string, logger *log.L
 		rootPath:    rootPath,
 		logger:      logger,
 		toolResults: make(map[string][]Diagnostic),
+		toolRuns:    make(map[string]*toolRun),
 		saveResults: make(map[string]savedFindings),
 	}
 	p.SetConfig(cfg)
@@ -92,6 +100,7 @@ func (p *Provider) SetConfig(cfg *config.Config) {
 	}
 	p.mu.Lock()
 	clear(p.toolResults)
+	p.stopToolRunsLocked()
 	p.mu.Unlock()
 }
 
@@ -278,22 +287,62 @@ func (p *Provider) saveDiagnostics(cfg *config.Config, uri, source string) []Dia
 	return diags
 }
 
-// RunTools executes external analysis tools (PHPStan, Pint) on a file.
-// Results are cached and included in subsequent Analyze calls, unless the
-// tools' settings changed while they ran.
-func (p *Provider) RunTools(uri, filePath string) {
+// RunTools runs the external analysis tools (PHPStan, Pint) on a saved
+// file and caches their findings for later Analyze calls. A file has at most
+// one run at a time: a new run stops the one in progress and waits for it to
+// end. RunTools reports false when its run was stopped, by a newer run,
+// ClearCache, StopTools or new tool settings. A run that ends is reported
+// true, and its findings are kept only if unchanged still reports true then.
+func (p *Provider) RunTools(uri, filePath string, unchanged func() bool) bool {
 	tools := p.settings.Load()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	run := &toolRun{cancel: cancel, done: make(chan struct{})}
+	defer close(run.done)
+	p.mu.Lock()
+	prev := p.toolRuns[uri]
+	p.toolRuns[uri] = run
+	p.mu.Unlock()
+	if prev != nil {
+		prev.cancel()
+		<-prev.done
+	}
+
 	var toolDiags []Diagnostic
-	if tools.phpstan.available() {
-		toolDiags = append(toolDiags, tools.phpstan.analyze(filePath)...)
+	if tools.phpstan.available() && ctx.Err() == nil {
+		toolDiags = append(toolDiags, tools.phpstan.analyze(ctx, filePath)...)
 	}
-	if tools.pint.available() {
-		toolDiags = append(toolDiags, tools.pint.analyze(filePath)...)
+	if tools.pint.available() && ctx.Err() == nil {
+		toolDiags = append(toolDiags, tools.pint.analyze(ctx, filePath)...)
 	}
+	current := ctx.Err() == nil && unchanged()
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.settings.Load().sameTools(tools) {
+	if p.toolRuns[uri] != run {
+		return false
+	}
+	delete(p.toolRuns, uri)
+	if ctx.Err() != nil || !p.settings.Load().sameTools(tools) {
+		return false
+	}
+	if current {
 		p.toolResults[uri] = toolDiags
+	}
+	return true
+}
+
+// StopTools stops every external tool run in progress; their findings are
+// dropped.
+func (p *Provider) StopTools() {
+	p.mu.Lock()
+	p.stopToolRunsLocked()
+	p.mu.Unlock()
+}
+
+func (p *Provider) stopToolRunsLocked() {
+	for _, run := range p.toolRuns {
+		run.cancel()
 	}
 }
 
@@ -332,9 +381,12 @@ func (p *Provider) reanalyzeStale() bool {
 	return len(stale) > 0
 }
 
-// ClearCache removes cached tool results for a URI.
+// ClearCache removes cached tool results for a URI and stops its tool run.
 func (p *Provider) ClearCache(uri string) {
 	p.mu.Lock()
+	if run := p.toolRuns[uri]; run != nil {
+		run.cancel()
+	}
 	delete(p.toolResults, uri)
 	delete(p.saveResults, uri)
 	p.mu.Unlock()

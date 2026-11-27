@@ -16,6 +16,9 @@ func (s *Server) handleMessage(msg *jsonRPCMessage) {
 	case "shutdown":
 		s.shutdown = true
 		s.cancelAllDiagnostics()
+		if s.session != nil {
+			s.session.StopTools()
+		}
 		if s.coverage != nil {
 			s.coverage.Stop()
 		}

@@ -1,10 +1,9 @@
 package diagnostics
 
 import (
+	"context"
 	"encoding/json"
 	"log"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -16,11 +15,8 @@ import (
 )
 
 type pintRunner struct {
-	binPath  string
-	cfgFile  string
-	rootPath string
-	logger   *log.Logger
-	enabled  bool
+	externalTool
+	cfgFile string
 }
 
 type pintOutput struct {
@@ -35,76 +31,29 @@ type pintFile struct {
 
 func newPintRunner(rootPath string, cfg *config.Config, logger *log.Logger) *pintRunner {
 	r := &pintRunner{
-		rootPath: rootPath,
-		logger:   logger,
+		externalTool: newExternalTool("Pint", "pint", rootPath, cfg.PintPath, cfg.PintEnabled, cfg.PintTimeout(), logger),
+		cfgFile:      cfg.PintConfig,
 	}
-
-	if cfg.PintEnabled != nil {
-		r.enabled = *cfg.PintEnabled
-	} else {
-		r.enabled = true
-	}
-
-	if cfg.PintPath != "" {
-		r.binPath = cfg.PintPath
-	} else {
-		vendorBin := filepath.Join(rootPath, "vendor", "bin", "pint")
-		if _, err := os.Stat(vendorBin); err == nil {
-			r.binPath = vendorBin
-		} else if path, err := exec.LookPath("pint"); err == nil {
-			r.binPath = path
-		} else {
-			r.enabled = false
-		}
-	}
-
-	if cfg.PintConfig != "" {
-		r.cfgFile = cfg.PintConfig
-	} else {
-		candidate := filepath.Join(rootPath, "pint.json")
-		if _, err := os.Stat(candidate); err == nil {
+	if r.cfgFile == "" {
+		if candidate := filepath.Join(rootPath, "pint.json"); fileExists(candidate) {
 			r.cfgFile = candidate
 		}
 	}
-
-	if r.enabled && r.binPath != "" {
+	if r.available() {
 		logger.Printf("Pint: binary=%s config=%s", r.binPath, r.cfgFile)
 	}
-
 	return r
 }
 
-func (r *pintRunner) available() bool {
-	return r.enabled && r.binPath != ""
-}
-
-func (r *pintRunner) analyze(filePath string) []Diagnostic {
+func (r *pintRunner) analyze(ctx context.Context, filePath string) []Diagnostic {
 	args := []string{"--test", "--format=json"}
-
 	if r.cfgFile != "" {
 		args = append(args, "--config="+r.cfgFile)
 	}
-
-	args = append(args, filePath)
-
-	cmd := exec.Command(r.binPath, args...)
-	cmd.Dir = r.rootPath
-
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			if exitErr.ExitCode() == 1 {
-				// Exit code 1 = fixable issues found — stdout has JSON
-			} else {
-				r.logger.Printf("Pint error (exit %d): %s", exitErr.ExitCode(), string(exitErr.Stderr))
-				return nil
-			}
-		} else {
-			r.logger.Printf("Pint exec error: %v", err)
-			return nil
-		}
+	output, ok := r.run(ctx, filePath, args...)
+	if !ok {
+		return nil
 	}
-
 	return r.parseOutput(output)
 }
 

@@ -67,6 +67,17 @@ Create `.tusk-php.json` in your project root for settings everyone who opens the
 
 All diagnostic rules are enabled by default. Set a rule to `false` (or `"off"`) to disable it, or to `"error"`, `"warning"`, `"info"` or `"hint"` to change its severity. A rule name or severity that doesn't exist is an error: the editor shows it, and `tusk-php check` stops with it. Every rule, and how to turn off PHPStan and Pint, is in [Diagnostics](diagnostics.md). Framework is auto-detected from `artisan` (Laravel), `bin/console` (Symfony), `bin/magento` (Magento 2), or `composer.json`.
 
+### PHPStan and Pint runs
+
+PHPStan and Pint run when you save a PHP file, one run per file at a time: saving again while a run is still going stops that run, and its processes, including PHPStan's workers, and starts a new one. If you edit the file while the tools run, their findings are dropped and the previous ones stay until the next save. A run that takes too long is stopped and reports nothing:
+
+| Key | Default | Description |
+|---|---|---|
+| `phpstanTimeoutMs` | `60000` | How long one PHPStan run may take, in milliseconds |
+| `pintTimeoutMs` | `30000` | How long one Pint run may take, in milliseconds |
+
+Both are read from `.tusk-php.json` and from the client's `initializationOptions`. `0` keeps the default; a negative value is reported, and the default applies. A run stopped at its timeout is written to the log. Which binaries and configuration the tools use is in [Diagnostics](diagnostics.md#phpstan).
+
 ### What applies without a restart
 
 Save `.tusk-php.json`, or have the client send `workspace/didChangeConfiguration` with settings shaped like `initializationOptions` (Zed and Neovim send their `settings` this way), and the server reads its configuration again. Those settings apply over `initializationOptions` instead of replacing them, and settings with no Tusk PHP option in them, such as the empty object Zed sends when its `settings` are unset, change nothing; a client that sends no settings still makes the server read the file again. A `.tusk-php.json` that can't be read, such as a half-edited save with a syntax error, is reported and the last version that could be read stays in use. Open files are checked again with the new settings. These apply straight away:
@@ -76,7 +87,7 @@ Save `.tusk-php.json`, or have the client send `workspace/didChangeConfiguration
 | `phpVersion`, `extensions`, `phpBinary`, `phpDetectTimeoutMs` | The PHP profile: builtins, completion, hover and `builtin-unavailable`. Changes to `"php"` or `ext-*` in `composer.json` apply the same way. |
 | `diagnosticsEnabled` | Turning it off clears the open files' diagnostics; turning it on checks them again. |
 | `diagnosticRules`, `diagnosticIgnore` | Which findings are reported, and with which severity. Findings of the on-save rules are worked out again for files you have saved. |
-| `phpstanEnabled`, `phpstanPath`, `phpstanLevel`, `phpstanConfig`, `pintEnabled`, `pintPath`, `pintConfig` | The next save runs the tools with the new settings. Findings from the old settings are dropped. |
+| `phpstanEnabled`, `phpstanPath`, `phpstanLevel`, `phpstanConfig`, `phpstanTimeoutMs`, `pintEnabled`, `pintPath`, `pintConfig`, `pintTimeoutMs` | The next save runs the tools with the new settings. Runs still going are stopped, and findings from the old settings are dropped. |
 | `excludePaths`, `maxIndexFiles` | The index, in the background: files in a newly excluded directory or past the new limit leave it, and files now included are indexed. A file open in the editor stays, and so do files that Composer's autoloader loads, such as `vendor` packages. |
 | `ai.denyPaths`, `ai.allowedRoots` | Which files the MCP tools read and return, from the next tool call. |
 | `inlayHints`, `autoImport.aliasStyle`, `php_manual_locale`, `php_manual_open_on_definition`, `composer.hover.enable`, `composer.openOnDefinition`, `introspection.verbosity` | The next request. |

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/rule"
@@ -160,10 +161,12 @@ type Config struct {
 	PHPStanPath             string          `json:"phpstanPath,omitempty"`
 	PHPStanLevel            string          `json:"phpstanLevel,omitempty"`
 	PHPStanConfig           string          `json:"phpstanConfig,omitempty"`
+	PHPStanTimeoutMs        int             `json:"phpstanTimeoutMs,omitempty"`
 	CoverageReportPath      string          `json:"coverageReportPath,omitempty"`
 	PintEnabled             *bool           `json:"pintEnabled,omitempty"`
 	PintPath                string          `json:"pintPath,omitempty"`
 	PintConfig              string          `json:"pintConfig,omitempty"`
+	PintTimeoutMs           int             `json:"pintTimeoutMs,omitempty"`
 	DatabaseEnabled         *bool           `json:"databaseEnabled,omitempty"`
 	DatabaseSource          string          `json:"databaseSource,omitempty"`
 	DiagnosticRules         DiagnosticRules `json:"diagnosticRules,omitempty"`
@@ -196,7 +199,40 @@ func (c *Config) SetDiagnosticRulesJSON(raw string) error {
 }
 
 func (c *Config) Problems() []error {
-	return c.DiagnosticIgnore.Invalid
+	problems := slices.Clone(c.DiagnosticIgnore.Invalid)
+	if c.PHPStanTimeoutMs < 0 {
+		problems = append(problems, negativeTimeout("phpstanTimeoutMs", c.PHPStanTimeoutMs))
+	}
+	if c.PintTimeoutMs < 0 {
+		problems = append(problems, negativeTimeout("pintTimeoutMs", c.PintTimeoutMs))
+	}
+	return problems
+}
+
+func negativeTimeout(key string, ms int) error {
+	return fmt.Errorf("%s must be a positive number of milliseconds, got %d; the default applies", key, ms)
+}
+
+const (
+	defaultPHPStanTimeout = 60 * time.Second
+	defaultPintTimeout    = 30 * time.Second
+)
+
+// PHPStanTimeout is how long one PHPStan run may take before it is stopped.
+func (c *Config) PHPStanTimeout() time.Duration {
+	return toolTimeout(c.PHPStanTimeoutMs, defaultPHPStanTimeout)
+}
+
+// PintTimeout is how long one Pint run may take before it is stopped.
+func (c *Config) PintTimeout() time.Duration {
+	return toolTimeout(c.PintTimeoutMs, defaultPintTimeout)
+}
+
+func toolTimeout(ms int, unset time.Duration) time.Duration {
+	if ms <= 0 {
+		return unset
+	}
+	return time.Duration(ms) * time.Millisecond
 }
 
 // IsPHPVersionExplicitlySet reports whether PHPVersion was supplied by a
@@ -338,6 +374,9 @@ func (c *Config) mergeClientOptions(opts *ClientOptions) {
 	if opts.PHPStanConfig != "" {
 		c.PHPStanConfig = opts.PHPStanConfig
 	}
+	if opts.PHPStanTimeoutMs != nil {
+		c.PHPStanTimeoutMs = *opts.PHPStanTimeoutMs
+	}
 	if opts.CoverageReportPath != "" {
 		c.CoverageReportPath = opts.CoverageReportPath
 	}
@@ -349,6 +388,9 @@ func (c *Config) mergeClientOptions(opts *ClientOptions) {
 	}
 	if opts.PintConfig != "" {
 		c.PintConfig = opts.PintConfig
+	}
+	if opts.PintTimeoutMs != nil {
+		c.PintTimeoutMs = *opts.PintTimeoutMs
 	}
 	if opts.DatabaseEnabled != nil {
 		c.DatabaseEnabled = opts.DatabaseEnabled
