@@ -90,8 +90,9 @@ above it in this list**, never from a later one:
    symbols, rename, signature help), `inlayhint`, `checks` (native rules, testable
    without LSP types), `diagnostics` (runs `checks`, plus PHPStan and Pint),
    `symquery`, `introspect`, `deps`, `unuseddeps`, `graph`, `composer/cardhover`,
-   `session` (wires diagnostics, completion, hover and the Blade and framework
-   resolvers they share over a workspace once, for the LSP, MCP and CLI alike;
+   `session` (wires diagnostics, completion, hover, inlay hints, the analyzer
+   and the Blade and framework resolvers they share over a workspace once, for
+   the LSP, MCP and CLI alike;
    on the editor side of the engine boundary, since it builds editor features).
 6. **Transports:** `lsp`, `mcpserver`.
 7. **Tests across everything:** `conformance`.
@@ -129,11 +130,10 @@ What each piece owns once it exists:
 - **`session`** is the only place that constructs providers and wires resolvers
   between them. `lsp` and `mcpserver` ask it for providers and add only
   transport-specific parts (client commands, notifications, tool registration).
-  Diagnostics, completion and hover already come only from it, and
-  `tusk-php check` and `introspect` use it too. Inlay hints and the analyzer
-  are still built in both `lsp/initialize.go` (`handleInitialize`) and
-  `mcpserver/server.go` (`buildRuntime`), from the session's resolvers, so a
-  change to their wiring is made in both.
+  Diagnostics, completion, hover, inlay hints and the analyzer come only from
+  it, and `tusk-php check` and `introspect` use it too, so a wiring change to
+  them goes in `session.New`, once. The Composer hover card and the coverage
+  store are built by the LSP alone, as only it serves them.
 - **`document`** owns the latest text of each open file and its version. Analysis
   runs on an immutable snapshot and its result is dropped if a newer version
   arrived meanwhile. It also converts columns between the byte offsets the core

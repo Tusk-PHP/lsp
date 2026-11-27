@@ -5,12 +5,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tusk-PHP/lsp/internal/analyzer"
 	"github.com/Tusk-PHP/lsp/internal/composer/cardhover"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/coverage"
 	"github.com/Tusk-PHP/lsp/internal/document"
-	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/session"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -76,8 +74,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 		}
 	}
 	s.completion.SetLazyResolve(lazyDoc, lazyDetail)
-	s.inlayHint = inlayhint.NewProvider(s.index, s.container)
-	s.inlayHint.SetTypedChainResolver(s.session.TypedExpression)
+	s.inlayHint = s.session.InlayHints()
 	s.hover = s.session.Hover()
 	s.coverage = coverage.NewStore(s.rootPath, s.cfg.CoverageReportPath, s.logger)
 	s.hover.SetCoverage(s.coverage)
@@ -96,19 +93,10 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 			})
 		})
 	}
-	s.analyzer = analyzer.NewAnalyzer(s.index, s.container)
+	s.analyzer = s.session.Analyzer()
 	if opts := params.InitializationOptions; opts != nil {
 		s.analyzer.SetClientCommands(opts.ClientCommands)
 	}
-	s.analyzer.SetChainResolver(s.session.Expression)
-	s.analyzer.SetTypedChainResolver(s.session.TypedExpression)
-	if s.routeIndex != nil {
-		s.analyzer.SetLaravelRouteIndex(s.routeIndex)
-	}
-	s.analyzer.SetViewResolver(s.session.Views())
-	s.analyzer.SetTranslationResolver(s.session.Translations())
-	s.analyzer.SetSymfonyTranslationResolver(s.session.SymfonyTranslations())
-	s.analyzer.SetSymfonyCommands(s.workspace.SymfonyCommands)
 	s.sendResponse(msg.ID, protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
 			PositionEncoding: s.encoding.String(),
