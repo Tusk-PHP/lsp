@@ -154,7 +154,7 @@ type routeSession struct {
 	routes   []RouteName
 }
 
-func readRouteFiles(files map[string]*routeFile, rootPath string) []RouteName {
+func readRouteFiles(files map[string]*routeFile, rootPath string, expected int) []RouteName {
 	paths := make([]string, 0, len(files))
 	included := make(map[string]bool)
 	for path, f := range files {
@@ -167,7 +167,7 @@ func readRouteFiles(files map[string]*routeFile, rootPath string) []RouteName {
 	}
 	slices.Sort(paths)
 
-	s := routeSession{rootPath: rootPath, files: files, reading: make(map[string]bool), used: make(map[string]map[routeGroup]bool)}
+	s := routeSession{rootPath: rootPath, files: files, reading: make(map[string]bool), used: make(map[string]map[routeGroup]bool), routes: make([]RouteName, 0, expected)}
 	for _, path := range paths {
 		if !included[path] {
 			s.read(path, routeGroup{})
@@ -217,5 +217,5 @@ func (r *routeReader) include(e ast.Expr, g routeGroup) bool {
 
 func parseRouteDefinitions(uri, source string) []RouteName {
 	f := parseRouteFile(uri, source, "")
-	return readRouteFiles(map[string]*routeFile{f.path: f}, "")
+	return readRouteFiles(map[string]*routeFile{f.path: f}, "", 0)
 }
