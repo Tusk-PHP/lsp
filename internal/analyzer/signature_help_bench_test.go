@@ -18,6 +18,16 @@ func BenchmarkSignatureHelpOfAConstruction(b *testing.B) {
 	benchSignatureHelp(b, source, source, "new Formatter")
 }
 
+func BenchmarkSignatureHelpOfAMethodCall(b *testing.B) {
+	source := signatureHelpBenchSource("$this->render")
+	benchSignatureHelp(b, source, source, "$this->render")
+}
+
+func BenchmarkSignatureHelpOfAConstructionAfterAnEditAboveTheCall(b *testing.B) {
+	source := signatureHelpBenchSource("new Formatter")
+	benchSignatureHelp(b, strings.Replace(source, "class Handler", "class Handle", 1), source, "new Formatter")
+}
+
 func BenchmarkSignatureHelpAfterAnEditAboveTheCall(b *testing.B) {
 	source := signatureHelpBenchSource("format")
 	benchSignatureHelp(b, strings.Replace(source, "class Handler", "class Handle", 1), source, "format")
@@ -25,7 +35,7 @@ func BenchmarkSignatureHelpAfterAnEditAboveTheCall(b *testing.B) {
 
 func signatureHelpBenchSource(call string) string {
 	var src strings.Builder
-	src.WriteString("<?php\nnamespace App\\Services;\n\nuse App\\Models\\User;\n\nclass Handler\n{\n")
+	src.WriteString("<?php\nnamespace App\\Services;\n\nuse App\\Models\\User;\n\nclass Handler\n{\n    public function render(string $text, int $width): string {}\n")
 	for i := range 300 {
 		src.WriteString("    public function run")
 		src.WriteString(strings.Repeat("x", i%7+1))
@@ -45,7 +55,7 @@ func benchSignatureHelp(b *testing.B, indexed, source, call string) {
 	idx.IndexFile("file:///helpers.php", "<?php\nnamespace App\\Services;\nfunction format(string $text, int $width): string {}\nclass Formatter { public function __construct(private string $text, private int $width) {} }\n")
 	idx.IndexFile("file:///handler.php", indexed)
 	a := NewAnalyzer(idx, nil)
-	pos := protocol.Position{Line: 7 + 150*6 + 3, Character: len("        return " + call + "($fn('a'), ")}
+	pos := protocol.Position{Line: 8 + 150*6 + 3, Character: len("        return " + call + "($fn('a'), ")}
 	if help := a.GetSignatureHelp("file:///handler.php", source, pos); help == nil || help.ActiveParameter != 1 {
 		b.Fatalf("signature help = %+v", help)
 	}

@@ -169,6 +169,7 @@ type Index struct {
 	sortedNames          sortedKeys // nameIndex's keys, for prefix search by name
 	sortedFQNs           sortedKeys // FQNs of named class-likes, functions and constants, for prefix search by FQN
 	fileSource           map[string]indexedText
+	parses               indexedParses
 	ready                atomic.Bool // true once project + vendor indexing has completed at least once
 	generator            atomic.Pointer[classGeneratorHolder]
 	loader               atomic.Pointer[classLoaderHolder]
@@ -380,16 +381,15 @@ func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSourc
 	if indexedBefore {
 		grammars = grammars.After(previous.grammar)
 	}
-	file := parser.ParseFileIn(source, grammars)
-	if file == nil {
-		return
-	}
+	parsed := parser.ParseIn(source, grammars)
+	file := parser.FileNodeOf(source, parsed.Tree)
 	indexed := indexedText{text: source, from: src, grammar: file.Grammar, importsEnd: file.ImportsEnd}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	foreign := idx.foreignMembersLocked(uri)
 	idx.removeFileSymbols(uri)
 	idx.fileSource[uri] = indexed
+	idx.parses.put(indexedParse{uri: uri, text: source, parsed: parsed, file: file})
 	idx.indexParsedLocked(uri, file, src)
 	idx.reattachForeignMembersLocked(foreign)
 }
@@ -709,6 +709,7 @@ func (idx *Index) removeFileSymbols(uri string) {
 	}
 	delete(idx.fileSymbols, uri)
 	delete(idx.fileSource, uri)
+	idx.parses.remove(uri)
 	delete(idx.generatedURIs, uri)
 }
 
