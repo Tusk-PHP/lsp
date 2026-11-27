@@ -5,6 +5,7 @@ package models
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -13,8 +14,8 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
-	_ "modernc.org/sqlite"
+	"github.com/lib/pq"
+	"modernc.org/sqlite"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
 )
@@ -25,19 +26,62 @@ import (
 func scanLiveSchema(dbCfg *config.DatabaseConfig, timeout time.Duration, cache *SchemaCache, logger *log.Logger) (*Schema, error) {
 	db, err := openDatabase(dbCfg, timeout)
 	if err != nil {
-		return nil, err
+		return nil, &liveSchemaError{step: "connect", err: err}
 	}
 	defer db.Close()
 	if logger != nil {
-		logger.Printf("Connected to %s database: %s", dbCfg.Driver, dbCfg.Database)
+		logger.Print("Connected to the project's database")
 	}
 	schema, scanErr := scanSchemaFromDB(db, dbCfg, cache, timeout)
 	if scanErr != nil {
-		return nil, scanErr
+		return nil, &liveSchemaError{step: "read the schema", err: scanErr}
 	}
 	schema.Source = SchemaSourceLive
 	schema.Connected = true
 	return schema, nil
+}
+
+var errUnsupportedDriver = errors.New("unsupported database driver")
+
+type liveSchemaError struct {
+	step string
+	err  error
+}
+
+func (e *liveSchemaError) Error() string {
+	return "could not " + e.step + ": " + valueFreeReason(e.err)
+}
+
+func (e *liveSchemaError) Unwrap() error {
+	return e.err
+}
+
+func valueFreeReason(err error) string {
+	var mysqlErr *mysql.MySQLError
+	var pqErr *pq.Error
+	var sqliteErr *sqlite.Error
+	var dnsErr *net.DNSError
+	var netErr *net.OpError
+	switch {
+	case errors.Is(err, errUnsupportedDriver):
+		return errUnsupportedDriver.Error()
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timed out"
+	case errors.As(err, &mysqlErr):
+		return "MySQL error " + strconv.Itoa(int(mysqlErr.Number))
+	case errors.As(err, &pqErr):
+		return "PostgreSQL error " + string(pqErr.Code)
+	case errors.As(err, &sqliteErr):
+		return "SQLite error " + strconv.Itoa(sqliteErr.Code())
+	case errors.As(err, &dnsErr):
+		return "host not found"
+	case errors.As(err, &netErr):
+		if netErr.Timeout() {
+			return "timed out"
+		}
+		return "network error on " + netErr.Op
+	}
+	return "driver error"
 }
 
 func openDatabase(cfg *config.DatabaseConfig, timeout time.Duration) (*sql.DB, error) {
@@ -82,7 +126,7 @@ func dataSource(cfg *config.DatabaseConfig, timeout time.Duration) (driverName, 
 	case "sqlite":
 		return "sqlite", cfg.Database, nil
 	default:
-		return "", "", fmt.Errorf("unsupported driver: %s", cfg.Driver)
+		return "", "", errUnsupportedDriver
 	}
 }
 
@@ -215,7 +259,7 @@ func queryTableNames(db *sql.DB, cfg *config.DatabaseConfig, timeout time.Durati
 	case "sqlite":
 		return queryTableNamesSQLite(db, timeout)
 	default:
-		return nil, fmt.Errorf("unsupported driver: %s", cfg.Driver)
+		return nil, errUnsupportedDriver
 	}
 }
 

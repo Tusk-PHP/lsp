@@ -188,7 +188,7 @@ func ScanSchema(rootPath, framework string, cfg *config.Config, logger *log.Logg
 			return schema, nil
 		}
 		if logger != nil {
-			logger.Printf("Database connection failed (will use fallback sources): %v", err)
+			logger.Printf("Live database schema not read (%v); using the fallback sources", err)
 		}
 		if mode == "live" {
 			base.Caveat = "live database unavailable"
