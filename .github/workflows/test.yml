@@ -3,8 +3,26 @@ name: Test
 on:
   push:
     branches: [main]
+    # Changes only to prose, images or repository metadata skip the tests.
+    # docs/ still counts: tests check docs/diagnostics.md against the rules.
+    paths:
+      - '**'
+      - '!**.md'
+      - 'docs/**'
+      - '!art/**'
+      - '!LICENSE'
+      - '!.github/CODEOWNERS'
   pull_request:
     branches: [main]
+    # Changes only to prose, images or repository metadata skip the tests.
+    # docs/ still counts: tests check docs/diagnostics.md against the rules.
+    paths:
+      - '**'
+      - '!**.md'
+      - 'docs/**'
+      - '!art/**'
+      - '!LICENSE'
+      - '!.github/CODEOWNERS'
   workflow_call:
     secrets:
       CODECOV_TOKEN:
