@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
@@ -79,7 +78,7 @@ func TestWithClientOptions(t *testing.T) {
 	boolFalse := false
 	maxFiles := 5000
 
-	opts := &protocol.InitializationOptions{
+	opts := &ClientOptions{
 		PHPVersion:         "8.2",
 		Framework:          "symfony",
 		ContainerAware:     &boolFalse,
@@ -116,7 +115,7 @@ func TestWithClientOptions(t *testing.T) {
 
 	t.Run("zero values don't override", func(t *testing.T) {
 		cfg2 := DefaultConfig()
-		cfg2 = cfg2.WithClientOptions(&protocol.InitializationOptions{})
+		cfg2 = cfg2.WithClientOptions(&ClientOptions{})
 		if cfg2.PHPVersion != "8.6" {
 			t.Error("empty string shouldn't override PHPVersion")
 		}
@@ -371,7 +370,7 @@ func TestWithClientOptionsPHPManual(t *testing.T) {
 	t.Run("locale overrides file value", func(t *testing.T) {
 		cfg := DefaultConfig()
 		cfg.PHPManualLocale = "de"
-		opts := &protocol.InitializationOptions{PHPManualLocale: "fr"}
+		opts := &ClientOptions{PHPManualLocale: "fr"}
 		cfg = cfg.WithClientOptions(opts)
 		if cfg.PHPManualLocale != "fr" {
 			t.Errorf("PHPManualLocale = %q, want %q", cfg.PHPManualLocale, "fr")
@@ -381,7 +380,7 @@ func TestWithClientOptionsPHPManual(t *testing.T) {
 	t.Run("empty locale does not override", func(t *testing.T) {
 		cfg := DefaultConfig()
 		cfg.PHPManualLocale = "ja"
-		opts := &protocol.InitializationOptions{}
+		opts := &ClientOptions{}
 		cfg = cfg.WithClientOptions(opts)
 		if cfg.PHPManualLocale != "ja" {
 			t.Errorf("PHPManualLocale = %q, want %q", cfg.PHPManualLocale, "ja")
@@ -391,7 +390,7 @@ func TestWithClientOptionsPHPManual(t *testing.T) {
 	t.Run("open on definition set to true", func(t *testing.T) {
 		cfg := DefaultConfig()
 		trueVal := true
-		opts := &protocol.InitializationOptions{PHPManualOpenOnDefinition: &trueVal}
+		opts := &ClientOptions{PHPManualOpenOnDefinition: &trueVal}
 		cfg = cfg.WithClientOptions(opts)
 		if !cfg.PHPManualOpenOnDefinition {
 			t.Error("PHPManualOpenOnDefinition should be true after merge")
@@ -401,7 +400,7 @@ func TestWithClientOptionsPHPManual(t *testing.T) {
 	t.Run("open on definition nil does not override", func(t *testing.T) {
 		cfg := DefaultConfig()
 		cfg.PHPManualOpenOnDefinition = true
-		opts := &protocol.InitializationOptions{}
+		opts := &ClientOptions{}
 		cfg = cfg.WithClientOptions(opts)
 		if !cfg.PHPManualOpenOnDefinition {
 			t.Error("PHPManualOpenOnDefinition should remain true when opts is nil")
@@ -448,7 +447,7 @@ func TestIsPHPVersionExplicitlySet(t *testing.T) {
 
 	t.Run("WithClientOptions with PHPVersion marks explicitly set", func(t *testing.T) {
 		cfg := DefaultConfig()
-		cfg = cfg.WithClientOptions(&protocol.InitializationOptions{PHPVersion: "8.3"})
+		cfg = cfg.WithClientOptions(&ClientOptions{PHPVersion: "8.3"})
 		if !cfg.IsPHPVersionExplicitlySet() {
 			t.Error("expected IsPHPVersionExplicitlySet()=true after WithClientOptions with PHPVersion")
 		}
@@ -456,7 +455,7 @@ func TestIsPHPVersionExplicitlySet(t *testing.T) {
 
 	t.Run("WithClientOptions without PHPVersion does not mark explicitly set", func(t *testing.T) {
 		cfg := DefaultConfig()
-		cfg = cfg.WithClientOptions(&protocol.InitializationOptions{})
+		cfg = cfg.WithClientOptions(&ClientOptions{})
 		if cfg.IsPHPVersionExplicitlySet() {
 			t.Error("expected IsPHPVersionExplicitlySet()=false after WithClientOptions with empty options")
 		}
@@ -479,7 +478,7 @@ func TestConfigExtensionsField(t *testing.T) {
 
 	t.Run("WithClientOptions with extensions", func(t *testing.T) {
 		cfg := DefaultConfig()
-		cfg = cfg.WithClientOptions(&protocol.InitializationOptions{Extensions: []string{"pdo"}})
+		cfg = cfg.WithClientOptions(&ClientOptions{Extensions: []string{"pdo"}})
 		if len(cfg.Extensions) != 1 || cfg.Extensions[0] != "pdo" {
 			t.Errorf("expected [pdo], got %v", cfg.Extensions)
 		}
@@ -532,8 +531,8 @@ func TestWithClientOptionsIntrospection(t *testing.T) {
 	t.Run("verbosity full overrides default", func(t *testing.T) {
 		cfg := DefaultConfig()
 		v := "full"
-		opts := &protocol.InitializationOptions{
-			Introspection: &protocol.IntrospectionClientOptions{Verbosity: &v},
+		opts := &ClientOptions{
+			Introspection: &IntrospectionClientOptions{Verbosity: &v},
 		}
 		cfg = cfg.WithClientOptions(opts)
 		if cfg.Introspection.Verbosity != "full" {
@@ -544,7 +543,7 @@ func TestWithClientOptionsIntrospection(t *testing.T) {
 	t.Run("nil introspection does not override file value", func(t *testing.T) {
 		cfg := DefaultConfig()
 		cfg.Introspection.Verbosity = "full"
-		cfg = cfg.WithClientOptions(&protocol.InitializationOptions{})
+		cfg = cfg.WithClientOptions(&ClientOptions{})
 		if cfg.Introspection.Verbosity != "full" {
 			t.Errorf("Introspection.Verbosity = %q, want %q", cfg.Introspection.Verbosity, "full")
 		}
@@ -553,8 +552,8 @@ func TestWithClientOptionsIntrospection(t *testing.T) {
 	t.Run("nil verbosity pointer does not override", func(t *testing.T) {
 		cfg := DefaultConfig()
 		cfg.Introspection.Verbosity = "full"
-		opts := &protocol.InitializationOptions{
-			Introspection: &protocol.IntrospectionClientOptions{},
+		opts := &ClientOptions{
+			Introspection: &IntrospectionClientOptions{},
 		}
 		cfg = cfg.WithClientOptions(opts)
 		if cfg.Introspection.Verbosity != "full" {
@@ -566,8 +565,8 @@ func TestWithClientOptionsIntrospection(t *testing.T) {
 		cfg := DefaultConfig()
 		cfg.Introspection.Verbosity = "full"
 		v := "compact"
-		opts := &protocol.InitializationOptions{
-			Introspection: &protocol.IntrospectionClientOptions{Verbosity: &v},
+		opts := &ClientOptions{
+			Introspection: &IntrospectionClientOptions{Verbosity: &v},
 		}
 		cfg = cfg.WithClientOptions(opts)
 		if cfg.Introspection.Verbosity != "compact" {
@@ -659,11 +658,11 @@ func TestAutoImportAliasStyle(t *testing.T) {
 		t.Errorf("file aliasStyle = %q, want prefix", cfg.AutoImport.AliasStyle)
 	}
 
-	cfg = cfg.WithClientOptions(&protocol.InitializationOptions{AutoImport: &protocol.AutoImportClientOptions{AliasStyle: "fullyQualified"}})
+	cfg = cfg.WithClientOptions(&ClientOptions{AutoImport: &AutoImportClientOptions{AliasStyle: "fullyQualified"}})
 	if cfg.AutoImport.AliasStyle != "fullyQualified" {
 		t.Errorf("client aliasStyle = %q, want fullyQualified", cfg.AutoImport.AliasStyle)
 	}
-	cfg = cfg.WithClientOptions(&protocol.InitializationOptions{AutoImport: &protocol.AutoImportClientOptions{}})
+	cfg = cfg.WithClientOptions(&ClientOptions{AutoImport: &AutoImportClientOptions{}})
 	if cfg.AutoImport.AliasStyle != "fullyQualified" {
 		t.Errorf("empty client option overrode aliasStyle: %q", cfg.AutoImport.AliasStyle)
 	}

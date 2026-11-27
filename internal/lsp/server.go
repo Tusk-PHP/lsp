@@ -23,7 +23,6 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/models"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
@@ -91,8 +90,8 @@ type Server struct {
 
 	clientSupportsShowDocument bool
 	clientWatchesFiles         bool
-	initOptions                *protocol.InitializationOptions
-	clientSettings             atomic.Pointer[protocol.InitializationOptions]
+	initOptions                *config.ClientOptions
+	clientSettings             atomic.Pointer[config.ClientOptions]
 	fileConfig                 atomic.Pointer[config.Config]
 	configProblems             reportedProblems
 	indexed                    chan struct{}

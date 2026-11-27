@@ -31,12 +31,11 @@ var engineForbiddenImports = []string{
 	"completion", "hover", "analyzer", "inlayhint", "source",
 }
 
-// Today's violations, as "importer -> imported". Each item of the plan's Stage 1
-// removes its entries; the test fails when an entry is no longer needed, so the
-// list only shrinks.
-var engineBoundaryAllowlist = map[string]bool{
-	"config -> protocol": true,
-}
+// Engine imports of the language server's side that are still allowed, as
+// "importer -> imported". It has been empty since Stage 1 of the extraction
+// plan drew the boundary, and it stays empty: move what the engine needs into
+// the engine instead. The test fails when an entry here is no longer needed.
+var engineBoundaryAllowlist = map[string]bool{}
 
 const internalImportPrefix = "github.com/Tusk-PHP/lsp/internal/"
 
