@@ -66,6 +66,7 @@ type Bootstrapped struct {
 	modelMu          sync.RWMutex
 	modelsAnalyzed   bool
 	migrationColumns map[string]map[string]*models.MigrationColumn
+	castDependents   castDependents
 }
 
 func New(opts Options) *Bootstrapped {
@@ -326,7 +327,7 @@ func (ws *Bootstrapped) AnalyzeModelClasses() {
 	}
 	switch ws.Framework {
 	case "laravel":
-		models.AnalyzeEloquentModels(ws.Index, ws.RootPath)
+		ws.castDependents.replaceAll(models.AnalyzeEloquentModels(ws.Index, ws.RootPath))
 	case "symfony":
 		models.AnalyzeDoctrineEntities(ws.Index, ws.RootPath)
 	}
@@ -386,7 +387,7 @@ func (ws *Bootstrapped) AnalyzeModelFile(uri, source string) {
 	if !analyzed {
 		return
 	}
-	models.AnalyzeModelFile(ws.Index, ws.RootPath, ws.Framework, uri, source, schema, migrationColumns)
+	ws.castDependents.set(uri, models.AnalyzeModelFile(ws.Index, ws.RootPath, ws.Framework, uri, source, schema, migrationColumns))
 }
 
 // SchemaIsLive reports whether the database columns given to models were

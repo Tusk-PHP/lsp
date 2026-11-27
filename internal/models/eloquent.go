@@ -52,14 +52,21 @@ var eloquentStaticForwards = []struct {
 	{"onlyTrashed", frameworklaravel.EloquentBuilder + "<{MODEL}>", nil},
 }
 
+// CastDependencies maps the URI of a file declaring models to the classes
+// its models' attribute cast types were read from.
+type CastDependencies map[string][]string
+
 // AnalyzeEloquentModels scans all classes extending Eloquent Model and injects
-// virtual properties for relations and accessors/mutators.
-func AnalyzeEloquentModels(index *symbols.Index, rootPath string) {
-	models := index.GetDescendants(frameworklaravel.EloquentModel)
-	for _, model := range models {
+// virtual properties for relations, accessors and attribute casts.
+func AnalyzeEloquentModels(index *symbols.Index, rootPath string) CastDependencies {
+	dependencies := CastDependencies{}
+	for _, model := range index.GetDescendants(frameworklaravel.EloquentModel) {
 		injectEloquentStaticMethods(index, model)
-		analyzeModel(index, model)
+		if classes := analyzeModel(index, model); len(classes) > 0 {
+			dependencies[model.URI] = append(dependencies[model.URI], classes...)
+		}
 	}
+	return dependencies
 }
 
 // injectEloquentStaticMethods adds common Builder methods as virtual static
@@ -93,12 +100,12 @@ func injectEloquentStaticMethods(index *symbols.Index, model *symbols.Symbol) {
 	}
 }
 
-func analyzeModel(index *symbols.Index, model *symbols.Symbol) {
+func analyzeModel(index *symbols.Index, model *symbols.Symbol) []string {
 	content, err := os.ReadFile(symbols.URIToPath(model.URI))
 	if err != nil {
-		return
+		return nil
 	}
-	analyzeModelSource(index, model, newModelSource(string(content), index.GrammarOf(model.URI)))
+	return analyzeModelSource(index, model, newModelSource(string(content), index.GrammarOf(model.URI)))
 }
 
 type modelSource struct {
@@ -236,11 +243,12 @@ var relationCallClasses = map[string]string{
 var throughRelations = map[string]bool{"HasOneThrough": true, "HasManyThrough": true}
 
 // analyzeModelSource injects the relations, accessors and attribute casts
-// model declares in source, the text of the file that declares it.
-func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source modelSource) {
+// model declares in source, the text of the file that declares it, and
+// returns the classes its cast types were read from.
+func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source modelSource) []string {
 	classNode, decls := source.class(model.FQN)
 	if classNode == nil {
-		return
+		return nil
 	}
 	for _, method := range classNode.Methods {
 		if relation, ok := source.relation(method, decls[method.Name]); ok {
@@ -286,7 +294,7 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source mode
 			})
 		}
 	}
-	injectCasts(index, model, source, source.classes[model.FQN], decls)
+	return injectCasts(index, model, source, source.classes[model.FQN], decls)
 }
 
 func hasDocReturn(method parser.MethodNode) bool {

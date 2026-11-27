@@ -88,7 +88,7 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 	}
 	s.docIndex.afterClose(uri, func() {
 		if symbols.PathToURI(path) != uri {
-			s.workspace.RemoveFile(uri)
+			s.refreshModelsInBackground(s.workspace.RemoveFile(uri))
 		}
 		if unsaved {
 			s.queueRefresh([]string{path}, false)

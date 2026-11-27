@@ -154,7 +154,7 @@ func TestClassCastTypeIsWhatTheCastReads(t *testing.T) {
 		{`App\Plain`, nil, "mixed"},
 		{`App\Missing`, nil, "mixed"},
 	} {
-		if got := ClassCastType(r, tc.class, tc.args); got != tc.want {
+		if got, _ := ClassCastType(r, tc.class, tc.args); got != tc.want {
 			t.Errorf("ClassCastType(%s, %v) = %q, want %q", tc.class, tc.args, got, tc.want)
 		}
 	}
@@ -169,7 +169,7 @@ use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 
 abstract class Partial implements CastsAttributes {}
 `)
-	if got := ClassCastType(resolve.NewResolver(idx), `App\Partial`, nil); got != "mixed" {
+	if got, _ := ClassCastType(resolve.NewResolver(idx), `App\Partial`, nil); got != "mixed" {
 		t.Errorf("a cast without get() reads as %q, want mixed", got)
 	}
 }
