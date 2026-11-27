@@ -196,7 +196,17 @@ func (n narrowing) mayNarrow(path []ast.Node) bool {
 		case *ast.InstanceOf:
 			found = true
 		case *ast.Binary:
-			found = isIdentity(node.Op) && (n.isVar(node.Left) || n.isVar(node.Right))
+			found = (isIdentity(node.Op) || isLogical(node.Op)) && (n.isVar(node.Left) || n.isVar(node.Right))
+		case *ast.Unary:
+			found = node.Op == token.Bang && n.isVar(node.Operand)
+		case *ast.If:
+			found = n.isVar(node.Cond)
+		case *ast.ElseIf:
+			found = n.isVar(node.Cond)
+		case *ast.While:
+			found = n.isVar(node.Cond)
+		case *ast.Ternary:
+			found = n.isVar(node.Cond)
 		case *ast.Call:
 			if name, ok := node.Callee.(*ast.ConstFetch); ok && n.narrowsByName(n.t.text(name)) {
 				found = true
@@ -426,6 +436,12 @@ func (n narrowing) applyCondition(t ResolvedType, cond ast.Expr, value, instance
 	if cond == nil || cond.Bounds().End <= n.after {
 		return t
 	}
+	if n.isVar(cond) {
+		if value {
+			return n.r.truthy(t)
+		}
+		return t
+	}
 	switch c := cond.(type) {
 	case *ast.Unary:
 		if c.Op == token.Bang {
@@ -450,6 +466,14 @@ func (n narrowing) applyCondition(t ResolvedType, cond ast.Expr, value, instance
 		}
 	}
 	return t
+}
+
+func isLogical(op token.Kind) bool {
+	switch op {
+	case token.BooleanAnd, token.And, token.BooleanOr, token.Or:
+		return true
+	}
+	return false
 }
 
 func isIdentity(op token.Kind) bool {
@@ -707,6 +731,14 @@ func (r *Resolver) removeType(t, remove ResolvedType) ResolvedType {
 		return t
 	}
 	return MakeUnion(kept, t.Nullable && !remove.Nullable)
+}
+
+// truthy is what t can be where it tests true: without null and false, and
+// bool as true. Where it tests false it can still be an empty string, 0 or
+// an empty array, so that side isn't narrowed.
+func (r *Resolver) truthy(t ResolvedType) ResolvedType {
+	t = r.removeType(t, ResolvedType{FQN: "null"})
+	return r.removeType(t, ResolvedType{FQN: "bool", Literal: "false"})
 }
 
 func otherBool(lit string) string {
