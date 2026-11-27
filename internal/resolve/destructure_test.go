@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -35,7 +36,7 @@ class Holder {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///a.php", src)
 	r := NewResolver(idx)
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	lines := SplitLines(src)
 	at := func(v, marker string) string {
 		for i, l := range lines {
