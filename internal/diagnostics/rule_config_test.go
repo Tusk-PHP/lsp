@@ -5,7 +5,7 @@ import (
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
 // providerWithRules returns a test provider configured with the given
@@ -28,7 +28,7 @@ func TestRedundantUnionMemberDefaultSeverity(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 redundant-union-member, got %d", len(got))
 	}
-	if got[0].Severity != protocol.DiagnosticSeverityInformation {
+	if got[0].Severity != rule.SeverityInfo {
 		t.Errorf("default severity: want information, got %d", got[0].Severity)
 	}
 }
@@ -39,11 +39,11 @@ func TestRedundantUnionMemberDefaultSeverity(t *testing.T) {
 func TestRuleSeverityConfigApplies(t *testing.T) {
 	for _, tc := range []struct {
 		value string
-		want  protocol.DiagnosticSeverity
+		want  rule.Severity
 	}{
-		{`"warning"`, protocol.DiagnosticSeverityWarning},
-		{`"error"`, protocol.DiagnosticSeverityError},
-		{`"hint"`, protocol.DiagnosticSeverityHint},
+		{`"warning"`, rule.SeverityWarning},
+		{`"error"`, rule.SeverityError},
+		{`"hint"`, rule.SeverityHint},
 	} {
 		p := providerWithRules(t, `{"redundant-union-member": `+tc.value+`}`)
 		got := filterByCode(p.Analyze("file:///t.php", redundantUnionSource), "redundant-union-member")
@@ -63,7 +63,7 @@ $name = "unterminated;
 	}
 	warn := providerWithRules(t, `{"syntax-error": "warning"}`)
 	got := filterByCode(warn.Analyze("file:///t.php", source), "syntax-error")
-	if len(got) != 1 || got[0].Severity != protocol.DiagnosticSeverityWarning {
+	if len(got) != 1 || got[0].Severity != rule.SeverityWarning {
 		t.Errorf("syntax-error as warning: got %#v", got)
 	}
 }
@@ -74,7 +74,7 @@ class Foo {
     abstract public function bar(): void;
 }
 `
-	if got := filterByCode(newTestProvider().Analyze("file:///t.php", source), "abstract-in-concrete"); len(got) != 1 || got[0].Severity != protocol.DiagnosticSeverityError {
+	if got := filterByCode(newTestProvider().Analyze("file:///t.php", source), "abstract-in-concrete"); len(got) != 1 || got[0].Severity != rule.SeverityError {
 		t.Fatalf("default: want one error, got %#v", got)
 	}
 	off := providerWithRules(t, `{"abstract-in-concrete": false}`)
@@ -82,7 +82,7 @@ class Foo {
 		t.Errorf("turned off: got %d diagnostics", len(got))
 	}
 	info := providerWithRules(t, `{"abstract-in-concrete": "info"}`)
-	if got := filterByCode(info.Analyze("file:///t.php", source), "abstract-in-concrete"); len(got) != 1 || got[0].Severity != protocol.DiagnosticSeverityInformation {
+	if got := filterByCode(info.Analyze("file:///t.php", source), "abstract-in-concrete"); len(got) != 1 || got[0].Severity != rule.SeverityInfo {
 		t.Errorf("as info: got %#v", got)
 	}
 }
@@ -113,7 +113,7 @@ func TestBuilderRulesAreConfigurable(t *testing.T) {
 	if len(cols) != 1 || len(rels) != 1 {
 		t.Fatalf("defaults: want one unknown-column and one unknown-relation, got %d and %d", len(cols), len(rels))
 	}
-	if cols[0].Severity != protocol.DiagnosticSeverityWarning || rels[0].Severity != protocol.DiagnosticSeverityWarning {
+	if cols[0].Severity != rule.SeverityWarning || rels[0].Severity != rule.SeverityWarning {
 		t.Errorf("defaults: want warnings, got %d and %d", cols[0].Severity, rels[0].Severity)
 	}
 
@@ -121,7 +121,7 @@ func TestBuilderRulesAreConfigurable(t *testing.T) {
 	p.AnalyzeOnSave(uri, builderSource)
 	diags = p.Analyze(uri, builderSource)
 	cols, rels = filterByCode(diags, "unknown-column"), filterByCode(diags, "unknown-relation")
-	if len(cols) != 1 || cols[0].Severity != protocol.DiagnosticSeverityError {
+	if len(cols) != 1 || cols[0].Severity != rule.SeverityError {
 		t.Errorf("unknown-column as error: got %#v", cols)
 	}
 	if len(rels) != 0 {
@@ -152,7 +152,7 @@ func TestUnknownNamedArgumentIsReported(t *testing.T) {
 	p.index.IndexFile("file:///lib.php", "<?php\nfunction greet(string $name) {}\n")
 	p.index.MarkReady()
 	got := filterByCode(p.Analyze("file:///t.php", "<?php\ngreet(nmae: 'x');\n"), "unknown-named-argument")
-	if len(got) != 1 || got[0].Severity != protocol.DiagnosticSeverityError || got[0].Range.Start.Line != 1 {
+	if len(got) != 1 || got[0].Severity != rule.SeverityError || got[0].Range.Start.Line != 1 {
 		t.Errorf("got %#v", got)
 	}
 	off := providerWithRules(t, `{"unknown-named-argument": false}`)

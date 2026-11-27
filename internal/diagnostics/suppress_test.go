@@ -5,12 +5,11 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
-func codesAt(diags []protocol.Diagnostic) map[int][]string {
+func codesAt(diags []Diagnostic) map[int][]string {
 	out := map[int][]string{}
 	for _, d := range diags {
 		out[d.Range.Start.Line] = append(out[d.Range.Start.Line], d.Source+":"+d.Code)
@@ -50,7 +49,7 @@ func TestInlineSuppressionDropsToolFindings(t *testing.T) {
 	p.index.MarkReady()
 	uri := "file:///tmp/tool.php"
 	source := "<?php\n// @tusk-ignore phpstan:argument.type\nstrlen(1);\nstrlen(2); // @tusk-ignore phpstan\nstrlen(3);\n"
-	p.toolResults[uri] = []protocol.Diagnostic{
+	p.toolResults[uri] = []Diagnostic{
 		{Range: textpos.Range{Start: textpos.Position{Line: 2}}, Source: "phpstan", Code: "argument.type", Message: "a"},
 		{Range: textpos.Range{Start: textpos.Position{Line: 3}}, Source: "phpstan", Code: "argument.type", Message: "b"},
 		{Range: textpos.Range{Start: textpos.Position{Line: 4}}, Source: "phpstan", Code: "argument.type", Message: "c"},
@@ -117,7 +116,7 @@ function run() {
     echo $fifth;
 }
 `
-	p.toolResults[uri] = []protocol.Diagnostic{
+	p.toolResults[uri] = []Diagnostic{
 		{Range: textpos.Range{Start: textpos.Position{Line: 4}}, Source: "phpstan", Code: "argument.type", Message: "ignored by PHPStan's own comment"},
 	}
 	got := codesAt(p.Analyze(uri, source))

@@ -11,6 +11,20 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
+// lspDiagnostics is what the language server sends for diags, as the quick
+// fixes receive them back.
+func lspDiagnostics(diags []Diagnostic) []protocol.Diagnostic {
+	out := make([]protocol.Diagnostic, 0, len(diags))
+	for _, d := range diags {
+		pd := protocol.Diagnostic{Range: d.Range, Severity: protocol.DiagnosticSeverity(d.Severity), Source: d.Source, Code: d.Code, Message: d.Message}
+		for _, tag := range d.Tags {
+			pd.Tags = append(pd.Tags, protocol.DiagnosticTag(tag))
+		}
+		out = append(out, pd)
+	}
+	return out
+}
+
 func applyInsertion(t *testing.T, source string, edit protocol.TextEdit) string {
 	t.Helper()
 	if edit.Range.Start != edit.Range.End {
@@ -43,7 +57,7 @@ class Shop
 	for len(diags) > 0 {
 		actions := analyzer.IgnoreDiagnosticActions(uri, source, protocol.CodeActionParams{
 			TextDocument: protocol.TextDocumentIdentifier{URI: uri},
-			Context:      protocol.CodeActionContext{Diagnostics: diags[:1]},
+			Context:      protocol.CodeActionContext{Diagnostics: lspDiagnostics(diags[:1])},
 		})
 		if len(actions) == 0 {
 			t.Fatalf("no quick fix for %+v", diags[0])
@@ -73,7 +87,7 @@ func TestIgnoreQuickFixSilencesMultiLineBladeDirectives(t *testing.T) {
 	}
 	params := protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
-		Context:      protocol.CodeActionContext{Diagnostics: diags},
+		Context:      protocol.CodeActionContext{Diagnostics: lspDiagnostics(diags)},
 	}
 	actions := analyzer.BladeIgnoreDiagnosticActions(uri, source, params, nil)
 	if len(actions) != 1 {
@@ -108,7 +122,7 @@ func TestIgnoreQuickFixSilencesMultiLineCustomBladeConditionals(t *testing.T) {
 	}
 	params := protocol.CodeActionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
-		Context:      protocol.CodeActionContext{Diagnostics: diags},
+		Context:      protocol.CodeActionContext{Diagnostics: lspDiagnostics(diags)},
 	}
 	actions := analyzer.BladeIgnoreDiagnosticActions(uri, source, params, custom)
 	if len(actions) != 1 {

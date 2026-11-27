@@ -972,7 +972,7 @@ func (s *Service) projectDiagnostics(path string) (DiagnosticsOutput, error) {
 		diags := rt.Diagnostics.AnalyzeAll(uri, string(data))
 		out.Files = append(out.Files, FileDiagnostics{
 			Path:        normalizedRelativePath(s.RootPath, absPath),
-			Diagnostics: diags,
+			Diagnostics: lspDiagnostics(diags),
 		})
 	}
 	sort.Slice(out.Files, func(i, j int) bool { return out.Files[i].Path < out.Files[j].Path })

@@ -6,7 +6,6 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -288,7 +287,7 @@ func TestFindingToDiagnosticWithTags(t *testing.T) {
 		},
 	}
 	d := findingToDiagnostic(findings[0])
-	if len(d.Tags) != 1 || d.Severity != protocol.DiagnosticSeverityHint || d.Code != "unused-import" {
+	if len(d.Tags) != 1 || d.Severity != rule.SeverityHint || d.Code != "unused-import" {
 		t.Errorf("got %+v", d)
 	}
 }

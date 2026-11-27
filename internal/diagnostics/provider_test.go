@@ -8,7 +8,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -44,7 +44,7 @@ class Foo {
 		t.Fatalf("expected 3 deprecation diagnostics, got %d", len(deprecations))
 	}
 	for _, d := range deprecations {
-		if d.Severity != protocol.DiagnosticSeverityWarning {
+		if d.Severity != rule.SeverityWarning {
 			t.Errorf("expected warning severity, got %d", d.Severity)
 		}
 		if d.Range.Start.Character == 0 && d.Range.End.Character == 0 {
@@ -68,7 +68,7 @@ class Foo {
 	if len(unused) != 1 {
 		t.Fatalf("expected 1 unused import diagnostic, got %d", len(unused))
 	}
-	if unused[0].Severity != protocol.DiagnosticSeverityHint {
+	if unused[0].Severity != rule.SeverityHint {
 		t.Errorf("expected hint severity, got %d", unused[0].Severity)
 	}
 }
@@ -85,7 +85,7 @@ class Foo {
 	if len(abstracts) != 1 {
 		t.Fatalf("expected 1 abstract-in-concrete diagnostic, got %d", len(abstracts))
 	}
-	if abstracts[0].Severity != protocol.DiagnosticSeverityError {
+	if abstracts[0].Severity != rule.SeverityError {
 		t.Errorf("expected error severity, got %d", abstracts[0].Severity)
 	}
 }
@@ -236,7 +236,7 @@ $name = "unterminated;
 	if len(syntax) != 1 {
 		t.Fatalf("expected 1 syntax diagnostic, got %d: %#v", len(syntax), syntax)
 	}
-	if syntax[0].Severity != protocol.DiagnosticSeverityError {
+	if syntax[0].Severity != rule.SeverityError {
 		t.Fatalf("expected error severity, got %d", syntax[0].Severity)
 	}
 	if syntax[0].Message != "unterminated string" {
@@ -290,7 +290,7 @@ class Foo {
 	for _, diag := range syntax {
 		if diag.Message == "expected ')'" {
 			found = true
-			if diag.Severity != protocol.DiagnosticSeverityError {
+			if diag.Severity != rule.SeverityError {
 				t.Fatalf("expected error severity, got %d", diag.Severity)
 			}
 			if diag.Range.Start.Line != 2 || diag.Range.Start.Character != 30 {
@@ -315,24 +315,24 @@ $name = "unterminated;
 `
 
 	p.mu.Lock()
-	p.saveResults[uri] = []protocol.Diagnostic{
+	p.saveResults[uri] = []Diagnostic{
 		{
 			Range:    textpos.Range{Start: textpos.Position{Line: 2, Character: 4}, End: textpos.Position{Line: 2, Character: 15}},
-			Severity: protocol.DiagnosticSeverityError,
+			Severity: rule.SeverityError,
 			Source:   "tusk-php",
 			Message:  "Class MissingClass not found",
 			Code:     "unknown-class",
 		},
 		{
 			Range:    textpos.Range{Start: textpos.Position{Line: 3, Character: 4}, End: textpos.Position{Line: 3, Character: 12}},
-			Severity: protocol.DiagnosticSeverityError,
+			Severity: rule.SeverityError,
 			Source:   "tusk-php",
 			Message:  "Function clients not found",
 			Code:     "unknown-function",
 		},
 		{
 			Range:    textpos.Range{Start: textpos.Position{Line: 4, Character: 4}, End: textpos.Position{Line: 4, Character: 15}},
-			Severity: protocol.DiagnosticSeverityError,
+			Severity: rule.SeverityError,
 			Source:   "tusk-php",
 			Message:  "Access to property $name on MissingClass",
 			Code:     "unknown-member",
@@ -362,7 +362,7 @@ $name = "unterminated;
 		if matches[0].Source != "tusk-php" {
 			t.Fatalf("expected %s source tusk-php, got %q", code, matches[0].Source)
 		}
-		if matches[0].Severity != protocol.DiagnosticSeverityError {
+		if matches[0].Severity != rule.SeverityError {
 			t.Fatalf("expected %s severity error, got %d", code, matches[0].Severity)
 		}
 	}
@@ -374,10 +374,10 @@ func TestToolResultsCaching(t *testing.T) {
 
 	// Simulate cached tool results
 	p.mu.Lock()
-	p.toolResults[uri] = []protocol.Diagnostic{
+	p.toolResults[uri] = []Diagnostic{
 		{
 			Range:    textpos.Range{Start: textpos.Position{Line: 5, Character: 0}},
-			Severity: protocol.DiagnosticSeverityError,
+			Severity: rule.SeverityError,
 			Source:   "phpstan",
 			Message:  "Test error",
 			Code:     "test.error",
@@ -449,7 +449,7 @@ func TestPHPStanOutputParsing(t *testing.T) {
 	if diags[0].Code != "argument.type" {
 		t.Errorf("expected code 'argument.type', got %q", diags[0].Code)
 	}
-	if diags[0].Severity != protocol.DiagnosticSeverityError {
+	if diags[0].Severity != rule.SeverityError {
 		t.Errorf("expected error severity, got %d", diags[0].Severity)
 	}
 
@@ -583,7 +583,7 @@ func TestPintDiffParsing(t *testing.T) {
 	if diags[0].Source != "pint" {
 		t.Errorf("expected source 'pint', got %q", diags[0].Source)
 	}
-	if diags[0].Severity != protocol.DiagnosticSeverityWarning {
+	if diags[0].Severity != rule.SeverityWarning {
 		t.Errorf("expected warning severity, got %d", diags[0].Severity)
 	}
 }
@@ -742,8 +742,8 @@ $x = str_contains("hay", "needle");
 	}
 }
 
-func filterBySource(diags []protocol.Diagnostic, source string) []protocol.Diagnostic {
-	var out []protocol.Diagnostic
+func filterBySource(diags []Diagnostic, source string) []Diagnostic {
+	var out []Diagnostic
 	for _, d := range diags {
 		if d.Source == source {
 			out = append(out, d)
@@ -752,8 +752,8 @@ func filterBySource(diags []protocol.Diagnostic, source string) []protocol.Diagn
 	return out
 }
 
-func filterByCode(diags []protocol.Diagnostic, code string) []protocol.Diagnostic {
-	var out []protocol.Diagnostic
+func filterByCode(diags []Diagnostic, code string) []Diagnostic {
+	var out []Diagnostic
 	for _, d := range diags {
 		if d.Code == code {
 			out = append(out, d)
