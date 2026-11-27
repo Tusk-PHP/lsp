@@ -34,6 +34,9 @@ type ServerSpec struct {
 	// recorded when seen but never required — readiness is decided by probe.
 	ReadySignals    []ReadySignal `json:"readySignals"`
 	ReadyTimeoutSec int           `json:"readyTimeoutSec"`
+	// IndexDone is the notification a server sends once its whole index is
+	// built, for suites with waitForIndex. Optional.
+	IndexDone *ReadySignal `json:"indexDone"`
 	// SkipFeatures excludes features the server cannot reasonably be asked for
 	// (recorded as "skipped", never as a failure).
 	SkipFeatures []string `json:"skipFeatures"`
@@ -88,8 +91,13 @@ type Suite struct {
 	Description string   `json:"description"`
 	OpenFiles   []string `json:"openFiles"`
 	ReadyProbe  string   `json:"readyProbe"`
-	Comment     string   `json:"comment"`
-	Cases       []Case   `json:"cases"`
+	// WaitForIndex holds the cases back, after the probe passes, until a
+	// server that declares indexDone has sent it. The ready time is still the
+	// probe's. Use it where correctness is the point and a probe can pass on
+	// a half-built index (a server that resolves classes lazily).
+	WaitForIndex bool   `json:"waitForIndex"`
+	Comment      string `json:"comment"`
+	Cases        []Case `json:"cases"`
 
 	file string
 }
@@ -148,6 +156,11 @@ func LoadServers(path string) ([]ServerSpec, error) {
 		for j := range specs[i].ReadySignals {
 			if err := specs[i].ReadySignals[j].compile(); err != nil {
 				return nil, fmt.Errorf("server %s: %w", specs[i].ID, err)
+			}
+		}
+		if specs[i].IndexDone != nil {
+			if err := specs[i].IndexDone.compile(); err != nil {
+				return nil, fmt.Errorf("%s: indexDone: %w", specs[i].ID, err)
 			}
 		}
 		if specs[i].ReadyTimeoutSec == 0 {

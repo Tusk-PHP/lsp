@@ -275,6 +275,11 @@ func runServer(spec ServerSpec, suite Suite, root string, fileCount int, opts op
 	} else if suite.ReadyProbe != "" {
 		run.Error = fmt.Sprintf("readyProbe %q not found in suite", suite.ReadyProbe)
 	}
+	if suite.WaitForIndex && spec.IndexDone != nil && run.ReadyMs > 0 {
+		if !waitIndexDone(spec, client, spawn.Add(readyTimeout)) {
+			fmt.Printf("  ! index not done within %s; cases run anyway\n", readyTimeout)
+		}
+	}
 	if sig, at, ok := firstReadySignal(spec, client); ok {
 		run.ReadySignal = sig
 		run.ReadySignalMs = float64(at.Sub(spawn).Microseconds()) / 1000
@@ -352,6 +357,22 @@ func waitReady(sess *session, probe Case, workspace string, timeout time.Duratio
 		time.Sleep(250 * time.Millisecond)
 	}
 	return false
+}
+
+// waitIndexDone waits until the server has sent its indexDone notification,
+// or the deadline passes.
+func waitIndexDone(spec ServerSpec, client *Client, deadline time.Time) bool {
+	for {
+		for _, n := range client.Notifications() {
+			if spec.IndexDone.Matches(n) {
+				return true
+			}
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func firstReadySignal(spec ServerSpec, client *Client) (string, time.Time, bool) {

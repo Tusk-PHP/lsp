@@ -3,6 +3,7 @@
   "root": "testdata/mageos",
   "description": "Mage-OS with the Luma sample data (Magento 2 reference app): a real Composer project of ~55k PHP files, Magento under vendor/mage-os/module-* and vendor/mage-os/framework, no generated/ code; fetched with `make reference-apps`",
   "readyProbe": "wsym.index-complete",
+  "waitForIndex": true,
   "comment": "All Magento code lives in vendor/, so `vendor` here marks a target in another Composer package than the file being edited (a module into the framework, another module, or Laminas), and `cross-file` a target in another file of the same package. Cases tagged magento, di-xml, factory, proxy, layout or framework-depth need Magento knowledge (generated classes, di.xml, layout XML, ObjectManager); the rest ask plain PHP questions of Magento code. Each anchor occurs once in its file unless `occurrence` is given.",
   "openFiles": [
     "vendor/mage-os/module-catalog/Controller/Product/View.php",

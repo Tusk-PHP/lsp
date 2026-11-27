@@ -234,6 +234,7 @@ func (s *Server) handleInitialized(msg *jsonRPCMessage) {
 		indexWg.Wait()
 		s.index.MarkReady()
 		close(s.indexed)
+		s.logInfo("PHP LSP: Index ready")
 		s.republishOpenDocuments()
 	})
 	s.watchFiles()
