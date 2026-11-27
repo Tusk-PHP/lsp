@@ -130,3 +130,55 @@ class User { private string $name; }
 		t.Fatalf("unexpected one-line constructor text:\n%s", edit.NewText)
 	}
 }
+
+func TestGetCodeActionsGenerateConstructorFindsTheClassBody(t *testing.T) {
+	for name, tc := range map[string]struct {
+		source string
+		line   int
+		want   protocol.Position
+		indent string
+	}{
+		"after a class constant": {"<?php\necho Foo::class; class A { private $x; }\n", 1, protocol.Position{Line: 1, Character: 39}, "    "},
+		"brace in a string":      {"<?php\nclass A {\n    private $x;\n    public function f() { return \"}{$y}\"; }\n}\n", 1, protocol.Position{Line: 4, Character: 0}, "    "},
+		"indent from a method":   {"<?php\nclass A {\nprivate $x;\n\tpublic function f() {}\n}\n", 1, protocol.Position{Line: 4, Character: 0}, "\t"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			edit, ok := generatedConstructorEdit(t, tc.source, tc.line)
+			if !ok {
+				t.Fatal("expected Generate Constructor action")
+			}
+			if edit.Range.Start != tc.want || !strings.Contains(edit.NewText, tc.indent+"public function __construct(") {
+				t.Fatalf("edit = %+v, want insertion at %v indented by %q", edit, tc.want, tc.indent)
+			}
+		})
+	}
+	for name, tc := range map[string]struct {
+		source string
+		line   int
+	}{
+		"unterminated body":     {"<?php\nclass A { private $x;\n", 1},
+		"name on the next line": {"<?php\nclass\nA { private $x; }\n", 2},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if edit, ok := generatedConstructorEdit(t, tc.source, tc.line); ok {
+				t.Fatalf("did not expect a Generate Constructor action, got %+v", edit)
+			}
+		})
+	}
+}
+
+func generatedConstructorEdit(t *testing.T, source string, line int) (protocol.TextEdit, bool) {
+	t.Helper()
+	a := setupCoverageAnalyzer()
+	actions := a.GetCodeActions("file:///app/A.php", source, protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///app/A.php"},
+		Range:        protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
+		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
+	})
+	for _, action := range actions {
+		if action.Title == "Generate Constructor" {
+			return action.Edit.Changes["file:///app/A.php"][0], true
+		}
+	}
+	return protocol.TextEdit{}, false
+}

@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -357,11 +359,7 @@ func (a *Analyzer) extractImplementMissingMethodDeclaration(member *symbols.Symb
 		return "", false
 	}
 
-	startOffset, endOffset, ok := extractImplementMissingMethodOffsets(result, method)
-	if !ok || startOffset < 0 || endOffset <= startOffset || endOffset > len(source) {
-		return "", false
-	}
-	return source[startOffset:endOffset], true
+	return methodDeclarationText(newCodeTokens(source, lexer.Lex(source, token.Latest)), method)
 }
 
 func findImplementMissingMethodDef(result *parser.ParseResult, member *symbols.Symbol) (parser.MethodDef, bool) {
@@ -397,77 +395,55 @@ func findImplementMissingMethodDef(result *parser.ParseResult, member *symbols.S
 	return parser.MethodDef{}, false
 }
 
-func extractImplementMissingMethodOffsets(result *parser.ParseResult, method parser.MethodDef) (int, int, bool) {
-	functionIdx := -1
-	for i := range result.Tokens {
-		tok := result.Tokens[i]
-		if tok.Line != method.Line || tok.Kind != parser.TokenFunction {
+func methodDeclarationText(toks codeTokens, method parser.MethodDef) (string, bool) {
+	function := methodFunctionToken(toks, method)
+	if function < 0 {
+		return "", false
+	}
+	start := function
+	for isMethodModifier(toks.kind(start - 1)) {
+		start--
+	}
+	depth := 0
+	for i := function; i < len(toks.all); i++ {
+		switch kind := toks.kind(i); kind {
+		case token.LeftParen, token.LeftBracket, token.Attribute, token.LeftBrace:
+			depth++
+		case token.RightParen, token.RightBracket, token.RightBrace:
+			depth = max(depth-1, 0)
+		case token.Semicolon:
+			if depth == 0 {
+				return toks.src[toks.all[start].Start:toks.all[i].End], true
+			}
+		}
+	}
+	return "", false
+}
+
+func methodFunctionToken(toks codeTokens, method parser.MethodDef) int {
+	for i, tok := range toks.all {
+		if tok.Kind != token.Function || toks.position(tok.Start).Line != method.Line {
 			continue
 		}
-		for j := i + 1; j < len(result.Tokens); j++ {
-			if result.Tokens[j].Line < method.Line {
-				continue
+		for j := i + 1; j < len(toks.all); j++ {
+			kind := toks.kind(j)
+			if kind.IsSemiReserved() && toks.text(j) == method.Name {
+				return i
 			}
-			if result.Tokens[j].Kind == parser.TokenIdentifier && result.Tokens[j].Value == method.Name {
-				functionIdx = i
-				break
-			}
-			if result.Tokens[j].Kind == parser.TokenSemicolon || result.Tokens[j].Kind == parser.TokenOpenBrace {
+			if kind == token.Semicolon || kind == token.LeftBrace {
 				break
 			}
 		}
-		if functionIdx >= 0 {
-			break
-		}
 	}
-	if functionIdx < 0 {
-		return 0, 0, false
-	}
+	return -1
+}
 
-	startIdx := functionIdx
-	for startIdx > 0 {
-		switch result.Tokens[startIdx-1].Kind {
-		case parser.TokenPublic, parser.TokenProtected, parser.TokenPrivate, parser.TokenStatic, parser.TokenAbstract, parser.TokenFinal, parser.TokenReadonly:
-			startIdx--
-		default:
-			goto foundStart
-		}
+func isMethodModifier(kind token.Kind) bool {
+	switch kind {
+	case token.Public, token.Protected, token.Private, token.Static, token.Abstract, token.Final, token.Readonly:
+		return true
 	}
-foundStart:
-
-	parenDepth := 0
-	bracketDepth := 0
-	braceDepth := 0
-	endOffset := 0
-	for i := functionIdx; i < len(result.Tokens); i++ {
-		switch result.Tokens[i].Kind {
-		case parser.TokenOpenParen:
-			parenDepth++
-		case parser.TokenCloseParen:
-			if parenDepth > 0 {
-				parenDepth--
-			}
-		case parser.TokenOpenBracket:
-			bracketDepth++
-		case parser.TokenCloseBracket:
-			if bracketDepth > 0 {
-				bracketDepth--
-			}
-		case parser.TokenOpenBrace:
-			braceDepth++
-		case parser.TokenCloseBrace:
-			if braceDepth > 0 {
-				braceDepth--
-			}
-		case parser.TokenSemicolon:
-			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
-				endOffset = result.Tokens[i].Offset + len(result.Tokens[i].Value)
-				return result.Tokens[startIdx].Offset, endOffset, true
-			}
-		}
-	}
-
-	return 0, 0, false
+	return false
 }
 
 func implementMissingMethodsInsertionEdit(uri, source string, target *implementMissingMethodsTarget, methods []string) *protocol.WorkspaceEdit {
