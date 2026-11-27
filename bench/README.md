@@ -157,6 +157,11 @@ latency of correct answers per feature. A miss fails the run, which is how CI
 gates on them. The marks are ratchets: raise them when a change earns it, and
 lower one only with a reason in the pull request.
 
+Their suites set `waitForIndex`: once the ready probe passes, cases wait
+for the server's `indexDone` notification (Tusk PHP logs `PHP LSP: Index
+ready`), so a probe answered from a half-built index can't make later cases
+fail by timing. The ready time is still the probe's.
+
 Cases are tagged by the PHP syntax and the framework feature they exercise
 (`variable`, `class-constant`, `match`, `generics`, `hooks`, `di-xml`, ...),
 and the report adds a table of correctness per tag across all workspaces, so
