@@ -40,7 +40,7 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 		if gen := r.enclosingReturnType(lines, pos, file); gen.FQN == "Generator" && len(gen.Params) >= 3 {
 			return gen.Params[2], true
 		}
-	case *ast.Binary, *ast.Unary, *ast.InstanceOf, *ast.Ternary:
+	case *ast.Binary, *ast.Unary, *ast.Postfix, *ast.InstanceOf, *ast.Ternary:
 		rt := r.typeOf(t, n, nil, ctx)
 		return rt, !rt.IsEmpty()
 	case *ast.ClassConstFetch:
@@ -175,7 +175,7 @@ func (r *Resolver) assignedPlainType(varName string, t *syntaxTree, v assignedVa
 		return PlainTypeName(r.InvokeType(r.typeOf(t, v.expr, nil, ExprContext{Lines: lines, Pos: pos, File: file}))), true
 	}
 	switch n := v.expr.(type) {
-	case *ast.Binary, *ast.Unary, *ast.InstanceOf, *ast.Ternary:
+	case *ast.Binary, *ast.Unary, *ast.Postfix, *ast.InstanceOf, *ast.Ternary:
 		return PlainTypeName(r.typeOf(t, n, nil, ExprContext{Lines: lines, Pos: pos, File: file})), true
 	case *ast.New:
 		if name, ok := n.Class.(*ast.ConstFetch); ok && n.Anonymous == nil {

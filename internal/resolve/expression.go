@@ -105,10 +105,15 @@ func (r *Resolver) typeOf(t *syntaxTree, e ast.Expr, expected *ResolvedType, ctx
 			rt.Literal = t.src[n.Start:lit.End]
 			return rt
 		}
-		if n.Op == token.At {
+		switch n.Op {
+		case token.At:
 			return r.typeOf(t, n.Operand, expected, ctx)
+		case token.Increment, token.Decrement:
+			return incrementedType(n.Op, r.typeOf(t, n.Operand, nil, ctx))
 		}
 		return r.operatorType(t, n, ctx)
+	case *ast.Postfix:
+		return r.typeOf(t, n.Operand, nil, ctx)
 	case *ast.InstanceOf:
 		return r.operatorType(t, n, ctx)
 	case *ast.Cast:
