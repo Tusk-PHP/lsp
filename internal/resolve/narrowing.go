@@ -238,17 +238,8 @@ func (n narrowing) statementsBefore(path []ast.Node) []ast.Stmt {
 	inner := innerPath(path)
 	var out []ast.Stmt
 	for i, node := range inner {
-		var stmts []ast.Stmt
-		switch node := node.(type) {
-		case *ast.Block:
-			stmts = node.Stmts
-		case *ast.Case:
-			stmts = node.Stmts
-		case *ast.Namespace:
-			stmts = node.Stmts
-		case *ast.File:
-			stmts = node.Stmts
-		default:
+		stmts, ok := statementsOf(node)
+		if !ok {
 			continue
 		}
 		var child ast.Node
@@ -269,6 +260,22 @@ func (n narrowing) statementsBefore(path []ast.Node) []ast.Stmt {
 		out = out[len(out)-maxNarrowingStatements:]
 	}
 	return out
+}
+
+// statementsOf returns the statements a block, case, namespace or file
+// holds; ok is false for any other node.
+func statementsOf(n ast.Node) ([]ast.Stmt, bool) {
+	switch n := n.(type) {
+	case *ast.Block:
+		return n.Stmts, true
+	case *ast.Case:
+		return n.Stmts, true
+	case *ast.Namespace:
+		return n.Stmts, true
+	case *ast.File:
+		return n.Stmts, true
+	}
+	return nil, false
 }
 
 func (n narrowing) applyStatement(t ResolvedType, stmt ast.Stmt) ResolvedType {
