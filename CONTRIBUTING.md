@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing! This document is the source of truth for how changes get into Tusk PHP: setup, the pull request checklist, review and releases. [AGENTS.md](AGENTS.md) holds the code's principles (structure, performance, correctness) and points AI agents back here for the process.
 
-Questions and ideas go to [Discussions](https://github.com/Tusk-PHP/lsp/discussions); bugs and agreed work go to [issues](https://github.com/Tusk-PHP/lsp/issues). Issues about diagnostics go to [Tusk-PHP/diagnostics](https://github.com/Tusk-PHP/diagnostics/issues) instead: see [Where an issue goes](#where-an-issue-goes).
+Questions and ideas go to [Discussions](https://github.com/Tusk-PHP/lsp/discussions); bugs and agreed work go to [issues](https://github.com/Tusk-PHP/lsp/issues). Issues about diagnostics go here too: see [Where an issue goes](#where-an-issue-goes).
 
 ## Code of Conduct
 
@@ -195,14 +195,11 @@ Each issue also gets a type (**Bug**, **Feature** or **Task**) and, where one fi
 
 ### Where an issue goes
 
-- **[Tusk-PHP/diagnostics](https://github.com/Tusk-PHP/diagnostics/issues)**: anything whose result is a diagnostic. That covers a new rule, a wrong or missing warning, rule configuration and suppression, PHPStan and Pint runs, and `tusk-php check` and its output. Its goals, such as [Fewer false warnings](https://github.com/Tusk-PHP/diagnostics/issues/4), live there too.
-- **Here**: editor features (completion, hover, navigation, refactors, code actions), the LSP and MCP servers, and the shared core (parser, index, types, framework knowledge), even when a rule depends on it.
-
-The diagnostics code still lives in this repository until it's extracted ([Tusk-PHP/diagnostics#1](https://github.com/Tusk-PHP/diagnostics/issues/1)), so a fix for a diagnostics issue is still a pull request here, saying `Fixes Tusk-PHP/diagnostics#N`.
+Every issue goes here, diagnostics included. One whose result is a diagnostic (a new rule, a wrong or missing warning, rule configuration and suppression, PHPStan and Pint runs, `tusk-php check` and its output) gets the `area: diagnostics` label and usually belongs to one of the diagnostics goals, such as [Fewer false warnings](https://github.com/Tusk-PHP/lsp/issues/530) or [New rules](https://github.com/Tusk-PHP/lsp/issues/555).
 
 ## Reporting Bugs
 
-- Use the [GitHub issue tracker](https://github.com/Tusk-PHP/lsp/issues); a wrong or missing warning goes to [Tusk-PHP/diagnostics](https://github.com/Tusk-PHP/diagnostics/issues)
+- Use the [GitHub issue tracker](https://github.com/Tusk-PHP/lsp/issues), for a wrong or missing warning too
 - Include your editor, OS, PHP version, and steps to reproduce
 - Attach the server log (`--log /tmp/tusk-php.log`) if relevant
 - Security vulnerabilities don't go in public issues: see [SECURITY.md](SECURITY.md)

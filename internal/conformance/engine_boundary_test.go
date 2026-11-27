@@ -12,7 +12,7 @@ import (
 )
 
 // The analysis engine stays apart from the editor inside this module (see
-// plans/analysis-engine-extraction.md in Tusk-PHP/diagnostics). These packages
+// ARCHITECTURE.md, "The engine boundary"). These packages
 // are the language server's side of that boundary: the transports, the editor
 // features, session (which wires both for every transport), and what only the
 // editor, MCP or CLI uses. Every other package under internal/ is engine.
