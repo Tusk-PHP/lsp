@@ -97,13 +97,11 @@ class AutowiredService {
 
 	ca := NewContainerAnalyzer(idx, dir, "symfony")
 	// Register app.notifier manually
-	ca.mu.Lock()
-	ca.bindings["app.notifier"] = &ServiceBinding{
+	seed(ca, ServiceBinding{
 		Abstract:  "app.notifier",
 		Concrete:  "App\\Service\\NotificationService",
 		Singleton: true,
-	}
-	ca.mu.Unlock()
+	})
 
 	deps := ca.AnalyzeConstructorInjection("App\\Service\\AutowiredService")
 	if len(deps) == 0 {

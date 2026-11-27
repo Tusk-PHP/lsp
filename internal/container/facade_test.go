@@ -181,9 +181,7 @@ class MyService {
 	ca := NewContainerAnalyzer(idx, "/tmp", "laravel")
 	ca.Analyze()
 	// Register a custom binding
-	ca.mu.Lock()
-	ca.bindings["my.service"] = &ServiceBinding{Abstract: "my.service", Concrete: `App\Services\MyService`}
-	ca.mu.Unlock()
+	seed(ca, ServiceBinding{Abstract: "my.service", Concrete: `App\Services\MyService`})
 
 	concrete := ca.ResolveFacade(`App\Facades\MyFacade`)
 	if concrete != `App\Services\MyService` {

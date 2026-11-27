@@ -363,3 +363,29 @@ func TestIDEHelperUnderAPathWithASpaceIsIndexedUnderItsFileURI(t *testing.T) {
 		t.Errorf("the IDE helper's class is declared at %s: %+v", want, route)
 	}
 }
+
+func TestRefreshReplacesTheContainerBindingsOfChangedProviders(t *testing.T) {
+	provider := func(abstract string) string {
+		return "<?php\nnamespace App\\Providers;\nclass AppServiceProvider {\n    public function register() {\n        $this->app->bind('" + abstract + "', 'App\\Service');\n    }\n}\n"
+	}
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"app/Providers/AppServiceProvider.php":  provider("payments"),
+		"app/Providers/MailServiceProvider.php": provider("mailer"),
+	})
+	ws := New(Options{RootPath: root, Framework: "laravel", Config: config.DefaultConfig(), Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+	ws.IndexWorkspace()
+	ws.Container.Analyze()
+
+	writeFiles(t, root, map[string]string{"app/Providers/AppServiceProvider.php": provider("reports")})
+	if err := os.Remove(filepath.Join(root, "app/Providers/MailServiceProvider.php")); err != nil {
+		t.Fatal(err)
+	}
+	refreshPaths(t, ws, root, "app/Providers/AppServiceProvider.php", "app/Providers/MailServiceProvider.php")
+
+	for abstract, bound := range map[string]bool{"payments": false, "mailer": false, "reports": true} {
+		if got := ws.Container.LookupBinding(abstract) != nil; got != bound {
+			t.Errorf("%s bound = %v, want %v", abstract, got, bound)
+		}
+	}
+}
