@@ -45,3 +45,23 @@ func (idx *Index) ScopeConventionOf(fqn string) (ScopeConvention, bool) {
 	c, ok := idx.scopeConventions[fqn]
 	return c, ok
 }
+
+// SetCollectionFactories records the collection classes whose instances for
+// an item class are built by a method of that class, as Laravel builds an
+// Eloquent Collection<TKey, TModel> with TModel::newCollection(). Keys are
+// collection class FQNs, values the factory method's name. It's set once,
+// before indexing; the map is kept as given and only read.
+func (idx *Index) SetCollectionFactories(factories map[string]string) {
+	idx.mu.Lock()
+	idx.collectionFactories = factories
+	idx.mu.Unlock()
+}
+
+// CollectionFactory returns the name of the item class's method that builds
+// collection class fqn, if it has one.
+func (idx *Index) CollectionFactory(fqn string) (string, bool) {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	factory, ok := idx.collectionFactories[fqn]
+	return factory, ok
+}

@@ -150,65 +150,69 @@ func envWithFileFirst(env typeEnv) typeEnv {
 // applyEnv substitutes templates and static in rt and resolves its class names.
 func (r *Resolver) applyEnv(rt ResolvedType, env typeEnv) ResolvedType {
 	return rt.transform(func(t ResolvedType) ResolvedType {
-		if t.FQN == "" {
+		return r.itemCollection(r.envNode(t, env))
+	})
+}
+
+func (r *Resolver) envNode(t ResolvedType, env typeEnv) ResolvedType {
+	if t.FQN == "" {
+		return t
+	}
+	if len(t.Params) == 0 && t.Callable == nil && len(t.Fields) == 0 {
+		if sub, ok := env.subst[t.FQN]; ok {
+			if t.Nullable && !sub.Nullable {
+				sub = MakeUnion([]ResolvedType{sub}, true)
+			}
+			return sub
+		}
+	}
+	switch t.FQN {
+	case "static", "self", "$this":
+		if env.static.IsEmpty() {
 			return t
 		}
-		if len(t.Params) == 0 && t.Callable == nil && len(t.Fields) == 0 {
-			if sub, ok := env.subst[t.FQN]; ok {
-				if t.Nullable && !sub.Nullable {
-					sub = MakeUnion([]ResolvedType{sub}, true)
-				}
-				return sub
+		out := env.static
+		out.Nullable = out.Nullable || t.Nullable
+		if len(t.Params) > 0 {
+			out.Params = t.Params
+		}
+		return out
+	}
+	if t.Qualified {
+		t.Qualified = false
+		return t
+	}
+	if env.fileFirst && env.file != nil && !IsBuiltinTypeName(t.FQN) && !strings.HasPrefix(t.FQN, "\\") {
+		if res := r.ResolveClassName(t.FQN, env.file); res != t.FQN || r.Index != nil && r.Index.Lookup(res) != nil {
+			t.FQN = res
+			return t
+		}
+	}
+	switch t.FQN {
+	case "new":
+		// new<T>: an object of the class T or class-string<T> names.
+		if len(t.Params) == 1 {
+			if target := ClassStringTarget(t.Params[0]); !IsBuiltinTypeName(target.FQN) && !target.IsEmpty() {
+				return target
 			}
 		}
-		switch t.FQN {
-		case "static", "self", "$this":
-			if env.static.IsEmpty() {
-				return t
-			}
-			out := env.static
-			out.Nullable = out.Nullable || t.Nullable
-			if len(t.Params) > 0 {
-				out.Params = t.Params
-			}
+		return t
+	case "key-of", "value-of", "offset-access":
+		if out, ok := r.evalTypeOperator(t); ok {
 			return out
 		}
-		if t.Qualified {
-			t.Qualified = false
-			return t
-		}
-		if env.fileFirst && env.file != nil && !IsBuiltinTypeName(t.FQN) && !strings.HasPrefix(t.FQN, "\\") {
-			if res := r.ResolveClassName(t.FQN, env.file); res != t.FQN || r.Index != nil && r.Index.Lookup(res) != nil {
-				t.FQN = res
-				return t
-			}
-		}
-		switch t.FQN {
-		case "new":
-			// new<T>: an object of the class T or class-string<T> names.
-			if len(t.Params) == 1 {
-				if target := ClassStringTarget(t.Params[0]); !IsBuiltinTypeName(target.FQN) && !target.IsEmpty() {
-					return target
-				}
-			}
-			return t
-		case "key-of", "value-of", "offset-access":
-			if out, ok := r.evalTypeOperator(t); ok {
-				return out
-			}
-			return t
-		}
-		if i := strings.Index(t.FQN, "::"); i > 0 && len(t.Params) == 0 {
-			// A class constant used as a type: Foo::TYPES.
-			class := r.qualifyDocName(t.FQN[:i], env.owner, env.file)
-			if out, ok := r.classConstantType(class, t.FQN[i+2:], env.static); ok {
-				return out
-			}
-			return t
-		}
-		t.FQN = r.qualifyDocName(t.FQN, env.owner, env.file)
 		return t
-	})
+	}
+	if i := strings.Index(t.FQN, "::"); i > 0 && len(t.Params) == 0 {
+		// A class constant used as a type: Foo::TYPES.
+		class := r.qualifyDocName(t.FQN[:i], env.owner, env.file)
+		if out, ok := r.classConstantType(class, t.FQN[i+2:], env.static); ok {
+			return out
+		}
+		return t
+	}
+	t.FQN = r.qualifyDocName(t.FQN, env.owner, env.file)
+	return t
 }
 
 // evalTypeOperator works out key-of<T>, value-of<T> and T[K] once T and K
@@ -394,6 +398,9 @@ func (r *Resolver) ancestorArgs(classFQN string, args []ResolvedType, ancestor s
 				parentArgs[i] = r.applyEnv(r.parseType(raw), env)
 			}
 			break
+		}
+		if parentArgs == nil && len(sym.Templates) == 0 && parent == sym.Extends {
+			parentArgs = args
 		}
 		if strings.EqualFold(parent, ancestor) {
 			return parentArgs, true

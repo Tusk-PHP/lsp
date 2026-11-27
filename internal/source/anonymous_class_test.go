@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -27,7 +29,7 @@ func TestCursorInsideAnAnonymousClassIsInThatClass(t *testing.T) {
 	at := func(needle string) *CursorContext {
 		i := strings.Index(anonymousRoom, needle)
 		pos := protocol.Position{Line: strings.Count(anonymousRoom[:i], "\n"), Character: i - strings.LastIndex(anonymousRoom[:i], "\n") - 1}
-		return Analyze("file:///Room.php", anonymousRoom, pos)
+		return Analyze("file:///Room.php", anonymousRoom, pos, phpparser.OnlyGrammar(token.Latest))
 	}
 	inside := at("return 2")
 	if !parser.IsAnonymousClass(inside.EnclosingFQN) {

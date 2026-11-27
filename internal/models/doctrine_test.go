@@ -362,7 +362,7 @@ class Product
 		if sym == nil {
 			t.Fatal("expected virtual property '$reviews'")
 		}
-		if sym.Type != "Doctrine\\Common\\Collections\\Collection" {
+		if sym.Type != "Doctrine\\Common\\Collections\\Collection<int, App\\Entity\\Review>" {
 			t.Errorf("expected Collection type, got %q", sym.Type)
 		}
 	})
@@ -452,5 +452,83 @@ class Tag
 	}
 	if members != 1 {
 		t.Errorf("the property is listed once: %d", members)
+	}
+}
+
+func TestDoctrineToManyPropertiesCarryTheTargetEntity(t *testing.T) {
+	idx, root := setupDoctrineIndex(t, `<?php
+namespace App\Entity;
+
+use Doctrine\Common\Collections\Collection;
+use Doctrine\ORM\Mapping as ORM;
+
+#[ORM\Entity]
+class Post
+{
+    #[ORM\OneToMany(targetEntity: Comment::class, mappedBy: 'post')]
+    private Collection $comments;
+    #[ORM\ManyToMany(targetEntity: Tag::class)]
+    private $tags;
+    #[ORM\ManyToMany(targetEntity: Tag::class)]
+    private iterable $iterableTags;
+    #[ORM\OneToMany(mappedBy: 'post')]
+    private Collection $untargeted;
+}
+`)
+	AnalyzeDoctrineEntities(idx, root)
+	for prop, want := range map[string]string{
+		"$comments":     `Doctrine\Common\Collections\Collection<int, App\Entity\Comment>`,
+		"$tags":         `Doctrine\Common\Collections\Collection<int, App\Entity\Tag>`,
+		"$iterableTags": "iterable",
+		"$untargeted":   `Doctrine\Common\Collections\Collection`,
+	} {
+		if sym := idx.Lookup(`App\Entity\Post::` + prop); sym == nil || sym.Type != want {
+			t.Errorf("%s: %+v, want type %s", prop, sym, want)
+		}
+	}
+}
+
+func TestDoctrineXMLMappingRefinesDeclaredProperties(t *testing.T) {
+	idx, dir := setupDoctrineIndex(t, `<?php
+namespace App\Entity;
+
+use Doctrine\Common\Collections\Collection;
+
+class Product
+{
+    private $id;
+    private ?string $title;
+    private Collection $reviews;
+    private $tags;
+    private $category;
+}
+`)
+	xmlPath := filepath.Join(dir, "Product.orm.xml")
+	if err := os.WriteFile(xmlPath, []byte(`<?xml version="1.0" encoding="UTF-8"?>
+<doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping">
+    <entity name="App\Entity\Product">
+        <id name="id" type="integer"/>
+        <field name="title" type="string"/>
+        <one-to-many field="reviews" target-entity="App\Entity\Review" mapped-by="product"/>
+        <many-to-many field="tags" target-entity="App\Entity\Tag"/>
+        <many-to-one field="category" target-entity="App\Entity\Category"/>
+    </entity>
+</doctrine-mapping>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	parseDoctrineXMLMapping(idx, idx.Lookup(`App\Entity\Product`), `App\Entity\Product`, xmlPath, func(name string) string { return name })
+	for prop, want := range map[string]string{
+		"$id":       "int",
+		"$title":    "?string",
+		"$reviews":  `Doctrine\Common\Collections\Collection<int, App\Entity\Review>`,
+		"$tags":     `Doctrine\Common\Collections\Collection<int, App\Entity\Tag>`,
+		"$category": `?App\Entity\Category`,
+	} {
+		if sym := idx.Lookup(`App\Entity\Product::` + prop); sym == nil || sym.Type != want {
+			t.Errorf("%s: %+v, want type %s", prop, sym, want)
+		}
+	}
+	if id := idx.Lookup(`App\Entity\Product::$id`); id == nil || !id.IsReadonly {
+		t.Errorf("the mapped id is read-only: %+v", id)
 	}
 }

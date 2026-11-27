@@ -189,6 +189,8 @@ src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function
 src/Symfony/Component/Cache/Adapter/ApcuAdapter.php	builtin-unavailable	Function 'apcu_store' requires ext-apcu
 src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'Cluster'
 src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'ClusterOptions'
+src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'DocumentNotFoundException'
+src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'DocumentNotFoundException'
 src/Symfony/Component/Cache/Adapter/CouchbaseCollectionAdapter.php	unknown-class	Unknown class 'UpsertOptions'
 src/Symfony/Component/Cache/Adapter/PdoTagAwareAdapter.php	unused-private-method	Private method 'PdoTagAwareAdapter::createTables' is never used
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
@@ -247,7 +249,6 @@ src/Symfony/Component/Cache/Traits/Relay/Relay502Trait.php	unknown-class	Unknown
 src/Symfony/Component/Cache/Traits/RelayClusterProxy.php	unknown-class	Unknown class 'Relay\Cluster'
 src/Symfony/Component/Cache/Traits/RelayClusterProxy.php	unknown-class	Unknown class 'Relay\Relay'
 src/Symfony/Component/Cache/Traits/RelayProxy.php	unknown-class	Unknown class 'Relay\Relay'
-src/Symfony/Component/Clock/Resources/now.php	unknown-class	Unknown class 'now'
 src/Symfony/Component/Clock/Test/ClockSensitiveTrait.php	unknown-class	Unknown attribute 'After'
 src/Symfony/Component/Clock/Test/ClockSensitiveTrait.php	unknown-class	Unknown attribute 'Before'
 src/Symfony/Component/Clock/Test/ClockSensitiveTrait.php	unknown-class	Unknown attribute 'BeforeClass'
@@ -364,7 +365,6 @@ src/Symfony/Component/JsonPath/Test/JsonPathNotSame.php	unknown-class	Unknown cl
 src/Symfony/Component/JsonPath/Test/JsonPathSame.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/JsonStreamer/Read/Decoder.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/JsonStreamer/Write/StreamWriterGenerator.php	unused-variable	Variable $classReflection is assigned but never read
-src/Symfony/Component/KeyManagement/Bridge/DoctrineOrm/EventListener/EncryptedColumnListener.php	unknown-function	Unknown function 'readonly'
 src/Symfony/Component/KeyManagement/Bridge/Kmip/Kmip/StreamTransport.php	undefined-variable	Undefined variable $written
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWrite'
 src/Symfony/Component/Lock/Store/MongoDbStore.php	unknown-class	Unknown class 'BulkWrite'
@@ -403,6 +403,7 @@ src/Symfony/Component/Lock/Store/ZookeeperStore.php	unknown-class	Unknown class 
 src/Symfony/Component/Lock/Store/ZookeeperStore.php	unknown-class	Unknown class 'Zookeeper'
 src/Symfony/Component/Lock/Store/ZookeeperStore.php	unknown-class	Unknown class 'ZookeeperException'
 src/Symfony/Component/Lock/Store/ZookeeperStore.php	unknown-class	Unknown class 'ZookeeperException'
+src/Symfony/Component/Lock/Store/ZookeeperStore.php	unknown-class	Unknown class 'ZookeeperException'
 src/Symfony/Component/Lock/Test/AbstractStoreTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Mailer/Bridge/Postal/Transport/PostalApiTransport.php	unused-private-property	Private property 'PostalApiTransport::$hostName' is never used
 src/Symfony/Component/Mailer/Bridge/Sendgrid/Transport/SendgridSmtpTransport.php	unused-private-property	Private property 'SendgridSmtpTransport::$region' is never used
@@ -419,6 +420,10 @@ src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpFactory.php	unknown-cl
 src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpFactory.php	unknown-class	Unknown class 'AMQPConnection'
 src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpFactory.php	unknown-class	Unknown class 'AMQPExchange'
 src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpFactory.php	unknown-class	Unknown class 'AMQPQueue'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPConnectionException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPConnectionException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPConnectionException'
+src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPConnectionException'
 src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPException'
 src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPException'
 src/Symfony/Component/Messenger/Bridge/Amqp/Transport/AmqpReceiver.php	unknown-class	Unknown class 'AMQPException'
@@ -527,7 +532,6 @@ src/Symfony/Component/Security/Core/Role/SwitchUserRole.php	unused-private-prope
 src/Symfony/Component/Security/Core/Role/SwitchUserRole.php	unused-private-property	Private property 'SwitchUserRole::$source' is never used
 src/Symfony/Component/Security/Core/Test/AccessDecisionStrategyTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Security/Core/Test/AccessDecisionStrategyTestCase.php	unknown-class	Unknown class 'TestCase'
-src/Symfony/Component/Security/Http/AccessToken/OAuth2/Oauth2TokenHandler.php	unknown-class	Unknown class 'Symfony\Component\String\u'
 src/Symfony/Component/Security/Http/Firewall/ContextListener.php	unknown-class	Unknown class 'LazyLoadingInterface'
 src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'Redis' requires ext-redis
 src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
@@ -545,10 +549,6 @@ src/Symfony/Component/Serializer/Normalizer/ArrayDenormalizer.php	unknown-class	
 src/Symfony/Component/Serializer/Normalizer/GetSetMethodNormalizer.php	unknown-class	Unknown class 'LegacyIgnore'
 src/Symfony/Component/String/AbstractString.php	unused-variable	Variable $fromEncoding is assigned but never read
 src/Symfony/Component/String/AbstractUnicodeString.php	unknown-member	Unknown member 'NFKC_CF' on 'Normalizer'
-src/Symfony/Component/String/Resources/functions.php	unknown-class	Unknown class 'b'
-src/Symfony/Component/String/Resources/functions.php	unknown-class	Unknown class 's'
-src/Symfony/Component/String/Resources/functions.php	unknown-class	Unknown class 'u'
-src/Symfony/Component/Translation/Resources/functions.php	unknown-class	Unknown class 't'
 src/Symfony/Component/Translation/Test/AbstractProviderFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Translation/Test/AbstractProviderFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Translation/Test/AbstractProviderFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
@@ -585,6 +585,8 @@ src/Symfony/Component/VarDumper/Caster/DsCaster.php	unknown-class	Unknown class 
 src/Symfony/Component/VarDumper/Caster/DsCaster.php	unknown-class	Unknown class 'Pair'
 src/Symfony/Component/VarDumper/Caster/MemcachedCaster.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
 src/Symfony/Component/VarDumper/Caster/MemcachedCaster.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
+src/Symfony/Component/VarDumper/Caster/RdKafkaCaster.php	unknown-class	Unknown class 'RdKafkaException'
+src/Symfony/Component/VarDumper/Caster/RdKafkaCaster.php	unknown-class	Unknown class 'RdKafkaException'
 src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis
 src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis
 src/Symfony/Component/VarDumper/Caster/RedisCaster.php	builtin-unavailable	Class 'Redis' requires ext-redis

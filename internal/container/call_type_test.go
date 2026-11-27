@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -21,7 +22,7 @@ func TestCallTypes(t *testing.T) {
 	}
 	callType := CallTypes(ca, idx)
 	r := resolve.NewResolver(idx)
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	for expr, want := range map[string]string{
 		"app('request')":       request.Concrete,
 		"resolve('request')":   request.Concrete,

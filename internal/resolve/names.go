@@ -21,7 +21,7 @@ func FunctionNames(name string, file *parser.FileNode) ([]string, bool) {
 		return []string{name}, true
 	}
 	if strings.Contains(name, "\\") {
-		return []string{ImportedName(name, file.Namespace, file.Uses, "class")}, true
+		return []string{parser.ResolveImportedName(name, file.Namespace, file.Uses, "class")}, true
 	}
 	for _, u := range file.Uses {
 		if u.Kind == "function" && strings.EqualFold(u.Alias, name) {
@@ -34,32 +34,6 @@ func FunctionNames(name string, file *parser.FileNode) ([]string, bool) {
 	}
 	fqns = append(fqns, name)
 	return fqns, true
-}
-
-func ImportedName(name, currentNs string, uses []parser.UseNode, useKind string) string {
-	if name == "" {
-		return ""
-	}
-	if strings.HasPrefix(name, "\\") {
-		return strings.TrimPrefix(name, "\\")
-	}
-	parts := strings.SplitN(name, "\\", 2)
-	for _, u := range uses {
-		if useKind != "" && u.Kind != useKind {
-			continue
-		}
-		if !strings.EqualFold(u.Alias, parts[0]) {
-			continue
-		}
-		if len(parts) > 1 {
-			return u.FullName + "\\" + parts[1]
-		}
-		return u.FullName
-	}
-	if currentNs != "" {
-		return currentNs + "\\" + name
-	}
-	return name
 }
 
 func (r *Resolver) CalledFunction(name string, file *parser.FileNode) *symbols.Symbol {

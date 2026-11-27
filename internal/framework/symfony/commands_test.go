@@ -1,11 +1,14 @@
 package symfony
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -107,8 +110,8 @@ class BarCommand extends Command {}
 }
 
 func TestCommandIndexFind(t *testing.T) {
-	ci := NewCommandIndex()
-	ci.UpdateFile("file:///src/Command/TestCommand.php", "<?php\nnamespace App\\Command;\n#[AsCommand(name: 'app:test')]\nclass TestCommand {}\n")
+	ci := NewCommandIndex(phpparser.OnlyGrammar(token.Latest))
+	ci.UpdateFile("file:///src/Command/TestCommand.php", "<?php\nnamespace App\\Command;\nuse Symfony\\Component\\Console\\Attribute\\AsCommand;\n#[AsCommand(name: 'app:test')]\nclass TestCommand {}\n")
 	if e := ci.Find("app:test"); e == nil {
 		t.Fatal("expected to find app:test")
 	}
@@ -199,25 +202,47 @@ func TestExtractCommandNameContext(t *testing.T) {
 	}
 }
 
-func TestParseAsCommandBlock(t *testing.T) {
-	tests := []struct {
-		block string
-		name  string
-		desc  string
-	}{
-		{`#[AsCommand(name: 'app:do-thing', description: 'Does the thing')]`, "app:do-thing", "Does the thing"},
-		{`#[AsCommand('app:simple')]`, "app:simple", ""},
-		{`#[AsCommand(name: "app:double-quoted")]`, "app:double-quoted", ""},
-		{`#[Route('/foo')]`, "", ""}, // not AsCommand — should be empty
+func TestAsCommandAttributes(t *testing.T) {
+	src := `<?php
+namespace App\Command;
+use Symfony\Component\Console\Attribute\AsCommand;
+use Other\AsCommand as NotSymfony;
+
+#[AsCommand(name: 'app:do-thing', description: 'Does the thing')]
+class DoThing {}
+#[AsCommand('app:simple', 'Positional')]
+class Simple {}
+#[AsCommand(name: "app:double-quoted")]
+class DoubleQuoted {}
+#[\Symfony\Component\Console\Attribute\AsCommand(
+    name: 'app:multi-line',
+)]
+class MultiLine {}
+#[NotSymfony('app:other')]
+class Other {}
+#[AsCommand(name: self::NAME)]
+class Dynamic {}
+class Legacy {
+    protected static $defaultName = 'app:legacy';
+    protected static $defaultDescription = 'Old style';
+}
+class Unnamed {
+    protected static $defaultName = '';
+}
+`
+	var got []string
+	for _, e := range discoverCommandsInFile("file:///c.php", src, phpparser.OnlyGrammar(token.Latest)) {
+		got = append(got, fmt.Sprintf("%s %q %s %d:%d-%d", e.Name, e.Description, e.ClassFQN, e.Range.Start.Line, e.Range.Start.Character, e.Range.End.Character))
 	}
-	for _, tt := range tests {
-		name, desc := parseAsCommandBlock(tt.block)
-		if name != tt.name {
-			t.Errorf("block=%q: name=%q want=%q", tt.block, name, tt.name)
-		}
-		if desc != tt.desc {
-			t.Errorf("block=%q: desc=%q want=%q", tt.block, desc, tt.desc)
-		}
+	want := []string{
+		`app:do-thing "Does the thing" App\Command\DoThing 6:6-13`,
+		`app:simple "Positional" App\Command\Simple 8:6-12`,
+		`app:double-quoted "" App\Command\DoubleQuoted 10:6-18`,
+		`app:multi-line "" App\Command\MultiLine 14:6-15`,
+		`app:legacy "Old style" App\Command\Legacy 20:21-33`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got\n%s", strings.Join(got, "\n"))
 	}
 }
 
@@ -313,14 +338,14 @@ class Application extends BaseApplication {}
 }
 
 func TestCommandIndexUpdateFile(t *testing.T) {
-	ci := NewCommandIndex()
+	ci := NewCommandIndex(phpparser.OnlyGrammar(token.Latest))
 	const uri = "file:///src/Command/A.php"
-	ci.UpdateFile(uri, "<?php\n#[AsCommand(name: 'app:a')]\nclass A {}\n")
-	ci.UpdateFile("file:///vendor/x/B.php", "<?php\n#[AsCommand(name: 'vendor:b')]\nclass B {}\n")
+	ci.UpdateFile(uri, "<?php\nuse Symfony\\Component\\Console\\Attribute\\AsCommand;\n#[AsCommand(name: 'app:a')]\nclass A {}\n")
+	ci.UpdateFile("file:///vendor/x/B.php", "<?php\nuse Symfony\\Component\\Console\\Attribute\\AsCommand;\n#[AsCommand(name: 'vendor:b')]\nclass B {}\n")
 	if got := strings.Join(ci.Names(), ","); got != "app:a" {
 		t.Fatalf("names = %q", got)
 	}
-	ci.UpdateFile(uri, "<?php\n#[AsCommand(name: 'app:renamed')]\nclass A {}\n")
+	ci.UpdateFile(uri, "<?php\nuse Symfony\\Component\\Console\\Attribute\\AsCommand;\n#[AsCommand(name: 'app:renamed')]\nclass A {}\n")
 	if got := strings.Join(ci.Names(), ","); got != "app:renamed" {
 		t.Errorf("after rename: names = %q", got)
 	}
@@ -328,8 +353,8 @@ func TestCommandIndexUpdateFile(t *testing.T) {
 	if len(ci.All()) != 0 {
 		t.Errorf("after removing the attribute: %v", ci.All())
 	}
-	other := NewCommandIndex()
-	other.UpdateFile(uri, "<?php\n#[AsCommand(name: 'app:z')]\nclass A {}\n")
+	other := NewCommandIndex(phpparser.OnlyGrammar(token.Latest))
+	other.UpdateFile(uri, "<?php\nuse Symfony\\Component\\Console\\Attribute\\AsCommand;\n#[AsCommand(name: 'app:z')]\nclass A {}\n")
 	ci.ReplaceWith(other)
 	if ci.Find("app:z") == nil {
 		t.Error("ReplaceWith lost app:z")

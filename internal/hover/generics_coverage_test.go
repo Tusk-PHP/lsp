@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -138,7 +139,7 @@ func TestHoverVariableShowsGenericType(t *testing.T) {
 
 func TestResolveExpressionTypeCoverage(t *testing.T) {
 	p, src := setupProvider(t)
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}

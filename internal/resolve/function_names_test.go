@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -15,7 +16,7 @@ namespace App;
 use Vendor\Lib;
 use function Other\helper;
 `
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	cases := map[string]string{
 		`\Uri\WhatWg\url_percent_encode`: `Uri\WhatWg\url_percent_encode`,
 		`Lib\run`:                        `Vendor\Lib\run`,
@@ -46,28 +47,8 @@ func TestFunctionNamesNeedAFileAndAName(t *testing.T) {
 	if _, ok := FunctionNames("f", nil); ok {
 		t.Error("no file, no names")
 	}
-	if _, ok := FunctionNames(" \\", parser.ParseFile("<?php\n")); ok {
+	if _, ok := FunctionNames(" \\", parser.ParseFile("<?php\n", token.Latest)); ok {
 		t.Error("an empty name has no names")
-	}
-}
-
-func TestImportedName(t *testing.T) {
-	uses := []parser.UseNode{{FullName: `Lib\Helpers`, Alias: "Helpers", Kind: "class"}, {FullName: `Lib\run`, Alias: "run", Kind: "function"}}
-	for _, c := range []struct{ name, kind, want string }{
-		{"", "class", ""},
-		{`\Full\Name`, "class", `Full\Name`},
-		{`Helpers\go`, "class", `Lib\Helpers\go`},
-		{`helpers\go`, "class", `Lib\Helpers\go`},
-		{"HELPERS", "class", `Lib\Helpers`},
-		{"run", "class", `App\run`},
-		{"run", "", `Lib\run`},
-	} {
-		if got := ImportedName(c.name, "App", uses, c.kind); got != c.want {
-			t.Errorf("ImportedName(%q, %q) = %q, want %q", c.name, c.kind, got, c.want)
-		}
-	}
-	if got := ImportedName("run", "", nil, "class"); got != "run" {
-		t.Errorf("in the global namespace a name stays as written, got %q", got)
 	}
 }
 
@@ -77,7 +58,7 @@ func TestCalledFunctionFindsOnlyAFunctionByPHPsRules(t *testing.T) {
 	idx.IndexFile("file:///f.php", "<?php\nnamespace App;\nfunction local() {}\n")
 	idx.IndexFile("file:///g.php", "<?php\nfunction helper() {}\n")
 	r := NewResolver(idx)
-	file := parser.ParseFile("<?php\nnamespace App;\n")
+	file := parser.ParseFile("<?php\nnamespace App;\n", token.Latest)
 	for name, want := range map[string]string{"local": `App\local`, "HELPER": "helper", `\helper`: "helper"} {
 		if fn := r.CalledFunction(name, file); fn == nil || fn.FQN != want {
 			t.Errorf("CalledFunction(%q) = %+v, want %s", name, fn, want)

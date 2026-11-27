@@ -1,9 +1,13 @@
 package parser
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+)
 
 func TestConstantsKeepTheirDocComments(t *testing.T) {
-	file := ParseFile("<?php\n/** Global. */\nconst G = 1;\nclass Room {\n    /** Both. */\n    const A = 1, B = 2;\n    const BARE = 3;\n}\n")
+	file := ParseFile("<?php\n/** Global. */\nconst G = 1;\nclass Room {\n    /** Both. */\n    const A = 1, B = 2;\n    const BARE = 3;\n}\n", token.Latest)
 	if len(file.Constants) != 1 || file.Constants[0].DocComment != "/** Global. */" {
 		t.Errorf("the global constant keeps its doc comment: %+v", file.Constants)
 	}
