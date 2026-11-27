@@ -127,23 +127,20 @@ func TestOpenFailsOnABrokenConfiguration(t *testing.T) {
 	}
 }
 
-func TestCompletionAndHoverShareTheSessionsResolvers(t *testing.T) {
+func TestEditorFeaturesShareTheSessionsResolvers(t *testing.T) {
 	s := newSession(t, Options{})
-	if s.Completion() == nil || s.Hover() == nil {
-		t.Fatal("completion or hover isn't built")
-	}
-	if s.Translations() == nil || s.SymfonyTranslations() == nil {
-		t.Error("the translation resolvers aren't built")
+	if s.Completion() == nil || s.Hover() == nil || s.InlayHints() == nil || s.Analyzer() == nil {
+		t.Fatal("an editor feature isn't built")
 	}
 	const uri = "file:///probe/Foo.php"
 	src := "<?php\nclass Foo { public function bar(): Foo { return $this; } }\n$foo = new Foo();\n"
 	s.ws.Index.IndexFile(uri, src)
 	file := parser.ParseFile(src)
 	pos := textpos.Position{Line: 3, Character: 0}
-	if got := s.Expression("$foo->bar()", src, pos, file); got != "Foo" {
-		t.Errorf("Expression = %q, want Foo", got)
+	if got := s.expression("$foo->bar()", src, pos, file); got != "Foo" {
+		t.Errorf("expression = %q, want Foo", got)
 	}
-	if got := s.TypedExpression("$foo->bar()", src, pos, file); got.FullString() != "Foo" {
-		t.Errorf("TypedExpression = %q, want Foo", got.FullString())
+	if got := s.typedExpression("$foo->bar()", src, pos, file); got.FullString() != "Foo" {
+		t.Errorf("typedExpression = %q, want Foo", got.FullString())
 	}
 }

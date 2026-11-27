@@ -1,6 +1,6 @@
 // Package session builds and connects the analysis for a project once, for
 // every transport: the language server, the MCP server and the CLI get their
-// diagnostics, completion and hover through a Session, and none of them
+// diagnostics and editor features through a Session, and none of them
 // builds rules or wires resolvers between those providers itself. A transport
 // adds only what is its own, such as client capabilities.
 package session
@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 
+	"github.com/Tusk-PHP/lsp/internal/analyzer"
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/completion"
 	"github.com/Tusk-PHP/lsp/internal/config"
@@ -18,6 +19,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/hover"
+	"github.com/Tusk-PHP/lsp/internal/inlayhint"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
@@ -58,6 +60,8 @@ type Session struct {
 	symfonyTranslations *frameworksymfony.TranslationResolver
 	completion          *completion.Provider
 	hover               *hover.Provider
+	inlayHint           *inlayhint.Provider
+	analyzer            *analyzer.Analyzer
 }
 
 // New wires the analysis over ws, which may still be indexing: findings
@@ -113,7 +117,21 @@ func New(ws *workspace.Bootstrapped, opts Options) *Session {
 	s.hover = hover.NewProvider(ws.Index, ws.Container, ws.Framework)
 	s.hover.SetArrayResolver(arrays)
 	s.hover.SetConfig(ws.Config)
-	s.hover.SetTypedChainResolver(s.TypedExpression)
+	s.hover.SetTypedChainResolver(s.typedExpression)
+
+	s.inlayHint = inlayhint.NewProvider(ws.Index, ws.Container)
+	s.inlayHint.SetTypedChainResolver(s.typedExpression)
+
+	s.analyzer = analyzer.NewAnalyzer(ws.Index, ws.Container)
+	s.analyzer.SetChainResolver(s.expression)
+	s.analyzer.SetTypedChainResolver(s.typedExpression)
+	if ws.RouteIndex != nil {
+		s.analyzer.SetLaravelRouteIndex(ws.RouteIndex)
+	}
+	s.analyzer.SetViewResolver(s.views)
+	s.analyzer.SetTranslationResolver(s.translations)
+	s.analyzer.SetSymfonyTranslationResolver(s.symfonyTranslations)
+	s.analyzer.SetSymfonyCommands(ws.SymfonyCommands)
 	return s
 }
 
@@ -205,24 +223,24 @@ func (s *Session) Completion() *completion.Provider { return s.completion }
 // a coverage store it keeps current.
 func (s *Session) Hover() *hover.Provider { return s.hover }
 
-// Expression gives the class an expression evaluates to, as completion
-// resolves it, for the features that type method chains the same way.
-func (s *Session) Expression(expr, source string, pos textpos.Position, file *parser.FileNode) string {
+// InlayHints answers inlay hint requests.
+func (s *Session) InlayHints() *inlayhint.Provider { return s.inlayHint }
+
+// Analyzer answers definition, references, symbols, rename and signature
+// help. A transport adds only what it owns, such as the commands its client
+// can run.
+func (s *Session) Analyzer() *analyzer.Analyzer { return s.analyzer }
+
+// expression gives the class an expression evaluates to, as completion
+// resolves it, for the analyzer, which types method chains the same way.
+func (s *Session) expression(expr, source string, pos textpos.Position, file *parser.FileNode) string {
 	return s.completion.ResolveExpressionType(expr, source, pos, file)
 }
 
-// TypedExpression gives an expression's type with its generic arguments, as
+// typedExpression gives an expression's type with its generic arguments, as
 // completion resolves it, for hover, inlay hints and the analyzer.
-func (s *Session) TypedExpression(expr, source string, pos textpos.Position, file *parser.FileNode) resolve.ResolvedType {
+func (s *Session) typedExpression(expr, source string, pos textpos.Position, file *parser.FileNode) resolve.ResolvedType {
 	return s.completion.ResolveExpressionTypeTyped(expr, source, pos, file)
-}
-
-// Translations resolves Laravel translation keys.
-func (s *Session) Translations() *frameworklaravel.TranslationResolver { return s.translations }
-
-// SymfonyTranslations resolves Symfony translation keys.
-func (s *Session) SymfonyTranslations() *frameworksymfony.TranslationResolver {
-	return s.symfonyTranslations
 }
 
 // Views resolves Laravel view names, with the project's registered

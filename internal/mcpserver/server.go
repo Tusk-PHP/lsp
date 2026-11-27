@@ -710,21 +710,8 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 
 	rt.Completion = rt.Session.Completion()
 	rt.Hover = rt.Session.Hover()
-
-	rt.InlayHint = inlayhint.NewProvider(ws.Index, ws.Container)
-	rt.InlayHint.SetTypedChainResolver(rt.Session.TypedExpression)
-
-	rt.Analyzer = analyzer.NewAnalyzer(ws.Index, ws.Container)
-	if ws.RouteIndex != nil {
-		rt.Analyzer.SetLaravelRouteIndex(ws.RouteIndex)
-	}
-	rt.Analyzer.SetChainResolver(rt.Session.Expression)
-	rt.Analyzer.SetTypedChainResolver(rt.Session.TypedExpression)
-	rt.Analyzer.SetViewResolver(rt.Session.Views())
-	rt.Analyzer.SetTranslationResolver(rt.Session.Translations())
-	rt.Analyzer.SetSymfonyTranslationResolver(rt.Session.SymfonyTranslations())
-	rt.Analyzer.SetSymfonyCommands(ws.SymfonyCommands)
-
+	rt.InlayHint = rt.Session.InlayHints()
+	rt.Analyzer = rt.Session.Analyzer()
 	return rt
 }
 
