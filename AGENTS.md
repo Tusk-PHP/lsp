@@ -264,9 +264,9 @@ description instead, and the maintainers write the changelog from it when they r
 ## Opening an issue
 
 Follow [CONTRIBUTING.md › Issues, goals and milestones](CONTRIBUTING.md#issues-goals-and-milestones).
-An issue whose result is a diagnostic goes to `Tusk-PHP/diagnostics`, not here
-([Where an issue goes](CONTRIBUTING.md#where-an-issue-goes)); replace
-`Tusk-PHP/lsp` with `Tusk-PHP/diagnostics` in the commands below for it.
+Every issue goes in this repository; one whose result is a diagnostic gets the
+`area: diagnostics` label
+([Where an issue goes](CONTRIBUTING.md#where-an-issue-goes)).
 An issue you open is a sub-issue of one goal (the open issues with the
 [`roadmap`](https://github.com/Tusk-PHP/lsp/issues?q=is%3Aissue%20state%3Aopen%20label%3Aroadmap) label), has a type (Bug, Feature or Task) and an `area:` label where one fits. Link it
 to its goal after creating it:

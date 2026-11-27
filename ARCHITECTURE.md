@@ -21,7 +21,7 @@ Other flags: `--version`, `--log <file>`, `--strict` (re-panic after recovering,
 
 The same code builds for WebAssembly (`GOOS=wasip1`, `make wasm`), so the server can run as a web worker (for example on vscode.dev). Platform differences live in build-tagged files (`*_wasip1.go`, `*_wasm.go`), such as stdin handling, memory limits and the live database connection.
 
-Every front end builds its analysis state the same way, through `workspace` (see [Startup](#startup)). The LSP and MCP servers each wire the providers on top of it; until a shared `session` package exists, a wiring change goes in both `lsp/initialize.go` and `mcpserver/server.go`.
+Every front end builds its analysis state the same way, through `workspace` (see [Startup](#startup)), and gets its providers from `session`, which wires diagnostics, completion, hover, inlay hints and the analyzer over it once. The LSP adds only what is its own: client commands, lazy completion resolve, the Composer hover card and the coverage store.
 
 ## Packages
 
@@ -61,6 +61,7 @@ internal/
 ├── checks/                      Native rules, no LSP types
 ├── diagnostics/                 Runs checks, plus PHPStan and Pint
 ├── symquery/ introspect/ deps/ unuseddeps/ graph/
+├── session/                     Wires the providers above once, for the LSP, MCP and CLI
 │
 ├── lsp/                      6. LSP transport
 ├── mcpserver/                   MCP transport
@@ -206,6 +207,12 @@ Three sources, kept apart:
    - Heavier, type-aware rules run on save (`AnalyzeOnSave`); `tusk-php check` and MCP run both tiers.
 2. **PHPStan**, on save, when the project has it: its JSON output, with ranges narrowed to the identifier each message names.
 3. **Laravel Pint**, on save, when the project has it: style differences as warnings.
+
+### The engine boundary
+
+The packages the editor doesn't need to analyse code (everything under `internal/` except the transports, the editor features, `session` and the CLI-only tools) are the analysis engine. They never import `protocol`, the transports or the editor features: they use `textpos` positions, read client settings as `config.ClientOptions` and return `diagnostics.Diagnostic`, and `session.LSPDiagnostics` gives those the LSP's shape at the edge. `TestEngineBoundary` in `conformance` fails when an engine package imports across.
+
+The engine stays in this module. Moving it into a module or repository of its own was planned and dropped ([#527](https://github.com/Tusk-PHP/lsp/issues/527)): it would have to publish nearly the whole core as API that [#140](https://github.com/Tusk-PHP/lsp/issues/140) is about to change, and turn most fixes, which touch the core and an editor feature together, into two changes and a version bump.
 
 ## Project context
 
