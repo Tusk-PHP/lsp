@@ -136,12 +136,31 @@ the harness, not by convention:
 | `filament` | `testdata/filament` (fetched: `make filament-workspace`) | ~23.8k PHP files with full `vendor/` | the large workspace: deep `static` builder chains through traits, closures, Livewire and Blade components, Eloquent |
 | `symfony` | `testdata/symfony` | ~1.1k PHP files with `vendor/` | DI, autowired services, entities, PHP builtins |
 | `diagnostics` | `bench/workspaces/diagnostics` | 6 files, no `vendor/` | one deliberate defect per file, plus a clean file to catch false positives |
+| `sylius` | `testdata/sylius` (fetched: `bash scripts/fetch-sylius.sh`) | ~29.6k PHP files with full `vendor/` | the Symfony reference app: container, Doctrine entities and repositories, routes, translations, API Platform |
+| `woocommerce` | `testdata/woocommerce` (fetched: `bash scripts/fetch-woocommerce.sh`) | ~5.2k PHP files: WordPress plus the plugin and its `vendor/` | the WordPress reference app: hooks, template variables, globals, `define()` constants, docblock-typed code |
+| `mageos` | `testdata/mageos` (fetched: `bash scripts/fetch-mageos.sh`) | ~55k PHP files, Magento under `vendor/` | the Magento 2 reference app: `di.xml` preferences and plugins, generated factories, service contracts, layout |
 
 `laravel` and `symfony` are the repository's existing test fixtures, so the suite
 tracks the same code the unit tests do. `filament` is the Filament demo app at a
 pinned commit; it isn't committed, and a run without it skips the workspace. `diagnostics` is benchmark-only and lives here
 rather than in `testdata/` precisely because it contains code that is *meant* to
 be wrong — it must never reach the conformance corpus.
+
+## Reference apps and pass marks
+
+`filament`, `sylius`, `woocommerce` and `mageos` are the reference apps for
+1.0.0, one per framework (Tusk-PHP/lsp#431). `make reference-apps` fetches
+them; `make bench-reference` benchmarks this server on them and checks the
+run against `bench/passmarks.json` (`-passmarks`): per workspace, the
+minimum number of cases passed, the time to ready, the peak RSS and the p95
+latency of correct answers per feature. A miss fails the run, which is how CI
+gates on them. The marks are ratchets: raise them when a change earns it, and
+lower one only with a reason in the pull request.
+
+Cases are tagged by the PHP syntax and the framework feature they exercise
+(`variable`, `class-constant`, `match`, `generics`, `hooks`, `di-xml`, ...),
+and the report adds a table of correctness per tag across all workspaces, so
+a gap reads the same whichever app it shows up in.
 
 ## Adding a case
 

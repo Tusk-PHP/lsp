@@ -1,0 +1,1003 @@
+{
+  "workspace": "mageos",
+  "root": "testdata/mageos",
+  "description": "Mage-OS with the Luma sample data (Magento 2 reference app): a real Composer project of ~55k PHP files, Magento under vendor/mage-os/module-* and vendor/mage-os/framework, no generated/ code; fetched with `make reference-apps`",
+  "readyProbe": "wsym.index-complete",
+  "comment": "All Magento code lives in vendor/, so `vendor` here marks a target in another Composer package than the file being edited (a module into the framework, another module, or Laminas), and `cross-file` a target in another file of the same package. Cases tagged magento, di-xml, factory, proxy, layout or framework-depth need Magento knowledge (generated classes, di.xml, layout XML, ObjectManager); the rest ask plain PHP questions of Magento code. Each anchor occurs once in its file unless `occurrence` is given.",
+  "openFiles": [
+    "vendor/mage-os/module-catalog/Controller/Product/View.php",
+    "vendor/mage-os/module-checkout/Controller/Cart/Add.php",
+    "vendor/mage-os/module-catalog/view/frontend/templates/product/list.phtml",
+    "vendor/mage-os/module-ai-base/src/Model/AiServiceSelector.php",
+    "vendor/mage-os/module-catalog-sample-data/Model/Product.php"
+  ],
+  "cases": [
+    {
+      "id": "wsym.index-complete",
+      "feature": "workspaceSymbol",
+      "desc": "readiness probe: a sample-data patch class that only an indexed workspace can find (no file open names it, no import reaches it)",
+      "file": "vendor/mage-os/module-catalog/Controller/Product/View.php",
+      "query": "InstallWishlistSampleData",
+      "comment": "Tusk PHP resolves classes lazily through the Composer class loader, so a definition probe passes in ~0.2 s, long before the index is built, and every reference, implementation and workspace-symbol case after it would then run against a half-built index. This probe waits for the index instead.",
+      "expect": {
+        "items": [
+          "InstallWishlistSampleData"
+        ]
+      },
+      "tags": [
+        "vendor",
+        "magento"
+      ]
+    },
+    {
+      "id": "def.vendor-base-model",
+      "feature": "definition",
+      "desc": "readiness probe: `extends AbstractModel` from a catalog model into the framework",
+      "file": "vendor/mage-os/module-catalog/Model/CompareList.php",
+      "anchor": "class CompareList extends AbstractModel",
+      "offset": 28,
+      "expect": {
+        "targetFile": "framework/Model/AbstractModel.php",
+        "targetSymbol": "class AbstractModel"
+      },
+      "tags": [
+        "cross-file",
+        "vendor",
+        "inheritance",
+        "namespace-import"
+      ]
+    },
+    {
+      "id": "def.relative-class-name",
+      "feature": "definition",
+      "desc": "namespace-relative class name `ResourceModel\\Product\\Compare\\CompareList::class`",
+      "file": "vendor/mage-os/module-catalog/Model/CompareList.php",
+      "anchor": "ResourceModel\\Product\\Compare\\CompareList::class",
+      "offset": 32,
+      "expect": {
+        "targetFile": "module-catalog/Model/ResourceModel/Product/Compare/CompareList.php",
+        "targetSymbol": "class CompareList"
+      },
+      "tags": [
+        "namespace-import",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.promoted-readonly-in-closure",
+      "feature": "definition",
+      "desc": "method on a promoted readonly property, through `$this` inside a closure",
+      "file": "vendor/mage-os/module-catalog/ViewModel/Product/Gallery.php",
+      "anchor": "return $this->block->isMainImage($img);",
+      "offset": 22,
+      "expect": {
+        "targetFile": "module-catalog/Block/Product/View/Gallery.php",
+        "targetSymbol": "function isMainImage"
+      },
+      "tags": [
+        "promoted-property",
+        "readonly",
+        "closure",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.interface-constant",
+      "feature": "definition",
+      "desc": "constant of an interface in another module",
+      "file": "vendor/mage-os/module-catalog/ViewModel/Product/Gallery.php",
+      "anchor": "StoreManagerInterface::PARAM_NAME",
+      "offset": 24,
+      "expect": {
+        "targetFile": "module-store/Model/StoreManagerInterface.php",
+        "targetSymbol": "const PARAM_NAME"
+      },
+      "tags": [
+        "class-constant",
+        "interface",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.chain-interface-return",
+      "feature": "definition",
+      "desc": "method on the `@return StoreInterface` of a promoted interface property",
+      "file": "vendor/mage-os/module-catalog/ViewModel/Product/Gallery.php",
+      "anchor": "->getStore()->getCode()",
+      "offset": 16,
+      "expect": {
+        "targetFile": "module-store/Api/Data/StoreInterface.php",
+        "targetSymbol": "function getCode"
+      },
+      "tags": [
+        "method",
+        "interface",
+        "phpdoc",
+        "promoted-property",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.aliased-parent-return",
+      "feature": "definition",
+      "desc": "method on the aliased `@return ModelProduct` of a parent controller method",
+      "file": "vendor/mage-os/module-catalog/Controller/Product/View.php",
+      "anchor": "$product->getTypeInstance()",
+      "offset": 12,
+      "expect": {
+        "targetFile": "module-catalog/Model/Product.php",
+        "targetSymbol": "function getTypeInstance"
+      },
+      "tags": [
+        "inheritance",
+        "namespace-import",
+        "phpdoc",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.narrowed-false-union",
+      "feature": "definition",
+      "desc": "`Product|false` narrowed by an early `if (!$product) return`",
+      "file": "vendor/mage-os/module-checkout/Controller/Cart/Add.php",
+      "anchor": "$product->getName()",
+      "occurrence": 1,
+      "offset": 11,
+      "expect": {
+        "targetFile": "module-catalog/Model/Product.php",
+        "targetSymbol": "function getName"
+      },
+      "tags": [
+        "narrowing",
+        "phpdoc",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.global-function",
+      "feature": "definition",
+      "desc": "Magento's global translation function `__()`",
+      "file": "vendor/mage-os/module-checkout/Controller/Cart/Add.php",
+      "anchor": "__('Your session has expired')",
+      "offset": 0,
+      "expect": {
+        "targetFile": "framework/Phrase/__.php",
+        "targetSymbol": "function __"
+      },
+      "tags": [
+        "function",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.partial-namespace-import",
+      "feature": "definition",
+      "desc": "property typed through a partially imported namespace (`use Magento\\Framework\\Setup;` then `Setup\\SampleData\\Executor`)",
+      "file": "vendor/mage-os/module-catalog-sample-data/Setup/Patch/Data/InstallCatalogSampleData.php",
+      "anchor": "$this->executor->exec(",
+      "offset": 17,
+      "expect": {
+        "targetFile": "framework/Setup/SampleData/Executor.php",
+        "targetSymbol": "function exec"
+      },
+      "tags": [
+        "namespace-import",
+        "phpdoc",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.method-tag-chain",
+      "feature": "definition",
+      "desc": "fluent chain continuing past a `@method Product setWebsiteIds()` class tag",
+      "file": "vendor/mage-os/module-catalog-sample-data/Model/Product.php",
+      "anchor": "->setStatus(\\Magento",
+      "offset": 2,
+      "expect": {
+        "targetFile": "module-catalog/Model/Product.php",
+        "targetSymbol": "function setStatus"
+      },
+      "tags": [
+        "phpdoc",
+        "static-return",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.inferred-return-chain",
+      "feature": "definition",
+      "desc": "chain continuing past `setStockData()`, which has no `@return` but returns `$this`",
+      "file": "vendor/mage-os/module-catalog-sample-data/Model/Product.php",
+      "anchor": "->setStoreId(\\Magento\\Store",
+      "offset": 2,
+      "expect": {
+        "targetFile": "module-catalog/Model/Product.php",
+        "targetSymbol": "function setStoreId"
+      },
+      "tags": [
+        "static-return",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.alias-import",
+      "feature": "definition",
+      "desc": "method on a promoted property typed by an `as Resolver` alias",
+      "file": "vendor/mage-os/module-catalog/Observer/MoveStoreLevelCatalogDataToWebsiteScopeOnSingleStoreMode.php",
+      "anchor": "->migrateCatalogCategoryAndProductTables(",
+      "offset": 2,
+      "expect": {
+        "targetFile": "Model/ResourceModel/CatalogCategoryAndProductResolverOnSingleStoreMode.php",
+        "targetSymbol": "function migrateCatalogCategoryAndProductTables"
+      },
+      "tags": [
+        "namespace-import",
+        "promoted-property",
+        "readonly",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.aliased-class-constant",
+      "feature": "definition",
+      "desc": "constant through an alias, overriding the parent's `INDEXER_ID`",
+      "file": "vendor/mage-os/module-catalog/Observer/MoveStoreLevelCatalogDataToWebsiteScopeOnSingleStoreMode.php",
+      "anchor": "PriceIndexProcessor::INDEXER_ID",
+      "offset": 21,
+      "expect": {
+        "targetFile": "module-catalog/Model/Indexer/Product/Price/Processor.php",
+        "targetSymbol": "const INDEXER_ID"
+      },
+      "tags": [
+        "class-constant",
+        "namespace-import",
+        "inheritance",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.nullsafe",
+      "feature": "definition",
+      "desc": "nullsafe call on a nullable promoted property",
+      "file": "vendor/mage-os/module-ai-base/src/Model/Chat/ChatMessage.php",
+      "anchor": "$this->answeredToolCall?->getId()",
+      "offset": 27,
+      "expect": {
+        "targetFile": "Api/Data/ToolCallInterface.php",
+        "targetSymbol": "function getId"
+      },
+      "tags": [
+        "nullsafe",
+        "promoted-property",
+        "readonly",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.enum-case-in-match",
+      "feature": "definition",
+      "desc": "backed enum case used as a `match` arm",
+      "file": "vendor/mage-os/module-ai-base/src/Model/Chat/StreamChunk.php",
+      "anchor": "StreamChunkType::ThinkingStart =>",
+      "offset": 18,
+      "expect": {
+        "targetFile": "Api/Data/StreamChunkType.php",
+        "targetSymbol": "case ThinkingStart"
+      },
+      "tags": [
+        "enum",
+        "match",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "def.generic-list-foreach",
+      "feature": "definition",
+      "desc": "element of a `@return list<AiServiceInterface>` in foreach",
+      "file": "vendor/mage-os/module-ai-base/src/Model/AiServiceSelector.php",
+      "anchor": "$service->getId() === $id",
+      "offset": 11,
+      "expect": {
+        "targetFile": "Api/Data/AiServiceInterface.php",
+        "targetSymbol": "function getId"
+      },
+      "tags": [
+        "generics",
+        "foreach",
+        "phpdoc",
+        "interface"
+      ]
+    },
+    {
+      "id": "def.arrow-fn-param",
+      "feature": "definition",
+      "desc": "typed arrow-function parameter",
+      "file": "vendor/mage-os/module-ai-base/src/Model/AiServiceSelector.php",
+      "anchor": "fn (AiServiceInterface $service) => $service->getCode()",
+      "offset": 47,
+      "expect": {
+        "targetFile": "Api/Data/AiServiceInterface.php",
+        "targetSymbol": "function getCode"
+      },
+      "tags": [
+        "arrow-fn",
+        "interface"
+      ]
+    },
+    {
+      "id": "def.generator-foreach",
+      "feature": "definition",
+      "desc": "value type of `\\Generator<int, StreamChunkInterface, ...>` in foreach",
+      "file": "vendor/mage-os/module-ai-base/src/Model/Client/RecordingAiClient.php",
+      "anchor": "$usage = $chunk->getUsage() ?? $usage;",
+      "offset": 18,
+      "expect": {
+        "targetFile": "Api/Data/StreamChunkInterface.php",
+        "targetSymbol": "function getUsage"
+      },
+      "tags": [
+        "generics",
+        "foreach",
+        "phpdoc",
+        "promoted-property"
+      ]
+    },
+    {
+      "id": "def.first-class-callable",
+      "feature": "definition",
+      "desc": "method referenced as a first-class callable `$this->isProcessable(...)`",
+      "file": "vendor/mage-os/module-catalog/Model/Product/Gallery/DefaultValueProcessor.php",
+      "anchor": "$this->isProcessable(...)",
+      "offset": 9,
+      "expect": {
+        "targetFile": "module-catalog/Model/Product/Gallery/DefaultValueProcessor.php",
+        "targetSymbol": "function isProcessable"
+      },
+      "tags": [
+        "first-class-callable",
+        "method"
+      ]
+    },
+    {
+      "id": "def.factory-generated",
+      "feature": "definition",
+      "desc": "`$resultForward` from a generated `ForwardFactory::create()` (no generated/ on disk)",
+      "file": "vendor/mage-os/module-catalog/Controller/Product/View.php",
+      "anchor": "$resultForward->forward('noroute');",
+      "occurrence": 1,
+      "offset": 17,
+      "expect": {
+        "targetFile": "framework/Controller/Result/Forward.php",
+        "targetSymbol": "function forward"
+      },
+      "tags": [
+        "factory",
+        "magento",
+        "framework-depth",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.interface-factory",
+      "feature": "definition",
+      "desc": "entity from a generated factory of an interface (`AiServiceInterfaceFactory`)",
+      "file": "vendor/mage-os/module-ai-base/src/Model/AiServiceSelector.php",
+      "anchor": "if ($service->isEnabled())",
+      "offset": 18,
+      "expect": {
+        "targetFile": "Api/Data/AiServiceInterface.php",
+        "targetSymbol": "function isEnabled"
+      },
+      "tags": [
+        "factory",
+        "magento",
+        "framework-depth",
+        "interface"
+      ]
+    },
+    {
+      "id": "def.di-preference-request",
+      "feature": "definition",
+      "desc": "`isAjax()` exists only on `Request\\Http`, the di.xml preference for `RequestInterface`",
+      "file": "vendor/mage-os/module-catalog/Controller/Product/View.php",
+      "anchor": "$this->getRequest()->isAjax()",
+      "offset": 23,
+      "comment": "RequestInterface declares no isAjax(); app/etc/di.xml prefers Magento\\Framework\\App\\Request\\Http, which does",
+      "expect": {
+        "targetFile": "framework/App/Request/Http.php",
+        "targetSymbol": "function isAjax"
+      },
+      "tags": [
+        "di-xml",
+        "magento",
+        "framework-depth",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.object-manager-get",
+      "feature": "definition",
+      "desc": "`$this->_objectManager->get(StoreManagerInterface::class)->getStore()`: ObjectManager::get() returns mixed, the class-string names the type",
+      "file": "vendor/mage-os/module-checkout/Controller/Cart/Add.php",
+      "anchor": ")->getStore()->getId();",
+      "offset": 3,
+      "expect": {
+        "targetFile": "module-store/Model/StoreManagerInterface.php",
+        "targetSymbol": "function getStore"
+      },
+      "tags": [
+        "magento",
+        "framework-depth",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.repository-interface",
+      "feature": "definition",
+      "desc": "service-contract call: definition is the interface method",
+      "file": "vendor/mage-os/module-catalog/Controller/Product/View.php",
+      "anchor": "$this->productRepository->getById($productId, false, $this->storeManager",
+      "offset": 27,
+      "expect": {
+        "targetFile": "module-catalog/Api/ProductRepositoryInterface.php",
+        "targetSymbol": "function getById"
+      },
+      "tags": [
+        "repository",
+        "interface",
+        "magento"
+      ]
+    },
+    {
+      "id": "impl.repository-preference",
+      "feature": "implementation",
+      "desc": "implementation of a service contract, the di.xml preference `ProductRepository`",
+      "file": "vendor/mage-os/module-catalog/Controller/Product/View.php",
+      "anchor": "$this->productRepository->getById($productId, false, $this->storeManager",
+      "offset": 27,
+      "expect": {
+        "targetFile": "module-catalog/Model/ProductRepository.php",
+        "targetSymbol": "function getById"
+      },
+      "tags": [
+        "repository",
+        "di-xml",
+        "interface",
+        "magento"
+      ]
+    },
+    {
+      "id": "impl.di-preference-mutex",
+      "feature": "implementation",
+      "desc": "implementation behind a promoted interface property (di.xml preference `ProductMutex`)",
+      "file": "vendor/mage-os/module-catalog/Plugin/ProductRepositorySaveOperationSynchronizer.php",
+      "anchor": "$this->productMutex->execute(",
+      "offset": 22,
+      "expect": {
+        "targetFile": "module-catalog/Model/ProductMutex.php",
+        "targetSymbol": "function execute"
+      },
+      "tags": [
+        "di-xml",
+        "interface",
+        "promoted-property",
+        "magento"
+      ]
+    },
+    {
+      "id": "impl.di-preference-authorization",
+      "feature": "implementation",
+      "desc": "implementation of a controller collaborator interface (frontend di.xml preference)",
+      "file": "vendor/mage-os/module-sales/Controller/AbstractController/OrderLoader.php",
+      "anchor": "$this->orderAuthorization->canView($order)",
+      "offset": 28,
+      "expect": {
+        "targetFile": "Controller/AbstractController/OrderViewAuthorization.php",
+        "targetSymbol": "function canView"
+      },
+      "tags": [
+        "di-xml",
+        "interface",
+        "magento"
+      ]
+    },
+    {
+      "id": "def.phtml-block",
+      "feature": "definition",
+      "desc": "`$block` in a .phtml typed by `@var $block ListProduct`",
+      "file": "vendor/mage-os/module-catalog/view/frontend/templates/product/list.phtml",
+      "anchor": "$_productCollection = $block->getLoadedProductCollection();",
+      "offset": 31,
+      "expect": {
+        "targetFile": "module-catalog/Block/Product/ListProduct.php",
+        "targetSymbol": "function getLoadedProductCollection"
+      },
+      "tags": [
+        "layout",
+        "phpdoc",
+        "magento"
+      ]
+    },
+    {
+      "id": "def.phtml-override",
+      "feature": "definition",
+      "desc": "`$block->getProductPrice()` overridden in `ListProduct` (not the `AbstractProduct` one)",
+      "file": "vendor/mage-os/module-catalog/view/frontend/templates/product/list.phtml",
+      "anchor": "$block->getProductPrice($_product)",
+      "offset": 9,
+      "expect": {
+        "targetFile": "module-catalog/Block/Product/ListProduct.php",
+        "targetSymbol": "function getProductPrice(Product"
+      },
+      "tags": [
+        "layout",
+        "inheritance",
+        "phpdoc",
+        "magento"
+      ]
+    },
+    {
+      "id": "def.phtml-foreach-var",
+      "feature": "definition",
+      "desc": "foreach variable typed by a `@var $_product` before the loop",
+      "file": "vendor/mage-os/module-catalog/view/frontend/templates/product/list.phtml",
+      "anchor": "$_product->getProductUrl()",
+      "occurrence": 1,
+      "offset": 12,
+      "expect": {
+        "targetFile": "module-catalog/Model/Product.php",
+        "targetSymbol": "function getProductUrl"
+      },
+      "tags": [
+        "foreach",
+        "phpdoc",
+        "layout",
+        "magento"
+      ]
+    },
+    {
+      "id": "def.phtml-escaper",
+      "feature": "definition",
+      "desc": "the template's `$escaper`, typed by a docblock",
+      "file": "vendor/mage-os/module-catalog/view/frontend/templates/product/list.phtml",
+      "anchor": "$escaper->escapeUrl(",
+      "occurrence": 1,
+      "offset": 11,
+      "expect": {
+        "targetFile": "framework/Escaper.php",
+        "targetSymbol": "function escapeUrl"
+      },
+      "tags": [
+        "layout",
+        "phpdoc",
+        "variable",
+        "magento",
+        "vendor"
+      ]
+    },
+    {
+      "id": "def.phtml-method-tag",
+      "feature": "definition",
+      "desc": "`@method string getWidth()` on the image block",
+      "file": "vendor/mage-os/module-catalog/view/frontend/templates/product/list.phtml",
+      "anchor": "$productImage->getWidth()",
+      "offset": 16,
+      "expect": {
+        "targetFile": "module-catalog/Block/Product/Image.php",
+        "targetSymbol": "getWidth"
+      },
+      "tags": [
+        "phpdoc",
+        "layout",
+        "magento"
+      ]
+    },
+    {
+      "id": "def.phtml-layout-block",
+      "feature": "definition",
+      "desc": "`$block` with no docblock: its class comes from `catalog_product_view.xml` (`Magento\\Catalog\\Block\\Product\\View`)",
+      "file": "vendor/mage-os/module-catalog/view/frontend/templates/product/view/mailto.phtml",
+      "anchor": "$block->canEmailToFriend()",
+      "offset": 10,
+      "expect": {
+        "targetFile": "module-catalog/Block/Product/View.php",
+        "targetSymbol": "function canEmailToFriend"
+      },
+      "tags": [
+        "layout",
+        "framework-depth",
+        "magento"
+      ]
+    },
+    {
+      "id": "hover.phtml-collection",
+      "feature": "hover",
+      "desc": "variable assigned from a block method in a template",
+      "file": "vendor/mage-os/module-catalog/view/frontend/templates/product/list.phtml",
+      "anchor": "$_productCollection = $block->getLoadedProductCollection();",
+      "offset": 1,
+      "expect": {
+        "contains": [
+          "AbstractCollection"
+        ]
+      },
+      "tags": [
+        "layout",
+        "variable",
+        "phpdoc",
+        "magento"
+      ]
+    },
+    {
+      "id": "hover.narrowed-nullable",
+      "feature": "hover",
+      "desc": "`StoreInterface|null` after `if ($store)`",
+      "file": "vendor/mage-os/module-catalog/Observer/MoveStoreLevelCatalogDataToWebsiteScopeOnSingleStoreMode.php",
+      "anchor": "$storeId = $store->getId();",
+      "offset": 12,
+      "expect": {
+        "contains": [
+          "StoreInterface"
+        ],
+        "notContains": [
+          "|null",
+          "?StoreInterface",
+          "?\\Magento"
+        ]
+      },
+      "tags": [
+        "narrowing",
+        "variable"
+      ]
+    },
+    {
+      "id": "hover.factory-load",
+      "feature": "hover",
+      "desc": "`$orderFactory->create()->load()`: generated factory, then `@return $this`",
+      "file": "vendor/mage-os/module-sales/Controller/AbstractController/OrderLoader.php",
+      "anchor": "$this->orderAuthorization->canView($order)",
+      "offset": 37,
+      "expect": {
+        "contains": [
+          "Order"
+        ],
+        "notContains": [
+          "Factory"
+        ]
+      },
+      "tags": [
+        "factory",
+        "static-return",
+        "magento",
+        "framework-depth"
+      ]
+    },
+    {
+      "id": "hover.service-contract-return",
+      "feature": "hover",
+      "desc": "`AccountManagementInterface::authenticate()` result",
+      "file": "vendor/mage-os/module-customer/Controller/Account/LoginPost.php",
+      "anchor": "$customer = $this->customerAccountManagement->authenticate(",
+      "offset": 1,
+      "expect": {
+        "contains": [
+          "CustomerInterface"
+        ]
+      },
+      "tags": [
+        "repository",
+        "variable",
+        "interface"
+      ]
+    },
+    {
+      "id": "hover.null-coalesce",
+      "feature": "hover",
+      "desc": "`?TokenUsageInterface ?? null` keeps the interface",
+      "file": "vendor/mage-os/module-ai-base/src/Model/Client/RecordingAiClient.php",
+      "anchor": "$usage = $chunk->getUsage() ?? $usage;",
+      "offset": 1,
+      "expect": {
+        "contains": [
+          "TokenUsageInterface"
+        ]
+      },
+      "tags": [
+        "operator",
+        "variable",
+        "generics"
+      ]
+    },
+    {
+      "id": "hover.list-destructuring-shape",
+      "feature": "hover",
+      "desc": "first element of an `array{0: \\DateTimeImmutable, 1: ...}` destructured with `[$a, $b] =`",
+      "file": "vendor/mage-os/module-ai-base/src/Model/Usage/UsageMaintenance.php",
+      "anchor": "[$windowStart, $windowEnd] = $this->utcWindowForLocalDay",
+      "offset": 2,
+      "expect": {
+        "contains": [
+          "DateTimeImmutable"
+        ]
+      },
+      "tags": [
+        "list-destructuring",
+        "array-shape",
+        "phpdoc"
+      ]
+    },
+    {
+      "id": "hover.attribute",
+      "feature": "hover",
+      "desc": "builtin `#[\\SensitiveParameter]` attribute on a promoted parameter",
+      "file": "vendor/mage-os/module-ai-base/src/Model/AiService.php",
+      "anchor": "#[\\SensitiveParameter]",
+      "offset": 4,
+      "expect": {
+        "contains": [
+          "SensitiveParameter"
+        ]
+      },
+      "tags": [
+        "attribute",
+        "promoted-property"
+      ]
+    },
+    {
+      "id": "completion.repository",
+      "feature": "completion",
+      "desc": "service-contract methods on a repository property",
+      "file": "vendor/mage-os/module-catalog/Controller/Product/View.php",
+      "anchor": "$this->productRepository->getById($productId, false, $this->storeManager",
+      "offset": 26,
+      "expect": {
+        "items": [
+          "get",
+          "getById",
+          "save",
+          "getList",
+          "deleteById"
+        ]
+      },
+      "tags": [
+        "repository",
+        "interface",
+        "magento"
+      ]
+    },
+    {
+      "id": "completion.phtml-block",
+      "feature": "completion",
+      "desc": "`$block->` in a template: block methods incl. inherited",
+      "file": "vendor/mage-os/module-catalog/view/frontend/templates/product/list.phtml",
+      "anchor": "$block->getToolbarHtml()",
+      "offset": 8,
+      "expect": {
+        "items": [
+          "getLoadedProductCollection",
+          "getToolbarHtml",
+          "getProductPrice",
+          "getImage"
+        ]
+      },
+      "tags": [
+        "layout",
+        "phpdoc",
+        "inheritance",
+        "magento"
+      ]
+    },
+    {
+      "id": "completion.factory-create",
+      "feature": "completion",
+      "desc": "members after `$this->orderFactory->create()->` (generated factory)",
+      "file": "vendor/mage-os/module-sales/Controller/AbstractController/OrderLoader.php",
+      "anchor": "$this->orderFactory->create()->load($orderId)",
+      "offset": 31,
+      "expect": {
+        "items": [
+          "load",
+          "getIncrementId",
+          "getCustomerEmail"
+        ]
+      },
+      "tags": [
+        "factory",
+        "magento",
+        "framework-depth"
+      ]
+    },
+    {
+      "id": "completion.enum-cases",
+      "feature": "completion",
+      "desc": "cases of a backed enum in a `match` arm",
+      "file": "vendor/mage-os/module-ai-base/src/Model/Chat/StreamChunk.php",
+      "anchor": "StreamChunkType::Usage =>",
+      "offset": 17,
+      "expect": {
+        "items": [
+          "Text",
+          "Thinking",
+          "ThinkingStart",
+          "ToolCall",
+          "ToolCallStart",
+          "Usage"
+        ]
+      },
+      "tags": [
+        "enum",
+        "match"
+      ]
+    },
+    {
+      "id": "completion.nullsafe",
+      "feature": "completion",
+      "desc": "members after `?->` on a nullable promoted property",
+      "file": "vendor/mage-os/module-ai-base/src/Model/Chat/ChatMessage.php",
+      "anchor": "$this->answeredToolCall?->getId()",
+      "offset": 26,
+      "expect": {
+        "items": [
+          "getId",
+          "getName"
+        ]
+      },
+      "tags": [
+        "nullsafe",
+        "promoted-property",
+        "interface"
+      ]
+    },
+    {
+      "id": "completion.proxy",
+      "feature": "completion",
+      "desc": "members of a generated `Session\\Proxy` (extends the backend session)",
+      "file": "vendor/mage-os/module-inventory-catalog-admin-ui/Model/BulkSessionProductsStorage.php",
+      "anchor": "$this->session->setProductSkus",
+      "offset": 16,
+      "expect": {
+        "items": [
+          "getSessionId",
+          "start",
+          "destroy"
+        ]
+      },
+      "tags": [
+        "proxy",
+        "magento",
+        "framework-depth"
+      ]
+    },
+    {
+      "id": "sig.repository-getById",
+      "feature": "signatureHelp",
+      "desc": "parameters of a repository method",
+      "file": "vendor/mage-os/module-checkout/Controller/Cart/Add.php",
+      "anchor": "getById($productId, false, $storeId)",
+      "offset": 8,
+      "expect": {
+        "contains": [
+          "$productId",
+          "$editMode",
+          "$storeId"
+        ]
+      },
+      "tags": [
+        "repository",
+        "interface",
+        "magento"
+      ]
+    },
+    {
+      "id": "sig.interface-param-names",
+      "feature": "signatureHelp",
+      "desc": "parameters of the declared interface (`$email`), not of the implementation (`$username`)",
+      "file": "vendor/mage-os/module-customer/Controller/Account/LoginPost.php",
+      "anchor": "->authenticate($login['username']",
+      "offset": 15,
+      "expect": {
+        "contains": [
+          "$email",
+          "$password"
+        ]
+      },
+      "tags": [
+        "interface",
+        "repository"
+      ]
+    },
+    {
+      "id": "refs.method-subclasses",
+      "feature": "references",
+      "desc": "a block method used by a view model and a subclass in another module",
+      "file": "vendor/mage-os/module-catalog/Block/Product/View/Gallery.php",
+      "anchor": "public function isMainImage($image)",
+      "offset": 17,
+      "expect": {
+        "minCount": 3,
+        "files": [
+          "ViewModel/Product/Gallery.php",
+          "module-product-video/Block/Product/View/Gallery.php"
+        ]
+      },
+      "tags": [
+        "method",
+        "inheritance",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "refs.enum",
+      "feature": "references",
+      "desc": "every use of an enum across the AI module",
+      "file": "vendor/mage-os/module-ai-base/src/Api/Data/MessageRole.php",
+      "anchor": "enum MessageRole",
+      "offset": 6,
+      "expect": {
+        "minCount": 15,
+        "files": [
+          "Model/Chat/ChatMessage.php",
+          "Model/Chat/ChatRequestBuilder.php",
+          "Model/Client/SymfonyAiClient.php"
+        ]
+      },
+      "tags": [
+        "enum",
+        "cross-file"
+      ]
+    },
+    {
+      "id": "refs.plugin-di-xml",
+      "feature": "references",
+      "desc": "a plugin class is only wired in di.xml; a Magento-aware server lists that declaration",
+      "file": "vendor/mage-os/module-catalog/Plugin/ProductRepositorySaveOperationSynchronizer.php",
+      "anchor": "class ProductRepositorySaveOperationSynchronizer",
+      "offset": 8,
+      "expect": {
+        "minCount": 1,
+        "files": [
+          "module-catalog/etc/di.xml"
+        ]
+      },
+      "tags": [
+        "di-xml",
+        "magento",
+        "framework-depth"
+      ]
+    },
+    {
+      "id": "symbols.data-patch",
+      "feature": "documentSymbol",
+      "desc": "class and methods of a sample-data patch",
+      "file": "vendor/mage-os/module-catalog-sample-data/Setup/Patch/Data/InstallCatalogSampleData.php",
+      "expect": {
+        "items": [
+          "InstallCatalogSampleData",
+          "apply",
+          "getDependencies",
+          "getVersion",
+          "getAliases"
+        ]
+      },
+      "tags": [
+        "magento"
+      ]
+    },
+    {
+      "id": "wsym.service-contract",
+      "feature": "workspaceSymbol",
+      "desc": "find a service contract among ~55k files",
+      "file": "vendor/mage-os/module-catalog/Controller/Product/View.php",
+      "query": "ProductRepositoryInterface",
+      "expect": {
+        "items": [
+          "ProductRepositoryInterface"
+        ]
+      },
+      "tags": [
+        "repository",
+        "magento"
+      ]
+    }
+  ]
+}
