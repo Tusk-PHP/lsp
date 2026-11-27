@@ -88,12 +88,19 @@ func (f features) answersAt(source string, pos protocol.Position) []any {
 		f.a.GetDocumentHighlights(featureURI, source, pos),
 		f.a.PrepareRename(featureURI, source, pos),
 		f.a.GetSignatureHelp(featureURI, source, pos),
+		f.a.GetCodeActions(featureURI, source, protocol.CodeActionParams{TextDocument: protocol.TextDocumentIdentifier{URI: featureURI}, Range: protocol.Range{Start: pos, End: pos}}),
 	}
 }
 
 func (f features) documentAnswers(source string) []any {
 	cfg := &config.InlayHintsConfig{Enabled: true, VariableTypes: true, ForeachTypes: true, ClosureReturnTypes: true, ReturnTypes: true, ParameterNames: true}
-	return []any{f.a.GetDocumentSymbols(featureURI, source), f.hints.GetInlayHints(featureURI, source, cfg)}
+	read := func(string) string { return "" }
+	return []any{
+		f.a.GetDocumentSymbols(featureURI, source),
+		f.hints.GetInlayHints(featureURI, source, cfg),
+		f.a.GetFileNamespace(featureURI, source),
+		f.a.MoveToNamespace(featureURI, source, "App\\Moved", nil, read),
+	}
 }
 
 func featurePositions(src string) []protocol.Position {
@@ -121,7 +128,12 @@ func TestEveryCursorFeatureAnswersAlikeFromTheStoredParse(t *testing.T) {
 			stored, fresh := newFeatures(tc.indexed...), newFeatures(tc.indexed...)
 			fresh.forgetParses(t, tc.indexed[len(tc.indexed)-1])
 			if got, want := stored.documentAnswers(tc.source), fresh.documentAnswers(tc.source); !reflect.DeepEqual(got, want) {
-				t.Errorf("document symbols and inlay hints: %+v, from a fresh parse %+v", got, want)
+				t.Errorf("document symbols, inlay hints, file namespace and move: %+v, from a fresh parse %+v", got, want)
+			}
+			for i, answer := range stored.documentAnswers(tc.source) {
+				if v := reflect.ValueOf(answer); v.IsZero() || v.Kind() == reflect.Slice && v.Len() == 0 {
+					t.Errorf("document answer %d is empty", i)
+				}
 			}
 			answered := make([]int, len(stored.answersAt(tc.source, protocol.Position{})))
 			for _, pos := range featurePositions(tc.source) {

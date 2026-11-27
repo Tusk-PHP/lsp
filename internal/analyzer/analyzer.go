@@ -369,7 +369,7 @@ func (a *Analyzer) definitionForSymfonyCommand(r *resolve.Resolver, uri, source 
 	if cmd == nil {
 		return nil
 	}
-	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
+	file := sourcectx.IndexedFile(a.index, uri, source)
 	if !frameworksymfony.IsConsoleApplication(a.index, a.engine.ChainResolver(r, receiver, source, pos, file)) {
 		return nil
 	}
@@ -1512,8 +1512,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 		return actions
 	}
 
-	tree := parser.ParseTreeIn(source, a.index.GrammarOf(uri))
-	file := parser.FileNodeOf(source, tree)
+	tree, file := sourcectx.IndexedTree(a.index, uri, source)
 
 	actions = append(actions, a.unknownClassCodeActions(uri, source, tree, file, params)...)
 	actions = append(actions, a.importUnusedImportQuickFixes(uri, source, params)...)
@@ -1652,10 +1651,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 // GetFileNamespace returns the FQN of the primary class/interface/enum in a file,
 // or the namespace if no named type exists.
 func (a *Analyzer) GetFileNamespace(uri, source string) string {
-	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
-	if file == nil {
-		return ""
-	}
+	file := sourcectx.IndexedFile(a.index, uri, source)
 	ns := file.Namespace
 	for _, cls := range file.Classes {
 		if ns != "" {
@@ -1682,10 +1678,7 @@ func (a *Analyzer) GetFileNamespace(uri, source string) string {
 // the namespace declaration, all use imports across the workspace, FQN references,
 // and computing the new file path per PSR-4 autoload mappings.
 func (a *Analyzer) MoveToNamespace(uri, source, targetNS string, autoloadEntries []composer.AutoloadEntry, readDocument func(string) string) *protocol.WorkspaceEdit {
-	file := parser.ParseFileIn(source, a.index.GrammarOf(uri))
-	if file == nil {
-		return nil
-	}
+	file := sourcectx.IndexedFile(a.index, uri, source)
 
 	oldNS := file.Namespace
 

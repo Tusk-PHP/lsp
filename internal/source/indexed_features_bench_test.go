@@ -43,6 +43,11 @@ func BenchmarkCursorFeature(b *testing.B) {
 		{"Highlights", func() { f.a.GetDocumentHighlights(featureURI, source, pos) }},
 		{"DocumentSymbols", func() { f.a.GetDocumentSymbols(featureURI, source) }},
 		{"InlayHints", func() { f.hints.GetInlayHints(featureURI, source, hints) }},
+		{"CodeActions", func() {
+			f.a.GetCodeActions(featureURI, source, protocol.CodeActionParams{TextDocument: protocol.TextDocumentIdentifier{URI: featureURI}, Range: protocol.Range{Start: pos, End: pos}})
+		}},
+		{"FileNamespace", func() { f.a.GetFileNamespace(featureURI, source) }},
+		{"MoveToNamespace", func() { f.a.MoveToNamespace(featureURI, source, "App\\Moved", nil, read) }},
 	} {
 		b.Run(feature.name, func(b *testing.B) {
 			b.ReportAllocs()
