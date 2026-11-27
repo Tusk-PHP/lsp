@@ -673,11 +673,11 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 		if i >= len(lines) {
 			continue
 		}
-		value, ok := vs.assignedValue(tree, i, varPrefix)
+		a, ok := vs.assignedValue(tree, i, varPrefix)
 		if !ok {
 			continue
 		}
-		if rt, ok := r.assignedType(varName, tree, tree.reduce(value), lines, pos, file); ok {
+		if rt, ok := r.assignedType(varName, tree, tree.valueOf(a), lines, pos, file); ok {
 			return rt
 		}
 		break
@@ -776,11 +776,11 @@ func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos 
 		if i >= len(lines) {
 			continue
 		}
-		value, ok := vs.assignedValue(tree, i, varPrefix)
+		a, ok := vs.assignedValue(tree, i, varPrefix)
 		if !ok {
 			continue
 		}
-		typ, stop := r.assignedPlainType(tree, tree.reduce(value))
+		typ, stop := r.assignedPlainType(tree, tree.valueOf(a))
 		if typ != "" {
 			return typ
 		}

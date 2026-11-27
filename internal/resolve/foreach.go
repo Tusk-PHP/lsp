@@ -53,25 +53,36 @@ func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos
 			break
 		}
 		isKey := f.Key != nil && t.isVariable(f.Key, varPrefix)
-		if !isKey && !t.isVariable(f.Value, varPrefix) {
+		path, destructured := t.destructuredPath(f.Value, varPrefix)
+		if !isKey && !destructured && !t.isVariable(f.Value, varPrefix) {
 			continue
 		}
 		iterableType := r.iterableType(t, f.Subject, ctx)
 		if iterableType.IsEmpty() {
 			continue
 		}
-		if k, v, ok := r.IterableTypes(iterableType); ok {
-			if isKey {
-				return k
-			}
-			return v
-		}
-		if isKey {
+		k, v, ok := r.IterableTypes(iterableType)
+		switch {
+		case isKey && ok:
+			return k
+		case isKey:
 			continue
+		case !ok:
+			v = arrayElementType(iterableType)
 		}
-		return arrayElementType(iterableType)
+		return r.elementAt(v, path)
 	}
 	return ResolvedType{}
+}
+
+func (t *syntaxTree) destructuredPath(pattern ast.Expr, name string) ([]string, bool) {
+	var found []string
+	t.eachDestructured(pattern, nil, func(v *ast.Variable, path []string) {
+		if found == nil && t.text(v) == name {
+			found = path
+		}
+	})
+	return found, found != nil
 }
 
 func (t *syntaxTree) isVariable(e ast.Expr, name string) bool {

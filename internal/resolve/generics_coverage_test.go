@@ -341,10 +341,10 @@ func TestAssignmentStartingLine(t *testing.T) {
 	src := strings.Join(lines, "\n")
 	tree := newSyntaxTree(src, parser.ParseTree(src, token.Latest))
 	for i := range lines {
-		value, ok := tree.assignmentStartingLine(i, "$a")
+		a, ok := tree.assignmentStartingLine(i, "$a")
 		var got string
 		if ok {
-			got = tree.text(value)
+			got = tree.text(a.value)
 		}
 		w, wantOK := want[i]
 		if ok != wantOK || got != w {
