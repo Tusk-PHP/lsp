@@ -416,6 +416,7 @@ func parseSymfonyServicesYAML(path, content string) serviceDefinitions {
 			def.class = value
 		case "alias":
 			def.alias = value
+			def.class = cmp.Or(def.class, value)
 		case "shared":
 			def.sharing = sharingShared
 			if value == "false" {

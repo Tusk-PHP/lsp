@@ -224,3 +224,19 @@ func TestSymfonyClassInTheGlobalNamespaceIsBoundByItsName(t *testing.T) {
 		}
 	}
 }
+
+func TestYAMLAndPHPConfigAliasesResolveAlike(t *testing.T) {
+	root := t.TempDir()
+	writeProjectFile(t, root, "config/services.yaml", "services:\n    app.smtp:\n        class: App\\Smtp\n        shared: false\n    yaml.mailer:\n        alias: app.smtp\n")
+	writeProjectFile(t, root, "config/services.php", "<?php\nreturn function ($c) {\n    $c->services()->alias('php.mailer', 'app.smtp');\n};\n")
+	ca := NewContainerAnalyzer(symbols.NewIndex(), root, "symfony")
+	ca.Analyze()
+
+	yaml, php := ca.LookupBinding("yaml.mailer"), ca.LookupBinding("php.mailer")
+	if yaml == nil || php == nil {
+		t.Fatalf("yaml %+v, php %+v", yaml, php)
+	}
+	if yaml.Concrete != `App\Smtp` || yaml.Concrete != php.Concrete || yaml.Singleton != php.Singleton || yaml.Alias != php.Alias {
+		t.Errorf("yaml alias %+v, php alias %+v", yaml, php)
+	}
+}
