@@ -261,25 +261,6 @@ func checkUnionType(typeStr string, line int, index *symbols.Index) []Finding {
 		seen[lower] = true
 	}
 
-	// Check ?Type|null redundancy (the ? already makes it nullable)
-	if strings.HasPrefix(typeStr, "?") {
-		// Only what's written counts, not the |null this function adds for the `?`.
-		for _, p := range strings.Split(typeStr[1:], "|") {
-			if strings.ToLower(strings.TrimSpace(p)) == "null" {
-				findings = append(findings, Finding{
-					StartLine: line,
-					StartCol:  0,
-					EndLine:   line,
-					EndCol:    0,
-					Severity:  rule.SeverityInfo,
-					Code:      rule.RedundantUnionMember,
-					Message:   fmt.Sprintf("Redundant 'null' in union: '?' already makes '%s' nullable", typeStr),
-				})
-				break
-			}
-		}
-	}
-
 	// Check for supertype subsumption
 	partSet := make(map[string]bool)
 	for _, p := range parts {

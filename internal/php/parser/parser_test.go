@@ -903,6 +903,38 @@ func TestDocCommentsSurviveAttributesAndModifiers(t *testing.T) {
 	}
 }
 
+func TestDocBeforeIsTheDocCommentRightBeforeAToken(t *testing.T) {
+	src := "<?php\n/** @var Foo $x */\n$x = f(\n    /** @param Bar $b */ // note\n    function ($b) {}\n);\n$y = 1; /** trailing */\n"
+	file := Parse(src, token.Latest)
+	stmt := file.Stmts[0].(*ast.ExprStmt)
+	if doc, ok := file.DocBefore(stmt.Start); !ok || doc.Text(src) != "/** @var Foo $x */" {
+		t.Errorf("statement doc %q, %v", doc.Text(src), ok)
+	}
+	closure := stmt.Expr.(*ast.Assign).Value.(*ast.Call).Args.Args[0].Value
+	if doc, ok := file.DocBefore(closure.Bounds().Start); !ok || doc.Text(src) != "/** @param Bar $b */" {
+		t.Errorf("closure doc %q, %v", doc.Text(src), ok)
+	}
+	for _, s := range file.Stmts[1:] {
+		if doc, ok := file.DocBefore(s.Bounds().Start); ok {
+			t.Errorf("%q has no doc right before it, got %q", s.Bounds().Text(src), doc.Text(src))
+		}
+	}
+	if _, ok := file.DocBefore(stmt.Start + 1); ok {
+		t.Error("an offset that isn't a token's start has no doc")
+	}
+	if last := file.Docs[len(file.Docs)-1]; last.Doc.Text(src) != "/** trailing */" || last.Next != uint32(len(src)) {
+		t.Errorf("a doc comment at the end is kept, before the end: %q at %d", last.Doc.Text(src), last.Next)
+	}
+	src = "<?php /** @var A $a */ /** @var B $b */ echo 1;"
+	file = Parse(src, token.Latest)
+	if len(file.Docs) != 2 || file.Docs[0].Next != file.Docs[1].Next {
+		t.Fatalf("both doc comments are kept before the same token: %v", file.Docs)
+	}
+	if doc, ok := file.DocBefore(file.Stmts[0].Bounds().Start); !ok || doc.Text(src) != "/** @var B $b */" {
+		t.Errorf("the statement's doc is the last one: %q", doc.Text(src))
+	}
+}
+
 func TestDeepNestingIsAnErrorNotACrash(t *testing.T) {
 	for _, src := range []string{
 		"<?php $a = " + strings.Repeat("(", 1_000_000) + "1;",

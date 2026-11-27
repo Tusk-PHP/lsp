@@ -60,6 +60,7 @@ type DeprecatedFunctionRule struct {
 	// deprecated in a later version isn't reported: the project still supports
 	// PHP versions where it is fine. Empty reports every deprecation.
 	PHPVersion string
+	Shared     *Shared
 }
 
 func (r *DeprecatedFunctionRule) Codes() []rule.Code { return []rule.Code{rule.Deprecated} }
@@ -68,47 +69,20 @@ func (r *DeprecatedFunctionRule) Check(file *parser.FileNode, source string, ind
 	if file == nil {
 		return nil
 	}
+	syntax := r.Shared.tree(source, file)
 	var findings []Finding
-	mask := newMaskState(source)
-	prevTail := "" // last non-blank code of the previous line, for chains split across lines
-
-	for lineNum, raw := range strings.Split(source, "\n") {
-		line := maskPHPLine(raw, &mask)
-		for _, match := range unknownFunctionCallRe.FindAllStringSubmatchIndex(line, -1) {
-			start, end := match[2], match[3]
-			name := strings.TrimPrefix(line[start:end], "\\")
-			dep, ok := deprecatedFunctions[strings.ToLower(name)]
-			if !ok || (r.PHPVersion != "" && compareBuiltinVersionsStrings(r.PHPVersion, dep.since) < 0) {
-				continue
-			}
-			if shouldSkipFunctionCall(line, start, name) || isMemberAccessBefore(line[:start], prevTail) {
-				continue
-			}
-			findings = append(findings, Finding{
-				StartLine: lineNum,
-				StartCol:  start,
-				EndLine:   lineNum,
-				EndCol:    end,
-				Severity:  rule.SeverityWarning,
-				Code:      rule.Deprecated,
-				Message:   dep.message,
-				Tags:      []Tag{TagDeprecated},
-			})
+	for _, call := range syntax.references().calls {
+		name := strings.TrimPrefix(syntax.text(call.name), "\\")
+		dep, ok := deprecatedFunctions[strings.ToLower(name)]
+		if !ok || (r.PHPVersion != "" && compareBuiltinVersionsStrings(r.PHPVersion, dep.since) < 0) {
+			continue
 		}
-		if t := strings.TrimSpace(line); t != "" {
-			prevTail = t
-		}
+		findings = append(findings, syntax.at(call.name, Finding{
+			Severity: rule.SeverityWarning,
+			Code:     rule.Deprecated,
+			Message:  dep.message,
+			Tags:     []Tag{TagDeprecated},
+		}))
 	}
 	return findings
-}
-
-// isMemberAccessBefore reports whether the code right before a call name
-// (ignoring whitespace, including a line break) is `->`, `?->` or `::`,
-// meaning the name is a method rather than a global function.
-func isMemberAccessBefore(before, prevTail string) bool {
-	p := strings.TrimRight(before, " \t")
-	if p == "" {
-		p = prevTail
-	}
-	return strings.HasSuffix(p, "->") || strings.HasSuffix(p, "::")
 }

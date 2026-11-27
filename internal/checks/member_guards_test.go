@@ -40,6 +40,9 @@ class Other {}
 		{"guard in a closure of the same method", "$f = function () use ($v) { return method_exists($v, 'toArray'); };\nif ($f()) { $v->toArray(); }", nil},
 		{"arguments over several lines", "if (method_exists(\n    $v,\n    'toArray'\n)) {\n$v->toArray();\n}", nil},
 		{"is_callable over several lines", "if (is_callable([\n    $v,\n    'toArray',\n])) { $v->toArray(); }", nil},
+		{"is_callable with array()", "if (is_callable( array( $v, 'toArray' ) )) { $v->toArray(); }", nil},
+		{"is_callable with array() in a ternary", "return is_callable(array($v, 'toArray')) ? $v->toArray() : array();", nil},
+		{"is_callable with array() and more conditions", "if ($v && is_callable(array($v, 'toArray'))) { $v->toArray(); }", nil},
 		{"function name in upper case", "if (METHOD_EXISTS($v, 'toArray')) { $v->toArray(); }", nil},
 		{"function name in mixed case", "if (Property_Exists($v, 'extra')) { return $v->extra; }", nil},
 		{"a comment between the arguments", "if (method_exists($v, /* the hook */ 'toArray')) { $v->toArray(); }", nil},
@@ -126,6 +129,34 @@ class C {
 	got := unknownMemberMessages(checkUnknownMembers(t, map[string]string{"$this->item": `App\Post`}, decl, source))
 	want := []string{"Unknown member 'nope' on 'Post|Thread'"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestMemberGuardsComeFromCalls(t *testing.T) {
+	decl := `<?php
+namespace App;
+class Post {}
+`
+	source := `<?php
+namespace App;
+class C {
+    public function f(): void {
+        if (method_exists(
+            $this->post,
+            'publish',
+        )) { $this->post->publish(); }
+        if (is_callable([$this
+            -> post, 'archive'])) { $this->post->archive(); }
+        $partial = method_exists(?, 'x');
+        if (is_callable([$this->post, 'a', 'b']) || is_callable($this->post) || is_callable(['x' => $this->post, 'y' => 'z'])) {}
+        if (method_exists($other->items(), 'count') || method_exists($this->post, $name) || method_exists($this->post)) {}
+        if (Helper::method_exists($this->post, 'draft')) { $this->post->draft(); }
+    }
+}
+`
+	got := unknownMemberMessages(checkUnknownMembers(t, map[string]string{"$this->post": `App\Post`}, decl, source))
+	if want := []string{"Unknown member 'draft' on 'Post'"}; strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -26,7 +27,7 @@ func firstClassCallableResolver(t *testing.T) (*Resolver, *parser.FileNode) {
 	t.Helper()
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///app/Box.php", firstClassCallableSource)
-	return NewResolver(idx), parser.ParseFile(firstClassCallableSource)
+	return NewResolver(idx), parser.ParseFile(firstClassCallableSource, token.Latest)
 }
 
 func TestFirstClassCallableExpressionType(t *testing.T) {
@@ -70,7 +71,7 @@ func TestFirstClassCallableVariable(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///app/Box.php", src)
 	r := NewResolver(idx)
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	lines := SplitLines(src)
 	end := textpos.Position{Line: len(lines) - 2}
 	for name, want := range map[string]string{
@@ -84,22 +85,5 @@ func TestFirstClassCallableVariable(t *testing.T) {
 	}
 	if got := r.ResolveVariableType("$len", lines, end, file); got != "Closure" {
 		t.Errorf("plain type of $len = %q, want Closure", got)
-	}
-}
-
-func TestIsFirstClassCallable(t *testing.T) {
-	for expr, want := range map[string]bool{
-		"strlen(...)":           true,
-		"$this->format( ... );": true,
-		"Foo::bar(...)":         true,
-		"f(...$args)":           false,
-		"f($a, ...)":            false,
-		"f(g(...))":             false,
-		"f()":                   false,
-		"...":                   false,
-	} {
-		if got := IsFirstClassCallable(expr); got != want {
-			t.Errorf("IsFirstClassCallable(%q) = %v, want %v", expr, got, want)
-		}
 	}
 }

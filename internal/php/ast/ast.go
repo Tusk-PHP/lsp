@@ -1,6 +1,11 @@
 package ast
 
-import "github.com/Tusk-PHP/lsp/internal/php/token"
+import (
+	"cmp"
+	"slices"
+
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+)
 
 //go:generate go run ./gen
 
@@ -67,9 +72,33 @@ func (typ) typeNode() {}
 
 type File struct {
 	Span
-	Shebang Span
-	Stmts   []Stmt
-	Errors  []Error
+	Shebang  Span
+	Stmts    []Stmt
+	Docs     []DocComment
+	Errors   []Error
+	Warnings []Error
+	Version  token.Version
+}
+
+type DocComment struct {
+	Doc  Span
+	Next uint32
+}
+
+func (f *File) DocBefore(off uint32) (Span, bool) {
+	d, ok := LastDoc(f.Docs, off)
+	if !ok || d.Next != off {
+		return Span{}, false
+	}
+	return d.Doc, true
+}
+
+func LastDoc(docs []DocComment, at uint32) (DocComment, bool) {
+	i, _ := slices.BinarySearchFunc(docs, at+1, func(d DocComment, at uint32) int { return cmp.Compare(d.Next, at) })
+	if i == 0 {
+		return DocComment{}, false
+	}
+	return docs[i-1], true
 }
 
 type Error struct {
@@ -654,6 +683,7 @@ type Const struct {
 	stmt
 	Span
 	Attrs []*AttributeGroup
+	Doc   Span
 	Items []*ConstItem
 }
 
