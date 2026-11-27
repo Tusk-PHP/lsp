@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
@@ -117,9 +116,6 @@ func TestPHPSuppressionsWithoutMarker(t *testing.T) {
 	if got := PHPSuppressions("<?php\n// nothing to see\n$a = 1;\n", nil); got != nil {
 		t.Errorf("got %#v, want nil", got)
 	}
-	if got := BladeSuppressions("<p>{{-- plain --}}</p>", nil); got != nil {
-		t.Errorf("got %#v, want nil", got)
-	}
 }
 
 func TestPHPSuppressionsFromSharedTokens(t *testing.T) {
@@ -138,49 +134,6 @@ func TestSuppressionComments(t *testing.T) {
 	if got := PHPStanSuppressionComment("argument.type"); got != "@phpstan-ignore argument.type" {
 		t.Errorf("got %q", got)
 	}
-}
-
-func TestBladeSuppressions(t *testing.T) {
-	source := "<div>\n{{-- @tusk-ignore unknown-view --}}\n@include('missing')\n{{ $a }} {{-- @tusk-ignore undefined-variable --}}\n{{-- a note --}}\n@php\n    // @tusk-ignore unknown-function\n    nope();\n@endphp\n{{-- @tusk-ignore unknown-member--}}\n{{ $b->c }}\n</div>\n"
-	checkSuppressions(t, BladeSuppressions(source, nil), []suppressionCase{
-		{2, tusk, "unknown-view", true},
-		{3, tusk, "undefined-variable", true},
-		{3, tusk, "unknown-view", false},
-		{4, tusk, "undefined-variable", false},
-		{7, tusk, "unknown-function", true},
-		{10, tusk, "unknown-member", true},
-	})
-}
-
-func TestBladeMarkersCoverMultiLineDirectivesAndEchoes(t *testing.T) {
-	source := "<div>\n{{-- @tusk-ignore unknown-function --}}\n@include('row', [\n    'total' => missing(),\n])\n<p>{{ $a }}</p>\n{{ format(\n    $b,\n) }} {{-- @tusk-ignore undefined-variable --}}\n@include('row', [\n    'total' => missing(),\n])\n</div>\n"
-	checkSuppressions(t, BladeSuppressions(source, nil), []suppressionCase{
-		{2, tusk, "unknown-function", true},
-		{3, tusk, "unknown-function", true},
-		{4, tusk, "unknown-function", true},
-		{5, tusk, "undefined-variable", false},
-		{6, tusk, "undefined-variable", true},
-		{7, tusk, "undefined-variable", true},
-		{8, tusk, "undefined-variable", true},
-		{9, tusk, "unknown-function", false},
-		{10, tusk, "unknown-function", false},
-	})
-}
-
-func TestBladeMarkersCoverMultiLineCustomDirectives(t *testing.T) {
-	source := "<div>\n{{-- @tusk-ignore unknown-function --}}\n@admin([\n    'role' => missing(),\n])\nx\n@endadmin\n{{-- @tusk-ignore unknown-function --}}\n@money(\n    missing(),\n)\n</div>\n"
-	custom := &blade.Custom{Directives: map[string]bool{"money": true}, Conditionals: map[string]bool{"admin": true}}
-	checkSuppressions(t, BladeSuppressions(source, custom), []suppressionCase{
-		{2, tusk, "unknown-function", true},
-		{3, tusk, "unknown-function", true},
-		{4, tusk, "unknown-function", true},
-		{5, tusk, "unknown-function", false},
-		{9, tusk, "unknown-function", true},
-		{10, tusk, "unknown-function", true},
-	})
-	checkSuppressions(t, BladeSuppressions(source, nil), []suppressionCase{
-		{3, tusk, "unknown-function", false},
-	})
 }
 
 func TestOwnLineMarkersCoverDocblocksAttributesAndTheCodeLine(t *testing.T) {

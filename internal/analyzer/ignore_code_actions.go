@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/Tusk-PHP/lsp/internal/checks"
+	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
@@ -19,7 +20,7 @@ func IgnoreDiagnosticActions(uri, source string, params protocol.CodeActionParam
 }
 
 func BladeIgnoreDiagnosticActions(uri, source string, params protocol.CodeActionParams, custom *blade.Custom) []protocol.CodeAction {
-	return ignoreDiagnosticActions(uri, params, true, func() checks.Layout { return checks.BladeLayout(source, custom) })
+	return ignoreDiagnosticActions(uri, params, true, func() checks.Layout { return diagnostics.BladeLayout(source, custom) })
 }
 
 func ignoreDiagnosticActions(uri string, params protocol.CodeActionParams, inBlade bool, layoutOf func() checks.Layout) []protocol.CodeAction {
@@ -76,7 +77,7 @@ func ignoreComments(layout checks.Layout, d protocol.Diagnostic, inBlade bool) [
 	at := protocol.Position{Line: line}
 	comments := make([]ignoreComment, len(targets))
 	for i, target := range targets {
-		text := layout.Indent(line) + style.Wrap(checks.SuppressionComment(target)) + layout.LineEnding()
+		text := layout.Indent(line) + layout.Wrap(style, checks.SuppressionComment(target)) + layout.LineEnding()
 		comments[i] = ignoreComment{"Ignore " + target.String() + " on this line", text, at}
 	}
 	return comments
@@ -87,9 +88,9 @@ func phpstanIgnoreComment(layout checks.Layout, d protocol.Diagnostic) []ignoreC
 	if !ok {
 		return nil
 	}
-	text := " " + style.Wrap(checks.PHPStanSuppressionComment(d.Code))
+	text := " " + layout.Wrap(style, checks.PHPStanSuppressionComment(d.Code))
 	if style == checks.PHPBlockComment {
-		text = style.Wrap(checks.PHPStanSuppressionComment(d.Code)) + " "
+		text = layout.Wrap(style, checks.PHPStanSuppressionComment(d.Code)) + " "
 	}
 	at := protocol.Position{Line: d.Range.Start.Line, Character: layout.Character(offset)}
 	return []ignoreComment{{"Ignore " + d.Code + " with @phpstan-ignore", text, at}}

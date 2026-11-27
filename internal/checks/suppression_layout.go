@@ -4,7 +4,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
@@ -15,20 +14,34 @@ type CommentStyle int
 const (
 	PHPComment CommentStyle = iota
 	PHPBlockComment
-	BladeComment
+	// TemplateComment is the comment syntax of the template language a
+	// TemplateLayout was built for.
+	TemplateComment
 )
 
 const maxBlankLinesInReach = 1
 
-var commentDelimiters = map[CommentStyle][2]string{
+var phpCommentDelimiters = map[CommentStyle][2]string{
 	PHPComment:      {"// ", ""},
 	PHPBlockComment: {"/* ", " */"},
-	BladeComment:    {"{{-- ", " --}}"},
 }
 
-func (c CommentStyle) Wrap(text string) string {
-	d := commentDelimiters[c]
+// Wrap writes text as a comment in style: a PHP comment, or one in the
+// template's own syntax.
+func (l Layout) Wrap(style CommentStyle, text string) string {
+	d := phpCommentDelimiters[style]
+	if style == TemplateComment {
+		d = [2]string{l.template.CommentOpen + " ", " " + l.template.CommentClose}
+	}
 	return d[0] + text + d[1]
+}
+
+// commentOpeners are what a comment in this file can start with.
+func (l Layout) commentOpeners() []string {
+	if l.template == nil {
+		return phpCommentOpeners
+	}
+	return append([]string{l.template.CommentOpen}, phpCommentOpeners...)
 }
 
 type Layout struct {
@@ -41,7 +54,20 @@ type Layout struct {
 	php        []Span
 	opaque     []Span
 	constructs []Span
-	blade      bool
+	// template is set for a TemplateLayout.
+	template *Template
+}
+
+// Template is what another package finds in a file written in a template
+// language around PHP (Blade): the language's comments, the PHP code it
+// embeds, the constructs that span lines, and its comment delimiters. The
+// generic checks know PHP; the template's own syntax stays with its package.
+type Template struct {
+	Comments   []Span
+	PHP        []Span
+	Constructs []Span
+	// CommentOpen and CommentClose delimit a comment, like "{{--" and "--}}".
+	CommentOpen, CommentClose string
 }
 
 func PHPLayout(source string) Layout {
@@ -49,7 +75,7 @@ func PHPLayout(source string) Layout {
 }
 
 func phpLayout(source string, tokens []parser.Token) Layout {
-	l := newLayout(source, false)
+	l := newLayout(source)
 	regionStart := -1
 	for i := 0; i < len(tokens); i++ {
 		tok := tokens[i]
@@ -78,21 +104,19 @@ func phpLayout(source string, tokens []parser.Token) Layout {
 	return l
 }
 
-func BladeLayout(source string, custom *blade.Custom) Layout {
-	l := newLayout(source, true)
-	for _, c := range blade.Comments(source) {
-		l.addComment(Span{c.Start, c.End})
+// TemplateLayout lays out a template file from what its language's package
+// found in it, reading the embedded PHP itself.
+func TemplateLayout(source string, t Template) Layout {
+	l := newLayout(source)
+	l.template = &t
+	for _, c := range t.Comments {
+		l.addComment(c)
 	}
-	for _, n := range blade.ParseCustom(source, custom) {
-		if (n.Kind == blade.KindDirective || n.Kind == blade.KindEcho) && strings.Contains(source[n.Span.Start:n.Span.End], "\n") {
-			l.constructs = append(l.constructs, Span{n.Span.Start, n.Span.End})
-		}
-		if n.Kind != blade.KindPHP || n.Raw {
-			continue
-		}
-		l.php = append(l.php, Span{n.Expr.Start, n.Expr.End})
-		body := PHPLayout("<?php " + source[n.Expr.Start:n.Expr.End])
-		shift := n.Expr.Start - len("<?php ")
+	l.constructs = append(l.constructs, t.Constructs...)
+	for _, region := range t.PHP {
+		l.php = append(l.php, region)
+		body := PHPLayout("<?php " + source[region.Start:region.End])
+		shift := region.Start - len("<?php ")
 		for _, c := range body.comments {
 			l.addComment(Span{c.Start + shift, c.End + shift})
 		}
@@ -108,14 +132,14 @@ func BladeLayout(source string, custom *blade.Custom) Layout {
 	return l
 }
 
-func newLayout(source string, isBlade bool) Layout {
+func newLayout(source string) Layout {
 	starts := []int{0}
 	for i := 0; i < len(source); i++ {
 		if source[i] == '\n' {
 			starts = append(starts, i+1)
 		}
 	}
-	return Layout{source: source, lineStarts: starts, skipFrom: map[int]int{}, skipTo: map[int]int{}, blade: isBlade}
+	return Layout{source: source, lineStarts: starts, skipFrom: map[int]int{}, skipTo: map[int]int{}}
 }
 
 func (l *Layout) addComment(s Span) {
@@ -292,7 +316,7 @@ func (l Layout) StyleAt(offset int) (CommentStyle, bool) {
 	if region, ok := spanBefore(l.php, offset+1); ok && offset <= region.End {
 		return PHPComment, true
 	}
-	return BladeComment, l.blade
+	return TemplateComment, l.template != nil
 }
 
 func spanBefore(spans []Span, offset int) (Span, bool) {

@@ -1,17 +1,56 @@
 package checks
 
 import (
+	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
+	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
-func TestCommentStyleWrap(t *testing.T) {
-	if got := PHPComment.Wrap("@tusk-ignore x"); got != "// @tusk-ignore x" {
+func TestLayoutWrap(t *testing.T) {
+	l := PHPLayout("<?php\n")
+	if got := l.Wrap(PHPComment, "@tusk-ignore x"); got != "// @tusk-ignore x" {
 		t.Errorf("got %q", got)
 	}
-	if got := BladeComment.Wrap("@tusk-ignore x"); got != "{{-- @tusk-ignore x --}}" {
+	if got := l.Wrap(PHPBlockComment, "@tusk-ignore x"); got != "/* @tusk-ignore x */" {
 		t.Errorf("got %q", got)
+	}
+}
+
+// A template layout knows PHP; the template's own comments, PHP regions,
+// constructs and delimiters come from its language's package.
+func TestTemplateLayout(t *testing.T) {
+	// <%# ... %> comments, <?= ... ?> PHP: a made-up template language.
+	source := "<div>\n<%# @tusk-ignore unknown-function %>\n<?= nope() ?>\n<?=\n    // @tusk-ignore undefined-variable\n    $a\n?>\n</div>\n"
+	at := func(s string) int { return strings.Index(source, s) }
+	tpl := Template{
+		Comments:     []Span{{at("<%#"), at("%>") + 2}},
+		PHP:          []Span{{at("nope()"), at(" ?>")}, {at("\n    //"), at("\n?>")}},
+		CommentOpen:  "<%#",
+		CommentClose: "%>",
+	}
+	l := TemplateLayout(source, tpl)
+	if got := l.Wrap(TemplateComment, "@tusk-ignore x"); got != "<%# @tusk-ignore x %>" {
+		t.Errorf("template comment: got %q", got)
+	}
+	for line, want := range map[int]struct {
+		style CommentStyle
+		ok    bool
+	}{0: {TemplateComment, true}, 4: {PHPComment, true}, 7: {TemplateComment, true}} {
+		start, _ := l.LineStart(line)
+		if style, ok := l.StyleAt(start); style != want.style || ok != want.ok {
+			t.Errorf("line %d: %v %v, want %v", line, style, ok, want)
+		}
+	}
+	s := l.Suppressions()
+	for _, c := range []struct {
+		line int
+		code string
+		want bool
+	}{{2, "unknown-function", true}, {5, "undefined-variable", true}, {3, "unknown-function", false}} {
+		if got := s.Suppresses(c.line, string(rule.SourceTusk), c.code); got != c.want {
+			t.Errorf("line %d %s: got %v, want %v", c.line, c.code, got, c.want)
+		}
 	}
 }
 
@@ -36,16 +75,6 @@ func TestLayoutStyleAt(t *testing.T) {
 		start, _ := l.LineStart(c.line)
 		if style, ok := l.StyleAt(start); ok != c.ok || (ok && style != PHPComment) {
 			t.Errorf("line %d: %v %v, want %v", c.line, style, ok, c.ok)
-		}
-	}
-	view := BladeLayout("<div>\n@php\n    $s = 'a\nb';\n@endphp\n</div>\n", nil)
-	for line, want := range map[int]struct {
-		style CommentStyle
-		ok    bool
-	}{0: {BladeComment, true}, 2: {PHPComment, true}, 3: {PHPComment, false}, 5: {BladeComment, true}} {
-		start, _ := view.LineStart(line)
-		if style, ok := view.StyleAt(start); style != want.style || ok != want.ok {
-			t.Errorf("blade line %d: %v %v, want %v", line, style, ok, want)
 		}
 	}
 }
@@ -73,33 +102,6 @@ func TestLayoutMarkerLineStopsBeyondOneBlankLine(t *testing.T) {
 	source := "<?php\n/** @var int */\n\n\n$a = 1;\n/** @var int */\n\n$b = 1;\n"
 	l := PHPLayout(source)
 	for line, want := range map[int]int{4: 4, 7: 5} {
-		if got := l.MarkerLine(line); got != want {
-			t.Errorf("marker for line %d goes on line %d, want %d", line, got, want)
-		}
-	}
-}
-
-func TestBladeLayoutMarkerLineSkipsAttributesInPHPBlocks(t *testing.T) {
-	l := BladeLayout("<div>\n@php\n    #[A]\n    function f() {}\n@endphp\n</div>\n", nil)
-	if got := l.MarkerLine(3); got != 2 {
-		t.Errorf("marker goes above the attribute on line 2, got %d", got)
-	}
-}
-
-func TestBladeLayoutMarkerLineGoesAboveAMultiLineDirective(t *testing.T) {
-	l := BladeLayout("<div>\n    <p>@include('row', [\n        'total' => missing(),\n        'tax' => {{ 1 }},\n    ])</p>\n{{ $a }}\n</div>\n", nil)
-	for line, want := range map[int]int{1: 1, 2: 1, 3: 1, 4: 1, 5: 5} {
-		if got := l.MarkerLine(line); got != want {
-			t.Errorf("marker for line %d goes on line %d, want %d", line, got, want)
-		}
-	}
-}
-
-func TestBladeLayoutMarkerLineGoesAboveAMultiLineCustomDirective(t *testing.T) {
-	source := "<div>\n    @admin([\n        'role' => missing(),\n    ])\n    x\n    @endadmin\n</div>\n"
-	custom := &blade.Custom{Conditionals: map[string]bool{"admin": true}}
-	l := BladeLayout(source, custom)
-	for line, want := range map[int]int{1: 1, 2: 1, 3: 1, 4: 4} {
 		if got := l.MarkerLine(line); got != want {
 			t.Errorf("marker for line %d goes on line %d, want %d", line, got, want)
 		}

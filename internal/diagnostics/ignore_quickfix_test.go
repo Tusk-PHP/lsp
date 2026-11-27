@@ -1,4 +1,4 @@
-package diagnostics
+package diagnostics_test
 
 import (
 	"strings"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/analyzer"
 	"github.com/Tusk-PHP/lsp/internal/config"
+	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -13,7 +14,7 @@ import (
 
 // lspDiagnostics is what the language server sends for diags, as the quick
 // fixes receive them back.
-func lspDiagnostics(diags []Diagnostic) []protocol.Diagnostic {
+func lspDiagnostics(diags []diagnostics.Diagnostic) []protocol.Diagnostic {
 	out := make([]protocol.Diagnostic, 0, len(diags))
 	for _, d := range diags {
 		pd := protocol.Diagnostic{Range: d.Range, Severity: protocol.DiagnosticSeverity(d.Severity), Source: d.Source, Code: d.Code, Message: d.Message}
@@ -37,8 +38,13 @@ func applyInsertion(t *testing.T, source string, edit protocol.TextEdit) string 
 }
 
 func TestIgnoreQuickFixSilencesFindingsOnAttributeLines(t *testing.T) {
-	p := newTestProvider()
-	p.index.MarkReady()
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	idx.MarkReady()
+	cfg := config.DefaultConfig()
+	off := false
+	cfg.PHPStanEnabled, cfg.PintEnabled = &off, &off
+	p := diagnostics.NewProvider(idx, "none", "/tmp", nil, cfg)
 	uri := "file:///tmp/Shop.php"
 	source := `<?php
 class Shop
@@ -78,7 +84,7 @@ func TestIgnoreQuickFixSilencesMultiLineBladeDirectives(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
 	idx.MarkReady()
-	p := NewProvider(idx, "laravel", "/tmp", nil, config.DefaultConfig())
+	p := diagnostics.NewProvider(idx, "laravel", "/tmp", nil, config.DefaultConfig())
 	uri := "file:///tmp/resources/views/rows.blade.php"
 	source := "<table>\n    @include('row', [\n        'total' => missing(),\n    ])\n</table>\n"
 	diags := p.Analyze(uri, source)
@@ -111,7 +117,7 @@ func TestIgnoreQuickFixSilencesMultiLineCustomBladeConditionals(t *testing.T) {
 	idx := symbols.NewIndex()
 	idx.RegisterBuiltins()
 	idx.MarkReady()
-	p := NewProvider(idx, "laravel", "/tmp", nil, config.DefaultConfig())
+	p := diagnostics.NewProvider(idx, "laravel", "/tmp", nil, config.DefaultConfig())
 	custom := &blade.Custom{Conditionals: map[string]bool{"admin": true}}
 	p.Blade = &blade.Features{Custom: func() *blade.Custom { return custom }}
 	uri := "file:///tmp/resources/views/panel.blade.php"

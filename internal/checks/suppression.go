@@ -3,7 +3,6 @@ package checks
 import (
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
@@ -35,7 +34,7 @@ var markers = []marker{
 	{phpstanMarker + "-next-line", phpstanIgnoreNextLine, false},
 }
 
-var commentOpeners = []string{"{{--", "/**", "/*", "//", "#", "*"}
+var phpCommentOpeners = []string{"/**", "/*", "//", "#", "*"}
 
 type Suppressions map[int]suppressedCodes
 
@@ -57,22 +56,16 @@ func PHPSuppressions(source string, shared *Shared) Suppressions {
 	return phpLayout(source, shared.tokens(source)).Suppressions()
 }
 
-func BladeSuppressions(source string, custom *blade.Custom) Suppressions {
-	if !HasSuppressionMarker(source) {
-		return nil
-	}
-	return BladeLayout(source, custom).Suppressions()
-}
-
 func (l Layout) Suppressions() Suppressions {
 	var out Suppressions
+	openers := l.commentOpeners()
 	for _, span := range l.comments {
 		text := l.source[span.Start:span.End]
 		if !HasSuppressionMarker(text) {
 			continue
 		}
 		for _, m := range markers {
-			at := markerIndex(text, m)
+			at := markerIndex(text, m, openers)
 			if at < 0 {
 				continue
 			}
@@ -214,7 +207,7 @@ func skipReason(rest string) string {
 	return ""
 }
 
-func markerIndex(comment string, m marker) int {
+func markerIndex(comment string, m marker, openers []string) int {
 	from := 0
 	for {
 		i := strings.Index(comment[from:], m.text)
@@ -225,16 +218,16 @@ func markerIndex(comment string, m marker) int {
 		end := i + len(m.text)
 		before := i == 0 || !isCodeByte(comment[i-1])
 		after := end == len(comment) || comment[end] == ':' || !isCodeByte(comment[end])
-		if before && after && (!m.leading || startsComment(comment, i)) {
+		if before && after && (!m.leading || startsComment(comment, i, openers)) {
 			return i
 		}
 		from = end
 	}
 }
 
-func startsComment(comment string, at int) bool {
+func startsComment(comment string, at int, openers []string) bool {
 	lead := strings.TrimLeft(comment[strings.LastIndexByte(comment[:at], '\n')+1:at], " \t")
-	for _, opener := range commentOpeners {
+	for _, opener := range openers {
 		if strings.HasPrefix(lead, opener) {
 			lead = lead[len(opener):]
 			break
