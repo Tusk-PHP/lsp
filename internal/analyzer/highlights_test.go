@@ -162,3 +162,28 @@ func TestHighlightsNeedANameUnderTheCursor(t *testing.T) {
 		}
 	}
 }
+
+func TestHighlightsLookInsideOnlyTheInterpolationsOfAShellCommand(t *testing.T) {
+	src := `<?php
+namespace App;
+class Room {
+    public function area(): float { return 1.0; }
+    public function describe(): string {
+        $a = "{$this->area()} ${area} $this->area";
+        $b = <<<TXT
+            {$this->area(function () { return "{$this->area()}"; })}
+            TXT;
+        $c = ` + "`echo area {$this->area()}`" + `;
+        return $a . $b . $c . $this->area();
+    }
+}
+`
+	a, _ := setupRenameAnalyzer(map[string]string{"file:///room.php": src})
+	var got []highlightAt
+	for _, h := range a.GetDocumentHighlights("file:///room.php", src, positionOf(t, src, "area(): float")) {
+		got = append(got, highlightAt{h.Range.Start.Line, h.Range.Start.Character, h.Kind})
+	}
+	if want := []highlightAt{{3, 20, write}, {9, 32, read}, {10, 37, read}}; !slices.Equal(got, want) {
+		t.Errorf("the declaration, the call in the shell command and the call after the strings, nothing inside a string or heredoc:\n got %v\nwant %v", got, want)
+	}
+}

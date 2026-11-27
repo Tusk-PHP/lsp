@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -13,7 +14,7 @@ func TestGenericChainResolution(t *testing.T) {
 	p := setupRealisticEloquentTest(t)
 
 	resolveTyped := func(expr, source string) string {
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: 5}, file)
 		return rt.String()
 	}
@@ -85,7 +86,7 @@ func TestGenericChainResolution(t *testing.T) {
 
 	t.Run("non-Eloquent chain still works", func(t *testing.T) {
 		source := preamble
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		// Logger is not an Eloquent model, should resolve normally
 		rt := p.ResolveExpressionTypeTyped("Category::first()", source, protocol.Position{Line: 5}, file)
 		if rt.IsEmpty() {

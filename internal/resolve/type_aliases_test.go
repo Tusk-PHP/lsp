@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -37,7 +38,7 @@ class Consumer {
 	idx.IndexFile("file:///aliases.php", source)
 
 	r := NewResolver(idx)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 
 	users := idx.Lookup("App\\Consumer::users")
 	if users == nil {
@@ -93,7 +94,7 @@ class Consumer {
 	idx.IndexFile("file:///param_aliases.php", source)
 
 	r := NewResolver(idx)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	lines := SplitLines(source)
 
 	rt := r.ResolveVariableTypeTyped("$payload", lines, protocolPos(18), file)

@@ -1,129 +1,205 @@
 package sourcectx
 
 import (
-	"sort"
+	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
-func isCalled(tokens []parser.Token, word protocol.Range) bool {
-	last := identifierEndingAt(tokens, word.End)
-	if last < 0 {
-		return false
-	}
-	if next := parser.NextSignificant(tokens, last+1); next < 0 || tokens[next].Kind != parser.TokenOpenParen {
-		return false
-	}
-	first := last
-	for first > 0 && (tokens[first-1].Kind == parser.TokenIdentifier || tokens[first-1].Kind == parser.TokenBackslash) {
-		first--
-	}
-	if prev := parser.PrevSignificant(tokens, first-1); prev >= 0 {
-		if tokens[prev].Kind == parser.TokenAmpersand {
-			if beforeRef := parser.PrevSignificant(tokens, prev-1); beforeRef >= 0 && tokens[beforeRef].Kind == parser.TokenFunction {
-				return false
-			}
-		}
-		switch tokens[prev].Kind {
-		case parser.TokenNew, parser.TokenFunction:
-			return false
-		}
-	}
-	return !inAttribute(tokens, first)
+type Call struct {
+	Name      string
+	Offset    uint32
+	Position  protocol.Position
+	Argument  int
+	Function  bool
+	Namespace Namespace
 }
 
-func identifierEndingAt(tokens []parser.Token, end protocol.Position) int {
-	i := sort.Search(len(tokens), func(i int) bool {
-		t := tokens[i]
-		return t.Line > end.Line || t.Line == end.Line && t.Column+len(t.Value) >= end.Character
-	})
-	if i == len(tokens) {
-		return -1
-	}
-	t := tokens[i]
-	if t.Kind != parser.TokenIdentifier || t.Line != end.Line || t.Column+len(t.Value) != end.Character {
-		return -1
-	}
-	return i
-}
+type callSearch int
 
-func inAttribute(tokens []parser.Token, i int) bool {
-	depth := 0
-	for k := i - 1; k >= 0; k-- {
-		switch tokens[k].Kind {
-		case parser.TokenCloseBracket, parser.TokenCloseParen:
-			depth++
-		case parser.TokenOpenParen:
-			if depth > 0 {
-				depth--
-			}
-		case parser.TokenOpenBracket:
-			if depth > 0 {
-				depth--
-				continue
-			}
-			if k > 0 && tokens[k-1].Kind == parser.TokenHash {
-				return true
-			}
-		case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace:
-			return false
-		}
-	}
-	return false
-}
+const (
+	callUnknown callSearch = iota
+	callFound
+	callNone
+)
 
-func CallAt(uri, source string, pos protocol.Position) (callee *CursorContext, argument int, ok bool) {
-	doc := NewDocument(uri, source)
-	calleePos, argument, ok := calleeAt(doc.Tokens(), pos)
+func CallAt(idx *symbols.Index, uri, src string, pos protocol.Position) (Call, bool) {
+	from, at := idx.DeclarationBefore(uri, src, pos)
+	end, ok := offsetAt(src, from-uint32(at.Character), at.Line, pos)
 	if !ok {
-		return nil, 0, false
+		return Call{}, false
 	}
-	callee = doc.At(calleePos)
-	return callee, argument, callee != nil
+	call, r, ok := callBefore(src[:end], from)
+	if !ok {
+		return Call{}, false
+	}
+	call.Position = protocol.Position{
+		Line:      pos.Line - strings.Count(src[call.Offset:end], "\n"),
+		Character: int(call.Offset) - strings.LastIndexByte(src[:call.Offset], '\n') - 1,
+	}
+	if call.Function {
+		call.Namespace = r.namespaces(idx, uri, src, call.Offset).At(call.Offset)
+	}
+	return call, true
 }
 
-func calleeAt(tokens []parser.Token, pos protocol.Position) (callee protocol.Position, argument int, ok bool) {
-	cursor := sort.Search(len(tokens), func(i int) bool { return !tokenEndsBeforePos(tokens[i], pos) })
-	depth := 0
-	for k := cursor - 1; k >= 0; k-- {
-		switch tokens[k].Kind {
-		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
+func offsetAt(src string, lineStart uint32, line int, pos protocol.Position) (uint32, bool) {
+	if pos.Line < line {
+		return 0, false
+	}
+	start := int(lineStart)
+	for range pos.Line - line {
+		nl := strings.IndexByte(src[start:], '\n')
+		if nl < 0 {
+			return 0, false
+		}
+		start += nl + 1
+	}
+	lineEnd := len(src)
+	if nl := strings.IndexByte(src[start:], '\n'); nl >= 0 {
+		lineEnd = start + nl
+	}
+	return uint32(min(start+max(pos.Character, 0), lineEnd)), true
+}
+
+func callBefore(src string, from uint32) (Call, *callReader, bool) {
+	r := &callReader{src: src, from: from}
+	call, search := r.call()
+	if search == callUnknown {
+		r = &callReader{src: src}
+		call, search = r.call()
+	}
+	return call, r, search == callFound
+}
+
+type callReader struct {
+	src    string
+	from   uint32
+	tokens []lexer.Token
+}
+
+func (r *callReader) call() (Call, callSearch) {
+	r.lex()
+	depth, argument := 0, 0
+	for k := len(r.tokens) - 1; k >= 0; k-- {
+		switch r.tokens[k].Kind {
+		case token.RightParen, token.RightBracket, token.RightBrace:
 			depth++
-		case parser.TokenOpenBracket:
+		case token.LeftBracket, token.Attribute:
 			if depth > 0 {
 				depth--
 				continue
 			}
 			argument = 0
-		case parser.TokenOpenBrace:
+		case token.LeftBrace, token.CurlyOpen, token.DollarOpenCurlyBraces:
 			if depth == 0 {
-				return protocol.Position{}, 0, false
+				return Call{}, callNone
 			}
 			depth--
-		case parser.TokenOpenParen:
+		case token.LeftParen:
 			if depth > 0 {
 				depth--
 				continue
 			}
-			name := parser.PrevSignificant(tokens, k-1)
-			if name < 0 || tokens[name].Kind != parser.TokenIdentifier {
-				return protocol.Position{}, 0, false
-			}
-			return protocol.Position{Line: tokens[name].Line, Character: tokens[name].Column}, argument, true
-		case parser.TokenComma:
+			return r.callee(r.prev(k), argument)
+		case token.Comma:
 			if depth == 0 {
 				argument++
 			}
-		case parser.TokenSemicolon:
+		case token.Semicolon, token.OpenTag, token.OpenTagWithEcho, token.CloseTag:
 			if depth == 0 {
-				return protocol.Position{}, 0, false
+				return Call{}, callNone
 			}
 		}
 	}
-	return protocol.Position{}, 0, false
+	return r.exhausted()
 }
 
-func tokenEndsBeforePos(tok parser.Token, pos protocol.Position) bool {
-	return tok.Line < pos.Line || tok.Line == pos.Line && tok.Column+len(tok.Value) <= pos.Character
+func (r *callReader) lex() {
+	if r.from == 0 {
+		r.tokens = lex(r.src)
+		return
+	}
+	r.tokens = lexer.LexCode(r.src[r.from:], token.Latest)
+	for i := range r.tokens {
+		r.tokens[i].Start += r.from
+		r.tokens[i].End += r.from
+	}
+}
+
+func (r *callReader) prev(k int) int {
+	for k--; k >= 0 && r.tokens[k].Kind.IsTrivia(); k-- {
+	}
+	return k
+}
+
+func (r *callReader) exhausted() (Call, callSearch) {
+	if r.from > 0 {
+		return Call{}, callUnknown
+	}
+	return Call{}, callNone
+}
+
+func (r *callReader) callee(k, argument int) (Call, callSearch) {
+	if k < 0 {
+		return r.exhausted()
+	}
+	name := r.tokens[k]
+	switch name.Kind {
+	case token.Identifier, token.NameQualified, token.NameFullyQualified, token.NameRelative:
+	default:
+		return Call{}, callNone
+	}
+	return Call{Name: name.Text(r.src), Offset: name.Start, Argument: argument, Function: r.calledAsFunction(k)}, callFound
+}
+
+func (r *callReader) calledAsFunction(k int) bool {
+	before := r.prev(k)
+	if before < 0 {
+		return r.from == 0
+	}
+	switch r.tokens[before].Kind {
+	case token.ObjectOperator, token.NullsafeObjectOperator, token.DoubleColon, token.New, token.Function, token.Fn:
+		return false
+	case token.Ampersand, token.AmpersandFollowedByVarOrVararg, token.AmpersandNotFollowedByVarOrVararg:
+		if keyword := r.prev(before); keyword >= 0 && r.tokens[keyword].Kind == token.Function {
+			return false
+		}
+	}
+	return !r.inAttribute(k)
+}
+
+func (r *callReader) inAttribute(k int) bool {
+	depth := 0
+	for i := k - 1; i >= 0; i-- {
+		switch r.tokens[i].Kind {
+		case token.RightBracket, token.RightParen:
+			depth++
+		case token.LeftParen, token.LeftBracket:
+			if depth > 0 {
+				depth--
+			}
+		case token.Attribute:
+			if depth == 0 {
+				return true
+			}
+			depth--
+		case token.Semicolon, token.LeftBrace, token.RightBrace:
+			return false
+		}
+	}
+	return r.from > 0
+}
+
+func (r *callReader) namespaces(idx *symbols.Index, uri, src string, upTo uint32) *Namespaces {
+	if r.from == 0 {
+		return namespacesOfTokens(r.src, r.tokens)
+	}
+	if end, ok := idx.ImportsEnd(uri, src, upTo); ok {
+		return LexNamespaces(src[:end])
+	}
+	return LexNamespaces(src[:upTo])
 }
