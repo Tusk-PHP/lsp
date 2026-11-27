@@ -132,7 +132,7 @@ func (s *Server) docIndexIdle(uri string) bool {
 // the send one step, so an older version's diagnostics never arrive after a
 // newer version's.
 func (s *Server) publishDiagnostics(uri, source string) {
-	diagnostics := s.positionsOf(uri, source).diagnosticsOut(uri, lspDiagnostics(s.diag.Analyze(uri, source)))
+	diagnostics := s.positionsOf(uri, source).diagnosticsOut(uri, lspDiagnostics(s.analysis.Analyze(uri, source)))
 	s.publishMu.Lock()
 	defer s.publishMu.Unlock()
 	if !s.isCurrentDocument(uri, source) {

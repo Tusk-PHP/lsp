@@ -10,10 +10,8 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/composer/cardhover"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/coverage"
-	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	"github.com/Tusk-PHP/lsp/internal/document"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/hover"
 	"github.com/Tusk-PHP/lsp/internal/inlayhint"
@@ -21,6 +19,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
+	"github.com/Tusk-PHP/lsp/internal/session"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
@@ -70,7 +69,9 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.routeIndex = s.workspace.RouteIndex
 	s.schemaCache = s.workspace.SchemaCache
 	arrayResolver := models.NewFrameworkArrayResolver(s.index, s.rootPath, s.framework)
-	viewResolver := frameworklaravel.NewViews(s.rootPath)
+	s.session = session.New(s.workspace, session.Options{Read: s.getDocumentReader(), Logger: s.logger})
+	s.analysis = s.session
+	viewResolver := s.session.Views()
 	translationResolver := frameworklaravel.NewTranslationResolver(s.rootPath)
 	symfonyTranslations := frameworksymfony.NewTranslationResolver(s.rootPath)
 	s.completion = completion.NewProvider(s.index, s.container, s.framework)
@@ -123,26 +124,6 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 				"message": "PHP LSP: composer.openOnDefinition is enabled but the client does not advertise window/showDocument support; feature disabled",
 			})
 		})
-	}
-	s.diag = diagnostics.NewProvider(s.index, s.framework, s.rootPath, s.logger, s.cfg)
-	s.diag.ResolveTypes(s.container)
-	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(s.index, s.workspace.SchemaIsLive)
-	s.diag.Profile = s.workspace.Profile
-	s.providers = frameworklaravel.NewProviders(s.rootPath, s.index)
-	viewResolver.SetProviders(s.providers)
-	s.components = frameworklaravel.NewComponents(s.rootPath, s.index, s.providers, s.getDocumentReader())
-	s.bladeFeatures = &blade.Features{Views: viewResolver, Components: s.components, Read: s.getDocumentReader(), Custom: s.providers.Custom}
-	s.diag.Blade = s.bladeFeatures
-	if s.workspace.ViewData != nil {
-		s.viewTypes = &frameworklaravel.ViewTypes{
-			Data:  s.workspace.ViewData,
-			Index: s.index,
-			Read:  s.getDocumentReader(),
-			Resolve: func(expr, source string, file *parser.FileNode, line, col int) string {
-				return s.completion.ResolveExpressionType(expr, source, protocol.Position{Line: line, Character: col}, file)
-			},
-		}
-		s.diag.ViewTypes = s.viewTypes
 	}
 	s.analyzer = analyzer.NewAnalyzer(s.index, s.container)
 	if opts := params.InitializationOptions; opts != nil {

@@ -2,16 +2,13 @@ package lsp
 
 import (
 	"encoding/json"
-	"io"
-	"log"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
-	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/session"
 )
 
 // lockedBuffer collects the server's output from several goroutines.
@@ -32,35 +29,43 @@ func (w *lockedBuffer) String() string {
 	return w.b.String()
 }
 
-// slowDiagnosticsServer returns a server whose diagnostics pass blocks in
-// its type resolver until release is closed, and records each source it
-// analyzed.
+// slowDiagnosticsServer returns a server whose diagnostics pass blocks until
+// release is closed, and records each source it analyzed.
 func slowDiagnosticsServer(t *testing.T) (s *Server, out *lockedBuffer, release chan struct{}, analyzed func() []string) {
 	t.Helper()
 	out = &lockedBuffer{}
 	s = newServerWithWorkspace(t, out)
-	s.diag = diagnostics.NewProvider(s.index, "", "", log.New(io.Discard, "", 0), config.DefaultConfig())
 	s.diagDebounce.delay = 20 * time.Millisecond
-	release = make(chan struct{})
-	var mu sync.Mutex
-	seen := map[string]bool{}
-	var order []string
-	s.diag.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		mu.Lock()
-		if !seen[source] {
-			seen[source] = true
-			order = append(order, source)
-		}
-		mu.Unlock()
-		<-release
-		return ""
+	slow := &slowAnalysis{Session: session.New(s.workspace, session.Options{}), release: make(chan struct{}), seen: map[string]bool{}}
+	s.analysis = slow
+	return s, out, slow.release, slow.analyzed
+}
+
+// slowAnalysis is a session whose passes each block until release is
+// closed.
+type slowAnalysis struct {
+	*session.Session
+	release chan struct{}
+	mu      sync.Mutex
+	seen    map[string]bool
+	order   []string
+}
+
+func (a *slowAnalysis) Analyze(uri, source string) []diagnostics.Diagnostic {
+	a.mu.Lock()
+	if !a.seen[source] {
+		a.seen[source] = true
+		a.order = append(a.order, source)
 	}
-	analyzed = func() []string {
-		mu.Lock()
-		defer mu.Unlock()
-		return append([]string(nil), order...)
-	}
-	return s, out, release, analyzed
+	a.mu.Unlock()
+	<-a.release
+	return a.Session.Analyze(uri, source)
+}
+
+func (a *slowAnalysis) analyzed() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]string(nil), a.order...)
 }
 
 func didChangeMessage(t *testing.T, uri string, version int, text string) *jsonRPCMessage {

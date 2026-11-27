@@ -133,7 +133,7 @@ func (s *Server) refreshWorkspace() {
 	s.handBackToEditor(result.EditorOpened)
 	for _, uri := range result.Files {
 		if affectsComponents(s.rootPath, uri) {
-			s.components.Invalidate()
+			s.session.Components().Invalidate()
 			break
 		}
 	}

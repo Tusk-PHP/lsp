@@ -17,10 +17,19 @@ import (
 
 // viewVars returns what the Blade view at uri receives, typed.
 func (s *Server) viewVars(uri string) frameworklaravel.TypedInputs {
-	if s.viewTypes == nil || !workspace.IsBlade(uri) {
+	if s.session == nil || !workspace.IsBlade(uri) {
 		return frameworklaravel.TypedInputs{}
 	}
-	return s.viewTypes.For(uri)
+	return s.session.ViewTypes().For(uri)
+}
+
+// bladeCustom is what the project registers with Blade, or nil before
+// initialize.
+func (s *Server) bladeCustom() *blade.Custom {
+	if s.session == nil {
+		return nil
+	}
+	return s.session.BladeProviders().Custom()
 }
 
 // variableAt returns the `$name` at offset in a template, without `$`.

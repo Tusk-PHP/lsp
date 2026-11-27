@@ -6,9 +6,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/composer"
-	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	"github.com/Tusk-PHP/lsp/internal/introspect"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -112,18 +110,10 @@ func (s *Server) debugDocument(uri string) string {
 		bufferState = "live-buffer"
 	}
 
-	file := parser.ParseFile(source)
-	var typeRes diagnostics.TypeResolverFunc
-	var builtinRule *checks.BuiltinUnavailableRule
-	if s.diag != nil {
-		typeRes = s.diag.TypeResolver
-		builtinRule = s.diag.BuiltinUnavailableRule()
+	var findings []checks.Finding
+	if s.analysis != nil {
+		findings = s.analysis.NativeFindings(source)
 	}
-	rules := diagnostics.NativeRules(diagnostics.NativeRulesOptions{
-		TypeResolver:           typeRes,
-		BuiltinUnavailableRule: builtinRule,
-	})
-	findings := checks.CheckFile(file, source, s.index, rules)
 
 	v := introspect.ParseVerbosity(s.cfg.Introspection.Verbosity)
 
