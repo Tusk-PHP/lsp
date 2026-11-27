@@ -65,19 +65,80 @@ func supertypes(doc *parser.DocBlock, resolve func(string) string) []Supertype {
 	return out
 }
 
-// resolveDocTypeString resolves a PHPDoc type for storage. A plain class name
-// is resolved with the file's imports and namespace; anything more (generics,
-// unions, shapes) keeps the form its imports were qualified to, as the names
-// in it may be templates. Template names stay as they are.
+// resolveDocTypeString resolves a PHPDoc type for storage. Each part of a
+// union or intersection is resolved on its own: a class name, and the class a
+// generic or array type is over, are resolved with the file's imports and
+// namespace, while keywords (array, list, int<0, max>, array{…}), template
+// names, literals and the names inside a generic's arguments or a shape stay
+// in the form their imports were qualified to.
 func resolveDocTypeString(t string, resolve func(string) string, templates map[string]bool) string {
 	t = strings.TrimSpace(t)
-	if t == "" || templates[t] || isPseudoTypeName(t) {
-		return t
+	var b strings.Builder
+	depth, start := 0, 0
+	for i := 0; i <= len(t); i++ {
+		if i < len(t) {
+			switch t[i] {
+			case '<', '{', '(':
+				depth++
+				continue
+			case '>', '}', ')':
+				depth--
+				continue
+			case '|', '&':
+				if depth > 0 {
+					continue
+				}
+			default:
+				continue
+			}
+		}
+		if start == 0 && i == len(t) {
+			return resolveDocTypePart(t, resolve, templates)
+		}
+		b.WriteString(resolveDocTypePart(t[start:i], resolve, templates))
+		if i < len(t) {
+			b.WriteByte(t[i])
+		}
+		start = i + 1
 	}
-	if strings.ContainsAny(t, "<>{}()|&,: '\"") {
-		return t
+	return b.String()
+}
+
+func resolveDocTypePart(part string, resolve func(string) string, templates map[string]bool) string {
+	part = strings.TrimSpace(part)
+	name := strings.TrimPrefix(part, "?")
+	end := strings.IndexAny(name, "<{([")
+	if end < 0 {
+		end = len(name)
 	}
-	return resolve(t)
+	base := name[:end]
+	if !isDocClassName(base) || templates[base] || isPseudoTypeName(base) {
+		return part
+	}
+	return part[:len(part)-len(name)] + resolve(base) + name[end:]
+}
+
+func isDocClassName(s string) bool {
+	if s == "" || ('0' <= s[0] && s[0] <= '9') {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if !isDocNameByte(s[i]) && s[i] != '\\' {
+			return false
+		}
+	}
+	return true
+}
+
+func templateNames(params []TemplateParam) map[string]bool {
+	if len(params) == 0 {
+		return nil
+	}
+	names := make(map[string]bool, len(params))
+	for _, tp := range params {
+		names[tp.Name] = true
+	}
+	return names
 }
 
 // isPseudoTypeName reports whether a PHPDoc type is a keyword such as
