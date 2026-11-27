@@ -69,22 +69,28 @@ function declaredFunctions(string $source): array
     return $names;
 }
 
+/**
+ * PHP code, run in each build, that dumps its built-in functions by lower-case
+ * name, each with its extension, parameters and return type, and the
+ * lower-case names of its built-in classes and interfaces.
+ */
 function functionDumpCode(): string
 {
-    return dumpHeaderCode() . <<<'PHP'
+    return dumpHeaderCode() . signatureDumpCode() . <<<'PHP'
 $out['functions'] = [];
 foreach (get_defined_functions()['internal'] as $name) {
     $f = new ReflectionFunction($name);
-    $out['functions'][strtolower($name)] = strtolower((string) $f->getExtensionName());
+    $out['functions'][strtolower($name)] = [strtolower((string) $f->getExtensionName()), $params($f), $returnType($f)];
 }
+$out['classes'] = array_map('strtolower', array_merge(get_declared_classes(), get_declared_interfaces()));
 echo json_encode($out, JSON_INVALID_UTF8_SUBSTITUTE);
 PHP;
 }
 
 /**
- * @param list<array{version:string, extensions:list<string>, functions:array<string, string>}> $defaultDumps
- * @param list<array{version:string, extensions:list<string>, functions:array<string, string>}> $extensionDumps
- * @param list<array{version:string, extensions:list<string>, functions:array<string, string>}> $peclDumps
+ * @param list<array{version:string, extensions:list<string>, functions:array<string, array{0:string, 1:list<array>, 2:string}>}> $defaultDumps
+ * @param list<array{version:string, extensions:list<string>, functions:array<string, array{0:string, 1:list<array>, 2:string}>}> $extensionDumps
+ * @param list<array{version:string, extensions:list<string>, functions:array<string, array{0:string, 1:list<array>, 2:string}>}> $peclDumps
  */
 function generateGoFunctionAvailability(array $defaultDumps, array $extensionDumps, array $peclDumps, string $extensionStubsDir): string
 {
@@ -100,7 +106,7 @@ function generateGoFunctionAvailability(array $defaultDumps, array $extensionDum
     $in = [];
     $extensionOf = [];
     foreach ($dumps as $build => $dump) {
-        foreach ($dump['functions'] as $name => $extension) {
+        foreach ($dump['functions'] as $name => [$extension]) {
             if (isset($stubExtensions[$extension]) || isLanguageConstruct((string) $name)) {
                 continue;
             }
@@ -151,8 +157,8 @@ function generateGoFunctionAvailability(array $defaultDumps, array $extensionDum
 }
 
 /**
- * @param list<array{version:string, zts:bool, extensions:list<string>, functions:array<string, string>}> $defaultDumps
- * @param list<array{version:string, functions:array<string, string>}> $allDumps
+ * @param list<array{version:string, zts:bool, extensions:list<string>, functions:array<string, array{0:string, 1:list<array>, 2:string}>}> $defaultDumps
+ * @param list<array{version:string, functions:array<string, array{0:string, 1:list<array>, 2:string}>}> $allDumps
  * @return array<string, string>
  */
 function removedFunctions(array $defaultDumps, array $allDumps): array
@@ -164,7 +170,7 @@ function removedFunctions(array $defaultDumps, array $allDumps): array
         if ($next === null || $next['zts'] !== $dump['zts']) {
             continue;
         }
-        foreach ($dump['functions'] as $name => $extension) {
+        foreach ($dump['functions'] as $name => [$extension]) {
             if (!isset($next['functions'][$name]) && in_array($extension, $next['extensions'], true)) {
                 $removed[$name] = $next['version'];
             }

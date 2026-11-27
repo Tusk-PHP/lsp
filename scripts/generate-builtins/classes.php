@@ -20,9 +20,15 @@ $out = ['version' => PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION, 'zts' => (bool
 PHP;
 }
 
-function classLikeDumpCode(): string
+/**
+ * PHP code, run in each build, that defines $type, the declared type of a
+ * reflected parameter or return, $params, the parameters of a reflected
+ * function or method (name, type, default, variadic and by reference), and
+ * $returnType, its return type, tentative or not.
+ */
+function signatureDumpCode(): string
 {
-    return dumpHeaderCode() . <<<'PHP'
+    return <<<'PHP'
 $type = function ($t) use (&$type) {
     if ($t === null) {
         return '';
@@ -47,6 +53,19 @@ $params = function ($f) use ($type) {
     }
     return $out;
 };
+$returnType = function ($f) use ($type) {
+    if ($f->hasReturnType()) {
+        return $type($f->getReturnType());
+    }
+    return method_exists($f, 'hasTentativeReturnType') && $f->hasTentativeReturnType() ? $type($f->getTentativeReturnType()) : '';
+};
+
+PHP;
+}
+
+function classLikeDumpCode(): string
+{
+    return dumpHeaderCode() . signatureDumpCode() . <<<'PHP'
 $visibility = function ($m) {
     return $m->isProtected() ? 'protected' : 'public';
 };
@@ -76,8 +95,7 @@ foreach ($names as $name) {
         if ($m->isPrivate() || $m->getDeclaringClass()->getName() !== $c->getName()) {
             continue;
         }
-        $return = $m->hasReturnType() ? $m->getReturnType() : (method_exists($m, 'hasTentativeReturnType') && $m->hasTentativeReturnType() ? $m->getTentativeReturnType() : null);
-        $entry['methods'][$m->getName()] = [$visibility($m), $m->isStatic(), $m->isAbstract(), $m->isFinal(), $params($m), $type($return)];
+        $entry['methods'][$m->getName()] = [$visibility($m), $m->isStatic(), $m->isAbstract(), $m->isFinal(), $params($m), $returnType($m)];
     }
     foreach ($c->getProperties() as $p) {
         if ($p->isPrivate() || $p->getDeclaringClass()->getName() !== $c->getName()) {

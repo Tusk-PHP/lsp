@@ -99,7 +99,7 @@ Indexing a file parses it outside the lock, then replaces that file's entries in
 
 A `BuiltinProfile` is a PHP version and a set of extensions. Builtins are registered in a fixed order, later layers overriding earlier ones:
 
-1. the generated registry (names only, from phpstorm-stubs);
+1. the generated registry: every builtin function's native signature, from reflection of PHP's builds, with the PHPDoc types PHPStan's function map gives it for the selected version where they say more than the native ones (`builtin_signatures_generated.go`, `scripts/generate-builtins.php signatures`), then the remaining names;
 2. the PHP 7.4 core baseline (`stubs/php/core/php-7.4.php`) and the per-area core stubs (`spl/`, `date/`, `reflection/`, `io-poll/`, `time/`, `uri-*/`, …);
 3. core version deltas up to the selected version (`php-8.0.php` … `php-8.6.php`);
 4. extension baselines (`stubs/php/extensions/<ext>/php-7.4.php`);

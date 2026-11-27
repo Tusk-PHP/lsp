@@ -101,21 +101,28 @@ Options:
   --pecl-php=COMMANDS
                  Builds with PECL extensions (redis, brotli, ...). What only
                  these builds have needs its extension in the project's profile.
+  --phpstan=PATH A phpstan-src checkout, whose resources/functionMap*.php
+                 signatures mode reads.
   -h, --help     Show this help.
 
 TXT;
 }
 
 /**
- * @return array{output:?string, keep:?string, php:string, extensions-php:string, pecl-php:string}
+ * @return array{output:?string, keep:?string, php:string, extensions-php:string, pecl-php:string, phpstan:?string}
  */
 function parseOptions(array $argv): array
 {
-    $options = ['output' => null, 'keep' => null, 'php' => '', 'extensions-php' => '', 'pecl-php' => ''];
+    $options = ['output' => null, 'keep' => null, 'php' => '', 'extensions-php' => '', 'pecl-php' => '', 'phpstan' => null];
 
     foreach ($argv as $arg) {
         if (str_starts_with($arg, '--output=')) {
             $options['output'] = substr($arg, strlen('--output='));
+            continue;
+        }
+
+        if (str_starts_with($arg, '--phpstan=')) {
+            $options['phpstan'] = substr($arg, strlen('--phpstan='));
             continue;
         }
 
