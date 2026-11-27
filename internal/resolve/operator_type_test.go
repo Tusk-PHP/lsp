@@ -48,6 +48,9 @@ func TestOperatorsAreTypedFromTheirOperands(t *testing.T) {
 		"$o instanceof App\\Money": "bool",
 		"$o <=> $mix":              "int",
 		"$o . $mix":                "string",
+		"@$o":                      `App\Money`,
+		"@$i + 1":                  "int",
+		"@$missing":                "",
 		"(int) $o + 1.5":           "float",
 	} {
 		if got := r.ExpressionType(expr, ctx).FullString(); got != want {
@@ -69,6 +72,10 @@ function f(array $items, $y, float $rate) {
     echo $scaled; // float product
     $unknown = $y + 1;
     echo $unknown; // unknown operand
+    $direct = file_get_contents('/tmp/x');
+    echo $direct; // call
+    $contents = @file_get_contents('/tmp/x');
+    echo $contents; // silenced call
 }
 `
 	idx := symbols.NewIndex()
@@ -83,6 +90,8 @@ function f(array $items, $y, float $rate) {
 		{"$ratio", "division", "int|float"},
 		{"$scaled", "float product", "float"},
 		{"$unknown", "unknown operand", ""},
+		{"$direct", "call", "string|bool"},
+		{"$contents", "silenced call", "string|bool"},
 	} {
 		line := -1
 		for i, l := range lines {
