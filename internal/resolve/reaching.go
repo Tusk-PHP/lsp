@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -207,7 +209,7 @@ func (r *Resolver) feedsItself(varName string, lines []string, file *parser.File
 	if reach.TooMany {
 		return ResolvedType{}
 	}
-	if !slices.Contains(reach.Writes, w) {
+	if !slices.Contains(reach.Writes, w) || r.passesItselfThrough(lines, file, b, w) {
 		return t
 	}
 	var others []string
@@ -227,6 +229,47 @@ func (r *Resolver) feedsItself(varName string, lines []string, file *parser.File
 		}
 	}
 	return t
+}
+
+// passesItselfThrough reports whether write w reads its own variable only
+// where the value read becomes the value written, as the right of
+// `$usage = $chunk->getUsage() ?? $usage` does, or a branch of a ternary.
+// The next iteration then adds only the value it already had, so the value
+// worked out without it stands.
+func (r *Resolver) passesItselfThrough(lines []string, file *parser.FileNode, b *scope.Binding, w int) bool {
+	site := b.Site(w)
+	tree := r.syntaxTree(lines, file)
+	value, ok := writeScope(b, w, &site).assignedValue(tree, site.At.Line, b.Name)
+	return ok && passesThrough(tree, value, b.Name)
+}
+
+func passesThrough(t *syntaxTree, e ast.Expr, name string) bool {
+	switch n := e.(type) {
+	case *ast.Variable:
+		return true
+	case *ast.Binary:
+		if n.Op == token.Coalesce {
+			return passesThrough(t, n.Left, name) && passesThrough(t, n.Right, name)
+		}
+	case *ast.Ternary:
+		then := n.Then
+		if then == nil {
+			then = n.Cond
+		}
+		return passesThrough(t, then, name) && passesThrough(t, n.Else, name)
+	}
+	return !readsVariable(t, e, name)
+}
+
+func readsVariable(t *syntaxTree, e ast.Expr, name string) bool {
+	found := false
+	ast.Walk(e, func(n ast.Node) bool {
+		if v, ok := n.(*ast.Variable); ok && t.text(v) == name {
+			found = true
+		}
+		return !found
+	})
+	return found
 }
 
 // namedClasses returns the classes a type names, also those of a union kept
