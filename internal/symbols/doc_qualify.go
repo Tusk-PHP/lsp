@@ -28,6 +28,7 @@ func qualifyDocTypes(doc string, uses []parser.UseNode) string {
 		return doc
 	}
 	var b strings.Builder
+	var buf [2]int
 	last := 0
 	i := 0
 	for {
@@ -49,12 +50,18 @@ func qualifyDocTypes(doc string, uses []parser.UseNode) string {
 		} else {
 			lineEnd += j
 		}
-		starts, n := docTagTypeStarts(tag, doc, j, lineEnd)
-		for _, ts := range starts[:n] {
+		extract := types.ExtractDocTypeString
+		if tag == "method" {
+			if !namesImport(doc[j:lineEnd], uses) {
+				continue
+			}
+			extract = types.ExtractParamListType
+		}
+		for _, ts := range docTagTypeStarts(buf[:0], tag, doc, j, lineEnd) {
 			if ts < last {
 				continue
 			}
-			typeStr, _ := types.ExtractDocTypeString(doc[ts:lineEnd])
+			typeStr, _ := extract(doc[ts:lineEnd])
 			if typeStr == "" || !strings.HasPrefix(doc[ts:], typeStr) {
 				continue
 			}
@@ -129,6 +136,12 @@ func forEachImportedName(t string, uses []parser.UseNode, fn func(start, end int
 	}
 }
 
+func namesImport(t string, uses []parser.UseNode) bool {
+	found := false
+	forEachImportedName(t, uses, func(int, int, string) { found = true })
+	return found
+}
+
 // importedName returns the fully qualified name of name when its first segment
 // is a class import.
 func importedName(name string, uses []parser.UseNode) (string, bool) {
@@ -146,40 +159,33 @@ func importedName(name string, uses []parser.UseNode) (string, bool) {
 	return "", false
 }
 
-// docTagTypeStarts returns where the types of a tag's value start in doc. The
-// tag's name ends at j and its line at lineEnd. Most tags start with a type;
-// @template has one after `of` and another after `=`.
-func docTagTypeStarts(tag, doc string, j, lineEnd int) (starts [2]int, n int) {
+// docTagTypeStarts appends to dst where the types of a tag's value start in
+// doc. The tag's name ends at j and its line at lineEnd. Most tags start with
+// a type; @template has one after `of` and another after `=`, and @method one
+// for its return type and each parameter.
+func docTagTypeStarts(dst []int, tag, doc string, j, lineEnd int) []int {
 	ts := j
 	for ts < lineEnd && (doc[ts] == ' ' || doc[ts] == '\t') {
 		ts++
 	}
 	if ts >= lineEnd {
-		return starts, 0
+		return dst
 	}
 	switch tag {
 	case "param", "return", "var", "throws", "param-out", "param-closure-this",
 		"extends", "implements", "use", "template-extends", "template-implements", "template-use",
 		"mixin", "self-out", "this-out", "property", "property-read", "property-write":
-		return [2]int{ts}, 1
+		return append(dst, ts)
 	case "assert", "assert-if-true", "assert-if-false":
 		for ts < lineEnd && (doc[ts] == '!' || doc[ts] == '=') {
 			ts++
 		}
-		return [2]int{ts}, 1
+		return append(dst, ts)
 	case "method":
-		if strings.HasPrefix(doc[ts:lineEnd], "static ") {
-			ts += len("static ")
-			for ts < lineEnd && doc[ts] == ' ' {
-				ts++
-			}
-		}
-		// Only a return type: `@method name()` has none.
-		rest := doc[ts:lineEnd]
-		if open := strings.IndexByte(rest, '('); open >= 0 && !strings.ContainsAny(strings.TrimSpace(rest[:open]), " \t") {
-			return starts, 0
-		}
-		return [2]int{ts}, 1
+		parser.ForEachDocMethodType(doc[ts:lineEnd], func(start int) {
+			dst = append(dst, ts+start)
+		})
+		return dst
 	case "template", "template-covariant", "template-contravariant":
 		line := doc[ts:lineEnd]
 		for _, kw := range []string{" of ", " as "} {
@@ -188,8 +194,7 @@ func docTagTypeStarts(tag, doc string, j, lineEnd int) (starts [2]int, n int) {
 				for p < lineEnd && doc[p] == ' ' {
 					p++
 				}
-				starts[n] = p
-				n++
+				dst = append(dst, p)
 				break
 			}
 		}
@@ -198,12 +203,11 @@ func docTagTypeStarts(tag, doc string, j, lineEnd int) (starts [2]int, n int) {
 			for p < lineEnd && doc[p] == ' ' {
 				p++
 			}
-			starts[n] = p
-			n++
+			dst = append(dst, p)
 		}
-		return starts, n
+		return dst
 	}
-	return starts, 0
+	return dst
 }
 
 func isDocNameByte(c byte) bool {

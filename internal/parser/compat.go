@@ -434,8 +434,24 @@ func parseDocProperty(value string, readOnly, writeOnly bool) DocProperty {
 // parseDocMethod parses "@method ReturnType name(params) Description" or
 // "@method name(params) Description" into structured DocMethod.
 func parseDocMethod(value string) DocMethod {
+	return readDocMethod(value, nil)
+}
+
+// ForEachDocMethodType calls fn with the offset in value, the value of an
+// @method tag, of each type it names: its return type and its parameters'
+// types, in order.
+func ForEachDocMethodType(value string, fn func(start int)) {
+	readDocMethod(value, fn)
+}
+
+func readDocMethod(value string, typeAt func(start int)) DocMethod {
+	value = strings.TrimRight(value, " \t\r\n")
+	var at func(s string)
+	if typeAt != nil {
+		at = func(s string) { typeAt(len(value) - len(s)) }
+	}
 	m := DocMethod{}
-	rest := strings.TrimSpace(value)
+	rest := strings.TrimLeft(value, " \t\r\n")
 	if r, ok := strings.CutPrefix(rest, "static "); ok {
 		m.IsStatic = true
 		rest = strings.TrimLeft(r, " \t")
@@ -447,20 +463,20 @@ func parseDocMethod(value string) DocMethod {
 	typ, afterType := types.ExtractDocTypeString(rest)
 	name, list, called := docMethodCall(rest)
 	if called && !types.IsCallableName(name) {
-		m.setCall(name, list)
+		m.setCall(name, list, at)
 		return m
 	}
 	if typedName, typedList, typedCall := docMethodCall(afterType); typedCall {
-		m.setReturnType(typ)
-		m.setCall(typedName, typedList)
+		m.setReturnType(typ, rest, at)
+		m.setCall(typedName, typedList, at)
 		return m
 	}
 	if called {
-		m.setCall(name, list)
+		m.setCall(name, list, at)
 		return m
 	}
 	if typedName, description := docIdent(afterType); typedName != "" && (description == "" || description[0] == ' ' || description[0] == '\t') {
-		m.setReturnType(typ)
+		m.setReturnType(typ, rest, at)
 		m.Name = typedName
 		m.Description = strings.TrimSpace(description)
 		return m
@@ -471,14 +487,17 @@ func parseDocMethod(value string) DocMethod {
 	return m
 }
 
-func (m *DocMethod) setReturnType(typ string) {
+func (m *DocMethod) setReturnType(typ, from string, at func(string)) {
 	m.ReturnType = typ
 	m.ParsedType = parseDocTypeExprPtr(typ)
+	if at != nil {
+		at(from)
+	}
 }
 
-func (m *DocMethod) setCall(name, list string) {
+func (m *DocMethod) setCall(name, list string, at func(string)) {
 	m.Name = name
-	if params, description, ok := parseDocMethodParams(list); ok {
+	if params, description, ok := parseDocMethodParams(list, at); ok {
 		m.Params = params
 		m.Description = description
 	}

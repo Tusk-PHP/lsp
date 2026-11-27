@@ -6,7 +6,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
-func parseDocMethodParams(list string) (params []DocMethodParam, description string, ok bool) {
+func parseDocMethodParams(list string, typeAt func(s string)) (params []DocMethodParam, description string, ok bool) {
 	rest := strings.TrimSpace(list)
 	for rest != "" {
 		switch rest[0] {
@@ -20,15 +20,18 @@ func parseDocMethodParams(list string) (params []DocMethodParam, description str
 			params = make([]DocMethodParam, 0, strings.Count(rest, ",")+1)
 		}
 		var param DocMethodParam
-		param, rest = parseDocMethodParam(rest)
+		param, rest = parseDocMethodParam(rest, typeAt)
 		params = append(params, param)
 	}
 	return nil, "", false
 }
 
-func parseDocMethodParam(s string) (DocMethodParam, string) {
+func parseDocMethodParam(s string, typeAt func(s string)) (DocMethodParam, string) {
 	var param DocMethodParam
 	if s[0] != '$' && s[0] != '&' && !strings.HasPrefix(s, "...") {
+		if typeAt != nil {
+			typeAt(s)
+		}
 		param.Type, s = types.ExtractParamListType(s)
 	}
 	if rest, ok := strings.CutPrefix(s, "&"); ok {

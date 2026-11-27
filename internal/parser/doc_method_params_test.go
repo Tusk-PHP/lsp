@@ -3,6 +3,8 @@ package parser
 import (
 	"slices"
 	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
 func TestParseDocMethodParams(t *testing.T) {
@@ -103,6 +105,30 @@ func TestParseDocMethodReturnTypes(t *testing.T) {
 			}
 			if (m.ParsedType != nil) != (tt.returnType != "") {
 				t.Fatalf("parsed type = %+v for return type %q", m.ParsedType, tt.returnType)
+			}
+		})
+	}
+}
+
+func TestForEachDocMethodType(t *testing.T) {
+	tests := []struct {
+		value string
+		want  []string
+	}{
+		{"static Closure(Post): void make(User $u, $n = 1, Tag &...$t) \r\n", []string{"Closure(Post): void", "User", "Tag"}},
+		{" make(int $a, $b)", []string{"int"}},
+		{"Post getPost", []string{"Post"}},
+		{"getName", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.value, func(t *testing.T) {
+			var got []string
+			ForEachDocMethodType(tt.value, func(start int) {
+				typ, _ := types.ExtractParamListType(tt.value[start:])
+				got = append(got, typ)
+			})
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("types = %q, want %q", got, tt.want)
 			}
 		})
 	}
