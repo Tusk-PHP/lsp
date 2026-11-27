@@ -79,6 +79,7 @@ class ExampleTest extends TestCase {
 // PHP 8.6: #[\Override] on a class constant or enum case must override one.
 func TestOverrideOnConstants(t *testing.T) {
 	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
 	parentSrc := `<?php
 namespace App;
 interface HasLimit { const LIMIT = 1; }

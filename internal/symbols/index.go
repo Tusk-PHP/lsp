@@ -521,7 +521,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 	for _, en := range file.Enums {
 		fqn := buildFQN(ns, en.Name)
 		sym := &Symbol{Name: en.Name, FQN: fqn, Kind: KindEnum, URI: uri, DocComment: qualifyDocTypes(en.DocComment, file.Uses),
-			BackedType: en.BackedType, Implements: resolveNames(en.Implements, resolve), Traits: resolveNames(en.Traits, resolve),
+			BackedType: en.BackedType, Implements: enumInterfaces(resolveNames(en.Implements, resolve), en.BackedType != ""), Traits: resolveNames(en.Traits, resolve),
 			traitRules: newTraitRules(fqn, en.TraitRules, resolve),
 			Attributes: indexAttributes(en.Attributes, resolve),
 			Range:      symRange(en.StartLine, en.StartCol, len(en.Name))}
@@ -793,6 +793,22 @@ func resolveNames(names []string, resolve func(string) string) []string {
 		out = append(out, resolve(name))
 	}
 	return out
+}
+
+// enumInterfaces is what an enum implements: the interfaces it declares,
+// and UnitEnum, and BackedEnum for a backed enum, which PHP has every enum
+// implement without declaring them.
+func enumInterfaces(declared []string, backed bool) []string {
+	implicit := []string{"UnitEnum"}
+	if backed {
+		implicit = append(implicit, "BackedEnum")
+	}
+	for _, iface := range implicit {
+		if !slices.ContainsFunc(declared, func(d string) bool { return strings.EqualFold(d, iface) }) {
+			declared = append(declared, iface)
+		}
+	}
+	return declared
 }
 
 func (idx *Index) clearParentLocked(fqn string) {
