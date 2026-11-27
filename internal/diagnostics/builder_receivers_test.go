@@ -225,3 +225,17 @@ func TestBuilderArgsOnABuilderHeldElsewhereLeaveUnqualifiedColumnsAlone(t *testi
 		"Unknown column 'email' on model 'Post'",
 	)
 }
+
+func TestBuilderArgsThroughStaticPropertiesArrayElementsAndUseFunctionCheckRelations(t *testing.T) {
+	assertBuilderArgs(t, `    Holder::$shared->with('missingShared');
+    $holder->builders['posts']->with('missingElement');
+    postQuery()->with('missingFunction');
+    Holder::$shared->with('comments');
+    $holder->builders['posts']->with('comments');
+    postQuery()->with('comments');
+`,
+		"Unknown relation 'missingShared' on model 'Post'",
+		"Unknown relation 'missingElement' on model 'Post'",
+		"Unknown relation 'missingFunction' on model 'Post'",
+	)
+}
