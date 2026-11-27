@@ -76,7 +76,8 @@ above it in this list**, never from a later one:
    parser of PHP 7.4 and 8.0 to 8.6, with `short_open_tag` off, so `<?` is
    inline HTML; see issue #140; the lexer leaves out the empty
    `T_ENCAPSED_AND_WHITESPACE` PHP emits for a space in an unquoted string offset
-   like `"$a[ b]"`), `parser` (the older tokenizer and lightweight AST the
+   like `"$a[ b]"`), `parser` (`ParseFile` builds the declarations the index
+   reads from `php/parser`; the older tokenizer and lightweight AST other
    features still use),
    `types`, `phparray`, `stubs` (embedded builtin stubs by PHP version and
    extension), `phpdetect`.

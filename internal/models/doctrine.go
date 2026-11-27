@@ -38,36 +38,99 @@ var doctrineTypeMap = map[string]string{
 	"guid":               "string",
 }
 
-// Regexes for PHP 8 attribute syntax.
 var (
-	// Matches #[ORM\Entity(...)] or #[ORM\Entity]
-	ormEntityRe = regexp.MustCompile(`#\[\s*(?:ORM\\)?Entity\b(?:\(([^)]*)\))?`)
-	// Matches #[ORM\Column(...)] with named args
-	ormColumnRe = regexp.MustCompile(`#\[\s*(?:ORM\\)?Column\b(?:\(([^)]*)\))?`) // arguments are optional: #[ORM\Column]
-	// Matches #[ORM\Id]
-	ormIdRe = regexp.MustCompile(`#\[\s*(?:ORM\\)?Id\b`)
-	// Matches #[ORM\GeneratedValue]
-	ormGeneratedValueRe = regexp.MustCompile(`#\[\s*(?:ORM\\)?GeneratedValue\b`)
-	// Matches #[ORM\OneToOne(...)], #[ORM\OneToMany(...)], #[ORM\ManyToOne(...)], #[ORM\ManyToMany(...)]
-	ormRelationRe = regexp.MustCompile(`#\[\s*(?:ORM\\)?(OneToOne|OneToMany|ManyToOne|ManyToMany)\b\(([^)]*)\)`)
-	// Matches #[ORM\Table(name: 'tablename')]
-	ormTableRe = regexp.MustCompile(`#\[\s*(?:ORM\\)?Table\b\(([^)]*)\)`)
-
-	// Annotation syntax: @ORM\Column(type="string")
-	ormColumnAnnotRe   = regexp.MustCompile(`@ORM\\Column\(([^)]*)\)`)
-	ormEntityAnnotRe   = regexp.MustCompile(`@ORM\\Entity\b(?:\(([^)]*)\))?`)
-	ormRelationAnnotRe = regexp.MustCompile(`@ORM\\(OneToOne|OneToMany|ManyToOne|ManyToMany)\(([^)]*)\)`)
-
-	// Matches a PHP property declaration line: visibility [static] [readonly] [?Type] $name
-	phpPropertyDeclRe = regexp.MustCompile(`(?:public|protected|private)\s+(?:static\s+)?(?:readonly\s+)?(?:(\??\S+)\s+)?(\$\w+)`)
-	ormIdAnnotRe      = regexp.MustCompile(`@ORM\\Id\b`)
-
-	// Extract named argument values
-	typeArgRe      = regexp.MustCompile(`type\s*[:=]\s*['"]([^'"]+)['"]`)
-	targetEntityRe = regexp.MustCompile(`targetEntity\s*[:=]\s*([A-Za-z_\\]+)::class`)
-	repoClassRe    = regexp.MustCompile(`repositoryClass\s*[:=]\s*([A-Za-z_\\]+)::class`)
-	nameArgRe      = regexp.MustCompile(`name\s*[:=]\s*['"]([^'"]+)['"]`)
+	ormEntityAnnotRe = regexp.MustCompile(`@ORM\\Entity\b(?:\(([^)]*)\))?`)
+	repoClassRe      = regexp.MustCompile(`repositoryClass\s*[:=]\s*([A-Za-z_\\]+)::class`)
 )
+
+const (
+	doctrineMapping    = `Doctrine\ORM\Mapping\`
+	doctrineCollection = `Doctrine\Common\Collections\Collection`
+)
+
+var doctrineRelationKinds = []string{"OneToOne", "OneToMany", "ManyToOne", "ManyToMany"}
+
+type doctrineEntity struct {
+	class   *parser.ClassNode
+	fqn     string
+	resolve func(string) string
+	entity  *parser.AttributeDef
+}
+
+func doctrineEntities(file *parser.FileNode) []doctrineEntity {
+	resolve := func(name string) string {
+		return resolveWithUses(name, file.Namespace, file.Uses)
+	}
+	var entities []doctrineEntity
+	for i := range file.Classes {
+		cls := &file.Classes[i]
+		entity := doctrineEntity{class: cls, fqn: cls.FullName, resolve: resolve}
+		entity.entity = entity.attribute(cls.Attributes, "Entity")
+		if entity.entity != nil || ormEntityAnnotRe.MatchString(cls.DocComment) {
+			entities = append(entities, entity)
+		}
+	}
+	return entities
+}
+
+func (e doctrineEntity) attribute(attrs []parser.AttributeDef, kind string) *parser.AttributeDef {
+	for i := range attrs {
+		if strings.EqualFold(e.resolve(attrs[i].Name), doctrineMapping+kind) {
+			return &attrs[i]
+		}
+	}
+	return nil
+}
+
+func (e doctrineEntity) classArgument(attr *parser.AttributeDef, name string, position int) string {
+	if attr == nil {
+		return ""
+	}
+	value, _ := attr.Args.Get(name, position)
+	class, ok := strings.CutSuffix(value, "::class")
+	if !ok || class == "" {
+		return ""
+	}
+	return e.resolve(class)
+}
+
+type doctrineRelationProperty struct {
+	name   string
+	kind   string
+	target string
+}
+
+func (e doctrineEntity) relation(prop parser.PropertyNode) (doctrineRelationProperty, bool) {
+	for _, kind := range doctrineRelationKinds {
+		if attr := e.attribute(prop.Attributes, kind); attr != nil {
+			return doctrineRelationProperty{name: prop.Name, kind: kind, target: e.classArgument(attr, "targetEntity", -1)}, true
+		}
+	}
+	return doctrineRelationProperty{}, false
+}
+
+func (e doctrineEntity) repositoryClass() string {
+	if repo := e.classArgument(e.entity, "repositoryClass", 0); repo != "" {
+		return repo
+	}
+	if m := ormEntityAnnotRe.FindStringSubmatch(e.class.DocComment); m != nil && m[1] != "" {
+		if rm := repoClassRe.FindStringSubmatch(m[1]); rm != nil {
+			return e.resolve(rm[1])
+		}
+	}
+	return ""
+}
+
+func (e doctrineEntity) tableName() string {
+	if table := e.attribute(e.class.Attributes, "Table"); table != nil {
+		if name, ok := table.Args.Get("name", 0); ok {
+			if unquoted, ok := parser.StringLiteral(name); ok && unquoted != "" {
+				return unquoted
+			}
+		}
+	}
+	return toSnakeCase(e.class.Name)
+}
 
 // Singular Doctrine relations (result is nullable entity).
 var doctrineSingularRelations = map[string]bool{
@@ -96,222 +159,73 @@ func AnalyzeDoctrineEntities(index *symbols.Index, rootPath string) {
 // analyzeDoctrineSource injects the members of the Doctrine entities declared
 // in source, one file's text.
 func analyzeDoctrineSource(index *symbols.Index, rootPath, source string) {
-	// Quick check: does this file mention ORM\Entity?
-	if !strings.Contains(source, "ORM\\Entity") && !strings.Contains(source, "ORM\\Column") {
+	if !strings.Contains(source, doctrineMapping[:len(doctrineMapping)-1]) {
 		return
 	}
-
-	file := parser.ParseFile(source)
-	if file == nil {
-		return
-	}
-
-	for i := range file.Classes {
-		cls := &file.Classes[i]
-		fqn := file.Namespace + "\\" + cls.Name
-		if file.Namespace == "" {
-			fqn = cls.Name
-		}
-
-		sym := index.Lookup(fqn)
+	for _, entity := range doctrineEntities(parser.ParseFileIn(source, index.Grammars())) {
+		sym := index.Lookup(entity.fqn)
 		if sym == nil {
 			continue
 		}
-
-		resolve := func(name string) string {
-			return resolveWithUses(name, file.Namespace, file.Uses)
+		if !analyzeDoctrineAttributes(index, sym, entity) {
+			analyzeDoctrineXML(index, sym, rootPath, entity.fqn, entity.class, entity.resolve)
 		}
-
-		// Check for ORM\Entity in class docblock (annotation syntax) or source around class declaration
-		classSource := extractClassSource(source, cls)
-		if !isDoctrineEntity(classSource, cls.DocComment) {
-			continue
-		}
-
-		// Try PHP 8 attributes on properties first, then XML fallback
-		foundAttrs := analyzeDoctrineAttributes(index, sym, source, cls, resolve)
-
-		if !foundAttrs {
-			// XML mapping fallback
-			analyzeDoctrineXML(index, sym, rootPath, fqn, cls, resolve)
-		}
-
-		// Repository magic methods
-		repoFQN := extractRepositoryClass(classSource, cls.DocComment, resolve)
-		if repoFQN != "" {
-			injectRepositoryMagicMethods(index, repoFQN, fqn, sym)
+		if repoFQN := entity.repositoryClass(); repoFQN != "" {
+			injectRepositoryMagicMethods(index, repoFQN, entity.fqn, sym)
 		}
 	}
 }
 
-// isDoctrineEntity checks if the class has an ORM\Entity attribute or annotation.
-func isDoctrineEntity(classSource, docComment string) bool {
-	if ormEntityRe.MatchString(classSource) {
-		return true
-	}
-	if docComment != "" && ormEntityAnnotRe.MatchString(docComment) {
-		return true
-	}
-	return false
-}
-
-// extractClassSource returns the source text from the class declaration line to the end.
-func extractClassSource(source string, cls *parser.ClassNode) string {
-	lines := strings.Split(source, "\n")
-	// Look a few lines before the class declaration for attributes
-	start := cls.StartLine - 5
-	if start < 0 {
-		start = 0
-	}
-	if start >= len(lines) {
-		return ""
-	}
-	return strings.Join(lines[start:], "\n")
-}
-
-// analyzeDoctrineAttributes scans source text for PHP 8 ORM attributes on properties.
-// Works directly on source lines because the parser may not handle ::class inside attributes.
-// Returns true if any ORM attributes were found.
-func analyzeDoctrineAttributes(index *symbols.Index, entitySym *symbols.Symbol, source string, cls *parser.ClassNode, resolve func(string) string) bool {
-	lines := strings.Split(source, "\n")
+func analyzeDoctrineAttributes(index *symbols.Index, entitySym *symbols.Symbol, entity doctrineEntity) bool {
 	found := false
-
-	// Scan lines within the class body for property declarations
-	for i := cls.StartLine; i < len(lines); i++ {
-		line := strings.TrimSpace(lines[i])
-
-		// Stop at closing brace of class
-		if line == "}" {
-			break
-		}
-
-		// Find property declarations
-		m := phpPropertyDeclRe.FindStringSubmatch(line)
-		if m == nil {
-			continue
-		}
-		propTypeHint := m[1] // may be empty
-		propName := m[2]     // includes $
-
-		attrBlock := propertyAttributeBlock(lines, i, cls.StartLine)
-
-		// Check for #[ORM\Column]
-		if cm := ormColumnRe.FindStringSubmatch(attrBlock); cm != nil {
+	for _, prop := range entity.class.Properties {
+		if column := entity.attribute(prop.Attributes, "Column"); column != nil {
 			found = true
-			args := cm[1]
-			phpType := resolveColumnType(args, propTypeHint)
-
-			isId := ormIdRe.MatchString(attrBlock)
-			isGenerated := ormGeneratedValueRe.MatchString(attrBlock)
-
-			if !index.RefineProperty(entitySym.FQN+"::"+propName, phpType, isId || isGenerated) {
-				vis := "private"
-				if strings.Contains(line, "public") {
-					vis = "public"
-				} else if strings.Contains(line, "protected") {
-					vis = "protected"
-				}
-				index.AddVirtualMember(entitySym.FQN, &symbols.Symbol{
-					Name:       propName,
-					FQN:        entitySym.FQN + "::" + propName,
-					Kind:       symbols.KindProperty,
-					URI:        entitySym.URI,
-					Visibility: vis,
-					Type:       phpType,
-					IsVirtual:  true,
-					IsReadonly: isId || isGenerated,
-					DocComment: "Doctrine column",
-				})
-			}
+			readonly := entity.attribute(prop.Attributes, "Id") != nil || entity.attribute(prop.Attributes, "GeneratedValue") != nil
+			index.RefineProperty(entitySym.FQN+"::"+prop.Name, resolveColumnType(column, prop.Type.Name), readonly)
 			continue
 		}
-
-		// Check for ORM relation attributes
-		if rm := ormRelationRe.FindStringSubmatch(attrBlock); rm != nil {
+		if relation, ok := entity.relation(prop); ok {
 			found = true
-			relType := rm[1]
-			args := rm[2]
-			injectDoctrineRelation(index, entitySym, strings.TrimPrefix(propName, "$"), relType, args, resolve)
-			continue
+			typeDoctrineRelation(index, entitySym, relation)
 		}
 	}
-
 	return found
 }
 
 // resolveColumnType maps Doctrine column type to PHP type.
-func resolveColumnType(args, propType string) string {
-	// If the property already has a PHP type hint, prefer it
+func resolveColumnType(column *parser.AttributeDef, propType string) string {
 	if propType != "" && propType != "mixed" {
 		return propType
 	}
-	// Extract type from attribute args
-	if m := typeArgRe.FindStringSubmatch(args); m != nil {
-		if phpType, ok := doctrineTypeMap[m[1]]; ok {
-			return phpType
-		}
+	value, _ := column.Args.Get("type", 1)
+	name, ok := parser.StringLiteral(value)
+	if !ok {
+		constant, isConstant := strings.CutPrefix(value, "Types::")
+		name, ok = strings.ToLower(constant), isConstant
+	}
+	if phpType, known := doctrineTypeMap[name]; ok && known {
+		return phpType
 	}
 	return "mixed"
 }
 
-// injectDoctrineRelation creates a virtual property for a Doctrine relation.
-func injectDoctrineRelation(index *symbols.Index, entitySym *symbols.Symbol, propName, relType, args string, resolve func(string) string) {
-	if !strings.HasPrefix(propName, "$") {
-		propName = "$" + propName
+func typeDoctrineRelation(index *symbols.Index, entitySym *symbols.Symbol, relation doctrineRelationProperty) {
+	propType := "mixed"
+	switch {
+	case doctrineSingularRelations[relation.kind] && relation.target != "":
+		propType = "?" + relation.target
+	case doctrinePluralRelations[relation.kind]:
+		propType = doctrineToManyType(relation.target)
 	}
-
-	// Extract target entity
-	targetEntity := ""
-	if m := targetEntityRe.FindStringSubmatch(args); m != nil {
-		targetEntity = resolve(m[1])
-	}
-
-	var propType string
-	if doctrineSingularRelations[relType] {
-		if targetEntity != "" {
-			propType = "?" + targetEntity
-		} else {
-			propType = "mixed"
-		}
-	} else if doctrinePluralRelations[relType] {
-		propType = "Doctrine\\Common\\Collections\\Collection"
-	} else {
-		propType = "mixed"
-	}
-
-	if index.RefineProperty(entitySym.FQN+"::"+propName, propType, false) {
-		return
-	}
-
-	index.AddVirtualMember(entitySym.FQN, &symbols.Symbol{
-		Name:       propName,
-		FQN:        entitySym.FQN + "::" + propName,
-		Kind:       symbols.KindProperty,
-		URI:        entitySym.URI,
-		Visibility: "private",
-		Type:       propType,
-		IsVirtual:  true,
-		DocComment: relType + " relation",
-	})
+	index.RefineProperty(entitySym.FQN+"::"+relation.name, propType, false)
 }
 
-// extractRepositoryClass extracts the repository class FQN from #[ORM\Entity(repositoryClass: ...)]
-func extractRepositoryClass(classSource, docComment string, resolve func(string) string) string {
-	// Check attribute syntax
-	if m := ormEntityRe.FindStringSubmatch(classSource); m != nil && m[1] != "" {
-		if rm := repoClassRe.FindStringSubmatch(m[1]); rm != nil {
-			return resolve(rm[1])
-		}
+func doctrineToManyType(target string) string {
+	if target == "" {
+		return doctrineCollection
 	}
-	// Check annotation syntax
-	if docComment != "" {
-		if m := ormEntityAnnotRe.FindStringSubmatch(docComment); m != nil && m[1] != "" {
-			if rm := repoClassRe.FindStringSubmatch(m[1]); rm != nil {
-				return resolve(rm[1])
-			}
-		}
-	}
-	return ""
+	return doctrineCollection + "<int, " + target + ">"
 }
 
 // injectRepositoryMagicMethods injects findBy*, findOneBy*, countBy* methods
@@ -473,116 +387,47 @@ func parseDoctrineXMLMapping(index *symbols.Index, entitySym *symbols.Symbol, en
 	}
 
 	entity := mapping.Entity
-
-	// Process ID fields
 	for _, field := range entity.Id {
-		phpType := "mixed"
-		if t, ok := doctrineTypeMap[field.Type]; ok {
-			phpType = t
-		}
-		propName := "$" + field.Name
-		index.AddVirtualMember(entityFQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        entityFQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        entitySym.URI,
-			Visibility: "private",
-			Type:       phpType,
-			IsVirtual:  true,
-			IsReadonly: true,
-			DocComment: "Doctrine ID column",
-		})
+		mapDoctrineXMLProperty(index, entitySym, field.Name, doctrineXMLFieldType(field), "Doctrine ID column", true)
 	}
-
-	// Process regular fields
 	for _, field := range entity.Fields {
-		phpType := "mixed"
-		if t, ok := doctrineTypeMap[field.Type]; ok {
-			phpType = t
-		}
-		propName := "$" + field.Name
-		index.AddVirtualMember(entityFQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        entityFQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        entitySym.URI,
-			Visibility: "private",
-			Type:       phpType,
-			IsVirtual:  true,
-			DocComment: "Doctrine column",
-		})
+		mapDoctrineXMLProperty(index, entitySym, field.Name, doctrineXMLFieldType(field), "Doctrine column", false)
 	}
-
-	// Process relations
 	for _, rel := range entity.OneToOne {
-		target := resolve(rel.TargetEntity)
-		propName := "$" + rel.Field
-		index.AddVirtualMember(entityFQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        entityFQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        entitySym.URI,
-			Visibility: "private",
-			Type:       "?" + target,
-			IsVirtual:  true,
-			DocComment: "OneToOne relation",
-		})
+		mapDoctrineXMLProperty(index, entitySym, rel.Field, "?"+resolve(rel.TargetEntity), "OneToOne relation", false)
 	}
 	for _, rel := range entity.ManyToOne {
-		target := resolve(rel.TargetEntity)
-		propName := "$" + rel.Field
-		index.AddVirtualMember(entityFQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        entityFQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        entitySym.URI,
-			Visibility: "private",
-			Type:       "?" + target,
-			IsVirtual:  true,
-			DocComment: "ManyToOne relation",
-		})
+		mapDoctrineXMLProperty(index, entitySym, rel.Field, "?"+resolve(rel.TargetEntity), "ManyToOne relation", false)
 	}
 	for _, rel := range entity.OneToMany {
-		propName := "$" + rel.Field
-		index.AddVirtualMember(entityFQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        entityFQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        entitySym.URI,
-			Visibility: "private",
-			Type:       "Doctrine\\Common\\Collections\\Collection",
-			IsVirtual:  true,
-			DocComment: "OneToMany relation",
-		})
+		mapDoctrineXMLProperty(index, entitySym, rel.Field, doctrineToManyType(resolve(rel.TargetEntity)), "OneToMany relation", false)
 	}
 	for _, rel := range entity.ManyToMany {
-		propName := "$" + rel.Field
-		index.AddVirtualMember(entityFQN, &symbols.Symbol{
-			Name:       propName,
-			FQN:        entityFQN + "::" + propName,
-			Kind:       symbols.KindProperty,
-			URI:        entitySym.URI,
-			Visibility: "private",
-			Type:       "Doctrine\\Common\\Collections\\Collection",
-			IsVirtual:  true,
-			DocComment: "ManyToMany relation",
-		})
+		mapDoctrineXMLProperty(index, entitySym, rel.Field, doctrineToManyType(resolve(rel.TargetEntity)), "ManyToMany relation", false)
 	}
 }
 
-// propertyAttributeBlock returns the property declaration at lines[i] with
-// the attribute lines written above it: up to 6 lines back, stopping at the
-// previous statement (a line ending in `;`, `{` or `}`) or the class's first
-// line, so another property's #[ORM\Id] or #[ORM\ManyToOne] isn't read as
-// this one's.
-func propertyAttributeBlock(lines []string, i, classStart int) string {
-	start := i
-	for start > classStart && start > i-6 {
-		prev := strings.TrimSpace(lines[start-1])
-		if strings.HasSuffix(prev, ";") || strings.HasSuffix(prev, "{") || strings.HasSuffix(prev, "}") {
-			break
-		}
-		start--
+func doctrineXMLFieldType(field doctrineFieldXML) string {
+	if phpType, ok := doctrineTypeMap[field.Type]; ok {
+		return phpType
 	}
-	return strings.Join(lines[start:i+1], "\n")
+	return "mixed"
+}
+
+func mapDoctrineXMLProperty(index *symbols.Index, entitySym *symbols.Symbol, field, phpType, doc string, readonly bool) {
+	propName := "$" + field
+	if index.RefineProperty(entitySym.FQN+"::"+propName, phpType, readonly) {
+		return
+	}
+	index.AddVirtualMember(entitySym.FQN, &symbols.Symbol{
+		Name:       propName,
+		FQN:        entitySym.FQN + "::" + propName,
+		Kind:       symbols.KindProperty,
+		URI:        entitySym.URI,
+		Visibility: "private",
+		Type:       phpType,
+		IsVirtual:  true,
+		IsReadonly: readonly,
+		DocComment: doc,
+	})
 }

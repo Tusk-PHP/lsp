@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -42,7 +43,7 @@ function run(Shelf $s): void {
 }
 `
 	p := NewProvider(idx, nil, "")
-	file := parser.ParseFile(caller)
+	file := parser.ParseFile(caller, token.Latest)
 	for expr, want := range map[string]string{
 		"$s->box()->get()":     "Vendor\\Boxes\\Item",
 		"Shelf::make()->get()": "Vendor\\Boxes\\Item",

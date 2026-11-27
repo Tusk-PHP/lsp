@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 )
@@ -37,7 +38,7 @@ func findLine(source, substr string) int {
 func TestE2ELaravelEloquentChains(t *testing.T) {
 	p := setupLaravelE2E(t)
 	source := laravelControllerSource(t)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	uri := "file:///app/Http/Controllers/CategoryController.php"
 	p.index.IndexFile(uri, source)
 
@@ -138,7 +139,7 @@ func TestE2ELaravelEloquentChains(t *testing.T) {
 func TestE2ELaravelArrayShapes(t *testing.T) {
 	p := setupLaravelE2E(t)
 	source := laravelControllerSource(t)
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	uri := "file:///app/Http/Controllers/CategoryController.php"
 	p.index.IndexFile(uri, source)
 

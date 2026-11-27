@@ -244,7 +244,7 @@ func (t *ViewTypes) qualify(typ, uri string, st *typingState) string {
 	if !ok {
 		f.source = t.source(uri)
 		if f.source != "" {
-			f.file = parser.ParseFile(f.source)
+			f.file = parser.ParseFileIn(f.source, t.Index.GrammarOf(uri))
 		}
 		st.files[uri] = f
 	}
@@ -351,7 +351,7 @@ func (t *ViewTypes) siteType(site ViewVar, st *typingState) string {
 	if !ok {
 		f.source = t.source(site.URI)
 		if f.source != "" {
-			f.file = parser.ParseFile(f.source)
+			f.file = parser.ParseFileIn(f.source, t.Index.GrammarOf(site.URI))
 		}
 		st.files[site.URI] = f
 	}

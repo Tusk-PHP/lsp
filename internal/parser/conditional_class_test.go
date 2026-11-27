@@ -1,6 +1,9 @@
 package parser
 
-import "testing"
+import (
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+	"testing"
+)
 
 func TestClassDeclaredInBlockIsConditional(t *testing.T) {
 	source := `<?php
@@ -39,7 +42,7 @@ namespace Other {
 }
 `
 	want := map[string]bool{"Client": true, "Plain": false, "AfterNamespace": false}
-	file := ParseFile(source)
+	file := ParseFile(source, token.Latest)
 	if len(file.Classes) != len(want) {
 		t.Fatalf("want %d classes, got %+v", len(want), file.Classes)
 	}

@@ -66,6 +66,7 @@ type Bootstrapped struct {
 	modelMu          sync.RWMutex
 	modelsAnalyzed   bool
 	migrationColumns map[string]map[string]*models.MigrationColumn
+	castDependents   castDependents
 }
 
 func New(opts Options) *Bootstrapped {
@@ -74,7 +75,7 @@ func New(opts Options) *Bootstrapped {
 		cfg = config.DefaultConfig()
 	}
 
-	index := symbols.NewIndex()
+	index := symbols.NewIndexFor(opts.BuiltinProfile.Grammars)
 	index.RegisterBuiltinsForProfile(opts.BuiltinProfile)
 	index.SetOptionalNamespaces(composer.SuggestedNamespaces(opts.RootPath))
 	if opts.Framework == "magento" {
@@ -86,14 +87,14 @@ func New(opts Options) *Bootstrapped {
 	var viewData *frameworklaravel.ViewData
 	var commands *frameworksymfony.CommandIndex
 	if opts.Framework == "symfony" {
-		commands = frameworksymfony.NewCommandIndex()
+		commands = frameworksymfony.NewCommandIndex(index.Grammars())
 	}
 	if opts.Framework == "laravel" {
 		index.SetCallForwards(frameworklaravel.CallForwards())
 		index.SetScopeConventions(frameworklaravel.ScopeConventions())
-		routeIndex = frameworklaravel.NewRouteIndex(opts.RootPath)
+		routeIndex = frameworklaravel.NewRouteIndex(opts.RootPath, index.Grammars)
 		viewData = frameworklaravel.NewViewData(opts.RootPath)
-		aliases = frameworklaravel.NewAliases(opts.RootPath)
+		aliases = frameworklaravel.NewAliases(opts.RootPath, index.Grammars)
 		index.SetClassGenerator(aliases)
 	}
 
@@ -326,7 +327,7 @@ func (ws *Bootstrapped) AnalyzeModelClasses() {
 	}
 	switch ws.Framework {
 	case "laravel":
-		models.AnalyzeEloquentModels(ws.Index, ws.RootPath)
+		ws.castDependents.replaceAll(models.AnalyzeEloquentModels(ws.Index, ws.RootPath))
 	case "symfony":
 		models.AnalyzeDoctrineEntities(ws.Index, ws.RootPath)
 	}
@@ -341,7 +342,7 @@ func (ws *Bootstrapped) AnalyzeModelSchema() {
 	var migrationColumns map[string]map[string]*models.MigrationColumn
 	if ws.Framework == "laravel" && (schema == nil || schema.Source != models.SchemaSourceMigrations) {
 		migrationColumns = models.ScanMigrationColumns(ws.RootPath)
-		models.InjectMigrationColumns(ws.Index, ws.RootPath, migrationColumns)
+		models.InjectMigrationColumns(ws.Index, migrationColumns)
 	}
 	ws.modelMu.Lock()
 	ws.Schema = schema
@@ -386,7 +387,7 @@ func (ws *Bootstrapped) AnalyzeModelFile(uri, source string) {
 	if !analyzed {
 		return
 	}
-	models.AnalyzeModelFile(ws.Index, ws.RootPath, ws.Framework, uri, source, schema, migrationColumns)
+	ws.castDependents.set(uri, models.AnalyzeModelFile(ws.Index, ws.RootPath, ws.Framework, uri, source, schema, migrationColumns))
 }
 
 // SchemaIsLive reports whether the database columns given to models were

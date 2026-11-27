@@ -63,7 +63,7 @@ func (l autoloader) Loaded(class symbols.LoadedClass) {
 	if class.From != symbols.SourceProject {
 		return
 	}
-	models.AnalyzeModelFile(l.ws.Index, l.ws.RootPath, l.ws.Framework, class.URI, class.Source, nil, nil)
+	l.ws.castDependents.set(class.URI, models.AnalyzeModelFile(l.ws.Index, l.ws.RootPath, l.ws.Framework, class.URI, class.Source, nil, nil))
 }
 
 func (ws *Bootstrapped) walkerReaches(path string) bool {
