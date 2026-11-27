@@ -1,6 +1,9 @@
 package parser
 
-import "testing"
+import (
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+	"testing"
+)
 
 // PHP 8.6 attaches a doc comment to a parameter, written before it or after
 // it before the comma.
@@ -14,7 +17,7 @@ function f(
     $d,
     /** Last. */ $e
 ) {}
-`)
+`, token.Latest)
 	if len(file.Functions) != 1 {
 		t.Fatalf("functions: %d", len(file.Functions))
 	}

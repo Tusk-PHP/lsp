@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -72,7 +73,7 @@ func setupBoxResolver(t *testing.T, src string) (*Resolver, *parser.FileNode, []
 	t.Helper()
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///box.php", src)
-	file := parser.ParseFile(src)
+	file := parser.ParseFile(src, token.Latest)
 	if file == nil {
 		t.Fatal("expected parsed file")
 	}

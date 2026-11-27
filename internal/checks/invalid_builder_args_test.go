@@ -1,11 +1,13 @@
 package checks
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
@@ -101,7 +103,7 @@ func TestInvalidBuilderArgRule(t *testing.T) {
 use App\Models\Category;
 Category::where('nonexistent', 'value');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unknown-column"})
 		if !strings.Contains(findings[0].Message, "nonexistent") {
@@ -114,7 +116,7 @@ Category::where('nonexistent', 'value');
 use App\Models\Category;
 Category::where('name', 'value');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -124,7 +126,7 @@ Category::where('name', 'value');
 use App\Models\Category;
 Category::with('nonexistent');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unknown-relation"})
 	})
@@ -134,7 +136,7 @@ Category::with('nonexistent');
 use App\Models\Category;
 Category::with('products');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -144,7 +146,7 @@ Category::with('products');
 use App\Models\Category;
 Category::get(['nonexistent']);
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unknown-column"})
 	})
@@ -154,7 +156,7 @@ Category::get(['nonexistent']);
 use App\Models\Category;
 Category::get(['id', 'name']);
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -164,7 +166,7 @@ Category::get(['id', 'name']);
 use App\Models\Category;
 Category::with(['products', 'bad']);
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unknown-relation"})
 		if !strings.Contains(findings[0].Message, "bad") {
@@ -177,7 +179,7 @@ Category::with(['products', 'bad']);
 use App\Models\Category;
 Category::withCount(['products as cnt']);
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -187,7 +189,7 @@ Category::withCount(['products as cnt']);
 use App\Models\Category;
 Category::where('na
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -196,7 +198,7 @@ Category::where('na
 		source := `<?php
 $container->get('service');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -206,7 +208,7 @@ $container->get('service');
 use App\Models\Product;
 Product::orderBy('title');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -217,7 +219,7 @@ use App\Models\Product;
 Product::selectRaw('count(*) as total')->orderBy('total');
 Product::withCount('category')->having('category_count', '>', 1);
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -227,7 +229,7 @@ Product::withCount('category')->having('category_count', '>', 1);
 use App\Models\Category;
 Category::where('bad_col', 'x');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %d", len(findings))
@@ -237,14 +239,13 @@ Category::where('bad_col', 'x');
 		}
 	})
 
-	t.Run("dot notation validates first segment", func(t *testing.T) {
+	t.Run("dot notation validates every segment", func(t *testing.T) {
 		source := `<?php
 use App\Models\Category;
-Category::with('products.tags');
+Category::with('products.category');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
-		// 'products' exists as relation, so first segment is valid
 		assertNoFindings(t, findings)
 	})
 
@@ -253,7 +254,7 @@ Category::with('products.tags');
 use App\Models\Category;
 Category::with('nonexistent.tags');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unknown-relation"})
 	})
@@ -263,7 +264,7 @@ Category::with('nonexistent.tags');
 use App\Models\Category;
 Category::withSum('products', 'price');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -273,7 +274,7 @@ Category::withSum('products', 'price');
 use App\Models\Category;
 Category::withSum('products', 'nonexistent');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertFindingCodes(t, findings, []string{"unknown-column"})
 		if !strings.Contains(findings[0].Message, "Product") {
@@ -286,7 +287,7 @@ Category::withSum('products', 'nonexistent');
 use App\Models\Category;
 Category::withAvg('products', 'price');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		assertNoFindings(t, findings)
 	})
@@ -296,7 +297,7 @@ Category::withAvg('products', 'price');
 use App\Models\Category;
 Category::orderBy('relation.column');
 `
-		file := parser.ParseFile(source)
+		file := parser.ParseFile(source, token.Latest)
 		findings := checker.Check(file, source, nil)
 		// Dot-notation in column methods is join-qualified — skip validation
 		assertNoFindings(t, findings)
@@ -306,6 +307,35 @@ Category::orderBy('relation.column');
 // TestInvalidBuilderArgRuleStaysQuietWhenUnsure covers code the rule can't
 // judge: calls in comments and strings, arguments that are not plain names,
 // and models whose columns or relations aren't all known.
+func TestInvalidBuilderArgRuleFollowsRelationPaths(t *testing.T) {
+	checker := setupBuilderArgRule()
+	members := checker.Members.(*mockMemberChecker)
+	members.relatedModel["App\\Models\\Category"]["unknownTarget"] = ""
+	members.relations["App\\Models\\Category"]["unknownTarget"] = true
+	members.columns["App\\Models\\Partial"] = map[string]bool{}
+	members.partial = map[string]bool{"App\\Models\\Partial": true}
+	members.relatedModel["App\\Models\\Category"]["partial"] = "App\\Models\\Partial"
+	members.relations["App\\Models\\Category"]["partial"] = true
+	for source, want := range map[string]string{
+		"Category::with('products.category');":                   "",
+		"Category::with('products.category.products:id,title');": "",
+		"Category::with('products.missing');":                    "Unknown relation 'missing' on model 'Product'",
+		"Category::whereHas('products.category.missing');":       "Unknown relation 'missing' on model 'Category'",
+		"Category::with('unknownTarget.anything');":              "",
+		"Category::with('partial.anything');":                    "",
+		"Category::with('products.');":                           "",
+	} {
+		src := "<?php\nuse App\\Models\\Category;\n" + source + "\n"
+		var got []string
+		for _, f := range checker.Check(parser.ParseFile(src, token.Latest), src, nil) {
+			got = append(got, f.Message)
+		}
+		if strings.Join(got, "\n") != want {
+			t.Errorf("%s: got %v, want %q", source, got, want)
+		}
+	}
+}
+
 func TestInvalidBuilderArgRuleStaysQuietWhenUnsure(t *testing.T) {
 	checker := setupBuilderArgRule()
 	checker.Members.(*mockMemberChecker).columns["App\\Models\\Draft"] = map[string]bool{"id": true}
@@ -335,7 +365,7 @@ Category::with('products:id,title');
 Draft::where('not_in_migrations', 1);
 Draft::with('fromAnUnindexedTrait');
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	assertNoFindings(t, checker.Check(file, source, nil))
 }
 
@@ -352,7 +382,7 @@ func TestInvalidBuilderArgRulePassesCallPrefix(t *testing.T) {
 	source := `<?php
 Category::query()->where('name', 1)->with('products');
 `
-	file := parser.ParseFile(source)
+	file := parser.ParseFile(source, token.Latest)
 	checker.Check(file, source, nil)
 	want := []string{
 		"Category::query()->where(",
@@ -360,5 +390,31 @@ Category::query()->where('name', 1)->with('products');
 	}
 	if strings.Join(prefixes, "|") != strings.Join(want, "|") {
 		t.Errorf("prefixes: want %q, got %q", want, prefixes)
+	}
+}
+
+func TestInvalidBuilderArgReadsArgumentsFromTheTree(t *testing.T) {
+	checker := setupBuilderArgRule()
+	source := `<?php
+use App\Models\Category;
+Category::query()->select(['name', 'nope', 'name' => 'alias'])->with(['products' => fn ($q) => $q, 'gone']);
+Category::with(
+    'missingOnNextLine');
+Category::withSum('products', 'cost')->get("absent")->where($column)->select();
+// Category::where('commented');
+$s = "Category::where('quoted')";
+`
+	var got []string
+	for _, f := range checker.Check(parser.ParseFile(source, token.Latest), source, nil) {
+		got = append(got, fmt.Sprintf("%d:%d-%d %s", f.StartLine, f.StartCol, f.EndCol, f.Message))
+	}
+	want := []string{
+		"2:36-40 Unknown column 'nope' on model 'Category'",
+		"2:100-104 Unknown relation 'gone' on model 'Category'",
+		"5:31-35 Unknown column 'cost' on related model 'Product'",
+		"5:44-50 Unknown column 'absent' on model 'Category'",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got\n%s", strings.Join(got, "\n"))
 	}
 }

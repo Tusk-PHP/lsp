@@ -2,11 +2,11 @@ package checks
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -81,6 +81,7 @@ var aggregateRelationMethods = map[string]bool{
 type InvalidBuilderArgRule struct {
 	ModelResolver ModelResolverFunc
 	Members       MemberChecker
+	Shared        *Shared
 }
 
 func (r *InvalidBuilderArgRule) Codes() []rule.Code {
@@ -91,17 +92,17 @@ func (r *InvalidBuilderArgRule) Check(file *parser.FileNode, source string, _ *s
 	if r.ModelResolver == nil || r.Members == nil || file == nil {
 		return nil
 	}
-	lines := strings.Split(source, "\n")
+	syntax := r.Shared.tree(source, file.Grammar)
 	var findings []Finding
-
-	mask := newMaskState(source)
 	joins := &builderJoins{source: source}
-	for i, line := range lines {
-		code := maskPHPLine(line, &mask)
-		if !strings.Contains(code, "->") && !strings.Contains(code, "::") {
+	for _, m := range syntax.references().members {
+		if !m.call() || len(m.args.Args) == 0 {
 			continue
 		}
-		findings = append(findings, r.checkLine(line, code, i, source, file, joins)...)
+		method := syntax.text(m.name)
+		if builderRelationMethods[method] || builderColumnMethods[method] || builderDBColumnMethods[method] {
+			findings = append(findings, r.checkCall(syntax, m, method, source, file, joins)...)
+		}
 	}
 	return findings
 }
@@ -120,19 +121,47 @@ func (j *builderJoins) mayBeJoined(line, col int) bool {
 	return frameworklaravel.BuilderMayBeJoined(j.tokens, j.doc, line, col)
 }
 
-// callPrefix returns the line up to and including the opening parenthesis of
-// the call a match starts at (its `->` or `::`), or false when that operator
-// is inside a comment or string rather than code.
-func callPrefix(line, code string, match []int) (string, bool) {
-	start, nameEnd := match[0], match[3]
-	if code[start:start+2] != line[start:start+2] {
-		return "", false
+func (r *InvalidBuilderArgRule) checkCall(syntax *fileSyntax, call memberReference, method, source string, file *parser.FileNode, joins *builderJoins) []Finding {
+	lineNum := syntax.line(call.name)
+	prefix := source[syntax.lines[syntax.line(call.args)] : call.args.Start+1]
+	at := builderCall{line: lineNum, prefix: prefix}
+	at.operatorLine, at.operatorCol = syntax.lines.Position(syntax.memberOperator(call.name))
+	onNameLine := func(n ast.Node) bool {
+		start, _ := syntax.lines.Position(n.Bounds().Start)
+		end, _ := syntax.lines.Position(n.Bounds().End)
+		return start == lineNum && end == lineNum
 	}
-	open := strings.IndexByte(line[nameEnd:], '(')
-	if open < 0 {
-		return "", false
+	var findings []Finding
+	add := func(f *Finding) {
+		if f != nil {
+			findings = append(findings, *f)
+		}
 	}
-	return line[:nameEnd+open+1], true
+	args := call.args.Args
+	first := args[0].Value
+	if relation, ok := syntax.stringLiteral(first); ok && onNameLine(first) {
+		if len(args) > 1 && aggregateRelationMethods[method] {
+			if column, ok := syntax.stringLiteral(args[1].Value); ok && onNameLine(args[1].Value) {
+				startCol, endCol := syntax.stringContent(args[1].Value)
+				add(r.validateAggregateSecondArg(method, relation, column, lineNum, startCol, endCol, prefix, source, file))
+			}
+		}
+		startCol, endCol := syntax.stringContent(first)
+		add(r.validateArg(method, relation, at, startCol, endCol, source, file, joins))
+	}
+	if array, ok := first.(*ast.Array); ok && onNameLine(array) {
+		for _, item := range array.Items {
+			name := item.Key
+			if name == nil {
+				name = item.Value
+			}
+			if value, ok := syntax.stringLiteral(name); ok {
+				startCol, endCol := syntax.stringContent(name)
+				add(r.validateArg(method, stripAlias(value), at, startCol, endCol, source, file, joins))
+			}
+		}
+	}
+	return findings
 }
 
 // isPlainName reports whether s is a bare column or relation name. Anything
@@ -149,95 +178,6 @@ func isPlainName(s string) bool {
 		return false
 	}
 	return true
-}
-
-// Matches ->method('arg') or ::method('arg') with a completed single-quoted string.
-var directArgSingleRe = regexp.MustCompile(`(?:->|::)(\w+)\s*\(\s*'([^']*)'`)
-
-// Matches ->method("arg") or ::method("arg") with a completed double-quoted string.
-var directArgDoubleRe = regexp.MustCompile(`(?:->|::)(\w+)\s*\(\s*"([^"]*)"`)
-
-// Matches string literals inside array arguments: ['val1', 'val2']
-var arrayArgRe = regexp.MustCompile(`(?:->|::)(\w+)\s*\(\s*\[([^\]]*)\]`)
-
-// Matches individual single-quoted strings.
-var singleQuotedRe = regexp.MustCompile(`'([^']*)'`)
-
-// Matches individual double-quoted strings.
-var doubleQuotedRe = regexp.MustCompile(`"([^"]*)"`)
-
-// Matches two-arg pattern: ->withSum('relation', 'column') — captures method, first and second args.
-var twoArgSingleRe = regexp.MustCompile(`(?:->|::)(\w+)\s*\(\s*'([^']*)'\s*,\s*'([^']*)'`)
-var twoArgDoubleRe = regexp.MustCompile(`(?:->|::)(\w+)\s*\(\s*"([^"]*)"\s*,\s*"([^"]*)"`)
-
-func (r *InvalidBuilderArgRule) checkLine(line, code string, lineNum int, source string, file *parser.FileNode, joins *builderJoins) []Finding {
-	var findings []Finding
-
-	// Check aggregate two-arg methods first: ->withSum('relation', 'column')
-	for _, re := range []*regexp.Regexp{twoArgSingleRe, twoArgDoubleRe} {
-		for _, match := range re.FindAllStringSubmatchIndex(line, -1) {
-			method := line[match[2]:match[3]]
-			if !aggregateRelationMethods[method] {
-				continue
-			}
-			prefix, ok := callPrefix(line, code, match)
-			if !ok {
-				continue
-			}
-			firstArg := line[match[4]:match[5]]
-			secondArg := line[match[6]:match[7]]
-			secondStart := match[6]
-			secondEnd := match[7]
-
-			if f := r.validateAggregateSecondArg(method, firstArg, secondArg, lineNum, secondStart, secondEnd, prefix, source, file); f != nil {
-				findings = append(findings, *f)
-			}
-		}
-	}
-
-	// Check direct string arguments: ->where('column_name', or ->where("column_name",
-	for _, re := range []*regexp.Regexp{directArgSingleRe, directArgDoubleRe} {
-		for _, match := range re.FindAllStringSubmatchIndex(line, -1) {
-			method := line[match[2]:match[3]]
-			argValue := line[match[4]:match[5]]
-			argStart := match[4]
-			argEnd := match[5]
-			prefix, ok := callPrefix(line, code, match)
-			if !ok {
-				continue
-			}
-
-			if f := r.validateArg(method, argValue, builderCall{lineNum, match[0], prefix}, argStart, argEnd, source, file, joins); f != nil {
-				findings = append(findings, *f)
-			}
-		}
-	}
-
-	// Check array arguments: ->with(['products', 'category'])
-	for _, match := range arrayArgRe.FindAllStringSubmatchIndex(line, -1) {
-		method := line[match[2]:match[3]]
-		arrayContent := line[match[4]:match[5]]
-		prefix, ok := callPrefix(line, code, match)
-		if !ok {
-			continue
-		}
-
-		// Extract each quoted string from the array
-		for _, re := range []*regexp.Regexp{singleQuotedRe, doubleQuotedRe} {
-			for _, strMatch := range re.FindAllStringSubmatchIndex(arrayContent, -1) {
-				argValue := arrayContent[strMatch[2]:strMatch[3]]
-				absStart := match[4] + strMatch[2]
-				absEnd := match[4] + strMatch[3]
-
-				cleaned := stripAlias(argValue)
-				if f := r.validateArg(method, cleaned, builderCall{lineNum, match[0], prefix}, absStart, absEnd, source, file, joins); f != nil {
-					findings = append(findings, *f)
-				}
-			}
-		}
-	}
-
-	return findings
 }
 
 // validateAggregateSecondArg validates the second argument of aggregate methods
@@ -273,9 +213,10 @@ func (r *InvalidBuilderArgRule) validateAggregateSecondArg(method, relationName,
 }
 
 type builderCall struct {
-	line     int
-	operator int
-	prefix   string
+	line         int
+	operatorLine int
+	operatorCol  int
+	prefix       string
 }
 
 func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builderCall, startCol, endCol int, source string, file *parser.FileNode, joins *builderJoins) *Finding {
@@ -296,30 +237,29 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 		return nil
 	}
 
-	// For dot-notation, validate the first segment only
-	segments := strings.SplitN(argValue, ".", 2)
-	checkName := segments[0]
-
-	// Column methods with dot-notation are join-qualified — skip
-	if len(segments) > 1 && !isRelMethod {
-		return nil
-	}
-
 	// Handle closure-based array syntax: 'products' => function($q) {...}
 	// The regex captures 'products' before '=>', strip anything after =>
-	if idx := strings.Index(checkName, " =>"); idx >= 0 {
-		checkName = checkName[:idx]
+	if idx := strings.Index(argValue, " =>"); idx >= 0 {
+		argValue = argValue[:idx]
 	}
 	// `with('posts:id,title')` loads only those columns of the relation.
 	if isRelMethod {
-		if idx := strings.IndexByte(checkName, ':'); idx >= 0 {
-			checkName = checkName[:idx]
+		if idx := strings.IndexByte(argValue, ':'); idx >= 0 {
+			argValue = argValue[:idx]
 		}
 	}
-	checkName = strings.TrimSpace(checkName)
-	if !isPlainName(checkName) {
+	path := strings.Split(strings.TrimSpace(argValue), ".")
+
+	// Column methods with dot-notation are join-qualified — skip
+	if len(path) > 1 && !isRelMethod {
 		return nil
 	}
+	for _, name := range path {
+		if !isPlainName(name) {
+			return nil
+		}
+	}
+	checkName := path[0]
 
 	// Resolve the model from the line up to the method call
 	model := r.ModelResolver(call.prefix, method, source, call.line, file)
@@ -333,10 +273,7 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 
 	var msg string
 	if isRelMethod {
-		if !r.Members.IsRelation(modelFQN, checkName) {
-			short := shortName(modelFQN)
-			msg = fmt.Sprintf("Unknown relation '%s' on model '%s'", checkName, short)
-		}
+		msg = r.unknownRelationInPath(modelFQN, path)
 	} else if isDBColMethod {
 		if !r.Members.IsDBColumn(modelFQN, checkName) {
 			short := shortName(modelFQN)
@@ -352,7 +289,7 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 	if msg == "" {
 		return nil
 	}
-	if !isRelMethod && (model.OtherTables || joins.mayBeJoined(call.line, call.operator)) {
+	if !isRelMethod && (model.OtherTables || joins.mayBeJoined(call.operatorLine, call.operatorCol)) {
 		return nil
 	}
 
@@ -370,6 +307,26 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 		Code:      code,
 		Message:   msg,
 	}
+}
+
+// unknownRelationInPath follows a relation path such as products.reviews
+// from model and describes the first name that isn't a relation of the
+// model reached so far. It stops quietly at a relation whose model it can't
+// tell or whose relations it doesn't all know.
+func (r *InvalidBuilderArgRule) unknownRelationInPath(modelFQN string, path []string) string {
+	current := modelFQN
+	for i, name := range path {
+		if i > 0 {
+			current = r.Members.RelatedModelFQN(current, path[i-1])
+			if current == "" || !r.Members.KnowsRelations(current) {
+				return ""
+			}
+		}
+		if !r.Members.IsRelation(current, name) {
+			return fmt.Sprintf("Unknown relation '%s' on model '%s'", name, shortName(current))
+		}
+	}
+	return ""
 }
 
 // stripAlias removes " as alias" from a string (e.g., "products as cnt" → "products").
