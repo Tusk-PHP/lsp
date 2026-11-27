@@ -4,9 +4,9 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // BuilderModel finds the Eloquent model a builder call is made on, from
@@ -15,7 +15,7 @@ import (
 // model of $query's builder. Completion uses it for column and relation
 // names, and the unknown-column and unknown-relation diagnostics to check
 // them.
-func BuilderModel(r *resolve.Resolver, index *symbols.Index, prefix, method, source string, pos protocol.Position, file *parser.FileNode) QueriedModel {
+func BuilderModel(r *resolve.Resolver, index *symbols.Index, prefix, method, source string, pos textpos.Position, file *parser.FileNode) QueriedModel {
 	trimmed := strings.TrimSpace(prefix)
 
 	// The last ->method( or ::method( in the prefix.

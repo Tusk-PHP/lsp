@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // A catch variable has the type of the class it catches, or the union of
@@ -49,7 +49,7 @@ function run(bool $f): void {
 	at := func(v, marker string) string {
 		for i, l := range lines {
 			if strings.HasSuffix(l, "// "+marker) {
-				return r.ResolveVariableTypeTyped(v, lines, protocol.Position{Line: i, Character: strings.Index(l, v) + 2}, file).FullString()
+				return r.ResolveVariableTypeTyped(v, lines, textpos.Position{Line: i, Character: strings.Index(l, v) + 2}, file).FullString()
 			}
 		}
 		t.Fatalf("no line marked %q", marker)

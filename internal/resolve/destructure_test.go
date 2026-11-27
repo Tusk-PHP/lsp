@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // A variable written by a destructuring has whatever element it takes, which
@@ -40,7 +40,7 @@ class Holder {
 	at := func(v, marker string) string {
 		for i, l := range lines {
 			if strings.HasSuffix(l, "// "+marker) {
-				return r.ResolveVariableTypeTyped(v, lines, protocol.Position{Line: i, Character: strings.Index(l, v) + 2}, file).FullString()
+				return r.ResolveVariableTypeTyped(v, lines, textpos.Position{Line: i, Character: strings.Index(l, v) + 2}, file).FullString()
 			}
 		}
 		t.Fatalf("no line marked %q", marker)

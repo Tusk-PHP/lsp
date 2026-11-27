@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/scope"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // variableScope says where a variable lives, so that type lookups don't pick up
@@ -15,7 +15,7 @@ type variableScope struct {
 	inClosure  bool // the enclosing method's parameters aren't visible
 	isLocal    bool // it's bound in the enclosing function, method or closure
 	param      *scope.Binding
-	capturedAt *protocol.Position // resolve it here instead: it comes from the parent scope
+	capturedAt *textpos.Position // resolve it here instead: it comes from the parent scope
 	// reassigned: a parameter given a new value before the read, so its type
 	// comes from the values that reach it, not only its declaration.
 	reassigned bool
@@ -27,7 +27,7 @@ type variableScope struct {
 	write *scope.WriteSite
 	// readPos is where the binding is read, and inRHS is set when that's in
 	// the right-hand side of an assignment to it, before it takes effect.
-	readPos protocol.Position
+	readPos textpos.Position
 	inRHS   bool
 }
 
@@ -36,7 +36,7 @@ type variableScope struct {
 // diagnostics ask about a whole line, or as the line after a multi-line
 // assignment is asked about, reads after that assignment; anywhere else in a
 // right-hand side reads before it.
-func readPosition(b *scope.Binding, lines []string, pos protocol.Position) (protocol.Position, bool) {
+func readPosition(b *scope.Binding, lines []string, pos textpos.Position) (textpos.Position, bool) {
 	site, ok := b.AssignmentAround(pos)
 	if !ok {
 		return pos, false
@@ -75,7 +75,7 @@ func (r *Resolver) ScopeDocument(lines []string) *scope.Document {
 	return r.scopeDocument(lines)
 }
 
-func (r *Resolver) variableScopeAt(varName string, lines []string, pos protocol.Position) variableScope {
+func (r *Resolver) variableScopeAt(varName string, lines []string, pos textpos.Position) variableScope {
 	doc := r.scopeDocument(lines)
 	s := doc.ScopeAt(pos)
 	if s == nil {
@@ -169,9 +169,9 @@ func (vs *variableScope) closureParts(s *scope.Scope, binding *scope.Binding) {
 		}
 	case binding != nil && binding.Kind == scope.BindingClosureUse, binding == nil && s.ExprBody:
 		// `use ($x)`, or an arrow function reading its parent's variable.
-		parent := protocol.Position{Line: s.Range.Start.Line, Character: s.Range.Start.Character - 1}
+		parent := textpos.Position{Line: s.Range.Start.Line, Character: s.Range.Start.Character - 1}
 		if parent.Character < 0 {
-			parent = protocol.Position{Line: s.Range.Start.Line - 1, Character: 1 << 30}
+			parent = textpos.Position{Line: s.Range.Start.Line - 1, Character: 1 << 30}
 		}
 		if parent.Line >= 0 {
 			vs.capturedAt = &parent
@@ -181,7 +181,7 @@ func (vs *variableScope) closureParts(s *scope.Scope, binding *scope.Binding) {
 
 // closureThisAt returns what $this is at pos when pos is inside a closure
 // passed for a parameter tagged @param-closure-this.
-func (r *Resolver) closureThisAt(lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) closureThisAt(lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	s := r.scopeDocument(lines).ScopeAt(pos)
 	for ; s != nil; s = s.Parent {
 		if s.Kind != scope.ScopeClosure {
@@ -196,7 +196,7 @@ func (r *Resolver) closureThisAt(lines []string, pos protocol.Position, file *pa
 
 // IsLocalVariable reports whether the variable is bound in the function, method
 // or closure at pos, whether or not its type can be worked out.
-func (r *Resolver) IsLocalVariable(varName string, lines []string, pos protocol.Position) bool {
+func (r *Resolver) IsLocalVariable(varName string, lines []string, pos textpos.Position) bool {
 	vs := r.variableScopeAt(varName, lines, pos)
 	if vs.capturedAt != nil {
 		return r.IsLocalVariable(varName, lines, *vs.capturedAt)

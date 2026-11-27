@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 const firstClassCallableSource = `<?php
@@ -72,7 +72,7 @@ func TestFirstClassCallableVariable(t *testing.T) {
 	r := NewResolver(idx)
 	file := parser.ParseFile(src)
 	lines := SplitLines(src)
-	end := protocol.Position{Line: len(lines) - 2}
+	end := textpos.Position{Line: len(lines) - 2}
 	for name, want := range map[string]string{
 		"$r":     "App\\Foo",
 		"$again": "Closure(int): App\\Foo",

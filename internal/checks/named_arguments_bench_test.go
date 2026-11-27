@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func BenchmarkUnknownNamedArgument(b *testing.B) {
@@ -28,7 +28,7 @@ class User { public function rename(string $name): void {} public function repo(
 	file := parser.ParseFile(source)
 	types := resolve.NewChainEngine(idx)
 	resolver := func(expr, source string, line, col int, file *parser.FileNode) string {
-		return types.DiagnosticType(expr, source, protocol.Position{Line: line, Character: col}, file)
+		return types.DiagnosticType(expr, source, textpos.Position{Line: line, Character: col}, file)
 	}
 	b.ReportAllocs()
 	for b.Loop() {

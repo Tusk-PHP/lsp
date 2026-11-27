@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // TranslationEntry is a single discovered translation key with its location.
@@ -17,7 +18,7 @@ type TranslationEntry struct {
 	Locale string
 	File   string
 	URI    string
-	Range  protocol.Range
+	Range  textpos.Range
 }
 
 // TranslationContext holds the context detected at the cursor position inside
@@ -452,9 +453,9 @@ func parseYAMLTranslationContent(src, domain, locale, file, uri string) []Transl
 		// It's a leaf: compute range and add entry
 		// Find the column of the key on this line
 		keyCol := indent
-		rng := protocol.Range{
-			Start: protocol.Position{Line: lineNo, Character: keyCol},
-			End:   protocol.Position{Line: lineNo, Character: keyCol + len(key)},
+		rng := textpos.Range{
+			Start: textpos.Position{Line: lineNo, Character: keyCol},
+			End:   textpos.Position{Line: lineNo, Character: keyCol + len(key)},
 		}
 		_ = starts // use offset-based if needed; line-number is simpler here
 
@@ -692,8 +693,8 @@ func (p *phpSymfonyTranslationParser) skipValue(idx int) int {
 	return idx
 }
 
-func (p *phpSymfonyTranslationParser) rangeForOffsets(start, end int) protocol.Range {
-	return protocol.Range{
+func (p *phpSymfonyTranslationParser) rangeForOffsets(start, end int) textpos.Range {
+	return textpos.Range{
 		Start: xliffOffsetPosition(p.lineStarts, start),
 		End:   xliffOffsetPosition(p.lineStarts, end),
 	}
@@ -814,28 +815,28 @@ func parseXLIFFContent(src, domain, locale, file, uri string) []TranslationEntry
 
 // findXLIFFKeyRange finds the source element text range within the XLIFF source,
 // searching for the id attribute value or the source element content.
-func findXLIFFKeyRange(src, id string) protocol.Range {
+func findXLIFFKeyRange(src, id string) textpos.Range {
 	if id == "" {
-		return protocol.Range{}
+		return textpos.Range{}
 	}
 	needle := `id="` + id + `"`
 	offset := strings.Index(src, needle)
 	if offset < 0 {
-		return protocol.Range{}
+		return textpos.Range{}
 	}
 	valueOffset := offset + 4 // after id="
 	starts := yamlLineStarts(src)
 	start := xliffOffsetPosition(starts, valueOffset)
 	end := xliffOffsetPosition(starts, valueOffset+len(id))
-	return protocol.Range{Start: start, End: end}
+	return textpos.Range{Start: start, End: end}
 }
 
-func xliffOffsetPosition(starts []int, offset int) protocol.Position {
+func xliffOffsetPosition(starts []int, offset int) textpos.Position {
 	line := sort.Search(len(starts), func(i int) bool { return starts[i] > offset }) - 1
 	if line < 0 {
 		line = 0
 	}
-	return protocol.Position{
+	return textpos.Position{
 		Line:      line,
 		Character: offset - starts[line],
 	}

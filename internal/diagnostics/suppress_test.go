@@ -7,6 +7,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func codesAt(diags []protocol.Diagnostic) map[int][]string {
@@ -50,9 +51,9 @@ func TestInlineSuppressionDropsToolFindings(t *testing.T) {
 	uri := "file:///tmp/tool.php"
 	source := "<?php\n// @tusk-ignore phpstan:argument.type\nstrlen(1);\nstrlen(2); // @tusk-ignore phpstan\nstrlen(3);\n"
 	p.toolResults[uri] = []protocol.Diagnostic{
-		{Range: protocol.Range{Start: protocol.Position{Line: 2}}, Source: "phpstan", Code: "argument.type", Message: "a"},
-		{Range: protocol.Range{Start: protocol.Position{Line: 3}}, Source: "phpstan", Code: "argument.type", Message: "b"},
-		{Range: protocol.Range{Start: protocol.Position{Line: 4}}, Source: "phpstan", Code: "argument.type", Message: "c"},
+		{Range: textpos.Range{Start: textpos.Position{Line: 2}}, Source: "phpstan", Code: "argument.type", Message: "a"},
+		{Range: textpos.Range{Start: textpos.Position{Line: 3}}, Source: "phpstan", Code: "argument.type", Message: "b"},
+		{Range: textpos.Range{Start: textpos.Position{Line: 4}}, Source: "phpstan", Code: "argument.type", Message: "c"},
 	}
 	diags := p.Analyze(uri, source)
 	if len(diags) != 1 || diags[0].Message != "c" {
@@ -117,7 +118,7 @@ function run() {
 }
 `
 	p.toolResults[uri] = []protocol.Diagnostic{
-		{Range: protocol.Range{Start: protocol.Position{Line: 4}}, Source: "phpstan", Code: "argument.type", Message: "ignored by PHPStan's own comment"},
+		{Range: textpos.Range{Start: textpos.Position{Line: 4}}, Source: "phpstan", Code: "argument.type", Message: "ignored by PHPStan's own comment"},
 	}
 	got := codesAt(p.Analyze(uri, source))
 	for _, line := range []int{3, 6, 7} {

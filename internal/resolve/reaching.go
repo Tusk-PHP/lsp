@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/scope"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // A local variable's type at a read is the type of the writes that can reach
@@ -19,7 +19,7 @@ import (
 // the read: there's no write before it, or the one write that reaches it can't
 // be typed on its own and isn't an assignment the scan would read; but never
 // for a read in a write's own right-hand side.
-func (r *Resolver) reachingType(varName string, lines []string, pos protocol.Position, file *parser.FileNode, vs variableScope) (ResolvedType, bool) {
+func (r *Resolver) reachingType(varName string, lines []string, pos textpos.Position, file *parser.FileNode, vs variableScope) (ResolvedType, bool) {
 	b := vs.binding
 	if b == nil || b.Kind == scope.BindingImport {
 		return ResolvedType{}, false
@@ -55,7 +55,7 @@ func (r *Resolver) reachingType(varName string, lines []string, pos protocol.Pos
 // of several writes, as after `if ($c) { $x = new Bar(); }`: the union of what
 // each of them gives. When any of them can't be typed, neither can the
 // variable: its type is left unknown rather than guessed from the others.
-func (r *Resolver) reachingValuesType(varName string, lines []string, pos protocol.Position, file *parser.FileNode, vs variableScope) ResolvedType {
+func (r *Resolver) reachingValuesType(varName string, lines []string, pos textpos.Position, file *parser.FileNode, vs variableScope) ResolvedType {
 	if vs.reach.TooMany {
 		return ResolvedType{}
 	}
@@ -182,7 +182,7 @@ func (r *Resolver) caughtType(names []string, file *parser.FileNode) ResolvedTyp
 // names a class stands only if those values are known and name it too, so the
 // next iteration can't give another: `$q = $q->where()` on a query builder
 // stays the builder. Otherwise its value isn't known.
-func (r *Resolver) feedsItself(varName string, lines []string, file *parser.FileNode, b *scope.Binding, w int, pos protocol.Position, t ResolvedType) ResolvedType {
+func (r *Resolver) feedsItself(varName string, lines []string, file *parser.FileNode, b *scope.Binding, w int, pos textpos.Position, t ResolvedType) ResolvedType {
 	classes := namedClasses(t)
 	if len(classes) == 0 {
 		return t
@@ -228,6 +228,6 @@ func namedClasses(rt ResolvedType) []string {
 	return out
 }
 
-func positionBefore(a, b protocol.Position) bool {
+func positionBefore(a, b textpos.Position) bool {
 	return a.Line < b.Line || (a.Line == b.Line && a.Character < b.Character)
 }

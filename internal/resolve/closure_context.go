@@ -4,9 +4,9 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // A closure passed to a call takes what the parameter it's passed for says
@@ -23,7 +23,7 @@ type closureCallSite struct {
 	argIndex   int    // which positional argument the closure is
 	argName    string // the parameter a named argument is for
 	argsBefore string // the arguments written before the closure
-	at         protocol.Position
+	at         textpos.Position
 }
 
 // maxCallLookback bounds how many lines above a closure its call is looked for.
@@ -31,7 +31,7 @@ const maxCallLookback = 40
 
 // findClosureCall finds the call whose argument list the closure starting
 // at start is in. ok is false when the closure isn't a call argument.
-func findClosureCall(lines []string, start protocol.Position) (closureCallSite, bool) {
+func findClosureCall(lines []string, start textpos.Position) (closureCallSite, bool) {
 	if start.Line < 0 || start.Line >= len(lines) {
 		return closureCallSite{}, false
 	}
@@ -131,7 +131,7 @@ func findClosureCall(lines []string, start protocol.Position) (closureCallSite, 
 	at := start
 	for li := len(lineStarts) - 1; li >= 0; li-- {
 		if open >= lineStarts[li] {
-			at = protocol.Position{Line: first + li, Character: open - lineStarts[li]}
+			at = textpos.Position{Line: first + li, Character: open - lineStarts[li]}
 			break
 		}
 	}

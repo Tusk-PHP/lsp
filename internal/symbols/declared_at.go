@@ -3,13 +3,13 @@ package symbols
 import (
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // MemberDeclaredAt returns the member whose declaration name in the file at
 // uri covers pos and is word, or nil when pos isn't on one. Members PHP gives
 // an enum point at the enum's name and are never declared there.
-func (idx *Index) MemberDeclaredAt(uri string, pos protocol.Position, word string) *Symbol {
+func (idx *Index) MemberDeclaredAt(uri string, pos textpos.Position, word string) *Symbol {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	for _, sym := range idx.fileSymbols[uri] {

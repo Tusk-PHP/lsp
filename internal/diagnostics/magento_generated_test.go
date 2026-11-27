@@ -8,8 +8,8 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	frameworkmagento "github.com/Tusk-PHP/lsp/internal/framework/magento"
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // Magento code uses factories, proxies and extension interfaces that only
@@ -65,7 +65,7 @@ class Save {
 	p := NewProvider(idx, "magento", "/tmp", nil, config.DefaultConfig())
 	engine := TypeEngine(idx, nil)
 	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		return engine.Resolver().ExpressionClass(expr, source, protocol.Position{Line: line}, file)
+		return engine.Resolver().ExpressionClass(expr, source, textpos.Position{Line: line}, file)
 	}
 	var got []string
 	for _, d := range p.Analyze("file:///Save.php", src) {

@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func TestForwardsCallingClass(t *testing.T) {
@@ -58,13 +58,13 @@ class Child extends Base {
 function identity($a) { return $a; }
 `
 
-func chainFixture(t *testing.T) (*Resolver, *parser.FileNode, protocol.Position) {
+func chainFixture(t *testing.T) (*Resolver, *parser.FileNode, textpos.Position) {
 	t.Helper()
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///chain.php", chainSource)
 	file := parser.ParseFile(chainSource)
 	line := strings.Count(chainSource[:strings.Index(chainSource, "return 1;")], "\n")
-	return NewResolver(idx), file, protocol.Position{Line: line, Character: 8}
+	return NewResolver(idx), file, textpos.Position{Line: line, Character: 8}
 }
 
 // The shared walker types each kind of chain the features ask about.
@@ -148,7 +148,7 @@ func TestChainTypeContainerCall(t *testing.T) {
 func TestChainTypeWired(t *testing.T) {
 	r, file, pos := chainFixture(t)
 	var asked []string
-	r.TypedChainResolver = func(_ *Resolver, expr, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+	r.TypedChainResolver = func(_ *Resolver, expr, source string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 		asked = append(asked, expr)
 		return ResolvedType{FQN: `App\Logger`}
 	}

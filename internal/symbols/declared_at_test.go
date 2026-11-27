@@ -3,7 +3,7 @@ package symbols
 import (
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func TestMemberDeclaredAt(t *testing.T) {
@@ -33,7 +33,7 @@ enum Cases: string { case One = 'one'; }
 		{0, 0, "", ""},
 	}
 	for _, c := range cases {
-		got := idx.MemberDeclaredAt("file:///a.php", protocol.Position{Line: c.line, Character: c.char}, c.word)
+		got := idx.MemberDeclaredAt("file:///a.php", textpos.Position{Line: c.line, Character: c.char}, c.word)
 		switch {
 		case c.want == "" && got != nil:
 			t.Errorf("%d:%d %q: got %s, want none", c.line, c.char, c.word, got.FQN)
@@ -41,7 +41,7 @@ enum Cases: string { case One = 'one'; }
 			t.Errorf("%d:%d %q: got %v, want %s", c.line, c.char, c.word, got, c.want)
 		}
 	}
-	if got := idx.MemberDeclaredAt("file:///other.php", protocol.Position{Line: 2, Character: 61}, "measure"); got != nil {
+	if got := idx.MemberDeclaredAt("file:///other.php", textpos.Position{Line: 2, Character: 61}, "measure"); got != nil {
 		t.Errorf("another file: got %s", got.FQN)
 	}
 }

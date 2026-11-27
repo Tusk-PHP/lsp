@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func setupResolver() *Resolver {
@@ -91,20 +91,20 @@ class Baz {}
 `)
 
 	t.Run("inside class", func(t *testing.T) {
-		fqn := FindEnclosingClass(file, protocol.Position{Line: 3})
+		fqn := FindEnclosingClass(file, textpos.Position{Line: 3})
 		if fqn != "App\\Foo" {
 			t.Errorf("got %q, want App\\Foo", fqn)
 		}
 	})
 
 	t.Run("nil file", func(t *testing.T) {
-		if FindEnclosingClass(nil, protocol.Position{Line: 0}) != "" {
+		if FindEnclosingClass(nil, textpos.Position{Line: 0}) != "" {
 			t.Error("nil file should return empty")
 		}
 	})
 
 	t.Run("before any class", func(t *testing.T) {
-		fqn := FindEnclosingClass(file, protocol.Position{Line: 0})
+		fqn := FindEnclosingClass(file, textpos.Position{Line: 0})
 		if fqn != "" {
 			t.Errorf("before class should be empty, got %q", fqn)
 		}
@@ -122,14 +122,14 @@ class Foo {
 `)
 
 	t.Run("inside method", func(t *testing.T) {
-		m := FindEnclosingMethod(file, protocol.Position{Line: 3})
+		m := FindEnclosingMethod(file, textpos.Position{Line: 3})
 		if m == nil || m.Name != "bar" {
 			t.Errorf("expected bar, got %v", m)
 		}
 	})
 
 	t.Run("nil file", func(t *testing.T) {
-		if FindEnclosingMethod(nil, protocol.Position{Line: 0}) != nil {
+		if FindEnclosingMethod(nil, textpos.Position{Line: 0}) != nil {
 			t.Error("nil file should return nil")
 		}
 	})
@@ -260,7 +260,7 @@ class Service {
     public function foo() { $this->bar(); }
 }
 `)
-		typ := r.ResolveVariableType("$this", lines, protocol.Position{Line: 3}, file)
+		typ := r.ResolveVariableType("$this", lines, textpos.Position{Line: 3}, file)
 		if typ != "App\\Service" {
 			t.Errorf("expected App\\Service, got %q", typ)
 		}
@@ -278,7 +278,7 @@ class Foo {
 `
 		file := parser.ParseFile(source)
 		lines := SplitLines(source)
-		typ := r.ResolveVariableType("$log", lines, protocol.Position{Line: 5}, file)
+		typ := r.ResolveVariableType("$log", lines, textpos.Position{Line: 5}, file)
 		if typ != "Monolog\\Logger" {
 			t.Errorf("expected Monolog\\Logger, got %q", typ)
 		}
@@ -292,14 +292,14 @@ $x->info("test");
 `
 		file := parser.ParseFile(source)
 		lines := SplitLines(source)
-		typ := r.ResolveVariableType("$x", lines, protocol.Position{Line: 3}, file)
+		typ := r.ResolveVariableType("$x", lines, textpos.Position{Line: 3}, file)
 		if typ != "Monolog\\Logger" {
 			t.Errorf("expected Monolog\\Logger, got %q", typ)
 		}
 	})
 
 	t.Run("nil file", func(t *testing.T) {
-		if r.ResolveVariableType("$x", nil, protocol.Position{}, nil) != "" {
+		if r.ResolveVariableType("$x", nil, textpos.Position{}, nil) != "" {
 			t.Error("nil file should return empty")
 		}
 	})
@@ -315,7 +315,7 @@ echo $providerClass;
 `
 		file := parser.ParseFile(source)
 		lines := SplitLines(source)
-		typ := r2.ResolveVariableType("$providerClass", lines, protocol.Position{Line: 3}, file)
+		typ := r2.ResolveVariableType("$providerClass", lines, textpos.Position{Line: 3}, file)
 		if typ != "string" {
 			t.Errorf("expected string, got %q", typ)
 		}
@@ -332,7 +332,7 @@ echo $providerClass;
 `
 		file := parser.ParseFile(source)
 		lines := SplitLines(source)
-		rt := r2.ResolveVariableTypeTyped("$providerClass", lines, protocol.Position{Line: 3}, file)
+		rt := r2.ResolveVariableTypeTyped("$providerClass", lines, textpos.Position{Line: 3}, file)
 		if rt.FQN != "string" {
 			t.Errorf("expected string, got %q", rt.FQN)
 		}
@@ -443,27 +443,27 @@ func TestWordAt(t *testing.T) {
 	lines := []string{"$user->getName()"}
 
 	t.Run("variable", func(t *testing.T) {
-		w := WordAt(lines, protocol.Position{Line: 0, Character: 0})
+		w := WordAt(lines, textpos.Position{Line: 0, Character: 0})
 		if w != "$user" {
 			t.Errorf("got %q", w)
 		}
 	})
 
 	t.Run("method name", func(t *testing.T) {
-		w := WordAt(lines, protocol.Position{Line: 0, Character: 7})
+		w := WordAt(lines, textpos.Position{Line: 0, Character: 7})
 		if w != "getName" {
 			t.Errorf("got %q", w)
 		}
 	})
 
 	t.Run("out of bounds line", func(t *testing.T) {
-		if WordAt(lines, protocol.Position{Line: 5, Character: 0}) != "" {
+		if WordAt(lines, textpos.Position{Line: 5, Character: 0}) != "" {
 			t.Error("expected empty for OOB line")
 		}
 	})
 
 	t.Run("out of bounds character", func(t *testing.T) {
-		if WordAt(lines, protocol.Position{Line: 0, Character: 100}) != "" {
+		if WordAt(lines, textpos.Position{Line: 0, Character: 100}) != "" {
 			t.Error("expected empty for OOB character")
 		}
 	})
@@ -523,7 +523,7 @@ func TestGetLineAt(t *testing.T) {
 
 func TestGetWordAt(t *testing.T) {
 	source := "$user->getName()"
-	w := GetWordAt(source, protocol.Position{Line: 0, Character: 0})
+	w := GetWordAt(source, textpos.Position{Line: 0, Character: 0})
 	if w != "$user" {
 		t.Errorf("got %q", w)
 	}
@@ -627,7 +627,7 @@ function run(): void {
 	file := parser.ParseFile(src)
 	lines := SplitLines(src)
 	at := func(v string, line int) string {
-		return r.ResolveVariableTypeTyped(v, lines, protocol.Position{Line: line, Character: 9}, file).String()
+		return r.ResolveVariableTypeTyped(v, lines, textpos.Position{Line: line, Character: 9}, file).String()
 	}
 	for _, c := range []struct {
 		v    string

@@ -10,6 +10,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func newTestProvider() *Provider {
@@ -316,21 +317,21 @@ $name = "unterminated;
 	p.mu.Lock()
 	p.saveResults[uri] = []protocol.Diagnostic{
 		{
-			Range:    protocol.Range{Start: protocol.Position{Line: 2, Character: 4}, End: protocol.Position{Line: 2, Character: 15}},
+			Range:    textpos.Range{Start: textpos.Position{Line: 2, Character: 4}, End: textpos.Position{Line: 2, Character: 15}},
 			Severity: protocol.DiagnosticSeverityError,
 			Source:   "tusk-php",
 			Message:  "Class MissingClass not found",
 			Code:     "unknown-class",
 		},
 		{
-			Range:    protocol.Range{Start: protocol.Position{Line: 3, Character: 4}, End: protocol.Position{Line: 3, Character: 12}},
+			Range:    textpos.Range{Start: textpos.Position{Line: 3, Character: 4}, End: textpos.Position{Line: 3, Character: 12}},
 			Severity: protocol.DiagnosticSeverityError,
 			Source:   "tusk-php",
 			Message:  "Function clients not found",
 			Code:     "unknown-function",
 		},
 		{
-			Range:    protocol.Range{Start: protocol.Position{Line: 4, Character: 4}, End: protocol.Position{Line: 4, Character: 15}},
+			Range:    textpos.Range{Start: textpos.Position{Line: 4, Character: 4}, End: textpos.Position{Line: 4, Character: 15}},
 			Severity: protocol.DiagnosticSeverityError,
 			Source:   "tusk-php",
 			Message:  "Access to property $name on MissingClass",
@@ -375,7 +376,7 @@ func TestToolResultsCaching(t *testing.T) {
 	p.mu.Lock()
 	p.toolResults[uri] = []protocol.Diagnostic{
 		{
-			Range:    protocol.Range{Start: protocol.Position{Line: 5, Character: 0}},
+			Range:    textpos.Range{Start: textpos.Position{Line: 5, Character: 0}},
 			Severity: protocol.DiagnosticSeverityError,
 			Source:   "phpstan",
 			Message:  "Test error",

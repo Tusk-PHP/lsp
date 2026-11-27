@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func TestFunctionCallTypeFollowsPHPsNameRules(t *testing.T) {
@@ -50,7 +50,7 @@ foreach (orphans() as $stray) {
 		"$elsewhere":         "",
 		"$qualified":         `App\Helpers\Money`,
 	} {
-		pos := protocol.Position{Line: lineContaining(t, lines, variable+" =") + 1}
+		pos := textpos.Position{Line: lineContaining(t, lines, variable+" =") + 1}
 		if got := r.ResolveVariableTypeTyped(variable, lines, pos, file).FullString(); got != want {
 			t.Errorf("%s = %q, want %q", variable, got, want)
 		}
@@ -59,7 +59,7 @@ foreach (orphans() as $stray) {
 		}
 	}
 	for variable, want := range map[string]string{"$each": `App\Helpers\Money`, "$stray": ""} {
-		pos := protocol.Position{Line: lineContaining(t, lines, "echo "+variable)}
+		pos := textpos.Position{Line: lineContaining(t, lines, "echo "+variable)}
 		if got := r.ResolveVariableTypeTyped(variable, lines, pos, file).FullString(); got != want {
 			t.Errorf("foreach %s = %q, want %q", variable, got, want)
 		}
@@ -104,7 +104,7 @@ foreach (unknown() ?: [] as $unknown) {
 		"$void":    "",
 		"$unknown": "",
 	} {
-		pos := protocol.Position{Line: lineContaining(t, lines, "echo "+variable)}
+		pos := textpos.Position{Line: lineContaining(t, lines, "echo "+variable)}
 		if got := r.ResolveVariableTypeTyped(variable, lines, pos, file).FullString(); got != want {
 			t.Errorf("foreach %s = %q, want %q", variable, got, want)
 		}
@@ -147,7 +147,7 @@ function run($checked, $unchecked): void {
 		{"$money", "echo $money", `App\Helpers\Money`},
 		{"$other", "echo $other", ""},
 	} {
-		pos := protocol.Position{Line: lineContaining(t, lines, c.line), Character: 4}
+		pos := textpos.Position{Line: lineContaining(t, lines, c.line), Character: 4}
 		if got := r.ResolveVariableTypeTyped(c.variable, lines, pos, file).FullString(); got != c.want {
 			t.Errorf("%s = %q, want %q", c.variable, got, c.want)
 		}
@@ -178,7 +178,7 @@ foreach (items() ?: [] as $fallback) {
 	lines := SplitLines(src)
 	r := NewResolver(idx)
 	for _, variable := range []string{"$item", "$fallback"} {
-		pos := protocol.Position{Line: lineContaining(t, lines, "echo "+variable)}
+		pos := textpos.Position{Line: lineContaining(t, lines, "echo "+variable)}
 		if got := r.ResolveVariableTypeTyped(variable, lines, pos, file).FullString(); got != `App\Models\Item` {
 			t.Errorf("foreach %s = %q, want App\\Models\\Item", variable, got)
 		}

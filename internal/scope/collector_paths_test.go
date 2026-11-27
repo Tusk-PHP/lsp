@@ -6,18 +6,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
-func at(t *testing.T, source, needle string) protocol.Position {
+func at(t *testing.T, source, needle string) textpos.Position {
 	t.Helper()
 	for i, line := range strings.Split(source, "\n") {
 		if col := strings.Index(line, needle); col >= 0 {
-			return protocol.Position{Line: i, Character: col}
+			return textpos.Position{Line: i, Character: col}
 		}
 	}
 	t.Fatalf("%q is not in the source", needle)
-	return protocol.Position{}
+	return textpos.Position{}
 }
 
 func TestFunctionWithReturnTypeOpensItsBody(t *testing.T) {
@@ -64,7 +64,7 @@ class C {
 `
 	doc := Collect(source)
 	cls := at(t, source, "$cls")
-	if !slices.ContainsFunc(doc.Properties, func(r protocol.Range) bool { return r.Start == cls }) {
+	if !slices.ContainsFunc(doc.Properties, func(r textpos.Range) bool { return r.Start == cls }) {
 		t.Errorf("$cls after new $this->map[$k]:: is not a property: %+v", doc.Properties)
 	}
 	if b := doc.BindingAt(cls); b != nil {
@@ -215,7 +215,7 @@ func TestTopLevelAssignmentIsRecorded(t *testing.T) {
 	if b == nil || len(b.Assignments) != 1 {
 		t.Fatalf("$total = %+v, want one assignment", b)
 	}
-	want := protocol.Range{Start: at(t, source, "40"), End: protocol.Position{Line: 0, Character: strings.Index(source, ";")}}
+	want := textpos.Range{Start: at(t, source, "40"), End: textpos.Position{Line: 0, Character: strings.Index(source, ";")}}
 	if got := b.Assignments[0].Expression; !reflect.DeepEqual(got, want) {
 		t.Errorf("assigned expression = %+v, want %+v", got, want)
 	}
@@ -228,7 +228,7 @@ func TestArrowFunctionRunsToTheEndOfTheFile(t *testing.T) {
 	if s == nil || s.Kind != ScopeClosure || !s.ExprBody {
 		t.Fatalf("scope of the body = %+v, want an arrow function", s)
 	}
-	if want := (protocol.Position{Line: 1, Character: len("$double = fn($x) => $x * 2")}); s.Range.End != want {
+	if want := (textpos.Position{Line: 1, Character: len("$double = fn($x) => $x * 2")}); s.Range.End != want {
 		t.Errorf("arrow function ends at %+v, want %+v", s.Range.End, want)
 	}
 }

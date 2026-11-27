@@ -8,15 +8,15 @@ import (
 	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 type RouteName struct {
 	Name          string
 	Path          string
 	URI           string
-	Range         protocol.Range
+	Range         textpos.Range
 	TargetKind    string
 	Target        string
 	HandlerFQN    string
@@ -280,9 +280,9 @@ func parseRouteDefinition(tokens []parser.Token, uri string, methodTok int, meth
 				endCol--
 			}
 			route.Name = name
-			route.Range = protocol.Range{
-				Start: protocol.Position{Line: tokens[valueTok].Line, Character: startCol},
-				End:   protocol.Position{Line: tokens[valueTok].Line, Character: endCol},
+			route.Range = textpos.Range{
+				Start: textpos.Position{Line: tokens[valueTok].Line, Character: startCol},
+				End:   textpos.Position{Line: tokens[valueTok].Line, Character: endCol},
 			}
 		}
 	}

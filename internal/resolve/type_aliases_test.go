@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func TestRawMemberReturnTypeExpandsImportedAliases(t *testing.T) {
@@ -105,6 +105,6 @@ class Consumer {
 	}
 }
 
-func protocolPos(line int) protocol.Position {
-	return protocol.Position{Line: line}
+func protocolPos(line int) textpos.Position {
+	return textpos.Position{Line: line}
 }

@@ -8,8 +8,8 @@ import (
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // Eloquent relation types grouped by cardinality.
@@ -213,7 +213,7 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source stri
 }
 
 // injectRelation creates virtual property and ensures the method also has the right return type.
-func injectRelation(index *symbols.Index, model *symbols.Symbol, methodName string, methodRange protocol.Range, relType, body string, resolve func(string) string) {
+func injectRelation(index *symbols.Index, model *symbols.Symbol, methodName string, methodRange textpos.Range, relType, body string, resolve func(string) string) {
 	// Extract related model from body: $this->hasMany(Post::class)
 	relatedModel := ""
 	if match := relationCallRe.FindStringSubmatch(body); match != nil {
@@ -248,10 +248,10 @@ func injectRelation(index *symbols.Index, model *symbols.Symbol, methodName stri
 // methodNameRange is where the index puts the method's own symbol. A
 // property made from a method (a relation, an accessor) points there, so go
 // to definition on $user->posts opens posts() instead of the top of the file.
-func methodNameRange(m parser.MethodNode) protocol.Range {
-	return protocol.Range{
-		Start: protocol.Position{Line: m.StartLine, Character: m.StartCol},
-		End:   protocol.Position{Line: m.StartLine, Character: m.StartCol + len(m.Name)},
+func methodNameRange(m parser.MethodNode) textpos.Range {
+	return textpos.Range{
+		Start: textpos.Position{Line: m.StartLine, Character: m.StartCol},
+		End:   textpos.Position{Line: m.StartLine, Character: m.StartCol + len(m.Name)},
 	}
 }
 

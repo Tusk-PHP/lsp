@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // reachingLines returns the lines (1-based) of the writes to name that reach
@@ -13,10 +13,10 @@ import (
 func reachingLines(t *testing.T, src, name string) ([]int, Reach) {
 	t.Helper()
 	lines := strings.Split(src, "\n")
-	pos := protocol.Position{Line: -1}
+	pos := textpos.Position{Line: -1}
 	for i, l := range lines {
 		if c := strings.Index(l, "/*?*/"); c >= 0 {
-			pos = protocol.Position{Line: i, Character: c + len("/*?*/")}
+			pos = textpos.Position{Line: i, Character: c + len("/*?*/")}
 			break
 		}
 	}
@@ -283,14 +283,14 @@ function f($c) {
 		}
 	}
 	// On the `x` of the second `$x`.
-	reach := doc.ReachingWrites(b, protocol.Position{Line: 4, Character: 9})
+	reach := doc.ReachingWrites(b, textpos.Position{Line: 4, Character: 9})
 	if !reach.OnWrite || !slices.Equal(reach.Writes, []int{0}) {
 		t.Errorf("on the write: got %+v, want only that write", reach)
 	}
 	want := WriteSite{
-		At:        protocol.Position{Line: 4, Character: 8},
-		RHS:       protocol.Position{Line: 4, Character: 13},
-		End:       protocol.Position{Line: 4, Character: 22},
+		At:        textpos.Position{Line: 4, Character: 8},
+		RHS:       textpos.Position{Line: 4, Character: 13},
+		End:       textpos.Position{Line: 4, Character: 22},
 		Statement: true,
 	}
 	if got := b.Site(0); got != want {
@@ -313,7 +313,7 @@ function f($c) {
 			b = cand
 		}
 	}
-	at := func(line, char int) protocol.Position { return protocol.Position{Line: line, Character: char} }
+	at := func(line, char int) textpos.Position { return textpos.Position{Line: line, Character: char} }
 	if got, want := b.Site(DeclWrite), (WriteSite{At: at(2, 14), RHS: at(2, 19), End: at(2, 28), Statement: true}); got != want {
 		t.Errorf("declaration: Site = %+v, want %+v", got, want)
 	}

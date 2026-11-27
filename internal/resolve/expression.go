@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // ExprContext is where an expression is read: the file's lines, the position
@@ -13,7 +13,7 @@ import (
 // written, such as the parameters of a closure being typed.
 type ExprContext struct {
 	Lines  []string
-	Pos    protocol.Position
+	Pos    textpos.Position
 	File   *parser.FileNode
 	Locals map[string]ResolvedType
 	depth  int

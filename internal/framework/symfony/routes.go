@@ -10,23 +10,23 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 type Route struct {
 	Name      string
 	Path      string
 	URI       string
-	NameRange protocol.Range
-	DeclRange protocol.Range
+	NameRange textpos.Range
+	DeclRange textpos.Range
 }
 
 type routeAttribute struct {
 	Name      string
 	Path      string
-	NameRange protocol.Range
-	AttrRange protocol.Range
+	NameRange textpos.Range
+	AttrRange textpos.Range
 }
 
 var routeNamePattern = regexp.MustCompile(`name\s*:\s*['"]([^'"]*)['"]`)
@@ -37,7 +37,7 @@ type routeConfigEntry struct {
 	Name       string
 	Path       string
 	URI        string
-	DeclRange  protocol.Range
+	DeclRange  textpos.Range
 	IsImport   bool
 	Resource   string
 	Type       string
@@ -311,14 +311,14 @@ func ExtractRouteNameContext(trimmed string) (partial, quote string, ok bool) {
 	return "", "", false
 }
 
-func RouteNameAtPosition(source string, pos protocol.Position) (string, protocol.Range, bool) {
+func RouteNameAtPosition(source string, pos textpos.Position) (string, textpos.Range, bool) {
 	lines := strings.Split(source, "\n")
 	if pos.Line < 0 || pos.Line >= len(lines) {
-		return "", protocol.Range{}, false
+		return "", textpos.Range{}, false
 	}
 	line := lines[pos.Line]
 	if pos.Character < 0 || pos.Character > len(line) {
-		return "", protocol.Range{}, false
+		return "", textpos.Range{}, false
 	}
 
 	patterns := []string{
@@ -357,12 +357,12 @@ func RouteNameAtPosition(source string, pos protocol.Position) (string, protocol
 		if comma := strings.Index(line[idx+len(pat):start-1], ","); comma >= 0 {
 			continue
 		}
-		return line[start:end], protocol.Range{
-			Start: protocol.Position{Line: pos.Line, Character: start},
-			End:   protocol.Position{Line: pos.Line, Character: end},
+		return line[start:end], textpos.Range{
+			Start: textpos.Position{Line: pos.Line, Character: start},
+			End:   textpos.Position{Line: pos.Line, Character: end},
 		}, true
 	}
-	return "", protocol.Range{}, false
+	return "", textpos.Range{}, false
 }
 
 func discoverRoutesInFile(uri, source string) []Route {
@@ -390,7 +390,7 @@ func discoverRoutesInFile(uri, source string) []Route {
 				}
 
 				declRange := attr.AttrRange
-				if attr.NameRange != (protocol.Range{}) {
+				if attr.NameRange != (textpos.Range{}) {
 					declRange = attr.NameRange
 				}
 
@@ -528,7 +528,7 @@ func parseRouteAttributeBlock(snippet, block string, baseLine, blockOffset int) 
 
 	args := block[open+1 : close]
 	attr := routeAttribute{
-		AttrRange: protocol.Range{
+		AttrRange: textpos.Range{
 			Start: positionFromOffset(snippet, baseLine, blockOffset),
 			End:   positionFromOffset(snippet, baseLine, blockOffset+len(block)),
 		},
@@ -536,7 +536,7 @@ func parseRouteAttributeBlock(snippet, block string, baseLine, blockOffset int) 
 
 	if match := routeNamePattern.FindStringSubmatchIndex(args); len(match) >= 4 {
 		attr.Name = args[match[2]:match[3]]
-		attr.NameRange = protocol.Range{
+		attr.NameRange = textpos.Range{
 			Start: positionFromOffset(snippet, baseLine, blockOffset+open+1+match[2]),
 			End:   positionFromOffset(snippet, baseLine, blockOffset+open+1+match[3]),
 		}
@@ -550,7 +550,7 @@ func parseRouteAttributeBlock(snippet, block string, baseLine, blockOffset int) 
 	return attr, true
 }
 
-func positionFromOffset(text string, baseLine, offset int) protocol.Position {
+func positionFromOffset(text string, baseLine, offset int) textpos.Position {
 	if offset < 0 {
 		offset = 0
 	}
@@ -568,7 +568,7 @@ func positionFromOffset(text string, baseLine, offset int) protocol.Position {
 		}
 		col++
 	}
-	return protocol.Position{Line: line, Character: col}
+	return textpos.Position{Line: line, Character: col}
 }
 
 func parseYAMLRouteConfig(uri, source string) []routeConfigEntry {
@@ -595,7 +595,7 @@ func parseYAMLRouteConfig(uri, source string) []routeConfigEntry {
 		entry := routeConfigEntry{
 			Name:      name,
 			URI:       "file://" + filepath.ToSlash(uri),
-			DeclRange: protocol.Range{Start: protocol.Position{Line: i, Character: 0}, End: protocol.Position{Line: i, Character: len(name)}},
+			DeclRange: textpos.Range{Start: textpos.Position{Line: i, Character: 0}, End: textpos.Position{Line: i, Character: len(name)}},
 		}
 
 		baseIndent := leadingIndent(line)
@@ -737,15 +737,15 @@ func trimYAMLScalar(value string) string {
 	return strings.Trim(value, `'"`)
 }
 
-func findXMLDeclRange(source, attr, value string) protocol.Range {
+func findXMLDeclRange(source, attr, value string) textpos.Range {
 	needle := attr + `="` + value + `"`
 	offset := strings.Index(source, needle)
 	if offset < 0 {
-		return protocol.Range{}
+		return textpos.Range{}
 	}
 
 	valueOffset := offset + len(attr) + 2
 	start := positionFromOffset(source, 0, valueOffset)
 	end := positionFromOffset(source, 0, valueOffset+len(value))
-	return protocol.Range{Start: start, End: end}
+	return textpos.Range{Start: start, End: end}
 }

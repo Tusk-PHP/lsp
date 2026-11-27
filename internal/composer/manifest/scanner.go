@@ -1,7 +1,7 @@
 package manifest
 
 import (
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // scanner is a simple byte-oriented JSON tokenizer that tracks 0-based
@@ -36,8 +36,8 @@ func (s *scanner) advance() {
 	s.pos++
 }
 
-func (s *scanner) position() protocol.Position {
-	return protocol.Position{Line: s.line, Character: s.col}
+func (s *scanner) position() textpos.Position {
+	return textpos.Position{Line: s.line, Character: s.col}
 }
 
 func (s *scanner) skipWS() {
@@ -55,9 +55,9 @@ func (s *scanner) skipWS() {
 // double-quote. Returns the unescaped content, the range covering only
 // the content (quotes excluded), and ok=false if the string was not
 // terminated before EOF.
-func (s *scanner) readString() (string, protocol.Range, bool) {
+func (s *scanner) readString() (string, textpos.Range, bool) {
 	if s.peek() != '"' {
-		return "", protocol.Range{}, false
+		return "", textpos.Range{}, false
 	}
 	s.advance() // opening "
 	start := s.position()
@@ -68,12 +68,12 @@ func (s *scanner) readString() (string, protocol.Range, bool) {
 		case '"':
 			end := s.position()
 			s.advance() // closing "
-			return string(out), protocol.Range{Start: start, End: end}, true
+			return string(out), textpos.Range{Start: start, End: end}, true
 		case '\\':
 			s.advance()
 			esc := s.peek()
 			if esc == 0 {
-				return string(out), protocol.Range{Start: start, End: s.position()}, false
+				return string(out), textpos.Range{Start: start, End: s.position()}, false
 			}
 			switch esc {
 			case '"', '\\', '/':
@@ -107,7 +107,7 @@ func (s *scanner) readString() (string, protocol.Range, bool) {
 			s.advance()
 		}
 	}
-	return string(out), protocol.Range{Start: start, End: s.position()}, false
+	return string(out), textpos.Range{Start: start, End: s.position()}, false
 }
 
 // skipValue consumes one JSON value of arbitrary type (string, number,

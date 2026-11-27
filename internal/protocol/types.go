@@ -3,6 +3,8 @@ package protocol
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // MessageType represents LSP message types.
@@ -83,17 +85,12 @@ const (
 	SymbolKindTypeParameter SymbolKind = 26
 )
 
-// Position in a text document.
-type Position struct {
-	Line      int `json:"line"`
-	Character int `json:"character"`
-}
+// Position in a text document. It is the engine's textpos.Position: inside
+// the server its Character is a byte column, converted to UTF-16 at the edge.
+type Position = textpos.Position
 
-// Range in a text document.
-type Range struct {
-	Start Position `json:"start"`
-	End   Position `json:"end"`
-}
+// Range in a text document, the engine's textpos.Range.
+type Range = textpos.Range
 
 // Location represents a location inside a resource.
 type Location struct {

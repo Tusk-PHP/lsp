@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/scope"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 var joinMethods = map[string]bool{
@@ -18,7 +18,7 @@ var joinMethods = map[string]bool{
 }
 
 func BuilderMayBeJoined(tokens []parser.Token, doc *scope.Document, line, col int) bool {
-	op := tokenAt(tokens, protocol.Position{Line: line, Character: col})
+	op := tokenAt(tokens, textpos.Position{Line: line, Character: col})
 	if op < 0 || !isMemberOperator(tokens[op].Kind) {
 		return false
 	}
@@ -30,7 +30,7 @@ func BuilderMayBeJoined(tokens []parser.Token, doc *scope.Document, line, col in
 	if tokens[head].Kind != parser.TokenVariable || doc == nil {
 		return false
 	}
-	at := protocol.Position{Line: tokens[head].Line, Character: tokens[head].Column}
+	at := textpos.Position{Line: tokens[head].Line, Character: tokens[head].Column}
 	binding := doc.BindingAt(at)
 	if binding == nil {
 		return false
@@ -89,13 +89,13 @@ func callLink(tokens []parser.Token, i int) (int, bool) {
 	return parser.NextSignificant(tokens, closing+1), closing >= 0
 }
 
-func lastValueWritten(binding *scope.Binding, at protocol.Position) protocol.Position {
+func lastValueWritten(binding *scope.Binding, at textpos.Position) textpos.Position {
 	for i := len(binding.Rebinds) - 1; i >= 0; i-- {
 		if binding.Rebinds[i].HoldsAt(at) && !binding.ReadsItself(i) {
 			return binding.Rebinds[i].At
 		}
 	}
-	return protocol.Position{}
+	return textpos.Position{}
 }
 
 func assignedJoined(tokens []parser.Token, variable int) bool {
@@ -103,7 +103,7 @@ func assignedJoined(tokens []parser.Token, variable int) bool {
 	return eq >= 0 && tokens[eq].Kind == parser.TokenEquals && chainJoins(tokens, parser.NextSignificant(tokens, eq+1))
 }
 
-func tokenAt(tokens []parser.Token, pos protocol.Position) int {
+func tokenAt(tokens []parser.Token, pos textpos.Position) int {
 	i := sort.Search(len(tokens), func(i int) bool {
 		t := tokens[i]
 		return t.Line > pos.Line || t.Line == pos.Line && t.Column >= pos.Character
@@ -114,7 +114,7 @@ func tokenAt(tokens []parser.Token, pos protocol.Position) int {
 	return i
 }
 
-func before(a, b protocol.Position) bool {
+func before(a, b textpos.Position) bool {
 	return a.Line < b.Line || a.Line == b.Line && a.Character < b.Character
 }
 

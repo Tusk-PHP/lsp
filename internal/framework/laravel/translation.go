@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 type TranslationResolver struct {
@@ -20,7 +21,7 @@ type TranslationEntry struct {
 	Locale string
 	File   string
 	URI    string
-	Range  protocol.Range
+	Range  textpos.Range
 }
 
 type TranslationStringContext struct {
@@ -352,7 +353,7 @@ func discoverJSONTranslationEntries(path string) []TranslationEntry {
 	return entries
 }
 
-func jsonKeyRange(src, key string) protocol.Range {
+func jsonKeyRange(src, key string) textpos.Range {
 	quoted, _ := json.Marshal(key)
 	lines := strings.Split(src, "\n")
 	for lineNo, line := range lines {
@@ -360,12 +361,12 @@ func jsonKeyRange(src, key string) protocol.Range {
 		if idx < 0 {
 			continue
 		}
-		return protocol.Range{
-			Start: protocol.Position{Line: lineNo, Character: idx + 1},
-			End:   protocol.Position{Line: lineNo, Character: idx + len(string(quoted)) - 1},
+		return textpos.Range{
+			Start: textpos.Position{Line: lineNo, Character: idx + 1},
+			End:   textpos.Position{Line: lineNo, Character: idx + len(string(quoted)) - 1},
 		}
 	}
-	return protocol.Range{}
+	return textpos.Range{}
 }
 
 type phpTranslationParser struct {
@@ -515,8 +516,8 @@ func (p *phpTranslationParser) skipValue(idx int) int {
 	return idx
 }
 
-func (p *phpTranslationParser) rangeForOffsets(start, end int) protocol.Range {
-	return protocol.Range{
+func (p *phpTranslationParser) rangeForOffsets(start, end int) textpos.Range {
+	return textpos.Range{
 		Start: offsetPosition(p.lineStarts, start),
 		End:   offsetPosition(p.lineStarts, end),
 	}
@@ -532,12 +533,12 @@ func lineStarts(src string) []int {
 	return starts
 }
 
-func offsetPosition(starts []int, offset int) protocol.Position {
+func offsetPosition(starts []int, offset int) textpos.Position {
 	line := sort.Search(len(starts), func(i int) bool { return starts[i] > offset }) - 1
 	if line < 0 {
 		line = 0
 	}
-	return protocol.Position{
+	return textpos.Position{
 		Line:      line,
 		Character: offset - starts[line],
 	}

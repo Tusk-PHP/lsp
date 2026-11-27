@@ -35,17 +35,10 @@ var engineForbiddenImports = []string{
 // removes its entries; the test fails when an entry is no longer needed, so the
 // list only shrinks.
 var engineBoundaryAllowlist = map[string]bool{
-	"checks -> protocol":            true,
-	"composer/manifest -> protocol": true,
 	"config -> protocol":            true,
-	"container -> protocol":         true,
 	"diagnostics -> protocol":       true,
 	"framework/laravel -> protocol": true,
 	"framework/symfony -> protocol": true,
-	"models -> protocol":            true,
-	"resolve -> protocol":           true,
-	"scope -> protocol":             true,
-	"symbols -> protocol":           true,
 }
 
 const internalImportPrefix = "github.com/Tusk-PHP/lsp/internal/"

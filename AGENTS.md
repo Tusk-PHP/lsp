@@ -64,7 +64,10 @@ detail; this is the map.
 Packages are layered. **A package may import only from its own layer or the ones
 above it in this list**, never from a later one:
 
-1. **Wire types and identifiers:** `protocol` (LSP types, no logic), `rule`
+1. **Wire types and identifiers:** `textpos` (the engine's positions and
+   ranges: byte columns, converted to UTF-16 at the LSP and MCP edge),
+   `protocol` (LSP types, no logic; its `Position` and `Range` are aliases of
+   `textpos`'s), `rule`
    (diagnostic codes, severities and sources: every code a finding carries is a
    `rule.Code` constant listed in `rule.All`), `strict` (whether a recovered
    panic is raised again: `-strict` or `TUSK_STRICT`).
@@ -135,9 +138,10 @@ What each piece owns once it exists:
   `$/cancelRequest`, interactive requests before background work).
 - **Framework knowledge** lives under `framework/<name>/`, never inside generic
   completion, hover or checks.
-- **Core packages** move to protocol-neutral positions and ranges over time,
-  converted at the transport edge. New core code should not add new uses of
-  `protocol` types.
+- **Core packages** use `textpos.Position` and `textpos.Range`, converted at
+  the transport edge, and don't add new uses of `protocol` types. The import
+  boundary test in `conformance` lists the engine packages that still import
+  `protocol`; that list only shrinks.
 
 ## Structure rules
 

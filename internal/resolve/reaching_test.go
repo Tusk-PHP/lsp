@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // A variable that may hold the value of several writes has all of their
@@ -89,7 +89,7 @@ function run(bool $f, int $n, A $p, $untyped, array $list): void {
 	at := func(v, marker string) string {
 		for i, l := range lines {
 			if strings.HasSuffix(l, "// "+marker) {
-				return r.ResolveVariableTypeTyped(v, lines, protocol.Position{Line: i, Character: strings.Index(l, v) + 2}, file).FullString()
+				return r.ResolveVariableTypeTyped(v, lines, textpos.Position{Line: i, Character: strings.Index(l, v) + 2}, file).FullString()
 			}
 		}
 		t.Fatalf("no line marked %q", marker)
@@ -172,7 +172,7 @@ function run(bool $c, int $n, array $xs, $untyped): void {
 	at := func(v, marker string) string {
 		for i, l := range lines {
 			if strings.HasSuffix(l, "// "+marker) {
-				return r.ResolveVariableTypeTyped(v, lines, protocol.Position{Line: i, Character: strings.LastIndex(l, v) + 2}, file).FullString()
+				return r.ResolveVariableTypeTyped(v, lines, textpos.Position{Line: i, Character: strings.LastIndex(l, v) + 2}, file).FullString()
 			}
 		}
 		t.Fatalf("no line marked %q", marker)

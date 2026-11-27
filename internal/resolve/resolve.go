@@ -14,9 +14,9 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/phparray"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
@@ -36,11 +36,11 @@ type Engine struct {
 	// ChainResolver is an optional callback to resolve method chain expressions
 	// like "Category::first()" or "$foo->bar()->baz()". Set by the completion/hover
 	// provider that has access to the full chain resolution logic.
-	ChainResolver func(r *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) string
+	ChainResolver func(r *Resolver, expr string, source string, pos textpos.Position, file *parser.FileNode) string
 	// TypedChainResolver is like ChainResolver but returns a ResolvedType
 	// preserving generic parameters. Used for variable type inference that
 	// needs to carry generic context through assignments.
-	TypedChainResolver func(r *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType
+	TypedChainResolver func(r *Resolver, expr string, source string, pos textpos.Position, file *parser.FileNode) ResolvedType
 	// ContainerCall, when set, gives the class a container call such as
 	// app('request') or $container->get(Foo::class) resolves to, "-" for one
 	// that gives a value rather than an object, or "" when it isn't one.
@@ -95,15 +95,15 @@ func NewResolver(index *symbols.Index) *Resolver {
 // DelegateChains sets e's ChainResolver to fn, another provider's chain
 // resolution, which starts its own request: the calling Resolver is not
 // passed on, so fn must not call back into e.
-func (e *Engine) DelegateChains(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) string) {
-	e.ChainResolver = func(_ *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) string {
+func (e *Engine) DelegateChains(fn func(expr string, source string, pos textpos.Position, file *parser.FileNode) string) {
+	e.ChainResolver = func(_ *Resolver, expr string, source string, pos textpos.Position, file *parser.FileNode) string {
 		return fn(expr, source, pos, file)
 	}
 }
 
 // DelegateTypedChains is DelegateChains for TypedChainResolver.
-func (e *Engine) DelegateTypedChains(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType) {
-	e.TypedChainResolver = func(_ *Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (e *Engine) DelegateTypedChains(fn func(expr string, source string, pos textpos.Position, file *parser.FileNode) ResolvedType) {
+	e.TypedChainResolver = func(_ *Resolver, expr string, source string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 		return fn(expr, source, pos, file)
 	}
 }
@@ -208,7 +208,7 @@ func classLikes(file *parser.FileNode) []classLike {
 
 // FindEnclosingClass returns the FQN of the class, trait, interface or enum that
 // contains the given position.
-func FindEnclosingClass(file *parser.FileNode, pos protocol.Position) string {
+func FindEnclosingClass(file *parser.FileNode, pos textpos.Position) string {
 	if file == nil {
 		return ""
 	}
@@ -224,7 +224,7 @@ func FindEnclosingClass(file *parser.FileNode, pos protocol.Position) string {
 }
 
 // FindEnclosingMethod returns the method node that contains the given position.
-func FindEnclosingMethod(file *parser.FileNode, pos protocol.Position) *parser.MethodNode {
+func FindEnclosingMethod(file *parser.FileNode, pos textpos.Position) *parser.MethodNode {
 	if file == nil {
 		return nil
 	}
@@ -447,7 +447,7 @@ func resolveStaticOrClassName(r *Resolver, name, staticFQN string, file *parser.
 
 // inferArgType resolves the type of a constructor/method argument expression.
 // It handles variables, array literals, and chain expressions.
-func (r *Resolver) inferArgType(argStr string, lines []string, pos protocol.Position, file *parser.FileNode, assignLine int) ResolvedType {
+func (r *Resolver) inferArgType(argStr string, lines []string, pos textpos.Position, file *parser.FileNode, assignLine int) ResolvedType {
 	argStr = strings.TrimSpace(argStr)
 	// First arg only (split by comma, take first)
 	if commaIdx := IndexOutsideBrackets(argStr, ','); commaIdx >= 0 {
@@ -589,7 +589,7 @@ func (r *Resolver) resolveMethodParamTypeTyped(method *parser.MethodNode, varNam
 			continue
 		}
 		if docType := paramDocType(param, parser.ParseDocBlock(method.DocComment), varName); docType != "" {
-			docType = r.expandTypeAliases(docType, FindEnclosingClass(file, protocol.Position{Line: method.StartLine}), file)
+			docType = r.expandTypeAliases(docType, FindEnclosingClass(file, textpos.Position{Line: method.StartLine}), file)
 			if rt := r.resolveDocType(docType, file); !rt.IsEmpty() {
 				return rt
 			}
@@ -694,7 +694,7 @@ func IndexOutsideBrackets(s string, ch byte) int {
 // Falls back to @return/@var docblock annotations when no type hint is present.
 func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) string {
 	var typeName string
-	ownerFQN := ownerScopeFQN(member, protocol.Position{}, file)
+	ownerFQN := ownerScopeFQN(member, textpos.Position{}, file)
 	switch member.Kind {
 	case symbols.KindProperty:
 		typeName = member.Type
@@ -751,7 +751,7 @@ func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) str
 // ResolveVariableTypeTyped infers the type of a variable preserving generic context.
 // Used by the typed chain resolver so that $categories = Category::query()->get()
 // results in $categories having type Collection<int, Category>.
-func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos protocol.Position, file *parser.FileNode) ResolvedType {
+func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
 	if varName == "$this" || file == nil {
 		return r.resolveVariableTypeTypedBase(varName, lines, pos, file, variableScope{})
 	}
@@ -778,7 +778,7 @@ func (r *Resolver) ResolveVariableTypeTyped(varName string, lines []string, pos 
 	return rt
 }
 
-func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, pos protocol.Position, file *parser.FileNode, vs variableScope) ResolvedType {
+func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, pos textpos.Position, file *parser.FileNode, vs variableScope) ResolvedType {
 	exit, ok := r.enterResolution("typed|" + varName + "|" + strconv.Itoa(pos.Line) + ":" + strconv.Itoa(pos.Character))
 	if !ok {
 		return ResolvedType{}
@@ -1042,7 +1042,7 @@ func arrayElementType(rt ResolvedType) ResolvedType {
 // ResolveVariableType infers the type of a variable from context:
 // method/function parameters, class properties, $var = new ClassName(...),
 // @var annotations, and literal type inference.
-func (r *Resolver) ResolveVariableType(varName string, lines []string, pos protocol.Position, file *parser.FileNode) string {
+func (r *Resolver) ResolveVariableType(varName string, lines []string, pos textpos.Position, file *parser.FileNode) string {
 	if varName == "$this" || file == nil {
 		return r.resolveVariableTypePlain(varName, lines, pos, file, variableScope{})
 	}
@@ -1053,7 +1053,7 @@ func (r *Resolver) ResolveVariableType(varName string, lines []string, pos proto
 	return r.resolveVariableTypePlain(varName, lines, pos, file, vs)
 }
 
-func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos protocol.Position, file *parser.FileNode, vs variableScope) string {
+func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos textpos.Position, file *parser.FileNode, vs variableScope) string {
 	exit, ok := r.enterResolution("plain|" + varName + "|" + strconv.Itoa(pos.Line) + ":" + strconv.Itoa(pos.Character))
 	if !ok {
 		return ""
@@ -1194,7 +1194,7 @@ var classConstantRe = regexp.MustCompile(`^\\?[A-Za-z_][A-Za-z0-9_\\]*::class$`)
 // ClassKeywordFQN resolves self, static and parent (any letter case) to the
 // class they stand for at pos. ok is false when name isn't one of them; fqn is
 // empty when there is no enclosing class or, for parent, no parent class.
-func (r *Resolver) ClassKeywordFQN(name string, pos protocol.Position, file *parser.FileNode) (fqn string, ok bool) {
+func (r *Resolver) ClassKeywordFQN(name string, pos textpos.Position, file *parser.FileNode) (fqn string, ok bool) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "self", "static":
 		return FindEnclosingClass(file, pos), true
@@ -1377,7 +1377,7 @@ func GetLineAt(source string, line int) string {
 
 // WordAt extracts the word at the given position from pre-split lines,
 // including $ prefix for variables.
-func WordAt(lines []string, pos protocol.Position) string {
+func WordAt(lines []string, pos textpos.Position) string {
 	if pos.Line < 0 || pos.Line >= len(lines) {
 		return ""
 	}
@@ -1415,7 +1415,7 @@ func WordAt(lines []string, pos protocol.Position) string {
 }
 
 // GetWordAt extracts the word at the given position, including $ prefix for variables.
-func GetWordAt(source string, pos protocol.Position) string {
+func GetWordAt(source string, pos textpos.Position) string {
 	return WordAt(SplitLines(source), pos)
 }
 
@@ -1465,7 +1465,7 @@ func ExtractContainerCallArg(expr string) string {
 // ParamDocSummary returns the summary of the doc comment written on the
 // parameter varName (PHP 8.6) of the method or function enclosing pos, or ""
 // when it has none.
-func ParamDocSummary(file *parser.FileNode, pos protocol.Position, varName string) string {
+func ParamDocSummary(file *parser.FileNode, pos textpos.Position, varName string) string {
 	if file == nil {
 		return ""
 	}

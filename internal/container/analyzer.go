@@ -10,8 +10,8 @@ import (
 	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 type ServiceBinding struct {
@@ -22,7 +22,7 @@ type ServiceBinding struct {
 	Tags          []string
 	Alias         string
 	DefinitionURI string
-	Definition    protocol.Range
+	Definition    textpos.Range
 }
 
 type ContainerAnalyzer struct {
@@ -615,7 +615,7 @@ func (ca *ContainerAnalyzer) parseSymfonyServicesYAML() {
 					continue
 				}
 				currentService = serviceID
-				binding := ca.ensureSymfonyBinding(serviceID, yamlPath, protocol.Position{
+				binding := ca.ensureSymfonyBinding(serviceID, yamlPath, textpos.Position{
 					Line:      lineNo,
 					Character: len(line) - len(strings.TrimLeft(line, " \t")),
 				})
@@ -740,13 +740,13 @@ func (ca *ContainerAnalyzer) resolveSymfonyAliases() {
 	}
 }
 
-func (ca *ContainerAnalyzer) ensureSymfonyBinding(serviceID, sourcePath string, pos protocol.Position) *ServiceBinding {
+func (ca *ContainerAnalyzer) ensureSymfonyBinding(serviceID, sourcePath string, pos textpos.Position) *ServiceBinding {
 	if binding, ok := ca.bindings[serviceID]; ok {
 		if binding.DefinitionURI == "" {
 			binding.DefinitionURI = pathToFileURI(sourcePath)
-			binding.Definition = protocol.Range{
+			binding.Definition = textpos.Range{
 				Start: pos,
-				End:   protocol.Position{Line: pos.Line, Character: pos.Character + len(serviceID)},
+				End:   textpos.Position{Line: pos.Line, Character: pos.Character + len(serviceID)},
 			}
 		}
 		if binding.Source == "" {
@@ -760,9 +760,9 @@ func (ca *ContainerAnalyzer) ensureSymfonyBinding(serviceID, sourcePath string, 
 		Singleton:     true,
 		Source:        sourcePath,
 		DefinitionURI: pathToFileURI(sourcePath),
-		Definition: protocol.Range{
+		Definition: textpos.Range{
 			Start: pos,
-			End:   protocol.Position{Line: pos.Line, Character: pos.Character + len(serviceID)},
+			End:   textpos.Position{Line: pos.Line, Character: pos.Character + len(serviceID)},
 		},
 	}
 	ca.bindings[serviceID] = binding
@@ -1078,7 +1078,7 @@ func interpretSymfonyPHPServiceExpr(expr, currentNs string, uses []parser.UseNod
 	return ""
 }
 
-func offsetToPosition(content string, offset int) protocol.Position {
+func offsetToPosition(content string, offset int) textpos.Position {
 	if offset < 0 {
 		offset = 0
 	}
@@ -1093,7 +1093,7 @@ func offsetToPosition(content string, offset int) protocol.Position {
 			lineStart = i + 1
 		}
 	}
-	return protocol.Position{
+	return textpos.Position{
 		Line:      line,
 		Character: offset - lineStart,
 	}

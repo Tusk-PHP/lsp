@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // CallArg is one argument of a call as written: `$user`, or `name: $user`
@@ -629,7 +629,7 @@ func literalExprType(expr string) ResolvedType {
 	}
 }
 
-var positionZero = protocol.Position{}
+var positionZero = textpos.Position{}
 
 // inheritedDocMethod finds the nearest method of the same name above
 // member's class (parent classes, interfaces, traits) whose PHPDoc gives a

@@ -5,15 +5,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // reachBenchSource is a method that assigns $r in 1,500 `if` blocks, with a
 // read after each, and then in 1,500 `case`s of a switch, with 300 reads after
 // it: every read may be reached by more writes than ReachingWrites looks at.
-func reachBenchSource() (string, []protocol.Position) {
+func reachBenchSource() (string, []textpos.Position) {
 	var sb strings.Builder
-	var reads []protocol.Position
+	var reads []textpos.Position
 	line := 0
 	write := func(s string) {
 		sb.WriteString(s)
@@ -27,7 +27,7 @@ func reachBenchSource() (string, []protocol.Position) {
 		write("    if ($n > " + strconv.Itoa(i) + ") {")
 		write("        $r = new Bar();")
 		write("    }")
-		reads = append(reads, protocol.Position{Line: line, Character: 4})
+		reads = append(reads, textpos.Position{Line: line, Character: 4})
 		write("    $r->fooOnly();")
 	}
 	write("    switch ($n) {")
@@ -38,7 +38,7 @@ func reachBenchSource() (string, []protocol.Position) {
 	}
 	write("    }")
 	for i := 0; i < 300; i++ {
-		reads = append(reads, protocol.Position{Line: line, Character: 4})
+		reads = append(reads, textpos.Position{Line: line, Character: 4})
 		write("    $r->fooOnly();")
 	}
 	write("}")

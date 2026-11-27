@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func TestParseRequireBlocks(t *testing.T) {
@@ -51,7 +51,7 @@ func TestPackageAtCursorOnName(t *testing.T) {
 	// line 2 is `    "laravel/framework": "^10.0"`
 	// content starts after the opening quote
 	pos := find(source, "laravel/framework")
-	got := m.PackageAtCursor(protocol.Position{Line: pos.Line, Character: pos.Character + 3})
+	got := m.PackageAtCursor(textpos.Position{Line: pos.Line, Character: pos.Character + 3})
 	if got == nil {
 		t.Fatalf("expected to hit a package, got nil")
 	}
@@ -68,7 +68,7 @@ func TestPackageAtCursorOnValue(t *testing.T) {
 }`
 	m := Parse(source)
 	pos := find(source, "^10.0")
-	got := m.PackageAtCursor(protocol.Position{Line: pos.Line, Character: pos.Character + 1})
+	got := m.PackageAtCursor(textpos.Position{Line: pos.Line, Character: pos.Character + 1})
 	if got == nil || got.Name != "laravel/framework" {
 		t.Fatalf("expected laravel/framework via value hover, got %+v", got)
 	}
@@ -84,7 +84,7 @@ func TestPackageAtCursorOutsideReturnsNil(t *testing.T) {
 	m := Parse(source)
 	// Cursor on the "name" value — should NOT match.
 	pos := find(source, "acme/widgets")
-	if got := m.PackageAtCursor(protocol.Position{Line: pos.Line, Character: pos.Character + 1}); got != nil {
+	if got := m.PackageAtCursor(textpos.Position{Line: pos.Line, Character: pos.Character + 1}); got != nil {
 		t.Errorf("expected nil for cursor outside require, got %+v", got)
 	}
 }
@@ -123,10 +123,10 @@ func TestParseMalformedDoesNotPanic(t *testing.T) {
 }
 
 // find returns the 0-based line/col where needle first appears in source.
-func find(source, needle string) protocol.Position {
+func find(source, needle string) textpos.Position {
 	idx := strings.Index(source, needle)
 	if idx < 0 {
-		return protocol.Position{}
+		return textpos.Position{}
 	}
 	line := 0
 	col := 0
@@ -138,5 +138,5 @@ func find(source, needle string) protocol.Position {
 			col++
 		}
 	}
-	return protocol.Position{Line: line, Character: col}
+	return textpos.Position{Line: line, Character: col}
 }

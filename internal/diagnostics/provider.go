@@ -13,6 +13,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
@@ -203,7 +204,7 @@ func toTemplate(doc *blade.Document, diags []protocol.Diagnostic) []protocol.Dia
 		if !ok {
 			continue
 		}
-		d.Range = protocol.Range{Start: protocol.Position{Line: sl, Character: sc}, End: protocol.Position{Line: el, Character: ec}}
+		d.Range = textpos.Range{Start: textpos.Position{Line: sl, Character: sc}, End: textpos.Position{Line: el, Character: ec}}
 		out = append(out, d)
 	}
 	return out
@@ -285,9 +286,9 @@ var lspSeverity = map[rule.Severity]protocol.DiagnosticSeverity{
 
 func findingToDiagnostic(f checks.Finding) protocol.Diagnostic {
 	d := protocol.Diagnostic{
-		Range: protocol.Range{
-			Start: protocol.Position{Line: f.StartLine, Character: f.StartCol},
-			End:   protocol.Position{Line: f.EndLine, Character: f.EndCol},
+		Range: textpos.Range{
+			Start: textpos.Position{Line: f.StartLine, Character: f.StartCol},
+			End:   textpos.Position{Line: f.EndLine, Character: f.EndCol},
 		},
 		Severity: lspSeverity[f.Severity],
 		Source:   string(rule.SourceTusk),

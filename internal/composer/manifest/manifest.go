@@ -10,7 +10,7 @@
 package manifest
 
 import (
-	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // RequireKind identifies which composer require-style block an entry came
@@ -33,9 +33,9 @@ const (
 type RequireEntry struct {
 	Kind       RequireKind
 	Name       string
-	NameRange  protocol.Range
+	NameRange  textpos.Range
 	Value      string
-	ValueRange protocol.Range
+	ValueRange textpos.Range
 }
 
 // RepositoryEntry is one entry from the top-level "repositories" array.
@@ -68,7 +68,7 @@ func Parse(source string) *Manifest {
 
 // PackageAtCursor returns the require entry whose name or value range
 // contains the cursor, or nil if the cursor is somewhere else.
-func (m *Manifest) PackageAtCursor(pos protocol.Position) *RequireEntry {
+func (m *Manifest) PackageAtCursor(pos textpos.Position) *RequireEntry {
 	for i := range m.Requires {
 		r := &m.Requires[i]
 		if containsPos(r.NameRange, pos) || containsPos(r.ValueRange, pos) {
@@ -80,7 +80,7 @@ func (m *Manifest) PackageAtCursor(pos protocol.Position) *RequireEntry {
 
 // containsPos reports whether r covers pos. r.End is exclusive in column,
 // matching the convention used elsewhere in the codebase.
-func containsPos(r protocol.Range, pos protocol.Position) bool {
+func containsPos(r textpos.Range, pos textpos.Position) bool {
 	if pos.Line < r.Start.Line || pos.Line > r.End.Line {
 		return false
 	}
@@ -157,23 +157,23 @@ func (m *Manifest) handleRootKey(s *scanner, key string) {
 	}
 }
 
-func (m *Manifest) handleRequireValue(s *scanner, path, name string, nameRange protocol.Range) {
+func (m *Manifest) handleRequireValue(s *scanner, path, name string, nameRange textpos.Range) {
 	if s.peek() != '"' {
 		// Object-style constraint (rare in composer.json — e.g. branch alias).
 		// We still record the entry, with empty value.
-		m.recordRequire(path, name, nameRange, "", protocol.Range{})
+		m.recordRequire(path, name, nameRange, "", textpos.Range{})
 		s.skipValue()
 		return
 	}
 	val, valRange, ok := s.readString()
 	if !ok {
-		m.recordRequire(path, name, nameRange, "", protocol.Range{})
+		m.recordRequire(path, name, nameRange, "", textpos.Range{})
 		return
 	}
 	m.recordRequire(path, name, nameRange, val, valRange)
 }
 
-func (m *Manifest) recordRequire(path, name string, nameRange protocol.Range, value string, valueRange protocol.Range) {
+func (m *Manifest) recordRequire(path, name string, nameRange textpos.Range, value string, valueRange textpos.Range) {
 	kind := RequireKindRuntime
 	if path == "require-dev" {
 		kind = RequireKindDev

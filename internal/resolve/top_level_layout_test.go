@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func TestTopLevelVariableTypeDoesNotDependOnLineLayout(t *testing.T) {
@@ -20,7 +20,7 @@ func TestTopLevelVariableTypeDoesNotDependOnLineLayout(t *testing.T) {
 		"<?php\nuse App\\Shop;\n$shop = new Shop();\n$shop->total();",
 	} {
 		i := strings.LastIndex(src, "$shop")
-		pos := protocol.Position{Line: strings.Count(src[:i], "\n"), Character: i - strings.LastIndex(src[:i], "\n") - 1}
+		pos := textpos.Position{Line: strings.Count(src[:i], "\n"), Character: i - strings.LastIndex(src[:i], "\n") - 1}
 		file := parser.ParseFile(src)
 		if got := r.ResolveVariableType("$shop", SplitLines(src), pos, file); got != `App\Shop` {
 			t.Errorf("%q: $shop = %q, want App\\Shop", src, got)

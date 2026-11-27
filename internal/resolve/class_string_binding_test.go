@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // boxSource is the shared fixture for class-string<T> binding tests.
@@ -81,7 +81,7 @@ func setupBoxResolver(t *testing.T, src string) (*Resolver, *parser.FileNode, []
 
 func TestClassStringBindingLiteralString(t *testing.T) {
 	r, file, lines := setupBoxResolver(t, boxSource)
-	pos := protocol.Position{Line: lineContaining(t, lines, "$b1 =")}
+	pos := textpos.Position{Line: lineContaining(t, lines, "$b1 =")}
 	rt := r.ResolveVariableTypeTyped("$b1", lines, pos, file)
 	if rt.FQN != "App\\Box" {
 		t.Fatalf("FQN = %q, want App\\Box", rt.FQN)
@@ -93,7 +93,7 @@ func TestClassStringBindingLiteralString(t *testing.T) {
 
 func TestClassStringBindingClassConstant(t *testing.T) {
 	r, file, lines := setupBoxResolver(t, boxSource)
-	pos := protocol.Position{Line: lineContaining(t, lines, "$b2 =")}
+	pos := textpos.Position{Line: lineContaining(t, lines, "$b2 =")}
 	rt := r.ResolveVariableTypeTyped("$b2", lines, pos, file)
 	if rt.FQN != "App\\Box" {
 		t.Fatalf("FQN = %q, want App\\Box", rt.FQN)
@@ -105,7 +105,7 @@ func TestClassStringBindingClassConstant(t *testing.T) {
 
 func TestClassStringBindingVariableFromClassConstant(t *testing.T) {
 	r, file, lines := setupBoxResolver(t, boxSource)
-	pos := protocol.Position{Line: lineContaining(t, lines, "$b3 =")}
+	pos := textpos.Position{Line: lineContaining(t, lines, "$b3 =")}
 	rt := r.ResolveVariableTypeTyped("$b3", lines, pos, file)
 	if rt.FQN != "App\\Box" {
 		t.Fatalf("FQN = %q, want App\\Box", rt.FQN)
@@ -117,7 +117,7 @@ func TestClassStringBindingVariableFromClassConstant(t *testing.T) {
 
 func TestClassStringBindingReassignedVariableNotBound(t *testing.T) {
 	r, file, lines := setupBoxResolver(t, boxSource)
-	pos := protocol.Position{Line: lineContaining(t, lines, "$b5 =")}
+	pos := textpos.Position{Line: lineContaining(t, lines, "$b5 =")}
 	rt := r.ResolveVariableTypeTyped("$b5", lines, pos, file)
 	if rt.FQN != "App\\Box" {
 		t.Fatalf("FQN = %q, want App\\Box", rt.FQN)
@@ -130,7 +130,7 @@ func TestClassStringBindingReassignedVariableNotBound(t *testing.T) {
 
 func TestClassStringBindingArbitraryExpressionNotBound(t *testing.T) {
 	r, file, lines := setupBoxResolver(t, boxSource)
-	pos := protocol.Position{Line: lineContaining(t, lines, "$b6 =")}
+	pos := textpos.Position{Line: lineContaining(t, lines, "$b6 =")}
 	rt := r.ResolveVariableTypeTyped("$b6", lines, pos, file)
 	if rt.FQN != "App\\Box" {
 		t.Fatalf("FQN = %q, want App\\Box", rt.FQN)
@@ -142,7 +142,7 @@ func TestClassStringBindingArbitraryExpressionNotBound(t *testing.T) {
 
 func TestClassStringBindingParameterVariableNotBound(t *testing.T) {
 	r, file, lines := setupBoxResolver(t, paramSource)
-	pos := protocol.Position{Line: lineContaining(t, lines, "$b7 =")}
+	pos := textpos.Position{Line: lineContaining(t, lines, "$b7 =")}
 	rt := r.ResolveVariableTypeTyped("$b7", lines, pos, file)
 	if rt.FQN != "App\\Box" {
 		t.Fatalf("FQN = %q, want App\\Box", rt.FQN)
@@ -156,7 +156,7 @@ func TestClassStringBindingMakeMethodReturn(t *testing.T) {
 	r, file, lines := setupBoxResolver(t, boxSource)
 
 	// Resolve $b2 type to get Box<App\MyModel>
-	b2Line := protocol.Position{Line: lineContaining(t, lines, "$b2 =")}
+	b2Line := textpos.Position{Line: lineContaining(t, lines, "$b2 =")}
 	b2Type := r.ResolveVariableTypeTyped("$b2", lines, b2Line, file)
 	if b2Type.FQN != "App\\Box" || len(b2Type.Params) != 1 {
 		t.Fatalf("prerequisite failed: $b2 type = %v", b2Type)

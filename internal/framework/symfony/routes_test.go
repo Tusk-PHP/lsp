@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func TestDiscoverRoutesFromAttributes(t *testing.T) {
@@ -99,7 +99,7 @@ class ProductController
 		t.Fatal("failed to find route usage")
 	}
 
-	name, rng, ok := RouteNameAtPosition(source, protocol.Position{Line: lineNo, Character: col + 3})
+	name, rng, ok := RouteNameAtPosition(source, textpos.Position{Line: lineNo, Character: col + 3})
 	if !ok {
 		t.Fatal("expected route name context")
 	}
