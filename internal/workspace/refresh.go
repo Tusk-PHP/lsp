@@ -68,15 +68,16 @@ func (ws *Bootstrapped) ConfigPath() string {
 	return filepath.Join(ws.RootPath, config.FileName)
 }
 
-func WatchGlobs() []string {
-	globs := make([]string, 0, len(phpSourceExtensions)+len(composerStateFiles)+1)
+func (ws *Bootstrapped) WatchGlobs() []string {
+	containerGlobs := ws.Container.WatchGlobs()
+	globs := make([]string, 0, len(phpSourceExtensions)+len(composerStateFiles)+1+len(containerGlobs))
 	for _, ext := range phpSourceExtensions {
 		globs = append(globs, "**/*"+ext)
 	}
 	for _, name := range append(slices.Clone(composerStateFiles), config.FileName) {
 		globs = append(globs, "**/"+name)
 	}
-	return globs
+	return append(globs, containerGlobs...)
 }
 
 func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
@@ -86,7 +87,7 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 	configPath := ws.ConfigPath()
 	composerState := ws.ComposerStatePaths()
 	seen := make(map[string]struct{}, len(r.Paths))
-	var sources []string
+	var sources, others []string
 	profile := r.Profile
 	for _, path := range r.Paths {
 		path = filepath.Clean(path)
@@ -107,6 +108,10 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 					seen[source] = struct{}{}
 					sources = append(sources, source)
 				}
+			}
+			if _, dup := seen[path]; !dup {
+				seen[path] = struct{}{}
+				others = append(others, path)
 			}
 		}
 	}
@@ -136,7 +141,7 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 			errs = append(errs, err)
 		}
 	}
-	for _, path := range sources {
+	for _, path := range slices.Concat(sources, others) {
 		if err := ws.Container.Update(path); err != nil {
 			errs = append(errs, err)
 		}

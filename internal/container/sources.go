@@ -98,6 +98,19 @@ func (ca *ContainerAnalyzer) Update(path string) error {
 	return nil
 }
 
+// WatchGlobs returns the file watcher globs for sources the editor's PHP
+// globs don't cover: a Symfony project's services YAML files.
+func (ca *ContainerAnalyzer) WatchGlobs() []string {
+	if ca.framework != "symfony" {
+		return nil
+	}
+	globs := make([]string, len(symfonyServicesYAMLFiles))
+	for i, name := range symfonyServicesYAMLFiles {
+		globs[i] = "**/config/" + name
+	}
+	return globs
+}
+
 func (ca *ContainerAnalyzer) sourceDirs() []string {
 	switch ca.framework {
 	case "laravel":

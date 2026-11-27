@@ -34,3 +34,18 @@ func TestSavingSymfonyServicesYAMLUpdatesTheContainer(t *testing.T) {
 	waitForBinding(t, h, "app.notifier", true)
 	waitForBinding(t, h, "app.mailer", false)
 }
+
+func TestSymfonyServicesYAMLChangedOutsideTheEditorUpdatesTheContainer(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json":        `{"require": {"symfony/framework-bundle": "^7.0"}}`,
+		"config/services.yaml": "services:\n    app.mailer:\n        class: App\\Mailer\n",
+	}, map[string]interface{}{}, nil)
+	<-h.server.indexed
+	waitForBinding(t, h, "app.mailer", true)
+
+	writeProjectFiles(t, root, map[string]string{"config/services.yaml": "services:\n    app.notifier:\n        class: App\\Notifier\n"})
+	notifyWatched(h, root, "config/services.yaml")
+
+	waitForBinding(t, h, "app.notifier", true)
+	waitForBinding(t, h, "app.mailer", false)
+}
