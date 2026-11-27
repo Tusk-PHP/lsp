@@ -264,7 +264,7 @@ func (r *routeReader) expandResource(spec resourceSpec, resource resourceName, c
 	for _, action := range opts.actions(spec) {
 		route := RouteName{
 			Name:       g.as + opts.routeName(name, action, spec.singleton),
-			URI:        r.uri,
+			URI:        r.file.uri,
 			Range:      r.literalRange(resource.span),
 			TargetKind: "route",
 		}
@@ -279,6 +279,6 @@ func (r *routeReader) expandResource(spec resourceSpec, resource resourceName, c
 			route.TargetKind, route.Target = "controller", fqn+"@"+action
 			route.HandlerFQN, route.HandlerMethod = fqn, action
 		}
-		r.routes = append(r.routes, route)
+		r.session.routes = append(r.session.routes, route)
 	}
 }

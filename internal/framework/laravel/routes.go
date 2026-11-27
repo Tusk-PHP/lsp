@@ -3,7 +3,7 @@ package laravel
 import (
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -25,15 +25,19 @@ type RouteName struct {
 type RouteIndex struct {
 	rootPath string
 
+	writeMu sync.Mutex
+	files   map[string]*routeFile
+
 	mu     sync.RWMutex
-	byURI  map[string][]RouteName
+	all    []RouteName
+	names  []string
 	byName map[string][]RouteName
 }
 
 func NewRouteIndex(rootPath string) *RouteIndex {
 	return &RouteIndex{
 		rootPath: rootPath,
-		byURI:    make(map[string][]RouteName),
+		files:    make(map[string]*routeFile),
 		byName:   make(map[string][]RouteName),
 	}
 }
@@ -51,7 +55,8 @@ func (idx *RouteIndex) ScanWorkspace() error {
 		return nil
 	}
 
-	return filepath.Walk(routesDir, func(path string, info os.FileInfo, err error) error {
+	var files []*routeFile
+	err = filepath.Walk(routesDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info == nil || info.IsDir() || filepath.Ext(path) != ".php" {
 			return nil
 		}
@@ -59,46 +64,71 @@ func (idx *RouteIndex) ScanWorkspace() error {
 		if err != nil {
 			return nil
 		}
-		idx.IndexFile("file://"+path, string(content))
+		files = append(files, parseRouteFile("file://"+path, string(content), idx.rootPath))
 		return nil
 	})
+	idx.update(func(known map[string]*routeFile) {
+		for _, f := range files {
+			known[f.path] = f
+		}
+	})
+	return err
 }
 
 func (idx *RouteIndex) IndexFile(uri, source string) {
 	if !isLaravelRouteFile(uri) {
 		return
 	}
+	f := parseRouteFile(uri, source, idx.rootPath)
+	idx.update(func(known map[string]*routeFile) { known[f.path] = f })
+}
 
-	routes := parseRouteDefinitions(uri, source)
+func (idx *RouteIndex) RemoveFile(uri string) {
+	if !isLaravelRouteFile(uri) {
+		return
+	}
+	path := routeFilePath(uri)
+	idx.update(func(known map[string]*routeFile) { delete(known, path) })
+}
+
+func (idx *RouteIndex) update(change func(map[string]*routeFile)) {
+	idx.writeMu.Lock()
+	defer idx.writeMu.Unlock()
+
+	change(idx.files)
+	all := readRouteFiles(idx.files, idx.rootPath)
+	slices.SortFunc(all, compareRoutes)
+	byName := make(map[string][]RouteName)
+	names := make([]string, 0, len(all))
+	for _, route := range all {
+		if len(byName[route.Name]) == 0 {
+			names = append(names, route.Name)
+		}
+		byName[route.Name] = append(byName[route.Name], route)
+	}
 
 	idx.mu.Lock()
-	defer idx.mu.Unlock()
+	idx.all, idx.names, idx.byName = all, names, byName
+	idx.mu.Unlock()
+}
 
-	if prev := idx.byURI[uri]; len(prev) > 0 {
-		for _, route := range prev {
-			idx.removeRouteLocked(route)
-		}
+func compareRoutes(a, b RouteName) int {
+	if c := strings.Compare(a.Name, b.Name); c != 0 {
+		return c
 	}
-
-	idx.byURI[uri] = routes
-	for _, route := range routes {
-		idx.byName[route.Name] = append(idx.byName[route.Name], route)
-		idx.sortRouteDefsLocked(route.Name)
+	if c := strings.Compare(a.URI, b.URI); c != 0 {
+		return c
 	}
+	if a.Range.Start.Line != b.Range.Start.Line {
+		return a.Range.Start.Line - b.Range.Start.Line
+	}
+	return a.Range.Start.Character - b.Range.Start.Character
 }
 
 func (idx *RouteIndex) Names() []string {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-
-	names := make([]string, 0, len(idx.byName))
-	for name, entries := range idx.byName {
-		if name != "" && len(entries) > 0 {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	return names
+	return slices.Clone(idx.names)
 }
 
 func (idx *RouteIndex) Find(name string) *RouteName {
@@ -124,61 +154,7 @@ func (idx *RouteIndex) All() []RouteName {
 
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-
-	var routes []RouteName
-	for _, entries := range idx.byName {
-		routes = append(routes, entries...)
-	}
-	sort.Slice(routes, func(i, j int) bool {
-		if routes[i].Name != routes[j].Name {
-			return routes[i].Name < routes[j].Name
-		}
-		if routes[i].URI != routes[j].URI {
-			return routes[i].URI < routes[j].URI
-		}
-		if routes[i].Range.Start.Line != routes[j].Range.Start.Line {
-			return routes[i].Range.Start.Line < routes[j].Range.Start.Line
-		}
-		return routes[i].Range.Start.Character < routes[j].Range.Start.Character
-	})
-	return routes
-}
-
-func (idx *RouteIndex) removeRouteLocked(route RouteName) {
-	entries := idx.byName[route.Name]
-	if len(entries) == 0 {
-		return
-	}
-
-	filtered := entries[:0]
-	for _, entry := range entries {
-		if entry.URI == route.URI &&
-			entry.Range.Start == route.Range.Start &&
-			entry.Range.End == route.Range.End {
-			continue
-		}
-		filtered = append(filtered, entry)
-	}
-
-	if len(filtered) == 0 {
-		delete(idx.byName, route.Name)
-		return
-	}
-	idx.byName[route.Name] = filtered
-}
-
-func (idx *RouteIndex) sortRouteDefsLocked(name string) {
-	sort.Slice(idx.byName[name], func(i, j int) bool {
-		a := idx.byName[name][i]
-		b := idx.byName[name][j]
-		if a.URI != b.URI {
-			return a.URI < b.URI
-		}
-		if a.Range.Start.Line != b.Range.Start.Line {
-			return a.Range.Start.Line < b.Range.Start.Line
-		}
-		return a.Range.Start.Character < b.Range.Start.Character
-	})
+	return slices.Clone(idx.all)
 }
 
 func isLaravelRouteFile(uri string) bool {

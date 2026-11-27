@@ -6,7 +6,6 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/lexer"
-	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -122,20 +121,10 @@ func (c routeCall) values() []ast.Expr {
 }
 
 type routeReader struct {
-	src       string
-	uri       string
-	lines     ast.Lines
+	session   *routeSession
+	file      *routeFile
 	namespace string
 	imports   map[string]string
-	routes    []RouteName
-}
-
-func parseRouteDefinitions(uri, source string) []RouteName {
-	r := routeReader{src: source, uri: uri, lines: ast.NewLines(source)}
-	for _, stmt := range phpparser.Parse(source, token.Latest).Stmts {
-		r.node(stmt, routeGroup{})
-	}
-	return r.routes
 }
 
 func (r *routeReader) node(n ast.Node, g routeGroup) {
@@ -148,6 +137,10 @@ func (r *routeReader) node(n ast.Node, g routeGroup) {
 	case *ast.Use:
 		r.use(n)
 		return
+	case *ast.Include:
+		if r.include(n.Operand, g) {
+			return
+		}
 	case *ast.MethodCall, *ast.StaticCall:
 		if calls, ok := r.routeChain(n.(ast.Expr)); ok {
 			r.chain(calls, g)
@@ -255,6 +248,8 @@ func (r *routeReader) group(c routeCall, outer, own routeGroup) {
 	inner := outer.nest(own)
 	for _, v := range values {
 		switch fn := v.(type) {
+		case *ast.Literal, *ast.Binary, *ast.MagicConst, *ast.Call:
+			r.include(fn, inner)
 		case *ast.Closure:
 			if fn.Body != nil {
 				r.node(fn.Body, inner)
@@ -284,7 +279,7 @@ func (r *routeReader) route(verb routeCall, mods []routeCall, g routeGroup) {
 	if verb.name == "match" {
 		at = 1
 	}
-	route := RouteName{URI: r.uri}
+	route := RouteName{URI: r.file.uri}
 	if path, _, ok := r.str(verb.arg(at)); ok && g.unknown&routePrefix == 0 {
 		route.Path = "/" + joinRoutePath(g.prefix, path)
 	}
@@ -321,7 +316,7 @@ func (r *routeReader) route(verb routeCall, mods []routeCall, g routeGroup) {
 	route.Name = name
 	route.Range = r.literalRange(nameSpan)
 	route.TargetKind, route.Target, route.HandlerFQN, route.HandlerMethod = r.target(verb.name, action, g)
-	r.routes = append(r.routes, route)
+	r.session.routes = append(r.session.routes, route)
 }
 
 func (r *routeReader) target(method string, action ast.Expr, g routeGroup) (kind, target, handlerFQN, handlerMethod string) {
@@ -443,12 +438,12 @@ func (r *routeReader) str(e ast.Expr) (string, ast.Span, bool) {
 }
 
 func (r *routeReader) text(n ast.Node) string {
-	return n.Bounds().Text(r.src)
+	return n.Bounds().Text(r.file.src)
 }
 
 func (r *routeReader) literalRange(s ast.Span) textpos.Range {
-	startLine, startCol := r.lines.Position(s.Start + 1)
-	endLine, endCol := r.lines.Position(s.End - 1)
+	startLine, startCol := r.file.lines.Position(s.Start + 1)
+	endLine, endCol := r.file.lines.Position(s.End - 1)
 	return textpos.Range{
 		Start: textpos.Position{Line: startLine, Character: startCol},
 		End:   textpos.Position{Line: endLine, Character: endCol},

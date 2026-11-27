@@ -34,3 +34,20 @@ func BenchmarkParseRouteDefinitions(b *testing.B) {
 		parseRouteDefinitions("file:///project/routes/web.php", src)
 	}
 }
+
+func BenchmarkRouteIndexReindexFile(b *testing.B) {
+	idx := NewRouteIndex("/project")
+	var web strings.Builder
+	web.WriteString("<?php\n\nuse Illuminate\\Support\\Facades\\Route;\n\n")
+	for i := 0; i < 10; i++ {
+		n := strconv.Itoa(i)
+		idx.IndexFile("file:///project/routes/area"+n+".php", benchmarkRouteSource(5))
+		web.WriteString("Route::prefix('p" + n + "')->name('p" + n + ".')->group(base_path('routes/area" + n + ".php'));\n")
+	}
+	idx.IndexFile("file:///project/routes/web.php", web.String())
+	edited := benchmarkRouteSource(5)
+	b.ReportAllocs()
+	for b.Loop() {
+		idx.IndexFile("file:///project/routes/area3.php", edited)
+	}
+}
