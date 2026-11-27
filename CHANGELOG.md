@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Building from source needs Go 1.27** or later (was 1.25).
 - A request whose parameters can't be read, or a `workspace/executeCommand` call with a missing or wrongly typed argument, now gets an `Invalid params` error naming the method and the argument, and the server log records it. Before, commands answered with an empty result, and a malformed notification was dropped without a trace.
 
+### Removed
+
+- **The `scripts/install.sh` one-line installer.** With Go installed it tried to build from source and failed when piped from `curl`. Download the binary from the latest release instead; [docs/editors.md](docs/editors.md#binary-installation) has a `curl` command that always fetches the newest one.
+
 ### Fixed
 
 - The "stopped indexing at maxIndexFiles" warning no longer appears when the workspace has exactly `maxIndexFiles` PHP files; it shows only when files were actually left out.

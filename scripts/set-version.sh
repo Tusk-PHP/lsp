@@ -67,7 +67,6 @@ echo "Setting version to $VERSION"
 
 replace_in_file "Makefile" 's/^VERSION \?= .+$/VERSION ?= $ENV{VERSION}/m'
 replace_in_file "scripts/build.sh" 's/^VERSION="\$\{VERSION:-[^}]+\}"$/VERSION="\${VERSION:-$ENV{VERSION}}"/m'
-replace_in_file "scripts/install.sh" 's/^VERSION="\$\{VERSION:-[^}]+\}"$/VERSION="\${VERSION:-$ENV{VERSION}}"/m'
 replace_in_file "cmd/tusk-php/main.go" 's/^(\s*version\s*=\s*")[^"]+(")/$1$ENV{VERSION}$2/m'
 replace_in_file "internal/lsp/server.go" 's/^(const ServerVersion = ")[^"]+(")/$1$ENV{VERSION}$2/m'
 replace_in_file "CONTRIBUTING.md" 's/(Pushing a semver tag \(e\.g\., `v)[^`]+(`\) triggers:)/$1$ENV{VERSION}$2/'
@@ -76,7 +75,6 @@ echo "Updated version references:"
 printf '  %s\n' \
     "Makefile" \
     "scripts/build.sh" \
-    "scripts/install.sh" \
     "cmd/tusk-php/main.go" \
     "internal/lsp/server.go" \
     "CONTRIBUTING.md"

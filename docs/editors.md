@@ -105,13 +105,18 @@ tusk-php --transport stdio
 
 ## Binary Installation
 
-**Download** from [GitHub Releases](https://github.com/Tusk-PHP/lsp/releases/latest) (Linux, macOS, Windows — amd64/arm64).
+**Download** from [GitHub Releases](https://github.com/Tusk-PHP/lsp/releases/latest): Linux and macOS on amd64 and arm64, Windows on amd64.
 
-**Quick install** (Linux / macOS):
+**From the terminal** (Linux / macOS), the latest release into `~/.local/bin`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Tusk-PHP/lsp/main/scripts/install.sh | bash
+OS=$(uname -s | tr '[:upper:]' '[:lower:]'); ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+mkdir -p ~/.local/bin
+curl -fsSL -o ~/.local/bin/tusk-php "https://github.com/Tusk-PHP/lsp/releases/latest/download/tusk-php-$OS-$ARCH"
+chmod +x ~/.local/bin/tusk-php
 ```
+
+Make sure `~/.local/bin` is on your `PATH`.
 
 **From source** (requires Go 1.27+):
 
