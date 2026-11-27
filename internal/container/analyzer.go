@@ -542,7 +542,7 @@ func (ca *ContainerAnalyzer) parseSymfonyClasses(path string, content string) cl
 	ns := file.Namespace
 	uri := pathToFileURI(path)
 	for _, cls := range file.Classes {
-		fqn := ns + "\\" + cls.Name
+		fqn := cls.FullName
 		bindings = append(bindings, ServiceBinding{Abstract: fqn, Concrete: fqn, Singleton: true, Source: path, DefinitionURI: uri})
 		for _, iface := range cls.Implements {
 			ifaceFQN := parser.ResolveImportedName(iface, ns, file.Uses, "class")
