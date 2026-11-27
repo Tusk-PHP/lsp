@@ -163,7 +163,7 @@ func (r bladeRequest) hover(h *protocol.Hover) *protocol.Hover {
 	return h
 }
 
-// completions moves the items' extra edits to the view. An edit that falls in
+// completions moves the items' edits to the view. An edit that falls in
 // generated PHP is an import added at the top of the file, which a view has no
 // place for: the item then inserts the fully qualified name instead.
 func (r bladeRequest) completions(items []protocol.CompletionItem) []protocol.CompletionItem {
@@ -172,6 +172,13 @@ func (r bladeRequest) completions(items []protocol.CompletionItem) []protocol.Co
 	}
 	for i := range items {
 		item := &items[i]
+		if e := item.TextEdit; e != nil {
+			if rng, ok := r.toView(e.Range); ok {
+				item.TextEdit = &protocol.TextEdit{Range: rng, NewText: e.NewText}
+			} else {
+				item.TextEdit, item.InsertText = nil, e.NewText
+			}
+		}
 		if len(item.AdditionalTextEdits) == 0 {
 			continue
 		}

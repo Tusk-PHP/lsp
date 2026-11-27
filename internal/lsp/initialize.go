@@ -91,12 +91,14 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if s.routeIndex != nil {
 		s.completion.SetLaravelRouteIndex(s.routeIndex)
 	}
+	s.completion.SetLaravelAuthorization(s.workspace.Authorization)
 	s.completion.SetViewResolver(viewResolver)
 	s.completion.SetTranslationResolver(translationResolver)
 	s.completion.SetSymfonyTranslationResolver(symfonyTranslations)
 	s.completion.SetSymfonyCommands(s.workspace.SymfonyCommands)
 	s.inlayHint = inlayhint.NewProvider(s.index, s.container)
 	s.hover = hover.NewProvider(s.index, s.container, s.framework)
+	s.hover.SetLaravelAuthorization(s.workspace.Authorization)
 	s.hover.SetArrayResolver(arrayResolver)
 	s.hover.SetConfig(s.cfg)
 	s.coverage = coverage.NewStore(s.rootPath, s.cfg.CoverageReportPath, s.logger)
@@ -141,6 +143,7 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	if s.routeIndex != nil {
 		s.analyzer.SetLaravelRouteIndex(s.routeIndex)
 	}
+	s.analyzer.SetLaravelAuthorization(s.workspace.Authorization)
 	s.analyzer.SetViewResolver(viewResolver)
 	s.analyzer.SetTranslationResolver(translationResolver)
 	s.analyzer.SetSymfonyTranslationResolver(symfonyTranslations)
@@ -231,6 +234,7 @@ func (s *Server) handleInitialized(msg *jsonRPCMessage) {
 	if s.routeIndex != nil {
 		s.goSafe("laravelRoutes.ScanWorkspace", func() {
 			_ = s.workspace.ScanRoutes()
+			s.workspace.ScanAuthorization()
 		})
 	}
 	// Run model analysis after both workspace and vendor indexing complete

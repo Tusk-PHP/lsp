@@ -7,6 +7,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/coverage"
+	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
@@ -23,6 +24,7 @@ type Provider struct {
 	engine        *resolve.Engine
 	framework     string
 	arrayResolver *models.FrameworkArrayResolver
+	authorization *frameworklaravel.Authorization
 	cfg           *config.Config
 	coverage      *coverage.Store
 }
@@ -39,6 +41,12 @@ func (p *Provider) SetCoverage(store *coverage.Store) {
 // SetArrayResolver sets the framework array resolver for config hover.
 func (p *Provider) SetArrayResolver(resolver *models.FrameworkArrayResolver) {
 	p.arrayResolver = resolver
+}
+
+// SetLaravelAuthorization sets the Gate abilities and middleware names hover
+// describes in the arguments that take them.
+func (p *Provider) SetLaravelAuthorization(authorization *frameworklaravel.Authorization) {
+	p.authorization = authorization
 }
 
 // SetConfig stores the server config so hover can read live settings (e.g.
@@ -61,6 +69,13 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 
 	if v, path, key, ok := arrayKeyAt(ctx); ok {
 		return p.hoverArrayKey(r, file, v, path, key)
+	}
+	if p.framework == "laravel" && p.authorization != nil {
+		if arg, ok := ctx.CallArg(); ok && arg.Value == ast.ArgString {
+			if name, ok := frameworklaravel.AuthNameArg(r, p.index, file, arg); ok {
+				return p.hoverAuthName(r, file, name)
+			}
+		}
 	}
 
 	// Check for config key hover: config('database.connections.mysql')

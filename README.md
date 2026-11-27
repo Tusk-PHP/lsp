@@ -72,6 +72,7 @@ Setup for each editor is in [docs/editors.md](docs/editors.md), every setting is
 **Laravel**
 - Service container bindings from your providers, plus 25+ core framework bindings.
 - `config()` keys with value preview, routes, views and translations, all with completion and go-to-definition.
+- Gate abilities from `Gate::define()` and policies, and middleware aliases and groups, with completion, hover and go-to-definition in `Gate::allows()`, `$user->can()`, `@can`, `->middleware()` and the like.
 - Eloquent query chains, relations, casts and scopes. Unknown columns and relations are flagged in query builders.
 
 **Symfony**

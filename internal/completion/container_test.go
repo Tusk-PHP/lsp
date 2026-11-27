@@ -28,7 +28,7 @@ func collectLabels(items []protocol.CompletionItem) map[string]bool {
 	return m
 }
 
-func indexPHPDir(t *testing.T, idx *symbols.Index, root, dir string, src symbols.SymbolSource) {
+func indexPHPDir(t testing.TB, idx *symbols.Index, root, dir string, src symbols.SymbolSource) {
 	t.Helper()
 	absDir := filepath.Join(root, dir)
 	filepath.Walk(absDir, func(path string, info os.FileInfo, err error) error {
@@ -45,7 +45,7 @@ func indexPHPDir(t *testing.T, idx *symbols.Index, root, dir string, src symbols
 	})
 }
 
-func setupLaravelIndex(t *testing.T) (*symbols.Index, *container.ContainerAnalyzer) {
+func setupLaravelIndex(t testing.TB) (*symbols.Index, *container.ContainerAnalyzer) {
 	t.Helper()
 	requireLaravelVendor(t)
 	root := filepath.Join("..", "..", "testdata", "laravel")
