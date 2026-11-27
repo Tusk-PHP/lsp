@@ -279,6 +279,6 @@ func (r *routeReader) expandResource(spec resourceSpec, resource resourceName, c
 			route.TargetKind, route.Target = "controller", fqn+"@"+action
 			route.HandlerFQN, route.HandlerMethod = fqn, action
 		}
-		r.session.routes = append(r.session.routes, route)
+		r.out.routes = append(r.out.routes, route)
 	}
 }
