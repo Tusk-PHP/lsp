@@ -66,8 +66,6 @@ wp-content/plugins/woocommerce/includes/admin/class-wc-admin-setup-wizard.php	un
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-setup-wizard.php	unused-private-property	Private property 'WC_Admin_Setup_Wizard::$tweets' is never used
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-status.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-status.php	unknown-class	Unknown class 'Constants'
-wp-content/plugins/woocommerce/includes/admin/class-wc-admin-status.php	unused-private-method	Private method 'WC_Admin_Status::output_plugins_info' is never used
-wp-content/plugins/woocommerce/includes/admin/class-wc-admin-status.php	unused-private-method	Private method 'WC_Admin_Status::output_tables_info' is never used
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-status.php	unused-variable	Variable $has_newer_version is assigned but never read
 wp-content/plugins/woocommerce/includes/admin/class-wc-admin-taxonomies.php	unused-variable	Variable $wc_admin_taxonomies is assigned but never read
 wp-content/plugins/woocommerce/includes/admin/helper/class-wc-helper-admin.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\Admin\Marketplace'
@@ -107,10 +105,6 @@ wp-content/plugins/woocommerce/includes/class-wc-ajax.php	unknown-member	Unknown
 wp-content/plugins/woocommerce/includes/class-wc-ajax.php	unknown-member	Unknown member 'get_product' on 'WC_Order_Item'
 wp-content/plugins/woocommerce/includes/class-wc-ajax.php	unknown-member	Unknown member 'get_variation_attributes' on 'WC_Product'
 wp-content/plugins/woocommerce/includes/class-wc-ajax.php	unknown-member	Unknown member 'get_variation_attributes' on 'WC_Product'
-wp-content/plugins/woocommerce/includes/class-wc-ajax.php	unused-private-method	Private method 'WC_AJAX::variation_bulk_action_variable_stock_status_instock' is never used
-wp-content/plugins/woocommerce/includes/class-wc-ajax.php	unused-private-method	Private method 'WC_AJAX::variation_bulk_action_variable_stock_status_onbackorder' is never used
-wp-content/plugins/woocommerce/includes/class-wc-ajax.php	unused-private-method	Private method 'WC_AJAX::variation_bulk_action_variable_stock_status_outofstock' is never used
-wp-content/plugins/woocommerce/includes/class-wc-ajax.php	unused-private-method	Private method 'WC_AJAX::variation_bulk_action_variable_unset_cogs_value' is never used
 wp-content/plugins/woocommerce/includes/class-wc-auth.php	unknown-class	Unknown class 'Automattic\Jetpack\Connection\SSO'
 wp-content/plugins/woocommerce/includes/class-wc-background-emailer.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/class-wc-background-emailer.php	unknown-function	Unknown function 'fastcgi_finish_request'
@@ -201,10 +195,6 @@ wp-content/plugins/woocommerce/includes/class-wc-register-wp-admin-settings.php	
 wp-content/plugins/woocommerce/includes/class-wc-session-handler.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/class-wc-shipping.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/class-wc-shipping.php	unknown-class	Unknown class 'Constants'
-wp-content/plugins/woocommerce/includes/class-wc-tax.php	unused-private-method	Private method 'WC_Tax::format_tax_rate_country' is never used
-wp-content/plugins/woocommerce/includes/class-wc-tax.php	unused-private-method	Private method 'WC_Tax::format_tax_rate_name' is never used
-wp-content/plugins/woocommerce/includes/class-wc-tax.php	unused-private-method	Private method 'WC_Tax::format_tax_rate_priority' is never used
-wp-content/plugins/woocommerce/includes/class-wc-tax.php	unused-private-method	Private method 'WC_Tax::format_tax_rate_state' is never used
 wp-content/plugins/woocommerce/includes/class-wc-tracker.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/class-wc-tracker.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/class-wc-tracker.php	unknown-class	Unknown class 'Constants'
@@ -639,7 +629,6 @@ wp-content/plugins/woocommerce/src/Database/Migrations/CustomOrderTable/CLIRunne
 wp-content/plugins/woocommerce/src/Database/Migrations/CustomOrderTable/CLIRunner.php	unknown-function	Unknown function 'WP_CLI\Utils\make_progress_bar'
 wp-content/plugins/woocommerce/src/Database/Migrations/CustomOrderTable/CLIRunner.php	unknown-function	Unknown function 'WP_CLI\Utils\make_progress_bar'
 wp-content/plugins/woocommerce/src/Database/Migrations/CustomOrderTable/CLIRunner.php	unknown-function	Unknown function 'WP_CLI\Utils\make_progress_bar'
-wp-content/plugins/woocommerce/src/Database/Migrations/CustomOrderTable/CLIRunner.php	unused-private-method	Private method 'CLIRunner::is_enabled' is never used
 wp-content/plugins/woocommerce/src/Deprecated.php	unknown-class	Unknown class 'Automattic\WooCommerce\Admin\Features\Navigation\CoreMenu'
 wp-content/plugins/woocommerce/src/Deprecated.php	unknown-class	Unknown class 'Automattic\WooCommerce\Admin\Features\Navigation\Menu'
 wp-content/plugins/woocommerce/src/Deprecated.php	unknown-class	Unknown class 'Automattic\WooCommerce\Admin\Features\Navigation\Screen'
@@ -689,9 +678,6 @@ wp-content/plugins/woocommerce/src/Internal/Admin/Orders/ListTable.php	unused-im
 wp-content/plugins/woocommerce/src/Internal/Admin/Orders/ListTable.php	unused-private-property	Private property 'ListTable::$status_count_cache' is never used
 wp-content/plugins/woocommerce/src/Internal/Admin/Orders/MetaBoxes/CustomMetaBox.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\DataStores\CustomMetaDataStore'
 wp-content/plugins/woocommerce/src/Internal/Admin/Orders/MetaBoxes/CustomerHistory.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Overrides\Order'
-wp-content/plugins/woocommerce/src/Internal/Admin/Orders/PageController.php	unused-private-method	Private method 'PageController::setup_action_edit_order' is never used
-wp-content/plugins/woocommerce/src/Internal/Admin/Orders/PageController.php	unused-private-method	Private method 'PageController::setup_action_list_orders' is never used
-wp-content/plugins/woocommerce/src/Internal/Admin/Orders/PageController.php	unused-private-method	Private method 'PageController::setup_action_new_order' is never used
 wp-content/plugins/woocommerce/src/Internal/Admin/Schedulers/CustomersScheduler.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\API\Reports\Cache'
 wp-content/plugins/woocommerce/src/Internal/Admin/Settings.php	unknown-class	Unknown class 'Automattic\Jetpack\Connection\REST_Connector'
 wp-content/plugins/woocommerce/src/Internal/Admin/Settings.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Features\Features'
@@ -863,8 +849,6 @@ wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/LegacyDataHandler.
 wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/LegacyDataHandler.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\Utilities\DatabaseUtil'
 wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/OrdersTableDataStore.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/OrdersTableDataStore.php	unknown-class	Unknown class 'Constants'
-wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/OrdersTableDataStore.php	unused-private-method	Private method 'OrdersTableDataStore::get_cpt_order' is never used
-wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/OrdersTableDataStore.php	unused-private-method	Private method 'OrdersTableDataStore::get_order_meta_select_statement' is never used
 wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/OrdersTableSearchQuery.php	unused-variable	Variable $address_table is assigned but never read
 wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/OrdersTableSearchQuery.php	unused-variable	Variable $db_util is assigned but never read
 wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/OrdersTableSearchQuery.php	unused-variable	Variable $db_util is assigned but never read
@@ -904,22 +888,12 @@ wp-content/plugins/woocommerce/src/Internal/ProductFilters/FilterData.php	unused
 wp-content/plugins/woocommerce/src/Internal/PushNotifications/Dispatchers/WpcomNotificationDispatcher.php	unknown-class	Unknown class 'Jetpack_Connection_Client'
 wp-content/plugins/woocommerce/src/Internal/PushNotifications/Traits/ConvertsExceptionsToWpError.php	unknown-member	Unknown member 'getErrorCode' on 'Exception'
 wp-content/plugins/woocommerce/src/Internal/PushNotifications/Traits/ConvertsExceptionsToWpError.php	unknown-member	Unknown member 'getErrorData' on 'Exception'
-wp-content/plugins/woocommerce/src/Internal/PushNotifications/Validators/PushTokenValidator.php	unused-private-method	Private method 'PushTokenValidator::validate_device_locale' is never used
-wp-content/plugins/woocommerce/src/Internal/PushNotifications/Validators/PushTokenValidator.php	unused-private-method	Private method 'PushTokenValidator::validate_device_uuid' is never used
-wp-content/plugins/woocommerce/src/Internal/PushNotifications/Validators/PushTokenValidator.php	unused-private-method	Private method 'PushTokenValidator::validate_id' is never used
-wp-content/plugins/woocommerce/src/Internal/PushNotifications/Validators/PushTokenValidator.php	unused-private-method	Private method 'PushTokenValidator::validate_metadata' is never used
-wp-content/plugins/woocommerce/src/Internal/PushNotifications/Validators/PushTokenValidator.php	unused-private-method	Private method 'PushTokenValidator::validate_origin' is never used
-wp-content/plugins/woocommerce/src/Internal/PushNotifications/Validators/PushTokenValidator.php	unused-private-method	Private method 'PushTokenValidator::validate_platform' is never used
-wp-content/plugins/woocommerce/src/Internal/PushNotifications/Validators/PushTokenValidator.php	unused-private-method	Private method 'PushTokenValidator::validate_token' is never used
-wp-content/plugins/woocommerce/src/Internal/PushNotifications/Validators/PushTokenValidator.php	unused-private-method	Private method 'PushTokenValidator::validate_user_id' is never used
 wp-content/plugins/woocommerce/src/Internal/ReceiptRendering/ReceiptRenderingEngine.php	unknown-member	Unknown member 'get_product' on 'WC_Order_Item'
 wp-content/plugins/woocommerce/src/Internal/ReceiptRendering/ReceiptRenderingEngine.php	unknown-member	Unknown member 'get_subtotal' on 'WC_Order_Item'
 wp-content/plugins/woocommerce/src/Internal/ReceiptRendering/ReceiptRenderingEngine.php	unused-private-constant	Private constant 'ReceiptRenderingEngine::KNOWN_CARD_TYPES' is never used
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/AbstractCollectionQuery.php	unused-import	Unused import 'WC_Order'
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/OrderNotes/CollectionQuery.php	argument-count-mismatch	Too many arguments to remove_filter(): 4 passed, at most 3 expected
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/OrderNotes/CollectionQuery.php	unused-import	Unused import 'WC_Order'
-wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Orders/ActionController.php	unused-private-method	Private method 'ActionController::action_payment_complete' is never used
-wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Orders/ActionController.php	unused-private-method	Private method 'ActionController::action_reset_download_permissions' is never used
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Orders/Schema/OrderItemSchema.php	unused-import	Unused import 'Automattic\WooCommerce\Enums\ProductType'
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Orders/Schema/OrderItemSchema.php	unused-import	Unused import 'Automattic\WooCommerce\Utilities\OrderUtil'
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Products/Controller.php	unknown-member	Unknown member 'set_button_text' on 'WC_Product'
@@ -958,7 +932,6 @@ wp-content/plugins/woocommerce/src/Internal/VariationGallery/ClassicVariationGal
 wp-content/plugins/woocommerce/src/Internal/VariationGallery/ClassicVariationGalleryAdmin.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/src/Packages.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/src/Proxies/LegacyProxy.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\DependencyManagement\Definition'
-wp-content/plugins/woocommerce/src/Proxies/LegacyProxy.php	unused-private-method	Private method 'LegacyProxy::get_instance_of_wc_queue_interface' is never used
 wp-content/plugins/woocommerce/src/StoreApi/Legacy.php	unused-import	Unused import 'Automattic\WooCommerce\Blocks\Package'
 wp-content/plugins/woocommerce/src/StoreApi/Routes/V1/AI/Middleware.php	unused-import	Unused import 'Automattic\WooCommerce\StoreApi\Exceptions\RouteException'
 wp-content/plugins/woocommerce/src/StoreApi/Routes/V1/CartItemsByKey.php	unused-variable	Variable $cart is assigned but never read
