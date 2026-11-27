@@ -214,3 +214,13 @@ func TestCompareWalkOrderMatchesTheDirectoryWalk(t *testing.T) {
 		t.Errorf("sorted %v, walked %v", sorted, walked)
 	}
 }
+
+func TestSymfonyClassInTheGlobalNamespaceIsBoundByItsName(t *testing.T) {
+	ca := NewContainerAnalyzer(symbols.NewIndex(), "/tmp", "symfony")
+	set := applied(ca.parseSymfonyClasses("/app/src/Mailer.php", "<?php\nclass Mailer implements SendsMail {}\n"))
+	for _, abstract := range []string{"Mailer", "SendsMail"} {
+		if b := set.bindings[abstract]; b == nil || b.Concrete != "Mailer" {
+			t.Errorf("%s: %+v", abstract, b)
+		}
+	}
+}
