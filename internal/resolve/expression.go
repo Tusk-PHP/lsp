@@ -105,6 +105,9 @@ func (r *Resolver) typeOf(t *syntaxTree, e ast.Expr, expected *ResolvedType, ctx
 			rt.Literal = t.src[n.Start:lit.End]
 			return rt
 		}
+		if n.Op == token.At {
+			return r.typeOf(t, n.Operand, expected, ctx)
+		}
 		return r.operatorType(t, n, ctx)
 	case *ast.InstanceOf:
 		return r.operatorType(t, n, ctx)
