@@ -142,19 +142,13 @@ func (r *Resolver) typeOf(t *syntaxTree, e ast.Expr, expected *ResolvedType, ctx
 		return r.ternaryType(t, n, ctx)
 	case *ast.Call:
 		return r.callType(t, n, ctx)
-	case *ast.MethodCall:
-		return r.accessType(t, n, n.Object, "->", n.Name, n.Args, ctx)
-	case *ast.PropertyFetch:
-		return r.accessType(t, n, n.Object, "->", n.Name, nil, ctx)
-	case *ast.StaticCall:
-		return r.accessType(t, n, n.Class, "::", n.Name, n.Args, ctx)
-	case *ast.StaticPropertyFetch:
-		return r.accessType(t, n, n.Class, "::", n.Name, nil, ctx)
+	case *ast.MethodCall, *ast.PropertyFetch, *ast.StaticCall, *ast.StaticPropertyFetch:
+		return r.memberChainType(t, e, ctx)
 	case *ast.ClassConstFetch:
 		if strings.EqualFold(t.text(n.Name), "class") {
 			return r.classStringOf(t, n.Class, ctx)
 		}
-		return r.accessType(t, n, n.Class, "::", n.Name, nil, ctx)
+		return r.memberChainType(t, e, ctx)
 	case *ast.ArrayDimFetch:
 		if n.Dim == nil {
 			return ResolvedType{}
@@ -311,13 +305,61 @@ func (r *Resolver) containerCallType(t *syntaxTree, call ast.Expr, ctx ExprConte
 	}
 }
 
-func (r *Resolver) accessType(t *syntaxTree, n, receiver ast.Expr, op string, nameNode ast.Expr, argList *ast.ArgList, ctx ExprContext) ResolvedType {
-	call := argList != nil
-	if call {
-		if rt, ok := r.containerCallType(t, n, ctx); ok {
-			return rt
+type memberLink struct {
+	node     ast.Expr
+	receiver ast.Expr
+	op       string
+	name     ast.Expr
+	args     *ast.ArgList
+}
+
+func memberLinkOf(t *syntaxTree, e ast.Expr) (memberLink, bool) {
+	switch n := e.(type) {
+	case *ast.MethodCall:
+		return memberLink{node: n, receiver: n.Object, op: "->", name: n.Name, args: n.Args}, true
+	case *ast.PropertyFetch:
+		return memberLink{node: n, receiver: n.Object, op: "->", name: n.Name}, true
+	case *ast.StaticCall:
+		return memberLink{node: n, receiver: n.Class, op: "::", name: n.Name, args: n.Args}, true
+	case *ast.StaticPropertyFetch:
+		return memberLink{node: n, receiver: n.Class, op: "::", name: n.Name}, true
+	case *ast.ClassConstFetch:
+		if strings.EqualFold(t.text(n.Name), "class") {
+			return memberLink{}, false
 		}
+		return memberLink{node: n, receiver: n.Class, op: "::", name: n.Name}, true
 	}
+	return memberLink{}, false
+}
+
+func (r *Resolver) memberChainType(t *syntaxTree, e ast.Expr, ctx ExprContext) ResolvedType {
+	var buf [8]memberLink
+	links := buf[:0]
+	var cur ResolvedType
+	for {
+		link, ok := memberLinkOf(t, e)
+		if !ok {
+			cur = r.typeOf(t, e, nil, ctx)
+			break
+		}
+		if link.args != nil {
+			if rt, ok := r.containerCallType(t, link.node, ctx); ok {
+				cur = rt
+				break
+			}
+		}
+		links = append(links, link)
+		e = link.receiver
+	}
+	for i := len(links) - 1; i >= 0; i-- {
+		cur = r.linkType(t, links[i], cur, ctx)
+	}
+	return cur
+}
+
+func (r *Resolver) linkType(t *syntaxTree, link memberLink, cur ResolvedType, ctx ExprContext) ResolvedType {
+	receiver, op, nameNode, argList := link.receiver, link.op, link.name, link.args
+	call := argList != nil
 	name := t.text(nameNode)
 	access := MemberAccessOf(call, op == "::", name)
 	switch nameNode.(type) {
@@ -330,7 +372,6 @@ func (r *Resolver) accessType(t *syntaxTree, n, receiver ast.Expr, op string, na
 	default:
 		return ResolvedType{}
 	}
-	cur := r.typeOf(t, receiver, nil, ctx)
 	if cur.IsEmpty() || r.Index == nil {
 		return ResolvedType{}
 	}

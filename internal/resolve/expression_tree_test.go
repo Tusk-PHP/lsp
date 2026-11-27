@@ -90,6 +90,30 @@ func TestExpressionsAreTypedFromTheSyntaxTree(t *testing.T) {
 	}
 }
 
+// A chain is typed link by link, so its length isn't bounded by how deeply
+// nested expressions are followed: a Filament panel or a query builder chains
+// dozens of calls.
+func TestLongChainsAreTyped(t *testing.T) {
+	r, file, lines := expressionTreeFixture(t)
+	pos := textpos.Position{Line: markedLine(t, lines, "receivers"), Character: 8}
+	ctx := ExprContext{Lines: lines, Pos: pos, File: file}
+	links := 4 * maxExprDepth
+	var b strings.Builder
+	b.WriteString("Repo::create()")
+	for range links {
+		b.WriteString("\n    ->create()")
+	}
+	for expr, want := range map[string]string{
+		b.String():                      `App\Repo`,
+		b.String() + "->make()->name()": "string",
+		b.String() + "->find(pick('q', $repo->find('x')->first()->name()))->first()": `App\User`,
+	} {
+		if got := r.ExpressionType(expr, ctx).FullString(); got != want {
+			t.Errorf("ExpressionType(%.40q…) = %q, want %q", expr, got, want)
+		}
+	}
+}
+
 // The receiver of the member access at the cursor is read from the file's
 // tree, also while the access is still being typed.
 func TestReceiverAt(t *testing.T) {
