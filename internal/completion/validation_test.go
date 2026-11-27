@@ -48,6 +48,17 @@ trait ValidatesAttributes
     public function validateNullable() {}
 }
 `,
+	"vendor/Livewire/Component.php": `<?php
+namespace Livewire;
+abstract class Component {}
+`,
+	"vendor/Livewire/Attributes.php": `<?php
+namespace Livewire\Attributes;
+#[\Attribute]
+class Validate { public function __construct(public $rule = null, public $as = null) {} }
+#[\Attribute]
+class Rule extends Validate {}
+`,
 	"app/Http/Controllers/Controller.php": `<?php
 namespace App\Http\Controllers;
 use Illuminate\Foundation\Validation\ValidatesRequests;
@@ -286,5 +297,34 @@ func TestValidationRulesFromTheInstalledFramework(t *testing.T) {
 		if r.TakesParameters && len(r.Parameters) == 0 {
 			t.Errorf("%s takes parameters Laravel's documentation doesn't name here", r.Name)
 		}
+	}
+}
+
+func TestValidationRuleCompletionInLivewire(t *testing.T) {
+	p := validationProvider(t)
+	const component = `<?php
+namespace App\Livewire;
+
+use Livewire\Attributes\Validate;
+use Livewire\Component;
+
+class CreatePost extends Component
+{
+    BODY
+}
+`
+	for name, tc := range map[string]struct{ body, want string }{
+		"rules method":       {`public function rules() { return ['title' => 'requ|^']; }`, "required required_if"},
+		"rules property":     {`protected $rules = ['title' => 'nu|^'];`, "nullable"},
+		"validate attribute": {"#[Validate('string|ma|^')]\n    public $title = '';", "max"},
+		"attribute list":     {"#[Validate(['str|^'])]\n    public $title = '';", "string"},
+		"this validate":      {`public function save() { $this->validate(['title' => 'i|^']); }`, "in"},
+		"validateOnly":       {`public function updated($p) { $this->validateOnly($p, ['title' => 'i|^']); }`, "in"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := labels(completeAtMarker(t, p, strings.Replace(component, "BODY", tc.body, 1))); got != tc.want {
+				t.Errorf("got  %q\nwant %q", got, tc.want)
+			}
+		})
 	}
 }
