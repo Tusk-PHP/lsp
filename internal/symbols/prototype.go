@@ -89,17 +89,36 @@ func (w *prototypeWalk) declared(ancestor string, inherited bool) *Symbol {
 }
 
 func (idx *Index) declaredMemberLocked(owner string, member *Symbol) *Symbol {
-	if sym := idx.symbols[owner+"::"+member.Name]; sym != nil && sym.Kind == member.Kind {
+	sym, ownerSym := idx.ownMemberLocked(owner, member)
+	if sym != nil || ownerSym == nil {
 		return sym
+	}
+	if a, method := idx.traitAliasLocked(ownerSym, member.Name); method != nil {
+		return a.modified(method)
+	}
+	return nil
+}
+
+func (idx *Index) familyMemberLocked(owner string, member *Symbol) *Symbol {
+	sym, ownerSym := idx.ownMemberLocked(owner, member)
+	if sym != nil || ownerSym == nil {
+		return sym
+	}
+	if a, method := idx.traitAliasLocked(ownerSym, member.Name); method != nil {
+		return ownerSym.traitRules.aliasOf(a, method)
+	}
+	return nil
+}
+
+func (idx *Index) ownMemberLocked(owner string, member *Symbol) (sym, methodOwner *Symbol) {
+	if sym := idx.symbols[owner+"::"+member.Name]; sym != nil && sym.Kind == member.Kind {
+		return sym, nil
 	}
 	ownerSym := idx.symbols[owner]
 	if member.Kind != KindMethod || ownerSym == nil {
-		return nil
+		return nil, nil
 	}
-	if sym := methodNamed(ownerSym.Children, member.Name); sym != nil {
-		return sym
-	}
-	return idx.aliasedMethodLocked(ownerSym, member.Name)
+	return methodNamed(ownerSym.Children, member.Name), ownerSym
 }
 
 func methodNamed(members []*Symbol, name string) *Symbol {

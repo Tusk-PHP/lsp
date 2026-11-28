@@ -8,9 +8,11 @@ type TraitAdaptations struct {
 }
 
 type TraitPrecedence struct {
-	Trait     string
-	Method    string
-	InsteadOf []string
+	Trait      string
+	Method     string
+	InsteadOf  []string
+	MethodLine int
+	MethodCol  int
 }
 
 type TraitAlias struct {
@@ -19,6 +21,27 @@ type TraitAlias struct {
 	Alias      string
 	Visibility string
 	Final      bool
+	MethodLine int
+	MethodCol  int
+}
+
+// MethodAt returns the trait and method named by the rule whose method name
+// covers line and col. The trait is empty when the rule names none.
+func (t TraitAdaptations) MethodAt(line, col int) (trait, method string, ok bool) {
+	covers := func(methodLine, methodCol int, method string) bool {
+		return methodLine == line && methodCol <= col && col <= methodCol+len(method)
+	}
+	for _, p := range t.Precedences {
+		if covers(p.MethodLine, p.MethodCol, p.Method) {
+			return p.Trait, p.Method, true
+		}
+	}
+	for _, a := range t.Aliases {
+		if covers(a.MethodLine, a.MethodCol, a.Method) {
+			return a.Trait, a.Method, true
+		}
+	}
+	return "", "", false
 }
 
 func (p *structParser) parseTraitAdaptations() {
@@ -47,6 +70,7 @@ func (p *structParser) parseTraitAdaptations() {
 }
 
 func (p *structParser) parseTraitAdaptation() {
+	at := p.peek()
 	method, trait := p.readAdaptationName(), ""
 	if p.peek().Kind == TokenDoubleColon {
 		p.advance()
@@ -54,7 +78,8 @@ func (p *structParser) parseTraitAdaptation() {
 		if !isNameToken(p.peek()) {
 			return
 		}
-		trait, method = method, p.advance().Value
+		at = p.advance()
+		trait, method = method, at.Value
 	}
 	if method == "" {
 		return
@@ -67,7 +92,7 @@ func (p *structParser) parseTraitAdaptation() {
 	switch strings.ToLower(keyword.Value) {
 	case "insteadof":
 		p.advance()
-		rule := TraitPrecedence{Trait: trait, Method: method}
+		rule := TraitPrecedence{Trait: trait, Method: method, MethodLine: at.Line, MethodCol: at.Column}
 		for {
 			p.skipCommentTokens()
 			name := p.readQualifiedName()
@@ -85,7 +110,7 @@ func (p *structParser) parseTraitAdaptation() {
 		}
 	case "as":
 		p.advance()
-		rule := TraitAlias{Trait: trait, Method: method}
+		rule := TraitAlias{Trait: trait, Method: method, MethodLine: at.Line, MethodCol: at.Column}
 		p.skipCommentTokens()
 		switch p.peek().Kind {
 		case TokenPublic, TokenProtected, TokenPrivate:
@@ -137,4 +162,35 @@ func (p *structParser) skipCommentTokens() {
 	for k := p.peek().Kind; k == TokenComment || k == TokenDocComment; k = p.peek().Kind {
 		p.advance()
 	}
+}
+
+// TraitRuleMethodAt returns the class-like whose trait rule has its method
+// name at line and col, with the trait and method that rule names.
+func (f *FileNode) TraitRuleMethodAt(line, col int) (owner, trait, method string, ok bool) {
+	at := func(name string, rules TraitAdaptations) bool {
+		trait, method, ok = rules.MethodAt(line, col)
+		owner = name
+		return ok
+	}
+	for _, c := range f.AnonymousClasses {
+		if at(c.FullName, c.TraitRules) {
+			return
+		}
+	}
+	for _, c := range f.Classes {
+		if at(c.FullName, c.TraitRules) {
+			return
+		}
+	}
+	for _, t := range f.Traits {
+		if at(t.FullName, t.TraitRules) {
+			return
+		}
+	}
+	for _, e := range f.Enums {
+		if at(e.FullName, e.TraitRules) {
+			return
+		}
+	}
+	return "", "", "", false
 }

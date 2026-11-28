@@ -318,3 +318,62 @@ func TestReferencesFromABladeTemplateIncludeItsOwnAndTheOtherFiles(t *testing.T)
 		t.Errorf("references of Room from a template = %v, want %v", got, want)
 	}
 }
+
+func renamedAt(t *testing.T, sources map[string]string, uri, needle, newName string) []string {
+	t.Helper()
+	a, read := setupRenameAnalyzer(sources)
+	edit := a.Rename(uri, sources[uri], positionOf(t, sources[uri], needle), newName, read)
+	if edit == nil {
+		t.Fatalf("rename at %q in %s was refused", needle, uri)
+	}
+	var got []string
+	for file, edits := range edit.Changes {
+		for _, e := range edits {
+			got = append(got, fmt.Sprintf("%s:%d:%d", strings.TrimPrefix(file, "file:///"), e.Range.Start.Line, e.Range.Start.Character))
+		}
+	}
+	slices.Sort(got)
+	return got
+}
+
+func TestRenameOfAnAbstractTraitMethodRenamesItsImplementations(t *testing.T) {
+	sources := map[string]string{
+		"file:///T.php": "<?php\nnamespace App;\ntrait T { abstract public function foo(): void; }\ntrait U { use T; }\n",
+		"file:///C.php": "<?php\nnamespace App;\nclass C { use T; public function foo(): void {} }\nclass D { use U; public function foo(): void {} }\nfunction f(C $c, D $d): void { $c->foo(); $d->foo(); }\n",
+	}
+	got := renamedAt(t, sources, "file:///T.php", "foo(): void;", "bar")
+	want := []string{"C.php:2:33", "C.php:3:33", "C.php:4:35", "C.php:4:46", "T.php:2:35"}
+	if !slices.Equal(got, want) {
+		t.Errorf("renaming T::foo renames what implements it in the classes that use T, directly or through U, and their calls:\n got %v\nwant %v", got, want)
+	}
+}
+
+func TestRenameOfATraitMethodKeepsItsAliasesAndRules(t *testing.T) {
+	sources := map[string]string{
+		"file:///T.php": "<?php\nnamespace App;\ntrait Talks { public function talk(): void {} }\ntrait Waves { public function talk(): void {} }\n",
+		"file:///C.php": `<?php
+namespace App;
+class Pair { use Talks { talk as chat; Talks::talk as protected speak; } }
+class Pick { use Talks, Waves { Talks::talk insteadof Waves; } }
+class Wave { use Talks, Waves { Waves::talk insteadof Talks; } }
+function f(Pair $p, Pick $k, Wave $w): void { $p->talk(); $p->chat(); $k->talk(); $w->talk(); }
+`,
+	}
+	got := renamedAt(t, sources, "file:///T.php", "talk(): void {} }\ntrait Waves", "say")
+	want := []string{"C.php:2:25", "C.php:2:46", "C.php:3:39", "C.php:5:50", "C.php:5:74", "T.php:2:30"}
+	if !slices.Equal(got, want) {
+		t.Errorf("renaming Talks::talk renames the method its rules name and its calls, never an alias, its calls or another trait's talk:\n got %v\nwant %v", got, want)
+	}
+}
+
+func TestRenameRefusesAMethodAnAliasOverrides(t *testing.T) {
+	src := "<?php\nnamespace App;\ntrait Talks { public function talk(): void {} }\nclass Speaker { public function speak(): void {} }\nclass Loud extends Speaker { use Talks { talk as speak; } }\n"
+	a, read := setupRenameAnalyzer(map[string]string{"file:///C.php": src})
+	pos := positionOf(t, src, "speak(): void")
+	if got := a.PrepareRename("file:///C.php", src, pos); got != nil {
+		t.Errorf("Loud::speak is an alias of Talks::talk, so Speaker::speak can't be renamed alone: %+v", got)
+	}
+	if got := a.Rename("file:///C.php", src, pos, "say", read); got != nil {
+		t.Errorf("rename of Speaker::speak: %+v", got)
+	}
+}

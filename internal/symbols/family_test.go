@@ -71,3 +71,67 @@ class Knot extends Loop { public function run(): void {} }
 		t.Errorf("family across a cycle = %v, want %v", got, want)
 	}
 }
+
+func TestMemberFamilyReachesTheClassesThatUseATrait(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///traits.php", `<?php
+namespace App;
+trait Greets { abstract public function greet(): void; }
+trait Polite { use Greets; }
+class Host { use Greets; public function greet(): void {} }
+class Guest { use Polite; public function greet(): void {} }
+class Child extends Host { public function greet(): void {} }
+trait Waves { public function greet(): void {} }
+class Picky { use Greets, Waves { Waves::greet insteadof Greets; } }
+class PickyChild extends Picky { public function greet(): void {} }
+class Renamer { use Greets { greet as hello; } public function greet(): void {} }
+`)
+	idx.IndexFile("file:///other.php", `<?php
+namespace App;
+class Leaving { use Greets; public function greet(): void {} }
+`)
+	family := func(from string) []string {
+		var out []string
+		for _, s := range idx.MemberFamily(idx.Lookup(from)) {
+			out = append(out, s.FQN)
+		}
+		slices.Sort(out)
+		return out
+	}
+	want := []string{`App\Child::greet`, `App\Greets::greet`, `App\Guest::greet`, `App\Host::greet`, `App\Leaving::greet`, `App\Renamer::greet`}
+	if got := family(`App\Greets::greet`); !slices.Equal(got, want) {
+		t.Errorf("family of a trait method = %v, want %v: its users, a trait's user, their subclasses, never what an insteadof rule replaces", got, want)
+	}
+	idx.IndexFile("file:///other.php", `<?php
+namespace App;
+class Leaving { public function greet(): void {} }
+`)
+	if got := family(`App\Greets::greet`); slices.Contains(got, `App\Leaving::greet`) {
+		t.Errorf("a class that no longer uses the trait is still in its family: %v", got)
+	}
+	if got := family(`App\Waves::greet`); !slices.Equal(got, []string{`App\PickyChild::greet`, `App\Waves::greet`}) {
+		t.Errorf("family of the trait method an insteadof rule keeps = %v", got)
+	}
+}
+
+func TestMemberFamilyGivesAnAliasAsTheAlias(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///alias.php", `<?php
+namespace App;
+trait Talks { public function talk(): void {} }
+class Speaker { public function speak(): void {} }
+class Loud extends Speaker { use Talks { talk as speak; } }
+`)
+	var aliases []*Symbol
+	for _, s := range idx.MemberFamily(idx.Lookup(`App\Speaker::speak`)) {
+		if s.FQN == `App\Talks::talk` {
+			t.Errorf("the method an alias overrides with brought the aliased trait method into the family")
+		}
+		if s.AliasOf != nil {
+			aliases = append(aliases, s)
+		}
+	}
+	if len(aliases) != 1 || aliases[0].FQN != `App\Loud::speak` || aliases[0].AliasOf.FQN != `App\Talks::talk` {
+		t.Errorf("want Loud::speak as an alias of Talks::talk in the family, got %v", aliases)
+	}
+}

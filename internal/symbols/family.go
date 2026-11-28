@@ -38,7 +38,7 @@ func (idx *Index) MemberFamily(member *Symbol) []*Symbol {
 			}
 			seenUp[key] = true
 			ancestors = append(ancestors, next)
-			if add(idx.declaredMemberLocked(next, member)) {
+			if add(idx.familyMemberLocked(next, member)) {
 				roots = append(roots, next)
 			}
 		})
@@ -50,11 +50,11 @@ func (idx *Index) MemberFamily(member *Symbol) []*Symbol {
 		idx.directSubtypesLocked(owner, func(names []string) {
 			for _, name := range names {
 				key := strings.ToLower(name)
-				if seenDown[key] {
+				if seenDown[key] || member.Kind == KindMethod && idx.traitRulesLocked(name).excludes(owner, member.Name) {
 					continue
 				}
 				seenDown[key] = true
-				add(idx.declaredMemberLocked(name, member))
+				add(idx.familyMemberLocked(name, member))
 				roots = append(roots, name)
 			}
 		})

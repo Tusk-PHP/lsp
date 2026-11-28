@@ -729,6 +729,14 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 		return nil
 	}
 	word, file, pos := ctx.SymbolText, ctx.File, ctx.Position
+	if file != nil {
+		if owner, trait, method, ok := file.TraitRuleMethodAt(pos.Line, pos.Character); ok {
+			if trait != "" {
+				trait = r.ResolveClassName(trait, file)
+			}
+			return a.index.TraitRuleMethod(owner, trait, method)
+		}
+	}
 
 	// Check for member access context (->method or ::method).
 	// W1 guard: if we're in an access chain but can't resolve the receiver or
