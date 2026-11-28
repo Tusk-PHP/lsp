@@ -77,17 +77,21 @@ func (r *traitRules) adapt(trait string, method *Symbol) (kept *Symbol, aliases 
 			kept = a.modified(kept)
 			continue
 		}
-		renamed := *a.modified(method)
-		renamed.Name = a.alias
-		renamed.FQN = r.owner + "::" + a.alias
-		renamed.ParentFQN = r.owner
-		renamed.AliasOf = method
-		aliases = append(aliases, &renamed)
+		aliases = append(aliases, r.aliasOf(a, method))
 	}
 	if r.excludes(trait, method.Name) {
 		kept = nil
 	}
 	return kept, aliases
+}
+
+func (r *traitRules) aliasOf(a traitAlias, method *Symbol) *Symbol {
+	renamed := *a.modified(method)
+	renamed.Name = a.alias
+	renamed.FQN = r.owner + "::" + a.alias
+	renamed.ParentFQN = r.owner
+	renamed.AliasOf = method
+	return &renamed
 }
 
 func (a traitAlias) modified(method *Symbol) *Symbol {
@@ -104,21 +108,37 @@ func (a traitAlias) modified(method *Symbol) *Symbol {
 	return &copied
 }
 
-func (idx *Index) aliasedMethodLocked(owner *Symbol, name string) *Symbol {
+func (idx *Index) traitAliasLocked(owner *Symbol, name string) (traitAlias, *Symbol) {
 	if owner.traitRules == nil {
-		return nil
+		return traitAlias{}, nil
 	}
 	for _, a := range owner.traitRules.aliases {
 		if !strings.EqualFold(a.alias, name) {
 			continue
 		}
-		for _, trait := range idx.traitMap[owner.FQN] {
-			if a.trait != "" && !strings.EqualFold(a.trait, trait) {
-				continue
-			}
-			if m := methodNamed(idx.getClassMembersRecursive(trait, map[string]bool{owner.FQN: true}), a.method); m != nil {
-				return a.modified(m)
-			}
+		if m := idx.ruleMethodLocked(owner.FQN, a.trait, a.method); m != nil {
+			return a, m
+		}
+	}
+	return traitAlias{}, nil
+}
+
+// TraitRuleMethod returns the trait method that a trait rule of owner names:
+// method of trait, or, when trait is empty, of the first of owner's traits
+// that has it. It returns nil when none of owner's traits has the method.
+func (idx *Index) TraitRuleMethod(owner, trait, method string) *Symbol {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.ruleMethodLocked(owner, trait, method)
+}
+
+func (idx *Index) ruleMethodLocked(owner, trait, method string) *Symbol {
+	for _, used := range idx.traitMap[owner] {
+		if trait != "" && !strings.EqualFold(trait, used) {
+			continue
+		}
+		if m := methodNamed(idx.getClassMembersRecursive(used, map[string]bool{owner: true}), method); m != nil {
+			return m
 		}
 	}
 	return nil

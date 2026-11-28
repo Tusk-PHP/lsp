@@ -2,13 +2,14 @@ package sourcectx
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
 func isCalled(tokens []parser.Token, word protocol.Range) bool {
-	last := identifierEndingAt(tokens, word.End)
+	tokens, last := identifierEndingAt(tokens, word.End)
 	if last < 0 {
 		return false
 	}
@@ -33,19 +34,35 @@ func isCalled(tokens []parser.Token, word protocol.Range) bool {
 	return !inAttribute(tokens, first)
 }
 
-func identifierEndingAt(tokens []parser.Token, end protocol.Position) int {
+func identifierEndingAt(tokens []parser.Token, end protocol.Position) ([]parser.Token, int) {
 	i := sort.Search(len(tokens), func(i int) bool {
 		t := tokens[i]
 		return t.Line > end.Line || t.Line == end.Line && t.Column+len(t.Value) >= end.Character
 	})
+	for _, k := range []int{i - 1, i} {
+		if k >= 0 && k < len(tokens) && tokens[k].Kind == parser.TokenStringLiteral && spans(tokens[k], end) {
+			return identifierEndingAt(parser.InterpolatedTokens(tokens[k]), end)
+		}
+	}
 	if i == len(tokens) {
-		return -1
+		return tokens, -1
 	}
 	t := tokens[i]
 	if t.Kind != parser.TokenIdentifier || t.Line != end.Line || t.Column+len(t.Value) != end.Character {
-		return -1
+		return tokens, -1
 	}
-	return i
+	return tokens, i
+}
+
+func spans(tok parser.Token, pos protocol.Position) bool {
+	if pos.Line < tok.Line || pos.Line == tok.Line && pos.Character <= tok.Column {
+		return false
+	}
+	lastLine, lastColumn := tok.Line, tok.Column+len(tok.Value)
+	if nl := strings.LastIndexByte(tok.Value, '\n'); nl >= 0 {
+		lastLine, lastColumn = tok.Line+strings.Count(tok.Value, "\n"), len(tok.Value)-nl-1
+	}
+	return pos.Line < lastLine || pos.Line == lastLine && pos.Character < lastColumn
 }
 
 func inAttribute(tokens []parser.Token, i int) bool {

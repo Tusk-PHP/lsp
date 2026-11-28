@@ -108,6 +108,14 @@ func (s *Server) phpDocument(uri string) bladeRequest {
 	return bladeRequest{uri: uri, source: doc.PHP, doc: doc, template: source, vars: vars}
 }
 
+// text is the document the request was made on, as the client sent it.
+func (r bladeRequest) text() string {
+	if r.doc != nil {
+		return r.template
+	}
+	return r.source
+}
+
 // toView moves a range in the virtual PHP to the view.
 func (r bladeRequest) toView(rng protocol.Range) (protocol.Range, bool) {
 	if r.doc == nil {

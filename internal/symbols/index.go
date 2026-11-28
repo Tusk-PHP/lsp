@@ -163,8 +163,9 @@ type Index struct {
 	reverseImplementsMap map[string][]string // interface → classes that implement it
 	subInterfaceMap      map[string][]string // interface → interfaces that extend it
 	traitMap             map[string][]string
-	sortedNames          sortedKeys // nameIndex's keys, for prefix search by name
-	sortedFQNs           sortedKeys // FQNs of named class-likes, functions and constants, for prefix search by FQN
+	traitUsersMap        map[string][]string // lowercase trait FQN → class-likes that use it, the reverse of traitMap
+	sortedNames          sortedKeys          // nameIndex's keys, for prefix search by name
+	sortedFQNs           sortedKeys          // FQNs of named class-likes, functions and constants, for prefix search by FQN
 	fileSource           map[string]indexedText
 	ready                atomic.Bool // true once project + vendor indexing has completed at least once
 	generator            atomic.Pointer[classGeneratorHolder]
@@ -218,6 +219,7 @@ func NewIndex() *Index {
 		reverseImplementsMap: make(map[string][]string),
 		subInterfaceMap:      make(map[string][]string),
 		traitMap:             make(map[string][]string),
+		traitUsersMap:        make(map[string][]string),
 		fileSource:           make(map[string]indexedText),
 		generatedURIs:        make(map[string]bool),
 		generatedFrom:        make(map[string][]string),
@@ -738,6 +740,8 @@ func (idx *Index) linkTypeLocked(sym *Symbol) {
 	}
 	for _, tr := range sym.Traits {
 		idx.traitMap[fqn] = appendUnique(idx.traitMap[fqn], tr)
+		key := strings.ToLower(tr)
+		idx.traitUsersMap[key] = appendUnique(idx.traitUsersMap[key], fqn)
 	}
 }
 
@@ -752,6 +756,14 @@ func (idx *Index) unlinkTypeLocked(sym *Symbol) {
 	}
 	delete(idx.implementsMap, fqn)
 	idx.clearParentLocked(fqn)
+	for _, tr := range idx.traitMap[fqn] {
+		key := strings.ToLower(tr)
+		if users := removeFromSlice(idx.traitUsersMap[key], fqn); len(users) > 0 {
+			idx.traitUsersMap[key] = users
+		} else {
+			delete(idx.traitUsersMap, key)
+		}
+	}
 	delete(idx.traitMap, fqn)
 }
 
@@ -2014,6 +2026,7 @@ func (idx *Index) directSubtypesLocked(fqn string, visit func([]string)) {
 	visit(idx.childrenMap[strings.ToLower(fqn)])
 	visit(idx.reverseImplementsMap[fqn])
 	visit(idx.subInterfaceMap[fqn])
+	visit(idx.traitUsersMap[strings.ToLower(fqn)])
 }
 
 func (idx *Index) DirectSupertypes(fqn string) []string {

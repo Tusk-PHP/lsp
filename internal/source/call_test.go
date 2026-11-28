@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 )
@@ -179,6 +180,27 @@ func TestCalledVariableAtFindsOnlyAVariableBeingCalled(t *testing.T) {
 	}
 }
 
+func TestCalledReadsTheCodeInsideAString(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want bool
+	}{
+		{"echo \"{$r->ar|ea()}\";", true},
+		{"echo \"{$r->ar|ea}()\";", false},
+		{"echo \"$r->ar|ea()\";", false},
+		{"echo <<<EOT\n  x\n  {$r->ar|ea(1)}\n  EOT;", true},
+		{"echo \"ar|ea()\";", false},
+	} {
+		src := "<?php\n" + tc.src + "\n"
+		offset := strings.Index(src, "|")
+		src = src[:offset] + src[offset+1:]
+		pos := protocol.Position{Line: strings.Count(src[:offset], "\n"), Character: offset - strings.LastIndex(src[:offset], "\n") - 1}
+		if ctx := Analyze("file:///a.php", src, pos); ctx == nil || ctx.Called != tc.want {
+			t.Errorf("%q: Called = %v, want %v", tc.src, ctx != nil && ctx.Called, tc.want)
+		}
+	}
+}
+
 func TestCallAtFindsANamedCallee(t *testing.T) {
 	src := "<?php\narea(1, f(2), "
 	callee, argument, ok := CallAt("file:///t.php", src, protocol.Position{Line: 1, Character: len("area(1, f(2), ")})
@@ -187,5 +209,24 @@ func TestCallAtFindsANamedCallee(t *testing.T) {
 	}
 	if _, _, ok := CallAt("file:///t.php", "<?php\n$fn(1, ", protocol.Position{Line: 1, Character: len("$fn(1, ")}); ok {
 		t.Error("a variable being called has no named callee")
+	}
+}
+
+func TestSpansIsInsideTheToken(t *testing.T) {
+	lit := parser.Token{Kind: parser.TokenStringLiteral, Value: "\"ab\ncd\"", Line: 2, Column: 4}
+	for _, c := range []struct {
+		pos  protocol.Position
+		want bool
+	}{
+		{protocol.Position{Line: 1, Character: 9}, false},
+		{protocol.Position{Line: 2, Character: 4}, false},
+		{protocol.Position{Line: 2, Character: 5}, true},
+		{protocol.Position{Line: 3, Character: 2}, true},
+		{protocol.Position{Line: 3, Character: 3}, false},
+		{protocol.Position{Line: 4, Character: 0}, false},
+	} {
+		if got := spans(lit, c.pos); got != c.want {
+			t.Errorf("spans(%v) = %v, want %v", c.pos, got, c.want)
+		}
 	}
 }

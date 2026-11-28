@@ -83,9 +83,9 @@ func TestHighlightsOfAMethodAreOnlyThatMethod(t *testing.T) {
 
 func TestHighlightsOfAPropertyAreItsDeclarationAndAccesses(t *testing.T) {
 	got := highlightsOf(t, "$area = 0.0", 0)
-	want := []highlightAt{{4, 18, write}, {7, 22, read}}
+	want := []highlightAt{{4, 18, write}, {7, 22, read}, {13, 32, read}}
 	if !slices.Equal(got, want) {
-		t.Errorf("the property's declaration and $this->area, never the local $area, the method or the string:\n got %v\nwant %v", got, want)
+		t.Errorf("the property's declaration and $this->area, in code and in the string, never the local $area or the method:\n got %v\nwant %v", got, want)
 	}
 }
 
@@ -116,7 +116,7 @@ func TestHighlightsOfALocalNamedLikeAPropertyAreTheLocal(t *testing.T) {
 	}
 }
 
-func TestHighlightsOfAPromotedPropertyAreTheProperty(t *testing.T) {
+func TestHighlightsOfAPromotedPropertyAreThePropertyAndTheParameter(t *testing.T) {
 	src := `<?php
 namespace App;
 class Plot {
@@ -131,8 +131,8 @@ class Plot {
 	for _, h := range a.GetDocumentHighlights("file:///plot.php", src, positionOf(t, src, "$area)")) {
 		got = append(got, highlightAt{h.Range.Start.Line, h.Range.Start.Character, h.Kind})
 	}
-	if want := []highlightAt{{3, 46, write}, {6, 50, read}}; !slices.Equal(got, want) {
-		t.Errorf("the promoted parameter is the property's declaration, highlighted with $this->area:\n got %v\nwant %v", got, want)
+	if want := []highlightAt{{3, 46, write}, {4, 13, read}, {6, 50, read}}; !slices.Equal(got, want) {
+		t.Errorf("the promoted parameter is the property's declaration, highlighted with the parameter's use and $this->area:\n got %v\nwant %v", got, want)
 	}
 }
 

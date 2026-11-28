@@ -706,45 +706,20 @@ func (a *Analyzer) FindReferences(uri, source string, pos protocol.Position) []p
 // to reading from the index's stored file URIs via disk.
 func (a *Analyzer) FindAllReferences(uri, source string, pos protocol.Position, readDocument func(string) string) []protocol.Location {
 	r := a.engine.Resolver()
-	word, _ := sourcectx.WordAt(source, pos)
-	if word == "" {
+	ctx := sourcectx.NewDocument(uri, source).NameAt(pos)
+	if ctx == nil || ctx.SymbolText == "" {
 		return nil
 	}
-
-	file := parser.ParseFile(source)
-
-	// Try to resolve as a symbol first — this handles properties ($name in declarations)
-	// and member access contexts before falling back to variable scope
-	ctx := sourcectx.Analyze(uri, source, pos)
-	sym := a.resolveSymbolAt(r, ctx.Name(), source)
-
-	// Built-in symbols are opaque to navigation: do not scan the workspace for refs.
-	if symbols.IsBuiltin(sym) {
-		return nil
-	}
-
-	// W1 guard: if we were in a member access chain and the receiver/member couldn't
-	// be resolved, do not fall through to name-based lookups.
-	if sym == nil && ctx != nil && (ctx.AccessKind != sourcectx.AccessNone || ctx.FunctionCall) {
-		return nil
-	}
-
-	// Variable references — local scope only (if not resolved as a property/symbol)
-	if sym == nil && strings.HasPrefix(word, "$") && word != "$this" {
-		return a.findVariableReferences(uri, source, pos, word, file)
-	}
-	if sym == nil {
-		// Fallback: definition-only lookup by name (original behavior)
-		var locs []protocol.Location
-		for _, s := range a.index.LookupByName(word) {
-			if !symbols.IsBuiltin(s) && s.URI != "" {
-				locs = append(locs, protocol.Location{URI: s.URI, Range: s.Range})
-			}
+	if a.mayBeLocalVariable(ctx) {
+		if locs := a.findVariableReferences(uri, source, pos, ctx.SymbolText); locs != nil {
+			return locs
 		}
-		return locs
 	}
-
-	return a.findSymbolOccurrences(sym, readDocument, uri, source)
+	sym := a.resolveSymbolAt(r, ctx, source)
+	if sym == nil || symbols.IsBuiltin(sym) {
+		return nil
+	}
+	return a.findSymbolOccurrences(r, sym, readDocument, uri, source)
 }
 
 // resolveSymbolAtCursor resolves the word at cursor to a Symbol, handling
@@ -754,6 +729,14 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 		return nil
 	}
 	word, file, pos := ctx.SymbolText, ctx.File, ctx.Position
+	if file != nil {
+		if owner, trait, method, ok := file.TraitRuleMethodAt(pos.Line, pos.Character); ok {
+			if trait != "" {
+				trait = r.ResolveClassName(trait, file)
+			}
+			return a.index.TraitRuleMethod(owner, trait, method)
+		}
+	}
 
 	// Check for member access context (->method or ::method).
 	// W1 guard: if we're in an access chain but can't resolve the receiver or
@@ -768,6 +751,10 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 	}
 	if ctx.FunctionCall {
 		return r.CalledFunction(word, file)
+	}
+
+	if member := a.index.MemberDeclaredAt(ctx.URI, pos, word); member != nil {
+		return member
 	}
 
 	// Check if it's a class property declaration ($name on a property line)
@@ -793,6 +780,8 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 			if sym := a.index.Lookup(ctx.EnclosingFQN + "::" + strings.TrimPrefix(word, "$")); sym != nil {
 				return sym
 			}
+		} else if alias := a.traitAliasIn(ctx.EnclosingFQN, word); alias != nil {
+			return alias
 		}
 	}
 
@@ -815,9 +804,17 @@ func (a *Analyzer) resolveSymbolAt(r *resolve.Resolver, ctx *sourcectx.NameConte
 	return a.index.LookupStandalone(word, ctx.EnclosingFQN)
 }
 
+func (a *Analyzer) traitAliasIn(classFQN, name string) *symbols.Symbol {
+	for _, member := range a.index.TraitMembers(classFQN) {
+		if member.AliasOf != nil && strings.EqualFold(member.Name, name) {
+			return member
+		}
+	}
+	return nil
+}
+
 // findVariableReferences finds all occurrences of a variable within its enclosing function scope.
-func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Position, varName string, file *parser.FileNode) []protocol.Location {
-	_ = file
+func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Position, varName string) []protocol.Location {
 	doc := scope.Collect(source)
 	binding := doc.BindingAt(pos)
 	if binding == nil || binding.Name != varName {
@@ -1306,21 +1303,13 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 
 	file := ctx.File
 
-	// Try resolving as a symbol (class, method, property, function, etc.)
+	if a.mayBeLocalVariable(ctx.Name()) && isPrepareRenameVariableBindingSupported(scope.Collect(source).BindingAt(pos), word) {
+		return &protocol.PrepareRenameResult{Range: wordRange, Placeholder: word}
+	}
+
 	sym := a.resolveSymbolAt(r, ctx.Name(), source)
 
-	// Reject built-ins
-	if sym != nil && symbols.IsBuiltin(sym) {
-		return nil
-	}
-
-	// Reject vendor and generated symbols (renaming dependencies is not
-	// useful, and generated classes have no file to edit)
-	if sym != nil && (sym.Source == symbols.SourceVendor || sym.Source == symbols.SourceGenerated) {
-		return nil
-	}
-
-	if sym != nil && sym.AliasOf != nil {
+	if sym != nil && !a.referenceTargetOf(sym).renamable() {
 		return nil
 	}
 
@@ -1335,13 +1324,8 @@ func (a *Analyzer) PrepareRename(uri, source string, pos protocol.Position) *pro
 		return &protocol.PrepareRenameResult{Range: wordRange, Placeholder: placeholder}
 	}
 
-	// Variables are always renameable (local scope)
 	if strings.HasPrefix(word, "$") {
-		binding := scope.Collect(source).BindingAt(pos)
-		if !isPrepareRenameVariableBindingSupported(binding, word) {
-			return nil
-		}
-		return &protocol.PrepareRenameResult{Range: wordRange, Placeholder: word}
+		return nil
 	}
 
 	// Check for member access context (method/property on -> or ::).
@@ -1414,33 +1398,28 @@ func (a *Analyzer) Rename(uri, source string, pos protocol.Position, newName str
 		return nil
 	}
 
-	file := ctx.File
-
-	// Try resolving as a symbol first (handles properties, methods, classes, etc.)
-	sym := a.resolveSymbolAt(r, ctx.Name(), source)
-
-	// If it's a known symbol, rename it across the workspace
-	if sym != nil {
-		if symbols.IsBuiltin(sym) || sym.Source == symbols.SourceVendor || sym.Source == symbols.SourceGenerated || sym.AliasOf != nil {
-			return nil
+	if a.mayBeLocalVariable(ctx.Name()) {
+		if edit := a.renameVariable(uri, source, pos, word, newName); edit != nil {
+			return edit
 		}
-		return a.renameSymbol(sym, newName, readDocument, uri, source)
 	}
 
-	// Fall back to variable rename (local scope)
-	if strings.HasPrefix(word, "$") {
-		return a.renameVariable(uri, source, pos, word, newName, file)
+	sym := a.resolveSymbolAt(r, ctx.Name(), source)
+	if sym != nil {
+		if !a.referenceTargetOf(sym).renamable() {
+			return nil
+		}
+		return a.renameSymbol(r, sym, newName, readDocument, uri, source)
 	}
 
 	return nil
 }
 
 // renameVariable renames a variable within its enclosing function scope.
-func (a *Analyzer) renameVariable(uri, source string, pos protocol.Position, oldName, newName string, file *parser.FileNode) *protocol.WorkspaceEdit {
+func (a *Analyzer) renameVariable(uri, source string, pos protocol.Position, oldName, newName string) *protocol.WorkspaceEdit {
 	if !strings.HasPrefix(newName, "$") {
 		newName = "$" + newName
 	}
-	_ = file
 	doc := scope.Collect(source)
 	binding := doc.BindingAt(pos)
 	if binding == nil || binding.Name != oldName {
@@ -1462,8 +1441,8 @@ func (a *Analyzer) renameVariable(uri, source string, pos protocol.Position, old
 
 // renameSymbol renames a class, method, property, function, interface, enum, or trait
 // across the entire workspace by finding all occurrences and generating TextEdits.
-func (a *Analyzer) renameSymbol(sym *symbols.Symbol, newName string, readDocument func(string) string, uri, source string) *protocol.WorkspaceEdit {
-	locs := a.findSymbolOccurrences(sym, readDocument, uri, source)
+func (a *Analyzer) renameSymbol(r *resolve.Resolver, sym *symbols.Symbol, newName string, readDocument func(string) string, uri, source string) *protocol.WorkspaceEdit {
+	locs := a.findSymbolOccurrences(r, sym, readDocument, uri, source)
 	if len(locs) == 0 {
 		return nil
 	}
