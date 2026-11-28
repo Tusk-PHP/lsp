@@ -50,9 +50,6 @@ func qualifyDocTypes(doc string, uses []parser.UseNode) string {
 		}
 		parser.ForEachDocTagType(doc[at+1:j], value, func(start int, typ string) {
 			ts := j + start
-			if ts < last {
-				return
-			}
 			forEachImportedName(typ, uses, func(start, end int, fqn string) {
 				if b.Len() == 0 {
 					b.Grow(len(doc) + 64)
