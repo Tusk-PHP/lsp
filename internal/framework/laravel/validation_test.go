@@ -10,7 +10,9 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 const validatesAttributesSource = `<?php
@@ -156,9 +158,39 @@ class Other
 	if got := extensionNames(e); got != "Postcode greater_than_field iban phone_number" {
 		t.Errorf("App\\Validator, managers, comments and strings register nothing: %q", got)
 	}
+	e.IndexFile("file:///app/More.php", `<?php
+use Illuminate\Support\Facades\{Validator};
+use Illuminate\Support;
+use function Illuminate\Support\Facades\extend;
+app('validator')->extend('from_app', fn () => true); Validator::extend('grouped', fn () => true);
+Support\Facades\Validator::extendDependent('qualified', fn () => true);
+Validator::extend();
+Validator::{$method}('dynamic', fn () => true);
+Str::upper('extend');
+app('other')->extend('not_validator', fn () => true);
+config('validator')->extend('not_app', fn () => true);
+`)
+	if got := extensionNames(e); got != "Postcode from_app greater_than_field grouped iban phone_number qualified" {
+		t.Errorf("app('validator'), a grouped use and a name qualified through a use register: %q", got)
+	}
+	_, regs = e.snapshot()
+	var more []string
+	for _, reg := range regs {
+		if reg.URI == "file:///app/More.php" {
+			more = append(more, reg.Name)
+		}
+	}
+	if want := "from_app grouped qualified"; strings.Join(more, " ") != want {
+		t.Errorf("a file's rules are in order of line and column: %q, want %q", strings.Join(more, " "), want)
+	}
+	e.IndexFile("file:///app/Text.php", "<?php\n$word = 'extend';\n")
+	if got := extensionNames(e); !strings.Contains(got, "qualified") || strings.Count(got, " ") != 6 {
+		t.Errorf("a file that only says extend in a string registers nothing: %q", got)
+	}
+
 	var none *ValidationExtensions
 	none.IndexFile("file:///x.php", validationProvider)
-	if v, regs := none.snapshot(); v != 0 || regs != nil {
+	if v, regs := none.snapshot(); v != 0 || regs != nil || none.currentVersion() != 0 {
 		t.Error("a nil set has nothing")
 	}
 }
@@ -319,6 +351,14 @@ func TestValidationRuleStringsInEachCallForm(t *testing.T) {
 		"dynamic":            {`$request->validate(['a' => 'required|' . $max, 'b' => "max:$n", 'c' => $rules, ...$more]);`, ""},
 		"rules variable":     {`$request->validate($rules, ['a' => 'Message']);`, ""},
 		"list is no rules":   {`$request->validate(['required']);`, ""},
+		"dynamic method":     {`$request->{$method}(['a' => 'nope']);`, ""},
+		"no arguments":       {`$request->validate();`, ""},
+		"dynamic class":      {`$validator::make($data, ['a' => 'nope']);`, ""},
+		"dynamic static":     {`Validator::{$method}($data, ['a' => 'nope']);`, ""},
+		"other static":       {`Validator::extend('a', ['a' => 'nope']);`, ""},
+		"unpacked arguments": {`$request->validate(...$arguments);`, ""},
+		"keyed and unpacked": {`$request->validate(['a' => ['k' => 'nope', ...$more, 'required']]);`, "array:required[]"},
+		"binary string":      {`$request->validate(['a' => b'nope', 'b' => B'nope']);`, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := strings.Join(ruleStrings(t, "<?php\n"+tc.src), " | ")
@@ -397,6 +437,118 @@ func TestMayValidate(t *testing.T) {
 	} {
 		if got := MayValidate(parser.Tokenize(src)); got != want {
 			t.Errorf("MayValidate(%q) = %v", src, got)
+		}
+	}
+}
+
+const oddValidatesAttributesSource = `<?php
+namespace Illuminate\Validation\Concerns;
+
+trait ValidatesAttributes
+{
+    public function validateRequired($attribute, $value) { return true; }
+
+    public function validateStartsWithFoo($attribute, $value, $parameters)
+    {
+        $this->{$check}(1, $parameters, 'starts_with_foo');
+        $this->requireParameterCount($count, $parameters, 'starts_with_foo');
+        $this->requireParameterCount(1, $parameters, $rule);
+        return true;
+    }
+
+    public function requireParameterCount($count, $parameters, $rule) {}
+}
+`
+
+func validationRulesFrom(t *testing.T, traitSource string, read func(string) string, extensions map[string]string) *ValidationRules {
+	t.Helper()
+	idx := symbols.NewIndex()
+	idx.IndexFileWithSource("file:///vendor/laravel/framework/src/Illuminate/Validation/Concerns/ValidatesAttributes.php", traitSource, symbols.SourceVendor)
+	idx.MarkReady()
+	ext := NewValidationExtensions()
+	for uri, src := range extensions {
+		ext.IndexFile(uri, src)
+	}
+	return NewValidationRules(idx, ext, read)
+}
+
+func TestValidationRulesCatalogReadsWhatItCan(t *testing.T) {
+	v := validationRulesFrom(t, oddValidatesAttributesSource, func(string) string { return oddValidatesAttributesSource }, map[string]string{
+		"file:///app/Providers/AppServiceProvider.php": "<?php\nValidator::extend('Required', fn () => true);\nValidator::extend('slug', fn () => true);\n",
+	})
+	var names []string
+	for _, r := range v.All() {
+		names = append(names, r.Name)
+	}
+	if got := strings.Join(names, " "); got != "required slug starts_with_foo" {
+		t.Errorf("rules = %q: a custom rule named like a built-in one is the built-in", got)
+	}
+	if r, _ := v.Lookup("starts_with_foo"); !r.TakesParameters || r.Required != 0 || r.Signature() != "starts_with_foo:…" {
+		t.Errorf("a rule whose parameter count isn't a literal call: %+v, signature %q", r, r.Signature())
+	}
+
+	unread := validationRulesFrom(t, oddValidatesAttributesSource, func(string) string { return "" }, nil)
+	if r, ok := unread.Lookup("starts_with_foo"); !ok || r.Required != 0 {
+		t.Errorf("a trait whose source can't be read still gives its rules, without counts: %+v %v", r, ok)
+	}
+}
+
+const validationControllerSource = `<?php
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+
+class StoreController
+{
+    public function store(Request $request)
+    {
+        $request->validate(['a' => 'required|max:5']);
+        Validator::make([], ['b' => 'email']);
+    }
+}
+`
+
+func validationSyntaxOfController(t *testing.T) ValidationSyntax {
+	t.Helper()
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///vendor/Request.php", "<?php\nnamespace Illuminate\\Http;\nclass Request {}\n")
+	idx.IndexFile("file:///app/StoreController.php", validationControllerSource)
+	return ValidationSyntaxOf(idx, resolve.NewResolver(idx), validationControllerSource, parser.ParseFile(validationControllerSource))
+}
+
+func TestValidationSyntaxOfReadsTheFilesNamesAndTypes(t *testing.T) {
+	src := validationControllerSource
+	var got []string
+	ValidationRuleStrings(src, phpparser.Parse(src, token.Latest), validationSyntaxOfController(t), func(r RuleString) {
+		got = append(got, src[r.Start:r.End])
+	})
+	if want := []string{"required|max:5", "email"}; !slices.Equal(got, want) {
+		t.Errorf("rule strings = %q, want %q: $request typed from its parameter, Validator from its use", got, want)
+	}
+}
+
+func TestValidationRuleSlotAt(t *testing.T) {
+	src := validationControllerSource
+	syn := validationSyntaxOfController(t)
+	pos := func(needle string, offset int) textpos.Position {
+		i := strings.Index(src, needle) + offset
+		return textpos.Position{Line: strings.Count(src[:i], "\n"), Character: i - strings.LastIndex(src[:i], "\n") - 1}
+	}
+	slot, ok := ValidationRuleSlotAt(src, pos("required|", 3), syn)
+	if !ok || slot.Name != "required" || slot.Typed != "req" || !slot.InName || slot.HasParameters || slot.TypedRange.End != pos("required|", 3) || slot.NameRange.Start != pos("required|", 0) {
+		t.Errorf("in the name: %+v %v", slot, ok)
+	}
+	slot, ok = ValidationRuleSlotAt(src, pos("max:5", 5), syn)
+	if !ok || slot.Name != "max" || slot.InName || !slot.HasParameters || slot.Typed != "" {
+		t.Errorf("in the parameters: %+v %v", slot, ok)
+	}
+	for name, at := range map[string]textpos.Position{
+		"outside a rule string": pos("Validator::make", 3),
+		"a line past the end":   {Line: 99},
+		"a column past the end": {Line: strings.Count(src, "\n"), Character: 10},
+		"a negative line":       {Line: -1},
+	} {
+		if slot, ok := ValidationRuleSlotAt(src, at, syn); ok {
+			t.Errorf("%s: %+v", name, slot)
 		}
 	}
 }

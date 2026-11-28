@@ -1,6 +1,8 @@
 package laravel
 
 import (
+	"cmp"
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
@@ -104,12 +106,9 @@ func ValidationRuleAt(src string, file *ast.File, syn ValidationSyntax, offset u
 	if !ok {
 		return RuleString{}, RuleSegment{}, false
 	}
-	for _, seg := range found.Segments(src) {
-		if seg.Start <= offset && offset <= seg.End {
-			return found, seg, true
-		}
-	}
-	return RuleString{}, RuleSegment{}, false
+	segs := found.Segments(src)
+	i, _ := slices.BinarySearchFunc(segs, offset, func(s RuleSegment, at uint32) int { return cmp.Compare(s.End, at) })
+	return found, segs[i], true
 }
 
 type ruleWalk struct {
@@ -261,7 +260,7 @@ func (w *ruleWalk) rules(rules *ast.Array) {
 }
 
 func (w *ruleWalk) ruleString(lit *ast.Literal, piped bool) {
-	if lit.Kind != token.ConstantString || lit.End-lit.Start < 2 || w.src[lit.Start] == 'b' || w.src[lit.Start] == 'B' {
+	if lit.Kind != token.ConstantString || w.src[lit.Start] == 'b' || w.src[lit.Start] == 'B' {
 		return
 	}
 	w.visit(RuleString{Start: lit.Start + 1, End: lit.End - 1, Piped: piped})

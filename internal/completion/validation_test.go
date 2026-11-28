@@ -228,6 +228,16 @@ func TestValidationRuleCompletionStaysOut(t *testing.T) {
 			}
 		})
 	}
+	t.Run("outside a Laravel app", func(t *testing.T) {
+		p := validationProvider(t)
+		p.framework = "none"
+		items := completeAtMarker(t, p, strings.Replace(validationController, "CALL", `$request->validate(['title' => 'requ|^']);`, 1))
+		for _, it := range items {
+			if it.Label == "required_if" {
+				t.Errorf("rule %q offered", it.Label)
+			}
+		}
+	})
 }
 
 func BenchmarkCompleteValidationRule(b *testing.B) {

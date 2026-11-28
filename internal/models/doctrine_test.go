@@ -454,3 +454,21 @@ class Tag
 		t.Errorf("the property is listed once: %d", members)
 	}
 }
+
+func TestDoctrineEntityWithoutATableTakesItsSnakeCaseName(t *testing.T) {
+	source := `<?php
+namespace App\Entity;
+
+use Doctrine\ORM\Mapping as ORM;
+
+#[ORM\Entity]
+class BlogPost {}
+`
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///app/Entity/BlogPost.php", source)
+	schema := &Schema{Tables: []SchemaTable{{Name: "blog_post", Columns: []SchemaColumn{{Name: "title", DataType: "varchar"}}}}}
+	injectDoctrineSchemaSource(idx, schema, source)
+	if sym := idx.Lookup(`App\Entity\BlogPost::$title`); sym == nil || sym.Type != "string" {
+		t.Errorf("$title from table blog_post = %+v, want a string property", sym)
+	}
+}

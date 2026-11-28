@@ -375,3 +375,13 @@ func TestAnalyzeInString(t *testing.T) {
 		}
 	}
 }
+
+func TestAnalyzeInStringBeforeTheFirstToken(t *testing.T) {
+	src := "<p>intro</p>\n<?php echo 'x';\n"
+	if ctx := Analyze("file:///a.php", src, protocol.Position{Line: 0, Character: 4}); ctx != nil && ctx.InString {
+		t.Error("inline HTML before the first PHP token is in a string")
+	}
+	if ctx := Analyze("file:///a.php", src, protocol.Position{Line: 1, Character: 12}); ctx == nil || !ctx.InString {
+		t.Error("the PHP string after it is not in a string")
+	}
+}

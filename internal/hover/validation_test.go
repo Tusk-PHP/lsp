@@ -93,4 +93,11 @@ function store(Request $request)
 	if h := p.GetHover("file:///store.php", src, at("unknwn")); h != nil {
 		t.Errorf("no hover on an unknown rule: %+v", h)
 	}
+	if h := p.GetHover("file:///store.php", src, at("'title'")); h != nil && strings.Contains(h.Contents.Value, "validation rule") {
+		t.Errorf("a rules array key is no rule: %+v", h)
+	}
+	p.framework = "none"
+	if h := p.GetHover("file:///store.php", src, at("max:")); h != nil && strings.Contains(h.Contents.Value, "validation rule") {
+		t.Errorf("outside a Laravel app a rule string is a string: %+v", h)
+	}
 }
