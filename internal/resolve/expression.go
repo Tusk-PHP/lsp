@@ -120,10 +120,10 @@ func (r *Resolver) ExpressionTypeExpecting(expr string, expected *ResolvedType, 
 	return ResolvedType{}
 }
 
-// chainOrigin is the first part of a chain: $var, a class name, `new Foo(…)`
-// or a function call.
+// chainOrigin is the first part of a chain: $var, a class name, a constant,
+// `new Foo(…)` or a function call.
 type chainOrigin struct {
-	kind byte // '$' variable, 'c' class name, 'n' new, 'f' function call
+	kind byte // '$' variable, 'c' class name, 'k' constant, 'n' new, 'f' function call
 	text string
 	args string
 }
@@ -238,8 +238,10 @@ func parseChain(expr string) (steps []chainStep, origin chainOrigin, ok bool) {
 				return nil, origin, false
 			}
 			origin = chainOrigin{kind: 'f', text: name, args: args}
-		} else {
+		} else if strings.HasPrefix(expr[i:], "::") {
 			origin = chainOrigin{kind: 'c', text: name}
+		} else {
+			origin = chainOrigin{kind: 'k', text: name}
 		}
 	default:
 		return nil, origin, false
