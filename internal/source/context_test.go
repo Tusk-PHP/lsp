@@ -385,3 +385,17 @@ func TestAnalyzeInStringBeforeTheFirstToken(t *testing.T) {
 		t.Error("the PHP string after it is not in a string")
 	}
 }
+
+func TestScopeMethodNamesTheClassAndMethodTheCursorIsIn(t *testing.T) {
+	src := "<?php\nnamespace App;\nclass Form {\n    public function rules() {\n        return ['a' => 'x'];\n    }\n}\nfunction helper() { return 1; }\n"
+	if class, method := Analyze("file:///a.php", src, protocol.Position{Line: 4, Character: 18}).ScopeMethod(); class != `App\Form` || method != "rules" {
+		t.Errorf("in a method: %q %q", class, method)
+	}
+	if class, method := Analyze("file:///a.php", src, protocol.Position{Line: 7, Character: 22}).ScopeMethod(); class != "" || method != "" {
+		t.Errorf("in a function: %q %q", class, method)
+	}
+	var none *CursorContext
+	if class, method := none.ScopeMethod(); class != "" || method != "" {
+		t.Errorf("no context: %q %q", class, method)
+	}
+}

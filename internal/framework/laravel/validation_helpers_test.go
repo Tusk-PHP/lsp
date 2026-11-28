@@ -1,8 +1,13 @@
 package laravel
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -196,4 +201,62 @@ func TestValidationHelpersFollowEveryCallForm(t *testing.T) {
 	}
 	var none *ValidationHelpers
 	none.IndexFile("file:///app/Form.php", helperEdgeFixture)
+}
+
+func TestRuleStringsInHelperMethodsAndMayHoldRules(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFileWithSource("file:///vendor/FormRequest.php", "<?php\nnamespace Illuminate\\Foundation\\Http;\nclass FormRequest {}\n", symbols.SourceVendor)
+	idx.IndexFileWithSource("file:///app/Form.php", helperEdgeFixture, symbols.SourceProject)
+	idx.IndexFileWithSource("file:///app/Importer.php", helperFixture, symbols.SourceProject)
+	h := NewValidationHelpers()
+	h.IndexFile("file:///app/Form.php", helperEdgeFixture)
+	h.IndexFile("file:///app/Importer.php", helperFixture)
+	rules := NewValidationRules(idx, NewValidationExtensions(), h, func(string) string { return "" })
+
+	seen := map[string]bool{}
+	for _, src := range []string{helperEdgeFixture, helperFixture} {
+		syn := rules.SyntaxOf(resolve.NewResolver(idx), src, parser.ParseFile(src))
+		file := phpparser.Parse(src, token.Latest)
+		for needle, want := range map[string]bool{
+			"sharedRules() { return ['string":             true,
+			"baggedRules() { return ['string":             true,
+			"keyedSpreadRules() { return ['s' => 'string": true,
+			"tagRules() { return ['array":                 true,
+			"public function rules() { return ['tags' =>": false,
+			"unused() { return ['required":                false,
+		} {
+			i := strings.Index(src, needle)
+			if i < 0 {
+				continue
+			}
+			seen[needle] = true
+			_, _, ok := ValidationRuleAt(src, file, syn, uint32(i+len(needle)-1))
+			if ok != want {
+				t.Errorf("in %q: a rule string %v, want %v", needle, ok, want)
+			}
+		}
+	}
+
+	if len(seen) != 6 {
+		t.Fatalf("only %d of the 6 places are in the fixtures: %v", len(seen), seen)
+	}
+
+	var none *ValidationRules
+	if none.MayHoldRules(parser.Tokenize("<?php $request->validate([]);"), "", "") {
+		t.Error("nil rules hold rules")
+	}
+	plain := parser.Tokenize("<?php\nreturn ['string'];\n")
+	for _, tc := range []struct {
+		tokens        []parser.Token
+		class, method string
+		want          bool
+	}{
+		{parser.Tokenize("<?php $request->validate([]);"), "", "", true},
+		{plain, `App\Form`, "baggedRules", true},
+		{plain, `App\Form`, "messages", false},
+	} {
+		if got := rules.MayHoldRules(tc.tokens, tc.class, tc.method); got != tc.want {
+			t.Errorf("MayHoldRules(%s::%s) = %v, want %v", tc.class, tc.method, got, tc.want)
+		}
+	}
 }
