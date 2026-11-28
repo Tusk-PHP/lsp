@@ -28,6 +28,7 @@ type Store struct {
 	files    map[string]openFile
 	uris     map[string]string
 	revision uint64
+	pathOf   func(uri string) string
 }
 
 type openFile struct {
@@ -35,16 +36,14 @@ type openFile struct {
 	unsaved bool
 }
 
-func NewStore() *Store {
-	return &Store{docs: make(map[string]Snapshot), files: make(map[string]openFile), uris: make(map[string]string)}
+func NewStore(pathOf func(uri string) string) *Store {
+	return &Store{docs: make(map[string]Snapshot), files: make(map[string]openFile), uris: make(map[string]string), pathOf: pathOf}
 }
 
-func (s *Store) Open(uri, path string, version int, text string, unsaved bool) Snapshot {
+func (s *Store) Open(uri string, version int, text string, unsaved bool) Snapshot {
+	path := s.pathOf(uri)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if old, open := s.files[uri]; open && old.path != path && s.uris[old.path] == uri {
-		delete(s.uris, old.path)
-	}
 	s.files[uri] = openFile{path: path, unsaved: unsaved}
 	s.uris[path] = uri
 	return s.putLocked(Snapshot{URI: uri, Version: version, Text: text})

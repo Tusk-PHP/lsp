@@ -4,12 +4,14 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func TestStoreKeepsTextAndVersion(t *testing.T) {
-	s := NewStore()
-	s.Open("file:///b.php", "/b.php", 1, "<?php\n$a;\n", false)
-	s.Open("file:///a.php", "/a.php", 3, "<?php\n", false)
+	s := NewStore(symbols.URIToPath)
+	s.Open("file:///b.php", 1, "<?php\n$a;\n", false)
+	s.Open("file:///a.php", 3, "<?php\n", false)
 	changed, err := s.Change("file:///b.php", 2, UTF16, []Change{{Range: at(1, 1, 1, 2), Text: "b"}})
 	if err != nil || changed.Text != "<?php\n$b;\n" || changed.Version != 2 {
 		t.Fatalf("Change = %+v, %v", changed, err)
@@ -40,8 +42,8 @@ func TestStoreKeepsTextAndVersion(t *testing.T) {
 }
 
 func TestStoreCurrentFollowsEveryWriteNotTheText(t *testing.T) {
-	s := NewStore()
-	first := s.Open("file:///a.php", "/a.php", 1, "<?php\n", false)
+	s := NewStore(symbols.URIToPath)
+	first := s.Open("file:///a.php", 1, "<?php\n", false)
 	if !s.Current(first) {
 		t.Fatal("a fresh snapshot is not current")
 	}
@@ -60,18 +62,18 @@ func TestStoreCurrentFollowsEveryWriteNotTheText(t *testing.T) {
 		t.Error("saving the same text made the snapshot stale")
 	}
 	s.Close("file:///a.php")
-	again := s.Open("file:///a.php", "/a.php", 3, "<?php\n", false)
+	again := s.Open("file:///a.php", 3, "<?php\n", false)
 	if s.Current(third) || !s.Current(again) {
 		t.Error("a snapshot from before a close and reopen with the same version and text counts as current")
 	}
 }
 
 func TestStoreRejectsChangesItCannotApply(t *testing.T) {
-	s := NewStore()
+	s := NewStore(symbols.URIToPath)
 	if _, err := s.Change("file:///x.php", 2, UTF16, []Change{{Text: "x"}}); err == nil || !strings.Contains(err.Error(), "not open") {
 		t.Errorf("change to a closed document: %v", err)
 	}
-	s.Open("file:///x.php", "/x.php", 1, "<?php\n", false)
+	s.Open("file:///x.php", 1, "<?php\n", false)
 	if _, err := s.Change("file:///x.php", 2, UTF16, []Change{{Range: at(-1, 0, 0, 0), Text: "x"}}); err == nil || !strings.Contains(err.Error(), "file:///x.php, version 2") || errors.Is(err, ErrDiverged) {
 		t.Errorf("a negative position: %v", err)
 	}
@@ -82,8 +84,8 @@ func TestStoreRejectsChangesItCannotApply(t *testing.T) {
 
 func TestStoreRefusesRangeEditsAfterARejectedChange(t *testing.T) {
 	const uri = "file:///a.php"
-	s := NewStore()
-	s.Open(uri, "/a.php", 1, "<?php\nfoo();\n", false)
+	s := NewStore(symbols.URIToPath)
+	s.Open(uri, 1, "<?php\nfoo();\n", false)
 	if _, err := s.Change(uri, 2, UTF16, []Change{{Range: at(1, 3, 1, 1), Text: "x"}}); err == nil || errors.Is(err, ErrDiverged) {
 		t.Fatalf("the first rejected change: %v, want the reason it can't apply", err)
 	}
@@ -122,10 +124,10 @@ func TestStoreReopenAndSaveEndADivergence(t *testing.T) {
 			t.Fatal("the negative position applied")
 		}
 	}
-	s := NewStore()
-	s.Open(uri, "/a.php", 1, "<?php\n", false)
+	s := NewStore(symbols.URIToPath)
+	s.Open(uri, 1, "<?php\n", false)
 	diverge(s)
-	s.Open(uri, "/a.php", 1, "<?php\n", false)
+	s.Open(uri, 1, "<?php\n", false)
 	if doc, err := s.Change(uri, 2, UTF16, []Change{{Range: at(1, 0, 1, 0), Text: "a();"}}); err != nil || doc.Text != "<?php\na();" {
 		t.Errorf("a range edit after a reopen: %+v, %v", doc, err)
 	}
@@ -140,9 +142,9 @@ func TestStoreReopenAndSaveEndADivergence(t *testing.T) {
 }
 
 func TestStoreFindsAnOpenDocumentByPathAndKnowsWhetherItIsSaved(t *testing.T) {
-	s := NewStore()
-	s.Open("file:///srv/my%20app/a.php", "/srv/my app/a.php", 1, "<?php\n", false)
-	s.Open("file:///srv/my app/a.php", "/srv/my app/a.php", 1, "<?php\n", false)
+	s := NewStore(symbols.URIToPath)
+	s.Open("file:///srv/my%20app/a.php", 1, "<?php\n", false)
+	s.Open("file:///srv/my app/a.php", 1, "<?php\n", false)
 	if uri, open := s.URIAt("/srv/my app/a.php"); !open || uri != "file:///srv/my app/a.php" {
 		t.Errorf("the path finds the URI opened last: %q, %v", uri, open)
 	}
@@ -169,7 +171,7 @@ func TestStoreFindsAnOpenDocumentByPathAndKnowsWhetherItIsSaved(t *testing.T) {
 		t.Error("closing the last URI of a path frees the path")
 	}
 
-	s.Open("file:///b.php", "/b.php", 1, "<?php\n", true)
+	s.Open("file:///b.php", 1, "<?php\n", true)
 	s.Save("file:///b.php", "<?php\n")
 	if s.Close("file:///b.php") {
 		t.Error("a save with its text leaves the document saved")

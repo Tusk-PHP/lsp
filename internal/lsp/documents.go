@@ -32,9 +32,8 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 }
 
 func (s *Server) openDocument(uri string, version int, text string) document.Snapshot {
-	path := symbols.URIToPath(uri)
-	unsaved := s.index.GetFileSource(symbols.PathToURI(path)) != text
-	return s.docs.Open(uri, path, version, text, unsaved)
+	unsaved := s.index.GetFileSource(symbols.PathToURI(symbols.URIToPath(uri))) != text
+	return s.docs.Open(uri, version, text, unsaved)
 }
 
 func (s *Server) handleDidChange(msg *jsonRPCMessage) {
