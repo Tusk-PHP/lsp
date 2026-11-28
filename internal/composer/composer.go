@@ -8,6 +8,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 // AutoloadEntry represents a single autoload entry (PSR-4 directory or file).
@@ -218,16 +222,18 @@ func parsePSR0(psr0 map[string]interface{}, basePath string) []AutoloadEntry {
 	return entries
 }
 
-var composerAutoloadFileRe = regexp.MustCompile(`\$(vendorDir|baseDir)\s*\.\s*'([^']+\.php)'`)
-
 func appendComposerAutoloadFiles(entries []AutoloadEntry, rootPath string) []AutoloadEntry {
-	autoloadFilesPath := filepath.Join(rootPath, "vendor", "composer", "autoload_files.php")
-	data, err := os.ReadFile(autoloadFilesPath)
+	data, err := os.ReadFile(filepath.Join(rootPath, "vendor", "composer", "autoload_files.php"))
 	if err != nil {
 		return entries
 	}
+	src := string(data)
+	files := phpparser.Parse(src, token.Latest).ReturnedArray()
+	if files == nil {
+		return entries
+	}
 
-	seen := make(map[string]bool, len(entries))
+	seen := make(map[string]bool, len(entries)+len(files.Items))
 	for _, entry := range entries {
 		if entry.IsFile {
 			seen[filepath.Clean(entry.Path)] = true
@@ -235,13 +241,28 @@ func appendComposerAutoloadFiles(entries []AutoloadEntry, rootPath string) []Aut
 	}
 
 	vendorDir := filepath.Join(rootPath, "vendor")
-	baseDir := rootPath
-	for _, match := range composerAutoloadFileRe.FindAllStringSubmatch(string(data), -1) {
-		base := vendorDir
-		if match[1] == "baseDir" {
-			base = baseDir
+	dirs := map[string]string{"$vendorDir": vendorDir, "$baseDir": rootPath}
+	for _, item := range files.Items {
+		if item == nil {
+			continue
 		}
-		path := filepath.Clean(filepath.Join(base, match[2]))
+		concat, ok := item.Value.(*ast.Binary)
+		if !ok || concat.Op != token.Dot {
+			continue
+		}
+		dirVar, ok := concat.Left.(*ast.Variable)
+		if !ok {
+			continue
+		}
+		base, ok := dirs[dirVar.Text(src)]
+		if !ok {
+			continue
+		}
+		rel, ok := ast.StringValue(concat.Right, src)
+		if !ok || !strings.HasSuffix(rel, ".php") {
+			continue
+		}
+		path := filepath.Clean(filepath.Join(base, rel))
 		if seen[path] {
 			continue
 		}

@@ -3,14 +3,13 @@ package composer
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
-)
+	"strings"
 
-// bundleClassRe matches PHP class constant expressions used as array keys in
-// config/bundles.php, e.g. "Symfony\Bundle\FrameworkBundle\FrameworkBundle::class".
-// Both fully-qualified forms (with or without a leading backslash) are accepted.
-var bundleClassRe = regexp.MustCompile(`\\?[A-Za-z0-9_\\]+::class`)
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+)
 
 // SymfonyBundlePackages reads config/bundles.php at rootPath and returns the
 // Composer package names that own the registered Symfony bundle classes.
@@ -39,30 +38,14 @@ func SymfonyBundlePackages(rootPath string) []string {
 		return nil
 	}
 
-	// Extract every ::class key expression from the file.  A regex/string scan
-	// is intentional here (mirrors laravel_discovery.go) — we deliberately avoid
-	// a full PHP parse dependency for these discovery helpers.
-	matches := bundleClassRe.FindAllString(string(data), -1)
-	if len(matches) == 0 {
-		return nil
-	}
-
-	// Strip the trailing ::class suffix to obtain the bare FQN.
-	fqns := make([]string, 0, len(matches))
-	for _, m := range matches {
-		fqn := m[:len(m)-len("::class")]
-		if fqn != "" {
-			fqns = append(fqns, fqn)
-		}
-	}
-
+	fqns := bundleClasses(string(data))
 	if len(fqns) == 0 {
 		return nil
 	}
 
 	resolve := NewPackageResolver(rootPath)
 
-	seen := make(map[string]struct{})
+	seen := make(map[string]struct{}, len(fqns))
 	for _, fqn := range fqns {
 		pkg, _, ok := resolve(fqn)
 		if !ok || pkg == "" {
@@ -81,4 +64,74 @@ func SymfonyBundlePackages(rootPath string) []string {
 	}
 	sort.Strings(pkgs)
 	return pkgs
+}
+
+func bundleClasses(src string) []string {
+	file := phpparser.Parse(src, token.Latest)
+	bundles := file.ReturnedArray()
+	if bundles == nil {
+		return nil
+	}
+	imports := classImports(file, src)
+	fqns := make([]string, 0, len(bundles.Items))
+	for _, item := range bundles.Items {
+		if item == nil {
+			continue
+		}
+		fetch, ok := item.Key.(*ast.ClassConstFetch)
+		if !ok {
+			continue
+		}
+		class, ok := fetch.Class.(*ast.ConstFetch)
+		if !ok || !strings.EqualFold(fetch.Name.Bounds().Text(src), "class") {
+			continue
+		}
+		fqns = append(fqns, resolveClassName(class.Name, imports, src))
+	}
+	return fqns
+}
+
+func classImports(file *ast.File, src string) map[string]string {
+	imports := make(map[string]string)
+	for _, stmt := range file.Stmts {
+		use, ok := stmt.(*ast.Use)
+		if !ok {
+			continue
+		}
+		prefix := ""
+		if use.Prefix != nil {
+			prefix = strings.TrimPrefix(use.Prefix.Text(src), `\`) + `\`
+		}
+		for _, item := range use.Items {
+			if item.Kind != token.Use || item.Name == nil {
+				continue
+			}
+			fqn := prefix + strings.TrimPrefix(item.Name.Text(src), `\`)
+			alias := fqn[strings.LastIndexByte(fqn, '\\')+1:]
+			if item.Alias != nil {
+				alias = item.Alias.Text(src)
+			}
+			imports[strings.ToLower(alias)] = fqn
+		}
+	}
+	return imports
+}
+
+func resolveClassName(name *ast.Name, imports map[string]string, src string) string {
+	text := name.Text(src)
+	switch name.Kind {
+	case token.NameFullyQualified:
+		return text[1:]
+	case token.NameRelative:
+		return text[len(`namespace\`):]
+	}
+	first, rest, qualified := strings.Cut(text, `\`)
+	fqn, ok := imports[strings.ToLower(first)]
+	if !ok {
+		return text
+	}
+	if !qualified {
+		return fqn
+	}
+	return fqn + `\` + rest
 }

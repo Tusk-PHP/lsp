@@ -3,13 +3,12 @@ package laravel
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
-)
 
-// livewireLocationCall is one entry of Livewire's component_locations:
-// resource_path('views/livewire'), base_path('…') or app_path('…').
-var livewireLocationCall = regexp.MustCompile(`^(resource_path|base_path|app_path)\(\s*['"]([^'"$]*)['"]\s*\)$`)
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+)
 
 // livewireLocations returns the directories Livewire 4 registers as
 // locations for views and anonymous components, from component_locations in
@@ -26,34 +25,68 @@ func livewireLocations(root string) (dirs []string, known bool) {
 			return nil, true
 		}
 	}
-	cfg := string(data)
-	k := strings.Index(cfg, "'component_locations'")
-	if k < 0 {
-		return nil, true // Livewire 3 registers no locations.
-	}
-	rest := cfg[k:]
-	open := strings.IndexByte(rest, '[')
-	end := strings.IndexByte(rest, ']')
-	if open < 0 || end < open {
+	src := string(data)
+	config := phpparser.Parse(src, token.Latest).ReturnedArray()
+	if config == nil {
 		return nil, false
 	}
-	for _, entry := range strings.Split(rest[open+1:end], ",") {
-		entry = strings.TrimSpace(entry)
-		if entry == "" || strings.HasPrefix(entry, "//") {
+	for _, item := range config.Items {
+		if item == nil {
 			continue
 		}
-		m := livewireLocationCall.FindStringSubmatch(entry)
-		if m == nil {
+		if key, ok := ast.StringValue(item.Key, src); ok && key == "component_locations" {
+			return livewireLocationDirs(root, item.Value, src)
+		}
+	}
+	return nil, true // Livewire 3 registers no locations.
+}
+
+func livewireLocationDirs(root string, value ast.Expr, src string) ([]string, bool) {
+	locations, ok := value.(*ast.Array)
+	if !ok {
+		return nil, false
+	}
+	dirs := make([]string, 0, len(locations.Items))
+	for _, item := range locations.Items {
+		dir, ok := livewireLocationDir(root, item, src)
+		if !ok {
 			return nil, false
 		}
-		base := root
-		switch m[1] {
-		case "resource_path":
-			base = filepath.Join(root, "resources")
-		case "app_path":
-			base = filepath.Join(root, "app")
-		}
-		dirs = append(dirs, filepath.Join(base, filepath.FromSlash(m[2])))
+		dirs = append(dirs, dir)
 	}
 	return dirs, true
+}
+
+func livewireLocationDir(root string, item *ast.ArrayItem, src string) (string, bool) {
+	if item == nil {
+		return "", false
+	}
+	call, ok := item.Value.(*ast.Call)
+	if !ok || item.Key != nil || item.Unpack || call.Args == nil || len(call.Args.Args) != 1 {
+		return "", false
+	}
+	callee, ok := call.Callee.(*ast.ConstFetch)
+	if !ok {
+		return "", false
+	}
+	arg := call.Args.Args[0]
+	if arg.Name != nil || arg.Unpack {
+		return "", false
+	}
+	rel, ok := ast.StringValue(arg.Value, src)
+	if !ok {
+		return "", false
+	}
+	var base string
+	switch strings.ToLower(strings.TrimPrefix(callee.Name.Text(src), `\`)) {
+	case "resource_path":
+		base = filepath.Join(root, "resources")
+	case "app_path":
+		base = filepath.Join(root, "app")
+	case "base_path":
+		base = root
+	default:
+		return "", false
+	}
+	return filepath.Join(base, filepath.FromSlash(rel)), true
 }

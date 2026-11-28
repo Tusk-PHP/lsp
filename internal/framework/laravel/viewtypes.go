@@ -2,13 +2,15 @@ package laravel
 
 import (
 	"os"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -299,28 +301,55 @@ var componentOwnMethods = map[string]bool{
 	"forgetcomponentsresolver": true, "resolvecomponentsusing": true,
 }
 
-var (
-	intLiteral   = regexp.MustCompile(`^-?\d+$`)
-	floatLiteral = regexp.MustCompile(`^-?\d*\.\d+$`)
-)
-
 // literalType types a literal expression, or returns "".
 func literalType(expr string) string {
-	expr = strings.TrimSpace(expr)
-	switch {
-	case expr == "":
+	if strings.TrimSpace(expr) == "" {
 		return ""
-	case strings.HasPrefix(expr, "'") || strings.HasPrefix(expr, `"`):
+	}
+	src := expr + ";"
+	file := phpparser.ParseCode(src, token.Latest)
+	if len(file.Errors) != 0 || len(file.Stmts) != 1 {
+		return ""
+	}
+	stmt, ok := file.Stmts[0].(*ast.ExprStmt)
+	if !ok {
+		return ""
+	}
+	return literalExprType(stmt.Expr, src)
+}
+
+func literalExprType(e ast.Expr, src string) string {
+	switch e := e.(type) {
+	case *ast.Literal:
+		switch e.Kind {
+		case token.ConstantString:
+			return "string"
+		case token.IntegerLiteral:
+			return "int"
+		case token.FloatLiteral:
+			return "float"
+		}
+	case *ast.InterpolatedString:
 		return "string"
-	case intLiteral.MatchString(expr):
-		return "int"
-	case floatLiteral.MatchString(expr):
-		return "float"
-	case strings.EqualFold(expr, "true") || strings.EqualFold(expr, "false"):
-		return "bool"
-	case strings.EqualFold(expr, "null"):
-		return "null"
-	case strings.HasPrefix(expr, "["):
+	case *ast.Binary:
+		if e.Op == token.Dot {
+			return "string"
+		}
+	case *ast.Unary:
+		if e.Op != token.Minus && e.Op != token.Plus {
+			return ""
+		}
+		if typ := literalExprType(e.Operand, src); typ == "int" || typ == "float" {
+			return typ
+		}
+	case *ast.ConstFetch:
+		switch strings.ToLower(strings.TrimPrefix(e.Name.Text(src), `\`)) {
+		case "true", "false":
+			return "bool"
+		case "null":
+			return "null"
+		}
+	case *ast.Array:
 		return "array"
 	}
 	return ""

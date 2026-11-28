@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -145,6 +146,63 @@ return array(
 	}
 	if projectFile == nil || !projectFile.IsFile || projectFile.IsVendor {
 		t.Fatalf("expected generated project helper file entry, got %#v", projectFile)
+	}
+}
+
+func TestGetAutoloadFilesReadsOnlyTheReturnedArray(t *testing.T) {
+	root := t.TempDir()
+	composerDir := filepath.Join(root, "vendor", "composer")
+	if err := os.MkdirAll(composerDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	content := `<?php
+$vendorDir = dirname(__DIR__);
+$baseDir = dirname($vendorDir);
+// 'old' => $vendorDir . '/removed/package/helpers.php',
+$other = $vendorDir . '/assigned/helpers.php';
+
+return array(
+    'a' => $vendorDir . '/kept/package/helpers.php',
+    'b' => $baseDir . '/app/helpers.php',
+    'c' => $vendorDir . '/kept/package/helpers.php',
+    'd' => $otherDir . '/unknown/helpers.php',
+    'e' => $vendorDir . "/$name.php",
+    'f' => $vendorDir . '/kept/package/readme.txt',
+    'g' => __DIR__ . '/relative.php',
+    'h' => $vendorDir,
+    ,
+);
+`
+	if err := os.WriteFile(filepath.Join(composerDir, "autoload_files.php"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+	listed := AutoloadEntry{Path: filepath.Join(root, "vendor", "kept", "package", "helpers.php"), IsVendor: true, IsFile: true}
+	for _, entry := range appendComposerAutoloadFiles([]AutoloadEntry{{Path: root}, listed}, root) {
+		rel, err := filepath.Rel(root, entry.Path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, filepath.ToSlash(rel))
+	}
+	want := []string{".", "vendor/kept/package/helpers.php", "app/helpers.php"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("autoload files = %v, want %v", got, want)
+	}
+}
+
+func TestGetAutoloadFilesWithoutReturnedArray(t *testing.T) {
+	root := t.TempDir()
+	composerDir := filepath.Join(root, "vendor", "composer")
+	if err := os.MkdirAll(composerDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(composerDir, "autoload_files.php"), []byte("<?php\nreturn require __DIR__ . '/other.php';\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := appendComposerAutoloadFiles(nil, root); len(got) != 0 {
+		t.Fatalf("autoload files = %v, want none", got)
 	}
 }
 
