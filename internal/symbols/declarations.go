@@ -181,9 +181,6 @@ func addVirtualMembers(uri string, parent *Symbol, resolve func(string) string) 
 		return
 	}
 	doc := parser.ParseDocBlock(parent.DocComment)
-	if doc == nil {
-		return
-	}
 	fqn := parent.FQN
 
 	indexTypeAliases(parent, doc, resolve)
