@@ -204,7 +204,14 @@ func TestDenseCodeGrowsTheTokensOnceOrTwice(t *testing.T) {
 func TestAGrowthStepNeverMoreThanDoublesTheTokens(t *testing.T) {
 	src := "<?php " + strings.Repeat(";", 400000) + "?>" + strings.Repeat("<p>html</p>\n", 133000)
 	toks := Lex(src, token.Latest)
-	if limit := 2*len(toks) + 1; cap(toks) > limit {
+	if limit := 2*len(toks) + minTokenGrowth; cap(toks) > limit {
 		t.Errorf("%d tokens reserve a capacity of %d, want at most %d", len(toks), cap(toks), limit)
+	}
+}
+
+func TestTinySourcesGrowTheTokensOnce(t *testing.T) {
+	src := "<?php echo 1;"
+	if got := testing.AllocsPerRun(5, func() { Lex(src, token.Latest) }); got > 2 {
+		t.Errorf("lexing %q allocates %v times, want at most 2", src, got)
 	}
 }

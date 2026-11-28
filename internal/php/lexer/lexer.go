@@ -82,10 +82,12 @@ func (l *lexer) emit(kind token.Kind, end int) {
 	l.pos, l.halted = len(l.src), true
 }
 
+const minTokenGrowth = 8
+
 func (l *lexer) grow() {
 	n := len(l.tokens)
 	expected := (len(l.src) - l.pos) * (n - l.grownLen) / max(l.pos-l.grownAt, 1)
-	grown := make([]Token, n, n+max(min(expected+expected/8, n), n/4)+1)
+	grown := make([]Token, n, n+max(min(expected+expected/8, n), n/4, minTokenGrowth))
 	copy(grown, l.tokens)
 	l.tokens, l.grownAt, l.grownLen = grown, l.pos, n
 }
