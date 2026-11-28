@@ -21,11 +21,7 @@ func (r *UnreachableCodeRule) Check(file *parser.FileNode, source string, _ *sym
 	if file == nil {
 		return nil
 	}
-	result := r.Shared.parse(source)
-	if result == nil {
-		return nil
-	}
-	tokens := parser.SignificantTokens(result.Tokens)
+	tokens := r.Shared.significantTokens(source)
 
 	var findings []Finding
 	check := func(methods []parser.MethodNode) {
