@@ -105,7 +105,6 @@ func New(ws *workspace.Bootstrapped, opts Options) *Session {
 	arrays := models.NewFrameworkArrayResolver(ws.Index, ws.RootPath, ws.Framework)
 
 	s.completion = completion.NewProvider(ws.Index, ws.Container, ws.Framework)
-	s.completion.SetAutoImportAliasStyle(cfg.AutoImport.AliasStyle)
 	s.completion.SetArrayResolver(arrays)
 	if ws.RouteIndex != nil {
 		s.completion.SetLaravelRouteIndex(ws.RouteIndex)
@@ -117,7 +116,6 @@ func New(ws *workspace.Bootstrapped, opts Options) *Session {
 
 	s.hover = hover.NewProvider(ws.Index, ws.Container, ws.Framework)
 	s.hover.SetArrayResolver(arrays)
-	s.hover.SetConfig(cfg)
 	s.hover.SetTypedChainResolver(s.typedExpression)
 
 	s.inlayHint = inlayhint.NewProvider(ws.Index, ws.Container)
@@ -133,6 +131,7 @@ func New(ws *workspace.Bootstrapped, opts Options) *Session {
 	s.analyzer.SetTranslationResolver(s.translations)
 	s.analyzer.SetSymfonyTranslationResolver(s.symfonyTranslations)
 	s.analyzer.SetSymfonyCommands(ws.SymfonyCommands)
+	s.SetConfig(cfg)
 	return s
 }
 
@@ -161,9 +160,10 @@ func Open(ctx context.Context, root string, opts Options) (*Session, error) {
 // Config is the project's current configuration.
 func (s *Session) Config() *config.Config { return s.ws.Config() }
 
-// SetConfig hands a newly loaded configuration to every provider that reads
-// settings: diagnostics, completion's auto-import alias style and hover.
-// The workspace takes it separately, in Refresh.
+// SetConfig hands a configuration to every provider that reads settings:
+// diagnostics, completion's auto-import alias style and hover. New calls it
+// once; a transport calls it again whenever the settings change. The
+// workspace takes a new configuration separately, in Refresh.
 func (s *Session) SetConfig(cfg *config.Config) {
 	s.diag.SetConfig(cfg)
 	s.completion.SetAutoImportAliasStyle(cfg.AutoImport.AliasStyle)

@@ -82,6 +82,9 @@ func (s *settings) sameTools(other *settings) bool {
 }
 
 func (p *Provider) SetConfig(cfg *config.Config) {
+	if current := p.settings.Load(); current != nil && current.cfg == cfg {
+		return
+	}
 	next := &settings{cfg: cfg, phpstan: newPHPStanRunner(p.rootPath, cfg, p.logger), pint: newPintRunner(p.rootPath, cfg, p.logger)}
 	prev := p.settings.Swap(next)
 	if prev == nil || prev.sameTools(next) {

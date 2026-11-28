@@ -242,3 +242,20 @@ func TestReanalyzeSavedKeepsASaveStoredMeanwhile(t *testing.T) {
 		t.Errorf("findings of the older source don't replace those of a save stored during the reanalysis: %#v", cols)
 	}
 }
+
+func TestSetConfigWithTheConfigurationInUseKeepsTheSavedFindings(t *testing.T) {
+	const uri = "file:///t.php"
+	p := builderProvider(t, `{}`)
+	p.AnalyzeOnSave(uri, builderSource)
+	resolve := p.BuilderModelResolver
+	reanalyzed := false
+	p.BuilderModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
+		reanalyzed = true
+		return resolve(prefix, method, source, line, file)
+	}
+	p.SetConfig(p.settings.Load().cfg)
+	p.ReanalyzeSaved()
+	if reanalyzed {
+		t.Error("the on-save findings stay when the configuration handed over is the one in use")
+	}
+}
