@@ -74,7 +74,9 @@ func (s *viewScan) declarations() {
 	for i := 0; i < len(toks); i++ {
 		switch toks[i].Kind {
 		case parser.TokenNamespace:
-			s.namespace, _ = qualifiedName(toks, i+1)
+			if parser.IsNamespaceDeclaration(toks, i) {
+				s.namespace, _ = qualifiedName(toks, i+1)
+			}
 		case parser.TokenUse:
 			if s.classAt(i) != "" || i+1 < len(toks) && toks[i+1].Kind == parser.TokenOpenParen {
 				continue // a trait or a closure's use

@@ -79,7 +79,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 			if !wanted {
 				continue
 			}
-			classFQN, ok := resolveClassLikeName(tok.Value, tok.Line, file)
+			classFQN, ok := resolveClassLikeName(tok.Value, tok.Line, tok.Column, file)
 			if !ok || classFQN == "" {
 				continue
 			}
@@ -117,7 +117,7 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 			continue
 		}
 		if prev >= 0 && tokens[prev].Kind == parser.TokenNew {
-			classFQN, ok := resolveClassLikeName(tok.Value, tok.Line, file)
+			classFQN, ok := resolveClassLikeName(tok.Value, tok.Line, tok.Column, file)
 			if !ok || classFQN == "" {
 				continue
 			}
@@ -134,24 +134,21 @@ func eachResolvedCall(file *parser.FileNode, source string, index *symbols.Index
 				}
 			}
 		}
-		fqns, _ := resolve.FunctionNames(tok.Value, file)
+		fqns, _ := resolve.FunctionNames(tok.Value, file.NamespaceAt(tok.Line, tok.Column))
 		emit(callFunction, functionCallees(fqns, index), tok, tok.Value, i, next, closeIdx)
 	}
 }
 
 func functionCallees(fqns []string, index *symbols.Index) []callee {
+	var callees []callee
 	for _, fqn := range fqns {
-		var callees []callee
 		for _, def := range index.Definitions(fqn) {
 			if def.Kind == symbols.KindFunction {
 				callees = append(callees, callee{sym: def})
 			}
 		}
-		if len(callees) > 0 {
-			return callees
-		}
 	}
-	return nil
+	return callees
 }
 
 func methodCallees(classFQN, method string, index *symbols.Index) []callee {

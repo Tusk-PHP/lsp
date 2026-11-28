@@ -55,7 +55,7 @@ func checkUnknownClassMatches(line string, lineNum int, file *parser.FileNode, i
 		}
 		start, end := match[2], match[3]
 		name := line[start:end]
-		if classLikeKnown(name, lineNum, file, index) {
+		if classLikeKnown(name, lineNum, start, file, index) {
 			continue
 		}
 		findings = append(findings, Finding{
@@ -101,7 +101,7 @@ func checkUnknownStaticClassMatches(line, prevLine string, lineNum int, file *pa
 		if followsObjectOperator(line, prevLine, start) {
 			continue
 		}
-		if classLikeKnown(name, lineNum, file, index) {
+		if classLikeKnown(name, lineNum, start, file, index) {
 			continue
 		}
 		findings = append(findings, Finding{
@@ -146,7 +146,7 @@ func checkUnknownCatchClasses(line string, lineNum int, file *parser.FileNode, i
 			rel := strings.Index(part, trimmed)
 			start := listStart + offset + rel
 			end := start + len(trimmed)
-			if classLikeKnown(trimmed, lineNum, file, index) {
+			if classLikeKnown(trimmed, lineNum, start, file, index) {
 				offset += len(part) + 1
 				continue
 			}
@@ -183,7 +183,7 @@ func checkUnknownImplementsClasses(line string, lineNum int, file *parser.FileNo
 			rel := strings.Index(part, trimmed)
 			start := listStart + offset + rel
 			end := start + len(trimmed)
-			if classLikeKnown(trimmed, lineNum, file, index) {
+			if classLikeKnown(trimmed, lineNum, start, file, index) {
 				offset += len(part) + 1
 				continue
 			}
@@ -210,7 +210,7 @@ func checkUnknownAttributeClasses(line string, lineNum int, file *parser.FileNod
 	var findings []Finding
 	for _, g := range scanAttributeGroups(line) {
 		for _, tok := range g.names {
-			if classLikeKnown(tok.name, lineNum, file, index) || isPHPBuiltinAttribute(tok.name, lineNum, file) {
+			if classLikeKnown(tok.name, lineNum, tok.start, file, index) || isPHPBuiltinAttribute(tok.name, lineNum, tok.start, file) {
 				continue
 			}
 			findings = append(findings, Finding{
@@ -232,8 +232,8 @@ func checkUnknownAttributeClasses(line string, lineNum int, file *parser.FileNod
 // PHP version. Those are forward-compatible: a PHP that doesn't know one
 // ignores it, so it is never an unknown class. builtin-unavailable says when
 // it has no effect yet. A name that resolves into a namespace is not PHP's.
-func isPHPBuiltinAttribute(name string, line int, file *parser.FileNode) bool {
-	fqn, ok := resolveClassLikeName(name, line, file)
+func isPHPBuiltinAttribute(name string, line, col int, file *parser.FileNode) bool {
+	fqn, ok := resolveClassLikeName(name, line, col, file)
 	if !ok || fqn == "" || strings.Contains(fqn, "\\") {
 		return false
 	}
@@ -241,8 +241,8 @@ func isPHPBuiltinAttribute(name string, line int, file *parser.FileNode) bool {
 	return known
 }
 
-// attrToken is an attribute class name and the column where it begins.
-type attrToken struct {
+// classNameAt is a class name on a line and the column where it begins.
+type classNameAt struct {
 	name  string
 	start int
 }
@@ -252,7 +252,7 @@ type attrToken struct {
 type attrGroup struct {
 	start int // index of `#`
 	end   int // one past the closing `]` (or end of line if unterminated)
-	names []attrToken
+	names []classNameAt
 }
 
 // scanAttributeGroups finds every `#[...]` group on a (string/comment-masked)
@@ -288,7 +288,7 @@ func scanAttributeGroups(line string) []attrGroup {
 				return
 			}
 			rel := strings.Index(seg, name)
-			g.names = append(g.names, attrToken{name: name, start: segStart + rel})
+			g.names = append(g.names, classNameAt{name: name, start: segStart + rel})
 		}
 		j := i + 2
 		for ; j < len(line); j++ {
@@ -393,12 +393,14 @@ func (r *UnknownFunctionRule) Check(file *parser.FileNode, source string, index 
 			if shouldSkipFunctionCall(line, start, name) {
 				continue
 			}
-			if functionExists(writtenName(line, start, name), file, index) {
+			written := writtenName(line, start, name)
+			ns := file.NamespaceAt(lineNum, start)
+			if functionExists(written, ns, file, index) {
 				continue
 			}
 			// A PHP builtin the project's PHP version or extensions don't
 			// have is reported once, by builtin-unavailable.
-			if _, _, builtin := builtinFunctionAvailability(writtenName(line, start, name), file); builtin {
+			if _, _, builtin := builtinFunctionAvailability(written, ns); builtin {
 				continue
 			}
 			findings = append(findings, Finding{
@@ -612,7 +614,7 @@ func (r *UnknownMemberRule) Check(file *parser.FileNode, source string, index *s
 // nothing when any part of the type isn't known, since the member could be there.
 func (r *UnknownMemberRule) resolveOwners(ownerExpr string, lineNum, col int, source string, file *parser.FileNode, index *symbols.Index) []string {
 	if !strings.HasPrefix(ownerExpr, "$") && !strings.HasSuffix(ownerExpr, ")") && !strings.HasSuffix(ownerExpr, "]") {
-		fqn, ok := resolveClassLikeName(ownerExpr, lineNum, file)
+		fqn, ok := resolveClassLikeName(ownerExpr, lineNum, col, file)
 		if ok && fqn != "" {
 			if name, found := canonicalClassLike(fqn, file, index); found {
 				return []string{name}
@@ -641,8 +643,8 @@ func instanceofOwners(ownerExpr string, lines []string, instanceofLines []int, l
 		if !strings.Contains(line, ownerExpr) {
 			continue
 		}
-		for _, name := range instanceofTargets(line, ownerExpr) {
-			fqn, resolved := resolveClassLikeName(name, lineNum, file)
+		for _, target := range instanceofTargets(line, ownerExpr) {
+			fqn, resolved := resolveClassLikeName(target.name, i, target.start, file)
 			if !resolved || fqn == "" {
 				return nil, false
 			}
@@ -686,8 +688,8 @@ func linesWithInstanceof(lines []string) []int {
 // instanceofTargets returns the class names `expr instanceof Name` tests
 // expr against on a line, where expr is a whole variable, not the start of a
 // longer name ($item, not $items).
-func instanceofTargets(line, expr string) []string {
-	var out []string
+func instanceofTargets(line, expr string) []classNameAt {
+	var out []classNameAt
 	for from := 0; ; {
 		k := strings.Index(line[from:], expr)
 		if k < 0 {
@@ -711,7 +713,7 @@ func instanceofTargets(line, expr string) []string {
 		if end == 0 || after[0] >= '0' && after[0] <= '9' {
 			continue
 		}
-		out = append(out, after[:end])
+		out = append(out, classNameAt{name: after[:end], start: len(line) - len(after)})
 	}
 }
 
@@ -936,15 +938,15 @@ func heredocOpenLabel(rest string) (string, bool) {
 // classLikeKnown is classLikeExists for unknown-class: a PHP builtin the
 // project's PHP version or extensions don't have counts as known, since
 // builtin-unavailable reports it, once.
-func classLikeKnown(name string, line int, file *parser.FileNode, index *symbols.Index) bool {
-	if classLikeExists(name, line, file, index) {
+func classLikeKnown(name string, line, col int, file *parser.FileNode, index *symbols.Index) bool {
+	if classLikeExists(name, line, col, file, index) {
 		return true
 	}
-	_, _, builtin := builtinClassAvailability(name, line, file)
+	_, _, builtin := builtinClassAvailability(name, line, col, file)
 	return builtin
 }
 
-func classLikeExists(name string, line int, file *parser.FileNode, index *symbols.Index) bool {
+func classLikeExists(name string, line, col int, file *parser.FileNode, index *symbols.Index) bool {
 	// self, static and parent name the class being edited or its parent. If
 	// that parent is missing, its `extends` is what's reported, not every
 	// parent:: in the class.
@@ -952,7 +954,7 @@ func classLikeExists(name string, line int, file *parser.FileNode, index *symbol
 	case "self", "static", "parent":
 		return true
 	}
-	fqn, ok := resolveClassLikeName(name, line, file)
+	fqn, ok := resolveClassLikeName(name, line, col, file)
 	if !ok || fqn == "" {
 		return true
 	}
@@ -983,8 +985,8 @@ func isFunctionSymbol(sym *symbols.Symbol) bool {
 	return sym != nil && sym.Kind == symbols.KindFunction
 }
 
-func functionExists(name string, file *parser.FileNode, index *symbols.Index) bool {
-	fqns, ok := resolve.FunctionNames(name, file)
+func functionExists(name string, ns *parser.NamespaceNode, file *parser.FileNode, index *symbols.Index) bool {
+	fqns, ok := resolve.FunctionNames(name, ns)
 	if !ok || len(fqns) == 0 {
 		return true
 	}
@@ -1309,7 +1311,7 @@ func isCallAfter(line string, pos int) bool {
 	return strings.HasPrefix(rest, "(")
 }
 
-func resolveClassLikeName(name string, line int, file *parser.FileNode) (string, bool) {
+func resolveClassLikeName(name string, line, col int, file *parser.FileNode) (string, bool) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", false
@@ -1317,16 +1319,20 @@ func resolveClassLikeName(name string, line int, file *parser.FileNode) (string,
 	if strings.HasPrefix(name, "\\") {
 		return strings.TrimPrefix(name, "\\"), true
 	}
+	ns := file.NamespaceAt(line, col)
+	if ns == nil {
+		return "", false
+	}
 	lower := strings.ToLower(name)
 	switch lower {
 	case "self", "static":
 		if cls := enclosingClassAtLine(file, line); cls != nil {
-			return classNodeFQN(cls, file), true
+			return cls.FullName, true
 		}
 		return "", false
 	case "parent":
 		if cls := enclosingClassAtLine(file, line); cls != nil && cls.Extends != "" {
-			return resolve.ImportedName(cls.Extends, file.Namespace, file.Uses, ""), true
+			return resolve.ImportedName(cls.Extends, ns.Name, ns.Uses, ""), true
 		}
 		return "", false
 	case "class", "readonly":
@@ -1336,7 +1342,7 @@ func resolveClassLikeName(name string, line int, file *parser.FileNode) (string,
 	if symbols.IsPHPBuiltinType(lower) {
 		return "", false
 	}
-	return resolve.ImportedName(name, file.Namespace, file.Uses, "class"), true
+	return resolve.ImportedName(name, ns.Name, ns.Uses, "class"), true
 }
 
 // writtenName returns a name matched at line[start:] with the leading `\` of a
@@ -1360,22 +1366,22 @@ func localClassLikeFQN(fqn string, file *parser.FileNode) (string, bool) {
 		return "", false
 	}
 	for _, cls := range file.Classes {
-		if name := classNodeFQN(&cls, file); strings.EqualFold(name, fqn) {
+		if name := cls.FullName; strings.EqualFold(name, fqn) {
 			return name, true
 		}
 	}
 	for _, iface := range file.Interfaces {
-		if name := interfaceNodeFQN(&iface, file); strings.EqualFold(name, fqn) {
+		if name := iface.FullName; strings.EqualFold(name, fqn) {
 			return name, true
 		}
 	}
 	for _, tr := range file.Traits {
-		if name := traitNodeFQN(&tr, file); strings.EqualFold(name, fqn) {
+		if name := tr.FullName; strings.EqualFold(name, fqn) {
 			return name, true
 		}
 	}
 	for _, en := range file.Enums {
-		if name := enumNodeFQN(&en, file); strings.EqualFold(name, fqn) {
+		if name := en.FullName; strings.EqualFold(name, fqn) {
 			return name, true
 		}
 	}
@@ -1388,7 +1394,7 @@ func localClassStandsAlone(fqn string, file *parser.FileNode) bool {
 	}
 	for i := range file.Classes {
 		cls := &file.Classes[i]
-		if classNodeFQN(cls, file) != fqn {
+		if cls.FullName != fqn {
 			continue
 		}
 		if cls.Extends != "" || len(cls.Implements) > 0 || len(cls.Traits) > 0 || strings.Contains(cls.DocComment, "@mixin") {
@@ -1405,7 +1411,7 @@ func localClassStandsAlone(fqn string, file *parser.FileNode) bool {
 		return true
 	}
 	for i := range file.Enums {
-		if enumNodeFQN(&file.Enums[i], file) == fqn {
+		if file.Enums[i].FullName == fqn {
 			return len(file.Enums[i].Implements) == 0
 		}
 	}
@@ -1417,7 +1423,7 @@ func localFunctionExists(fqn string, file *parser.FileNode) bool {
 		return false
 	}
 	for _, fn := range file.Functions {
-		if strings.EqualFold(functionNodeFQN(&fn, file), fqn) {
+		if strings.EqualFold(fn.FullName, fqn) {
 			return true
 		}
 	}
@@ -1429,7 +1435,7 @@ func localMemberExists(ownerFQN, member string, file *parser.FileNode) bool {
 		return false
 	}
 	for _, cls := range file.Classes {
-		if classNodeFQN(&cls, file) != ownerFQN {
+		if cls.FullName != ownerFQN {
 			continue
 		}
 		for _, m := range cls.Methods {
@@ -1449,7 +1455,7 @@ func localMemberExists(ownerFQN, member string, file *parser.FileNode) bool {
 		}
 	}
 	for _, en := range file.Enums {
-		if enumNodeFQN(&en, file) != ownerFQN {
+		if en.FullName != ownerFQN {
 			continue
 		}
 		for _, m := range en.Methods {
@@ -1482,71 +1488,6 @@ func enclosingClassAtLine(file *parser.FileNode, line int) *parser.ClassNode {
 		}
 	}
 	return best
-}
-
-func classNodeFQN(cls *parser.ClassNode, file *parser.FileNode) string {
-	if cls == nil {
-		return ""
-	}
-	if cls.FullName != "" {
-		return cls.FullName
-	}
-	if file != nil && file.Namespace != "" {
-		return file.Namespace + "\\" + cls.Name
-	}
-	return cls.Name
-}
-
-func interfaceNodeFQN(iface *parser.InterfaceNode, file *parser.FileNode) string {
-	if iface == nil {
-		return ""
-	}
-	if iface.FullName != "" {
-		return iface.FullName
-	}
-	if file != nil && file.Namespace != "" {
-		return file.Namespace + "\\" + iface.Name
-	}
-	return iface.Name
-}
-
-func traitNodeFQN(tr *parser.TraitNode, file *parser.FileNode) string {
-	if tr == nil {
-		return ""
-	}
-	if tr.FullName != "" {
-		return tr.FullName
-	}
-	if file != nil && file.Namespace != "" {
-		return file.Namespace + "\\" + tr.Name
-	}
-	return tr.Name
-}
-
-func enumNodeFQN(en *parser.EnumNode, file *parser.FileNode) string {
-	if en == nil {
-		return ""
-	}
-	if en.FullName != "" {
-		return en.FullName
-	}
-	if file != nil && file.Namespace != "" {
-		return file.Namespace + "\\" + en.Name
-	}
-	return en.Name
-}
-
-func functionNodeFQN(fn *parser.FunctionNode, file *parser.FileNode) string {
-	if fn == nil {
-		return ""
-	}
-	if fn.FullName != "" {
-		return fn.FullName
-	}
-	if file != nil && file.Namespace != "" {
-		return file.Namespace + "\\" + fn.Name
-	}
-	return fn.Name
 }
 
 func backwardExprStart(line string, end int) int {

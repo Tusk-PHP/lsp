@@ -790,3 +790,23 @@ class Assert {
 		t.Fatal("a removed method should no longer narrow")
 	}
 }
+
+func TestIndexLeavesOutDocMembersWithoutAName(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///model.php", `<?php
+/**
+ * @property int
+ * @property-read
+ * @method ()
+ * @property string $name
+ */
+class User {}
+`)
+	var names []string
+	for _, child := range idx.Lookup("User").Children {
+		names = append(names, child.Name)
+	}
+	if len(names) != 1 || names[0] != "$name" {
+		t.Errorf("virtual members = %q, want only $name", names)
+	}
+}

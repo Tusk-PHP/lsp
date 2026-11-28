@@ -317,12 +317,24 @@ $x = 1;
 `
 	ctx := Analyze("file:///u.php", source, positionAfter(t, source, "$x"))
 	want := []parser.UseNode{
-		{FullName: "App\\Support\\helper", Alias: "helper", Kind: "function", StartLine: 2},
-		{FullName: "App\\Support\\LIMIT", Alias: "LIMIT", Kind: "const", StartLine: 3},
-		{FullName: "App\\Models\\User", Alias: "Account", Kind: "class", StartLine: 4},
+		{FullName: "App\\Support\\helper", Alias: "helper", Kind: "function", StartLine: 2, StartCol: 13},
+		{FullName: "App\\Support\\LIMIT", Alias: "LIMIT", Kind: "const", StartLine: 3, StartCol: 10},
+		{FullName: "App\\Models\\User", Alias: "Account", Kind: "class", StartLine: 4, StartCol: 4},
 	}
 	if !reflect.DeepEqual(ctx.Uses, want) {
 		t.Errorf("Uses = %#v, want %#v", ctx.Uses, want)
+	}
+}
+
+func TestAnalyzeLeavesOutAnImportLaterOnTheCursorsLine(t *testing.T) {
+	source := "<?php\nnamespace App;\nuse Lib\\First;\nnew Thing(); use Lib\\Thing;\n"
+	ctx := Analyze("file:///u.php", source, positionAfter(t, source, "new Th"))
+	if len(ctx.Uses) != 1 || ctx.Uses[0].FullName != `Lib\First` {
+		t.Errorf("Uses at the first Thing = %+v, want only Lib\\First", ctx.Uses)
+	}
+	ctx = Analyze("file:///u.php", source, positionAfter(t, source, "use Lib\\Th"))
+	if len(ctx.Uses) != 2 || ctx.Uses[1].FullName != `Lib\Thing` {
+		t.Errorf("Uses on the import itself = %+v, want both imports", ctx.Uses)
 	}
 }
 

@@ -808,7 +808,7 @@ func (p *Provider) resolveCalleeParams(
 		}
 		return p.membersToParams(cls, callee)
 	default:
-		fn := r.CalledFunction(callee, file)
+		fn := r.CalledFunction(callee, file.NamespaceAt(tokens[openParen].Line, tokens[openParen].Column))
 		if fn == nil {
 			return nil
 		}

@@ -2,23 +2,34 @@ package symbols
 
 import "github.com/Tusk-PHP/lsp/internal/parser"
 
-// indexConstants handles both file constants and constants owned by a class-like
-// symbol. Global constants need the same source/profile handling as functions.
-func (idx *Index) indexConstants(uri string, parent *Symbol, parentFQN string, consts []parser.ConstantNode, uses []parser.UseNode, src SymbolSource, resolve func(string) string) {
-	for _, co := range consts {
-		// A global constant's FQN is namespace\NAME and it has no owner; only a
-		// class constant has a ParentFQN (hover shows it as Owner::NAME).
-		fqn, owner := buildFQN(parentFQN, co.Name), ""
-		if parent != nil {
-			fqn, owner = parentFQN+"::"+co.Name, parentFQN
+func constantSymbol(uri, fqn, owner string, co *parser.ConstantNode, resolve func(string) string, uses []parser.UseNode) *Symbol {
+	return &Symbol{Name: co.Name, FQN: fqn, Kind: KindConstant, URI: uri, ParentFQN: owner,
+		Value: co.Value, Type: resolve(co.Type.Name), Visibility: co.Visibility,
+		Attributes: indexAttributes(co.Attributes, resolve), DocComment: qualifyDocTypes(co.DocComment, uses),
+		Range: symRange(co.StartLine, co.StartCol, len(co.Name))}
+}
+
+func addClassConstants(uri string, parent *Symbol, consts []parser.ConstantNode, resolve func(string) string, uses []parser.UseNode) {
+	for i := range consts {
+		parent.Children = append(parent.Children, constantSymbol(uri, parent.FQN+"::"+consts[i].Name, parent.FQN, &consts[i], resolve, uses))
+	}
+}
+
+func appendGlobalConstants(decls []*Symbol, uri string, consts []parser.ConstantNode) []*Symbol {
+	for start := 0; start < len(consts); {
+		ns := consts[start].Namespace
+		resolve := namespaceResolver(ns)
+		end := start
+		for ; end < len(consts) && consts[end].Namespace == ns; end++ {
+			decls = append(decls, constantSymbol(uri, buildFQN(ns.Name, consts[end].Name), "", &consts[end], resolve, ns.Uses))
 		}
-		cs := &Symbol{Name: co.Name, FQN: fqn, Kind: KindConstant, URI: uri, ParentFQN: owner,
-			Value: co.Value, Type: resolve(co.Type.Name), Visibility: co.Visibility,
-			Attributes: indexAttributes(co.Attributes, resolve), DocComment: qualifyDocTypes(co.DocComment, uses),
-			Range: symRange(co.StartLine, co.StartCol, len(co.Name))}
-		if parent != nil {
-			parent.Children = append(parent.Children, cs)
-		}
-		idx.addSymbolWithSource(uri, cs, src)
+		start = end
+	}
+	return decls
+}
+
+func namespaceResolver(ns *parser.NamespaceNode) func(string) string {
+	return func(name string) string {
+		return resolveTypeName(name, ns.Name, ns.Uses)
 	}
 }
