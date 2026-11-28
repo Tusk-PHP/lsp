@@ -70,7 +70,7 @@ func CompileWith(template string, opts CompileOptions) *Document {
 	vars := opts.Vars
 	var header strings.Builder
 	for _, v := range vars {
-		if !validVarName(v.Name) {
+		if !parser.IsIdentifier(v.Name) {
 			continue
 		}
 		t := v.Type
@@ -86,7 +86,7 @@ func CompileWith(template string, opts CompileOptions) *Document {
 		names := make([]string, 0, len(vars)+len(bladeVariables))
 		seen := map[string]bool{}
 		addName := func(n string) {
-			if validVarName(n) && !seen[n] {
+			if parser.IsIdentifier(n) && !seen[n] {
 				seen[n] = true
 				names = append(names, "$"+n)
 			}
@@ -430,18 +430,6 @@ func injected(template string, nodes []Node) []string {
 		}
 	}
 	return out
-}
-
-func validVarName(s string) bool {
-	if s == "" || ('0' <= s[0] && s[0] <= '9') {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		if !parser.IsIdentByte(s[i]) {
-			return false
-		}
-	}
-	return true
 }
 
 func lineStarts(s string) []int {

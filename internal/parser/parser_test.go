@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -643,12 +644,12 @@ func TestParseDocBlockPropertyAndMethod(t *testing.T) {
 	}
 
 	m0 := doc.Methods[0]
-	if m0.ReturnType != "Collection" || m0.Name != "all" || m0.Params != "" {
+	if m0.ReturnType != "Collection" || m0.Name != "all" || len(m0.Params) != 0 {
 		t.Errorf("unexpected method 0: %+v", m0)
 	}
 
 	m1 := doc.Methods[1]
-	if m1.ReturnType != "bool" || m1.Name != "save" || m1.Params != "array $options" {
+	if m1.ReturnType != "bool" || m1.Name != "save" || !slices.Equal(m1.Params, []DocMethodParam{{Type: "array", Name: "$options"}}) {
 		t.Errorf("unexpected method 1: %+v", m1)
 	}
 	if m1.Description != "Save the model" {
@@ -659,8 +660,45 @@ func TestParseDocBlockPropertyAndMethod(t *testing.T) {
 	if m2.ReturnType != "void" || m2.Name != "setName" {
 		t.Errorf("unexpected method 2: %+v", m2)
 	}
-	if m2.Params != "string $name, bool $force = false" {
-		t.Errorf("unexpected method 2 params: %q", m2.Params)
+	if want := []DocMethodParam{{Type: "string", Name: "$name"}, {Type: "bool", Name: "$force", Default: "false"}}; !slices.Equal(m2.Params, want) {
+		t.Errorf("unexpected method 2 params: %+v", m2.Params)
+	}
+}
+
+func TestParseDocBlockMethodWithoutParentheses(t *testing.T) {
+	doc := ParseDocBlock("/**\n * @method Collection getCollection the items\n * @method getName\n */")
+	if len(doc.Methods) != 2 {
+		t.Fatalf("expected 2 methods, got %d", len(doc.Methods))
+	}
+	if m := doc.Methods[0]; m.ReturnType != "Collection" || m.Name != "getCollection" || m.Description != "the items" || m.ParsedType == nil {
+		t.Errorf("unexpected method 0: %+v", m)
+	}
+	if m := doc.Methods[1]; m.ReturnType != "" || m.Name != "getName" {
+		t.Errorf("unexpected method 1: %+v", m)
+	}
+}
+
+func TestParseDocBlockMethodNeedsAnIdentifier(t *testing.T) {
+	for _, tag := range []string{"?", "-x", "()", "int -x", "int -x()", "1abc()", "int foo-bar()", "static ?"} {
+		if doc := ParseDocBlock("/**\n * @method " + tag + "\n */"); len(doc.Methods) != 0 {
+			t.Errorf("@method %s: got methods %+v, want none", tag, doc.Methods)
+		}
+	}
+	doc := ParseDocBlock("/**\n * @method ?\n * @method int _ok()\n * @method \u00e9t\u00e9\n */")
+	var names []string
+	for _, m := range doc.Methods {
+		names = append(names, m.Name)
+	}
+	if want := []string{"_ok", "\u00e9t\u00e9"}; !slices.Equal(names, want) {
+		t.Errorf("method names = %q, want %q", names, want)
+	}
+}
+
+func TestIsIdentifier(t *testing.T) {
+	for s, want := range map[string]bool{"": false, "a": true, "_": true, "a1": true, "1a": false, "foo-bar": false, "?": false, "\u00e9": true, "a b": false} {
+		if got := IsIdentifier(s); got != want {
+			t.Errorf("IsIdentifier(%q) = %v, want %v", s, got, want)
+		}
 	}
 }
 

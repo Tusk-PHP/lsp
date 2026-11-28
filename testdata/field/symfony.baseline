@@ -523,11 +523,13 @@ src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown 
 src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'ScriptEvents'
 src/Symfony/Component/Runtime/Runner/FrankenPhpWorkerRunner.php	unused-variable	Variable $sfRequest is assigned but never read
 src/Symfony/Component/Runtime/Runner/FrankenPhpWorkerRunner.php	unused-variable	Variable $sfResponse is assigned but never read
+src/Symfony/Component/Security/Core/Authentication/AuthenticationTrustResolver.php	unused-import	Unused import 'Symfony\Component\Security\Core\Authorization\Voter\AuthenticatedVoter'
 src/Symfony/Component/Security/Core/Role/SwitchUserRole.php	unused-private-property	Private property 'SwitchUserRole::$deprecationTriggered' is never used
 src/Symfony/Component/Security/Core/Role/SwitchUserRole.php	unused-private-property	Private property 'SwitchUserRole::$source' is never used
 src/Symfony/Component/Security/Core/Test/AccessDecisionStrategyTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Security/Core/Test/AccessDecisionStrategyTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Security/Http/AccessToken/OAuth2/Oauth2TokenHandler.php	unknown-class	Unknown class 'Symfony\Component\String\u'
+src/Symfony/Component/Security/Http/Authenticator/Passport/Badge/AuthenticationMethodBadge.php	unused-import	Unused import 'Symfony\Component\Security\Core\Authentication\AuthenticationMethod'
 src/Symfony/Component/Security/Http/Firewall/ContextListener.php	unknown-class	Unknown class 'LazyLoadingInterface'
 src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'Redis' requires ext-redis
 src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisArray' requires ext-redis

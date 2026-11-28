@@ -184,6 +184,47 @@ function getUser(): User {
 		assertNoFindings(t, findings)
 	})
 
+	t.Run("mentions outside code flagged", func(t *testing.T) {
+		source := "<?php\nuse App\\Models\\Post;\n// Post\necho 'Post';\n?>\n<p>Post</p>\n"
+		file := parser.ParseFile(source)
+		findings := checker.Check(file, source, nil)
+		assertFindingCodes(t, findings, []string{"unused-import"})
+	})
+
+	t.Run("names PHP does not resolve through the import flagged", func(t *testing.T) {
+		source := "<?php\nuse App\\Models\\Post;\nuse App\\Models\\User;\nuse function App\\fmt;\nnew \\App\\Models\\Post();\necho $x->User, Post::User, fmt;\n"
+		file := parser.ParseFile(source)
+		findings := checker.Check(file, source, nil)
+		if len(findings) != 2 || findings[0].StartLine != 2 || findings[1].StartLine != 3 {
+			t.Fatalf("expected User and fmt flagged, got %+v", findings)
+		}
+	})
+
+	t.Run("class and function names in another case not flagged, const names flagged", func(t *testing.T) {
+		source := "<?php\nuse App\\Models\\Post;\nuse function App\\fmt;\nuse const App\\MAX;\nnew post();\necho FMT(max);\n"
+		file := parser.ParseFile(source)
+		findings := checker.Check(file, source, nil)
+		if len(findings) != 1 || findings[0].StartLine != 3 {
+			t.Fatalf("expected only MAX flagged, got %+v", findings)
+		}
+	})
+
+	t.Run("names only in doc comment prose flagged, types in tags not flagged", func(t *testing.T) {
+		source := "<?php\nuse App\\Backend\\Action;\nuse App\\Models\\Post;\n/**\n * Ajax grid action.\n * @return Post|null the loaded post\n */\nfunction f() {}\n"
+		file := parser.ParseFile(source)
+		findings := checker.Check(file, source, nil)
+		if len(findings) != 1 || findings[0].StartLine != 1 {
+			t.Fatalf("expected only Action flagged, got %+v", findings)
+		}
+	})
+
+	t.Run("import used in interpolation not flagged", func(t *testing.T) {
+		source := "<?php\nuse App\\Models\\Post;\necho \"{$app->make(Post::class)}\";\n"
+		file := parser.ParseFile(source)
+		findings := (&UnusedImportsRule{Shared: &Shared{}}).Check(file, source, nil)
+		assertNoFindings(t, findings)
+	})
+
 	t.Run("severity is hint", func(t *testing.T) {
 		source := `<?php
 use App\Models\User;
