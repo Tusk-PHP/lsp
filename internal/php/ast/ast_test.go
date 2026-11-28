@@ -77,3 +77,18 @@ func TestWalkReachesEveryNodeType(t *testing.T) {
 		t.Errorf("a span's text is its source: %q", text)
 	}
 }
+
+func TestFileIsCleanWithoutErrorsOrWarnings(t *testing.T) {
+	for _, tc := range []struct {
+		src   string
+		clean bool
+	}{
+		{"<?php echo 1;", true},
+		{"<?php echo ;", false},
+		{"<?php /* never closed", false},
+	} {
+		if got := parser.Parse(tc.src, token.PHP74).Clean(); got != tc.clean {
+			t.Errorf("Clean() of %q = %v, want %v", tc.src, got, tc.clean)
+		}
+	}
+}
