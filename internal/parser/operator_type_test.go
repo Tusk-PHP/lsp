@@ -106,20 +106,42 @@ func TestOperatorTypesFollowPHP(t *testing.T) {
 
 func TestLiteralOperatorsAreTyped(t *testing.T) {
 	for expr, want := range map[string]string{
-		"60 * 60":         "int",
-		"1 + 1.5":         "float",
-		"1 / 2":           "int|float",
-		"'a' . 'b'":       "string",
-		"1 < 2":           "bool",
-		"-(1 + 2)":        "int",
-		"PHP_INT_MAX + 1": "",
-		"[1] + [2]":       "array",
-		"2 ** -1":         "float",
+		"60 * 60":                   "int",
+		"1 + 1.5":                   "float",
+		"1 / 2":                     "int|float",
+		"'a' . 'b'":                 "string",
+		"1 < 2":                     "bool",
+		"-(1 + 2)":                  "int",
+		"PHP_INT_MAX + 1":           "",
+		"[1] + [2]":                 "array",
+		"2 ** -1":                   "float",
+		"2 ** 99999999999999999999": "float",
+		"2 ** 08":                   "int|float",
 	} {
 		src := "return " + expr + ";"
 		e := phpparser.ParseCode(src, token.Latest).Stmts[0].(*ast.Return).Value
 		if got := LiteralValueType(e, src); got != want {
 			t.Errorf("LiteralValueType(%s) = %q, want %q", expr, got, want)
 		}
+	}
+}
+
+func TestScalarSets(t *testing.T) {
+	for name, want := range map[string]string{
+		"non-empty-string": "string",
+		"true":             "bool",
+		"null":             "null",
+		"list":             "array",
+		"numeric":          "int|float|string",
+		"scalar":           "int|float|string|bool",
+		"array-key":        "int|string",
+		"object":           "",
+	} {
+		if got := ScalarOf(name).String(); got != want {
+			t.Errorf("ScalarOf(%s) = %q, want %q", name, got, want)
+		}
+	}
+	if got := (ScalarInt | ScalarString).Names(); len(got) != 2 || got[0] != "int" || got[1] != "string" {
+		t.Errorf("Names = %q, want [int string]", got)
 	}
 }
