@@ -34,25 +34,85 @@ func docLines(comment string) iter.Seq[string] {
 	}
 }
 
+// docTagLayout says where the value of a PHPDoc tag holds types.
+type docTagLayout uint8
+
+const (
+	docLayoutProse docTagLayout = iota
+	docLayoutVariableType
+	docLayoutLeadingType
+	docLayoutAssert
+	docLayoutTemplate
+	docLayoutTypeAlias
+	docLayoutImportType
+	docLayoutMethod
+	docLayoutReference
+)
+
+// docTagRead says in which forms ParseDocBlock interprets a tag: a bare
+// @assert is PHPUnit's own annotation and a bare @type is WordPress's hash
+// notation, so those are only read with a phpstan- or psalm- prefix.
+type docTagRead uint8
+
+const (
+	docReadNever docTagRead = iota
+	docReadAlways
+	docReadPlain
+	docReadPrefixed
+)
+
+type docTagSpec struct {
+	layout docTagLayout
+	read   docTagRead
+}
+
+// docTagSpecOf is the one list of the PHPDoc tags this package knows, keyed by
+// the base name docTagName gives: where each holds types, and whether
+// ParseDocBlock interprets it.
+func docTagSpecOf(base string) docTagSpec {
+	switch base {
+	case "param", "var", "param-out", "param-closure-this":
+		return docTagSpec{docLayoutVariableType, docReadAlways}
+	case "property", "property-read", "property-write":
+		return docTagSpec{docLayoutVariableType, docReadPlain}
+	case "global":
+		return docTagSpec{docLayoutVariableType, docReadNever}
+	case "return", "extends", "implements", "use", "self-out", "mixin":
+		return docTagSpec{docLayoutLeadingType, docReadAlways}
+	case "throws":
+		return docTagSpec{docLayoutLeadingType, docReadPlain}
+	case "require-extends", "require-implements", "sealed", "inheritors", "if-this-is", "scope-this", "yield", "expectedException":
+		return docTagSpec{docLayoutLeadingType, docReadNever}
+	case "assert", "assert-if-true", "assert-if-false":
+		return docTagSpec{docLayoutAssert, docReadPrefixed}
+	case "template":
+		return docTagSpec{docLayoutTemplate, docReadAlways}
+	case "type":
+		return docTagSpec{docLayoutTypeAlias, docReadPrefixed}
+	case "import-type":
+		return docTagSpec{docLayoutImportType, docReadPrefixed}
+	case "method":
+		return docTagSpec{docLayoutMethod, docReadPlain}
+	case "deprecated":
+		return docTagSpec{docLayoutProse, docReadPlain}
+	case "see", "link", "covers", "coversDefaultClass", "uses":
+		return docTagSpec{docLayoutReference, docReadNever}
+	}
+	return docTagSpec{}
+}
+
 // docTagBase maps a tag name to the tag it stands for and its precedence:
 // @phpstan-X beats @psalm-X, which beats @X. ok is false for tags this parser
 // doesn't interpret.
 func docTagBase(name string) (base string, prio int, ok bool) {
 	base, prio = docTagName(name)
-	switch base {
-	case "param", "return", "var", "template", "extends", "implements", "use",
-		"param-out", "self-out", "param-closure-this", "mixin":
+	switch docTagSpecOf(base).read {
+	case docReadAlways:
 		return base, prio, true
-	case "assert", "assert-if-true", "assert-if-false":
-		// A bare @assert is PHPUnit's own annotation, not a type assertion.
+	case docReadPlain:
+		return base, prio, prio == 0
+	case docReadPrefixed:
 		return base, prio, prio > 0
-	case "type", "import-type":
-		// Aliases are only read in their prefixed forms.
-		return base, prio, prio > 0
-	}
-	switch name {
-	case "throws", "deprecated", "property", "property-read", "property-write", "method":
-		return name, 0, true
 	}
 	return "", 0, false
 }

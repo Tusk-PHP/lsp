@@ -50,29 +50,29 @@ func (c *importCollector) markDocTag(tag string) {
 	}
 	name, value := splitDocTag(tag)
 	base, prio := docTagName(name)
-	switch base {
-	case "param", "var", "param-out", "param-closure-this", "property", "property-read", "property-write":
+	switch docTagSpecOf(base).layout {
+	case docLayoutVariableType:
 		c.markDocType(docVariableType(value))
-	case "type":
+	case docLayoutLeadingType:
+		typ, _ := types.ExtractDocTypeString(value)
+		c.markDocType(typ)
+	case docLayoutAssert:
+		c.markDocType(parseDocAssert(value, AssertAlways).Type)
+	case docLayoutTemplate:
+		tmpl := parseDocTemplate(value)
+		c.markDocType(tmpl.Bound)
+		c.markDocType(tmpl.Default)
+	case docLayoutTypeAlias:
 		if prio == 0 {
 			c.markDocType(docVariableType(value))
 			return
 		}
 		c.markDocType(parseDocTypeAlias(value).Type)
-	case "return", "throws", "self-out", "mixin", "extends", "implements", "use", "require-extends", "require-implements":
-		typ, _ := types.ExtractDocTypeString(value)
-		c.markDocType(typ)
-	case "assert", "assert-if-true", "assert-if-false":
-		c.markDocType(parseDocAssert(value, AssertAlways).Type)
-	case "template":
-		tmpl := parseDocTemplate(value)
-		c.markDocType(tmpl.Bound)
-		c.markDocType(tmpl.Default)
-	case "import-type":
+	case docLayoutImportType:
 		c.markDocType(parseDocImportedTypeAlias(value).From)
-	case "method":
+	case docLayoutMethod:
 		c.markDocMethod(value)
-	case "see", "link", "covers", "coversDefaultClass", "uses":
+	case docLayoutReference:
 		c.markDocTarget(value)
 	default:
 		if isDocAnnotation(name) {
