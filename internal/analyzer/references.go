@@ -31,33 +31,31 @@ func (a *Analyzer) findSymbolOccurrences(sym *symbols.Symbol, readDocument func(
 		locs = append(locs, protocol.Location{URI: sym.URI, Range: sym.Range})
 	}
 
+	word := strings.TrimPrefix(sym.Name, "$")
 	for _, fileURI := range a.index.GetAllFileURIs() {
-		// Defense in depth: skip any stub URIs that may have been indexed.
 		if strings.HasPrefix(fileURI, "builtin://") {
 			continue
 		}
-		var src string
-		if readDocument != nil {
-			src = readDocument(fileURI)
+		if src := a.sourceMentioning(fileURI, word, readDocument); src != "" {
+			locs = append(locs, symbolOccurrencesIn(sym, fileURI, src)...)
 		}
-		// Prefer the in-memory source stored by the index to avoid redundant disk I/O.
-		// Fall back to disk only when neither the caller-supplied reader nor the index
-		// has a stored copy (e.g. files indexed without source via IndexFile on older paths).
-		if src == "" {
-			src = a.index.GetFileSource(fileURI)
-		}
-		if src == "" {
-			src = a.readFileFromDisk(fileURI)
-		}
-		if src == "" {
-			continue
-		}
-		locs = append(locs, symbolOccurrencesIn(sym, fileURI, src)...)
 	}
 	locs = append(locs, a.templateOccurrences(sym, readDocument, uri, source)...)
 
 	// Deduplicate (definition may appear twice: once from sym.Range, once from file scan)
 	return deduplicateLocations(locs)
+}
+
+func (a *Analyzer) sourceMentioning(uri, word string, readDocument func(string) string) string {
+	if readDocument != nil {
+		if src := readDocument(uri); src != "" {
+			return src
+		}
+	}
+	if !a.index.MayMention(uri, word) {
+		return ""
+	}
+	return a.index.GetFileSource(uri)
 }
 
 // symbolOccurrencesIn finds the words in source that may name sym.

@@ -130,6 +130,9 @@ func (s *Server) refreshWorkspace() {
 	if result.ProfileChanged {
 		s.logInfo(fmt.Sprintf("PHP LSP: PHP %s (source: %s)", result.Profile.PHPVersion, result.ProfileSource))
 	}
+	if result.Vendor {
+		s.logInfo(fmt.Sprintf("PHP LSP: Re-indexed %d vendor files after a Composer change", result.VendorFiles))
+	}
 	s.handBackToEditor(result.EditorOpened)
 	for _, uri := range result.Files {
 		if affectsComponents(s.rootPath, uri) {

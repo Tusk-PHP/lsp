@@ -95,3 +95,31 @@ func TestLaravelAutoDiscoveredPackages_UnresolvableFQN(t *testing.T) {
 		t.Fatalf("expected nil when FQN is unresolvable, got %v", got)
 	}
 }
+
+func TestLaravelPackageDiscoveryReadsInstalledPackagesExceptDontDiscover(t *testing.T) {
+	root := t.TempDir()
+	writeComposerJSON(t, root, `{"extra": {"laravel": {"dont-discover": ["acme/skipped"]}}}`)
+	writeInstalledJSON(t, root, []map[string]interface{}{
+		{
+			"name": "acme/kept",
+			"extra": map[string]interface{}{"laravel": map[string]interface{}{
+				"providers": []string{`\Acme\Kept\KeptServiceProvider`},
+				"aliases":   map[string]string{"Kept": `Acme\Kept\Facades\Kept`},
+			}},
+		},
+		{
+			"name": "acme/skipped",
+			"extra": map[string]interface{}{"laravel": map[string]interface{}{
+				"providers": []string{`Acme\Skipped\SkippedServiceProvider`},
+				"aliases":   map[string]string{"Skipped": `Acme\Skipped\Facades\Skipped`},
+			}},
+		},
+	})
+
+	if got, want := LaravelPackageProviders(root), []string{`Acme\Kept\KeptServiceProvider`}; !reflect.DeepEqual(got, want) {
+		t.Errorf("providers = %v, want %v", got, want)
+	}
+	if got, want := LaravelPackageAliases(root), map[string]string{"Kept": `Acme\Kept\Facades\Kept`}; !reflect.DeepEqual(got, want) {
+		t.Errorf("aliases = %v, want %v", got, want)
+	}
+}

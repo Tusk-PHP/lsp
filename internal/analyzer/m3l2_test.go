@@ -1,6 +1,8 @@
 package analyzer
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/container"
@@ -220,5 +222,32 @@ class Page {
 	}
 	if !pageFound {
 		t.Error("expected render() call site reference in page.php; GetFileSource fallback not working")
+	}
+}
+
+func TestFindReferencesReadsVendorFilesThatMentionTheName(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"Widget.php": "<?php\nnamespace Lib;\nclass Widget {}\n",
+		"Uses.php":   "<?php\nnamespace Lib;\nfunction make(): Widget { return new Widget(); }\n",
+		"Other.php":  "<?php\nnamespace Lib;\nclass Gadget {}\n",
+	}
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	for name, src := range files {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		idx.IndexFileWithSource("file://"+path, src, symbols.SourceVendor)
+	}
+	a := NewAnalyzer(idx, container.NewContainerAnalyzer(idx, "/tmp", "none"))
+	widget := "file://" + filepath.Join(dir, "Widget.php")
+	byFile := map[string]int{}
+	for _, loc := range a.FindAllReferences(widget, files["Widget.php"], protocol.Position{Line: 2, Character: 7}, nil) {
+		byFile[filepath.Base(symbols.URIToPath(loc.URI))]++
+	}
+	if byFile["Uses.php"] != 2 || byFile["Other.php"] != 0 {
+		t.Errorf("both uses in the vendor file are found from disk: %v", byFile)
 	}
 }

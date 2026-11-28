@@ -25,6 +25,8 @@ type Refreshed struct {
 	EditorOpened   []string
 	Failed         []string
 	Composer       bool
+	Vendor         bool
+	VendorFiles    int
 	ProfileChanged bool
 	Profile        symbols.BuiltinProfile
 	ProfileSource  string
@@ -85,6 +87,7 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 	manifest := filepath.Join(ws.RootPath, composerManifest)
 	configPath := ws.ConfigPath()
 	composerState := ws.ComposerStatePaths()
+	vendorState := ws.VendorStatePaths()
 	seen := make(map[string]struct{}, len(r.Paths))
 	var sources []string
 	profile := r.Profile
@@ -95,6 +98,7 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 			profile = true
 		case slices.Contains(composerState, path):
 			out.Composer = true
+			out.Vendor = out.Vendor || slices.Contains(vendorState, path)
 			profile = profile || path == manifest
 		default:
 			found, err := ws.sourcesAt(path)
@@ -131,6 +135,10 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 	if out.Composer {
 		ws.rereadAutoload()
 	}
+	if out.Vendor {
+		out.VendorFiles = ws.indexComposerDependencies(r.editorOwns)
+		ws.AnalyzeModels()
+	}
 	if profile {
 		if err := ws.refreshProfile(r.Config, &out); err != nil {
 			errs = append(errs, err)
@@ -159,7 +167,7 @@ func (r Refresh) editorOwns(path string) bool {
 
 func (ws *Bootstrapped) sourcesAt(path string) ([]string, error) {
 	if IsPHPSource(path) {
-		if !ws.walkerReaches(path) {
+		if !ws.walkerReaches(path) && !ws.IsVendorFile(symbols.PathToURI(path)) {
 			return nil, nil
 		}
 		return []string{path}, nil
@@ -190,17 +198,25 @@ func (ws *Bootstrapped) sourcesAt(path string) ([]string, error) {
 }
 
 func (ws *Bootstrapped) refreshFile(path, uri string) (bool, error) {
+	vendor := ws.IsVendorFile(uri)
 	content, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		if !ws.Index.HasFile(uri) {
 			return false, nil
 		}
 		ws.RemoveFile(uri)
-		ws.projectFiles.release(path)
+		if !vendor {
+			ws.projectFiles.release(path)
+		}
 		return true, nil
 	}
 	if err != nil {
 		return false, fmt.Errorf("re-index %s: %w", path, err)
+	}
+	if vendor {
+		ws.Index.IndexFileWithSource(uri, string(content), symbols.SourceVendor)
+		ws.forgetProjectFile(uri)
+		return true, nil
 	}
 	if !ws.Index.HasFile(uri) && !ws.projectFiles.admitCreated(path) {
 		return false, nil

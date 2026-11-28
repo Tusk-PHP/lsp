@@ -21,6 +21,10 @@ func (ws *Bootstrapped) IndexFile(uri, source string) {
 
 func (ws *Bootstrapped) RemoveFile(uri string) {
 	ws.Index.RemoveFile(uri)
+	ws.forgetProjectFile(uri)
+}
+
+func (ws *Bootstrapped) forgetProjectFile(uri string) {
 	ws.ViewData.IndexFile(uri, "")
 	ws.SymfonyCommands.UpdateFile(uri, "")
 	if ws.RouteIndex != nil {

@@ -1,6 +1,8 @@
 package symbols
 
 import (
+	"hash/maphash"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -166,6 +168,8 @@ type Index struct {
 	sortedNames          sortedKeys // nameIndex's keys, for prefix search by name
 	sortedFQNs           sortedKeys // FQNs of named class-likes, functions and constants, for prefix search by FQN
 	fileSource           map[string]indexedText
+	diskSources          map[string]diskSource
+	textSeed             maphash.Seed
 	ready                atomic.Bool // true once project + vendor indexing has completed at least once
 	generator            atomic.Pointer[classGeneratorHolder]
 	loader               atomic.Pointer[classLoaderHolder]
@@ -219,6 +223,8 @@ func NewIndex() *Index {
 		subInterfaceMap:      make(map[string][]string),
 		traitMap:             make(map[string][]string),
 		fileSource:           make(map[string]indexedText),
+		diskSources:          make(map[string]diskSource),
+		textSeed:             maphash.MakeSeed(),
 		generatedURIs:        make(map[string]bool),
 		generatedFrom:        make(map[string][]string),
 		files:                fileTree{windows: hostWindows},
@@ -343,25 +349,55 @@ type indexedText struct {
 	ideHelper bool
 }
 
+type diskSource struct {
+	size   int
+	digest uint64
+	words  wordFilter
+}
+
+func (d diskSource) sameText(other diskSource) bool {
+	return d.size == other.size && d.digest == other.digest
+}
+
 func (idx *Index) IndexFileWithSource(uri string, source string, src SymbolSource) {
 	indexed := indexedText{text: source, from: src}
-	idx.mu.RLock()
-	previous, indexedBefore := idx.fileSource[uri]
-	idx.mu.RUnlock()
-	if indexedBefore && previous == indexed {
+	var disk diskSource
+	if src == SourceVendor {
+		disk = diskSource{size: len(source), digest: maphash.String(idx.textSeed, source)}
+	}
+	if idx.indexedAlready(uri, indexed, disk) {
 		return
 	}
 	file := parser.ParseFile(source)
 	if file == nil {
 		return
 	}
+	if src == SourceVendor {
+		file.Detach()
+		disk.words = newWordFilter(source)
+	}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	foreign := idx.foreignMembersLocked(uri)
 	idx.removeFileSymbols(uri)
-	idx.fileSource[uri] = indexed
+	if src == SourceVendor {
+		idx.diskSources[uri] = disk
+	} else {
+		idx.fileSource[uri] = indexed
+	}
 	idx.indexParsedLocked(uri, file, src)
 	idx.reattachForeignMembersLocked(foreign)
+}
+
+func (idx *Index) indexedAlready(uri string, indexed indexedText, disk diskSource) bool {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	if indexed.from == SourceVendor {
+		previous, ok := idx.diskSources[uri]
+		return ok && previous.sameText(disk)
+	}
+	previous, ok := idx.fileSource[uri]
+	return ok && previous == indexed
 }
 
 // foreignMembersLocked returns, by class, the members other files added to
@@ -679,6 +715,7 @@ func (idx *Index) removeFileSymbols(uri string) {
 	}
 	delete(idx.fileSymbols, uri)
 	delete(idx.fileSource, uri)
+	delete(idx.diskSources, uri)
 	delete(idx.generatedURIs, uri)
 }
 
@@ -1868,13 +1905,39 @@ func (idx *Index) TemplateFileURIs() []string {
 	return uris
 }
 
-// GetFileSource returns the raw PHP source text stored for the given URI,
-// or an empty string if the URI has not been indexed or was removed.
-// This allows the analyzer to avoid re-reading files from disk.
 func (idx *Index) GetFileSource(uri string) string {
 	idx.mu.RLock()
-	defer idx.mu.RUnlock()
-	return idx.fileSource[uri].text
+	entry, stored := idx.fileSource[uri]
+	_, onDisk := idx.diskSources[uri]
+	idx.mu.RUnlock()
+	if stored || !onDisk {
+		return entry.text
+	}
+	data, err := os.ReadFile(URIToPath(uri))
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+func (idx *Index) RemoveVendorFilesExcept(keep map[string]struct{}) int {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	removed := 0
+	for uri := range idx.diskSources {
+		if _, ok := keep[uri]; !ok {
+			idx.removeFileSymbols(uri)
+			removed++
+		}
+	}
+	return removed
+}
+
+func (idx *Index) MayMention(uri, word string) bool {
+	idx.mu.RLock()
+	disk, onDisk := idx.diskSources[uri]
+	idx.mu.RUnlock()
+	return !onDisk || disk.words.mayContain(word)
 }
 
 // Ready reports whether at least one full workspace + composer indexing pass

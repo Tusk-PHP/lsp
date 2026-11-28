@@ -3,7 +3,6 @@ package composer
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -21,8 +20,7 @@ type Package struct {
 // {"packages":[...]} and the legacy v1 top-level array form are supported.
 // If the file is missing or cannot be parsed, nil is returned (no panic).
 func InstalledPackages(rootPath string) []Package {
-	installedPath := filepath.Join(rootPath, "vendor", "composer", "installed.json")
-	data, err := os.ReadFile(installedPath)
+	data, err := os.ReadFile(InstalledJSONPath(rootPath))
 	if err != nil {
 		return nil
 	}

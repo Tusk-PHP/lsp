@@ -60,6 +60,7 @@ type Bootstrapped struct {
 	autoloadRead    bool
 	autoloadEntries []composer.AutoloadEntry
 	projectFiles    *projectFiles
+	vendorFiles     atomic.Pointer[map[string]struct{}]
 
 	// modelMu guards what model analysis read, for re-analysing one file
 	// later: Schema once AnalyzeModels has set it, and the following.
@@ -247,57 +248,61 @@ func (ws *Bootstrapped) IndexComposerDependencies() int {
 	if ws == nil {
 		return 0
 	}
+	return ws.indexComposerDependencies(func(string) bool { return false })
+}
+
+func (ws *Bootstrapped) indexComposerDependencies(editorOwns func(path string) bool) int {
 
 	if ws.Aliases != nil {
 		ws.Aliases.Load()
 	}
 
-	entries := ws.autoload()
-	if len(entries) == 0 {
-		return 0
-	}
-
-	vendorCount := 0
-	for _, entry := range entries {
-		src := symbols.SourceProject
-		if entry.IsVendor {
-			src = symbols.SourceVendor
+	vendorFiles := map[string]struct{}{}
+	indexVendorFile := func(path string) {
+		uri := symbols.PathToURI(path)
+		if editorOwns(path) {
+			vendorFiles[uri] = struct{}{}
+			return
 		}
-
-		if entry.IsFile {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return
+		}
+		ws.Index.IndexFileWithSource(uri, string(content), symbols.SourceVendor)
+		vendorFiles[uri] = struct{}{}
+	}
+	for _, entry := range ws.autoload() {
+		switch {
+		case entry.IsFile && entry.IsVendor:
+			indexVendorFile(entry.Path)
+		case entry.IsFile && editorOwns(entry.Path):
+		case entry.IsFile:
 			if content, err := os.ReadFile(entry.Path); err == nil {
-				ws.Index.IndexFileWithSource(symbols.PathToURI(entry.Path), string(content), src)
-				if entry.IsVendor {
-					vendorCount++
+				ws.Index.IndexFileWithSource(symbols.PathToURI(entry.Path), string(content), symbols.SourceProject)
+			}
+		case entry.IsVendor:
+			_ = filepath.WalkDir(entry.Path, func(path string, d fs.DirEntry, err error) error {
+				if err == nil && !d.IsDir() && strings.HasSuffix(path, ".php") {
+					indexVendorFile(path)
 				}
-			}
-			continue
-		}
-
-		if !entry.IsVendor {
-			continue
-		}
-		info, err := os.Stat(entry.Path)
-		if err != nil || !info.IsDir() {
-			continue
-		}
-		_ = filepath.Walk(entry.Path, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() {
 				return nil
-			}
-			if !strings.HasSuffix(path, ".php") {
-				return nil
-			}
-			if content, err := os.ReadFile(path); err == nil {
-				ws.Index.IndexFileWithSource(symbols.PathToURI(path), string(content), symbols.SourceVendor)
-				vendorCount++
-			}
-			return nil
-		})
+			})
+		}
 	}
+	removed := ws.Index.RemoveVendorFilesExcept(vendorFiles)
+	ws.vendorFiles.Store(&vendorFiles)
 
-	ws.logf("Indexed %d vendor PHP files from Composer dependencies", vendorCount)
-	return vendorCount
+	ws.logf("Indexed %d vendor PHP files from Composer dependencies, removed %d that are no longer installed", len(vendorFiles), removed)
+	return len(vendorFiles)
+}
+
+func (ws *Bootstrapped) IsVendorFile(uri string) bool {
+	files := ws.vendorFiles.Load()
+	if files == nil {
+		return false
+	}
+	_, vendor := (*files)[uri]
+	return vendor
 }
 
 func (ws *Bootstrapped) ScanRoutes() error {

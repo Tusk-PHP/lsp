@@ -157,6 +157,7 @@ Open documents are a map guarded by an `RWMutex`. On `didChange` the server stor
 |---|---|
 | `initialize`, `initialized`, `shutdown`, `exit` | `lsp` |
 | `textDocument/didOpen`, `didChange`, `didClose`, `didSave` | `lsp` (documents, indexing, diagnostics) |
+| `workspace/didChangeWatchedFiles` | `lsp` → `workspace.Refresh`: re-indexes changed project files, and every Composer dependency when `composer.lock` or `vendor/composer/installed.json` changes; registered only with clients that support dynamic registration |
 | `textDocument/completion`, `completionItem/resolve` | `completion` |
 | `textDocument/hover` | `hover` (`composer/cardhover` for `composer.json`) |
 | `textDocument/definition`, `declaration`, `typeDefinition`, `implementation`, `references` | `analyzer` |
