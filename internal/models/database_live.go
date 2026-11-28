@@ -256,11 +256,8 @@ func queryTableNames(db *sql.DB, cfg *config.DatabaseConfig, timeout time.Durati
 		return queryTableNamesMySQL(db, cfg.Database, timeout)
 	case "pgsql":
 		return queryTableNamesPostgres(db, cfg.Database, timeout)
-	case "sqlite":
-		return queryTableNamesSQLite(db, timeout)
-	default:
-		return nil, errUnsupportedDriver
 	}
+	return queryTableNamesSQLite(db, timeout)
 }
 
 func queryTableNamesMySQL(db *sql.DB, dbName string, timeout time.Duration) ([]string, error) {
