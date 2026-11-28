@@ -329,8 +329,7 @@ func (at *cursorDeclarations) enclose(stmt ast.Stmt) {
 		case *ast.EnumDecl:
 			at.enterClass(n.Name)
 		case *ast.Method:
-			name := n.Name.Text(at.src)
-			at.scope = &Scope{Kind: ScopeMethod, Name: name, ClassFQN: at.classFQN, MethodName: name, StartLine: at.line(n.Name.Start), EndLine: at.endLine(span)}
+			at.scope = at.methodScope(n)
 		case *ast.FunctionDecl:
 			at.scope = &Scope{Kind: ScopeFunction, Name: n.Name.Text(at.src), StartLine: at.line(n.Name.Start), EndLine: at.endLine(span)}
 		case *ast.Closure, *ast.ArrowFunction:
@@ -355,7 +354,19 @@ func (at *cursorDeclarations) calls(callee ast.Expr) {
 	}
 }
 
+func (at *cursorDeclarations) methodScope(m *ast.Method) *Scope {
+	scope := &Scope{Kind: ScopeMethod, ClassFQN: at.classFQN, StartLine: at.line(m.Start), EndLine: at.endLine(m.Span)}
+	if m.Name != nil {
+		scope.Name = m.Name.Text(at.src)
+		scope.MethodName = scope.Name
+		scope.StartLine = at.line(m.Name.Start)
+	}
+	return scope
+}
+
 func (at *cursorDeclarations) enterClass(name *ast.Identifier) {
+	at.classFQN = ""
+	at.scope = nil
 	if name == nil {
 		return
 	}
@@ -363,7 +374,6 @@ func (at *cursorDeclarations) enterClass(name *ast.Identifier) {
 	if at.namespace.Name != "" {
 		at.classFQN = at.namespace.Name + "\\" + at.classFQN
 	}
-	at.scope = nil
 }
 
 func (at *cursorDeclarations) enterAnonymousClass(decl *ast.ClassDecl) {

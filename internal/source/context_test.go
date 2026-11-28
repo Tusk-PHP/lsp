@@ -422,3 +422,43 @@ func TestAnalyzeCursorAfterAFileLevelArrowFunctionIsInNoScope(t *testing.T) {
 		}
 	}
 }
+
+func TestAnalyzeCursorInsideInterfaceTraitAndEnumMethods(t *testing.T) {
+	source := `<?php
+namespace App;
+interface Shape {
+    public function area(int $scale = SCALE);
+}
+trait Named {
+    public function name() { return NAME; }
+}
+enum Suit {
+    case Hearts;
+    public function color() { return COLOR; }
+}
+`
+	for _, tc := range []struct{ needle, class, method string }{
+		{"SCALE", `App\Shape`, "area"},
+		{"NAME", `App\Named`, "name"},
+		{"COLOR", `App\Suit`, "color"},
+	} {
+		ctx := Analyze("file:///shapes.php", source, positionAfter(t, source, tc.needle), phpparser.OnlyGrammar(token.Latest))
+		if ctx.EnclosingFQN != tc.class || ctx.Scope == nil || ctx.Scope.Kind != ScopeMethod || ctx.Scope.ClassFQN != tc.class || ctx.Scope.MethodName != tc.method {
+			t.Errorf("at %s: class %q, scope %+v; want %s::%s", tc.needle, ctx.EnclosingFQN, ctx.Scope, tc.class, tc.method)
+		}
+	}
+}
+
+func TestAnalyzeWhileTypingADeclarationsName(t *testing.T) {
+	unnamedMethod := "<?php\nnamespace App;\nclass Shop {\n    public function () {\n        return TOTAL;\n    }\n}\n"
+	ctx := Analyze("file:///a.php", unnamedMethod, positionAfter(t, unnamedMethod, "TOTAL"), phpparser.OnlyGrammar(token.Latest))
+	if ctx.Scope == nil || ctx.Scope.Kind != ScopeMethod || ctx.Scope.ClassFQN != `App\Shop` || ctx.Scope.MethodName != "" || ctx.Scope.StartLine != 3 {
+		t.Errorf("in a method without a name yet: scope %+v, want an unnamed method of App\\Shop starting on line 3", ctx.Scope)
+	}
+
+	unnamedInterface := "<?php\nnamespace App;\nfunction make() {\n    interface {\n        const X = LIMIT;\n    }\n}\n"
+	ctx = Analyze("file:///b.php", unnamedInterface, positionAfter(t, unnamedInterface, "LIMIT"), phpparser.OnlyGrammar(token.Latest))
+	if ctx.Scope != nil {
+		t.Errorf("in an interface without a name yet: scope %+v, want none", ctx.Scope)
+	}
+}
