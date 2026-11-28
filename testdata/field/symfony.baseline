@@ -302,11 +302,8 @@ src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-membe
 src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-member	Unknown member 'method' on 'ValidatorInterface'
 src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
 src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown class 'Rize\UriTemplate'
-src/Symfony/Component/HttpClient/Recorder/Redactor/DefaultRedactor.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/HttpClient/Resources/config/http_client.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
 src/Symfony/Component/HttpClient/Resources/config/http_client.php	unknown-class	Unknown class 'Rize\UriTemplate'
-src/Symfony/Component/HttpClient/Response/JsonMockResponse.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
-src/Symfony/Component/HttpFoundation/RequestMatcher/IsJsonRequestMatcher.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
@@ -349,7 +346,6 @@ src/Symfony/Component/JsonPath/Test/JsonPathNotContains.php	unknown-class	Unknow
 src/Symfony/Component/JsonPath/Test/JsonPathNotEquals.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/JsonPath/Test/JsonPathNotSame.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/JsonPath/Test/JsonPathSame.php	unknown-class	Unknown class 'Constraint'
-src/Symfony/Component/JsonStreamer/Read/Decoder.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/JsonStreamer/Write/StreamWriterGenerator.php	unused-variable	Variable $classReflection is assigned but never read
 src/Symfony/Component/KeyManagement/Bridge/DoctrineOrm/EventListener/EncryptedColumnListener.php	unknown-function	Unknown function 'readonly'
 src/Symfony/Component/KeyManagement/Bridge/Kmip/Kmip/StreamTransport.php	undefined-variable	Undefined variable $written
@@ -530,7 +526,6 @@ src/Symfony/Component/Translation/Test/ProviderTestCase.php	unknown-class	Unknow
 src/Symfony/Component/Translation/Test/ProviderTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Tui/Input/KeyParser.php	unused-variable	Variable $isDigit is assigned but never read
 src/Symfony/Component/TypeInfo/TypeContext/TypeContextFactory.php	unused-variable	Variable $typeContext is assigned but never read
-src/Symfony/Component/Validator/Constraints/JsonValidator.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/Validator/Constraints/NoSuspiciousCharactersValidator.php	unused-private-constant	Private constant 'NoSuspiciousCharactersValidator::CHECK_SINGLE_SCRIPT' is never used
 src/Symfony/Component/Validator/Test/CompoundConstraintTestCase.php	unknown-class	Unknown class 'ExpectationFailedException'
 src/Symfony/Component/Validator/Test/CompoundConstraintTestCase.php	unknown-class	Unknown class 'TestCase'

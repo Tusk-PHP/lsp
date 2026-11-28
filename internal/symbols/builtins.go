@@ -168,68 +168,6 @@ var builtinAvailabilityByName = map[string]BuiltinAvailability{
 	"SSH2_STREAM_STDIO":           {Extension: "ssh2"},
 	"SSH2_TERM_UNIT_CHARS":        {Extension: "ssh2"},
 	"SSH2_TERM_UNIT_PIXELS":       {Extension: "ssh2"},
-	"apcu_add":                    {Extension: "apcu"},
-	"apcu_cache_info":             {Extension: "apcu"},
-	"apcu_cas":                    {Extension: "apcu"},
-	"apcu_clear_cache":            {Extension: "apcu"},
-	"apcu_dec":                    {Extension: "apcu"},
-	"apcu_delete":                 {Extension: "apcu"},
-	"apcu_enabled":                {Extension: "apcu"},
-	"apcu_entry":                  {Extension: "apcu"},
-	"apcu_exists":                 {Extension: "apcu"},
-	"apcu_fetch":                  {Extension: "apcu"},
-	"apcu_inc":                    {Extension: "apcu"},
-	"apcu_key_info":               {Extension: "apcu"},
-	"apcu_sma_info":               {Extension: "apcu"},
-	"apcu_store":                  {Extension: "apcu"},
-	"igbinary_serialize":          {Extension: "igbinary"},
-	"igbinary_unserialize":        {Extension: "igbinary"},
-	"ssh2_auth_agent":             {Extension: "ssh2"},
-	"ssh2_auth_hostbased_file":    {Extension: "ssh2"},
-	"ssh2_auth_none":              {Extension: "ssh2"},
-	"ssh2_auth_password":          {Extension: "ssh2"},
-	"ssh2_auth_pubkey":            {Extension: "ssh2"},
-	"ssh2_auth_pubkey_file":       {Extension: "ssh2"},
-	"ssh2_connect":                {Extension: "ssh2"},
-	"ssh2_disconnect":             {Extension: "ssh2"},
-	"ssh2_exec":                   {Extension: "ssh2"},
-	"ssh2_fetch_stream":           {Extension: "ssh2"},
-	"ssh2_fingerprint":            {Extension: "ssh2"},
-	"ssh2_forward_accept":         {Extension: "ssh2"},
-	"ssh2_forward_listen":         {Extension: "ssh2"},
-	"ssh2_hostkey":                {Extension: "ssh2"},
-	"ssh2_keepalive_config":       {Extension: "ssh2"},
-	"ssh2_keepalive_send":         {Extension: "ssh2"},
-	"ssh2_methods_negotiated":     {Extension: "ssh2"},
-	"ssh2_poll":                   {Extension: "ssh2"},
-	"ssh2_publickey_add":          {Extension: "ssh2"},
-	"ssh2_publickey_init":         {Extension: "ssh2"},
-	"ssh2_publickey_list":         {Extension: "ssh2"},
-	"ssh2_publickey_remove":       {Extension: "ssh2"},
-	"ssh2_scp_recv":               {Extension: "ssh2"},
-	"ssh2_scp_send":               {Extension: "ssh2"},
-	"ssh2_send_eof":               {Extension: "ssh2"},
-	"ssh2_send_signal":            {Extension: "ssh2"},
-	"ssh2_set_timeout":            {Extension: "ssh2"},
-	"ssh2_sftp":                   {Extension: "ssh2"},
-	"ssh2_sftp_chmod":             {Extension: "ssh2"},
-	"ssh2_sftp_lstat":             {Extension: "ssh2"},
-	"ssh2_sftp_mkdir":             {Extension: "ssh2"},
-	"ssh2_sftp_readlink":          {Extension: "ssh2"},
-	"ssh2_sftp_realpath":          {Extension: "ssh2"},
-	"ssh2_sftp_rename":            {Extension: "ssh2"},
-	"ssh2_sftp_rmdir":             {Extension: "ssh2"},
-	"ssh2_sftp_stat":              {Extension: "ssh2"},
-	"ssh2_sftp_symlink":           {Extension: "ssh2"},
-	"ssh2_sftp_unlink":            {Extension: "ssh2"},
-	"ssh2_shell":                  {Extension: "ssh2"},
-	"ssh2_shell_resize":           {Extension: "ssh2"},
-	"ssh2_tunnel":                 {Extension: "ssh2"},
-
-	"str_contains":    {Since: "8.0"},
-	"str_starts_with": {Since: "8.0"},
-	"str_ends_with":   {Since: "8.0"},
-	"json_validate":   {Since: "8.3", Extension: "json"},
 
 	// PHP 7.3 constants
 	"JSON_THROW_ON_ERROR": {Since: "7.3"},
@@ -379,17 +317,18 @@ func builtinAvailable(name string, profile BuiltinProfile) bool {
 }
 
 // LookupAvailability reports whether name is a known PHP built-in subject
-// to a version or extension constraint. Class-likes come from the generated
-// class table (builtin_classes_generated.go); functions and constants from
-// builtinAvailabilityByName in this file, then builtin_availability_generated.go.
+// to a version or extension constraint. Class-likes and functions come from
+// the generated tables (builtin_classes_generated.go,
+// builtin_functions_generated.go); constants from builtinAvailabilityByName in
+// this file.
 func LookupAvailability(name string) (BuiltinAvailability, bool) {
 	if a, ok := generatedBuiltinClassAvailability[name]; ok {
 		return a, true
 	}
-	if a, ok := builtinAvailabilityByName[name]; ok {
+	if a, ok := generatedBuiltinFunctionAvailabilityByName[name]; ok {
 		return a, true
 	}
-	if a, ok := generatedBuiltinAvailability[name]; ok {
+	if a, ok := builtinAvailabilityByName[name]; ok {
 		return a, true
 	}
 	return BuiltinAvailability{}, false

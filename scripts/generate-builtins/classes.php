@@ -2,9 +2,27 @@
 
 declare(strict_types=1);
 
-function classLikeDumpCode(): string
+/**
+ * PHP code, run in each build, that starts its dump: the version, the loaded
+ * extensions, and the static ones, which a run without any ini file (-n)
+ * still loads.
+ */
+function dumpHeaderCode(): string
 {
     return <<<'PHP'
+$static = json_decode((string) shell_exec(escapeshellarg(PHP_BINARY) . ' -n -r ' . escapeshellarg('echo json_encode(array_map("strtolower", get_loaded_extensions()));')), true);
+if (!is_array($static)) {
+    fwrite(STDERR, "Can't list the static extensions of " . PHP_BINARY . "\n");
+    exit(1);
+}
+$out = ['version' => PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION, 'extensions' => array_map('strtolower', get_loaded_extensions()), 'static' => $static];
+
+PHP;
+}
+
+function classLikeDumpCode(): string
+{
+    return dumpHeaderCode() . <<<'PHP'
 $type = function ($t) use (&$type) {
     if ($t === null) {
         return '';
@@ -33,7 +51,7 @@ $visibility = function ($m) {
     return $m->isProtected() ? 'protected' : 'public';
 };
 $names = array_merge(get_declared_classes(), get_declared_interfaces(), get_declared_traits());
-$out = ['version' => PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION, 'extensions' => array_map('strtolower', get_loaded_extensions()), 'classes' => []];
+$out['classes'] = [];
 foreach ($names as $name) {
     $c = new ReflectionClass($name);
     if (!$c->isInternal()) {
@@ -92,8 +110,10 @@ PHP;
  *
  * Each build lists the extensions it loaded. A build without something proves
  * it absent only when that build loaded the extensions that provide it, or
- * lacked just extensions that had not come to PHP yet (ones every build has
- * from the version that brought them, as random did with 8.2). A build that
+ * lacked just extensions that had not come to PHP yet: ones compiled into the
+ * builds of the version that brought them and in every build from then on, as
+ * random was with 8.2. An extension first seen as a shared one (opcache in the
+ * 8.1 images) may simply not have been enabled before. A build that
  * lacked a provider, such as a default build without pdo_mysql for
  * PDO::MYSQL_ATTR_*, proves nothing.
  */
@@ -107,7 +127,7 @@ final class BuildVersions
     private array $arrived = [];
 
     /**
-     * @param list<array{version:string, extensions:list<string>}> $dumps sorted by version
+     * @param list<array{version:string, extensions:list<string>, static:list<string>}> $dumps sorted by version
      */
     public function __construct(private readonly array $dumps)
     {
@@ -121,7 +141,8 @@ final class BuildVersions
         foreach ($first as $extension => $since) {
             $everywhere = true;
             foreach ($dumps as $i => $dump) {
-                if (version_compare($dump['version'], $since, '>=') && !isset($this->extensions[$i][$extension])) {
+                $at = version_compare($dump['version'], $since);
+                if ($at >= 0 && !isset($this->extensions[$i][$extension]) || $at === 0 && !in_array($extension, $dump['static'], true)) {
                     $everywhere = false;
                     break;
                 }
@@ -427,6 +448,23 @@ function loadedExtensions(array $dumps): array
 function extensionStubClassLikes(string $dir, array $defaultExtensions): array
 {
     $out = [];
+    foreach (extensionStubSources($dir, $defaultExtensions) as [$extension, $source]) {
+        foreach (declaredClassLikes($source) as $name => $kind) {
+            $out[$name] = [$kind, $extension];
+        }
+    }
+    return $out;
+}
+
+/**
+ * The PHP files under internal/stubs/php/extensions/<extension>/, in path
+ * order, with their extension, leaving out extensions of the default builds.
+ *
+ * @param array<string, true> $defaultExtensions
+ * @return list<array{0:string, 1:string}>
+ */
+function extensionStubSources(string $dir, array $defaultExtensions): array
+{
     $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS | FilesystemIterator::UNIX_PATHS));
     $paths = [];
     foreach ($files as $info) {
@@ -435,6 +473,7 @@ function extensionStubClassLikes(string $dir, array $defaultExtensions): array
         }
     }
     sort($paths, SORT_STRING);
+    $out = [];
     foreach ($paths as $file) {
         $extension = strtolower(explode('/', substr($file, strlen($dir) + 1))[0]);
         if (isset($defaultExtensions[$extension])) {
@@ -445,16 +484,11 @@ function extensionStubClassLikes(string $dir, array $defaultExtensions): array
             fwrite(STDERR, "Can't read {$file}\n");
             exit(1);
         }
-        foreach (declaredClassLikes($source) as $name => $kind) {
-            $out[$name] = [$kind, $extension];
-        }
+        $out[] = [$extension, $source];
     }
     return $out;
 }
 
-/**
- * @return array<string, string> the kind of each class-like a PHP file declares, by fully qualified name
- */
 function declaredClassLikes(string $source): array
 {
     $tokens = array_values(array_filter(
@@ -539,7 +573,7 @@ function sortedKeys(array $map): array
 
 return [
     'name' => 'classes',
-    'usage' => 'php scripts/generate-builtins.php classes --php=COMMANDS [--output=PATH]',
+    'usage' => 'php scripts/generate-builtins.php classes --php=COMMANDS [--extensions-php=COMMANDS] [--pecl-php=COMMANDS] [--output=PATH]',
     'help' => '  classes       Run each PHP given with --php and emit the Go table of PHP\'s
                 built-in classes, interfaces, traits and enums with their
                 public and protected methods, properties and constants. A
