@@ -286,15 +286,6 @@ src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown cl
 src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'ProxyInterface'
 src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'StatelessInvocation'
 src/Symfony/Component/ErrorHandler/DebugClassLoader.php	unknown-class	Unknown class 'Stub'
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::addElementToGhost' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::dumpExceptionProperties' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::fileExcerpt' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatArgsAsText' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatFileFromText' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatLogContext' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::formatLogMessage' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::isVendorExceptionClass' is never used
-src/Symfony/Component/ErrorHandler/ErrorRenderer/HtmlErrorRenderer.php	unused-private-method	Private method 'HtmlErrorRenderer::showExceptionProperties' is never used
 src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
 src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
 src/Symfony/Component/Form/Extension/Core/Type/BaseType.php	unknown-member	Unknown member 'vars' on 'AbstractType'
@@ -491,9 +482,7 @@ src/Symfony/Component/Mime/Test/Constraint/EmailHtmlBodyContains.php	unknown-mem
 src/Symfony/Component/Mime/Test/Constraint/EmailSubjectContains.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/Mime/Test/Constraint/EmailTextBodyContains.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/Mime/Test/Constraint/EmailTextBodyContains.php	unknown-member	Unknown member 'getTextBody' on 'RawMessage'
-src/Symfony/Component/Notifier/Bridge/Firebase/FirebaseOptions.php	unused-private-property	Private property 'FirebaseOptions::$target' is never used
 src/Symfony/Component/Notifier/Bridge/MicrosoftTeams/Test/Action/Input/AbstractInputTestCase.php	unknown-class	Unknown class 'TestCase'
-src/Symfony/Component/Notifier/Bridge/Sipgate/SipgateTransport.php	unused-private-property	Private property 'SipgateTransport::$token' is never used
 src/Symfony/Component/Notifier/Test/AbstractTransportFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Notifier/Test/AbstractTransportFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Notifier/Test/AbstractTransportFactoryTestCase.php	unknown-class	Unknown attribute 'DataProvider'

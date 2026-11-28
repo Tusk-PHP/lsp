@@ -377,7 +377,7 @@ func (p *parser) identifier() *ast.Identifier {
 }
 
 func (p *parser) memberName() *ast.Identifier {
-	if !isSemiReserved(p.peek()) {
+	if !p.peek().IsSemiReserved() {
 		p.unexpected("expected a name")
 		return nil
 	}
@@ -481,8 +481,4 @@ func isName(k token.Kind) bool {
 		return true
 	}
 	return false
-}
-
-func isSemiReserved(k token.Kind) bool {
-	return k == token.Identifier || k >= token.Abstract && k <= token.TraitConst
 }

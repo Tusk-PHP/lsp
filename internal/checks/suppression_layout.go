@@ -4,7 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 type Span struct{ Start, End int }
@@ -71,37 +72,52 @@ type Template struct {
 }
 
 func PHPLayout(source string) Layout {
-	return phpLayout(source, parser.Tokenize(source))
+	return phpLayout(source, lexer.Lex(source, token.Latest))
 }
 
-func phpLayout(source string, tokens []parser.Token) Layout {
+func phpLayout(source string, tokens []lexer.Token) Layout {
 	l := newLayout(source)
 	regionStart := -1
 	for i := 0; i < len(tokens); i++ {
 		tok := tokens[i]
-		if strings.Contains(tok.Value, "\n") {
-			l.opaque = append(l.opaque, Span{tok.Offset, tok.Offset + len(tok.Value)})
-		}
-		switch {
-		case tok.Kind == parser.TokenPHP:
-			regionStart = tok.Offset + len(tok.Value)
-		case tok.Value == "?>" && regionStart >= 0:
-			l.php = append(l.php, Span{regionStart, tok.Offset})
-			regionStart = -1
-		case tok.Kind == parser.TokenComment || tok.Kind == parser.TokenDocComment:
-			l.addComment(Span{tok.Offset, tok.Offset + len(tok.Value)})
-		case tok.Kind == parser.TokenHash && i+1 < len(tokens) && tokens[i+1].Kind == parser.TokenOpenBracket:
-			end := parser.MatchingClose(tokens, i+1)
-			if end < 0 {
-				end = len(tokens) - 1
+		span := Span{int(tok.Start), int(tok.End)}
+		switch tok.Kind {
+		case token.OpenTag, token.OpenTagWithEcho:
+			regionStart = span.Start + len(strings.TrimRight(tok.Text(source), " \t\r\n"))
+			continue
+		case token.CloseTag:
+			if regionStart >= 0 {
+				l.php = append(l.php, Span{regionStart, span.Start})
+				regionStart = -1
 			}
-			l.addAttribute(Span{tok.Offset, tokens[end].Offset + len(tokens[end].Value)})
+			continue
+		case token.Comment, token.DocComment:
+			l.addComment(span)
+		case token.Attribute:
+			l.addAttribute(Span{span.Start, int(tokens[attributeEnd(tokens, i)].End)})
+			continue
+		case token.DoubleQuote, token.StartHeredoc, token.Backtick:
+			i = lexer.LiteralEnd(tokens, i)
+			span.End = int(tokens[i].End)
+		case token.ConstantString:
+		default:
+			continue
+		}
+		if strings.Contains(source[span.Start:span.End], "\n") {
+			l.opaque = append(l.opaque, span)
 		}
 	}
 	if regionStart >= 0 {
 		l.php = append(l.php, Span{regionStart, len(source)})
 	}
 	return l
+}
+
+func attributeEnd(tokens []lexer.Token, open int) int {
+	if end := lexer.MatchingClose(tokens, open); end >= 0 {
+		return end
+	}
+	return len(tokens) - 1
 }
 
 // TemplateLayout lays out a template file from what its language's package
