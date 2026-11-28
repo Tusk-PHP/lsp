@@ -29,6 +29,12 @@ func TestLiteralTypesAreReadFromTheNode(t *testing.T) {
 		"!true":                            {"", ""},
 		"(int) $x":                         {"int", "int"},
 		"(object) []":                      {"object", "object"},
+		"(float) $x":                       {"float", "float"},
+		"(string) $x":                      {"string", "string"},
+		"(bool) $x":                        {"bool", "bool"},
+		"(array) $x":                       {"array", "array"},
+		"(void) $x":                        {"", ""},
+		"[1, , 2]":                         {"array<int, int>", "array"},
 		"self::class":                      {"string", "string"},
 		"\\App\\Foo::class":                {"string", "string"},
 		"Foo::CLASS_NAME":                  {"", ""},
@@ -54,5 +60,14 @@ func TestLiteralTypesAreReadFromTheNode(t *testing.T) {
 		if got := LiteralValueType(e, src); got != want[1] {
 			t.Errorf("LiteralValueType(%s) = %q, want %q", expr, got, want[1])
 		}
+	}
+}
+
+func TestCastTypeOfCastsWithoutAValue(t *testing.T) {
+	if got := CastType(token.UnsetCast); got != "null" {
+		t.Errorf("(unset) = %q, want null", got)
+	}
+	if got := CastType(token.VoidCast); got != "" {
+		t.Errorf("(void) = %q, want no type", got)
 	}
 }
