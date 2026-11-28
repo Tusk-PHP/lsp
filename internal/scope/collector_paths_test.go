@@ -232,3 +232,23 @@ func TestArrowFunctionRunsToTheEndOfTheFile(t *testing.T) {
 		t.Errorf("arrow function ends at %+v, want %+v", s.Range.End, want)
 	}
 }
+
+func TestByReferenceClosureUseDefinesTheVariableInTheParent(t *testing.T) {
+	source := `<?php
+function run() {
+    $cb = function () use (&$error, $plain) { $error = 1; };
+    return [$error, $plain];
+}
+`
+	doc := Collect(source)
+	defined := doc.BindingAt(at(t, source, "$error,"))
+	if defined == nil || defined.Kind != BindingImplicit || defined.Scope.Name != "run" {
+		t.Fatalf("$error in the use = %+v, want an implicit binding of run()", defined)
+	}
+	if read := doc.BindingAt(at(t, source, "$error, $plain]")); read != defined {
+		t.Errorf("the read of $error after the closure = %+v, want the binding the by-reference use made", read)
+	}
+	if plain := doc.BindingAt(at(t, source, "$plain]")); plain != nil {
+		t.Errorf("a by-value use of an undefined variable defines it: %+v", plain)
+	}
+}
