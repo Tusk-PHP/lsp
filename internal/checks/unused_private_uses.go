@@ -149,11 +149,7 @@ func (c *useCollector) dynamicMethod(tokens []parser.Token, at int) {
 // isMemberName reports whether the name at tokens[i] follows `->`, `::` or
 // `function`, so it names a member rather than a language construct.
 func isMemberName(tokens []parser.Token, i int) bool {
-	prev := parser.PrevSignificant(tokens, i-1)
-	if prev < 0 {
-		return false
-	}
-	switch tokens[prev].Kind {
+	switch tokenAt(tokens, parser.PrevSignificant(tokens, i-1)).Kind {
 	case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenFunction:
 		return true
 	}
@@ -204,24 +200,15 @@ func boundOtherwise(tokens []parser.Token, i int) bool {
 	if open < 0 {
 		return false
 	}
-	switch tokens[open].Kind {
-	case parser.TokenOpenBracket:
+	if tokens[open].Kind == parser.TokenOpenBracket {
 		return significantAt(tokens, matchingClose(tokens, open)+1).Kind == parser.TokenEquals
-	case parser.TokenOpenParen:
-		before := parser.PrevSignificant(tokens, open-1)
-		if before < 0 {
-			return false
-		}
-		if strings.EqualFold(tokens[before].Value, "list") {
-			return true
-		}
-		if tokens[before].Kind == parser.TokenFunction || strings.EqualFold(tokens[before].Value, "fn") || tokens[before].Kind == parser.TokenUse {
-			return true
-		}
-		fn := parser.PrevSignificant(tokens, before-1)
-		return fn >= 0 && tokens[fn].Kind == parser.TokenFunction
 	}
-	return false
+	before := parser.PrevSignificant(tokens, open-1)
+	b := tokenAt(tokens, before)
+	if b.Kind == parser.TokenFunction || b.Kind == parser.TokenUse || strings.EqualFold(b.Value, "list") || strings.EqualFold(b.Value, "fn") {
+		return true
+	}
+	return tokenAt(tokens, parser.PrevSignificant(tokens, before-1)).Kind == parser.TokenFunction
 }
 
 // enclosingOpen returns the `(` or `[` that the token at tokens[i] is inside,
@@ -301,10 +288,10 @@ func endsName(tokens []parser.Token, at int) bool {
 // ownReceiver reports whether the access at tokens[arrow] is on $this.
 func ownReceiver(tokens []parser.Token, arrow int) bool {
 	before := parser.PrevSignificant(tokens, arrow-1)
-	if before >= 0 && tokens[before].Kind == parser.TokenQuestion {
+	if tokenAt(tokens, before).Kind == parser.TokenQuestion {
 		before = parser.PrevSignificant(tokens, before-1)
 	}
-	if before < 0 || !isThis(tokens[before]) {
+	if !isThis(tokenAt(tokens, before)) {
 		return false
 	}
 	prev := parser.PrevSignificant(tokens, before-1)
@@ -329,7 +316,7 @@ func nextSignificant(tokens []parser.Token, from int) int {
 }
 
 func tokenAt(tokens []parser.Token, i int) parser.Token {
-	if i < len(tokens) {
+	if i >= 0 && i < len(tokens) {
 		return tokens[i]
 	}
 	return parser.Token{Kind: parser.TokenEOF}

@@ -331,6 +331,14 @@ func TestUnusedPrivateMethodNameVariables(t *testing.T) {
 		{"a foreach target", "$m = 'format_'; foreach ($keys as $m) { $this->$m(); }", nil},
 		{"a destructuring", "$m = 'format_'; [$m] = $keys; return $this->$m();", nil},
 		{"a reference", "$m = 'format_'; fill($keys, &$m); return $this->$m();", nil},
+		{"never assigned", "return $this->$m();", nil},
+		{"a list()", "$m = 'format_'; list($m) = $keys; return $this->$m();", nil},
+		{"a closure parameter", "$m = 'format_'; return array_map(function ($m) { return $this->$m(); }, $keys);", nil},
+		{"a destructuring after a subscript", "$m = 'format_'; [$keys[0], $m] = $keys; return $this->$m();", nil},
+		{"a literal that starts an expression", "$m = 'format_x' ?: $key; return $this->$m();", nil},
+		{"an interpolated string that starts an expression", `$m = "format_{$key}" . $key; return $this->$m();`, nil},
+		{"an interpolated string that starts with a variable", `$m = "$key"; return $this->$m();`, nil},
+		{"an array left open", "$m = 'format_'; $a = [$m; return $this->$m();", []string{"Private method 'Foo::helper' is never used"}},
 	} {
 		src := "<?php\nclass Foo {\n    private function helper(): void {}\n    private function format_x(): void {}\n    public function run(string $key, array $keys) { " + c.body + " }\n}\n"
 		got := unusedPrivateMessages(src, nil)
@@ -476,5 +484,19 @@ class Two { private $x; private function y() {} public function f() { return $th
 	}
 	if got := unusedPrivateMessages(src, nil); !slices.Equal(got, want) {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestUnusedPrivateMethodNameVariableAtTheStartOfAnAnonymousClassLine(t *testing.T) {
+	src := "<?php\n$m = 'format_'; $o = new class { private function helper(): void {} private function format_x(): void {} public function run() { $m = 'help'; return $this->$m(); } };\n"
+	if got := unusedPrivateMessages(src, nil); len(got) != 0 {
+		t.Errorf("both prefixes assigned to $m, the first at the start of the class's line, reach the methods: got %q", got)
+	}
+}
+
+func TestUnusedPrivateReadsAnUnterminatedBracedAccessAsNoCall(t *testing.T) {
+	src := "<?php\nclass Foo {\n    private function helper(): void {}\n    public function run(string $key) { return $this->{$key"
+	if got := unusedPrivateMessages(src, nil); !slices.Equal(got, []string{"Private method 'Foo::helper' is never used"}) {
+		t.Errorf("got %q", got)
 	}
 }
