@@ -83,3 +83,20 @@ func TestNamespaceAtFindsTheBlockAroundAPosition(t *testing.T) {
 		t.Errorf("a position before the file has no namespace, got %+v", got)
 	}
 }
+
+func TestNamespaceAsAMemberOrRelativeNameStartsNoBlock(t *testing.T) {
+	for _, src := range []string{
+		"<?php\nnamespace App;\nuse X\\Dep;\nRoute::namespace('Admin')->group(fn () => 1);\nclass Foo {}\n",
+		"<?php\nnamespace App;\nuse X\\Dep;\n$r?->namespace('x');\n$r->namespace('y');\nclass Foo {}\n",
+		"<?php\nnamespace App;\nuse X\\Dep;\nnamespace\\helper();\nclass Foo {}\n",
+	} {
+		file := ParseFile(src)
+		if len(file.Namespaces) != 2 {
+			t.Errorf("%q: %d namespaces, want the global one and App", src, len(file.Namespaces))
+		}
+		ns := file.Classes[0].Namespace
+		if ns == nil || ns.Name != "App" || len(ns.Uses) != 1 || file.Classes[0].FullName != `App\Foo` {
+			t.Errorf("%q: Foo's namespace = %+v, want App importing X\\Dep", src, ns)
+		}
+	}
+}

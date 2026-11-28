@@ -129,3 +129,19 @@ func TestResolveClassLikeNameWithoutANamespaceCannotTell(t *testing.T) {
 		t.Errorf("resolved %q in a file without namespaces; want no answer", got)
 	}
 }
+
+func TestUnknownClassKeepsImportsAcrossRouteNamespace(t *testing.T) {
+	source := `<?php
+use App\Http\Controllers\UserController;
+use Illuminate\Support\Facades\Route;
+
+Route::namespace('Admin')->group(fn () => Route::get('/', [UserController::class, 'index']));
+`
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///UserController.php", "<?php\nnamespace App\\Http\\Controllers;\nclass UserController {}\n")
+	idx.IndexFile("file:///Route.php", "<?php\nnamespace Illuminate\\Support\\Facades;\nclass Route {}\n")
+	idx.IndexFile("file:///routes/web.php", source)
+	if findings := (&UnknownClassRule{}).Check(parser.ParseFile(source), source, idx); len(findings) != 0 {
+		t.Fatalf("findings = %+v, want none", findings)
+	}
+}

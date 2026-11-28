@@ -946,6 +946,10 @@ func (p *structParser) parse() {
 			p.attributes = append(p.attributes, p.parseAttributeGroup()...)
 			continue
 		case TokenNamespace:
+			if !isNamespaceDeclaration(p.tokens, p.pos) {
+				p.advance()
+				break
+			}
 			p.parseNamespace()
 			if p.peek().Kind == TokenOpenBrace {
 				p.blocks = append(p.blocks, true)
@@ -1097,6 +1101,16 @@ func (p *structParser) qualify(name string) string {
 		return name
 	}
 	return p.namespace.Name + "\\" + name
+}
+
+func isNamespaceDeclaration(tokens []Token, at int) bool {
+	if prev := PrevSignificant(tokens, at-1); prev >= 0 {
+		if k := tokens[prev].Kind; k == TokenArrow || k == TokenDoubleColon {
+			return false
+		}
+	}
+	next := NextSignificant(tokens, at+1)
+	return next >= 0 && (tokens[next].Kind == TokenIdentifier || tokens[next].Kind == TokenOpenBrace)
 }
 
 func (p *structParser) parseNamespace() {
