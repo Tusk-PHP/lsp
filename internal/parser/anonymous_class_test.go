@@ -63,3 +63,23 @@ class AsCollection implements Castable
 		t.Errorf("both named %q", outer.FullName)
 	}
 }
+
+func TestAnonymousClassNameAtTheClassKeyword(t *testing.T) {
+	file := ParseFile("<?php\nnamespace App;\n$a = new class {};\n$b = new readonly class(1) {};\n", token.Latest)
+	if len(file.AnonymousClasses) != 2 {
+		t.Fatalf("got %d anonymous classes, want 2", len(file.AnonymousClasses))
+	}
+	for _, tc := range []struct {
+		line, character int
+		want            string
+	}{
+		{2, 9, file.AnonymousClasses[0].FullName},
+		{3, 18, file.AnonymousClasses[1].FullName},
+		{3, 9, ""},
+		{2, 5, ""},
+	} {
+		if got := file.AnonymousClassNameAt(tc.line, tc.character); got != tc.want {
+			t.Errorf("AnonymousClassNameAt(%d, %d) = %q, want %q", tc.line, tc.character, got, tc.want)
+		}
+	}
+}

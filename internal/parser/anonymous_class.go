@@ -39,18 +39,15 @@ func (f *FileNode) AnonymousClassAt(line, character int) *ClassNode {
 	return best
 }
 
-// AnonymousClassDeclaredAt returns the anonymous class whose `class` keyword
-// is at the position, or nil.
-func (f *FileNode) AnonymousClassDeclaredAt(line, character int) *ClassNode {
-	if f == nil {
-		return nil
-	}
-	for i := range f.AnonymousClasses {
-		if c := &f.AnonymousClasses[i]; c.StartLine == line && c.StartCol == character {
-			return c
+// AnonymousClassNameAt returns the full name of the anonymous class whose
+// `class` keyword is at the position, or "" when none is.
+func (f *FileNode) AnonymousClassNameAt(line, character int) string {
+	for _, c := range f.AnonymousClasses {
+		if c.StartLine == line && c.StartCol == character {
+			return c.FullName
 		}
 	}
-	return nil
+	return ""
 }
 
 // parseAnonymousClasses reads each `new class (...) extends ... implements ...
