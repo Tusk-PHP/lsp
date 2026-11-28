@@ -43,6 +43,7 @@ func benchLaravelProvider(b *testing.B) *Provider {
 		}
 	}
 	idx.SetCallForwards(laravel.CallForwards()) // as workspace.New does for Laravel
+	idx.SetTemplateMappings(laravel.TemplateMappings())
 	models.AnalyzeEloquentModels(idx, root)
 	return NewProvider(idx, container.NewContainerAnalyzer(idx, root, "laravel"), "laravel")
 }

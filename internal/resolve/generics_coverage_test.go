@@ -184,10 +184,14 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 		}
 	})
 
-	t.Run("member type resolved falls back to known template registry", func(t *testing.T) {
+	t.Run("member type resolved falls back to the index's template mappings", func(t *testing.T) {
+		idx.SetTemplateMappings(map[string]symbols.TemplateMapping{
+			"App\\Unannotated": {Params: []string{"TModel"}, Methods: map[string]string{"first": "?TModel"}},
+		})
+		defer idx.SetTemplateMappings(nil)
 		member := &symbols.Symbol{
 			Kind:      symbols.KindMethod,
-			ParentFQN: "Illuminate\\Database\\Eloquent\\Builder",
+			ParentFQN: "App\\Unannotated",
 			Name:      "first",
 		}
 		rt := r.MemberTypeResolved(member, file, "", []ResolvedType{{FQN: "App\\Logger"}})
@@ -197,11 +201,7 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 	})
 
 	t.Run("template substitution helpers resolve names", func(t *testing.T) {
-		subst := buildTemplateSubst(idx, "App\\Repository", []ResolvedType{{FQN: "App\\Logger"}})
-		if subst["TModel"].FQN != "App\\Logger" {
-			t.Fatalf("unexpected substitution map: %#v", subst)
-		}
-
+		subst := map[string]ResolvedType{"TModel": {FQN: "App\\Logger"}}
 		if got := resolveTypeParam(r, "TModel", "App\\Repository", subst, file); got != "App\\Logger" {
 			t.Fatalf("got %q", got)
 		}

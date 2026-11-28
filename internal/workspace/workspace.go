@@ -77,6 +77,7 @@ func New(opts Options) *Bootstrapped {
 	index := symbols.NewIndex()
 	index.RegisterBuiltinsForProfile(opts.BuiltinProfile)
 	index.SetOptionalNamespaces(composer.SuggestedNamespaces(opts.RootPath))
+	index.SetTemplateMappings(frameworklaravel.TemplateMappings())
 	if opts.Framework == "magento" {
 		index.SetClassGenerator(frameworkmagento.GeneratedClasses{})
 	}

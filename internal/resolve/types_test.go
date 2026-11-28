@@ -168,76 +168,39 @@ class Repository {
 	}
 }
 
-func TestResolveTemplateReturn(t *testing.T) {
-	catType := ResolvedType{FQN: "App\\Models\\Category"}
-	intType := ResolvedType{FQN: "int"}
-
-	t.Run("Builder get returns Collection<int, Category>", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Illuminate\\Database\\Eloquent\\Builder", "get", []ResolvedType{catType})
-		if rt.BaseFQN() != "Illuminate\\Database\\Eloquent\\Collection" {
-			t.Errorf("FQN = %q", rt.FQN)
-		}
-		if len(rt.Params) != 2 {
-			t.Fatalf("params = %d", len(rt.Params))
-		}
-		if rt.Params[0].FQN != "int" {
-			t.Errorf("param[0] = %q", rt.Params[0].FQN)
-		}
-		if rt.Params[1].FQN != "App\\Models\\Category" {
-			t.Errorf("param[1] = %q", rt.Params[1].FQN)
-		}
+func TestMappedTemplateReturn(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.SetTemplateMappings(map[string]symbols.TemplateMapping{
+		"App\\Box": {
+			Params: []string{"TKey", "TItem"},
+			Methods: map[string]string{
+				"all":   "App\\List<TKey, TItem>",
+				"first": "?TItem",
+				"where": "static",
+				"count": "int",
+			},
+		},
 	})
-
-	t.Run("Builder first returns ?Category", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Illuminate\\Database\\Eloquent\\Builder", "first", []ResolvedType{catType})
-		if rt.FQN != "App\\Models\\Category" {
-			t.Errorf("FQN = %q", rt.FQN)
+	r := NewResolver(idx)
+	key, item := ResolvedType{FQN: "int"}, ResolvedType{FQN: "App\\Models\\Category"}
+	cases := []struct {
+		name, class, method, want string
+	}{
+		{"a generic return", "App\\Box", "all", "App\\List<int, App\\Models\\Category>"},
+		{"a nullable template", "App\\Box", "first", "?App\\Models\\Category"},
+		{"static keeps the arguments", "App\\Box", "where", "App\\Box<int, App\\Models\\Category>"},
+		{"a plain type", "App\\Box", "count", "int"},
+		{"an unknown method", "App\\Box", "missing", ""},
+		{"an unmapped class", "App\\Other", "all", ""},
+	}
+	for _, c := range cases {
+		if got := r.mappedTemplateReturn(c.class, c.method, []ResolvedType{key, item}).String(); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
 		}
-		if !rt.Nullable {
-			t.Error("expected nullable")
-		}
-	})
-
-	t.Run("Builder where returns static (Builder<Category>)", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Illuminate\\Database\\Eloquent\\Builder", "where", []ResolvedType{catType})
-		if rt.FQN != "Illuminate\\Database\\Eloquent\\Builder" {
-			t.Errorf("FQN = %q", rt.FQN)
-		}
-		if len(rt.Params) != 1 || rt.Params[0].FQN != "App\\Models\\Category" {
-			t.Errorf("params = %v", rt.Params)
-		}
-	})
-
-	t.Run("Collection first returns ?Category", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Illuminate\\Database\\Eloquent\\Collection", "first", []ResolvedType{intType, catType})
-		if rt.FQN != "App\\Models\\Category" {
-			t.Errorf("FQN = %q", rt.FQN)
-		}
-		if !rt.Nullable {
-			t.Error("expected nullable")
-		}
-	})
-
-	t.Run("Collection all returns array", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Illuminate\\Database\\Eloquent\\Collection", "all", []ResolvedType{intType, catType})
-		if rt.FQN != "array" {
-			t.Errorf("FQN = %q", rt.FQN)
-		}
-	})
-
-	t.Run("unknown class returns empty", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Unknown\\Class", "get", nil)
-		if !rt.IsEmpty() {
-			t.Error("expected empty for unknown class")
-		}
-	})
-
-	t.Run("unknown method returns empty", func(t *testing.T) {
-		rt := ResolveTemplateReturn("Illuminate\\Database\\Eloquent\\Builder", "unknownMethod", []ResolvedType{catType})
-		if !rt.IsEmpty() {
-			t.Error("expected empty for unknown method")
-		}
-	})
+	}
+	if got := NewResolver(nil).mappedTemplateReturn("App\\Box", "all", nil); !got.IsEmpty() {
+		t.Errorf("a resolver without an index maps nothing, got %q", got.String())
+	}
 }
 
 // A callable with a return type is parenthesised in a union, so its return

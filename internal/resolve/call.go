@@ -234,9 +234,10 @@ func (r *Resolver) MemberTypeForCall(member *symbols.Symbol, file *parser.FileNo
 	if member == nil {
 		return ResolvedType{}
 	}
-	// Framework classes whose PHPDoc has no generics use the hard-coded
-	// registry; ones that declare templates are read from their PHPDoc.
-	if len(typeContext) > 0 && member.Kind == symbols.KindMethod && HasTemplateMapping(member.ParentFQN) {
+	// Framework classes whose PHPDoc has no generics use the template
+	// mappings the framework set on the index; ones that declare templates
+	// are read from their PHPDoc.
+	if len(typeContext) > 0 && member.Kind == symbols.KindMethod && r.hasTemplateMapping(member.ParentFQN) {
 		if sym := r.Index.Lookup(member.ParentFQN); sym == nil || len(sym.Templates) == 0 {
 			if rt := r.memberTypeFallback(member, file, callerFQN, typeContext); !rt.IsEmpty() {
 				return rt
@@ -312,11 +313,11 @@ func (r *Resolver) MemberTypeForCall(member *symbols.Symbol, file *parser.FileNo
 }
 
 // memberTypeFallback is the type of a member whose PHPDoc and signature say
-// nothing useful: the hard-coded generic registry for the framework classes it
-// covers, else the plain member type.
+// nothing useful: the template mappings a framework set on the index for the
+// classes they cover, else the plain member type.
 func (r *Resolver) memberTypeFallback(member *symbols.Symbol, file *parser.FileNode, callerFQN string, typeContext []ResolvedType) ResolvedType {
 	if len(typeContext) > 0 && member.Kind == symbols.KindMethod {
-		if rt := ResolveTemplateReturn(member.ParentFQN, member.Name, typeContext); !rt.IsEmpty() {
+		if rt := r.mappedTemplateReturn(member.ParentFQN, member.Name, typeContext); !rt.IsEmpty() {
 			if rt.FQN == member.ParentFQN && callerFQN != "" {
 				rt.FQN = callerFQN
 			}

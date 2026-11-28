@@ -159,6 +159,7 @@ class Category extends Model {
 `)
 
 	idx.SetCallForwards(laravel.CallForwards()) // as workspace.New does for Laravel
+	idx.SetTemplateMappings(laravel.TemplateMappings())
 	models.AnalyzeEloquentModels(idx, "/tmp")
 	p := NewProvider(idx, nil, "laravel")
 
@@ -287,6 +288,7 @@ class Category extends Model {
 `)
 
 	idx.SetCallForwards(laravel.CallForwards()) // as workspace.New does for Laravel
+	idx.SetTemplateMappings(laravel.TemplateMappings())
 	models.AnalyzeEloquentModels(idx, "/tmp")
 	p := NewProvider(idx, nil, "laravel")
 
