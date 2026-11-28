@@ -496,14 +496,6 @@ func resolvedTypeFromDocType(t types.TypeExpr) ResolvedType {
 			// A wildcard type argument: Collection<*>.
 			return ResolvedType{FQN: "mixed"}
 		}
-		// Call-site variance: Collection<covariant Animal> reads as Animal.
-		for _, prefix := range []string{"covariant ", "contravariant "} {
-			if strings.HasPrefix(name, prefix) {
-				rt := resolvedTypeFromDocType(types.ParseTypeExpr(strings.TrimSpace(name[len(prefix):])))
-				rt.Nullable = rt.Nullable || t.Nullable
-				return rt
-			}
-		}
 		if strings.HasPrefix(name, "'") || strings.HasPrefix(name, "\"") {
 			return ResolvedType{FQN: "string", Nullable: t.Nullable, Literal: name}
 		}

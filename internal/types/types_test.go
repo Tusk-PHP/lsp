@@ -99,6 +99,43 @@ func TestParseTypeStructured(t *testing.T) {
 	}
 }
 
+func TestParseTypeCallSiteVariance(t *testing.T) {
+	tests := []struct {
+		input    string
+		name     string
+		variance Variance
+		nullable bool
+	}{
+		{"Box<covariant Animal>", "Animal", VarianceCovariant, false},
+		{"Box<contravariant ?Animal>", "Animal", VarianceContravariant, true},
+		{"Box<covariant\tAnimal>", "Animal", VarianceCovariant, false},
+		{"Box<covariantAnimal>", "covariantAnimal", VarianceInvariant, false},
+		{"Box<covariant>", "covariant", VarianceInvariant, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			parsed := ParseTypeExpr(tt.input)
+			if parsed.Kind != TypeKindGeneric || len(parsed.Params) != 1 {
+				t.Fatalf("ParseTypeExpr(%q) = %+v, want one generic argument", tt.input, parsed)
+			}
+			arg := parsed.Params[0]
+			if arg.Name != tt.name || arg.Variance != tt.variance || arg.Nullable != tt.nullable {
+				t.Errorf("argument = {Name: %q, Variance: %v, Nullable: %v}, want {%q, %v, %v}", arg.Name, arg.Variance, arg.Nullable, tt.name, tt.variance, tt.nullable)
+			}
+		})
+	}
+	if got, want := ParseTypeExpr("Box<covariant Animal, contravariant ?Food>").String(), "Box<covariant Animal, contravariant ?Food>"; got != want {
+		t.Errorf("String() = %q, want %q", got, want)
+	}
+}
+
+func TestExpandAliasesKeepsVariance(t *testing.T) {
+	aliases := map[string]*Type{"Pet": Parse("Cat|Dog")}
+	if got, want := ExpandAliases(Parse("Box<covariant Pet>"), aliases).String(), "Box<covariant Cat | Dog>"; got != want {
+		t.Errorf("ExpandAliases() = %q, want %q", got, want)
+	}
+}
+
 func TestExpandAliases(t *testing.T) {
 	aliases := map[string]*Type{
 		"Payload": Parse("array{id: int, user: User}"),

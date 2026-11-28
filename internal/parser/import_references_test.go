@@ -105,6 +105,7 @@ func TestImportReferencesInDocComments(t *testing.T) {
 		{"assert", "/** @phpstan-assert-if-true !Post $p */", map[string]bool{"Post": true}},
 		{"type alias", "/** @phpstan-type Row array{post: Post} */", map[string]bool{"Post": true}},
 		{"imported type alias", "/** @phpstan-import-type Row from Post as PostRow */", map[string]bool{"Post": true, "PostRow": false}},
+		{"call-site variance", "/** @param Repository<covariant Post, contravariant User> $r */", map[string]bool{"Repository": true, "Post": true, "User": true}},
 		{"WordPress hash type", "/** @type Post $post */", map[string]bool{"Post": true}},
 		{"generics", "/** @param Collection<int, Post> $p */", map[string]bool{"Collection": true, "Post": true}},
 		{"union, intersection and nullable", "/** @return ?Post|(User&Tag) */", map[string]bool{"Post": true, "User": true, "Tag": true}},

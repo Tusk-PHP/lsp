@@ -19,6 +19,18 @@ const (
 	TypeKindOffset
 )
 
+// Variance is the call-site variance of a generic type argument, as in
+// Collection<covariant Animal>.
+type Variance int
+
+const (
+	VarianceInvariant Variance = iota
+	VarianceCovariant
+	VarianceContravariant
+)
+
+var varianceKeywords = [...]string{VarianceCovariant: "covariant", VarianceContravariant: "contravariant"}
+
 // TypeExpr is a small structured PHPDoc type model shared by hover/completion.
 // It currently focuses on round-tripping structured display output rather than
 // full semantic evaluation.
@@ -26,6 +38,7 @@ type TypeExpr struct {
 	Kind        TypeKind
 	Name        string
 	Nullable    bool
+	Variance    Variance
 	Wrapped     bool
 	Literal     string
 	Element     *TypeExpr
@@ -162,6 +175,9 @@ func (expr TypeExpr) String() string {
 	}
 	if expr.Nullable && out != "" {
 		out = "?" + out
+	}
+	if expr.Variance != VarianceInvariant && out != "" {
+		out = varianceKeywords[expr.Variance] + " " + out
 	}
 	return out
 }
@@ -567,15 +583,10 @@ func expandAliases(expr *Type, aliases map[string]*Type, seen map[string]bool) *
 			if expanded == nil {
 				return cloneType(expr)
 			}
-			if expr.Nullable && !expanded.Nullable {
-				out := *expanded
-				out.Nullable = true
-				return &out
-			}
-			if expr.Wrapped && !expanded.Wrapped {
-				out := *expanded
-				out.Wrapped = true
-				return &out
+			expanded.Nullable = expanded.Nullable || expr.Nullable
+			expanded.Wrapped = expanded.Wrapped || expr.Wrapped
+			if expr.Variance != VarianceInvariant {
+				expanded.Variance = expr.Variance
 			}
 			return expanded
 		}
@@ -750,7 +761,24 @@ func parseGenericExpr(raw string) (string, []TypeExpr, bool) {
 	if len(params) == 0 {
 		return name, nil, true
 	}
-	return name, parseTypeExprs(params), true
+	args := make([]TypeExpr, len(params))
+	for i, param := range params {
+		args[i] = parseTypeArg(param)
+	}
+	return name, args, true
+}
+
+func parseTypeArg(raw string) TypeExpr {
+	for variance := VarianceCovariant; variance <= VarianceContravariant; variance++ {
+		rest, ok := strings.CutPrefix(raw, varianceKeywords[variance])
+		if !ok || rest == "" || (rest[0] != ' ' && rest[0] != '\t') {
+			continue
+		}
+		expr := parseTypeExpr(strings.TrimSpace(rest))
+		expr.Variance = variance
+		return expr
+	}
+	return parseTypeExpr(raw)
 }
 
 func isLiteralType(raw string) bool {
