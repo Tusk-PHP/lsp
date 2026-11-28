@@ -462,3 +462,24 @@ func TestAnalyzeWhileTypingADeclarationsName(t *testing.T) {
 		t.Errorf("in an interface without a name yet: scope %+v, want none", ctx.Scope)
 	}
 }
+
+func TestDocumentSharesItsTokensAndPositions(t *testing.T) {
+	source := "<?php\n// note\n$shop = new Shop();\n"
+	doc := NewDocument("file:///a.php", source, phpparser.OnlyGrammar(token.Latest))
+	var texts []string
+	for _, tok := range doc.Significant() {
+		texts = append(texts, tok.Text(source))
+	}
+	if got, want := strings.Join(texts, " "), "$shop = new Shop ( ) ;"; got != want {
+		t.Errorf("significant tokens = %q, want %q", got, want)
+	}
+	shop := uint32(strings.Index(source, "Shop"))
+	want := protocol.Range{Start: protocol.Position{Line: 2, Character: 12}, End: protocol.Position{Line: 2, Character: 16}}
+	if got := doc.Range(shop, shop+4); got != want {
+		t.Errorf("Range of Shop = %+v, want %+v", got, want)
+	}
+	name := doc.NameAt(want.Start)
+	if name == nil || name.SymbolText != "Shop" || !reflect.DeepEqual(*name, doc.At(want.Start).NameContext) {
+		t.Errorf("NameAt(Shop) = %+v, want the name At finds", name)
+	}
+}

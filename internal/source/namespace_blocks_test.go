@@ -164,3 +164,26 @@ func sameNamespaces(src string) bool {
 	}
 	return true
 }
+
+func TestUseSiteInsertsTheImportWhereTheBlockAroundTheCursorKeepsThem(t *testing.T) {
+	for _, tc := range []struct {
+		name, source, marker string
+		want                 protocol.TextEdit
+	}{
+		{"after the last import", "<?php\nnamespace A;\nuse X;\nclass Foo { function f() { CURSOR; } }\n", "CURSOR",
+			protocol.TextEdit{Range: protocol.Range{Start: protocol.Position{Line: 3}, End: protocol.Position{Line: 3}}, NewText: "use Y;\n"}},
+		{"after the header, before a blank line", "<?php\nnamespace A;\n\nclass Foo { function f() { CURSOR; } }\n", "CURSOR",
+			protocol.TextEdit{Range: protocol.Range{Start: protocol.Position{Line: 2}, End: protocol.Position{Line: 2}}, NewText: "use Y;\n"}},
+		{"inside a braced block, before code", "<?php\nnamespace A {\nclass Foo { function f() { CURSOR; } }\n}\nnamespace B {\nuse Z;\n}\n", "CURSOR",
+			protocol.TextEdit{Range: protocol.Range{Start: protocol.Position{Line: 2}, End: protocol.Position{Line: 2}}, NewText: "use Y;\n\n"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tree := parser.ParseTreeIn(tc.source, phpparser.OnlyGrammar(token.Latest))
+			namespaces := NamespacesOf(tc.source, ast.NewLines(tc.source), tree)
+			site := namespaces.UseSiteAt(namespaces.Offset(positionOf(t, tc.source, tc.marker)))
+			if got := site.Insert("use Y;\n"); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("Insert = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}

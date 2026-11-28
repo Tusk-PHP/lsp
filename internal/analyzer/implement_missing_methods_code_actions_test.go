@@ -203,3 +203,54 @@ interface Readable {
 		}
 	}
 }
+
+func TestGetCodeActionsImplementMissingMethodsOnEnum(t *testing.T) {
+	source := `<?php
+namespace App;
+
+enum Status: string implements HasLabel {
+    case Active = 'active';
+}
+`
+
+	a, _ := setupRenameAnalyzer(map[string]string{
+		"file:///test.php": source,
+		"file:///label.php": `<?php
+namespace App;
+
+interface HasLabel {
+    public function label(): string;
+}
+`,
+	})
+
+	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 3, Character: 0},
+			End:   protocol.Position{Line: 3, Character: 5},
+		},
+		Context: protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
+	})
+
+	var action *protocol.CodeAction
+	for i := range actions {
+		if actions[i].Title == "Implement missing methods" {
+			action = &actions[i]
+			break
+		}
+	}
+	if action == nil || action.Edit == nil {
+		t.Fatalf("expected implement missing methods action on the enum, got %#v", actions)
+	}
+	edits := action.Edit.Changes["file:///test.php"]
+	if len(edits) != 1 {
+		t.Fatalf("expected one edit, got %#v", edits)
+	}
+	if edits[0].Range.Start.Line != 5 {
+		t.Fatalf("expected the methods before the enum's closing brace on line 5, got line %d", edits[0].Range.Start.Line)
+	}
+	if !strings.Contains(edits[0].NewText, "public function label(): string") {
+		t.Fatalf("missing interface method:\n%s", edits[0].NewText)
+	}
+}
