@@ -175,3 +175,60 @@ func TestNarrowingAndClosuresOnTheSyntaxTree(t *testing.T) {
 		t.Errorf("receiver of special() = %q, want App\\Special", got)
 	}
 }
+
+func cursorAfter(src, code string) textpos.Position {
+	end := strings.Index(src, code) + len(code)
+	return textpos.Position{Line: strings.Count(src[:end], "\n"), Character: end - strings.LastIndex(src[:end], "\n") - 1}
+}
+
+func TestReceiverAtEdges(t *testing.T) {
+	r, _, _ := expressionTreeFixture(t)
+	for _, c := range []struct {
+		code, want string
+		ok, static bool
+	}{
+		{code: "$repo->   ", want: `App\Repo`, ok: true},
+		{code: "Repo ::", want: `App\Repo`, ok: true, static: true},
+		{code: "Repo::create", want: `App\Repo`, ok: true, static: true},
+		{code: "Repo::$items", want: `App\Repo`, ok: true, static: true},
+		{code: "Repo::LIMIT", want: `App\Repo`, ok: true, static: true},
+		{code: "Repo::(", ok: false},
+		{code: "  ::", ok: false},
+		{code: "echo 1 +", ok: false},
+		{code: "$repo", ok: false},
+		{code: "Repo::'x'", ok: false},
+		{code: "Repo::1", ok: false},
+		{code: "Repo::[", ok: false},
+		{code: "Repo::-", ok: false},
+		{code: "Repo::$", want: `App\Repo`, ok: true, static: true},
+	} {
+		src := strings.Replace(expressionTreeSource, "echo $repo; // receivers", c.code+"\n", 1)
+		recv, ok := r.ReceiverAt(src, cursorAfter(src, c.code), parser.ParseFile(src, token.Latest))
+		if ok != c.ok || recv.Type.FullString() != c.want || recv.Static != c.static {
+			t.Errorf("ReceiverAt after %q = %+v, %v; want %q static=%v ok=%v", c.code, recv, ok, c.want, c.static, c.ok)
+		}
+	}
+	if _, ok := r.ReceiverAt(expressionTreeSource, textpos.Position{}, nil); ok {
+		t.Error("ReceiverAt without a file found a receiver")
+	}
+}
+
+func TestCallTypeAt(t *testing.T) {
+	r, _, _ := expressionTreeFixture(t)
+	src := strings.Replace(expressionTreeSource, "echo $repo; // receivers", "Repo::create(); $repo->items;", 1)
+	file := parser.ParseFile(src, token.Latest)
+	for _, c := range []struct{ code, want string }{
+		{"$s = $repo->make", `App\User`},
+		{"Repo::create", `App\Repo`},
+		{"Repo::create(", ""},
+		{"$repo->items", ""},
+		{"public static function create", ""},
+	} {
+		if got := r.CallTypeAt(src, cursorAfter(src, c.code), file).FullString(); got != c.want {
+			t.Errorf("CallTypeAt after %q = %q, want %q", c.code, got, c.want)
+		}
+	}
+	if got := r.CallTypeAt(src, cursorAfter(src, "$s = $repo->make"), nil); !got.IsEmpty() {
+		t.Errorf("CallTypeAt without a file = %q", got.FullString())
+	}
+}

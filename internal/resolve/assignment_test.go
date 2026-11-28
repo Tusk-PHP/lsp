@@ -260,6 +260,14 @@ class Holder {
             $inner = new User();
         };
         echo $inner; // assigned only in a closure
+        $cast = (int) $fn;
+        echo $cast; // cast
+        $long = array($fn);
+        echo $long; // long array of an unknown value
+        $className = $fn::class;
+        echo $className; // class of a value
+        $named = User::class;
+        echo $named; // class name
         $tooDeep = $c ? $users[0][0][0][0][0][0][0][0][0][0][0][0][0] : null;
         echo $tooDeep; // offsets past the depth limit
     }
@@ -303,6 +311,10 @@ class Holder {
 		{"$partial", "partial application", `Closure(App\User): App\User`},
 		{"$restPartial", "partial application of the rest", `Closure(App\User): App\User`},
 		{"$tooDeep", "offsets past the depth limit", ``},
+		{"$cast", "cast", `int`},
+		{"$long", "long array of an unknown value", `array`},
+		{"$className", "class of a value", `class-string`},
+		{"$named", "class name", `class-string<App\User>`},
 		{"$quoted", "quoted class name constructor argument", `App\Box<App\User>`},
 		{"$pipedFunction", "pipe to a first-class callable function", `App\Query`},
 		{"$mixed", "spread of a call", `array`},
