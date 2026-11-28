@@ -81,3 +81,16 @@ func TestLookups(t *testing.T) {
 		t.Error("kind classes")
 	}
 }
+
+func TestSemiReservedKindsAreIdentifiersAndKeywords(t *testing.T) {
+	for _, k := range []Kind{Identifier, Abstract, Class, Function, List, TraitConst} {
+		if !k.IsSemiReserved() {
+			t.Errorf("%v can name a member", k)
+		}
+	}
+	for _, k := range []Kind{Variable, NameQualified, LeftParen, Colon, Invalid} {
+		if k.IsSemiReserved() {
+			t.Errorf("%v can't name a member", k)
+		}
+	}
+}

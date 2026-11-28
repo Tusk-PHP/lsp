@@ -158,6 +158,7 @@ func TestCallAtFromADeclarationLexesOnlyFromThere(t *testing.T) {
 		{"an attribute in the declaration's parameters", "function run(#[Room(|", "run", "Room", 0, false, false},
 		{"a call in a parameter's default value", "function run($a = area(|", "run", "area", 0, false, true},
 		{"the declaration's name called on the next line", "f(run\n(|", "run", "run", 0, false, true},
+		{"an anonymous class's own arguments", "$x = new class(1, |", "class", "class", 1, false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

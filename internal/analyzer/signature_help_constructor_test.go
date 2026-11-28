@@ -27,6 +27,10 @@ class Big extends Room {}
 
 class Plain {}
 
+class Loose {
+    public function __construct($anything, int $count) {}
+}
+
 final class Spread {
     public function __construct(string $first, string ...$rest) {}
 }
@@ -43,6 +47,7 @@ func TestSignatureHelpOfAConstructionShowsTheConstructor(t *testing.T) {
 		{"promoted parameters", "<?php\nnamespace App;\nnew Room('a', |", "Room(string $name, int $size, bool $open)", 1},
 		{"an inherited constructor", "<?php\nnamespace App;\nnew Big(|", "Big(string $name, int $size, bool $open)", 0},
 		{"a class without a constructor", "<?php\nnamespace App;\nnew Plain(|", "Plain()", 0},
+		{"an untyped parameter", "<?php\nnamespace App;\nnew Loose(|", "Loose($anything, int $count)", 0},
 		{"a named argument", "<?php\nnamespace App;\nnew Room(open: |", "Room(string $name, int $size, bool $open)", 2},
 		{"a named argument after others", "<?php\nnamespace App;\nnew Room('a', open: true, size: |", "Room(string $name, int $size, bool $open)", 1},
 		{"a name the variadic takes", "<?php\nnamespace App;\nnew Spread(other: |", "Spread(string $first, string $rest)", 1},
