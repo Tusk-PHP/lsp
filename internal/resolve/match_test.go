@@ -16,6 +16,7 @@ namespace App;
 class User {}
 class Team {}
 class Repo { public function user(): User { return new User(); } }
+class Node { public function parent(): Node { return $this; } }
 class StatisticsComponent {
     public string $interval = 'day';
     public function run(Repo $repo, User $user, Team $team, int $n): void {
@@ -53,6 +54,14 @@ class StatisticsComponent {
             };
         }
         echo $state; // loop write passing itself through
+        $node = new Node();
+        foreach ([1, 2] as $step) {
+            $node = match ($step) {
+                1 => $node->parent(),
+                default => $node,
+            };
+        }
+        echo $node; // loop write reading itself in an arm
         $arg = match ($n) { 1 => 1, default => 2.5 } + 1;
         echo $arg; // match as an operand
     }
@@ -79,6 +88,7 @@ class StatisticsComponent {
 		{"$unknown", "an untyped arm", ``},
 		{"$never", "only throws", ``},
 		{"$state", "loop write passing itself through", `App\User|App\Team`},
+		{"$node", "loop write reading itself in an arm", `App\Node`},
 		{"$arg", "match as an operand", `int|float`},
 	} {
 		if got := at(c.v, c.marker); got != c.want {
