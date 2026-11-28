@@ -55,3 +55,17 @@ func TestRefineMethodReturnTypeFillsOnlyAMissingNativeType(t *testing.T) {
 		t.Error("refining a method the class doesn't declare added one")
 	}
 }
+
+func TestCollectionFactoryIsWhatWasRegistered(t *testing.T) {
+	idx := NewIndex()
+	if _, ok := idx.CollectionFactory(`App\Collection`); ok {
+		t.Error("a factory before any was registered")
+	}
+	idx.SetCollectionFactories(map[string]string{`App\Collection`: "newCollection"})
+	if factory, ok := idx.CollectionFactory(`App\Collection`); !ok || factory != "newCollection" {
+		t.Errorf("CollectionFactory = %q, %v; want newCollection", factory, ok)
+	}
+	if _, ok := idx.CollectionFactory(`App\Other`); ok {
+		t.Error("a factory for a class that wasn't registered")
+	}
+}

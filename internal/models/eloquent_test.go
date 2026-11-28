@@ -468,6 +468,27 @@ class Overridden extends Model
 {
     public function newCollection(array $models = []) { return new static($models); }
 }
+
+#[ObservedBy(ProductObserver::class)]
+#[CollectedBy(TagCollection::class)]
+class Observed extends Model {}
+
+class Branching extends Model
+{
+    public function newCollection(array $models = [])
+    {
+        if ($models === []) {
+            return new \App\Collections\LabelCollection($models);
+        }
+        return new TagCollection($models);
+    }
+}
+
+#[CollectedBy(ProductCollection::class)]
+abstract class Base extends Model
+{
+    abstract public function newCollection(array $models = []);
+}
 `
 	dir := t.TempDir()
 	path := filepath.Join(dir, "Models.php")
@@ -479,7 +500,7 @@ class Overridden extends Model
 	idx.IndexFile("file:///Collection.php", "<?php\nnamespace Illuminate\\Database\\Eloquent;\nclass Collection {}\n")
 	idx.IndexFile("file:///Collections.php", "<?php\nnamespace App\\Collections;\nuse Illuminate\\Database\\Eloquent\\Collection;\nclass ProductCollection extends Collection {}\nclass TagCollection extends Collection {}\nclass LabelCollection extends Collection {}\n")
 	source := newModelSource(src, phpparser.OnlyGrammar(token.Latest))
-	for _, model := range []string{"Product", "Tag", "Label", "Overridden"} {
+	for _, model := range []string{"Product", "Tag", "Label", "Overridden", "Observed", "Branching", "Base"} {
 		analyzeModelSource(idx, idx.Lookup(`App\Models\`+model), source)
 	}
 	for model, want := range map[string]string{
@@ -487,6 +508,9 @@ class Overridden extends Model
 		"Tag":        `App\Collections\TagCollection`,
 		"Label":      `App\Collections\LabelCollection`,
 		"Overridden": "",
+		"Observed":   `App\Collections\TagCollection`,
+		"Branching":  `App\Collections\LabelCollection`,
+		"Base":       "",
 	} {
 		if sym := idx.Lookup(`App\Models\` + model + `::newCollection`); sym == nil || sym.ReturnType != want {
 			t.Errorf("%s::newCollection(): %+v, want return type %q", model, sym, want)
