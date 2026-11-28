@@ -242,3 +242,27 @@ function test() {
 		}
 	}
 }
+
+func TestHoverArrayKeyFromAMethodDocBlock(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.RegisterBuiltins()
+	p := NewProvider(idx, nil, "")
+
+	source := `<?php
+class Client {
+    /**
+     */
+    public function ping(array $config): void {}
+    /**
+     * @param array{host: string, port: int} $config
+     */
+    public function connect(array $config): void {
+        $config['port'];
+    }
+}
+`
+	hover := p.GetHover("file:///test.php", source, protocol.Position{Line: 9, Character: 18})
+	if hover == nil || !strings.Contains(hover.Contents.Value, "port") || !strings.Contains(hover.Contents.Value, "int") {
+		t.Fatalf("hover on 'port' = %+v, want its int type from the method's @param", hover)
+	}
+}

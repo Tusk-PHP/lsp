@@ -288,3 +288,34 @@ func TestSnakeCase(t *testing.T) {
 		}
 	}
 }
+
+func TestEloquentLegacyAccessorTypeFromItsDocBlock(t *testing.T) {
+	source := `<?php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class User extends Model {
+    /** @return string */
+    public function getNicknameAttribute()
+    {
+        return 'x';
+    }
+
+    /**
+     */
+    public function getRankAttribute()
+    {
+        return 1;
+    }
+}
+`
+	idx := setupEloquentIndex(t, source)
+	AnalyzeEloquentModels(idx, "")
+	for prop, want := range map[string]string{"$nickname": "string", "$rank": ""} {
+		sym := idx.Lookup(`App\Models\User::` + prop)
+		if sym == nil || sym.Type != want {
+			t.Errorf("User::%s = %+v, want a virtual property of type %q", prop, sym, want)
+		}
+	}
+}
