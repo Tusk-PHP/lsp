@@ -237,11 +237,6 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 		return nil
 	}
 
-	// Handle closure-based array syntax: 'products' => function($q) {...}
-	// The regex captures 'products' before '=>', strip anything after =>
-	if idx := strings.Index(argValue, " =>"); idx >= 0 {
-		argValue = argValue[:idx]
-	}
 	// `with('posts:id,title')` loads only those columns of the relation.
 	if isRelMethod {
 		if idx := strings.IndexByte(argValue, ':'); idx >= 0 {
