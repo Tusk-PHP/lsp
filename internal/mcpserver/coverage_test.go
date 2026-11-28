@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/coverage"
+	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
 const coverageTestReport = `<?xml version="1.0"?>
@@ -31,7 +32,10 @@ const coverageTestReport = `<?xml version="1.0"?>
 
 func coverageTestService(t *testing.T, report string) *Service {
 	t.Helper()
-	root := t.TempDir()
+	root, err := workspace.ResolveRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(filepath.Join(root, "app"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +54,10 @@ func coverageTestService(t *testing.T, report string) *Service {
 }
 
 func TestPhpCoverageFile(t *testing.T) {
-	out := coverageTestService(t, coverageTestReport).phpCoverage("app/Service.php")
+	out, err := coverageTestService(t, coverageTestReport).phpCoverage("app/Service.php")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !out.ReportFound || out.ReportPath != "clover.xml" || out.File == nil {
 		t.Fatalf("unexpected output: %+v", out)
 	}
@@ -70,7 +77,10 @@ func TestPhpCoverageFile(t *testing.T) {
 }
 
 func TestPhpCoverageProject(t *testing.T) {
-	out := coverageTestService(t, coverageTestReport).phpCoverage("")
+	out, err := coverageTestService(t, coverageTestReport).phpCoverage("")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if out.CoveredLines != 3 || out.ExecutableLines != 6 || out.Percent != 50 {
 		t.Errorf("unexpected totals: %+v", out)
 	}
@@ -80,14 +90,20 @@ func TestPhpCoverageProject(t *testing.T) {
 }
 
 func TestPhpCoverageUnknownIsNotUntested(t *testing.T) {
-	out := coverageTestService(t, coverageTestReport).phpCoverage("app/NotInReport.php")
+	out, err := coverageTestService(t, coverageTestReport).phpCoverage("app/NotInReport.php")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if out.File != nil || !strings.Contains(out.Note, "unknown") {
 		t.Errorf("expected unknown coverage, got %+v", out)
 	}
 }
 
 func TestPhpCoverageWithoutReport(t *testing.T) {
-	out := coverageTestService(t, "").phpCoverage("")
+	out, err := coverageTestService(t, "").phpCoverage("")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if out.ReportFound || !strings.Contains(out.Note, "--coverage-clover") {
 		t.Errorf("expected a note on creating a report, got %+v", out)
 	}

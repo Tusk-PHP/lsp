@@ -2,7 +2,6 @@ package mcpserver
 
 import (
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -49,12 +48,12 @@ type PhpCoverageOutput struct {
 	LeastCovered    []CoverageFileRecord `json:"leastCovered,omitempty"`
 }
 
-func (s *Service) phpCoverage(path string) PhpCoverageOutput {
+func (s *Service) phpCoverage(path string) (PhpCoverageOutput, error) {
 	s.coverage.Refresh()
 
 	reportPath, generated, ok := s.coverage.ReportInfo()
 	if !ok {
-		return PhpCoverageOutput{Note: "No Clover report found. Run the tests with --coverage-clover clover.xml, or set coverageReportPath."}
+		return PhpCoverageOutput{Note: "No Clover report found. Run the tests with --coverage-clover clover.xml, or set coverageReportPath."}, nil
 	}
 	out := PhpCoverageOutput{
 		ReportFound: true,
@@ -63,14 +62,14 @@ func (s *Service) phpCoverage(path string) PhpCoverageOutput {
 	}
 
 	if strings.TrimSpace(path) != "" {
-		absPath := path
-		if !filepath.IsAbs(absPath) {
-			absPath = filepath.Join(s.RootPath, path)
+		absPath, err := s.workspacePath(path)
+		if err != nil {
+			return PhpCoverageOutput{}, err
 		}
 		file, stale := s.coverage.File(absPath)
 		if file == nil {
 			out.Note = "This file isn't in the report, so its coverage is unknown. That doesn't mean it's untested."
-			return out
+			return out, nil
 		}
 		record := coverageFileRecord(file, s.coverage.Relative(file))
 		record.UncoveredLines = lineRanges(file.Uncovered)
@@ -87,7 +86,7 @@ func (s *Service) phpCoverage(path string) PhpCoverageOutput {
 		}
 		out.File = &record
 		out.Stale = stale
-		return out
+		return out, nil
 	}
 
 	var records []CoverageFileRecord
@@ -104,7 +103,7 @@ func (s *Service) phpCoverage(path string) PhpCoverageOutput {
 		records = records[:maxLeastCoveredFiles]
 	}
 	out.LeastCovered = records
-	return out
+	return out, nil
 }
 
 func coverageFileRecord(file *coverage.File, path string) CoverageFileRecord {

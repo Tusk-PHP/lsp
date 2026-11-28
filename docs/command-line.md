@@ -19,6 +19,8 @@ tusk-php check --exclude Tests --exclude '*Test.php' src
 Each finding is printed as `path:line:column: severity code: message`, with paths
 relative to the root. A summary goes to standard error. Directories cover the
 indexed PHP files under them, so paths in `excludePaths` stay out.
+The root may be a symbolic link: it's followed, and findings are the same as
+through the directory it leads to.
 
 | Option | Default | Description |
 |---|---|---|

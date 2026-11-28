@@ -68,16 +68,11 @@ func runCheck(args []string, stdout, stderr io.Writer) (int, error) {
 	if *format != "text" && *format != "json" {
 		return 2, fmt.Errorf("invalid --format %q: must be text or json", *format)
 	}
-	root := *rootFlag
-	if root == "" {
-		root = "."
-	}
-	root, err := filepath.Abs(root)
+	start := time.Now()
+	root, err := workspace.ResolveRoot(*rootFlag)
 	if err != nil {
 		return 2, err
 	}
-
-	start := time.Now()
 	sess, err := session.Open(context.Background(), root, session.Options{})
 	if err != nil {
 		return 2, fmt.Errorf("building workspace: %w", err)
@@ -210,13 +205,18 @@ func checkTargets(root string, args []string, indexed []string) ([]string, error
 		}
 		for _, m := range matches {
 			info, err := os.Stat(m)
-			switch {
-			case err != nil:
+			if err != nil {
 				return nil, fmt.Errorf("%s: %w", arg, err)
+			}
+			resolved, err := workspace.ResolvePath(m)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", arg, err)
+			}
+			switch {
 			case info.IsDir():
-				add(under(m)...)
-			case workspace.IsPHPSource(m), workspace.IsBlade(m):
-				add(m)
+				add(under(resolved)...)
+			case workspace.IsPHPSource(resolved), workspace.IsBlade(resolved):
+				add(resolved)
 			}
 		}
 	}
