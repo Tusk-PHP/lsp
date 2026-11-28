@@ -336,21 +336,21 @@ func (s *helperScan) calls(root ast.Node) {
 func (s *helperScan) methodRulesArg(call *ast.MethodCall) int {
 	switch strings.ToLower(memberName(s.src, call.Name)) {
 	case "validate":
-		return s.controllerShift(call)
+		return s.controllerShift(call, 0)
 	case "validatewithbag":
-		return 1 + s.controllerShift(call)
+		return 1 + s.controllerShift(call, 1)
 	case "validateonly":
 		return 1
 	}
 	return -1
 }
 
-func (s *helperScan) controllerShift(call *ast.MethodCall) int {
+func (s *helperScan) controllerShift(call *ast.MethodCall, at int) int {
 	object, ok := call.Object.(*ast.Variable)
-	if !ok || object.Text(s.src) != "$this" || len(call.Args.Args) < 2 {
+	if !ok || object.Text(s.src) != "$this" || len(call.Args.Args) < at+2 {
 		return 0
 	}
-	if _, isVar := call.Args.Args[0].Value.(*ast.Variable); isVar {
+	if _, isVar := call.Args.Args[at].Value.(*ast.Variable); isVar {
 		return 1
 	}
 	return 0
