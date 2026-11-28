@@ -276,17 +276,15 @@ func (c *compileChecker) label(n *ast.Label) {
 
 func (c *compileChecker) jump(n ast.Stmt, levels ast.Expr, keyword string) {
 	depth := int64(1)
-	switch lit := levels.(type) {
-	case nil:
-	case *ast.Literal:
-		v, ok := c.integer(lit)
+	switch {
+	case levels == nil:
+	case c.literal(levels):
+		v, ok := c.integer(levels)
 		if !ok || v < 1 {
 			c.report(n, "'"+keyword+"' operator accepts only positive integers")
 			return
 		}
 		depth = v
-	case *ast.InterpolatedString:
-		return
 	default:
 		c.report(n, "'"+keyword+"' operator with non-integer operand is no longer supported")
 		return
@@ -299,8 +297,27 @@ func (c *compileChecker) jump(n ast.Stmt, levels ast.Expr, keyword string) {
 	}
 }
 
-func (c *compileChecker) integer(lit *ast.Literal) (int64, bool) {
-	if lit.Kind != token.IntegerLiteral {
+func (c *compileChecker) literal(e ast.Expr) bool {
+	switch e := e.(type) {
+	case *ast.Literal:
+		return true
+	case *ast.InterpolatedString:
+		if e.Kind != token.StartHeredoc {
+			return false
+		}
+		for _, part := range e.Parts {
+			if _, ok := part.(*ast.StringPart); !ok {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func (c *compileChecker) integer(e ast.Expr) (int64, bool) {
+	lit, ok := e.(*ast.Literal)
+	if !ok || lit.Kind != token.IntegerLiteral {
 		return 0, false
 	}
 	v, err := strconv.ParseInt(strings.ReplaceAll(c.text(lit), "_", ""), 0, 64)
@@ -310,11 +327,7 @@ func (c *compileChecker) integer(lit *ast.Literal) (int64, bool) {
 func (c *compileChecker) declare(d *ast.Declare) {
 	for _, dir := range d.Directives {
 		name := c.text(dir.Name)
-		switch dir.Value.(type) {
-		case *ast.Literal:
-		case *ast.MagicConst, *ast.InterpolatedString:
-			continue
-		default:
+		if !c.literal(dir.Value) {
 			c.report(dir.Value, "declare("+name+") value must be a literal")
 			continue
 		}
@@ -327,7 +340,7 @@ func (c *compileChecker) declare(d *ast.Declare) {
 		case d.Body != nil:
 			c.report(dir, "strict_types declaration must not use block mode")
 		default:
-			if v, ok := c.integer(dir.Value.(*ast.Literal)); !ok || v != 0 && v != 1 {
+			if v, ok := c.integer(dir.Value); !ok || v != 0 && v != 1 {
 				c.report(dir.Value, "strict_types declaration must have 0 or 1 as its value")
 			}
 		}
