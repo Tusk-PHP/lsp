@@ -44,10 +44,17 @@ class Loose {
 
 func expressionFormsFixture(t *testing.T) (*Resolver, ExprContext) {
 	t.Helper()
+	return fixtureAt(t, expressionFormsSource, "here")
+}
+
+// fixtureAt indexes src and returns a resolver with the context of the line
+// that ends with `// marker`.
+func fixtureAt(t *testing.T, src, marker string) (*Resolver, ExprContext) {
+	t.Helper()
 	idx := symbols.NewIndex()
-	idx.IndexFile("file:///forms.php", expressionFormsSource)
-	lines := SplitLines(expressionFormsSource)
-	return NewResolver(idx), ExprContext{Lines: lines, Pos: textpos.Position{Line: markedLine(t, lines, "here"), Character: 8}, File: parser.ParseFile(expressionFormsSource, token.Latest)}
+	idx.IndexFile("file:///fixture.php", src)
+	lines := SplitLines(src)
+	return NewResolver(idx), ExprContext{Lines: lines, Pos: textpos.Position{Line: markedLine(t, lines, marker), Character: 8}, File: parser.ParseFile(src, token.Latest)}
 }
 
 func TestExpressionForms(t *testing.T) {
