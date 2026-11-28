@@ -124,12 +124,12 @@ func (s *Server) handleReferences(msg *jsonRPCMessage) {
 
 // answerInBackground answers a request whose cost grows with the workspace
 // off the message loop. The answer is sent only if the document it was asked
-// on is still the same text; otherwise its positions may be stale, and the
-// client is told the content changed.
+// on is still the same text, open or, once closed, on disk; otherwise its
+// positions may be stale, and the client is told the content changed.
 func (s *Server) answerInBackground(msg *jsonRPCMessage, req bladeRequest, answer func() any) {
 	s.goSafe(msg.Method, func() {
 		result := answer()
-		if s.getDocument(req.uri) != req.text() {
+		if s.getDocumentReader()(req.uri) != req.text() {
 			s.sendError(msg.ID, codeContentModified, msg.Method+": "+req.uri+" changed while the request ran")
 			return
 		}
