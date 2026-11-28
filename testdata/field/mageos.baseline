@@ -72,8 +72,6 @@ vendor/mage-os/framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisLuaHelper.p
 vendor/mage-os/framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisLuaHelper.php	builtin-unavailable	Class 'RedisException' requires ext-redis
 vendor/mage-os/framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisLuaHelper.php	builtin-unavailable	Class 'RedisException' requires ext-redis
 vendor/mage-os/framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
-vendor/mage-os/framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
-vendor/mage-os/framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 vendor/mage-os/framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis
 vendor/mage-os/framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis
 vendor/mage-os/framework/Cache/Frontend/Adapter/SymfonyAdapters/RedisTagAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis

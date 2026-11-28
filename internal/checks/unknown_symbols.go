@@ -1106,9 +1106,11 @@ func (h *memberHierarchy) walk(fqn string, index *symbols.Index) {
 		h.open = true
 		return
 	}
-	// A trait's `$this` is whichever class uses it, and builtins registered by
-	// name alone have no members listed. Neither can show a member is missing.
-	if sym.Kind == symbols.KindTrait || (symbols.IsBuiltin(sym) && len(sym.Children) == 0 && sym.Extends == "" && len(sym.Implements) == 0) {
+	// A trait's `$this` is whichever class uses it, and a builtin is complete
+	// only as far as a hand-written stub declares it: the generated table
+	// comes from a few PHP builds, which lack what other builds and
+	// extensions add. Neither can show a member is missing.
+	if sym.Kind == symbols.KindTrait || symbols.IsBuiltin(sym) && !symbols.HasStubbedMembers(sym) {
 		h.open = true
 		return
 	}
