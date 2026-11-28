@@ -149,7 +149,8 @@ func TestApplyRejectsChangesThatDoNotFit(t *testing.T) {
 		want   string
 	}{
 		{"end before start", Change{Range: at(1, 3, 1, 1)}, "before its start"},
-		{"negative", Change{Range: at(-1, 0, 0, 0)}, "negative"},
+		{"negative start", Change{Range: at(-1, 0, 0, 0)}, "range start: position -1:0 is negative"},
+		{"negative end", Change{Range: at(0, 0, 0, -1)}, "range end: position 0:-1 is negative"},
 	}
 	for _, c := range cases {
 		_, err := Apply("<?php\nabc\n", UTF16, []Change{{Range: at(0, 0, 0, 0), Text: ""}, c.change})
