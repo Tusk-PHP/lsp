@@ -36,16 +36,9 @@ func (r *Resolver) closureCall(lines []string, file *parser.FileNode, start text
 	t := r.syntaxTree(lines, file)
 	path := t.path(t.offset(start))
 	i := len(path) - 1
-	for i >= 0 {
-		if _, ok := path[i].(*ast.Closure); ok {
-			break
-		}
-		if _, ok := path[i].(*ast.ArrowFunction); ok {
-			break
-		}
-		i--
-	}
-	if i < 3 {
+	_, closure := path[i].(*ast.Closure)
+	_, arrow := path[i].(*ast.ArrowFunction)
+	if !closure && !arrow || i < 3 {
 		return closureCallSite{}, false
 	}
 	arg, isArg := path[i-1].(*ast.Arg)

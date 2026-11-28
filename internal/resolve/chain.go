@@ -168,17 +168,9 @@ func (t *syntaxTree) staticReceiverIn(span ast.Span, off uint32) (*syntaxTree, a
 	if last <= 0 {
 		return nil, nil
 	}
-	for _, tok := range toks[last+1:] {
-		if tok.Kind != token.Whitespace && tok.Kind != token.Identifier {
-			return nil, nil
-		}
-	}
 	first := last - 1
-	for first >= 0 && toks[first].Kind == token.Whitespace {
+	for toks[first].Kind == token.Whitespace {
 		first--
-	}
-	if first < 0 {
-		return nil, nil
 	}
 	return expressionTree(t.src[span.Start+toks[first].Start:span.Start+toks[first].End], t.grammar)
 }

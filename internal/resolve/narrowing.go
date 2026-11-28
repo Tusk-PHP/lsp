@@ -44,9 +44,6 @@ type narrowingFact struct {
 // read's own statement. A test on an assignment, `($r = f()) instanceof X`,
 // is a test on the variable assigned.
 func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string, pos textpos.Position, file *parser.FileNode) ResolvedType {
-	if file == nil || r.Index == nil || pos.Line >= len(lines) {
-		return t
-	}
 	n, path, ok := r.narrowingAt(varName, lines, pos, file)
 	if !ok {
 		return t
@@ -68,14 +65,14 @@ func (r *Resolver) narrowVariable(varName string, t ResolvedType, lines []string
 }
 
 func (r *Resolver) mayBeNarrowed(varName string, lines []string, pos textpos.Position, file *parser.FileNode) bool {
-	if file == nil || r.Index == nil || pos.Line >= len(lines) {
-		return false
-	}
 	_, _, ok := r.narrowingAt(varName, lines, pos, file)
 	return ok
 }
 
 func (r *Resolver) narrowingAt(varName string, lines []string, pos textpos.Position, file *parser.FileNode) (narrowing, []ast.Node, bool) {
+	if file == nil || r.Index == nil || pos.Line >= len(lines) {
+		return narrowing{}, nil, false
+	}
 	tree := r.syntaxTree(lines, file)
 	off := tree.offset(pos)
 	after, ok := r.lastWrite(varName, lines, tree, pos, off)
@@ -105,14 +102,9 @@ func (n narrowing) ctxAt(e ast.Node, known map[string]ResolvedType) ExprContext 
 func (r *Resolver) lastWrite(varName string, lines []string, t *syntaxTree, pos textpos.Position, off uint32) (uint32, bool) {
 	s := r.scopeDocument(lines).ScopeAt(pos)
 	for ; s != nil; s = s.Parent {
-		captured := false
 		for _, b := range s.Bindings {
 			if b.Name != varName {
 				continue
-			}
-			if b.Kind == scope.BindingClosureUse && rangeHolds(b.Decl, pos) {
-				captured = true
-				break
 			}
 			last := t.offset(b.Decl.Start)
 			if b.Kind == scope.BindingParameter {
@@ -130,18 +122,11 @@ func (r *Resolver) lastWrite(varName string, lines []string, t *syntaxTree, pos 
 			}
 			return last, true
 		}
-		if captured {
-			continue
-		}
 		if s.Kind != scope.ScopeClosure || !s.ExprBody {
 			return t.offset(s.Range.Start), true
 		}
 	}
 	return 0, false
-}
-
-func rangeHolds(r textpos.Range, pos textpos.Position) bool {
-	return !positionBefore(pos, r.Start) && !positionBefore(r.End, pos)
 }
 
 func (t *syntaxTree) writeHolds(at, off uint32) bool {
@@ -198,9 +183,6 @@ func innerPath(path []ast.Node) []ast.Node {
 
 func (n narrowing) mayNarrow(path []ast.Node) bool {
 	inner := innerPath(path)
-	if len(inner) == 0 {
-		return false
-	}
 	found := false
 	ast.Walk(inner[0], func(node ast.Node) bool {
 		if found {
@@ -402,10 +384,9 @@ func (n narrowing) callee(call ast.Expr, known map[string]ResolvedType) (callee 
 		return resolvedCallee{member: fn, params: n.r.paramPatterns(fn, n.r.parseDoc(fn.DocComment))}, nil, n.t.callArgList(c.Args), true
 	case *ast.MethodCall:
 		receiver, name, op, args = c.Object, n.t.text(c.Name), "->", n.t.callArgList(c.Args)
-	case *ast.StaticCall:
-		receiver, name, op, args = c.Class, n.t.text(c.Name), "::", n.t.callArgList(c.Args)
 	default:
-		return callee, nil, nil, false
+		s := call.(*ast.StaticCall)
+		receiver, name, op, args = s.Class, n.t.text(s.Name), "::", n.t.callArgList(s.Args)
 	}
 	recvType := n.r.typeOf(n.t, receiver, nil, ctx)
 	if op == "::" {
@@ -473,9 +454,6 @@ func (n narrowing) applyAssertingCall(t ResolvedType, call ast.Expr, value bool)
 		return t
 	}
 	doc := n.r.parseDoc(callee.member.DocComment)
-	if doc == nil {
-		return t
-	}
 	env := n.r.calleeEnv(callee, args, n.ctxAt(call, nil))
 	argIs := n.argIs(callee, args)
 	for _, a := range doc.Asserts {
@@ -536,13 +514,11 @@ func (n narrowing) switchCase(t ResolvedType, path []ast.Node) ResolvedType {
 		if !ok {
 			continue
 		}
-		if lit := constantLiteral(n.t.text(sw.Subject)); lit.Literal != "true" {
+		c, inCase := inner[i+1].(*ast.Case)
+		if lit := constantLiteral(n.t.text(sw.Subject)); lit.Literal != "true" || !inCase {
 			return t
 		}
-		k := slices.IndexFunc(sw.Cases, func(c *ast.Case) bool { return ast.Node(c) == inner[i+1] })
-		if k < 0 {
-			return t
-		}
+		k := slices.Index(sw.Cases, c)
 		var parts []ResolvedType
 		for j := k; j >= 0 && (j == k || len(sw.Cases[j].Stmts) == 0); j-- {
 			cond := sw.Cases[j].Cond

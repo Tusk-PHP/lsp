@@ -37,9 +37,6 @@ func expressionTree(expr string, grammar token.Version) (*syntaxTree, ast.Expr) 
 		return nil, nil
 	}
 	file := parser.ParseTree(src+";", grammar)
-	if len(file.Stmts) == 0 {
-		return nil, nil
-	}
 	stmt, ok := file.Stmts[0].(*ast.ExprStmt)
 	if !ok || stmt.Expr == nil {
 		return nil, nil
@@ -100,12 +97,10 @@ func (r *Resolver) typeOf(t *syntaxTree, e ast.Expr, expected *ResolvedType, ctx
 		}
 		return ResolvedType{FQN: "string"}
 	case *ast.Unary:
-		if lit, ok := n.Operand.(*ast.Literal); ok && (n.Op == token.Minus || n.Op == token.Plus) {
-			if rt := literalType(t, lit); rt.Literal != "" {
-				rt.Literal = t.src[n.Start:lit.End]
-				return rt
-			}
-			return literalType(t, lit)
+		if lit, ok := signedNumber(n); ok {
+			rt := literalType(t, lit)
+			rt.Literal = t.src[n.Start:lit.End]
+			return rt
 		}
 	case *ast.Cast:
 		return castResult(n.Kind)
@@ -175,16 +170,17 @@ func (r *Resolver) variableType(name string, ctx ExprContext) ResolvedType {
 func literalType(t *syntaxTree, n *ast.Literal) ResolvedType {
 	text := t.text(n)
 	switch n.Kind {
-	case token.ConstantString:
-		return ResolvedType{FQN: "string", Literal: text}
 	case token.IntegerLiteral:
 		return ResolvedType{FQN: "int", Literal: text}
 	case token.FloatLiteral:
 		return ResolvedType{FQN: "float", Literal: text}
-	case token.StartHeredoc:
-		return ResolvedType{FQN: "string"}
 	}
-	return ResolvedType{}
+	return ResolvedType{FQN: "string", Literal: text}
+}
+
+func signedNumber(n *ast.Unary) (*ast.Literal, bool) {
+	lit, ok := n.Operand.(*ast.Literal)
+	return lit, ok && lit.Kind != token.ConstantString && (n.Op == token.Minus || n.Op == token.Plus)
 }
 
 func constantLiteral(name string) ResolvedType {
@@ -229,9 +225,6 @@ func (r *Resolver) classReference(t *syntaxTree, n *ast.ConstFetch, ctx ExprCont
 		return ResolvedType{}
 	}
 	fqn := r.ResolveClassNameLoose(name, ctx.File)
-	if fqn == "" {
-		return ResolvedType{}
-	}
 	if sym := r.Index.Lookup(fqn); sym != nil {
 		switch sym.Kind {
 		case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
@@ -444,9 +437,6 @@ func (r *Resolver) arrayType(t *syntaxTree, n *ast.Array, ctx ExprContext) Resol
 		return rt
 	}
 	if n.Items[0] != nil && n.Items[0].Key != nil {
-		if rt.Shape == "" {
-			return rt
-		}
 		fields := make([]ShapeEntry, 0, len(n.Items))
 		for _, item := range n.Items {
 			if item == nil || item.Key == nil {
@@ -550,10 +540,9 @@ func literalValueType(t *syntaxTree, e ast.Expr) string {
 			return rt.Shape
 		}
 		return "array"
-	case *ast.Literal, *ast.InterpolatedString, *ast.ConstFetch, *ast.Unary:
-		if rt := literalNodeType(t, e); rt != "" {
-			return rt
-		}
+	}
+	if rt := literalNodeType(t, e); rt != "" {
+		return rt
 	}
 	return "mixed"
 }
@@ -567,7 +556,7 @@ func literalNodeType(t *syntaxTree, e ast.Expr) string {
 	case *ast.ConstFetch:
 		return constantLiteral(t.text(n)).FQN
 	case *ast.Unary:
-		if lit, ok := n.Operand.(*ast.Literal); ok && (n.Op == token.Minus || n.Op == token.Plus) {
+		if lit, ok := signedNumber(n); ok {
 			return literalType(t, lit).FQN
 		}
 	case *ast.Array:
@@ -637,17 +626,6 @@ func itoa(i int) string {
 	return string(buf[n:])
 }
 
-// FunctionCallType types a call to the function name with the arguments
-// args (the text between its parentheses), binding its templates.
-func (r *Resolver) FunctionCallType(name, args string, ctx ExprContext) ResolvedType {
-	t, e := expressionTree("f("+args+")", ctx.grammar())
-	call, ok := e.(*ast.Call)
-	if !ok {
-		return ResolvedType{}
-	}
-	return r.functionCallType(name, t.callArgList(call.Args), ctx)
-}
-
 func (r *Resolver) functionCallType(name string, args []CallArg, ctx ExprContext) ResolvedType {
 	if r.Index == nil {
 		return ResolvedType{}
@@ -660,18 +638,6 @@ func (r *Resolver) functionCallType(name string, args []CallArg, ctx ExprContext
 		return ResolvedType{}
 	}
 	return r.FunctionTypeForCall(fn, ctx.File, r.callSite(args, ctx))
-}
-
-// NewExpressionType types `new Foo(args)`. The class's templates are bound
-// from the constructor's arguments: `new Collection([$user])` is a
-// Collection<int, User>.
-func (r *Resolver) NewExpressionType(className, args string, ctx ExprContext) ResolvedType {
-	t, e := expressionTree("new "+className+"("+args+")", ctx.grammar())
-	n, ok := e.(*ast.New)
-	if !ok {
-		return ResolvedType{}
-	}
-	return r.newType(t, n, ctx)
 }
 
 func (r *Resolver) newExpressionType(className string, args []CallArg, ctx ExprContext) ResolvedType {
