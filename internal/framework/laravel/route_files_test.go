@@ -186,3 +186,46 @@ func TestIncludedRouteFileKeepsOnlyTheReadsInUse(t *testing.T) {
 		t.Fatalf("admin.php keeps %d reads, want 1", reads)
 	}
 }
+
+func TestRouteFilesIncludedByAPathThatCantBeReadStayOnTheirOwn(t *testing.T) {
+	for _, path := range []string{
+		"5",
+		"__FILE__",
+		"__DIR__ + '/admin.php'",
+		"$dir . '/admin.php'",
+		"__DIR__ . $file",
+		"app_path('routes/admin.php')",
+		"base_path()",
+		"base_path(path: 'routes/admin.php')",
+		"base_path(...$parts)",
+		"base_path('routes', 'admin.php')",
+	} {
+		t.Run(path, func(t *testing.T) {
+			web := routeTestHeader + "Route::prefix('admin')->name('admin.')->group(function () {\n    require " + path + ";\n});\nRoute::name('staff.')->group(" + path + ");\n"
+			idx := indexRouteFiles(t, map[string]string{"web.php": web, "admin.php": adminRoutes})
+			assertIndexedRoutes(t, idx, map[string]string{"users": "/users admin.php"})
+		})
+	}
+}
+
+func TestRoutesOfOneNameAreOrderedByFileThenPlace(t *testing.T) {
+	idx := indexRouteFiles(t, map[string]string{
+		"b.php": routeTestHeader + "Route::get('/b', 'b')->name('home');\n",
+		"a.php": routeTestHeader + "Route::get('/a2', 'a')->name('home');\nRoute::get('/a1', 'a')->name('home'); Route::get('/a3', 'a')->name('home');\n",
+	})
+	var got []string
+	for _, r := range idx.All() {
+		got = append(got, r.Path)
+	}
+	if want := []string{"/a2", "/a1", "/a3", "/b"}; !slices.Equal(got, want) {
+		t.Errorf("routes named home = %v, want %v: by file, then line, then column", got, want)
+	}
+	if r := idx.Find("home"); r == nil || r.Path != "/a2" {
+		t.Errorf("Find(home) = %+v, want the first in that order", r)
+	}
+	idx.RemoveFile("file:///tmp/project/app/Http/Kernel.php")
+	idx.RemoveFile(routeFileURI("a.php"))
+	if r := idx.Find("home"); r == nil || r.Path != "/b" {
+		t.Errorf("after a.php is removed, and a file outside routes/ is ignored, Find(home) = %+v", r)
+	}
+}
