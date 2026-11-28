@@ -310,3 +310,23 @@ class OrderShipped extends Mailable
 		t.Errorf("$order->id should resolve through App\\Models\\Order: %q", member.Contents.Value)
 	}
 }
+
+func TestAssignedInFindsWhatATemplateAssignsItself(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want bool
+	}{
+		{"@php $user = 1; @endphp", true},
+		{"@foreach ($rows as $user)", true},
+		{"@foreach ($rows as $key => $user)", true},
+		{"{{ $user }}", false},
+		{"@if ($user == 1)", false},
+		{"{{ ['name' => $user] }}", false},
+		{"@foreach ($rows as $key => $other) {{ $user }}", false},
+		{"@php $users = 1; @endphp {{ $user }}", false},
+	} {
+		if got := assignedIn(c.src, "user"); got != c.want {
+			t.Errorf("assignedIn(%q, user) = %v, want %v", c.src, got, c.want)
+		}
+	}
+}
