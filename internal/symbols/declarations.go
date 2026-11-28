@@ -177,10 +177,10 @@ func addEnumMembers(uri string, enum *Symbol) {
 // addVirtualMembers parses @property/@method docblock tags on a class-level
 // symbol and injects them as virtual children so they appear in completion/hover.
 func addVirtualMembers(uri string, parent *Symbol, resolve func(string) string) {
-	if parent.DocComment == "" {
+	doc := parser.ParseDocBlock(parent.DocComment)
+	if doc == nil {
 		return
 	}
-	doc := parser.ParseDocBlock(parent.DocComment)
 	fqn := parent.FQN
 
 	indexTypeAliases(parent, doc, resolve)
