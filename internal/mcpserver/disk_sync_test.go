@@ -194,6 +194,26 @@ func TestToolCallsFollowRuleSeveritiesChangedOnDisk(t *testing.T) {
 	}
 }
 
+func TestToolCallsRefuseAPathDeniedOnDisk(t *testing.T) {
+	session, root := connectedService(t, map[string]string{
+		".tusk-php.json":    plainProjectConfig,
+		"composer.json":     `{"require": {"php": "^8.2"}}`,
+		"secret/config.php": "<?php\nnamespace Secret;\nfunction token() { return new Missing(); }\n",
+	})
+	if got := diagnosticCodes(t, session, "secret/config.php"); !slices.Contains(got, "unknown-class") {
+		t.Fatalf("the file is readable with the startup configuration: %v", got)
+	}
+
+	writeProject(t, root, map[string]string{".tusk-php.json": `{"framework": "none", "databaseEnabled": false, "ai": {"denyPaths": ["secret"]}}`})
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "php_diagnostics", Arguments: map[string]any{"path": "secret/config.php"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsError {
+		t.Errorf("a path denied in the config file on disk is refused without a restart: %+v", res.StructuredContent)
+	}
+}
+
 func TestToolCallsFailOnABrokenConfigFile(t *testing.T) {
 	session, root := connectedService(t, map[string]string{
 		".tusk-php.json": plainProjectConfig,

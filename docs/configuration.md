@@ -78,6 +78,7 @@ Save `.tusk-php.json`, or have the client send `workspace/didChangeConfiguration
 | `diagnosticRules`, `diagnosticIgnore` | Which findings are reported, and with which severity. Findings of the on-save rules are worked out again for files you have saved. |
 | `phpstanEnabled`, `phpstanPath`, `phpstanLevel`, `phpstanConfig`, `pintEnabled`, `pintPath`, `pintConfig` | The next save runs the tools with the new settings. Findings from the old settings are dropped. |
 | `excludePaths`, `maxIndexFiles` | The index, in the background: files in a newly excluded directory or past the new limit leave it, and files now included are indexed. A file open in the editor stays, and so do files that Composer's autoloader loads, such as `vendor` packages. |
+| `ai.denyPaths`, `ai.allowedRoots` | Which files the MCP tools read and return, from the next tool call. |
 | `inlayHints`, `autoImport.aliasStyle`, `php_manual_locale`, `php_manual_open_on_definition`, `composer.hover.enable`, `composer.openOnDefinition`, `introspection.verbosity` | The next request. |
 
 Every other option needs a restart: `framework`, `coverageReportPath`, and the database settings (`databaseEnabled`, `databaseSource`, `db`).
