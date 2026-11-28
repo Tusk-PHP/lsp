@@ -44,9 +44,7 @@ func benchmarkServer(b *testing.B, source string) (*Server, string) {
 	}
 	s.handleMessage(message("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}}))
 	uri := symbols.PathToURI(root + "/Big.php")
-	s.docMu.Lock()
-	s.documents[uri] = source
-	s.docMu.Unlock()
+	s.openDocument(uri, 1, source)
 	s.index.IndexFile(uri, source)
 	s.index.MarkReady()
 	return s, uri
@@ -82,9 +80,10 @@ func BenchmarkPublishDiagnostics(b *testing.B) {
 		b.Run(bc.name, func(b *testing.B) {
 			source := benchmarkSource(bc.nonASCII)
 			s, uri := benchmarkServer(b, source)
+			doc, _ := s.docs.Get(uri)
 			b.ReportAllocs()
 			for b.Loop() {
-				s.publishDiagnostics(uri, source)
+				s.publishDiagnostics(doc)
 			}
 		})
 	}

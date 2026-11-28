@@ -31,7 +31,7 @@ func (w *lockedBuffer) String() string {
 
 // slowDiagnosticsServer returns a server whose diagnostics pass blocks until
 // release is closed, and records each source it analyzed.
-func slowDiagnosticsServer(t *testing.T) (s *Server, out *lockedBuffer, release chan struct{}, analyzed func() []string) {
+func slowDiagnosticsServer(t testing.TB) (s *Server, out *lockedBuffer, release chan struct{}, analyzed func() []string) {
 	t.Helper()
 	out = &lockedBuffer{}
 	s = newServerWithWorkspace(t, out)
@@ -97,7 +97,7 @@ func TestDidChangeDoesNotWaitForDiagnostics(t *testing.T) {
 	s, out, release, analyzed := slowDiagnosticsServer(t)
 	defer close(release)
 	uri := "file:///a.php"
-	s.documents[uri] = "<?php\n"
+	s.openDocument(uri, 1, "<?php\n")
 
 	done := make(chan struct{})
 	go func() {
@@ -121,7 +121,7 @@ func TestDidChangeDoesNotWaitForDiagnostics(t *testing.T) {
 func TestDebouncedDiagnosticsPublishOnlyTheLatestVersion(t *testing.T) {
 	s, out, release, analyzed := slowDiagnosticsServer(t)
 	uri := "file:///a.php"
-	s.documents[uri] = "<?php\n"
+	s.openDocument(uri, 1, "<?php\n")
 	version := func(n int) string {
 		return "<?php\n$a = new Foo();\n$a->bar();\n" + strings.Repeat("// edit\n", n)
 	}
@@ -167,7 +167,7 @@ func TestDidCloseCancelsPendingDiagnostics(t *testing.T) {
 	defer close(release)
 	s.diagDebounce.delay = 50 * time.Millisecond
 	uri := "file:///a.php"
-	s.documents[uri] = "<?php\n"
+	s.openDocument(uri, 1, "<?php\n")
 	s.handleMessage(didChangeMessage(t, uri, 2, "<?php\n$a = new Foo();\n$a->bar();\n"))
 	params, _ := json.Marshal(map[string]any{"textDocument": map[string]any{"uri": uri}})
 	s.handleMessage(&jsonRPCMessage{JSONRPC: "2.0", Method: "textDocument/didClose", Params: params})
@@ -181,5 +181,79 @@ func TestDidCloseCancelsPendingDiagnostics(t *testing.T) {
 	s.diagDebounce.mu.Unlock()
 	if pending != 0 {
 		t.Fatalf("%d diagnostics timers left after didClose", pending)
+	}
+}
+
+func didOpenMessage(t testing.TB, uri string, version int, text string) *jsonRPCMessage {
+	t.Helper()
+	params, err := json.Marshal(map[string]any{
+		"textDocument": map[string]any{"uri": uri, "languageId": "php", "version": version, "text": text},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &jsonRPCMessage{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: params}
+}
+
+// handleWithoutWaiting handles msg and fails the test if that waits for the
+// blocked diagnostics pass, releasing it so the handler can finish.
+func handleWithoutWaiting(t *testing.T, s *Server, release chan struct{}, msg *jsonRPCMessage) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		s.handleMessage(msg)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		close(release)
+		<-done
+		t.Fatalf("%s waited for the diagnostics pass", msg.Method)
+	}
+}
+
+// A didOpen returns before its file is analyzed, so the requests queued
+// behind it are answered straight away, and the analysis is published once
+// it is done.
+func TestDidOpenDoesNotWaitForDiagnostics(t *testing.T) {
+	s, out, release, analyzed := slowDiagnosticsServer(t)
+	uri := "file:///a.php"
+	text := "<?php\n$a = new Foo();\n$a->bar();\n"
+
+	handleWithoutWaiting(t, s, release, didOpenMessage(t, uri, 1, text))
+	waitFor(t, "the diagnostics pass to start", func() bool { return len(analyzed()) == 1 })
+	if got := analyzed()[0]; got != text {
+		t.Fatalf("analyzed %q, want the opened text", got)
+	}
+	if strings.Contains(out.String(), "publishDiagnostics") {
+		close(release)
+		t.Fatal("published diagnostics before the pass finished")
+	}
+	close(release)
+	waitFor(t, "diagnostics to be published", func() bool { return strings.Contains(out.String(), "publishDiagnostics") })
+}
+
+// An edit that arrives while the opened file is still being analyzed makes
+// that analysis stale: only the edited version's diagnostics are published.
+func TestDidOpenDiagnosticsOvertakenByAnEditAreDropped(t *testing.T) {
+	s, out, release, analyzed := slowDiagnosticsServer(t)
+	uri := "file:///a.php"
+	opened := "<?php\n$a = new Foo();\n$a->bar();\n"
+	handleWithoutWaiting(t, s, release, didOpenMessage(t, uri, 1, opened))
+	waitFor(t, "the didOpen pass to start", func() bool { return len(analyzed()) == 1 })
+
+	edited := opened + "function broken($name {\n    return $name;\n}\n"
+	s.handleMessage(didChangeMessage(t, uri, 2, edited))
+	waitFor(t, "the didChange pass to start", func() bool { return len(analyzed()) == 2 })
+	close(release)
+
+	waitFor(t, "diagnostics to be published", func() bool { return strings.Contains(out.String(), "publishDiagnostics") })
+	time.Sleep(50 * time.Millisecond) // the stale pass, if it were published, lands by now
+	if n := strings.Count(out.String(), "publishDiagnostics"); n != 1 {
+		t.Fatalf("published %d times, want once for the edited version:\n%s", n, out.String())
+	}
+	if !strings.Contains(out.String(), "syntax-error") {
+		t.Fatalf("published diagnostics aren't the edited version's:\n%s", out.String())
 	}
 }

@@ -3,6 +3,8 @@ package lsp
 import (
 	"sync"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/document"
 )
 
 // defaultDiagnosticsDelay is how long diagnostics wait after the last edit
@@ -48,16 +50,18 @@ func (s *Server) scheduleDiagnostics(uri string) {
 		}
 		delete(d.timers, uri)
 		d.mu.Unlock()
-		s.goSafe("diagnostics:"+uri, func() {
-			s.docMu.RLock()
-			source, open := s.documents[uri]
-			s.docMu.RUnlock()
-			if open {
-				s.publishDiagnostics(uri, source)
-			}
-		})
+		if doc, open := s.docs.Get(uri); open {
+			s.publishDiagnosticsInBackground(doc)
+		}
 	})
 	d.timers[uri] = t
+}
+
+// publishDiagnosticsInBackground analyzes doc off the message loop, right
+// away. publishDiagnostics drops the result if the document changed or
+// closed meanwhile, so an edit that arrives first wins.
+func (s *Server) publishDiagnosticsInBackground(doc document.Snapshot) {
+	s.goSafe("diagnostics:"+doc.URI, func() { s.publishDiagnostics(doc) })
 }
 
 // cancelDiagnostics drops the pending diagnostics run of uri, if any.

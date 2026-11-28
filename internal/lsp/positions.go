@@ -29,10 +29,7 @@ func (s *Server) positionsOf(uri, source string) *positions {
 }
 
 func (s *Server) positionText(uri string) (string, bool) {
-	s.docMu.RLock()
-	source, open := s.documents[uri]
-	s.docMu.RUnlock()
-	if open {
+	if source, open := s.docs.Text(uri); open {
 		return source, true
 	}
 	if source := s.index.GetFileSource(uri); source != "" {
