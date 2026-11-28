@@ -52,9 +52,10 @@ type Provider struct {
 }
 
 type savedFindings struct {
-	source string
-	diags  []Diagnostic
-	gen    uint64
+	source   string
+	diags    []Diagnostic
+	gen      uint64
+	settings *settings
 }
 
 func NewProvider(index *symbols.Index, framework, rootPath string, logger *log.Logger, cfg *config.Config) *Provider {
@@ -76,10 +77,14 @@ type settings struct {
 	pint    *pintRunner
 }
 
+func (s *settings) sameTools(other *settings) bool {
+	return *s.phpstan == *other.phpstan && *s.pint == *other.pint
+}
+
 func (p *Provider) SetConfig(cfg *config.Config) {
 	next := &settings{cfg: cfg, phpstan: newPHPStanRunner(p.rootPath, cfg, p.logger), pint: newPintRunner(p.rootPath, cfg, p.logger)}
 	prev := p.settings.Swap(next)
-	if prev == nil || *prev.phpstan == *next.phpstan && *prev.pint == *next.pint {
+	if prev == nil || prev.sameTools(next) {
 		return
 	}
 	p.mu.Lock()
@@ -233,16 +238,27 @@ func toTemplate(doc *blade.Document, diags []Diagnostic) []Diagnostic {
 
 // AnalyzeOnSave runs heavier checks that need type resolution or model lookups.
 // Called on file save only. Results are cached and merged into Analyze() output.
+// Findings worked out under settings replaced meanwhile are worked out again.
 func (p *Provider) AnalyzeOnSave(uri, source string) {
-	diags := p.saveDiagnostics(p.settings.Load().cfg, uri, source)
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.storeSavedLocked(uri, source, diags)
+	for {
+		current := p.settings.Load()
+		diags := p.saveDiagnostics(current.cfg, uri, source)
+		p.mu.Lock()
+		stored := p.storeSavedLocked(uri, source, diags, current)
+		p.mu.Unlock()
+		if stored {
+			return
+		}
+	}
 }
 
-func (p *Provider) storeSavedLocked(uri, source string, diags []Diagnostic) {
+func (p *Provider) storeSavedLocked(uri, source string, diags []Diagnostic, under *settings) bool {
+	if p.settings.Load() != under {
+		return false
+	}
 	p.saveGen++
-	p.saveResults[uri] = savedFindings{source: source, diags: diags, gen: p.saveGen}
+	p.saveResults[uri] = savedFindings{source: source, diags: diags, gen: p.saveGen, settings: under}
+	return true
 }
 
 // saveDiagnostics runs the rules that wait for a save.
@@ -260,7 +276,8 @@ func (p *Provider) saveDiagnostics(cfg *config.Config, uri, source string) []Dia
 }
 
 // RunTools executes external analysis tools (PHPStan, Pint) on a file.
-// Results are cached and included in subsequent Analyze calls.
+// Results are cached and included in subsequent Analyze calls, unless the
+// tools' settings changed while they ran.
 func (p *Provider) RunTools(uri, filePath string) {
 	tools := p.settings.Load()
 	var toolDiags []Diagnostic
@@ -271,33 +288,45 @@ func (p *Provider) RunTools(uri, filePath string) {
 		toolDiags = append(toolDiags, tools.pint.analyze(filePath)...)
 	}
 	p.mu.Lock()
-	p.toolResults[uri] = toolDiags
-	p.mu.Unlock()
+	defer p.mu.Unlock()
+	if p.settings.Load().sameTools(tools) {
+		p.toolResults[uri] = toolDiags
+	}
 }
 
 // ReanalyzeSaved works out the on-save rules' findings again, with the
-// current settings, for every saved source it holds results for. A result
-// is replaced only if no newer save stored one meanwhile.
+// current settings, for every saved source whose findings were worked out
+// under other settings. A result is replaced only if no newer save stored
+// one meanwhile; one worked out under settings replaced meanwhile is worked
+// out again.
 func (p *Provider) ReanalyzeSaved() {
+	for p.reanalyzeStale() {
+	}
+}
+
+func (p *Provider) reanalyzeStale() bool {
 	type saved struct {
 		uri, source string
 		gen         uint64
 	}
+	current := p.settings.Load()
 	p.mu.RLock()
-	pending := make([]saved, 0, len(p.saveResults))
+	var stale []saved
 	for uri, found := range p.saveResults {
-		pending = append(pending, saved{uri: uri, source: found.source, gen: found.gen})
+		if found.settings != current {
+			stale = append(stale, saved{uri: uri, source: found.source, gen: found.gen})
+		}
 	}
 	p.mu.RUnlock()
-	cfg := p.settings.Load().cfg
-	for _, s := range pending {
-		diags := p.saveDiagnostics(cfg, s.uri, s.source)
+	for _, s := range stale {
+		diags := p.saveDiagnostics(current.cfg, s.uri, s.source)
 		p.mu.Lock()
-		if current, ok := p.saveResults[s.uri]; ok && current.gen == s.gen {
-			p.storeSavedLocked(s.uri, s.source, diags)
+		if found, ok := p.saveResults[s.uri]; ok && found.gen == s.gen {
+			p.storeSavedLocked(s.uri, s.source, diags, current)
 		}
 		p.mu.Unlock()
 	}
+	return len(stale) > 0
 }
 
 // ClearCache removes cached tool results for a URI.

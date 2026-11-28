@@ -232,6 +232,8 @@ func TestReanalyzeSavedKeepsASaveStoredMeanwhile(t *testing.T) {
 		}
 		return resolve(prefix, method, source, line, file)
 	}
+	cfg := *p.settings.Load().cfg
+	p.SetConfig(&cfg)
 	p.ReanalyzeSaved()
 	if !saved {
 		t.Fatal("the reanalysis resolves the builder's model")
