@@ -161,3 +161,42 @@ func TestDocTagOffsetsPointIntoTheComment(t *testing.T) {
 		}
 	}
 }
+
+func TestDocTagsStopWhenTheReaderDoes(t *testing.T) {
+	comment := "/**\n * @param Foo $a\n * @param Bar $b\n * @return Baz\n */"
+	var names []string
+	for tag := range DocTags(comment) {
+		names = append(names, tag.Value)
+		break
+	}
+	if len(names) != 1 || names[0] != "Foo $a" {
+		t.Errorf("a reader that stops after the first tag got %q", names)
+	}
+}
+
+func TestDocTagsReadAnAnnotationOpenedInItsName(t *testing.T) {
+	comment := "/**\n * @Route(\n *     \"/path\",\n * )\n */"
+	var tags []DocTag
+	for tag := range DocTags(comment) {
+		tags = append(tags, tag)
+	}
+	if len(tags) != 1 || tags[0].Name != "Route(" || tags[0].Value != "\"/path\")" {
+		t.Fatalf("tags = %+v, want @Route( with the lines up to its closer", tags)
+	}
+	for i := range len(tags[0].Value) {
+		if c := tags[0].Value[i]; comment[tags[0].Offset(i)] != c {
+			t.Errorf("Value[%d] = %q, comment at Offset = %q", i, c, comment[tags[0].Offset(i)])
+		}
+	}
+}
+
+func TestDocTagsReadLinesIndentedWithNonASCIISpace(t *testing.T) {
+	comment := "/**\n * @param Foo $a\n　*　@return Bar\n */"
+	var values []string
+	for tag := range DocTags(comment) {
+		values = append(values, tag.Name+" "+tag.Value)
+	}
+	if want := []string{"param Foo $a", "return Bar"}; !reflect.DeepEqual(values, want) {
+		t.Errorf("tags = %q, want %q", values, want)
+	}
+}
