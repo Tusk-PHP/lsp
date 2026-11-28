@@ -113,7 +113,7 @@ func (c *authNameCheck) literal(call ast.Expr, lit *ast.Literal) {
 			return
 		}
 		ability, at, model, isCan := frameworklaravel.CanMiddleware(text)
-		if isCan && auth.UnknownAbility(ability, c.modelParam(model)) {
+		if isCan && auth.UnknownAbility(ability, modelParam(model)) {
 			c.report(rule.UnknownAbility, start+uint32(at), len(ability), "Gate ability `"+ability+"` is not defined")
 		}
 		return
@@ -130,14 +130,8 @@ func (c *authNameCheck) modelArg(e ast.Expr) frameworklaravel.ModelArg {
 	return frameworklaravel.ModelArg{Given: true, Class: c.knownClass(c.rule.Names.ModelClass(c.file, e))}
 }
 
-func (c *authNameCheck) modelParam(param string) frameworklaravel.ModelArg {
-	if param == "" {
-		return frameworklaravel.ModelArg{}
-	}
-	if !strings.Contains(param, `\`) {
-		return frameworklaravel.ModelArg{Given: true}
-	}
-	return frameworklaravel.ModelArg{Given: true, Class: c.knownClass(param)}
+func modelParam(param string) frameworklaravel.ModelArg {
+	return frameworklaravel.ModelArg{Given: param != ""}
 }
 
 func (c *authNameCheck) knownClass(class string) string {
