@@ -155,3 +155,22 @@ class UsageMaintenance {
 		}
 	}
 }
+
+func TestForeachKeysTakeTheKeyType(t *testing.T) {
+	src := `<?php
+namespace App;
+class User {}
+class Holder {
+    /** @param array<string, User> $byName */
+    public function run(array $byName): void {
+        foreach ($byName as $name => $user) {
+            echo $name; // key
+        }
+    }
+}
+`
+	typed, _ := assignedTypes(t, src)
+	if got := typed("$name", "key"); got != "string" {
+		t.Errorf("$name = %q, want string", got)
+	}
+}
