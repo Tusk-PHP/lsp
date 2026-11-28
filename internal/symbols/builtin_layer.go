@@ -19,12 +19,9 @@ func (p BuiltinProfile) Equal(other BuiltinProfile) bool {
 	return a.PHPVersion == b.PHPVersion && slices.Equal(a.Extensions, b.Extensions)
 }
 
-func (idx *Index) ReplaceBuiltins(profile BuiltinProfile) error {
+func (idx *Index) ReplaceBuiltins(profile BuiltinProfile) {
 	profile = normalizeBuiltinProfile(profile)
-	entries, err := stubs.BuiltinPHPForProfile(stubs.Profile{PHPVersion: profile.PHPVersion, Extensions: profile.Extensions})
-	if err != nil {
-		return err
-	}
+	entries := stubs.BuiltinPHPForProfile(stubs.Profile{PHPVersion: profile.PHPVersion, Extensions: profile.Extensions})
 	files := make([]*parser.FileNode, len(entries))
 	for i, entry := range entries {
 		files[i] = parser.ParseFile(entry.Content)
@@ -45,7 +42,6 @@ func (idx *Index) ReplaceBuiltins(profile BuiltinProfile) error {
 		idx.fileSource[uri] = indexedText{text: entry.Content, from: SourceBuiltin}
 		idx.indexParsedLocked(uri, files[i], SourceBuiltin)
 	}
-	return nil
 }
 
 func (idx *Index) declaredOverBuiltinLocked(sym *Symbol) bool {

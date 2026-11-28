@@ -129,9 +129,7 @@ func TestRefreshRespectsMaxIndexFiles(t *testing.T) {
 
 func TestRefreshResolvesTheProfileAgain(t *testing.T) {
 	ws, root := newRefreshWorkspace(t, nil, map[string]string{"composer.json": `{"require": {"php": "^8.1", "ext-redis": "*"}}`})
-	if _, err := ws.SetProfile(symbols.BuiltinProfile{PHPVersion: "8.1", Extensions: []string{"redis"}}); err != nil {
-		t.Fatal(err)
-	}
+	ws.SetProfile(symbols.BuiltinProfile{PHPVersion: "8.1", Extensions: []string{"redis"}})
 	if out := refreshPaths(t, ws, root, "composer.json"); out.ProfileChanged || !out.Composer {
 		t.Errorf("an unchanged platform leaves the builtins alone: %+v", out)
 	}

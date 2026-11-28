@@ -32,9 +32,7 @@ func TestReplaceBuiltinsMatchesAFreshIndexOfTheNewProfile(t *testing.T) {
 	if idx.Lookup("str_contains") == nil || idx.Lookup("Redis") == nil {
 		t.Fatal("the 8.3 profile with redis has str_contains and Redis")
 	}
-	if err := idx.ReplaceBuiltins(to); err != nil {
-		t.Fatal(err)
-	}
+	idx.ReplaceBuiltins(to)
 	got, want := builtinShape(idx), builtinShape(fresh)
 	if !slices.Equal(got, want) {
 		t.Fatalf("after the swap the index holds %d builtins, a fresh 7.4 index %d", len(got), len(want))
@@ -43,9 +41,7 @@ func TestReplaceBuiltinsMatchesAFreshIndexOfTheNewProfile(t *testing.T) {
 		t.Error("PHP 8.0 functions and dropped extensions leave, an added extension comes in")
 	}
 
-	if err := idx.ReplaceBuiltins(from); err != nil {
-		t.Fatal(err)
-	}
+	idx.ReplaceBuiltins(from)
 	back := NewIndex()
 	back.RegisterBuiltinsForProfile(from)
 	if !slices.Equal(builtinShape(idx), builtinShape(back)) {
@@ -62,9 +58,7 @@ func TestReplaceBuiltinsKeepsDeclarationsThatHideABuiltin(t *testing.T) {
 	idx.IndexFile(app, "<?php\nclass ArrayObject { public function mine(): void {} }\n")
 
 	for _, profile := range []BuiltinProfile{{PHPVersion: "7.4"}, {PHPVersion: "8.2"}} {
-		if err := idx.ReplaceBuiltins(profile); err != nil {
-			t.Fatal(err)
-		}
+		idx.ReplaceBuiltins(profile)
 		if sym := idx.Lookup("str_contains"); sym == nil || sym.URI != polyfill {
 			t.Errorf("PHP %s: the polyfill still declares str_contains: %+v", profile.PHPVersion, sym)
 		}
@@ -127,9 +121,7 @@ func BenchmarkReplaceBuiltins(b *testing.B) {
 	b.ReportAllocs()
 	i := 0
 	for b.Loop() {
-		if err := idx.ReplaceBuiltins(profiles[i%2]); err != nil {
-			b.Fatal(err)
-		}
+		idx.ReplaceBuiltins(profiles[i%2])
 		i++
 	}
 }

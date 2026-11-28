@@ -2,6 +2,7 @@ package stubs
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
 	"path"
 	"sort"
@@ -11,6 +12,8 @@ import (
 
 //go:embed php
 var phpFS embed.FS
+
+var stubPaths = embeddedStubPaths(phpFS)
 
 // Entry is an embedded builtin stub file ready for indexing by the parent.
 type Entry struct {
@@ -25,7 +28,7 @@ type Profile struct {
 }
 
 // BuiltinPHP returns embedded PHP builtin stubs in deterministic path order.
-func BuiltinPHP() ([]Entry, error) {
+func BuiltinPHP() []Entry {
 	return BuiltinPHPForProfile(DefaultProfile())
 }
 
@@ -43,41 +46,41 @@ func DefaultProfile() Profile {
 // BuiltinPHPForProfile returns embedded PHP builtin stubs in deterministic path
 // order for the selected PHP version and extension set. PHP 7.4 files are the
 // baseline; later files are deltas and are included only when <= PHPVersion.
-func BuiltinPHPForProfile(profile Profile) ([]Entry, error) {
-	var matches []string
-	if err := fs.WalkDir(phpFS, "php", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".php") {
-			return nil
-		}
-		matches = append(matches, path)
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
+func BuiltinPHPForProfile(profile Profile) []Entry {
 	profile = normalizeProfile(profile)
-	sort.Strings(matches)
-
-	entries := make([]Entry, 0, len(matches))
-	for _, path := range matches {
+	entries := make([]Entry, 0, len(stubPaths))
+	for _, path := range stubPaths {
 		if !includeStubPath(path, profile) {
 			continue
 		}
-		content, err := fs.ReadFile(phpFS, path)
-		if err != nil {
-			return nil, err
-		}
-
 		entries = append(entries, Entry{
 			Path:    path,
-			Content: string(content),
+			Content: string(mustEmbedded(fs.ReadFile(phpFS, path))),
 		})
 	}
+	return entries
+}
 
-	return entries, nil
+func embeddedStubPaths(fsys fs.FS) []string {
+	var paths []string
+	err := fs.WalkDir(fsys, "php", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(path, ".php") {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	sort.Strings(paths)
+	return mustEmbedded(paths, err)
+}
+
+func mustEmbedded[T any](v T, err error) T {
+	if err != nil {
+		panic(fmt.Sprintf("the embedded builtin stubs are unreadable, a build defect: %v", err))
+	}
+	return v
 }
 
 func normalizeProfile(profile Profile) Profile {
