@@ -29,6 +29,16 @@ type variableScope struct {
 	// the right-hand side of an assignment to it, before it takes effect.
 	readPos textpos.Position
 	inRHS   bool
+	doc     *scope.Document
+	own     *scope.Scope
+}
+
+func (vs variableScope) inOwnScope(pos textpos.Position) bool {
+	return vs.own == nil || vs.doc.ScopeAt(pos) == vs.own
+}
+
+func indentWidth(line string) int {
+	return len(line) - len(strings.TrimLeft(line, " \t"))
 }
 
 // readPosition returns where a read at pos reads the binding. A position in
@@ -43,7 +53,7 @@ func readPosition(b *scope.Binding, lines []string, pos textpos.Position) (textp
 	}
 	if pos.Line > site.At.Line && pos.Line < len(lines) {
 		line := lines[pos.Line]
-		if indent := len(line) - len(strings.TrimLeft(line, " \t")); pos.Character <= indent {
+		if pos.Character <= indentWidth(line) {
 			return site.End, false
 		}
 	}
@@ -82,7 +92,7 @@ func (r *Resolver) variableScopeAt(varName string, lines []string, pos textpos.P
 		return variableScope{}
 	}
 
-	vs := variableScope{firstLine: s.Range.Start.Line, inClosure: s.Kind == scope.ScopeClosure}
+	vs := variableScope{firstLine: s.Range.Start.Line, inClosure: s.Kind == scope.ScopeClosure, doc: doc, own: s}
 	var binding *scope.Binding
 	for _, b := range s.Bindings {
 		if b.Name == varName {
@@ -136,6 +146,9 @@ func writeScope(b *scope.Binding, write int, site *scope.WriteSite) variableScop
 func (vs variableScope) assignmentValue(lines []string, i int, varPrefix string) (full, firstLine string, ok bool) {
 	w := vs.write
 	if w == nil || i != w.At.Line || i >= len(lines) {
+		if !vs.inOwnScope(textpos.Position{Line: i, Character: indentWidth(lines[i])}) {
+			return "", "", false
+		}
 		return assignmentValue(lines, i, varPrefix)
 	}
 	line := lines[i]

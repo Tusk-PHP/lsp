@@ -40,9 +40,9 @@ func (r *Resolver) enclosingReturnType(lines []string, pos textpos.Position, fil
 // resolveForeachValueType looks backward for a foreach loop that binds varPrefix
 // as its value or key variable and returns the value or key type of what it
 // iterates. Handles both "foreach ($x as $v)" and "foreach ($x as $k => $v)".
-func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos textpos.Position, file *parser.FileNode, firstLine int) ResolvedType {
+func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos textpos.Position, file *parser.FileNode, vs variableScope) ResolvedType {
 	var source string
-	for i := pos.Line; i >= firstLine && i >= pos.Line-200; i-- {
+	for i := pos.Line; i >= vs.firstLine && i >= pos.Line-200; i-- {
 		if i >= len(lines) {
 			continue
 		}
@@ -51,6 +51,9 @@ func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos
 			continue
 		}
 		foreachIdx := strings.Index(line, "foreach")
+		if !vs.inOwnScope(textpos.Position{Line: i, Character: strings.Index(lines[i], "foreach")}) {
+			continue
+		}
 		openParen := strings.IndexByte(line[foreachIdx:], '(')
 		if openParen < 0 {
 			continue
