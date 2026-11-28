@@ -658,7 +658,7 @@ func tokenize(source string) ([]Token, []ParseError) {
 		case '\\':
 			kind = TokenBackslash
 		}
-		tokens = append(tokens, Token{kind, string(ch), line, col, offset})
+		tokens = append(tokens, Token{kind, source[offset : offset+1], line, col, offset})
 		offset++
 		col++
 	}
@@ -729,6 +729,11 @@ func heredocEnd(source string, start int) (int, bool) {
 }
 
 func comparisonOperatorAt(source string, offset int) string {
+	switch source[offset] {
+	case '=', '!', '<', '>':
+	default:
+		return ""
+	}
 	for _, op := range []string{"===", "!==", "<=>", "==", "!=", "<=", ">="} {
 		if strings.HasPrefix(source[offset:], op) {
 			return op
