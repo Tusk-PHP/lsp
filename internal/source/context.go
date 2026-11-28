@@ -58,6 +58,7 @@ type NameContext struct {
 	File            *parser.FileNode
 	Called          bool
 	FunctionCall    bool
+	Declared        bool
 }
 
 type CursorContext struct {
@@ -149,6 +150,7 @@ func (d *Document) NameAt(pos protocol.Position) *NameContext {
 		File:            d.file,
 		Called:          called,
 		FunctionCall:    called && accessKind == AccessNone,
+		Declared:        isDeclared(d.result.Tokens, wordRange),
 	}
 }
 

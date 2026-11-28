@@ -182,6 +182,14 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: p.formatHover(fn)}}
 	}
 
+	if ctx.Declared {
+		declared := p.index.Lookup(declaredFQN(ctx))
+		if declared == nil {
+			return nil
+		}
+		return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: p.formatHover(declared)}}
+	}
+
 	// Resolve the word via use statements
 	if file != nil {
 		for _, u := range ctx.Uses {
@@ -225,6 +233,16 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 		return nil
 	}
 	return &protocol.Hover{Contents: protocol.MarkupContent{Kind: "markdown", Value: content}}
+}
+
+func declaredFQN(ctx *sourcectx.CursorContext) string {
+	switch {
+	case ctx.EnclosingFQN != "":
+		return ctx.EnclosingFQN + "::" + ctx.SymbolText
+	case ctx.Namespace != "":
+		return ctx.Namespace + "\\" + ctx.SymbolText
+	}
+	return ctx.SymbolText
 }
 
 func isInStringLiteral(line string, character int) bool {

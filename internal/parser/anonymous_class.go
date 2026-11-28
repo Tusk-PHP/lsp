@@ -108,10 +108,7 @@ func (p *structParser) parseAnonymousClasses() {
 				cls.Properties[k].IsReadonly = true
 			}
 		}
-		// The closing brace's line: what follows may be far below.
-		if p.pos > 0 {
-			cls.EndLine = p.tokens[p.pos-1].Line
-		}
+		cls.EndLine = p.lastLine()
 		p.result.AnonymousClasses = append(p.result.AnonymousClasses, cls)
 	}
 }

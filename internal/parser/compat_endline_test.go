@@ -164,3 +164,33 @@ function helper(): void
 		}
 	}
 }
+
+func TestEndLineIsTheLineOfTheClosingBrace(t *testing.T) {
+	src := "<?php\nclass A {\n    public function f() {\n    }\n    abstract function g();\n}\n\ninterface I {}\ntrait T {\n}\nenum E {\n}\nfunction h() {\n}\n"
+	r := New().Parse(src)
+	got := map[string]int{}
+	for _, c := range r.Classes {
+		got[c.Name] = c.EndLine
+		for _, m := range c.Methods {
+			got[m.Name] = m.EndLine
+		}
+	}
+	for _, c := range r.Interfaces {
+		got[c.Name] = c.EndLine
+	}
+	for _, c := range r.Traits {
+		got[c.Name] = c.EndLine
+	}
+	for _, c := range r.Enums {
+		got[c.Name] = c.EndLine
+	}
+	for _, f := range r.Functions {
+		got[f.Name] = f.EndLine
+	}
+	want := map[string]int{"A": 5, "f": 3, "g": 4, "I": 7, "T": 9, "E": 11, "h": 13}
+	for name, line := range want {
+		if got[name] != line {
+			t.Errorf("%s ends on line %d, want %d", name, got[name], line)
+		}
+	}
+}
