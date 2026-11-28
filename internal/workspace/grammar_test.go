@@ -234,3 +234,23 @@ func TestAVersionThePHPOnPathReportsButNoGrammarReadsIsIgnored(t *testing.T) {
 		t.Errorf("the ignored version is logged: %q", logs)
 	}
 }
+
+func TestSymfonyCommandsAreReadWithTheProjectsPHPVersion(t *testing.T) {
+	for _, tc := range []struct {
+		php  string
+		want string
+	}{
+		{"^7.4", "app:legacy"},
+		{"^8.0", "app:attribute app:legacy"},
+	} {
+		dir := t.TempDir()
+		writeTestFile(t, filepath.Join(dir, "composer.json"), `{"require":{"php":"`+tc.php+`"}}`)
+		profile, _ := ResolveBuiltinProfileWithConfig(dir, filepath.Join(dir, "missing-php"), time.Second, nil, nil)
+		ws := New(Options{RootPath: dir, Framework: "symfony", BuiltinProfile: profile})
+		ws.UpdateFile("file://"+filepath.Join(dir, "src", "AttributeCommand.php"), "<?php\nuse Symfony\\Component\\Console\\Attribute\\AsCommand;\n#[AsCommand('app:attribute')]\nclass AttributeCommand {}\n")
+		ws.UpdateFile("file://"+filepath.Join(dir, "src", "LegacyCommand.php"), "<?php\nclass LegacyCommand { protected static $defaultName = 'app:legacy'; }\n")
+		if got := strings.Join(ws.SymfonyCommands.Names(), " "); got != tc.want {
+			t.Errorf("PHP %s: commands %q, want %q", tc.php, got, tc.want)
+		}
+	}
+}
