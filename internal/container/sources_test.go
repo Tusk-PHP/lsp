@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -195,7 +196,7 @@ func TestSymfonyDefinitionsComeBeforeClassesInSrc(t *testing.T) {
 
 func TestCompareWalkOrderMatchesTheDirectoryWalk(t *testing.T) {
 	root := t.TempDir()
-	for _, rel := range []string{"a.php", "a/b.php", "ab/c.php", "a-b.php", "a/b/c.php", "b.php"} {
+	for _, rel := range []string{"a.php", "a/b.php", "ab/c.php", "a-b.php", "a/b/c.php", "b.php", "b.php.php"} {
 		writeProjectFile(t, root, rel, "<?php\n")
 	}
 	var walked []string
@@ -238,5 +239,126 @@ func TestYAMLAndPHPConfigAliasesResolveAlike(t *testing.T) {
 	}
 	if yaml.Concrete != `App\Smtp` || yaml.Concrete != php.Concrete || yaml.Singleton != php.Singleton || yaml.Alias != php.Alias {
 		t.Errorf("yaml alias %+v, php alias %+v", yaml, php)
+	}
+}
+
+func TestSymfonyServicesYAMLReadsOnlyServiceDefinitions(t *testing.T) {
+	set := applied(parseSymfonyServicesYAML("/app/config/services.yaml", `parameters:
+    locale: en
+services:
+    _defaults:
+        autowire: true
+    app.mailer:
+        class: App\Mailer
+        arguments:
+            - '@logger'
+        tags:
+            - mail
+            - 'kernel.reset'
+        public: true
+when@dev:
+    parameters:
+        debug: true
+`))
+	if len(set.bindings) != 1 {
+		t.Fatalf("bindings %v, want app.mailer alone", slices.Sorted(maps.Keys(set.bindings)))
+	}
+	b := set.bindings["app.mailer"]
+	if b == nil || b.Concrete != `App\Mailer` || !slices.Equal(b.Tags, []string{"mail", "kernel.reset"}) {
+		t.Errorf("app.mailer = %+v", b)
+	}
+}
+
+func TestSymfonyServicesConfigRedefinesKnownServices(t *testing.T) {
+	root := t.TempDir()
+	yaml := writeProjectFile(t, root, "config/services.yaml", "services:\n    app.smtp:\n        class: App\\Smtp\n        shared: false\n    Symfony\\Component\\HttpFoundation\\RequestStack:\n        tags: [kernel.reset]\n")
+	writeProjectFile(t, root, "config/services.yml", "services:\n    app.smtp:\n        shared: true\n")
+	ca := NewContainerAnalyzer(symbols.NewIndex(), root, "symfony")
+	ca.Analyze()
+
+	if b := ca.LookupBinding("app.smtp"); b == nil || !b.Singleton || b.Source != yaml {
+		t.Errorf("app.smtp = %+v, want shared again by services.yml and defined in services.yaml", b)
+	}
+	stack := ca.LookupBinding(`Symfony\Component\HttpFoundation\RequestStack`)
+	if stack == nil || stack.Concrete != `Symfony\Component\HttpFoundation\RequestStack` || stack.Source != yaml || stack.DefinitionURI != pathToFileURI(yaml) || stack.Definition.Start.Line != 4 || !slices.Equal(stack.Tags, []string{"kernel.reset"}) {
+		t.Errorf("RequestStack = %+v, want the default service defined and tagged in services.yaml", stack)
+	}
+}
+
+func TestAnalyzeReadsOnlyTheServicesConfigAndSkipsBrokenLinks(t *testing.T) {
+	root := t.TempDir()
+	writeProjectFile(t, root, "config/services.yaml", "services:\n    app.mailer:\n        class: App\\Mailer\n")
+	writeProjectFile(t, root, "config/packages/messenger.yaml", "services:\n    app.ghost:\n        class: App\\Ghost\n")
+	if err := os.MkdirAll(filepath.Join(root, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "missing.php"), filepath.Join(root, "src", "Gone.php")); err != nil {
+		t.Fatal(err)
+	}
+	ca := NewContainerAnalyzer(symbols.NewIndex(), root, "symfony")
+	ca.Analyze()
+	if ca.LookupBinding("app.mailer") == nil || ca.LookupBinding("app.ghost") != nil {
+		t.Errorf("bindings %v, want app.mailer from services.yaml and nothing from config/packages", ca.GetBindings())
+	}
+}
+
+func TestUpdateReportsAServicesConfigItCannotRead(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "config", "services.yaml")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ca := NewContainerAnalyzer(symbols.NewIndex(), root, "symfony")
+	ca.Analyze()
+	before := ca.view.Load()
+	err := ca.Update(path)
+	if err == nil || !strings.Contains(err.Error(), "re-read container bindings from "+path) {
+		t.Fatalf("Update(%s) = %v, want a read error naming it", path, err)
+	}
+	if ca.view.Load() != before {
+		t.Error("a failed read rebuilt the container bindings")
+	}
+}
+
+func TestOnlySymfonyWatchesItsServicesConfig(t *testing.T) {
+	if got := NewContainerAnalyzer(symbols.NewIndex(), "/app", "symfony").WatchGlobs(); !slices.Equal(got, []string{"**/config/services.yaml", "**/config/services.yml"}) {
+		t.Errorf("symfony watches %v", got)
+	}
+	if got := NewContainerAnalyzer(symbols.NewIndex(), "/app", "laravel").WatchGlobs(); got != nil {
+		t.Errorf("laravel watches %v", got)
+	}
+}
+
+func TestAStaleReadDoesNotReplaceANewerUpdate(t *testing.T) {
+	root := t.TempDir()
+	path := writeProjectFile(t, root, "app/Providers/AppServiceProvider.php", laravelProvider("AppServiceProvider", "payments", `App\Stripe`))
+	ca := NewContainerAnalyzer(symbols.NewIndex(), root, "laravel")
+	stale, err := ca.read(path, phaseLaravelProvider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeProjectFile(t, root, "app/Providers/AppServiceProvider.php", laravelProvider("AppServiceProvider", "reports", `App\Reports`))
+	if err := ca.Update(path); err != nil {
+		t.Fatal(err)
+	}
+	ca.store(path, stale)
+	if ca.LookupBinding("reports") == nil || ca.LookupBinding("payments") != nil {
+		t.Errorf("bindings %v, want the newer update's", ca.GetBindings())
+	}
+}
+
+func TestAnalyzeKeepsAnUpdateThatFinishedWhileItRead(t *testing.T) {
+	root := t.TempDir()
+	path := writeProjectFile(t, root, "app/Providers/AppServiceProvider.php", laravelProvider("AppServiceProvider", "payments", `App\Stripe`))
+	ca := NewContainerAnalyzer(symbols.NewIndex(), root, "laravel")
+	seq := ca.seq.Add(1)
+	found := ca.readAll(seq)
+	writeProjectFile(t, root, "app/Providers/AppServiceProvider.php", laravelProvider("AppServiceProvider", "reports", `App\Reports`))
+	if err := ca.Update(path); err != nil {
+		t.Fatal(err)
+	}
+	ca.storeAll(seq, found)
+	if ca.LookupBinding("reports") == nil || ca.LookupBinding("payments") != nil {
+		t.Errorf("bindings %v, want the update's", ca.GetBindings())
 	}
 }

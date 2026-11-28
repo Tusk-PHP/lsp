@@ -418,3 +418,20 @@ func TestOnlySymfonyProjectsWatchServicesConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestRefreshReportsAServicesConfigTheContainerCannotRead(t *testing.T) {
+	root := t.TempDir()
+	ws := New(Options{RootPath: root, Framework: "symfony", Config: config.DefaultConfig(), Logger: log.New(io.Discard, "", 0), BuiltinProfile: symbols.BuiltinProfile{PHPVersion: "8.3"}})
+	ws.IndexWorkspace()
+	ws.Container.Analyze()
+	path := filepath.Join(root, "config", "services.yaml")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ws.Refresh(Refresh{Paths: []string{path}, Config: func() (*config.Config, error) {
+		return config.LoadFromFile(ws.ConfigPath())
+	}})
+	if err == nil || !strings.Contains(err.Error(), "re-read container bindings from "+path) {
+		t.Errorf("Refresh = %v, want the container's read error", err)
+	}
+}

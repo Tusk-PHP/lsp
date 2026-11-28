@@ -1,7 +1,9 @@
 package lsp
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,4 +50,27 @@ func TestSymfonyServicesYAMLChangedOutsideTheEditorUpdatesTheContainer(t *testin
 
 	waitForBinding(t, h, "app.notifier", true)
 	waitForBinding(t, h, "app.mailer", false)
+}
+
+func TestSavingAServicesConfigTheContainerCannotReadIsLogged(t *testing.T) {
+	h, root := startWatchedProject(t, map[string]string{
+		"composer.json": `{"require": {"symfony/framework-bundle": "^7.0"}}`,
+	}, map[string]interface{}{}, nil)
+	<-h.server.indexed
+	logs := &lockedBuffer{}
+	h.server.logger.SetOutput(logs)
+	path := filepath.Join(root, "config", "services.yaml")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h.notify("textDocument/didSave", map[string]interface{}{"textDocument": map[string]interface{}{"uri": symbols.PathToURI(path)}})
+
+	want := "container: re-read container bindings from " + path
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(logs.String(), want) {
+		if time.Now().After(deadline) {
+			t.Fatalf("logs %q, want %q", logs.String(), want)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
