@@ -3,20 +3,16 @@ package checks
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
-
-// builtinConstantRe matches sequences of uppercase letters, digits, and
-// underscores that start with an uppercase letter and are at least two
-// characters long (to avoid false positives on single-letter type keywords).
-// The surrounding context is checked in the calling loop to filter out class
-// constant accesses (:: prefix) and function calls (trailing '(').
-var builtinConstantRe = regexp.MustCompile(`\b([A-Z][A-Z0-9_]+)\b`)
 
 // BuiltinUnavailableRule reports usages of PHP builtins that are not
 // available in the project's resolved PHP version / extension profile.
@@ -63,8 +59,8 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 		findings = append(findings, r.checkClassLikesCatch(line, lineNum, file, index)...)
 		findings = append(findings, r.checkClassLikesImplements(line, lineNum, file, index)...)
 		findings = append(findings, r.checkClassLikesAttribute(line, lineNum, file, index)...)
-		findings = append(findings, r.checkConstants(line, lineNum)...)
 	}
+	findings = append(findings, r.checkConstants(source)...)
 	// Code that checks for an extension or symbol first runs only where it
 	// exists, so it is fine on a profile without it.
 	return dropGuarded(findings, lines, findExtensionGuards(source))
@@ -229,68 +225,164 @@ func (r *BuiltinUnavailableRule) classLikeFinding(name string, lineNum, start, e
 	}}
 }
 
-// checkConstants scans a masked line for global built-in constant references
-// and emits findings for any that require a newer PHP version than the profile.
-// It uses builtinConstantRe to find candidate all-uppercase identifiers and
-// then applies context checks to exclude:
-//   - class constant accesses: Foo::BAR  (preceded by '::')
-//   - function calls: NAME(  (followed by '(')
-//   - const declarations: `const NAME` or `define(` contexts are already masked
-//     by the string/comment masking layer, but leading `const ` is checked too.
-func (r *BuiltinUnavailableRule) checkConstants(line string, lineNum int) []Finding {
+// checkConstants reports the global builtin constants the file uses that
+// the project's profile lacks, read from PHP's own tokens. The newest grammar
+// reads the constants in any older PHP's code the same way, with each name
+// one token.
+func (r *BuiltinUnavailableRule) checkConstants(source string) []Finding {
+	tokens := withoutTrivia(lexer.Lex(source, token.Latest))
+	lineStarts := lineStartOffsets(source)
 	var findings []Finding
-	for _, match := range builtinConstantRe.FindAllStringSubmatchIndex(line, -1) {
-		start, end := match[2], match[3]
-		name := line[start:end]
-
-		// Skip if preceded by '::' — this is a class constant (Foo::CONST).
-		if start >= 2 && line[start-2:start] == "::" {
-			continue
-		}
-		// A single ':' before means it's part of a ternary or label, not '::'.
-		// Skip '->CONST' — a property or method named with all-caps (unusual but valid).
-		if start >= 2 && line[start-2:start] == "->" {
-			continue
-		}
-
-		// Skip if followed by '(' — this is a function call, not a constant.
-		after := end
-		for after < len(line) && line[after] == ' ' {
-			after++
-		}
-		if after < len(line) && line[after] == '(' {
-			continue
-		}
-
-		// Skip leading `const NAME` declarations (class/namespace constants).
-		prefix := strings.TrimSpace(line[:start])
-		if strings.HasSuffix(prefix, "const") {
-			continue
-		}
-
-		// Strip a fully-qualified leading backslash (\JSON_THROW_ON_ERROR).
-		// builtinConstantRe won't include the backslash; the backslash sits one
-		// character before start. We look it up bare regardless.
+	for _, at := range globalConstantUses(source, tokens) {
+		tok := tokens[at]
+		name := strings.TrimPrefix(tok.Text(source), "\\")
 		avail, ok := symbols.LookupAvailability(name)
-		if !ok {
+		if !ok || r.satisfies(avail) {
 			continue
 		}
-
-		if r.satisfies(avail) {
-			continue
-		}
-
+		line, col := offsetPosition(lineStarts, int(tok.Start))
 		findings = append(findings, Finding{
-			StartLine: lineNum,
-			StartCol:  start,
-			EndLine:   lineNum,
-			EndCol:    end,
+			StartLine: line,
+			StartCol:  col,
+			EndLine:   line,
+			EndCol:    col + int(tok.End-tok.Start),
 			Severity:  rule.SeverityWarning,
 			Code:      rule.BuiltinUnavailable,
 			Message:   r.constantMessage(name, avail),
 		})
 	}
 	return findings
+}
+
+func withoutTrivia(tokens []lexer.Token) []lexer.Token {
+	out := make([]lexer.Token, 0, len(tokens))
+	for _, t := range tokens {
+		if !t.Kind.IsTrivia() {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func lineStartOffsets(source string) []int {
+	starts := []int{0}
+	for i := 0; i < len(source); i++ {
+		if source[i] == '\n' {
+			starts = append(starts, i+1)
+		}
+	}
+	return starts
+}
+
+func offsetPosition(lineStarts []int, offset int) (int, int) {
+	line := sort.Search(len(lineStarts), func(i int) bool { return lineStarts[i] > offset }) - 1
+	return line, offset - lineStarts[line]
+}
+
+// globalConstantUses lists the tokens that read a global constant by name,
+// skipping the text of strings but not the expressions interpolated with
+// {$...} or ${...}.
+func globalConstantUses(source string, tokens []lexer.Token) []int {
+	var uses []int
+	var braces []int
+	inString := false
+	for i, tok := range tokens {
+		switch tok.Kind {
+		case token.DoubleQuote, token.Backtick:
+			if len(braces) == 0 {
+				inString = !inString
+			}
+			continue
+		case token.StartHeredoc:
+			inString = true
+			continue
+		case token.EndHeredoc:
+			inString = false
+			continue
+		case token.CurlyOpen, token.DollarOpenCurlyBraces:
+			braces = append(braces, 0)
+			continue
+		case token.LeftBrace:
+			if n := len(braces); n > 0 {
+				braces[n-1]++
+			}
+			continue
+		case token.RightBrace:
+			if n := len(braces); n > 0 {
+				if braces[n-1] == 0 {
+					braces = braces[:n-1]
+				} else {
+					braces[n-1]--
+				}
+			}
+			continue
+		}
+		if inString && len(braces) == 0 {
+			continue
+		}
+		if isGlobalConstantUse(source, tokens, i) {
+			uses = append(uses, i)
+		}
+	}
+	return uses
+}
+
+// isGlobalConstantUse reports whether tokens[i] reads a global constant, such
+// as `E_ALL` or `\PHP_EOL`: an upper-case name that isn't called, declared,
+// reached through a class or an object, namespaced, a type, a label or a
+// named argument.
+func isGlobalConstantUse(source string, tokens []lexer.Token, i int) bool {
+	name := tokens[i].Text(source)
+	switch tokens[i].Kind {
+	case token.Identifier:
+	case token.NameFullyQualified:
+		name = name[1:]
+	default:
+		return false
+	}
+	if !isConstantName(name) {
+		return false
+	}
+	prev, next := token.Invalid, token.Invalid
+	if i > 0 {
+		prev = tokens[i-1].Kind
+	}
+	if i+1 < len(tokens) {
+		next = tokens[i+1].Kind
+	}
+	switch next {
+	case token.DoubleColon, token.LeftParen, token.Variable, token.Ellipsis, token.AmpersandFollowedByVarOrVararg:
+		return false
+	case token.Colon:
+		switch prev {
+		case token.LeftParen, token.Comma, token.Semicolon, token.LeftBrace, token.RightBrace, token.Invalid, token.OpenTag:
+			return false
+		}
+	}
+	switch prev {
+	case token.ObjectOperator, token.NullsafeObjectOperator, token.DoubleColon, token.New, token.Class, token.Interface,
+		token.Trait, token.Enum, token.Function, token.Const, token.Use, token.Namespace, token.Extends, token.Implements,
+		token.InstanceOf, token.InsteadOf, token.As, token.Goto, token.Attribute:
+		return false
+	case token.Case:
+		return next != token.Equals && next != token.Semicolon
+	case token.Colon:
+		return !(i >= 2 && tokens[i-2].Kind == token.RightParen && (next == token.LeftBrace || next == token.DoubleArrow))
+	}
+	return true
+}
+
+func isConstantName(name string) bool {
+	if len(name) < 2 || name[0] < 'A' || name[0] > 'Z' {
+		return false
+	}
+	for i := 1; i < len(name); i++ {
+		c := name[i]
+		if (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *BuiltinUnavailableRule) constantMessage(name string, avail symbols.BuiltinAvailability) string {
