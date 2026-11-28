@@ -1,6 +1,9 @@
 package models
 
 import (
+	"os"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -393,5 +396,44 @@ func TestEloquentNullableColumnsMakeTheirCastsNullable(t *testing.T) {
 		if got := propertyType(t, idx, name); got != want {
 			t.Errorf("$%s: got %q, want %q", name, got, want)
 		}
+	}
+}
+
+func TestEloquentCastsFollowTheirClassAcrossAnalyses(t *testing.T) {
+	source := castModel(`    protected $casts = ['total' => MoneyCast::class];`)
+	idx := analyzeOrder(t, source, nil, nil)
+	if got := propertyType(t, idx, "total"); got != `?App\Money` {
+		t.Fatalf("$total before the cast class changes: %q", got)
+	}
+	idx.IndexFile("file:///vendor/casts4.php", strings.Replace(castStubs[4], "CastsAttributes<Money, Money>", `CastsAttributes<\App\Address, \App\Address>`, 1))
+	dependsOn := AnalyzeModelFile(idx, "/", "laravel", orderURI, source, nil, nil)
+	if got := propertyType(t, idx, "total"); got != `?App\Address` {
+		t.Errorf("$total after the cast class changed: %q, want ?App\\Address", got)
+	}
+	if !slices.Contains(dependsOn, `App\Casts\MoneyCast`) {
+		t.Errorf("the analysis depends on %v, want MoneyCast among them", dependsOn)
+	}
+}
+
+func TestAnalyzeEloquentModelsReportsWhatEachModelFilesCastsDependOn(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "Order.php")
+	source := castModel(`    protected $casts = ['total' => MoneyCast::class, 'paid_at' => 'datetime'];`)
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///vendor/Model.php", reanalyzeBaseModel)
+	for i, stub := range castStubs {
+		idx.IndexFile("file:///vendor/casts"+strconv.Itoa(i)+".php", stub)
+	}
+	uri := "file://" + path
+	idx.IndexFile(uri, source)
+	dependencies := AnalyzeEloquentModels(idx, dir)
+	if !slices.Contains(dependencies[uri], `App\Casts\MoneyCast`) {
+		t.Errorf("Order.php's casts depend on %v, want MoneyCast among them", dependencies[uri])
+	}
+	if _, ok := dependencies["file:///vendor/Model.php"]; ok {
+		t.Error("a file without models has cast dependencies")
 	}
 }

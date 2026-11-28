@@ -159,6 +159,21 @@ func TestCastDependentsFollowTheModelFile(t *testing.T) {
 	}
 }
 
+func TestCastDependentsMatchAClassHoweverItIsWritten(t *testing.T) {
+	var d castDependents
+	d.set("file:///Order.php", []string{`App\Casts\MoneyCast`, `app\casts\moneycast`, `App\Money`})
+	d.set("file:///Invoice.php", []string{`App\Money`})
+	if got := d.byModel["file:///Order.php"]; !slices.Equal(got, []string{`app\casts\moneycast`, `app\money`}) {
+		t.Errorf("Order.php's classes = %q, want each once", got)
+	}
+	if got := d.of([]string{`APP\CASTS\MONEYCAST`}, ""); !slices.Equal(got, []string{"file:///Order.php"}) {
+		t.Errorf("dependents of MoneyCast = %q, want Order.php", got)
+	}
+	if got := d.of([]string{`App\Money`}, "file:///Order.php"); !slices.Equal(got, []string{"file:///Invoice.php"}) {
+		t.Errorf("dependents of Money other than Order.php = %q, want Invoice.php", got)
+	}
+}
+
 // BenchmarkRefreshCastDependents measures the background work an edit to a
 // cast class starts: re-analysing the one model whose casts use it.
 func BenchmarkRefreshCastDependents(b *testing.B) {
