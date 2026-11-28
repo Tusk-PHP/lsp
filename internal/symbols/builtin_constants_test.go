@@ -1,6 +1,9 @@
 package symbols
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func builtinIndex(version string, extensions ...string) *Index {
 	idx := NewIndex()
@@ -76,5 +79,59 @@ func TestABuiltinConstantWhoseTypeChangedHasEveryType(t *testing.T) {
 		if sym == nil || sym.Type != "bool|int" || sym.Value != "" {
 			t.Errorf("%s is an int before PHP 8.4 and a bool since, and its value depends on the build: %+v", name, sym)
 		}
+	}
+}
+
+func TestTheBuiltinConstantTableIsSortedForItsLookups(t *testing.T) {
+	for i := 1; i < len(generatedBuiltinConstants); i++ {
+		if a, b := generatedBuiltinConstants[i-1].Name, generatedBuiltinConstants[i].Name; compareBuiltinConstantNames(a, b) >= 0 {
+			t.Fatalf("%s sorts after %s, so lookups by binary search miss them", a, b)
+		}
+	}
+}
+
+func TestBuiltinConstantsAreFoundByPrefix(t *testing.T) {
+	idx := builtinIndex("8.4")
+	var eol bool
+	for _, sym := range idx.SearchByPrefix("php_eo") {
+		eol = eol || sym.FQN == "PHP_EOL" && sym.Kind == KindConstant
+	}
+	if !eol {
+		t.Error("PHP_EOL is found by its prefix, ignoring case as name search does")
+	}
+	if got := idx.SearchByPrefix(""); !slices.ContainsFunc(got, func(s *Symbol) bool { return s.FQN == "SORT_STRING" }) {
+		t.Error("an empty prefix lists the builtin constants too")
+	}
+}
+
+func TestAnIndexWithoutBuiltinsHasNoBuiltinConstants(t *testing.T) {
+	if sym := NewIndex().Lookup("PHP_EOL"); sym != nil {
+		t.Errorf("PHP_EOL without registered builtins: %+v", sym)
+	}
+}
+
+func TestAUserConstantShadowsTheBuiltinOne(t *testing.T) {
+	idx := builtinIndex("8.4")
+	idx.IndexFile("file:///polyfill.php", "<?php\nconst SORT_STRING = 2;\n")
+	defs := idx.Definitions("SORT_STRING")
+	if len(defs) != 2 || defs[0].URI != "file:///polyfill.php" || defs[1].Source != SourceBuiltin {
+		t.Fatalf("the user's SORT_STRING comes first, then the builtin it shadows: %+v", defs)
+	}
+	idx.RemoveFile("file:///polyfill.php")
+	if sym := idx.Lookup("SORT_STRING"); sym == nil || sym.Source != SourceBuiltin {
+		t.Errorf("removing the user's SORT_STRING brings back the builtin: %+v", sym)
+	}
+}
+
+func TestReplacingBuiltinsLooksConstantsUpForTheNewProfile(t *testing.T) {
+	idx := builtinIndex("8.4")
+	if idx.Lookup("DATE_ISO8601_EXPANDED") == nil {
+		t.Fatal("DATE_ISO8601_EXPANDED is present on 8.4")
+	}
+	if err := idx.ReplaceBuiltins(BuiltinProfile{PHPVersion: "8.1"}); err != nil {
+		t.Fatal(err)
+	}
+	if sym := idx.Lookup("DATE_ISO8601_EXPANDED"); sym != nil {
+		t.Errorf("DATE_ISO8601_EXPANDED, added in PHP 8.2, is gone on 8.1: %+v", sym)
 	}
 }

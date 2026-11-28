@@ -80,7 +80,7 @@ function generateGoConstants(array $dumps): string
             }
         }
     }
-    ksort($seen, SORT_STRING);
+    uksort($seen, static fn(string $a, string $b): int => strcmp(strtolower($a), strtolower($b)) ?: strcmp($a, $b));
 
     $lines = [];
     foreach ($seen as $name => $occurrences) {

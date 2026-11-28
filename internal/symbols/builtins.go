@@ -336,11 +336,11 @@ func (idx *Index) registerBuiltinRegistryLocked(profile BuiltinProfile) {
 		idx.addBuiltinClassLikeLocked(name, "PHP built-in class-like symbol")
 	}
 
+	idx.builtinProfile = &profile
 	for _, c := range generatedBuiltinConstants {
-		if idx.symbols[c.Name] != nil || !availableIn(c.availability(), profile) {
-			continue
+		if strings.Contains(c.Name, "\\") && idx.builtinConstantMissingLocked(c) {
+			idx.storeBuiltinLocked(c.symbol())
 		}
-		idx.storeBuiltinLocked(&Symbol{Name: shortName(c.Name), FQN: c.Name, Kind: KindConstant, Source: SourceBuiltin, URI: builtinRegistryURI, Type: c.Type, Value: c.Value})
 	}
 }
 
