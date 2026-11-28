@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
@@ -230,5 +231,22 @@ func TestCallTypeAt(t *testing.T) {
 	}
 	if got := r.CallTypeAt(src, cursorAfter(src, "$s = $repo->make"), nil); !got.IsEmpty() {
 		t.Errorf("CallTypeAt without a file = %q", got.FullString())
+	}
+}
+
+func TestNodeTypeTypesANodeOfTheFilesTree(t *testing.T) {
+	r, file, _ := expressionTreeFixture(t)
+	var call ast.Expr
+	ast.Walk(file.Tree, func(n ast.Node) bool {
+		if m, ok := n.(*ast.MethodCall); ok && call == nil && strings.HasPrefix(m.Bounds().Text(expressionTreeSource), "$repo->make()") {
+			call = m
+		}
+		return call == nil
+	})
+	if call == nil {
+		t.Fatal("no $repo->make() call in the fixture")
+	}
+	if got := r.NodeType(file, call).FullString(); got != `App\User` {
+		t.Errorf("NodeType($repo->make()) = %q, want App\\User", got)
 	}
 }
