@@ -6,6 +6,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func TestFunctionCallMarksOnlyANameCalledAsAFunction(t *testing.T) {
@@ -165,6 +166,8 @@ func TestStringArgumentAtReadsTheStringAndItsCallFromTokens(t *testing.T) {
 		{"env|('A')", false, "", "", 0, "", ""},
 		{"env('A')|", false, "", "", 0, "", ""},
 		{"$a = 'A|';", false, "", "", 0, "", ""},
+		{"$a = ('A|');", false, "", "", 0, "", ""},
+		{"$o::make('A|')", true, "make", "", 0, "A", "A"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.src, func(t *testing.T) {
@@ -187,5 +190,36 @@ func TestStringArgumentAtReadsTheStringAndItsCallFromTokens(t *testing.T) {
 				t.Errorf("content range %+v does not cover %q", arg.Content, tc.text)
 			}
 		})
+	}
+}
+
+func TestStringArgumentAtPastTheLastToken(t *testing.T) {
+	if _, ok := NewDocument("file:///a.php", "<?php\nenv('A');").StringArgumentAt(protocol.Position{Line: 5}); ok {
+		t.Error("a position past the end of the file is in a string argument")
+	}
+}
+
+func TestStringArgumentCalledNamesTheFunctionOrTheStaticMethod(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///helpers.php", "<?php\nnamespace App;\nfunction setting($k) {}\n")
+	src := "<?php\nnamespace App;\nuse Illuminate\\Support\\Facades\\Config;\nenv('A');\nsetting('B');\nConfig::get('C');\n$repo->get('D');\n"
+	doc := NewDocument("file:///a.php", src)
+	for _, c := range []struct {
+		needle, function, class, method string
+	}{
+		{"'A", "env", "", ""},
+		{"'B", "App\\setting", "", ""},
+		{"'C", "", "Illuminate\\Support\\Facades\\Config", "get"},
+		{"'D", "", "", ""},
+	} {
+		offset := strings.Index(src, c.needle) + 1
+		pos := protocol.Position{Line: strings.Count(src[:offset], "\n"), Character: offset - strings.LastIndex(src[:offset], "\n") - 1}
+		arg, ok := doc.StringArgumentAt(pos)
+		if !ok {
+			t.Fatalf("%s: not a string argument", c.needle)
+		}
+		if function, class, method := arg.Called(idx); function != c.function || class != c.class || method != c.method {
+			t.Errorf("%s: Called = %q %q %q, want %q %q %q", c.needle, function, class, method, c.function, c.class, c.method)
+		}
 	}
 }

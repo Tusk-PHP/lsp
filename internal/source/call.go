@@ -175,9 +175,6 @@ func (d *Document) StringArgumentAt(pos protocol.Position) (StringArgument, bool
 		return StringArgument{}, false
 	}
 	callee := d.At(protocol.Position{Line: tokens[name].Line, Character: tokens[name].Column})
-	if callee == nil {
-		return StringArgument{}, false
-	}
 	line := d.lines[content.Start.Line]
 	return StringArgument{
 		Callee:   callee,

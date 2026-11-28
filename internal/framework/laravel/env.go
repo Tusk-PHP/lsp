@@ -70,7 +70,7 @@ func IsEnvFile(name string) bool {
 // FilesChanged forgets the keys read when one of paths, created, changed or
 // deleted, is a dotenv file in the root, or the root itself.
 func (e *EnvKeys) FilesChanged(paths []string) {
-	if e == nil || e.rootPath == "" {
+	if e == nil {
 		return
 	}
 	root := filepath.Clean(e.rootPath)

@@ -58,3 +58,15 @@ func TestParseDotenvUnterminatedQuoteTakesTheRestOfTheFile(t *testing.T) {
 		t.Errorf("an unterminated value hides no keys after it, as phpdotenv fails on it: %+v", entries)
 	}
 }
+
+func TestParseDotenvDecodesDoubleQuotedEscapesAndAnEmptyLastValue(t *testing.T) {
+	entries := ParseDotenv("ESCAPED=\"a\\nb\\rc\\fd\\ve\\$f\\xg\"\nSINGLE='a\\nb'\nLAST=")
+	want := []DotenvEntry{
+		{Key: "ESCAPED", Value: "a\nb\rc\fd\ve$f\\xg", Line: 0, Column: 0},
+		{Key: "SINGLE", Value: "a\\nb", Line: 1, Column: 0},
+		{Key: "LAST", Value: "", Line: 2, Column: 0},
+	}
+	if !slices.Equal(entries, want) {
+		t.Errorf("ParseDotenv =\n%+v\nwant\n%+v", entries, want)
+	}
+}

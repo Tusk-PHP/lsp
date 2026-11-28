@@ -153,3 +153,26 @@ func TestEnvKeysHoverNamesTheFilesNotTheValues(t *testing.T) {
 		t.Errorf("hover says a mistyped key is set nowhere: %q", hover)
 	}
 }
+
+func TestEnvKeysUnsetOrWithoutARootHaveNoKeys(t *testing.T) {
+	var unset *EnvKeys
+	unset.FilesChanged([]string{"/app/.env"})
+	if unset.Names() != nil || unset.Matching("APP") != nil || unset.Definitions("APP_NAME") != nil || unset.Definition("APP_NAME") != nil {
+		t.Error("an unset EnvKeys, as a provider has before SetEnvKeys, knows keys")
+	}
+	gone := NewEnvKeys(filepath.Join(t.TempDir(), "gone"))
+	if names := gone.Names(); len(names) != 0 {
+		t.Errorf("a root that doesn't exist has keys: %v", names)
+	}
+}
+
+func TestEnvKeysSkipADotenvFileThatCantBeRead(t *testing.T) {
+	root := t.TempDir()
+	writeEnvFiles(t, root, map[string]string{".env": "APP_NAME=Shop\n"})
+	if err := os.Symlink(filepath.Join(root, "missing"), filepath.Join(root, ".env.local")); err != nil {
+		t.Fatal(err)
+	}
+	if names := NewEnvKeys(root).Names(); !slices.Equal(names, []string{"APP_NAME"}) {
+		t.Errorf("Names() = %v, want the readable .env's keys", names)
+	}
+}
