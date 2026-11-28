@@ -78,9 +78,6 @@ func significantTokens(all []lexer.Token) []lexer.Token {
 }
 
 func (f *folder) line(offset uint32) int {
-	if offset < f.offsets[f.at] {
-		f.at = 0
-	}
 	for f.at+1 < len(f.offsets) && f.offsets[f.at+1] <= offset {
 		f.at++
 	}
