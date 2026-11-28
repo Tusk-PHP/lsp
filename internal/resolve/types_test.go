@@ -276,6 +276,8 @@ func TestFullStringShowsTrueAndFalse(t *testing.T) {
 		"1|2|1":             "1|2",
 		"int|1":             "int",
 		"'a'|string|1":      "string|1",
+		"float|1.5":         "float",
+		"(A&B)|int|1":       "A&B|int",
 	} {
 		if got := ParseGenericType(raw).FullString(); got != want {
 			t.Errorf("ParseGenericType(%q).FullString() = %q, want %q", raw, got, want)
