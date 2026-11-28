@@ -142,7 +142,7 @@ func (r *Resolver) ResolveClassName(name string, file *parser.FileNode) string {
 		return name
 	}
 	if strings.HasPrefix(name, "\\") {
-		return strings.TrimPrefix(name, "\\")
+		return r.declaredClassName(strings.TrimPrefix(name, "\\"))
 	}
 	if strings.HasPrefix(name, "?") {
 		name = name[1:]
@@ -154,20 +154,26 @@ func (r *Resolver) ResolveClassName(name string, file *parser.FileNode) string {
 	}
 	parts := strings.SplitN(name, "\\", 2)
 	for _, u := range file.Uses {
-		if u.Alias == parts[0] {
+		if symbols.EqualFold(u.Alias, parts[0]) {
 			if len(parts) > 1 {
-				return u.FullName + "\\" + parts[1]
+				return r.declaredClassName(u.FullName + "\\" + parts[1])
 			}
-			return u.FullName
+			return r.declaredClassName(u.FullName)
 		}
 	}
 	if file.Namespace != "" {
-		fqn := file.Namespace + "\\" + name
-		if r.Index.Lookup(fqn) != nil {
-			return fqn
+		if sym := r.Index.LookupFold(file.Namespace+"\\"+name, (*symbols.Symbol).IsClassLike); sym != nil {
+			return sym.FQN
 		}
 	}
-	return name
+	return r.declaredClassName(name)
+}
+
+func (r *Resolver) declaredClassName(fqn string) string {
+	if sym := r.Index.LookupFold(fqn, (*symbols.Symbol).IsClassLike); sym != nil {
+		return sym.FQN
+	}
+	return fqn
 }
 
 // typeNamePartRe matches each name in a union, intersection or DNF type.
@@ -261,7 +267,13 @@ func FindEnclosingMethod(file *parser.FileNode, pos textpos.Position) *parser.Me
 // FindMember looks up a member (method, property, constant) on a class,
 // traversing the inheritance chain and traits via GetClassMembers.
 func (r *Resolver) FindMember(classFQN, memberName string) *symbols.Symbol {
-	if named := r.Index.ClassMembersNamed(classFQN, memberName); len(named) > 0 {
+	named := r.Index.ClassMembersNamed(classFQN, memberName)
+	for _, m := range named {
+		if m.Name == memberName || m.Name == "$"+memberName {
+			return m
+		}
+	}
+	if len(named) > 0 {
 		return named[0]
 	}
 	return nil

@@ -90,7 +90,7 @@ type Attribute struct {
 // Attribute returns the attribute with this fully qualified name, if it has one.
 func (s *Symbol) Attribute(fqn string) *Attribute {
 	for i := range s.Attributes {
-		if strings.EqualFold(s.Attributes[i].FQN, fqn) {
+		if EqualFold(s.Attributes[i].FQN, fqn) {
 			return &s.Attributes[i]
 		}
 	}
@@ -202,7 +202,7 @@ func narrowsTypes(sym *Symbol) bool {
 func (idx *Index) MayNarrow(name string) bool {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	return idx.narrowingNames[strings.ToLower(name)] > 0
+	return idx.narrowingNames[FoldName(name)] > 0
 }
 
 func NewIndex() *Index {
@@ -543,7 +543,7 @@ func (idx *Index) addSymbol(uri string, sym *Symbol) {
 		if idx.narrowingNames == nil {
 			idx.narrowingNames = make(map[string]int)
 		}
-		idx.narrowingNames[strings.ToLower(sym.Name)]++
+		idx.narrowingNames[FoldName(sym.Name)]++
 	}
 	if idx.declaredOverBuiltinLocked(sym) {
 		if sym.Kind.IsMember() {
@@ -591,7 +591,7 @@ func (idx *Index) indexNamesLocked(sym *Symbol, pending pendingRemovals) {
 	if ns := namespaceForFQN(sym.FQN); !pending.byNamespace.take(ns, sym.FQN) {
 		idx.namespaceIndex[ns] = append(idx.namespaceIndex[ns], sym.FQN)
 	}
-	if key := strings.ToLower(sym.FQN); !pending.byFold.take(key, sym.FQN) {
+	if key := FoldName(sym.FQN); !pending.byFold.take(key, sym.FQN) {
 		if sym.Name != "" {
 			idx.sortedFQNs.add(sym.FQN)
 		}
@@ -610,7 +610,7 @@ func (idx *Index) LookupFold(fqn string, match func(*Symbol) bool) *Symbol {
 	if sym := idx.symbols[fqn]; sym != nil && (match == nil || match(sym)) {
 		return sym
 	}
-	for _, candidate := range idx.foldIndex[strings.ToLower(fqn)] {
+	for _, candidate := range idx.foldIndex[FoldName(fqn)] {
 		if sym := idx.symbols[candidate]; sym != nil && (match == nil || match(sym)) {
 			return sym
 		}
@@ -635,7 +635,7 @@ func (idx *Index) removeFileSymbols(uri string) {
 			}
 		}
 		if narrowsTypes(sym) {
-			key := strings.ToLower(sym.Name)
+			key := FoldName(sym.Name)
 			if idx.narrowingNames[key] <= 1 {
 				delete(idx.narrowingNames, key)
 			} else {
@@ -657,7 +657,7 @@ func (idx *Index) removeFileSymbols(uri string) {
 		pending.byName.add(sym.Name, sym.FQN)
 		if !sym.Kind.IsMember() {
 			pending.byNamespace.add(namespaceForFQN(sym.FQN), sym.FQN)
-			pending.byFold.add(strings.ToLower(sym.FQN), sym.FQN)
+			pending.byFold.add(FoldName(sym.FQN), sym.FQN)
 		}
 		idx.unlinkTypeLocked(sym)
 	}
@@ -771,7 +771,7 @@ func (idx *Index) clearParentLocked(fqn string) {
 	if !ok {
 		return
 	}
-	key := strings.ToLower(parent)
+	key := FoldName(parent)
 	if children := removeFromSlice(idx.childrenMap[key], fqn); len(children) > 0 {
 		idx.childrenMap[key] = children
 	} else {
@@ -1165,7 +1165,7 @@ func (idx *Index) SearchByPrefix(prefix string) []*Symbol {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
-	lp := strings.ToLower(prefix)
+	lp := FoldName(prefix)
 	names := idx.sortedNames.keys
 	start := sort.Search(len(names), func(i int) bool {
 		return compareFold(names[i], lp) >= 0
@@ -1198,7 +1198,7 @@ func (idx *Index) SearchByFQNPrefix(prefix string) ([]*Symbol, []string) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
-	lp := strings.ToLower(prefix)
+	lp := FoldName(prefix)
 	fqns := idx.sortedFQNs.keys
 	// Find the first FQN >= prefix (case-insensitive)
 	start := sort.Search(len(fqns), func(i int) bool {
@@ -1293,14 +1293,14 @@ func withoutAbstractsImplemented(members []*Symbol) []*Symbol {
 	concrete := make(map[string]bool)
 	for _, m := range members {
 		if m.Kind == KindMethod && !m.IsAbstract {
-			concrete[strings.ToLower(m.Name)] = true
+			concrete[FoldName(m.Name)] = true
 		}
 	}
 	if len(concrete) == 0 {
 		return members
 	}
 	return slices.DeleteFunc(members, func(m *Symbol) bool {
-		return isAbstractMethod(m) && concrete[strings.ToLower(m.Name)]
+		return isAbstractMethod(m) && concrete[FoldName(m.Name)]
 	})
 }
 
@@ -1375,7 +1375,7 @@ func (idx *Index) membersLocked(own []*Symbol, traits []string, rules *traitRule
 				if declared == nil {
 					declared = methodNames(members)
 				}
-				key := strings.ToLower(member.Name)
+				key := FoldName(member.Name)
 				if !declared[key] {
 					declared[key] = true
 					members = append(members, member)
@@ -1391,7 +1391,7 @@ func methodNames(members []*Symbol) map[string]bool {
 	names := make(map[string]bool, len(members))
 	for _, m := range members {
 		if m.Kind == KindMethod {
-			names[strings.ToLower(m.Name)] = true
+			names[FoldName(m.Name)] = true
 		}
 	}
 	return names
@@ -1436,7 +1436,7 @@ func (idx *Index) overridesInherited(classFQN, method string, kind SymbolKind) (
 		for _, child := range sym.Children {
 			// Of a trait's methods, only abstract ones are overridden rather than
 			// just being the same method.
-			sameName := strings.EqualFold(child.Name, method)
+			sameName := EqualFold(child.Name, method)
 			if kind == KindConstant {
 				sameName = child.Name == method
 			}
@@ -1475,7 +1475,7 @@ func (idx *Index) IsSubtypeOf(child, parent string) bool {
 }
 
 func (idx *Index) isSubtypeOfLocked(child, parent string) bool {
-	if strings.EqualFold(child, parent) {
+	if EqualFold(child, parent) {
 		return true
 	}
 	visited := map[string]bool{child: true}
@@ -1487,7 +1487,7 @@ func (idx *Index) isSubtypeOfLocked(child, parent string) bool {
 				return
 			}
 			visited[next] = true
-			if strings.EqualFold(next, parent) {
+			if EqualFold(next, parent) {
 				found = true
 				return
 			}
@@ -1673,7 +1673,7 @@ var phpBuiltinTypes = map[string]bool{
 
 // IsPHPBuiltinType returns true if the name is a PHP primitive/built-in type.
 func IsPHPBuiltinType(name string) bool {
-	return phpBuiltinTypes[strings.ToLower(name)]
+	return phpBuiltinTypes[FoldName(name)]
 }
 
 // IsBuiltin reports whether the symbol comes from the PHP builtin registry
@@ -1712,7 +1712,7 @@ func resolveTypeName(name string, currentNs string, uses []parser.UseNode) strin
 		return prefix + sb.String()
 	}
 	// Built-in types are never namespace-qualified
-	if phpBuiltinTypes[strings.ToLower(name)] {
+	if phpBuiltinTypes[FoldName(name)] {
 		return prefix + name
 	}
 	if strings.HasPrefix(name, "\\") {
@@ -1957,11 +1957,11 @@ func standaloneRank(s *Symbol) int {
 // setParentLocked records that fqn extends parent, in both directions.
 func (idx *Index) setParentLocked(fqn, parent string) {
 	if old, ok := idx.inheritanceMap[fqn]; ok && old != parent {
-		key := strings.ToLower(old)
+		key := FoldName(old)
 		idx.childrenMap[key] = removeFromSlice(idx.childrenMap[key], fqn)
 	}
 	idx.inheritanceMap[fqn] = parent
-	key := strings.ToLower(parent)
+	key := FoldName(parent)
 	idx.childrenMap[key] = appendUnique(idx.childrenMap[key], fqn)
 }
 
@@ -1973,11 +1973,11 @@ func (idx *Index) Implementations(fqn string) []string {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	var out []string
-	seen := map[string]bool{strings.ToLower(fqn): true}
+	seen := map[string]bool{FoldName(fqn): true}
 	queue := []string{fqn}
 	visit := func(names []string) {
 		for _, name := range names {
-			key := strings.ToLower(name)
+			key := FoldName(name)
 			if seen[key] {
 				continue
 			}
@@ -1998,10 +1998,10 @@ func (idx *Index) DirectSubtypes(fqn string) []string {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	var out []string
-	seen := map[string]bool{strings.ToLower(fqn): true}
+	seen := map[string]bool{FoldName(fqn): true}
 	idx.directSubtypesLocked(fqn, func(names []string) {
 		for _, name := range names {
-			if key := strings.ToLower(name); !seen[key] {
+			if key := FoldName(name); !seen[key] {
 				seen[key] = true
 				out = append(out, name)
 			}
@@ -2011,7 +2011,7 @@ func (idx *Index) DirectSubtypes(fqn string) []string {
 }
 
 func (idx *Index) directSubtypesLocked(fqn string, visit func([]string)) {
-	visit(idx.childrenMap[strings.ToLower(fqn)])
+	visit(idx.childrenMap[FoldName(fqn)])
 	visit(idx.reverseImplementsMap[fqn])
 	visit(idx.subInterfaceMap[fqn])
 }
@@ -2033,13 +2033,13 @@ func (idx *Index) Subclasses(fqn string) []string {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	var out []string
-	seen := map[string]bool{strings.ToLower(fqn): true}
+	seen := map[string]bool{FoldName(fqn): true}
 	queue := []string{fqn}
 	for len(queue) > 0 {
 		next := queue[0]
 		queue = queue[1:]
-		for _, child := range idx.childrenMap[strings.ToLower(next)] {
-			key := strings.ToLower(child)
+		for _, child := range idx.childrenMap[FoldName(next)] {
+			key := FoldName(child)
 			if seen[key] {
 				continue
 			}

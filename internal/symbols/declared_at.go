@@ -31,7 +31,7 @@ func (idx *Index) MemberDeclaredAt(uri string, pos textpos.Position, word string
 func (s *Symbol) isNamed(word string) bool {
 	name, word := strings.TrimPrefix(s.Name, "$"), strings.TrimPrefix(word, "$")
 	if s.Kind == KindMethod {
-		return strings.EqualFold(name, word)
+		return EqualFold(name, word)
 	}
 	return name == word
 }

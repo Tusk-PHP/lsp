@@ -49,7 +49,7 @@ func PHPManualURL(sym *Symbol, owner *Symbol, locale string) string {
 
 	switch sym.Kind {
 	case KindFunction:
-		slug := strings.ReplaceAll(strings.ToLower(sym.Name), "_", "-")
+		slug := strings.ReplaceAll(FoldName(sym.Name), "_", "-")
 		return base + "function." + slug + ".php"
 
 	case KindClass, KindInterface, KindTrait, KindEnum:
@@ -61,7 +61,7 @@ func PHPManualURL(sym *Symbol, owner *Symbol, locale string) string {
 			return ""
 		}
 		ownerSlug := classSlug(fqnOrName(owner))
-		method := strings.ToLower(sym.Name)
+		method := FoldName(sym.Name)
 		method = strings.TrimPrefix(method, "__")
 		return base + ownerSlug + "." + method + ".php"
 
@@ -70,19 +70,19 @@ func PHPManualURL(sym *Symbol, owner *Symbol, locale string) string {
 			return ""
 		}
 		ownerSlug := classSlug(fqnOrName(owner))
-		prop := strings.ToLower(strings.TrimPrefix(sym.Name, "$"))
+		prop := FoldName(strings.TrimPrefix(sym.Name, "$"))
 		return base + "class." + ownerSlug + ".php#" + ownerSlug + ".props." + prop
 
 	case KindConstant:
 		if owner != nil {
 			// Class constant
 			ownerSlug := classSlug(fqnOrName(owner))
-			constName := strings.ToLower(sym.Name)
+			constName := FoldName(sym.Name)
 			return base + "class." + ownerSlug + ".php#" + ownerSlug + ".constants." + constName
 		}
 		// Predefined constant — derive extension from URI
 		ext := extensionFromURI(sym.URI)
-		nameSlug := strings.ReplaceAll(strings.ToLower(sym.Name), "_", "-")
+		nameSlug := strings.ReplaceAll(FoldName(sym.Name), "_", "-")
 		if ext != "" {
 			return base + ext + ".constants.php#constant." + nameSlug
 		}
@@ -105,7 +105,7 @@ func fqnOrName(sym *Symbol) string {
 // then remaining backslashes are replaced with hyphens and the result is lowercased.
 func classSlug(fqn string) string {
 	fqn = strings.TrimLeft(fqn, "\\")
-	return strings.ReplaceAll(strings.ToLower(fqn), "\\", "-")
+	return strings.ReplaceAll(FoldName(fqn), "\\", "-")
 }
 
 // extensionFromURI extracts the extension name from a stub URI of the form

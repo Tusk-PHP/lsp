@@ -92,7 +92,7 @@ func (p *Provider) newImportPlanner(source string, file *parser.FileNode) *impor
 	for _, u := range file.Uses {
 		kind := importKindOf(u.Kind)
 		fqn := strings.TrimPrefix(u.FullName, "\\")
-		lower := strings.ToLower(fqn)
+		lower := symbols.FoldName(fqn)
 		name := u.Alias
 		if name == "" {
 			name = shortName(fqn)
@@ -102,7 +102,7 @@ func (p *Provider) newImportPlanner(source string, file *parser.FileNode) *impor
 			pl.importedAs[kind] = map[string]string{}
 			pl.importedShort[kind] = map[string]bool{}
 		}
-		pl.imported[kind][strings.ToLower(name)] = fqn
+		pl.imported[kind][symbols.FoldName(name)] = fqn
 		if _, ok := pl.importedAs[kind][lower]; !ok {
 			pl.importedAs[kind][lower] = name
 		}
@@ -115,7 +115,7 @@ func (p *Provider) newImportPlanner(source string, file *parser.FileNode) *impor
 		if pl.declared[kind] == nil {
 			pl.declared[kind] = map[string]bool{}
 		}
-		pl.declared[kind][strings.ToLower(name)] = true
+		pl.declared[kind][symbols.FoldName(name)] = true
 	}
 	for _, c := range file.Classes {
 		declare(importClass, c.Name)
@@ -156,15 +156,15 @@ func (pl *importPlanner) plan(kind importKind, fqn string) (string, []protocol.T
 	}
 	var buf [64]byte
 	// Already imported, maybe under an alias: use the name it has here.
-	if pl.importedShort[kind][string(foldKey(&buf, short))] {
-		if name, ok := pl.importedAs[kind][strings.ToLower(fqn)]; ok {
+	if pl.importedShort[kind][string(symbols.FoldKey(&buf, short))] {
+		if name, ok := pl.importedAs[kind][symbols.FoldName(fqn)]; ok {
 			return name, nil
 		}
 	}
 	// In the file's own namespace, the short name already resolves to it
 	// unless an import took that name.
-	if pl.file.Namespace != "" && strings.EqualFold(namespaceOf(fqn), pl.file.Namespace) {
-		if _, taken := pl.imported[kind][string(foldKey(&buf, short))]; !taken {
+	if pl.file.Namespace != "" && symbols.EqualFold(namespaceOf(fqn), pl.file.Namespace) {
+		if _, taken := pl.imported[kind][string(symbols.FoldKey(&buf, short))]; !taken {
 			return short, nil
 		}
 	} else if !pl.taken(kind, short, fqn) {
@@ -185,15 +185,15 @@ func (pl *importPlanner) plan(kind importKind, fqn string) (string, []protocol.T
 // PHP compares these names without regard to case.
 func (pl *importPlanner) taken(kind importKind, name, fqn string) bool {
 	var buf [64]byte
-	key := foldKey(&buf, name)
-	if other, ok := pl.imported[kind][string(key)]; ok && !strings.EqualFold(other, fqn) {
+	key := symbols.FoldKey(&buf, name)
+	if other, ok := pl.imported[kind][string(key)]; ok && !symbols.EqualFold(other, fqn) {
 		return true
 	}
 	if pl.declared[kind][string(key)] {
 		return true
 	}
 	other, ok := pl.namespaceMembers(kind)[string(key)]
-	return ok && !strings.EqualFold(other, fqn)
+	return ok && !symbols.EqualFold(other, fqn)
 }
 
 // namespaceMembers maps the lower-cased short names of the file's
@@ -218,7 +218,7 @@ func (pl *importPlanner) namespaceMembers(kind importKind) map[string]string {
 				if pl.sameNamespace[k] == nil {
 					pl.sameNamespace[k] = map[string]string{}
 				}
-				pl.sameNamespace[k][strings.ToLower(s.Name)] = s.FQN
+				pl.sameNamespace[k][symbols.FoldName(s.Name)] = s.FQN
 			}
 		}
 	}
@@ -310,26 +310,6 @@ func (pl *importPlanner) useInsertLine() int {
 	}
 	pl.insertLine = line
 	return line
-}
-
-// foldKey lower-cases an ASCII s into buf, so that a lookup such as
-// m[string(foldKey(&buf, s))] doesn't allocate. Longer or non-ASCII names
-// fall back to strings.ToLower.
-func foldKey(buf *[64]byte, s string) []byte {
-	if len(s) > len(buf) {
-		return []byte(strings.ToLower(s))
-	}
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 0x80 {
-			return []byte(strings.ToLower(s))
-		}
-		if 'A' <= c && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		buf[i] = c
-	}
-	return buf[:len(s)]
 }
 
 func shortName(fqn string) string {

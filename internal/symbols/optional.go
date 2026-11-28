@@ -22,7 +22,7 @@ func (idx *Index) IsOptionalClass(fqn string) bool {
 	if len(prefixes) == 0 {
 		return false
 	}
-	lower := strings.ToLower(strings.TrimPrefix(fqn, `\`))
+	lower := FoldName(strings.TrimPrefix(fqn, `\`))
 	for _, p := range prefixes {
 		if strings.HasPrefix(lower, p) {
 			return true

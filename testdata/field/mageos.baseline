@@ -669,7 +669,6 @@ vendor/mage-os/module-related-product-graph-ql/Model/Resolver/Batch/CrossSellPro
 vendor/mage-os/module-related-product-graph-ql/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Config\Element\Field'
 vendor/mage-os/module-related-product-graph-ql/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Query\Resolver\BatchResponse'
 vendor/mage-os/module-related-product-graph-ql/Model/Resolver/Batch/RelatedProducts.php	unused-import	Unused import 'Magento\Framework\GraphQl\Query\Resolver\ContextInterface'
-vendor/mage-os/module-remote-storage/Model/File/Uploader.php	unknown-member	Unknown member 'getDirectoryWrite' on 'FileSystem'
 vendor/mage-os/module-reports/Controller/Report/Product/View.php	unused-private-property	Private property 'View::$context' is never used
 vendor/mage-os/module-reports/Setup/Patch/Data/InitializeReportEntityTypesAndPages.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 vendor/mage-os/module-review-graph-ql/Mapper/ReviewDataMapper.php	unused-import	Unused import 'Magento\Catalog\Model\Product'

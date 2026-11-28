@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestCompareFoldMatchesToLower(t *testing.T) {
+func TestCompareFoldMatchesFoldName(t *testing.T) {
 	words := []string{
 		"", "a", "A", "ab", "aB", "Ab", "abc", "b", "B", "_x", "x_", "Z", "[", "`", "@",
 		"Über", "über", "uber", "Ünter", "İstanbul", "istanbul", "K", "K", "k", "ß", "SS", "é", "E",
@@ -17,12 +17,12 @@ func TestCompareFoldMatchesToLower(t *testing.T) {
 	sign := func(c int) int { return max(-1, min(1, c)) }
 	for _, a := range words {
 		for _, b := range words {
-			want := strings.Compare(strings.ToLower(a), strings.ToLower(b))
+			want := strings.Compare(FoldName(a), FoldName(b))
 			if got := compareFold(a, b); sign(got) != want {
 				t.Errorf("compareFold(%q, %q) = %d, want %d", a, b, got, want)
 			}
-			lp := strings.ToLower(b)
-			if got, want := hasFoldPrefix(a, lp), strings.HasPrefix(strings.ToLower(a), lp); got != want {
+			lp := FoldName(b)
+			if got, want := hasFoldPrefix(a, lp), strings.HasPrefix(FoldName(a), lp); got != want {
 				t.Errorf("hasFoldPrefix(%q, %q) = %v, want %v", a, lp, got, want)
 			}
 		}
@@ -147,4 +147,25 @@ func sortedNamesOf(syms []*Symbol) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+func TestPrefixSearchFoldsASCIIOnly(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///a.php", "<?php\nnamespace Ns;\nclass Äpfel {}\nclass Apfel {}\n")
+
+	var names []string
+	for _, sym := range idx.SearchByPrefix("äp") {
+		names = append(names, sym.Name)
+	}
+	if len(names) != 0 {
+		t.Errorf("SearchByPrefix(äp) = %v, want nothing: PHP keeps Ä and ä apart", names)
+	}
+	syms, _ := idx.SearchByFQNPrefix("ns\\ap")
+	if len(syms) != 1 || syms[0].Name != "Apfel" {
+		t.Errorf("SearchByFQNPrefix(ns\\ap) = %v, want only Apfel", syms)
+	}
+	syms, _ = idx.SearchByFQNPrefix("NS\\Äp")
+	if len(syms) != 1 || syms[0].Name != "Äpfel" {
+		t.Errorf("SearchByFQNPrefix(NS\\Äp) = %v, want only Äpfel", syms)
+	}
 }
