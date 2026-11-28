@@ -69,3 +69,12 @@ func TestOnlyPECLExtensionConstantsNeedTheExtension(t *testing.T) {
 		t.Error("CURLOPT_URL is in PHP's default build, so it needs no extension in the profile")
 	}
 }
+
+func TestABuiltinConstantWhoseTypeChangedHasEveryType(t *testing.T) {
+	for _, name := range []string{"PHP_DEBUG", "PHP_ZTS"} {
+		sym := builtinIndex("8.4").Lookup(name)
+		if sym == nil || sym.Type != "bool|int" || sym.Value != "" {
+			t.Errorf("%s is an int before PHP 8.4 and a bool since, and its value depends on the build: %+v", name, sym)
+		}
+	}
+}

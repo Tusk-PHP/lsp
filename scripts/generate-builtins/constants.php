@@ -32,13 +32,17 @@ function platformConstants(): array
 }
 
 /**
- * Constants PHP's grammar handles itself, which are never looked up by name.
+ * Whether name's value depends on the build rather than on the PHP version: a
+ * platform constant, or a version of PHP or of a library it was built with.
  */
 function isBuildDependent(string $name): bool
 {
     return in_array($name, platformConstants(), true) || str_contains($name, 'VERSION');
 }
 
+/**
+ * Constants PHP's grammar handles itself, which are never looked up by name.
+ */
 function languageConstants(): array
 {
     return ['TRUE', 'FALSE', 'NULL'];
@@ -82,9 +86,10 @@ function generateGoConstants(array $dumps): string
     foreach ($seen as $name => $occurrences) {
         $latest = $occurrences[count($occurrences) - 1];
         $extension = $latest['extension'];
-        $types = array_unique(array_column($occurrences, 'type'));
+        $types = array_values(array_unique(array_column($occurrences, 'type')));
+        sort($types, SORT_STRING);
         $values = array_unique(array_map(static fn(array $o): string => (string) $o['value'], $occurrences));
-        $type = count($types) === 1 ? $types[0] : '';
+        $type = implode('|', $types);
         $value = count($values) === 1 && $occurrences[0]['value'] !== null && !isBuildDependent($name) ? $occurrences[0]['value'] : '';
         $since = sinceVersion($name, $occurrences, $dumps, $baseline);
         $gate = isset($peclExtensions[$extension]) ? $extension : '';
@@ -98,7 +103,7 @@ function generateGoConstants(array $dumps): string
         );
     }
 
-    $versions = implode(', ', array_map(static fn(array $d): string => $d['version'] . ($d['kind'] === 'default' ? '' : " with {$d['kind']} extensions"), $dumps));
+    $versions = implode(', ', array_map(static fn(array $d): string => $d['version'] . buildKindLabel($d['kind']), $dumps));
 
     return implode("\n", [
         'package symbols',
@@ -111,6 +116,15 @@ function generateGoConstants(array $dumps): string
         '}',
         '',
     ]);
+}
+
+function buildKindLabel(string $kind): string
+{
+    return match ($kind) {
+        'default' => '',
+        'extensions' => ' with more extensions',
+        'pecl' => ' with PECL extensions',
+    };
 }
 
 /**
