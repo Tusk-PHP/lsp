@@ -4,6 +4,7 @@ import (
 	"log"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/checks"
 	"github.com/Tusk-PHP/lsp/internal/config"
@@ -21,9 +22,7 @@ type Provider struct {
 	framework string
 	rootPath  string
 	logger    *log.Logger
-	cfg       *config.Config
-	phpstan   *phpstanRunner
-	pint      *pintRunner
+	settings  atomic.Pointer[settings]
 
 	// TypeResolver resolves the type of a PHP expression for redundant nullsafe checks.
 	// Set by the LSP server after initialization.
@@ -48,7 +47,15 @@ type Provider struct {
 
 	mu          sync.RWMutex
 	toolResults map[string][]Diagnostic
-	saveResults map[string][]Diagnostic
+	saveResults map[string]savedFindings
+	saveGen     uint64
+}
+
+type savedFindings struct {
+	source   string
+	diags    []Diagnostic
+	gen      uint64
+	settings *settings
 }
 
 func NewProvider(index *symbols.Index, framework, rootPath string, logger *log.Logger, cfg *config.Config) *Provider {
@@ -57,13 +64,35 @@ func NewProvider(index *symbols.Index, framework, rootPath string, logger *log.L
 		framework:   framework,
 		rootPath:    rootPath,
 		logger:      logger,
-		cfg:         cfg,
 		toolResults: make(map[string][]Diagnostic),
-		saveResults: make(map[string][]Diagnostic),
+		saveResults: make(map[string]savedFindings),
 	}
-	p.phpstan = newPHPStanRunner(rootPath, cfg, logger)
-	p.pint = newPintRunner(rootPath, cfg, logger)
+	p.SetConfig(cfg)
 	return p
+}
+
+type settings struct {
+	cfg     *config.Config
+	phpstan *phpstanRunner
+	pint    *pintRunner
+}
+
+func (s *settings) sameTools(other *settings) bool {
+	return *s.phpstan == *other.phpstan && *s.pint == *other.pint
+}
+
+func (p *Provider) SetConfig(cfg *config.Config) {
+	if current := p.settings.Load(); current != nil && current.cfg == cfg {
+		return
+	}
+	next := &settings{cfg: cfg, phpstan: newPHPStanRunner(p.rootPath, cfg, p.logger), pint: newPintRunner(p.rootPath, cfg, p.logger)}
+	prev := p.settings.Swap(next)
+	if prev == nil || prev.sameTools(next) {
+		return
+	}
+	p.mu.Lock()
+	clear(p.toolResults)
+	p.mu.Unlock()
 }
 
 // Analyze runs fast static checks and merges cached external tool results.
@@ -81,6 +110,7 @@ func (p *Provider) AnalyzeAll(uri, source string) []Diagnostic {
 }
 
 func (p *Provider) analyze(uri, source string, withSaveRules bool) []Diagnostic {
+	cfg := p.settings.Load().cfg
 	var diags []Diagnostic
 	shared := &checks.Shared{}
 	if workspace.IsBlade(uri) {
@@ -88,21 +118,21 @@ func (p *Provider) analyze(uri, source string, withSaveRules bool) []Diagnostic 
 		// is found in that PHP is reported, at its place in the view.
 		in := p.ViewTypes.For(uri)
 		doc := blade.CompileWith(source, blade.CompileOptions{Vars: in.BladeVars(), Defined: in.Complete, Custom: p.bladeCustom()})
-		diags = toTemplate(doc, p.analyzeNative(doc.PHP, shared, true, !in.Complete))
-		diags = append(diags, p.analyzeBlade(source)...)
+		diags = toTemplate(doc, p.analyzeNative(cfg, doc.PHP, shared, true, !in.Complete))
+		diags = append(diags, p.analyzeBlade(cfg, source)...)
 	} else {
-		diags = p.analyzeNative(source, shared, false, workspace.IsTemplate(uri))
+		diags = p.analyzeNative(cfg, source, shared, false, workspace.IsTemplate(uri))
 	}
 	p.mu.RLock()
 	if cached, ok := p.toolResults[uri]; ok {
 		diags = append(diags, cached...)
 	}
 	if cached, ok := p.saveResults[uri]; ok && !withSaveRules {
-		diags = append(diags, cached...)
+		diags = append(diags, cached.diags...)
 	}
 	p.mu.RUnlock()
 	if withSaveRules {
-		diags = append(diags, p.saveDiagnostics(uri, source)...)
+		diags = append(diags, p.saveDiagnostics(cfg, uri, source)...)
 	}
 
 	// Soft-mode the unknown-* rules until the workspace + composer index has
@@ -113,12 +143,12 @@ func (p *Provider) analyze(uri, source string, withSaveRules bool) []Diagnostic 
 		diags = filterOutCodes(diags, rule.UnknownClass, rule.UnknownFunction, rule.UnknownMember, rule.InvalidOverride)
 	}
 
-	return p.dropSuppressed(uri, source, shared, diags)
+	return p.dropSuppressed(cfg, uri, source, shared, diags)
 }
 
-func (p *Provider) analyzeNative(source string, shared *checks.Shared, bladePHP, includedFile bool) []Diagnostic {
+func (p *Provider) analyzeNative(cfg *config.Config, source string, shared *checks.Shared, bladePHP, includedFile bool) []Diagnostic {
 	rules := EditRules(p.ruleOptions(bladePHP, includedFile), shared)
-	return p.toDiagnostics(p.runRules(rules, parser.ParseFile(source), source))
+	return toDiagnostics(cfg, p.runRules(cfg, rules, parser.ParseFile(source), source))
 }
 
 func (p *Provider) ruleOptions(bladePHP, includedFile bool) NativeRulesOptions {
@@ -140,23 +170,23 @@ func (p *Provider) BuiltinUnavailableRule() *checks.BuiltinUnavailableRule {
 	return &checks.BuiltinUnavailableRule{PHPVersion: profile.PHPVersion, Extensions: profile.Extensions}
 }
 
-func (p *Provider) runRules(rules []checks.Rule, file *parser.FileNode, source string) []checks.Finding {
+func (p *Provider) runRules(cfg *config.Config, rules []checks.Rule, file *parser.FileNode, source string) []checks.Finding {
 	var findings []checks.Finding
 	for _, r := range rules {
-		if slices.ContainsFunc(r.Codes(), p.cfg.IsRuleEnabled) {
+		if slices.ContainsFunc(r.Codes(), cfg.IsRuleEnabled) {
 			findings = append(findings, r.Check(file, source, p.index)...)
 		}
 	}
 	return findings
 }
 
-func (p *Provider) toDiagnostics(findings []checks.Finding) []Diagnostic {
+func toDiagnostics(cfg *config.Config, findings []checks.Finding) []Diagnostic {
 	diags := make([]Diagnostic, 0, len(findings))
 	for _, f := range findings {
-		if !p.cfg.IsRuleEnabled(f.Code) {
+		if !cfg.IsRuleEnabled(f.Code) {
 			continue
 		}
-		f.Severity = p.cfg.RuleSeverity(f.Code, f.Severity)
+		f.Severity = cfg.RuleSeverity(f.Code, f.Severity)
 		diags = append(diags, findingToDiagnostic(f))
 	}
 	return diags
@@ -171,7 +201,7 @@ func (p *Provider) bladeCustom() *blade.Custom {
 	return p.Blade.Custom()
 }
 
-func (p *Provider) analyzeBlade(source string) []Diagnostic {
+func (p *Provider) analyzeBlade(cfg *config.Config, source string) []Diagnostic {
 	if p.Blade == nil {
 		return nil
 	}
@@ -189,7 +219,7 @@ func (p *Provider) analyzeBlade(source string) []Diagnostic {
 			Severity: d.Severity, Code: d.Code, Message: d.Message,
 		})
 	}
-	return p.toDiagnostics(findings)
+	return toDiagnostics(cfg, findings)
 }
 
 // toTemplate moves diagnostics found in a Blade view's virtual PHP to the
@@ -211,21 +241,37 @@ func toTemplate(doc *blade.Document, diags []Diagnostic) []Diagnostic {
 
 // AnalyzeOnSave runs heavier checks that need type resolution or model lookups.
 // Called on file save only. Results are cached and merged into Analyze() output.
+// Findings worked out under settings replaced meanwhile are worked out again.
 func (p *Provider) AnalyzeOnSave(uri, source string) {
-	diags := p.saveDiagnostics(uri, source)
-	p.mu.Lock()
-	p.saveResults[uri] = diags
-	p.mu.Unlock()
+	for {
+		current := p.settings.Load()
+		diags := p.saveDiagnostics(current.cfg, uri, source)
+		p.mu.Lock()
+		stored := p.storeSavedLocked(uri, source, diags, current)
+		p.mu.Unlock()
+		if stored {
+			return
+		}
+	}
+}
+
+func (p *Provider) storeSavedLocked(uri, source string, diags []Diagnostic, under *settings) bool {
+	if p.settings.Load() != under {
+		return false
+	}
+	p.saveGen++
+	p.saveResults[uri] = savedFindings{source: source, diags: diags, gen: p.saveGen, settings: under}
+	return true
 }
 
 // saveDiagnostics runs the rules that wait for a save.
-func (p *Provider) saveDiagnostics(uri, source string) []Diagnostic {
+func (p *Provider) saveDiagnostics(cfg *config.Config, uri, source string) []Diagnostic {
 	var doc *blade.Document
 	if workspace.IsBlade(uri) {
 		doc = blade.CompileWith(source, blade.CompileOptions{Vars: p.ViewTypes.For(uri).BladeVars(), Custom: p.bladeCustom()})
 		source = doc.PHP
 	}
-	diags := p.toDiagnostics(p.runRules(SaveRules(p.ruleOptions(doc != nil, false)), parser.ParseFile(source), source))
+	diags := toDiagnostics(cfg, p.runRules(cfg, SaveRules(p.ruleOptions(doc != nil, false)), parser.ParseFile(source), source))
 	if doc != nil {
 		diags = toTemplate(doc, diags)
 	}
@@ -233,18 +279,57 @@ func (p *Provider) saveDiagnostics(uri, source string) []Diagnostic {
 }
 
 // RunTools executes external analysis tools (PHPStan, Pint) on a file.
-// Results are cached and included in subsequent Analyze calls.
+// Results are cached and included in subsequent Analyze calls, unless the
+// tools' settings changed while they ran.
 func (p *Provider) RunTools(uri, filePath string) {
+	tools := p.settings.Load()
 	var toolDiags []Diagnostic
-	if p.phpstan.available() {
-		toolDiags = append(toolDiags, p.phpstan.analyze(filePath)...)
+	if tools.phpstan.available() {
+		toolDiags = append(toolDiags, tools.phpstan.analyze(filePath)...)
 	}
-	if p.pint.available() {
-		toolDiags = append(toolDiags, p.pint.analyze(filePath)...)
+	if tools.pint.available() {
+		toolDiags = append(toolDiags, tools.pint.analyze(filePath)...)
 	}
 	p.mu.Lock()
-	p.toolResults[uri] = toolDiags
-	p.mu.Unlock()
+	defer p.mu.Unlock()
+	if p.settings.Load().sameTools(tools) {
+		p.toolResults[uri] = toolDiags
+	}
+}
+
+// ReanalyzeSaved works out the on-save rules' findings again, with the
+// current settings, for every saved source whose findings were worked out
+// under other settings. A result is replaced only if no newer save stored
+// one meanwhile; one worked out under settings replaced meanwhile is worked
+// out again.
+func (p *Provider) ReanalyzeSaved() {
+	for p.reanalyzeStale() {
+	}
+}
+
+func (p *Provider) reanalyzeStale() bool {
+	type saved struct {
+		uri, source string
+		gen         uint64
+	}
+	current := p.settings.Load()
+	p.mu.RLock()
+	var stale []saved
+	for uri, found := range p.saveResults {
+		if found.settings != current {
+			stale = append(stale, saved{uri: uri, source: found.source, gen: found.gen})
+		}
+	}
+	p.mu.RUnlock()
+	for _, s := range stale {
+		diags := p.saveDiagnostics(current.cfg, s.uri, s.source)
+		p.mu.Lock()
+		if found, ok := p.saveResults[s.uri]; ok && found.gen == s.gen {
+			p.storeSavedLocked(s.uri, s.source, diags, current)
+		}
+		p.mu.Unlock()
+	}
+	return len(stale) > 0
 }
 
 // ClearCache removes cached tool results for a URI.

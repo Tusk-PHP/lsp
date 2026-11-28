@@ -26,32 +26,24 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	}
 	s.logger.Printf("Initializing for workspace: %s", s.rootPath)
 	s.initOptions = params.InitializationOptions.settings()
-	s.cfg = s.loadConfig()
+	cfg := s.loadConfig()
 	s.encoding = document.Negotiate(params.Capabilities.General.PositionEncodings)
 	s.clientSupportsShowDocument = params.Capabilities.Window.ShowDocument.Support
 	s.clientWatchesFiles = params.Capabilities.Workspace.DidChangeWatchedFiles.DynamicRegistration
 	if !s.clientSupportsShowDocument {
 		s.logger.Printf("PHP LSP: client does not advertise window/showDocument support; builtin Cmd+Click → manual will be disabled if enabled in config")
 	}
-	if s.cfg.PHPManualOpenOnDefinition && !s.clientSupportsShowDocument {
-		s.manualFlagWarnedOnce.Do(func() {
-			s.sendNotification("window/logMessage", map[string]interface{}{
-				"type":    protocol.MessageTypeWarning,
-				"message": "PHP LSP: php_manual_open_on_definition is enabled but the client does not advertise window/showDocument support; feature disabled",
-			})
-		})
-	}
-	if s.cfg.Framework == "auto" {
+	if cfg.Framework == "auto" {
 		s.framework = config.DetectFramework(s.rootPath)
 	} else {
-		s.framework = s.cfg.Framework
+		s.framework = cfg.Framework
 	}
 	s.logger.Printf("Detected framework: %s", s.framework)
-	profile := s.resolveBuiltinProfile(s.cfg)
+	profile := s.resolveBuiltinProfile(cfg)
 	s.workspace = workspace.New(workspace.Options{
 		RootPath:       s.rootPath,
 		Framework:      s.framework,
-		Config:         s.cfg,
+		Config:         cfg,
 		Logger:         s.logger,
 		BuiltinProfile: profile,
 	})
@@ -76,27 +68,18 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.completion.SetLazyResolve(lazyDoc, lazyDetail)
 	s.inlayHint = s.session.InlayHints()
 	s.hover = s.session.Hover()
-	s.coverage = coverage.NewStore(s.rootPath, s.cfg.CoverageReportPath, s.logger)
+	s.coverage = coverage.NewStore(s.rootPath, cfg.CoverageReportPath, s.logger)
 	s.hover.SetCoverage(s.coverage)
 	s.coverageNotifications = params.InitializationOptions != nil && params.InitializationOptions.CoverageNotifications
 	if s.coverageNotifications {
 		s.coverage.OnChange(func() { s.sendNotification("tusk/coverageChanged", nil) })
 	}
 	s.composerHover = cardhover.NewProvider(s.rootPath, func() string { return s.workspace.Profile().PHPVersion })
-	s.composerHover.SetEnabled(s.cfg.Composer.Hover.Enable)
-	s.composerHover.SetOpenOnDefinition(s.cfg.Composer.OpenOnDefinition)
-	if s.cfg.Composer.OpenOnDefinition && !s.clientSupportsShowDocument {
-		s.composerOpenFlagWarnedOnce.Do(func() {
-			s.sendNotification("window/logMessage", map[string]interface{}{
-				"type":    protocol.MessageTypeWarning,
-				"message": "PHP LSP: composer.openOnDefinition is enabled but the client does not advertise window/showDocument support; feature disabled",
-			})
-		})
-	}
 	s.analyzer = s.session.Analyzer()
 	if opts := params.InitializationOptions; opts != nil {
 		s.analyzer.SetClientCommands(opts.ClientCommands)
 	}
+	s.applyConfig(cfg)
 	s.sendResponse(msg.ID, protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
 			PositionEncoding: s.encoding.String(),
@@ -134,6 +117,32 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	})
 }
 
+func (s *Server) applyConfig(cfg *config.Config) {
+	s.cfg.Store(cfg)
+	s.session.SetConfig(cfg)
+	s.composerHover.SetEnabled(cfg.Composer.Hover.Enable)
+	s.composerHover.SetOpenOnDefinition(cfg.Composer.OpenOnDefinition)
+	if s.clientSupportsShowDocument {
+		return
+	}
+	if cfg.PHPManualOpenOnDefinition {
+		s.manualFlagWarnedOnce.Do(func() {
+			s.sendNotification("window/logMessage", map[string]interface{}{
+				"type":    protocol.MessageTypeWarning,
+				"message": "PHP LSP: php_manual_open_on_definition is enabled but the client does not advertise window/showDocument support; feature disabled",
+			})
+		})
+	}
+	if cfg.Composer.OpenOnDefinition {
+		s.composerOpenFlagWarnedOnce.Do(func() {
+			s.sendNotification("window/logMessage", map[string]interface{}{
+				"type":    protocol.MessageTypeWarning,
+				"message": "PHP LSP: composer.openOnDefinition is enabled but the client does not advertise window/showDocument support; feature disabled",
+			})
+		})
+	}
+}
+
 func (s *Server) resolveBuiltinProfile(cfg *config.Config) symbols.BuiltinProfile {
 	timeout := time.Duration(cfg.PHPDetectTimeoutMs) * time.Millisecond
 	profile, _ := workspace.ResolveBuiltinProfileWithConfig(s.rootPath, cfg.PHPBinary, timeout, cfg, s.logInfo)
@@ -157,7 +166,7 @@ func (s *Server) handleInitialized(msg *jsonRPCMessage) {
 		s.workspace.AnalyzeModelClasses()
 		s.sendNotification("window/logMessage", map[string]interface{}{"type": protocol.MessageTypeInfo, "message": fmt.Sprintf("PHP LSP: Indexed %d files (%s framework)", indexed.Count, s.framework)})
 		if indexed.Truncated {
-			s.sendNotification("window/logMessage", map[string]interface{}{"type": protocol.MessageTypeWarning, "message": "PHP LSP: " + workspace.MaxIndexFilesWarning(s.cfg.MaxIndexFiles)})
+			s.sendNotification("window/logMessage", map[string]interface{}{"type": protocol.MessageTypeWarning, "message": "PHP LSP: " + workspace.MaxIndexFilesWarning(s.config().MaxIndexFiles)})
 		}
 	})
 	s.goSafe("indexComposerDeps", func() {

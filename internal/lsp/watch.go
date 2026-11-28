@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -16,7 +17,7 @@ const watchedFilesDelay = 200 * time.Millisecond
 type watchedFiles struct {
 	mu      sync.Mutex
 	paths   map[string]struct{}
-	profile bool
+	config  bool
 	timer   *time.Timer
 	refresh sync.Mutex
 }
@@ -45,13 +46,18 @@ func (s *Server) handleDidChangeWatchedFiles(msg *jsonRPCMessage) {
 	if !ok || s.workspace == nil {
 		return
 	}
+	configPath := s.workspace.ConfigPath()
 	paths := make([]string, 0, len(params.Changes))
+	configChanged := false
 	for _, change := range params.Changes {
-		if path := symbols.URIToPath(change.URI); path != "" {
-			paths = append(paths, path)
+		path := symbols.URIToPath(change.URI)
+		if filepath.Clean(path) == configPath {
+			configChanged = true
+			continue
 		}
+		paths = append(paths, path)
 	}
-	s.queueRefresh(paths, false)
+	s.queueRefresh(paths, configChanged)
 }
 
 func (s *Server) handleDidChangeConfiguration(msg *jsonRPCMessage) {
@@ -68,13 +74,14 @@ func (s *Server) handleDidChangeConfiguration(msg *jsonRPCMessage) {
 		})
 		return
 	}
-	if settings != nil {
-		s.clientSettings.Store(settings)
+	if settings == nil {
+		return
 	}
+	s.clientSettings.Store(settings)
 	s.queueRefresh(nil, true)
 }
 
-func (s *Server) queueRefresh(paths []string, profile bool) {
+func (s *Server) queueRefresh(paths []string, configChanged bool) {
 	w := &s.watch
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -84,7 +91,7 @@ func (s *Server) queueRefresh(paths []string, profile bool) {
 	for _, path := range paths {
 		w.paths[path] = struct{}{}
 	}
-	w.profile = w.profile || profile
+	w.config = w.config || configChanged
 	if w.timer != nil {
 		w.timer.Stop()
 	}
@@ -101,23 +108,28 @@ func (s *Server) takeRefresh() ([]string, bool) {
 	for path := range w.paths {
 		paths = append(paths, path)
 	}
-	profile := w.profile
-	w.paths, w.profile = nil, false
-	return paths, profile
+	configChanged := w.config
+	w.paths, w.config = nil, false
+	return paths, configChanged
 }
 
 func (s *Server) refreshWorkspace() {
 	<-s.indexed
 	s.watch.refresh.Lock()
 	defer s.watch.refresh.Unlock()
-	paths, profile := s.takeRefresh()
-	if len(paths) == 0 && !profile {
+	paths, configChanged := s.takeRefresh()
+	if len(paths) == 0 && !configChanged {
 		return
+	}
+	cfg := s.config()
+	if configChanged {
+		cfg = s.loadConfig()
+		s.applyConfig(cfg)
 	}
 	result, err := s.workspace.Refresh(workspace.Refresh{
 		Paths:      paths,
-		Profile:    profile,
-		Config:     func() (*config.Config, error) { return s.loadConfig(), nil },
+		Profile:    configChanged,
+		Config:     func() (*config.Config, error) { return cfg, nil },
 		EditorOwns: s.isOpenAt,
 	})
 	if err != nil {
@@ -137,7 +149,10 @@ func (s *Server) refreshWorkspace() {
 			break
 		}
 	}
-	if len(result.Files) > 0 || result.Composer || result.ProfileChanged {
+	if configChanged {
+		s.session.ReanalyzeSaved()
+	}
+	if len(result.Files) > 0 || result.Composer || result.ProfileChanged || configChanged {
 		s.republishOpenDocuments()
 	}
 }

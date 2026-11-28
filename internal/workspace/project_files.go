@@ -78,3 +78,12 @@ func (p *projectFiles) release(path string) {
 	}
 	p.indexed--
 }
+
+func (p *projectFiles) rescope(limit, indexed int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.limit = limit
+	p.walked = true
+	p.admitted = nil
+	p.indexed = indexed
+}

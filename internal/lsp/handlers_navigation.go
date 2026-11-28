@@ -42,8 +42,9 @@ func (s *Server) handleDefinition(msg *jsonRPCMessage) {
 			return
 		}
 	}
-	openManual := s.cfg.PHPManualOpenOnDefinition && s.clientSupportsShowDocument
-	result := s.analyzer.FindDefinitionWithManual(req.uri, req.source, req.pos, openManual, s.cfg.PHPManualLocale)
+	cfg := s.config()
+	openManual := cfg.PHPManualOpenOnDefinition && s.clientSupportsShowDocument
+	result := s.analyzer.FindDefinitionWithManual(req.uri, req.source, req.pos, openManual, cfg.PHPManualLocale)
 
 	if result.ExternalManualURL != "" {
 		s.sendServerRequest("window/showDocument", protocol.ShowDocumentParams{

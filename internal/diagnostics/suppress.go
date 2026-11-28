@@ -10,11 +10,11 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
-func (p *Provider) dropSuppressed(uri, source string, shared *checks.Shared, diags []Diagnostic) []Diagnostic {
+func (p *Provider) dropSuppressed(cfg *config.Config, uri, source string, shared *checks.Shared, diags []Diagnostic) []Diagnostic {
 	if len(diags) == 0 {
 		return diags
 	}
-	rules := p.ignoreRulesFor(uri)
+	rules := p.ignoreRulesFor(cfg, uri)
 	suppressions := p.sourceSuppressions(uri, source, shared)
 	if len(rules) == 0 && suppressions == nil {
 		return diags
@@ -36,13 +36,13 @@ func (p *Provider) sourceSuppressions(uri, source string, shared *checks.Shared)
 	return checks.PHPSuppressions(source, shared)
 }
 
-func (p *Provider) ignoreRulesFor(uri string) []config.IgnoreRule {
-	if len(p.cfg.DiagnosticIgnore.Rules) == 0 {
+func (p *Provider) ignoreRulesFor(cfg *config.Config, uri string) []config.IgnoreRule {
+	if len(cfg.DiagnosticIgnore.Rules) == 0 {
 		return nil
 	}
 	rel, inRoot := p.relativePath(uri)
 	var rules []config.IgnoreRule
-	for _, r := range p.cfg.DiagnosticIgnore.Rules {
+	for _, r := range cfg.DiagnosticIgnore.Rules {
 		if !r.HasPath() || (inRoot && r.MatchesPath(rel)) {
 			rules = append(rules, r)
 		}

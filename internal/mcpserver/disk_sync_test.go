@@ -129,20 +129,8 @@ func TestToolCallsFollowThePHPVersionInComposerJSON(t *testing.T) {
 	if err != nil || summary["phpVersion"] != "7.4" || summary["phpVersionSource"] != "composer" {
 		t.Fatalf("the summary reports composer.json's new PHP version: %v %v", summary, err)
 	}
-	diags, err := callTool(t, session, "php_diagnostics", map[string]any{"path": "check.php"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	found := false
-	for _, f := range diags["files"].([]any) {
-		for _, d := range f.(map[string]any)["diagnostics"].([]any) {
-			if d.(map[string]any)["code"] == "builtin-unavailable" {
-				found = true
-			}
-		}
-	}
-	if !found {
-		t.Errorf("str_contains is reported as unavailable on PHP 7.4: %v", diags)
+	if got := diagnosticCodes(t, session, "check.php"); !slices.Contains(got, "builtin-unavailable") {
+		t.Errorf("str_contains is reported as unavailable on PHP 7.4: %v", got)
 	}
 }
 
@@ -172,6 +160,57 @@ func TestToolCallsSeeComposerInstallsAndRemovals(t *testing.T) {
 	}
 	if got := foundFQNs(t, session, "Retired"); len(got) != 0 {
 		t.Errorf("a package Composer removed is gone: %v", got)
+	}
+}
+
+func diagnosticCodes(t *testing.T, session *mcp.ClientSession, path string) []string {
+	t.Helper()
+	out, err := callTool(t, session, "php_diagnostics", map[string]any{"path": path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var codes []string
+	for _, f := range out["files"].([]any) {
+		for _, d := range f.(map[string]any)["diagnostics"].([]any) {
+			codes = append(codes, d.(map[string]any)["code"].(string))
+		}
+	}
+	return codes
+}
+
+func TestToolCallsFollowRuleSeveritiesChangedOnDisk(t *testing.T) {
+	session, root := connectedService(t, map[string]string{
+		".tusk-php.json": plainProjectConfig,
+		"composer.json":  `{"require": {"php": "^8.2"}}`,
+		"app/make.php":   "<?php\nnamespace App;\nfunction make() { return new Missing(); }\n",
+	})
+	if got := diagnosticCodes(t, session, "app/make.php"); !slices.Contains(got, "unknown-class") {
+		t.Fatalf("the unknown class is reported with the startup configuration: %v", got)
+	}
+
+	writeProject(t, root, map[string]string{".tusk-php.json": `{"framework": "none", "databaseEnabled": false, "diagnosticRules": {"unknown-class": "off"}}`})
+	if got := diagnosticCodes(t, session, "app/make.php"); slices.Contains(got, "unknown-class") {
+		t.Errorf("a rule turned off in the config file on disk is no longer reported: %v", got)
+	}
+}
+
+func TestToolCallsRefuseAPathDeniedOnDisk(t *testing.T) {
+	session, root := connectedService(t, map[string]string{
+		".tusk-php.json":    plainProjectConfig,
+		"composer.json":     `{"require": {"php": "^8.2"}}`,
+		"secret/config.php": "<?php\nnamespace Secret;\nfunction token() { return new Missing(); }\n",
+	})
+	if got := diagnosticCodes(t, session, "secret/config.php"); !slices.Contains(got, "unknown-class") {
+		t.Fatalf("the file is readable with the startup configuration: %v", got)
+	}
+
+	writeProject(t, root, map[string]string{".tusk-php.json": `{"framework": "none", "databaseEnabled": false, "ai": {"denyPaths": ["secret"]}}`})
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "php_diagnostics", Arguments: map[string]any{"path": "secret/config.php"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsError {
+		t.Errorf("a path denied in the config file on disk is refused without a restart: %+v", res.StructuredContent)
 	}
 }
 

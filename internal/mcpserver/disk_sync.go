@@ -92,7 +92,8 @@ func readsIndex(method string, req mcp.Request) bool {
 func (s *Service) syncWithDisk(ctx context.Context) error {
 	s.disk.mu.Lock()
 	defer s.disk.mu.Unlock()
-	ws := s.runtime().Workspace
+	rt := s.runtime()
+	ws := rt.Workspace
 	now := scanDisk(ws)
 	changed := changedFiles(s.disk.files, now)
 	if len(changed) == 0 {
@@ -106,6 +107,9 @@ func (s *Service) syncWithDisk(ctx context.Context) error {
 		return nil
 	}
 	result, err := ws.Refresh(workspace.Refresh{Paths: changed, Config: s.loadConfig})
+	if result.Config != nil {
+		rt.Session.SetConfig(result.Config)
+	}
 	if result.ProfileChanged {
 		s.profileSource.Store(&result.ProfileSource)
 	}
