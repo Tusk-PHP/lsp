@@ -3,6 +3,11 @@
 package models
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -113,3 +118,35 @@ func TestOpenDatabaseConnectsThroughTheDataSource(t *testing.T) {
 		t.Error("openDatabase with an unsupported driver is an error")
 	}
 }
+
+func TestLiveSchemaErrorsNameTheStepAndNoValues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secret-name.sqlite")
+	if err := os.WriteFile(path, []byte("not a database, password=hunter2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := scanLiveSchema(&config.DatabaseConfig{Driver: "sqlite", Database: path}, time.Second, NewSchemaCache(), nil)
+	if err == nil || err.Error() != "could not connect: SQLite error 26" {
+		t.Errorf("scanLiveSchema over a file that isn't a database = %v, want the step and the SQLite code only", err)
+	}
+}
+
+func TestValueFreeReasonTellsTimeoutsAndNetworkErrorsApart(t *testing.T) {
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{fmt.Errorf("query users: %w", context.DeadlineExceeded), "timed out"},
+		{&net.OpError{Op: "dial", Err: timeoutError{}}, "timed out"},
+		{&net.OpError{Op: "read", Err: errors.New("connection reset by db.internal")}, "network error on read"},
+	} {
+		if got := valueFreeReason(c.err); got != c.want {
+			t.Errorf("valueFreeReason(%v) = %q, want %q", c.err, got, c.want)
+		}
+	}
+}
+
+type timeoutError struct{}
+
+func (timeoutError) Error() string   { return "i/o timeout" }
+func (timeoutError) Timeout() bool   { return true }
+func (timeoutError) Temporary() bool { return true }
