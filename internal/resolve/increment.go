@@ -87,8 +87,6 @@ func plainStringValue(literal string) (string, bool) {
 	}
 	quote, inner := literal[0], literal[1:len(literal)-1]
 	switch {
-	case literal[len(literal)-1] != quote:
-		return "", false
 	case quote == '\'' && !strings.ContainsRune(inner, '\\'):
 		return inner, true
 	case quote == '"' && !strings.ContainsAny(inner, "\\$"):
