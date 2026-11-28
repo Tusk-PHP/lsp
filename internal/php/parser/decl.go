@@ -376,6 +376,7 @@ func (p *parser) member() ast.Member {
 	case token.Use:
 		return p.traitUse(start, doc)
 	case token.Case:
+		p.requires(token.PHP81, p.start(), "enum cases")
 		p.next()
 		c := &ast.EnumCase{Attrs: attrs, Doc: doc, Name: p.memberName()}
 		if p.accept(token.Equals) {
