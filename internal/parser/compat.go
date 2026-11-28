@@ -311,7 +311,11 @@ func FileNodeOf(result *ParseResult) (file *FileNode) {
 }
 
 func ParseDocBlock(raw string) *DocBlock {
-	trimmed := strings.TrimPrefix(strings.TrimSpace(raw), "/**")
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return &DocBlock{}
+	}
+	trimmed = strings.TrimPrefix(trimmed, "/**")
 	trimmed = strings.TrimSuffix(trimmed, "*/")
 	lines := strings.Split(trimmed, "\n")
 	doc := &DocBlock{Tags: make(map[string][]string)}
