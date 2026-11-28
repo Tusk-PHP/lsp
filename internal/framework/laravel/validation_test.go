@@ -469,7 +469,7 @@ func validationRulesFrom(t *testing.T, traitSource string, read func(string) str
 	for uri, src := range extensions {
 		ext.IndexFile(uri, src)
 	}
-	return NewValidationRules(idx, ext, read)
+	return NewValidationRules(idx, ext, nil, read)
 }
 
 func TestValidationRulesCatalogReadsWhatItCan(t *testing.T) {
@@ -512,10 +512,11 @@ func validationSyntaxOfController(t *testing.T) ValidationSyntax {
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///vendor/Request.php", "<?php\nnamespace Illuminate\\Http;\nclass Request {}\n")
 	idx.IndexFile("file:///app/StoreController.php", validationControllerSource)
-	return ValidationSyntaxOf(idx, resolve.NewResolver(idx), validationControllerSource, parser.ParseFile(validationControllerSource))
+	rules := NewValidationRules(idx, NewValidationExtensions(), NewValidationHelpers(), func(string) string { return "" })
+	return rules.SyntaxOf(resolve.NewResolver(idx), validationControllerSource, parser.ParseFile(validationControllerSource))
 }
 
-func TestValidationSyntaxOfReadsTheFilesNamesAndTypes(t *testing.T) {
+func TestSyntaxOfReadsTheFilesNamesAndTypes(t *testing.T) {
 	src := validationControllerSource
 	var got []string
 	ValidationRuleStrings(src, phpparser.Parse(src, token.Latest), validationSyntaxOfController(t), func(r RuleString) {
