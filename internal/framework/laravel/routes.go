@@ -3,11 +3,10 @@ package laravel
 import (
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -26,15 +25,19 @@ type RouteName struct {
 type RouteIndex struct {
 	rootPath string
 
+	writeMu sync.Mutex
+	files   map[string]*routeFile
+
 	mu     sync.RWMutex
-	byURI  map[string][]RouteName
+	all    []RouteName
+	names  []string
 	byName map[string][]RouteName
 }
 
 func NewRouteIndex(rootPath string) *RouteIndex {
 	return &RouteIndex{
 		rootPath: rootPath,
-		byURI:    make(map[string][]RouteName),
+		files:    make(map[string]*routeFile),
 		byName:   make(map[string][]RouteName),
 	}
 }
@@ -52,7 +55,8 @@ func (idx *RouteIndex) ScanWorkspace() error {
 		return nil
 	}
 
-	return filepath.Walk(routesDir, func(path string, info os.FileInfo, err error) error {
+	var files []*routeFile
+	err = filepath.Walk(routesDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info == nil || info.IsDir() || filepath.Ext(path) != ".php" {
 			return nil
 		}
@@ -60,46 +64,74 @@ func (idx *RouteIndex) ScanWorkspace() error {
 		if err != nil {
 			return nil
 		}
-		idx.IndexFile("file://"+path, string(content))
+		files = append(files, parseRouteFile("file://"+path, string(content), idx.rootPath))
 		return nil
 	})
+	idx.update(func(known map[string]*routeFile) {
+		for _, f := range files {
+			known[f.path] = f
+		}
+	})
+	return err
 }
 
 func (idx *RouteIndex) IndexFile(uri, source string) {
 	if !isLaravelRouteFile(uri) {
 		return
 	}
+	f := parseRouteFile(uri, source, idx.rootPath)
+	idx.update(func(known map[string]*routeFile) { known[f.path] = f })
+}
 
-	routes := parseRouteDefinitions(uri, source)
+func (idx *RouteIndex) RemoveFile(uri string) {
+	if !isLaravelRouteFile(uri) {
+		return
+	}
+	path := routeFilePath(uri)
+	idx.update(func(known map[string]*routeFile) { delete(known, path) })
+}
+
+func (idx *RouteIndex) update(change func(map[string]*routeFile)) {
+	idx.writeMu.Lock()
+	defer idx.writeMu.Unlock()
+
+	change(idx.files)
+	all := readRouteFiles(idx.files, idx.rootPath, len(idx.all))
+	slices.SortFunc(all, compareRoutes)
+	byName := make(map[string][]RouteName)
+	var names []string
+	for start := 0; start < len(all); {
+		end := start + 1
+		for end < len(all) && all[end].Name == all[start].Name {
+			end++
+		}
+		names = append(names, all[start].Name)
+		byName[all[start].Name] = all[start:end:end]
+		start = end
+	}
 
 	idx.mu.Lock()
-	defer idx.mu.Unlock()
+	idx.all, idx.names, idx.byName = all, names, byName
+	idx.mu.Unlock()
+}
 
-	if prev := idx.byURI[uri]; len(prev) > 0 {
-		for _, route := range prev {
-			idx.removeRouteLocked(route)
-		}
+func compareRoutes(a, b RouteName) int {
+	if c := strings.Compare(a.Name, b.Name); c != 0 {
+		return c
 	}
-
-	idx.byURI[uri] = routes
-	for _, route := range routes {
-		idx.byName[route.Name] = append(idx.byName[route.Name], route)
-		idx.sortRouteDefsLocked(route.Name)
+	if c := strings.Compare(a.URI, b.URI); c != 0 {
+		return c
 	}
+	if a.Range.Start.Line != b.Range.Start.Line {
+		return a.Range.Start.Line - b.Range.Start.Line
+	}
+	return a.Range.Start.Character - b.Range.Start.Character
 }
 
 func (idx *RouteIndex) Names() []string {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-
-	names := make([]string, 0, len(idx.byName))
-	for name, entries := range idx.byName {
-		if name != "" && len(entries) > 0 {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	return names
+	return slices.Clone(idx.names)
 }
 
 func (idx *RouteIndex) Find(name string) *RouteName {
@@ -125,359 +157,7 @@ func (idx *RouteIndex) All() []RouteName {
 
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-
-	var routes []RouteName
-	for _, entries := range idx.byName {
-		routes = append(routes, entries...)
-	}
-	sort.Slice(routes, func(i, j int) bool {
-		if routes[i].Name != routes[j].Name {
-			return routes[i].Name < routes[j].Name
-		}
-		if routes[i].URI != routes[j].URI {
-			return routes[i].URI < routes[j].URI
-		}
-		if routes[i].Range.Start.Line != routes[j].Range.Start.Line {
-			return routes[i].Range.Start.Line < routes[j].Range.Start.Line
-		}
-		return routes[i].Range.Start.Character < routes[j].Range.Start.Character
-	})
-	return routes
-}
-
-func (idx *RouteIndex) removeRouteLocked(route RouteName) {
-	entries := idx.byName[route.Name]
-	if len(entries) == 0 {
-		return
-	}
-
-	filtered := entries[:0]
-	for _, entry := range entries {
-		if entry.URI == route.URI &&
-			entry.Range.Start == route.Range.Start &&
-			entry.Range.End == route.Range.End {
-			continue
-		}
-		filtered = append(filtered, entry)
-	}
-
-	if len(filtered) == 0 {
-		delete(idx.byName, route.Name)
-		return
-	}
-	idx.byName[route.Name] = filtered
-}
-
-func (idx *RouteIndex) sortRouteDefsLocked(name string) {
-	sort.Slice(idx.byName[name], func(i, j int) bool {
-		a := idx.byName[name][i]
-		b := idx.byName[name][j]
-		if a.URI != b.URI {
-			return a.URI < b.URI
-		}
-		if a.Range.Start.Line != b.Range.Start.Line {
-			return a.Range.Start.Line < b.Range.Start.Line
-		}
-		return a.Range.Start.Character < b.Range.Start.Character
-	})
-}
-
-var supportedRouteMethods = map[string]bool{
-	"get":      true,
-	"post":     true,
-	"put":      true,
-	"patch":    true,
-	"delete":   true,
-	"options":  true,
-	"match":    true,
-	"any":      true,
-	"view":     true,
-	"livewire": true,
-	"redirect": true,
-}
-
-func parseRouteDefinitions(uri, source string) []RouteName {
-	result := parser.New().Parse(source)
-	file := parser.ParseFile(source)
-	var routes []RouteName
-
-	for i := 0; i < len(result.Tokens); i++ {
-		if result.Tokens[i].Kind != parser.TokenIdentifier || result.Tokens[i].Value != "Route" {
-			continue
-		}
-		doubleColon := parser.NextSignificant(result.Tokens, i+1)
-		if doubleColon < 0 || result.Tokens[doubleColon].Kind != parser.TokenDoubleColon {
-			continue
-		}
-		methodTok := parser.NextSignificant(result.Tokens, doubleColon+1)
-		if methodTok < 0 || result.Tokens[methodTok].Kind != parser.TokenIdentifier {
-			continue
-		}
-		method := result.Tokens[methodTok].Value
-		if !supportedRouteMethods[method] {
-			continue
-		}
-		route, _, ok := parseRouteDefinition(result.Tokens, uri, methodTok, method, file)
-		if !ok {
-			continue
-		}
-		routes = append(routes, route)
-	}
-
-	return routes
-}
-
-func parseRouteDefinition(tokens []parser.Token, uri string, methodTok int, method string, file *parser.FileNode) (RouteName, int, bool) {
-	openTok := parser.NextSignificant(tokens, methodTok+1)
-	if openTok < 0 || tokens[openTok].Kind != parser.TokenOpenParen {
-		return RouteName{}, -1, false
-	}
-	closeTok := parser.MatchingClose(tokens, openTok)
-	if closeTok < 0 {
-		return RouteName{}, -1, false
-	}
-
-	args := splitTopLevelArgs(tokens, openTok+1, closeTok)
-	route := RouteName{URI: uri}
-	if len(args) > 0 {
-		if path, ok := firstStringLiteral(args[0]); ok {
-			route.Path = path
-		}
-	}
-	route.TargetKind, route.Target, route.HandlerFQN, route.HandlerMethod = parseRouteTarget(method, args, file)
-
-	end := closeTok
-	for i := closeTok + 1; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenSemicolon:
-			end = i
-			return route, end, route.Name != ""
-		case parser.TokenArrow:
-			nameTok := parser.NextSignificant(tokens, i+1)
-			if nameTok < 0 || tokens[nameTok].Kind != parser.TokenIdentifier {
-				continue
-			}
-			if tokens[nameTok].Value != "name" {
-				continue
-			}
-			nameOpen := parser.NextSignificant(tokens, nameTok+1)
-			if nameOpen < 0 || tokens[nameOpen].Kind != parser.TokenOpenParen {
-				continue
-			}
-			valueTok := parser.NextSignificant(tokens, nameOpen+1)
-			if valueTok < 0 || tokens[valueTok].Kind != parser.TokenStringLiteral {
-				continue
-			}
-			raw := tokens[valueTok].Value
-			name := trimQuotedLiteral(raw)
-			if name == "" {
-				continue
-			}
-			startCol := tokens[valueTok].Column
-			endCol := startCol + len(raw)
-			if len(raw) >= 2 {
-				startCol++
-				endCol--
-			}
-			route.Name = name
-			route.Range = textpos.Range{
-				Start: textpos.Position{Line: tokens[valueTok].Line, Character: startCol},
-				End:   textpos.Position{Line: tokens[valueTok].Line, Character: endCol},
-			}
-		}
-	}
-
-	return route, end, route.Name != ""
-}
-
-func trimQuotedLiteral(raw string) string {
-	if len(raw) >= 2 && (raw[0] == '\'' || raw[0] == '"') && raw[len(raw)-1] == raw[0] {
-		return raw[1 : len(raw)-1]
-	}
-	return raw
-}
-
-func splitTopLevelArgs(tokens []parser.Token, start, end int) [][]parser.Token {
-	var args [][]parser.Token
-	argStart := start
-	parenDepth, bracketDepth, braceDepth := 0, 0, 0
-	for i := start; i < end; i++ {
-		switch tokens[i].Kind {
-		case parser.TokenOpenParen:
-			parenDepth++
-		case parser.TokenCloseParen:
-			parenDepth--
-		case parser.TokenOpenBracket:
-			bracketDepth++
-		case parser.TokenCloseBracket:
-			bracketDepth--
-		case parser.TokenOpenBrace:
-			braceDepth++
-		case parser.TokenCloseBrace:
-			braceDepth--
-		case parser.TokenComma:
-			if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
-				args = append(args, trimInsignificantTokens(tokens[argStart:i]))
-				argStart = i + 1
-			}
-		}
-	}
-	if argStart <= end {
-		args = append(args, trimInsignificantTokens(tokens[argStart:end]))
-	}
-	return args
-}
-
-func trimInsignificantTokens(tokens []parser.Token) []parser.Token {
-	start := 0
-	for start < len(tokens) && tokens[start].Kind.IsComment() {
-		start++
-	}
-	end := len(tokens)
-	for end > start && tokens[end-1].Kind.IsComment() {
-		end--
-	}
-	return tokens[start:end]
-}
-
-func firstStringLiteral(tokens []parser.Token) (string, bool) {
-	tokens = trimInsignificantTokens(tokens)
-	if len(tokens) == 0 || tokens[0].Kind != parser.TokenStringLiteral {
-		return "", false
-	}
-	return trimQuotedLiteral(tokens[0].Value), true
-}
-
-func parseRouteTarget(method string, args [][]parser.Token, file *parser.FileNode) (kind, target, handlerFQN, handlerMethod string) {
-	switch method {
-	case "view":
-		if len(args) > 1 {
-			if value, ok := firstStringLiteral(args[1]); ok {
-				return "view", value, "", ""
-			}
-		}
-		return "view", "", "", ""
-	case "livewire":
-		if len(args) > 1 {
-			if value, ok := firstStringLiteral(args[1]); ok {
-				return "livewire", value, "", ""
-			}
-		}
-		return "livewire", "", "", ""
-	case "redirect":
-		if len(args) > 1 {
-			if value, ok := firstStringLiteral(args[1]); ok {
-				return "redirect", value, "", ""
-			}
-		}
-		return "redirect", "", "", ""
-	default:
-		if len(args) < 2 {
-			return "route", "", "", ""
-		}
-		action := trimInsignificantTokens(args[1])
-		if className, methodName, ok := parseControllerArrayAction(action, file); ok {
-			return "controller", className + "@" + methodName, className, methodName
-		}
-		if value, ok := firstStringLiteral(action); ok {
-			if strings.Contains(value, "@") {
-				parts := strings.SplitN(value, "@", 2)
-				className := resolveRouteClassName(parts[0], file)
-				methodName := parts[1]
-				return "controller", className + "@" + methodName, className, methodName
-			}
-			return "string", value, "", ""
-		}
-		if className, ok := parseClassConstExpr(action, file); ok {
-			return "controller", className + "@__invoke", className, "__invoke"
-		}
-		return "route", tokenText(action), "", ""
-	}
-}
-
-func parseControllerArrayAction(tokens []parser.Token, file *parser.FileNode) (className, methodName string, ok bool) {
-	tokens = trimInsignificantTokens(tokens)
-	if len(tokens) < 5 || tokens[0].Kind != parser.TokenOpenBracket || tokens[len(tokens)-1].Kind != parser.TokenCloseBracket {
-		return "", "", false
-	}
-	body := trimInsignificantTokens(tokens[1 : len(tokens)-1])
-	commaIdx := -1
-	depth := 0
-	for i, tok := range body {
-		switch tok.Kind {
-		case parser.TokenOpenBracket, parser.TokenOpenParen, parser.TokenOpenBrace:
-			depth++
-		case parser.TokenCloseBracket, parser.TokenCloseParen, parser.TokenCloseBrace:
-			depth--
-		case parser.TokenComma:
-			if depth == 0 {
-				commaIdx = i
-				break
-			}
-		}
-	}
-	if commaIdx < 0 {
-		return "", "", false
-	}
-	classTokens := trimInsignificantTokens(body[:commaIdx])
-	methodTokens := trimInsignificantTokens(body[commaIdx+1:])
-	className, ok = parseClassConstExpr(classTokens, file)
-	if !ok {
-		return "", "", false
-	}
-	methodName, ok = firstStringLiteral(methodTokens)
-	if !ok || methodName == "" {
-		return "", "", false
-	}
-	return className, methodName, true
-}
-
-func parseClassConstExpr(tokens []parser.Token, file *parser.FileNode) (string, bool) {
-	tokens = trimInsignificantTokens(tokens)
-	if len(tokens) < 3 || tokens[len(tokens)-2].Kind != parser.TokenDoubleColon || tokens[len(tokens)-1].Kind != parser.TokenClass {
-		return "", false
-	}
-	classRef := tokenText(tokens[:len(tokens)-2])
-	if classRef == "" {
-		return "", false
-	}
-	return resolveRouteClassName(classRef, file), true
-}
-
-func tokenText(tokens []parser.Token) string {
-	var b strings.Builder
-	for _, tok := range tokens {
-		if tok.Kind.IsComment() {
-			continue
-		}
-		b.WriteString(tok.Value)
-	}
-	return b.String()
-}
-
-func resolveRouteClassName(name string, file *parser.FileNode) string {
-	name = strings.TrimSpace(name)
-	name = strings.TrimPrefix(name, `\`)
-	if name == "" {
-		return ""
-	}
-	if strings.Contains(name, `\`) {
-		return name
-	}
-	if file != nil {
-		for _, use := range file.Uses {
-			if use.Alias == name {
-				return use.FullName
-			}
-			if last := filepath.Base(strings.ReplaceAll(use.FullName, `\`, `/`)); last == name {
-				return use.FullName
-			}
-		}
-		if file.Namespace != "" {
-			return file.Namespace + `\` + name
-		}
-	}
-	return name
+	return slices.Clone(idx.all)
 }
 
 func isLaravelRouteFile(uri string) bool {

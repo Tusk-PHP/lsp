@@ -81,3 +81,25 @@ func TestLookups(t *testing.T) {
 		t.Error("kind classes")
 	}
 }
+
+func TestIsSemiReserved(t *testing.T) {
+	for k, want := range map[Kind]bool{
+		Identifier: true, If: true, Class: true, Abstract: true, TraitConst: true, Enum: true,
+		Variable: false, NameQualified: false, LeftParen: false, IntCast: false, InlineHTML: false,
+	} {
+		if got := k.IsSemiReserved(); got != want {
+			t.Errorf("%s: IsSemiReserved() = %v, want %v", k, got, want)
+		}
+	}
+}
+
+func TestIsAssignment(t *testing.T) {
+	for k, want := range map[Kind]bool{
+		Equals: true, PlusEqual: true, CoalesceEqual: true, PowEqual: true, ConcatEqual: true,
+		IsEqual: false, DoubleArrow: false, Attribute: false, BooleanOr: false, Increment: false,
+	} {
+		if got := k.IsAssignment(); got != want {
+			t.Errorf("%s: IsAssignment() = %v, want %v", k, got, want)
+		}
+	}
+}

@@ -53,7 +53,7 @@ func PHPSuppressions(source string, shared *Shared) Suppressions {
 	if !HasSuppressionMarker(source) {
 		return nil
 	}
-	return phpLayout(source, shared.tokens(source)).Suppressions()
+	return phpLayout(source, shared.lex(source)).Suppressions()
 }
 
 func (l Layout) Suppressions() Suppressions {

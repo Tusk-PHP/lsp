@@ -5,6 +5,9 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -27,52 +30,40 @@ func (r *RedundantNullsafeRule) Check(file *parser.FileNode, source string, _ *s
 	if r.TypeResolver == nil || file == nil || !strings.Contains(source, "?->") {
 		return nil
 	}
-	toks := significantTokens(parser.Tokenize(source))
+	toks := lexer.Significant(lexer.Lex(source, token.Latest))
+	lines := ast.NewLines(source)
 	fns := functionSpans(file)
 	var findings []Finding
-	for i := 1; i+1 < len(toks); i++ {
+	for i := 1; i < len(toks); i++ {
 		q := toks[i]
-		if q.Kind != parser.TokenQuestion || toks[i+1].Kind != parser.TokenArrow || toks[i+1].Offset != q.Offset+1 {
+		if q.Kind != token.NullsafeObjectOperator {
 			continue
 		}
 		recv := toks[i-1]
-		if recv.Kind != parser.TokenVariable {
+		if recv.Kind != token.Variable || i >= 2 && isMemberAccess(toks[i-2].Kind) {
 			continue
 		}
-		// `$a->b?->` and `A::$b?->` are properties, not the variable.
-		if i >= 2 && (toks[i-2].Kind == parser.TokenArrow || toks[i-2].Kind == parser.TokenDoubleColon) {
-			continue
-		}
+		name := recv.Text(source)
 		message := ""
-		if recv.Value == "$this" {
+		if name == "$this" {
 			message = "Redundant nullsafe operator: $this is never null"
-		} else if typ, ok := nonNullParameter(toks, fns, recv); ok {
+		} else if typ, ok := nonNullParameter(source, toks, lines, fns, recv); ok {
 			message = fmt.Sprintf("Redundant nullsafe operator: type '%s' is non-nullable", typ)
 		} else {
 			continue
 		}
+		line, col := lines.Position(q.Start)
 		findings = append(findings, Finding{
-			StartLine: q.Line,
-			StartCol:  q.Column,
-			EndLine:   q.Line,
-			EndCol:    q.Column + 3,
+			StartLine: line,
+			StartCol:  col,
+			EndLine:   line,
+			EndCol:    col + 3,
 			Severity:  rule.SeverityInfo,
 			Code:      rule.RedundantNullsafe,
 			Message:   message,
 		})
 	}
 	return findings
-}
-
-// significantTokens drops comments.
-func significantTokens(all []parser.Token) []parser.Token {
-	out := make([]parser.Token, 0, len(all))
-	for _, t := range all {
-		if t.Kind != parser.TokenComment && t.Kind != parser.TokenDocComment && t.Kind != parser.TokenEOF {
-			out = append(out, t)
-		}
-	}
-	return out
 }
 
 type functionSpan struct {
@@ -110,11 +101,13 @@ func functionSpans(file *parser.FileNode) []functionSpan {
 // function around it whose declared type excludes null, with no null
 // default, and which the function only uses as a receiver (`$x->`, `$x?->`)
 // after declaring it, so it is never reassigned or passed by reference.
-func nonNullParameter(toks []parser.Token, fns []functionSpan, recv parser.Token) (string, bool) {
+func nonNullParameter(source string, toks []lexer.Token, lines ast.Lines, fns []functionSpan, recv lexer.Token) (string, bool) {
+	recvLine, _ := lines.Position(recv.Start)
+	name := recv.Text(source)
 	var fn *functionSpan
 	for i := range fns {
 		f := &fns[i]
-		if f.start <= recv.Line && recv.Line <= f.end && (fn == nil || f.end-f.start < fn.end-fn.start) {
+		if f.start <= recvLine && recvLine <= f.end && (fn == nil || f.end-f.start < fn.end-fn.start) {
 			fn = f
 		}
 	}
@@ -123,7 +116,7 @@ func nonNullParameter(toks []parser.Token, fns []functionSpan, recv parser.Token
 	}
 	var param *parser.ParamNode
 	for i := range fn.params {
-		if fn.params[i].Name == recv.Value {
+		if fn.params[i].Name == name {
 			param = &fn.params[i]
 		}
 	}
@@ -134,23 +127,18 @@ func nonNullParameter(toks []parser.Token, fns []functionSpan, recv parser.Token
 	if typ == "" || isNullable(typ) || strings.Contains(strings.ToLower(typ), "mixed") {
 		return "", false
 	}
+	from, to := lineSpan(lines, fn.start, fn.end, len(source))
+	body := tokensWithin(toks, from, to)
 	declared := false
-	for i, t := range toks {
-		if t.Line < fn.start || t.Line > fn.end || t.Kind != parser.TokenVariable || t.Value != recv.Value {
+	for i, t := range body {
+		if t.Kind != token.Variable || t.Text(source) != name {
 			continue
 		}
 		if !declared {
-			declared = true // the parameter itself, in the signature
+			declared = true
 			continue
 		}
-		next := parser.Token{Kind: parser.TokenEOF}
-		if i+1 < len(toks) {
-			next = toks[i+1]
-		}
-		if next.Kind == parser.TokenArrow {
-			continue
-		}
-		if next.Kind == parser.TokenQuestion && i+2 < len(toks) && toks[i+2].Kind == parser.TokenArrow {
+		if i+1 < len(body) && isObjectOperator(body[i+1].Kind) {
 			continue
 		}
 		return "", false

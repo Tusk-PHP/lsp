@@ -91,16 +91,6 @@ func infix(k token.Kind, v token.Version) (int, assoc, bool) {
 	return 0, left, false
 }
 
-func isAssignOp(k token.Kind) bool {
-	switch k {
-	case token.Equals, token.PlusEqual, token.MinusEqual, token.MulEqual, token.DivEqual, token.ConcatEqual,
-		token.ModEqual, token.AndEqual, token.OrEqual, token.XorEqual, token.ShiftLeftEqual, token.ShiftRightEqual,
-		token.CoalesceEqual, token.PowEqual:
-		return true
-	}
-	return false
-}
-
 func isVariable(e ast.Expr) bool {
 	switch e.(type) {
 	case *ast.Variable, *ast.VariableVariable, *ast.ArrayDimFetch, *ast.PropertyFetch, *ast.StaticPropertyFetch,
@@ -196,7 +186,7 @@ func (p *parser) exprBody(min int, start uint32) ast.Expr {
 func (p *parser) operators(lhs ast.Expr, min int, start uint32) ast.Expr {
 	for {
 		k := p.peek()
-		if isAssignOp(k) && p.assignable(lhs, k) {
+		if k.IsAssignment() && p.assignable(lhs, k) {
 			lhs = p.assignment(lhs, start)
 			continue
 		}
@@ -573,7 +563,7 @@ func (p *parser) staticMember(class ast.Expr, start uint32) ast.Expr {
 		}
 		p.requires(token.PHP83, nameStart, "dynamic class constant fetch")
 		return &ast.ClassConstFetch{Class: class, Name: name, Span: p.span(start)}
-	case isSemiReserved(k):
+	case k.IsSemiReserved():
 		p.next()
 		name := &ast.IdentifierExpr{Span: p.span(nameStart)}
 		if p.peek() == token.LeftParen {
@@ -619,7 +609,7 @@ func (p *parser) continuesMember(k token.Kind) bool {
 	case token.LeftBrace:
 		return p.version < token.PHP80
 	}
-	return !startsExpr(k) || isAmpersand(k) || isAssignOp(k)
+	return !startsExpr(k) || isAmpersand(k) || k.IsAssignment()
 }
 
 func (p *parser) args() *ast.ArgList {
@@ -690,7 +680,7 @@ func (p *parser) arg() *ast.Arg {
 	switch {
 	case p.accept(token.Ellipsis):
 		arg.Unpack = true
-	case isSemiReserved(p.peek()) && p.peekAt(1) == token.Colon:
+	case p.peek().IsSemiReserved() && p.peekAt(1) == token.Colon:
 		arg.Name = p.memberName()
 		p.next()
 		p.requires(token.PHP80, start, "named arguments")

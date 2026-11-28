@@ -203,3 +203,48 @@ interface Readable {
 		}
 	}
 }
+
+func TestGetCodeActionsImplementMissingMethodsCopiesDeclarationsFromTokens(t *testing.T) {
+	source := `<?php
+namespace App;
+
+class Square implements Shape {
+}
+`
+	a, _ := setupRenameAnalyzer(map[string]string{
+		"file:///test.php": source,
+		"file:///shape.php": `<?php
+namespace App;
+
+interface Shape {
+    public function a(): void; public static function list(array $x = [1, (2)], #[A] $y = null): void;
+    public function
+        late(): void;
+    public function open(): void
+`,
+	})
+
+	actions := a.GetCodeActions("file:///test.php", source, protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: "file:///test.php"},
+		Range:        protocol.Range{Start: protocol.Position{Line: 3}, End: protocol.Position{Line: 3, Character: 30}},
+		Context:      protocol.CodeActionContext{Only: []protocol.CodeActionKind{"refactor"}},
+	})
+	for _, action := range actions {
+		if action.Title != "Implement missing methods" {
+			continue
+		}
+		text := action.Edit.Changes["file:///test.php"][0].NewText
+		for _, want := range []string{"public function a(): void\n", "public static function list(array $x = [1, (2)], #[A] $y = null): void\n"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("missing %q in:\n%s", want, text)
+			}
+		}
+		for _, unwanted := range []string{"late", "open"} {
+			if strings.Contains(text, unwanted) {
+				t.Errorf("unexpected %q in:\n%s", unwanted, text)
+			}
+		}
+		return
+	}
+	t.Fatalf("expected implement missing methods action, got %#v", actions)
+}

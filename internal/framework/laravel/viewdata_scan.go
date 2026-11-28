@@ -3,13 +3,13 @@ package laravel
 import (
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
 // viewScan reads what one PHP file says about views from its tokens.
 type viewScan struct {
 	uri, source string
-	toks        []parser.Token
+	toks        []phpToken
 	namespace   string
 	imports     map[string]string // lower-case alias → class
 	classes     []classSpan
@@ -26,13 +26,7 @@ type classSpan struct {
 // every view, the composers it registers and the data composer classes in
 // it add.
 func parseViewFile(uri, source string) phpViewFile {
-	all := parser.Tokenize(source)
-	toks := make([]parser.Token, 0, len(all))
-	for _, t := range all {
-		if t.Kind != parser.TokenComment && t.Kind != parser.TokenDocComment {
-			toks = append(toks, t)
-		}
-	}
+	toks := phpTokens(source)
 	s := &viewScan{uri: uri, source: source, toks: toks, imports: map[string]string{}}
 	s.declarations()
 	for i := 0; i+1 < len(toks); i++ {
@@ -73,13 +67,14 @@ func (s *viewScan) declarations() {
 	toks := s.toks
 	for i := 0; i < len(toks); i++ {
 		switch toks[i].Kind {
-		case parser.TokenNamespace:
+		case token.Namespace:
 			s.namespace, _ = qualifiedName(toks, i+1)
-		case parser.TokenUse:
-			if s.classAt(i) != "" || i+1 < len(toks) && toks[i+1].Kind == parser.TokenOpenParen {
+		case token.Use:
+			if s.classAt(i) != "" || i+1 < len(toks) && toks[i+1].Kind == token.LeftParen {
 				continue // a trait or a closure's use
 			}
 			name, j := qualifiedName(toks, i+1)
+			name = strings.TrimPrefix(name, `\`)
 			alias := name[strings.LastIndexByte(name, '\\')+1:]
 			if j+1 < len(toks) && strings.EqualFold(toks[j].Value, "as") {
 				alias = toks[j+1].Value
@@ -87,18 +82,18 @@ func (s *viewScan) declarations() {
 			if name != "" {
 				s.imports[strings.ToLower(alias)] = name
 			}
-		case parser.TokenClass:
-			if i > 0 && (toks[i-1].Kind == parser.TokenDoubleColon || toks[i-1].Kind == parser.TokenNew) {
+		case token.Class:
+			if i > 0 && (toks[i-1].Kind == token.DoubleColon || toks[i-1].Kind == token.New) {
 				continue
 			}
-			if i+1 >= len(toks) || toks[i+1].Kind != parser.TokenIdentifier {
+			if i+1 >= len(toks) || toks[i+1].Kind != token.Identifier {
 				continue
 			}
 			open := i + 2
-			for open < len(toks) && toks[open].Kind != parser.TokenOpenBrace {
+			for open < len(toks) && toks[open].Kind != token.LeftBrace {
 				open++
 			}
-			end := parser.MatchingClose(toks, open)
+			end := matchingClose(toks, open)
 			if end < 0 {
 				continue
 			}
@@ -111,23 +106,11 @@ func (s *viewScan) declarations() {
 	}
 }
 
-// qualifiedName reads a name such as `App\Models\User` starting at toks[i],
-// returning it and the index after it.
-func qualifiedName(toks []parser.Token, i int) (string, int) {
-	var b strings.Builder
-	for ; i < len(toks); i++ {
-		switch toks[i].Kind {
-		case parser.TokenIdentifier:
-			b.WriteString(toks[i].Value)
-		case parser.TokenBackslash:
-			if b.Len() > 0 {
-				b.WriteByte('\\')
-			}
-		default:
-			return strings.Trim(b.String(), `\`), i
-		}
+func qualifiedName(toks []phpToken, i int) (string, int) {
+	if i >= len(toks) || !isName(toks[i].Kind) {
+		return "", i
 	}
-	return strings.Trim(b.String(), `\`), i
+	return toks[i].Value, i + 1
 }
 
 // classAt returns the innermost class whose body contains toks[i].
@@ -195,7 +178,7 @@ func (s *viewScan) render(i int) (int, bool) {
 		r.vars, r.opaque = vars, r.opaque || opaque
 	}
 	if call.chain {
-		for k := close + 1; k+2 < len(toks) && toks[k].Kind == parser.TokenArrow && toks[k+2].Kind == parser.TokenOpenParen; {
+		for k := close + 1; k+2 < len(toks) && isArrow(toks[k].Kind) && toks[k+2].Kind == token.LeftParen; {
 			method := toks[k+1].Value
 			if !strings.HasPrefix(method, "with") {
 				break
@@ -216,29 +199,29 @@ func (s *viewScan) render(i int) (int, bool) {
 }
 
 // renderCallAt reports whether a render call starts at toks[i].
-func renderCallAt(toks []parser.Token, i int) (renderCall, bool) {
+func renderCallAt(toks []phpToken, i int) (renderCall, bool) {
 	t := toks[i]
-	if t.Kind != parser.TokenIdentifier || i+1 >= len(toks) {
+	if t.Kind != token.Identifier || i+1 >= len(toks) {
 		return renderCall{}, false
 	}
-	prev := parser.TokenEOF
+	prev := token.Invalid
 	if i > 0 {
 		prev = toks[i-1].Kind
 	}
 	switch {
-	case (t.Value == "view" || t.Value == "markdown") && toks[i+1].Kind == parser.TokenOpenParen:
-		if prev == parser.TokenArrow {
+	case (t.Value == "view" || t.Value == "markdown") && toks[i+1].Kind == token.LeftParen:
+		if isArrow(prev) {
 			// response()->view('name', $data); a Mailable's or a mail
 			// message's ->view() and ->markdown(), whose views get more data
 			// than they're passed.
 			return renderCall{nameArg: 0, dataArg: 1, open: i + 1, opaque: t.Value == "markdown"}, true
 		}
-		if t.Value == "markdown" || prev == parser.TokenDoubleColon || prev == parser.TokenFunction || prev == parser.TokenNew {
+		if t.Value == "markdown" || prev == token.DoubleColon || prev == token.Function || prev == token.New {
 			return renderCall{}, false
 		}
 		return renderCall{nameArg: 0, dataArg: 1, open: i + 1, chain: true}, true
-	case (t.Value == "View" || t.Value == "Route") && i+3 < len(toks) && toks[i+1].Kind == parser.TokenDoubleColon && toks[i+3].Kind == parser.TokenOpenParen:
-		if prev == parser.TokenArrow || prev == parser.TokenDoubleColon {
+	case (t.Value == "View" || t.Value == "Route") && i+3 < len(toks) && toks[i+1].Kind == token.DoubleColon && toks[i+3].Kind == token.LeftParen:
+		if isArrow(prev) || prev == token.DoubleColon {
 			return renderCall{}, false
 		}
 		method := toks[i+2].Value
@@ -255,11 +238,11 @@ func renderCallAt(toks []parser.Token, i int) (renderCall, bool) {
 // content reads a Mailable's `new Content(view: 'mail.x', with: [...])`.
 func (s *viewScan) content(i int) (int, bool) {
 	toks := s.toks
-	if toks[i].Kind != parser.TokenNew || i+2 >= len(toks) {
+	if toks[i].Kind != token.New || i+2 >= len(toks) {
 		return 0, false
 	}
 	name, open := qualifiedName(toks, i+1)
-	if name == "" || name[strings.LastIndexByte(name, '\\')+1:] != "Content" || open >= len(toks) || toks[open].Kind != parser.TokenOpenParen {
+	if name == "" || name[strings.LastIndexByte(name, '\\')+1:] != "Content" || open >= len(toks) || toks[open].Kind != token.LeftParen {
 		return 0, false
 	}
 	args, close := splitTokenArgs(toks, open)
@@ -271,7 +254,7 @@ func (s *viewScan) content(i int) (int, bool) {
 	var vars []ViewVar
 	opaque := false
 	for _, a := range args {
-		if a.end-a.start < 3 || toks[a.start].Kind != parser.TokenIdentifier || toks[a.start+1].Kind != parser.TokenColon {
+		if a.end-a.start < 3 || toks[a.start].Kind != token.Identifier || toks[a.start+1].Kind != token.Colon {
 			opaque = true // positional arguments
 			continue
 		}
@@ -303,12 +286,12 @@ func (s *viewScan) content(i int) (int, bool) {
 func (s *viewScan) registration(i int) (int, bool) {
 	toks := s.toks
 	t := toks[i]
-	if t.Kind != parser.TokenIdentifier || i+1 >= len(toks) || toks[i+1].Kind != parser.TokenOpenParen {
+	if t.Kind != token.Identifier || i+1 >= len(toks) || toks[i+1].Kind != token.LeftParen {
 		return 0, false
 	}
-	onFacade := i >= 2 && toks[i-1].Kind == parser.TokenDoubleColon && toks[i-2].Value == "View"
-	onHelper := i >= 4 && toks[i-1].Kind == parser.TokenArrow && toks[i-2].Kind == parser.TokenCloseParen &&
-		toks[i-3].Kind == parser.TokenOpenParen && toks[i-4].Value == "view"
+	onFacade := i >= 2 && toks[i-1].Kind == token.DoubleColon && toks[i-2].Value == "View"
+	onHelper := i >= 4 && isArrow(toks[i-1].Kind) && toks[i-2].Kind == token.RightParen &&
+		toks[i-3].Kind == token.LeftParen && toks[i-4].Value == "view"
 	if !onFacade && !onHelper {
 		return 0, false
 	}
@@ -338,7 +321,7 @@ func (s *viewScan) registration(i int) (int, bool) {
 	case "composer", "creator", "composers":
 		s.composer(args, i)
 	case "first":
-		if len(args) == 0 || toks[args[0].start].Kind != parser.TokenOpenBracket {
+		if len(args) == 0 || toks[args[0].start].Kind != token.LeftBracket {
 			s.f.dynamic++
 			break
 		}
@@ -370,7 +353,7 @@ func (s *viewScan) composer(args []tokenSpan, call int) {
 	// The views: a name, or a list of names.
 	if name, ok := literalString(toks, args[0]); ok {
 		c.views = []string{name}
-	} else if toks[args[0].start].Kind == parser.TokenOpenBracket {
+	} else if toks[args[0].start].Kind == token.LeftBracket {
 		for _, item := range splitItems(toks, tokenSpan{args[0].start + 1, args[0].end - 1}) {
 			name, ok := literalString(toks, item)
 			if !ok {
@@ -390,10 +373,10 @@ func (s *viewScan) composer(args []tokenSpan, call int) {
 	// The composer: Composer::class, 'App\…\Composer', or a closure.
 	a := args[1]
 	switch {
-	case a.end-a.start >= 3 && toks[a.end-1].Value == "class" && toks[a.end-2].Kind == parser.TokenDoubleColon:
+	case a.end-a.start >= 3 && toks[a.end-1].Value == "class" && toks[a.end-2].Kind == token.DoubleColon:
 		name, _ := qualifiedName(toks, a.start)
 		c.class = s.resolveClass(name)
-	case a.end-a.start == 1 && toks[a.start].Kind == parser.TokenStringLiteral:
+	case a.end-a.start == 1 && toks[a.start].Kind == token.ConstantString:
 		if name, ok := literalString(toks, a); ok && strings.Contains(name, `\`) {
 			c.class = strings.TrimPrefix(name, `\`)
 		} else {
@@ -417,10 +400,10 @@ func (s *viewScan) composer(args []tokenSpan, call int) {
 func (s *viewScan) closureWith(a tokenSpan) ([]ViewVar, bool, bool) {
 	toks := s.toks
 	k := a.start
-	if toks[k].Kind == parser.TokenStatic {
+	if toks[k].Kind == token.Static {
 		k++
 	}
-	if k >= a.end || (toks[k].Kind != parser.TokenFunction && toks[k].Value != "fn") || k+1 >= a.end || toks[k+1].Kind != parser.TokenOpenParen {
+	if k >= a.end || (toks[k].Kind != token.Function && toks[k].Kind != token.Fn) || k+1 >= a.end || toks[k+1].Kind != token.LeftParen {
 		return nil, true, false
 	}
 	params, pclose := splitTokenArgs(toks, k+1)
@@ -437,7 +420,7 @@ func (s *viewScan) closureWith(a tokenSpan) ([]ViewVar, bool, bool) {
 // data its ->with() calls on $view add.
 func (s *viewScan) compose(i int) {
 	toks := s.toks
-	if toks[i].Kind != parser.TokenFunction || i+2 >= len(toks) || toks[i+1].Value != "compose" || toks[i+2].Kind != parser.TokenOpenParen {
+	if toks[i].Kind != token.Function || i+2 >= len(toks) || toks[i+1].Value != "compose" || toks[i+2].Kind != token.LeftParen {
 		return
 	}
 	class := s.classAt(i)
@@ -449,13 +432,13 @@ func (s *viewScan) compose(i int) {
 		return
 	}
 	open := pclose + 1
-	for open < len(toks) && toks[open].Kind != parser.TokenOpenBrace && toks[open].Kind != parser.TokenSemicolon {
+	for open < len(toks) && toks[open].Kind != token.LeftBrace && toks[open].Kind != token.Semicolon {
 		open++
 	}
-	if open >= len(toks) || toks[open].Kind != parser.TokenOpenBrace {
+	if open >= len(toks) || toks[open].Kind != token.LeftBrace {
 		return
 	}
-	end := parser.MatchingClose(toks, open)
+	end := matchingClose(toks, open)
 	if end < 0 {
 		return
 	}
@@ -479,10 +462,10 @@ func (s *viewScan) withCalls(param string, body tokenSpan) ([]ViewVar, bool) {
 	var vars []ViewVar
 	opaque := false
 	for k := body.start; k < body.end; k++ {
-		if toks[k].Kind != parser.TokenVariable || toks[k].Value != param {
+		if toks[k].Kind != token.Variable || toks[k].Value != param {
 			continue
 		}
-		if k+3 < body.end && toks[k+1].Kind == parser.TokenArrow && strings.HasPrefix(toks[k+2].Value, "with") && toks[k+3].Kind == parser.TokenOpenParen {
+		if k+3 < body.end && isArrow(toks[k+1].Kind) && strings.HasPrefix(toks[k+2].Value, "with") && toks[k+3].Kind == token.LeftParen {
 			args, close := splitTokenArgs(toks, k+3)
 			if close < 0 {
 				return vars, true
@@ -491,7 +474,7 @@ func (s *viewScan) withCalls(param string, body tokenSpan) ([]ViewVar, bool) {
 			vars = append(vars, v...)
 			opaque = opaque || o
 			// ->with(…)->with(…)
-			for close+3 < body.end && toks[close+1].Kind == parser.TokenArrow && strings.HasPrefix(toks[close+2].Value, "with") && toks[close+3].Kind == parser.TokenOpenParen {
+			for close+3 < body.end && isArrow(toks[close+1].Kind) && strings.HasPrefix(toks[close+2].Value, "with") && toks[close+3].Kind == token.LeftParen {
 				wargs, wclose := splitTokenArgs(toks, close+3)
 				if wclose < 0 {
 					break
@@ -511,9 +494,9 @@ func (s *viewScan) withCalls(param string, body tokenSpan) ([]ViewVar, bool) {
 
 // lastVariable returns the variable a parameter declares, such as `$view`
 // in `View $view`.
-func lastVariable(toks []parser.Token, s tokenSpan) string {
+func lastVariable(toks []phpToken, s tokenSpan) string {
 	for k := s.end - 1; k >= s.start; k-- {
-		if toks[k].Kind == parser.TokenVariable {
+		if toks[k].Kind == token.Variable {
 			return toks[k].Value
 		}
 	}

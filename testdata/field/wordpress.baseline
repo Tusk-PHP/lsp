@@ -112,7 +112,6 @@ src/wp-includes/class-walker-page.php	unused-variable	Variable $t is assigned bu
 src/wp-includes/class-wp-http-requests-hooks.php	argument-count-mismatch	Too many arguments to do_action_ref_array(): 4 passed, at most 2 expected
 src/wp-includes/class-wp-http.php	unused-private-method	Private method 'WP_Http::_dispatch_request' is never used
 src/wp-includes/class-wp-script-modules.php	unused-private-method	Private method 'WP_Script_Modules::get_marked_for_enqueue' is never used
-src/wp-includes/class-wpdb.php	unused-private-property	Private property 'wpdb::$use_mysqli' is never used
 src/wp-includes/deprecated.php	undefined-variable	Undefined variable $excerpt
 src/wp-includes/deprecated.php	undefined-variable	Undefined variable $excerpt
 src/wp-includes/deprecated.php	undefined-variable	Undefined variable $excerpt
