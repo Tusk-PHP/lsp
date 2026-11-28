@@ -97,9 +97,8 @@ func (s *Store) Save(uri, text string) bool {
 		return false
 	}
 	doc := s.docs[uri]
-	if doc.Text != text || doc.diverged {
+	if doc.Text != text {
 		doc.Text = text
-		doc.diverged = false
 		s.putLocked(doc)
 	}
 	return true

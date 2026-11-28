@@ -230,7 +230,7 @@ func TestAChangeToADocumentThatIsNotOpenIsOnlyLogged(t *testing.T) {
 	}
 }
 
-func TestSavingADivergedDocumentReadsItBackFromDisk(t *testing.T) {
+func TestSavingADivergedDocumentShowsTheDiskButKeepsWaitingForTheFullText(t *testing.T) {
 	s := NewServer(strings.NewReader(""), io.Discard, log.New(io.Discard, "", 0))
 	path := filepath.Join(t.TempDir(), "a.json")
 	uri := symbols.PathToURI(path)
@@ -239,14 +239,22 @@ func TestSavingADivergedDocumentReadsItBackFromDisk(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{\"saved\": 1}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	s.handleMessage(changeMessage(t, uri, 3, map[string]any{"range": lspRange(0, 1, 0, 1), "text": "\"typed\": 1, "}))
 	params, err := json.Marshal(map[string]any{"textDocument": map[string]any{"uri": uri}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	s.handleMessage(&jsonRPCMessage{JSONRPC: "2.0", Method: "textDocument/didSave", Params: params})
-	s.handleMessage(changeMessage(t, uri, 3, map[string]any{"range": lspRange(0, 1, 0, 1), "text": "\"a\": 0, "}))
-	if doc, _ := s.docs.Get(uri); doc.Text != "{\"a\": 0, \"saved\": 1}\n" || doc.Diverged() {
-		t.Errorf("after a save and a range edit: %+v", doc)
+	if doc, _ := s.docs.Get(uri); doc.Text != "{\"saved\": 1}\n" || !doc.Diverged() {
+		t.Errorf("after a save the diverged document is %+v, want the file on disk, still diverged", doc)
+	}
+	s.handleMessage(changeMessage(t, uri, 4, map[string]any{"range": lspRange(0, 1, 0, 1), "text": "\"a\": 0, "}))
+	if doc, _ := s.docs.Get(uri); doc.Text != "{\"saved\": 1}\n" || !doc.Diverged() {
+		t.Errorf("a range edit after the save applied to text one edit behind the editor's: %+v", doc)
+	}
+	s.handleMessage(changeMessage(t, uri, 5, map[string]any{"text": "{\"typed\": 1, \"a\": 0, \"saved\": 1}\n"}))
+	if doc, _ := s.docs.Get(uri); doc.Text != "{\"typed\": 1, \"a\": 0, \"saved\": 1}\n" || doc.Diverged() {
+		t.Errorf("after the full text: %+v", doc)
 	}
 }
 

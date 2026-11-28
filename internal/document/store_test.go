@@ -116,7 +116,7 @@ func TestStoreRefusesRangeEditsAfterARejectedChange(t *testing.T) {
 	}
 }
 
-func TestStoreReopenAndSaveEndADivergence(t *testing.T) {
+func TestStoreOnlyAReopenOrTheFullTextEndsADivergence(t *testing.T) {
 	const uri = "file:///a.php"
 	diverge := func(s *Store) {
 		t.Helper()
@@ -136,8 +136,11 @@ func TestStoreReopenAndSaveEndADivergence(t *testing.T) {
 	if !s.Save(uri, "<?php\nsaved();\n") {
 		t.Fatal("the save was refused")
 	}
-	if doc, err := s.Change(uri, 3, UTF16, []Change{{Range: at(1, 0, 1, 0), Text: "b();"}}); err != nil || doc.Text != "<?php\nb();saved();\n" {
-		t.Errorf("a range edit after a save with the full text: %+v, %v", doc, err)
+	if doc, _ := s.Get(uri); doc.Text != "<?php\nsaved();\n" || !doc.Diverged() {
+		t.Errorf("after a save the diverged document is %+v, want the saved text, still diverged", doc)
+	}
+	if _, err := s.Change(uri, 3, UTF16, []Change{{Range: at(1, 0, 1, 0), Text: "b();"}}); !errors.Is(err, ErrDiverged) {
+		t.Errorf("a range edit after a save: %v, want ErrDiverged", err)
 	}
 }
 
