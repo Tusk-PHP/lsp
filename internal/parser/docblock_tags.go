@@ -196,7 +196,9 @@ func applyDocTags(doc *DocBlock, tags []docTag) {
 		case "property-write":
 			doc.Properties = append(doc.Properties, parseDocProperty(v, false, true))
 		case "method":
-			doc.Methods = append(doc.Methods, parseDocMethod(v))
+			if method := parseDocMethod(v); method.Name != "" {
+				doc.Methods = append(doc.Methods, method)
+			}
 		case "template":
 			if tmpl := parseDocTemplate(v); tmpl.Name != "" {
 				doc.Templates = append(doc.Templates, tmpl)

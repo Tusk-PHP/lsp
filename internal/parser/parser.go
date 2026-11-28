@@ -369,6 +369,20 @@ func IsIdentByte(b byte) bool {
 	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b >= 0x80
 }
 
+// IsIdentifier reports whether s is a whole PHP name: one or more
+// IsIdentByte bytes, not starting with a digit.
+func IsIdentifier(s string) bool {
+	if s == "" || (s[0] >= '0' && s[0] <= '9') {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if !IsIdentByte(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // Text outside <?php … ?> is inline HTML and produces no tokens. A source
 // with no open tag at all (a snippet) is read as PHP throughout.
 func tokenize(source string) ([]Token, []ParseError) {

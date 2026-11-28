@@ -452,10 +452,10 @@ func parseDocMethod(value string) DocMethod {
 	if firstParen < 0 {
 		parts := strings.Fields(value)
 		if len(parts) < 2 {
-			m.Name = value
+			m.Name = docMethodName(value)
 			return m
 		}
-		m.ReturnType, m.Name = parts[0], parts[1]
+		m.ReturnType, m.Name = parts[0], docMethodName(parts[1])
 		m.ParsedType = parseDocTypeExprPtr(m.ReturnType)
 		m.Description = strings.Join(parts[2:], " ")
 		return m
@@ -469,10 +469,10 @@ func parseDocMethod(value string) DocMethod {
 		return m
 	case 1:
 		// Either "name(" or might be a type if there's no space before (
-		m.Name = parts[0]
+		m.Name = docMethodName(parts[0])
 	default:
 		// "ReturnType name(" — last part is name, everything before is return type
-		m.Name = parts[len(parts)-1]
+		m.Name = docMethodName(parts[len(parts)-1])
 		m.ReturnType = strings.Join(parts[:len(parts)-1], " ")
 		m.ParsedType = parseDocTypeExprPtr(m.ReturnType)
 	}
@@ -483,6 +483,13 @@ func parseDocMethod(value string) DocMethod {
 	}
 
 	return m
+}
+
+func docMethodName(name string) string {
+	if !IsIdentifier(name) {
+		return ""
+	}
+	return name
 }
 
 func parseDocTypeAlias(value string) DocTypeAlias {

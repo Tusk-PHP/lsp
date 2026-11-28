@@ -285,9 +285,6 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 						idx.addSymbolWithSource(uri, ps, SourceProject)
 					}
 					for _, method := range doc.Methods {
-						if method.Name == "" {
-							continue
-						}
 						if idx.symbols[fqn+"::"+method.Name] != nil {
 							continue
 						}
@@ -948,9 +945,6 @@ func (idx *Index) indexVirtualMembers(uri string, parent *Symbol, src SymbolSour
 	}
 
 	for _, method := range doc.Methods {
-		if method.Name == "" {
-			continue
-		}
 		if idx.symbols[fqn+"::"+method.Name] != nil {
 			continue
 		}

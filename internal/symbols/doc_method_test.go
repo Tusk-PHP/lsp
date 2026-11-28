@@ -53,3 +53,19 @@ func assertDocMethodParams(t *testing.T, idx *Index) {
 		t.Errorf("fill params:\n got %+v\nwant %+v", fill.Params, want)
 	}
 }
+
+func TestDocMethodWithoutANameAddsNoMember(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///user.php", "<?php\nnamespace App;\n\n/**\n * @method ?\n * @method -x\n * @method int save()\n */\nclass User {}\n")
+	for _, name := range []string{`App\User::?`, `App\User::-x`} {
+		if idx.Lookup(name) != nil {
+			t.Errorf("%s should not be a virtual member", name)
+		}
+	}
+	if idx.Lookup(`App\User::save`) == nil {
+		t.Error("expected the virtual method save")
+	}
+	if user := idx.Lookup(`App\User`); user == nil || len(user.Children) != 1 {
+		t.Errorf("User children = %+v, want only save", user)
+	}
+}

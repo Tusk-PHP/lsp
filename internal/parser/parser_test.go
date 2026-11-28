@@ -678,6 +678,30 @@ func TestParseDocBlockMethodWithoutParentheses(t *testing.T) {
 	}
 }
 
+func TestParseDocBlockMethodNeedsAnIdentifier(t *testing.T) {
+	for _, tag := range []string{"?", "-x", "()", "int -x", "int -x()", "1abc()", "int foo-bar()", "static ?"} {
+		if doc := ParseDocBlock("/**\n * @method " + tag + "\n */"); len(doc.Methods) != 0 {
+			t.Errorf("@method %s: got methods %+v, want none", tag, doc.Methods)
+		}
+	}
+	doc := ParseDocBlock("/**\n * @method ?\n * @method int _ok()\n * @method \u00e9t\u00e9\n */")
+	var names []string
+	for _, m := range doc.Methods {
+		names = append(names, m.Name)
+	}
+	if want := []string{"_ok", "\u00e9t\u00e9"}; !slices.Equal(names, want) {
+		t.Errorf("method names = %q, want %q", names, want)
+	}
+}
+
+func TestIsIdentifier(t *testing.T) {
+	for s, want := range map[string]bool{"": false, "a": true, "_": true, "a1": true, "1a": false, "foo-bar": false, "?": false, "\u00e9": true, "a b": false} {
+		if got := IsIdentifier(s); got != want {
+			t.Errorf("IsIdentifier(%q) = %v, want %v", s, got, want)
+		}
+	}
+}
+
 func TestParseDocBlockStructuredTypeAliases(t *testing.T) {
 	raw := `/**
 	 * @phpstan-type Payload array{id: int, name: string}
