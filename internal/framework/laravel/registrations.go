@@ -9,7 +9,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
-	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -196,13 +196,7 @@ type providerScan struct {
 
 func (ps *providerScan) scan(src string) {
 	uri := "file://" + filepath.ToSlash(ps.path)
-	all := parser.Tokenize(src)
-	toks := make([]parser.Token, 0, len(all))
-	for _, t := range all {
-		if t.Kind != parser.TokenComment && t.Kind != parser.TokenDocComment {
-			toks = append(toks, t)
-		}
-	}
+	toks := phpTokens(src)
 	vs := &viewScan{uri: uri, source: src, toks: toks, imports: map[string]string{}}
 	vs.declarations()
 	ps.scan_ = vs
@@ -210,11 +204,11 @@ func (ps *providerScan) scan(src string) {
 	packageName := ""
 	for i := 0; i+1 < len(toks); i++ {
 		t := toks[i]
-		if t.Kind != parser.TokenIdentifier || toks[i+1].Kind != parser.TokenOpenParen || i == 0 {
+		if !t.Kind.IsSemiReserved() || toks[i+1].Kind != token.LeftParen || i == 0 {
 			continue
 		}
 		prev := toks[i-1].Kind
-		if prev != parser.TokenArrow && prev != parser.TokenDoubleColon {
+		if !isArrow(prev) && prev != token.DoubleColon {
 			continue
 		}
 		args, close := splitTokenArgs(toks, i+1)
@@ -231,7 +225,7 @@ func (ps *providerScan) scan(src string) {
 				ps.regs.Directives[strings.ToLower(name)] = reg
 			}
 		case "if":
-			if name, ok := argString(toks, args, 0); ok && prev == parser.TokenDoubleColon {
+			if name, ok := argString(toks, args, 0); ok && prev == token.DoubleColon {
 				ps.regs.Conditionals[strings.ToLower(name)] = reg
 			}
 		case "component":
@@ -316,7 +310,7 @@ func (ps *providerScan) scan(src string) {
 
 // component reads Blade::component(X::class, 'alias'), the reverse, or
 // either with a prefix.
-func (ps *providerScan) component(toks []parser.Token, args []tokenSpan) {
+func (ps *providerScan) component(toks []phpToken, args []tokenSpan) {
 	if len(args) < 2 {
 		ps.regs.UnknownComponents = true // an alias guessed from the class
 		return
@@ -346,15 +340,15 @@ func (ps *providerScan) component(toks []parser.Token, args []tokenSpan) {
 }
 
 // components reads Blade::components([X::class => 'alias', ...]).
-func (ps *providerScan) components(toks []parser.Token, args []tokenSpan) {
-	if len(args) == 0 || toks[args[0].start].Kind != parser.TokenOpenBracket {
+func (ps *providerScan) components(toks []phpToken, args []tokenSpan) {
+	if len(args) == 0 || toks[args[0].start].Kind != token.LeftBracket {
 		ps.regs.UnknownComponents = true
 		return
 	}
 	for _, item := range splitItems(toks, tokenSpan{args[0].start + 1, args[0].end - 1}) {
 		arrow := -1
 		for k := item.start; k < item.end; k++ {
-			if toks[k].Kind == parser.TokenDoubleArrow {
+			if toks[k].Kind == token.DoubleArrow {
 				arrow = k
 				break
 			}
@@ -375,9 +369,9 @@ func (ps *providerScan) components(toks []parser.Token, args []tokenSpan) {
 
 // viewComponentsAs reads loadViewComponentsAs('prefix', [X::class, ...]):
 // `<x-prefix-x>`.
-func (ps *providerScan) viewComponentsAs(toks []parser.Token, args []tokenSpan) {
+func (ps *providerScan) viewComponentsAs(toks []phpToken, args []tokenSpan) {
 	prefix, ok := argString(toks, args, 0)
-	if !ok || len(args) < 2 || toks[args[1].start].Kind != parser.TokenOpenBracket {
+	if !ok || len(args) < 2 || toks[args[1].start].Kind != token.LeftBracket {
 		ps.regs.UnknownComponents = true
 		return
 	}
@@ -393,8 +387,8 @@ func (ps *providerScan) viewComponentsAs(toks []parser.Token, args []tokenSpan) 
 }
 
 // classArg reads `X::class` or a class name string.
-func (ps *providerScan) classArg(toks []parser.Token, a tokenSpan) string {
-	if a.end-a.start >= 3 && toks[a.end-1].Value == "class" && toks[a.end-2].Kind == parser.TokenDoubleColon {
+func (ps *providerScan) classArg(toks []phpToken, a tokenSpan) string {
+	if a.end-a.start >= 3 && toks[a.end-1].Value == "class" && toks[a.end-2].Kind == token.DoubleColon {
 		name, _ := qualifiedName(toks, a.start)
 		return ps.scan_.resolveClass(name)
 	}
@@ -404,7 +398,7 @@ func (ps *providerScan) classArg(toks []parser.Token, a tokenSpan) string {
 	return ""
 }
 
-func argString(toks []parser.Token, args []tokenSpan, i int) (string, bool) {
+func argString(toks []phpToken, args []tokenSpan, i int) (string, bool) {
 	if i >= len(args) {
 		return "", false
 	}
@@ -424,7 +418,7 @@ func unescapePHP(s string) string {
 // path_ evaluates a directory argument made of string literals, __DIR__,
 // dirname(__DIR__, n) and resource_path(), base_path() or app_path() with a
 // literal, joined with `.`.
-func (ps *providerScan) path_(toks []parser.Token, args []tokenSpan, i int) (string, bool) {
+func (ps *providerScan) path_(toks []phpToken, args []tokenSpan, i int) (string, bool) {
 	if i >= len(args) {
 		return "", false
 	}
@@ -434,24 +428,24 @@ func (ps *providerScan) path_(toks []parser.Token, args []tokenSpan, i int) (str
 	for k < a.end {
 		t := toks[k]
 		switch {
-		case t.Kind == parser.TokenStringLiteral:
+		case t.Kind == token.ConstantString:
 			s, ok := literalString(toks, tokenSpan{k, k + 1})
 			if !ok {
 				return "", false
 			}
 			b.WriteString(s)
 			k++
-		case t.Kind == parser.TokenIdentifier && t.Value == "__DIR__":
+		case t.Kind == token.DirConst:
 			b.WriteString(filepath.Dir(ps.path))
 			k++
-		case t.Kind == parser.TokenIdentifier && k+1 < a.end && toks[k+1].Kind == parser.TokenOpenParen:
+		case t.Kind == token.Identifier && k+1 < a.end && toks[k+1].Kind == token.LeftParen:
 			fargs, close := splitTokenArgs(toks, k+1)
 			if close < 0 || close >= a.end {
 				return "", false
 			}
 			switch t.Value {
 			case "dirname":
-				if len(fargs) == 0 || fargs[0].end-fargs[0].start != 1 || toks[fargs[0].start].Value != "__DIR__" {
+				if len(fargs) == 0 || fargs[0].end-fargs[0].start != 1 || toks[fargs[0].start].Kind != token.DirConst {
 					return "", false
 				}
 				levels := 1
@@ -482,7 +476,7 @@ func (ps *providerScan) path_(toks []parser.Token, args []tokenSpan, i int) (str
 				return "", false
 			}
 			k = close + 1
-		case t.Kind == parser.TokenUnknown && t.Value == ".":
+		case t.Kind == token.Dot:
 			k++
 		default:
 			return "", false

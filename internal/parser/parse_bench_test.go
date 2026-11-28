@@ -49,7 +49,7 @@ func BenchmarkTokenize(b *testing.B) {
 			b.SetBytes(int64(len(src)))
 			b.ReportAllocs()
 			for b.Loop() {
-				Tokenize(src)
+				tokenize(src)
 			}
 		})
 	}

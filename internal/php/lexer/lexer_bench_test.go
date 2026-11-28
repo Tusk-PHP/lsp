@@ -1,4 +1,4 @@
-package lexer
+package lexer_test
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 )
 
@@ -38,16 +38,7 @@ func BenchmarkLex(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			for _, src := range sources {
-				Lex(src, token.Latest)
-			}
-		}
-	})
-	b.Run("parser.Tokenize", func(b *testing.B) {
-		b.SetBytes(int64(size))
-		b.ReportAllocs()
-		for b.Loop() {
-			for _, src := range sources {
-				parser.Tokenize(src)
+				lexer.Lex(src, token.Latest)
 			}
 		}
 	})

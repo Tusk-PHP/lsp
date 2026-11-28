@@ -6,7 +6,7 @@ import (
 )
 
 func TestSignificantTokensSkipComments(t *testing.T) {
-	tokens := Tokenize("<?php /** doc */ $a /* c */ = // line\n 1;")
+	tokens := tokensOf("<?php /** doc */ $a /* c */ = // line\n 1;")
 	values := func(idx ...int) []string {
 		out := make([]string, 0, len(idx))
 		for _, i := range idx {
@@ -40,4 +40,9 @@ func TestSignificantTokensSkipComments(t *testing.T) {
 	if len(kept) != len(tokens)-3 {
 		t.Errorf("kept %v of %d tokens", kept, len(tokens))
 	}
+}
+
+func tokensOf(source string) []Token {
+	tokens, _ := tokenize(source)
+	return tokens
 }

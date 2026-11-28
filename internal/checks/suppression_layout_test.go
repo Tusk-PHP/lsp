@@ -138,3 +138,14 @@ func TestLayoutTrailingCommentAt(t *testing.T) {
 		t.Error("no line past the end")
 	}
 }
+
+func TestLayoutReadsInterpolatedStringsAsOneLiteral(t *testing.T) {
+	source := "<?php\n$a = \"x {$b[\"k\"]} $c\ny\";\n$d = <<<EOT\n{$e(\"f$x\n\")} ${g}\nEOT;\n$h = `ls\n-l`;\n$i = 1;\n$j = \"open {$k\nmore"
+	l := PHPLayout(source)
+	for line, want := range map[int]bool{1: true, 2: false, 3: true, 4: false, 5: false, 6: false, 7: true, 8: false, 9: true, 10: true, 11: false} {
+		start, _ := l.LineStart(line)
+		if _, ok := l.StyleAt(start); ok != want {
+			t.Errorf("line %d: in PHP %v, want %v", line, ok, want)
+		}
+	}
+}

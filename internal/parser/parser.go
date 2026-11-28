@@ -281,13 +281,6 @@ type ParseError struct {
 	Column  int
 }
 
-// Tokenize returns the tokens of PHP source, without the structural parse,
-// for callers that only read token patterns.
-func Tokenize(source string) []Token {
-	tokens, _ := tokenize(source)
-	return tokens
-}
-
 // Parse tokenizes and performs a structural parse of PHP source code.
 func (p *PHPParser) Parse(source string) *ParseResult {
 	result := &ParseResult{
@@ -843,6 +836,10 @@ func (p *structParser) peek() Token {
 	return p.tokens[p.pos]
 }
 
+func (p *structParser) lastLine() int {
+	return p.tokens[p.pos-1].Line
+}
+
 func (p *structParser) advance() Token {
 	t := p.peek()
 	if p.pos < len(p.tokens) {
@@ -1255,7 +1252,7 @@ afterMod:
 			cls.Properties[i].IsReadonly = true
 		}
 	}
-	cls.EndLine = p.peek().Line
+	cls.EndLine = p.lastLine()
 	cls.Conditional = p.inBlock()
 	p.result.Classes = append(p.result.Classes, cls)
 }
@@ -1291,7 +1288,7 @@ func (p *structParser) parseInterface(docComment string) {
 		return
 	}
 	iface.Methods, iface.Properties, iface.Constants, _ = p.parseClassBody()
-	iface.EndLine = p.peek().Line
+	iface.EndLine = p.lastLine()
 	p.result.Interfaces = append(p.result.Interfaces, iface)
 }
 
@@ -1311,7 +1308,7 @@ func (p *structParser) parseTrait(docComment string) {
 		return
 	}
 	trait.Methods, trait.Properties, trait.Constants, trait.Traits, trait.TraitUseDoc, trait.TraitRules = p.parseClassBodyWithTraitUses()
-	trait.EndLine = p.peek().Line
+	trait.EndLine = p.lastLine()
 	p.result.Traits = append(p.result.Traits, trait)
 }
 
@@ -1352,7 +1349,7 @@ func (p *structParser) parseEnum(docComment string) {
 	p.enumCases = &e.Cases
 	e.Methods, e.Properties, e.Constants, e.Traits, e.TraitUseDoc, e.TraitRules = p.parseClassBodyWithTraitUses()
 	p.enumCases = nil
-	e.EndLine = p.peek().Line
+	e.EndLine = p.lastLine()
 	p.result.Enums = append(p.result.Enums, e)
 }
 
@@ -1380,7 +1377,7 @@ func (p *structParser) parseFunction(docComment string) {
 	bodyStart := p.pos
 	p.skipBlock()
 	bodyEnd := p.pos
-	fn.EndLine = p.peek().Line
+	fn.EndLine = p.lastLine()
 	p.result.Functions = append(p.result.Functions, fn)
 	p.collectNestedFunctions(bodyStart, bodyEnd)
 }
@@ -1610,7 +1607,7 @@ func (p *structParser) parseClassBody() (methods []MethodDef, props []PropertyDe
 			} else {
 				p.expect(TokenSemicolon)
 			}
-			m.EndLine = p.peek().Line
+			m.EndLine = p.lastLine()
 			methods = append(methods, m)
 			if strings.EqualFold(m.Name, "__construct") {
 				props = append(props, promotedProperties(m.Params)...)

@@ -149,7 +149,7 @@ func operandStart(tokens []parser.Token, end int) int {
 		if open < 0 {
 			return -1
 		}
-		if callee := parser.PrevSignificant(tokens, open-1); callee >= 0 && isName(tokens[callee].Kind) {
+		if callee := parser.PrevSignificant(tokens, open-1); callee >= 0 && isCallee(tokens[callee].Kind) {
 			return qualifiedStart(tokens, callee)
 		}
 		return open
@@ -180,7 +180,7 @@ func nullsafeStart(tokens []parser.Token, op int) int {
 	return op
 }
 
-func isName(kind parser.TokenKind) bool {
+func isCallee(kind parser.TokenKind) bool {
 	return kind == parser.TokenIdentifier || kind == parser.TokenVariable
 }
 

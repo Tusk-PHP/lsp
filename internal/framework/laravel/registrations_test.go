@@ -123,3 +123,42 @@ func TestNamespacedComponentsAndViews(t *testing.T) {
 		t.Errorf("courier:: names: %q", names)
 	}
 }
+
+func TestProviderComponentLists(t *testing.T) {
+	scan := func(body string) *Registrations {
+		r := &Registrations{
+			Directives: map[string]Registration{}, Conditionals: map[string]Registration{},
+			ComponentAliases: map[string]string{}, ComponentNamespaces: map[string]string{},
+			ViewNamespaces: map[string][]string{}, UnknownNamespaces: map[string]bool{},
+		}
+		src := "<?php\nnamespace App\\Providers;\nuse App\\View\\Components\\Alert;\nclass P { public function boot() { " + body + " } }\n"
+		(&providerScan{root: "/app", path: "/app/app/Providers/P.php", regs: r}).scan(src)
+		return r
+	}
+	r := scan(`Blade::components([Alert::class => 'notice', \App\View\Components\UserCard::class => 'card']); $this->loadViewComponentsAs('ui', [Alert::class, 'App\\View\\Components\\SideMenu']);`)
+	want := map[string]string{
+		"notice":       `App\View\Components\Alert`,
+		"card":         `App\View\Components\UserCard`,
+		"ui-alert":     `App\View\Components\Alert`,
+		"ui-side-menu": `App\View\Components\SideMenu`,
+	}
+	if len(r.ComponentAliases) != len(want) || r.UnknownComponents {
+		t.Errorf("aliases %v unknown=%v", r.ComponentAliases, r.UnknownComponents)
+	}
+	for alias, class := range want {
+		if r.ComponentAliases[alias] != class {
+			t.Errorf("%s: %q, want %q", alias, r.ComponentAliases[alias], class)
+		}
+	}
+	for _, body := range []string{
+		`Blade::components($list);`,
+		`Blade::components([Alert::class]);`,
+		`Blade::components([Alert::class => $alias]);`,
+		`$this->loadViewComponentsAs('ui', $list);`,
+		`$this->loadViewComponentsAs('ui', [$class]);`,
+	} {
+		if !scan(body).UnknownComponents {
+			t.Errorf("%s: components it can't read must make the set unknown", body)
+		}
+	}
+}

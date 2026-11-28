@@ -3,7 +3,7 @@ package parser
 import "testing"
 
 func TestMatchingCloseAndOpenPairEachBracketKind(t *testing.T) {
-	tokens := Tokenize("<?php f([1, (2)], function () { return [$a{0}]; }); g(")
+	tokens := tokensOf("<?php f([1, (2)], function () { return [$a{0}]; }); g(")
 	index := func(value string, nth int) int {
 		seen := 0
 		for i, tok := range tokens {
@@ -69,7 +69,7 @@ func TestArrowExpressionEnd(t *testing.T) {
 		{"a block's brace", "<?php if (1) { $f = fn() => match($a) { 1 => 2 } }", "}"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tokens := Tokenize(tc.source)
+			tokens := tokensOf(tc.source)
 			start := -1
 			for i, tok := range tokens {
 				if tok.Kind == TokenDoubleArrow {
@@ -85,13 +85,13 @@ func TestArrowExpressionEnd(t *testing.T) {
 	}
 
 	t.Run("running to the end of the file", func(t *testing.T) {
-		tokens := Tokenize("<?php $f = fn($x) => $x * 2")
+		tokens := tokensOf("<?php $f = fn($x) => $x * 2")
 		if end := ArrowExpressionEnd(tokens, len(tokens)-3); end != PrevSignificant(tokens, len(tokens)-1) {
 			t.Errorf("ArrowExpressionEnd at the end of the file = %d, want the last significant token", end)
 		}
 	})
 	t.Run("no expression", func(t *testing.T) {
-		if end := ArrowExpressionEnd(Tokenize("<?php fn() =>"), -1); end != -1 {
+		if end := ArrowExpressionEnd(tokensOf("<?php fn() =>"), -1); end != -1 {
 			t.Errorf("ArrowExpressionEnd(-1) = %d, want -1", end)
 		}
 	})
