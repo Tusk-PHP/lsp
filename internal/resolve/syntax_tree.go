@@ -53,7 +53,7 @@ func (t *syntaxTree) collect(n ast.Node) bool {
 			if n.Op == token.Equals || n.Op == token.CoalesceEqual {
 				t.assigns[v.Start] = assignment{name: t.text(v), value: n.Value}
 			}
-		case *ast.List, *ast.Array:
+		case *ast.List:
 			t.eachDestructured(n.Target, nil, func(target *ast.Variable, path []string) {
 				t.assigns[target.Start] = assignment{name: t.text(target), value: n.Value, path: path}
 			})
@@ -72,16 +72,11 @@ func (t *syntaxTree) collect(n ast.Node) bool {
 }
 
 func (t *syntaxTree) eachDestructured(pattern ast.Expr, path []string, f func(v *ast.Variable, path []string)) {
-	var items []*ast.ArrayItem
-	switch n := pattern.(type) {
-	case *ast.List:
-		items = n.Items
-	case *ast.Array:
-		items = n.Items
-	default:
+	list, ok := pattern.(*ast.List)
+	if !ok {
 		return
 	}
-	for i, item := range items {
+	for i, item := range list.Items {
 		if item == nil || item.Value == nil {
 			continue
 		}
