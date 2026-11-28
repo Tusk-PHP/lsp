@@ -5,8 +5,6 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
-	"github.com/Tusk-PHP/lsp/internal/php/lexer"
-	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -50,14 +48,14 @@ func (r *Resolver) ReceiverAt(source string, pos textpos.Position, file *parser.
 	}
 	lines := r.Lines(source)
 	t := r.syntaxTree(lines, file)
-	tree, receiver, static := t.receiverAt(t.offset(pos))
+	receiver, _, static := ast.MemberAccess(ast.MemberAccessAt(t.root, t.offset(pos)))
 	if receiver == nil {
 		return Receiver{}, false
 	}
 	return Receiver{
-		Type:           r.delegatedType(tree, receiver, ExprContext{Lines: lines, Pos: pos, File: file}),
+		Type:           r.delegatedType(t, receiver, ExprContext{Lines: lines, Pos: pos, File: file}),
 		Static:         static,
-		ForwardsCaller: static && forwardsCallingClass(tree, receiver),
+		ForwardsCaller: static && forwardsCallingClass(t, receiver),
 	}, true
 }
 
@@ -69,13 +67,9 @@ func (r *Resolver) CallTypeAt(source string, pos textpos.Position, file *parser.
 	}
 	lines := r.Lines(source)
 	t := r.syntaxTree(lines, file)
-	tree, access := t.accessAt(t.offset(pos))
-	if access == nil {
-		return ResolvedType{}
-	}
-	switch access.(type) {
+	switch access := ast.MemberAccessAt(t.root, t.offset(pos)).(type) {
 	case *ast.MethodCall, *ast.StaticCall:
-		return r.delegatedType(tree, access, ExprContext{Lines: lines, Pos: pos, File: file})
+		return r.delegatedType(t, access, ExprContext{Lines: lines, Pos: pos, File: file})
 	}
 	return ResolvedType{}
 }
@@ -98,88 +92,6 @@ func (r *Resolver) delegatedType(t *syntaxTree, e ast.Expr, ctx ExprContext) Res
 		return r.TypedChainResolver(r, t.text(e), r.JoinLines(ctx.Lines), ctx.Pos, ctx.File)
 	}
 	return r.typeOf(t, e, nil, ctx)
-}
-
-func (t *syntaxTree) receiverAt(off uint32) (*syntaxTree, ast.Expr, bool) {
-	tree, access := t.accessAt(off)
-	if access == nil {
-		return nil, nil, false
-	}
-	if bad, ok := access.(*ast.BadExpr); ok {
-		tree, e := t.staticReceiverIn(bad.Span, off)
-		return tree, e, true
-	}
-	receiver, _, static := accessParts(access)
-	return tree, receiver, static
-}
-
-func (t *syntaxTree) accessAt(off uint32) (*syntaxTree, ast.Expr) {
-	var best ast.Expr
-	var bad *ast.BadExpr
-	var visit func(n ast.Node)
-	visit = func(n ast.Node) {
-		span := n.Bounds()
-		if off < span.Start || off > span.End {
-			return
-		}
-		if recv, name, _ := accessParts(n); recv != nil && recv.Bounds().End < off && (off <= name.Bounds().End || isMissing(name)) {
-			if best == nil || span.End-span.Start <= best.Bounds().End-best.Bounds().Start {
-				best = n.(ast.Expr)
-			}
-		}
-		if b, ok := n.(*ast.BadExpr); ok && b.End >= off {
-			bad = b
-		}
-		ast.Children(n, visit)
-	}
-	visit(t.root)
-	switch {
-	case best != nil:
-		return t, best
-	case bad != nil:
-		return t, bad
-	}
-	return nil, nil
-}
-
-func accessParts(n ast.Node) (receiver, name ast.Expr, static bool) {
-	switch n := n.(type) {
-	case *ast.MethodCall:
-		return n.Object, n.Name, false
-	case *ast.PropertyFetch:
-		return n.Object, n.Name, false
-	case *ast.StaticCall:
-		return n.Class, n.Name, true
-	case *ast.StaticPropertyFetch:
-		return n.Class, n.Name, true
-	case *ast.ClassConstFetch:
-		return n.Class, n.Name, true
-	}
-	return nil, nil, false
-}
-
-func isMissing(e ast.Expr) bool {
-	b, ok := e.(*ast.BadExpr)
-	return ok && b.Start == b.End
-}
-
-func (t *syntaxTree) staticReceiverIn(span ast.Span, off uint32) (*syntaxTree, ast.Expr) {
-	end := min(span.End, off)
-	toks := lexer.LexCode(t.src[span.Start:end], t.grammar)
-	last := -1
-	for i, tok := range toks {
-		if tok.Kind == token.DoubleColon {
-			last = i
-		}
-	}
-	if last <= 0 {
-		return nil, nil
-	}
-	first := last - 1
-	for toks[first].Kind == token.Whitespace {
-		first--
-	}
-	return expressionTree(t.src[span.Start+toks[first].Start:span.Start+toks[first].End], t.grammar)
 }
 
 // ClassKeyword lower-cases target when it's one of the class keywords

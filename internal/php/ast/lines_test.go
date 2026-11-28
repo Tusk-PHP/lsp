@@ -13,3 +13,20 @@ func TestLinesPosition(t *testing.T) {
 		t.Errorf("empty source has one line, got %v", got)
 	}
 }
+
+func TestLinesOffsetStaysOnItsLine(t *testing.T) {
+	src := "ab\ncd\n\nef"
+	lines := NewLines(src)
+	for _, c := range []struct {
+		line, col int
+		want      uint32
+		inside    bool
+	}{
+		{0, 0, 0, true}, {0, 2, 2, true}, {0, 9, 2, true}, {1, 1, 4, true}, {2, 5, 6, true}, {3, 9, 9, true},
+		{4, 0, 9, false}, {-1, 0, 0, false}, {0, -1, 0, false},
+	} {
+		if got, inside := lines.Offset(c.line, c.col, len(src)); got != c.want || inside != c.inside {
+			t.Errorf("%d:%d: %d %v, want %d %v", c.line, c.col, got, inside, c.want, c.inside)
+		}
+	}
+}

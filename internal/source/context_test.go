@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -43,8 +44,8 @@ class Handler
 	if ctx.AccessKind != AccessInstance {
 		t.Fatalf("AccessKind = %q, want %q", ctx.AccessKind, AccessInstance)
 	}
-	if ctx.SubjectExpr != "$user            ->profile()" {
-		t.Fatalf("SubjectExpr = %q", ctx.SubjectExpr)
+	if _, ok := ctx.Member.Access.(*ast.MethodCall); !ok || !ctx.Member.Call || ctx.Member.Filter != "" {
+		t.Fatalf("Member = %#v, want the name() call with no filter", ctx.Member)
 	}
 	if ctx.EnclosingFQN != "App\\Services\\Handler" {
 		t.Fatalf("EnclosingFQN = %q", ctx.EnclosingFQN)
@@ -71,30 +72,46 @@ func TestWordAtHandlesVariableCursorOnDollar(t *testing.T) {
 	}
 }
 
-func TestDetectMemberContext(t *testing.T) {
+func TestAnalyzeReadsTheMemberAccessFromTheTree(t *testing.T) {
 	tests := []struct {
 		name   string
-		input  string
-		prefix string
-		filter string
+		source string
 		kind   AccessKind
+		filter string
+		call   bool
 	}{
-		{name: "instance", input: "$user->pro", prefix: "$user->", filter: "pro", kind: AccessInstance},
-		{name: "nullsafe", input: "$user?->pro", prefix: "$user?->", filter: "pro", kind: AccessNullsafe},
-		{name: "static", input: "User::cre", prefix: "User::", filter: "cre", kind: AccessStatic},
+		{name: "instance", source: "$user->pro|", kind: AccessInstance, filter: "pro"},
+		{name: "nullsafe", source: "$user?->pro|", kind: AccessNullsafe, filter: "pro"},
+		{name: "nullsafe call", source: "$user?->pro|();", kind: AccessNullsafe, filter: "pro", call: true},
+		{name: "static", source: "User::cre|", kind: AccessStatic, filter: "cre"},
+		{name: "static property", source: "User::$ins|", kind: AccessStatic, filter: "$ins"},
+		{name: "static call", source: "User::cre|ate();", kind: AccessStatic, filter: "cre", call: true},
+		{name: "missing name", source: "$user->|", kind: AccessInstance},
+		{name: "missing static name before a closing brace", source: "function f() {\n    User::|\n}", kind: AccessStatic},
+		{name: "cursor in the middle of a call's name", source: "$user->pro|file();", kind: AccessInstance, filter: "pro", call: true},
+		{name: "cursor before a name on the next line", source: "$user->|\n    profile();", kind: AccessInstance},
+		{name: "chain across lines and a comment", source: "$user\n    // ->x\n    ->profile()\n    ->na|", kind: AccessInstance, filter: "na"},
+		{name: "inside the call's arguments", source: "$user->profile($a|);", kind: AccessNone},
+		{name: "on the receiver", source: "$us|er->profile();", kind: AccessNone},
+		{name: "in a comment", source: "// $user->pro|", kind: AccessNone},
+		{name: "in a string", source: "'$user->pro|';", kind: AccessNone},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := DetectMemberContext(tt.input)
-			if !ok {
-				t.Fatal("expected member context")
-			}
-			if got.Prefix != tt.prefix || got.Filter != tt.filter || got.AccessKind != tt.kind {
-				t.Fatalf("DetectMemberContext() = %#v", got)
+			source, pos := cursorIn("<?php\n" + tt.source)
+			ctx := Analyze("file:///a.php", source, pos, phpparser.OnlyGrammar(token.Latest))
+			if ctx.AccessKind != tt.kind || ctx.Member.Filter != tt.filter || ctx.Member.Call != tt.call {
+				t.Fatalf("AccessKind %q, Member %#v; want %q, filter %q, call %v", ctx.AccessKind, ctx.Member, tt.kind, tt.filter, tt.call)
 			}
 		})
 	}
+}
+
+func cursorIn(marked string) (string, protocol.Position) {
+	at := strings.Index(marked, "|")
+	before := marked[:at]
+	line := strings.Count(before, "\n")
+	return before + marked[at+1:], protocol.Position{Line: line, Character: at - strings.LastIndex(before, "\n") - 1}
 }
 
 func TestAnalyzeBuildsFunctionScopeOutsideClass(t *testing.T) {

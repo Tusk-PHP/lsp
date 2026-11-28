@@ -6,7 +6,6 @@ package resolve
 
 import (
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -890,78 +889,6 @@ func BuildFQN(namespace, name string) string {
 // (letters, digits, underscore, bytes 0x80-0xff, backslash).
 func IsWordChar(ch byte) bool {
 	return parser.IsIdentByte(ch) || ch == '\\'
-}
-
-// JoinChainLines joins the current line with preceding continuation lines
-// that form a method chain. When a line's meaningful content starts with
-// -> or ::, the previous line is prepended (trimmed) to form a single
-// expression. This allows AccessChainClass to walk multi-line chains.
-// Returns the joined line and the adjusted character offset within it.
-func JoinChainLines(lines []string, lineNum, character int) (string, int) {
-	if lineNum < 0 || lineNum >= len(lines) {
-		return "", character
-	}
-	cur := lines[lineNum]
-	// How many brackets closed before the cursor were opened on earlier
-	// lines, kept up to date as lines are prepended, so the walk is linear
-	// however long the argument list is.
-	open, _ := bracketBalance(cur[:min(character, len(cur))])
-	need := -open
-	first := cur
-	var parts []string
-	offset := character
-	for i := lineNum - 1; i >= 0 && lineNum-i <= maxChainJoinLines; i-- {
-		trimmed := strings.TrimSpace(first)
-		continuation := strings.HasPrefix(trimmed, "->") || strings.HasPrefix(trimmed, "::") || strings.HasPrefix(trimmed, "?->")
-		if !continuation && need <= 0 {
-			break
-		}
-		prev := strings.TrimRight(lines[i], " \t")
-		_, net := bracketBalance(prev)
-		need -= net
-		offset += len(prev)
-		parts = append(parts, prev)
-		first = prev
-	}
-	if len(parts) == 0 {
-		return cur, offset
-	}
-	slices.Reverse(parts)
-	parts = append(parts, cur)
-	return strings.Join(parts, ""), offset
-}
-
-// maxChainJoinLines bounds how far JoinChainLines walks back, so a stray
-// closing bracket cannot pull in a whole file. Seeders and config arrays
-// passed to Collection::make([...]) run to hundreds of lines.
-const maxChainJoinLines = 2000
-
-// bracketBalance reads the `(` and `[` brackets in s, skipping quoted
-// strings. lowest is the lowest the depth gets from 0, so -lowest brackets
-// close ones opened before s; net is opened minus closed.
-func bracketBalance(s string) (lowest, net int) {
-	var quote byte
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if quote != 0 {
-			if c == '\\' {
-				i++
-			} else if c == quote {
-				quote = 0
-			}
-			continue
-		}
-		switch c {
-		case '\'', '"':
-			quote = c
-		case '(', '[':
-			net++
-		case ')', ']':
-			net--
-			lowest = min(lowest, net)
-		}
-	}
-	return lowest, net
 }
 
 // SplitLines splits source into lines. Use this once per request,

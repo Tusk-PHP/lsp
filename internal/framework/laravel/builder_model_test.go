@@ -11,24 +11,28 @@ import (
 )
 
 func TestBuilderModel(t *testing.T) {
-	idx := queriedModelIndex()
-	src := "<?php\nnamespace App\\Http;\nuse App\\Models\\Post;\nuse App\\Models\\Plain;\n/** @param \\Illuminate\\Database\\Eloquent\\Builder<Post> $query */\nfunction run($query) {\n    return 1;\n}\n"
-	idx.IndexFile("file:///app/Http/run.php", src)
-	file := parser.ParseFile(src, token.Latest)
-	line := strings.Count(src[:strings.Index(src, "return 1;")], "\n")
-	r := resolve.NewResolver(idx)
-	for _, c := range []struct{ prefix, method, want string }{
-		{"Post::where(", "where", `App\Models\Post`},
-		{"\\App\\Models\\Post::where(", "where", `App\Models\Post`},
-		{"$query->where(", "where", `App\Models\Post`},
-		{"Plain::where(", "where", ""},
-		{"Post::where(", "with", ""},
-		{"::where(", "where", ""},
-		{"$unknown->where(", "where", ""},
+	for _, c := range []struct{ call, method, want string }{
+		{"Post::where('a');", "where", `App\Models\Post`},
+		{"\\App\\Models\\Post::where('a');", "where", `App\Models\Post`},
+		{"$query->where('a');", "where", `App\Models\Post`},
+		{"$query\n        // ->with(\n        ->where('a');", "where", `App\Models\Post`},
+		{"Plain::where('a');", "where", ""},
+		{"Post::where('a');", "with", ""},
+		{"// Post::where('a');", "where", ""},
+		{"$unknown->where('a');", "where", ""},
 	} {
-		pos := textpos.Position{Line: line, Character: len(c.prefix)}
-		if got := BuilderModel(r, idx, c.prefix, c.method, src, pos, file).FQN; got != c.want {
-			t.Errorf("BuilderModel(%q, %q) = %q, want %q", c.prefix, c.method, got, c.want)
+		idx := queriedModelIndex()
+		src := "<?php\nnamespace App\\Http;\nuse App\\Models\\Post;\nuse App\\Models\\Plain;\n/** @param \\Illuminate\\Database\\Eloquent\\Builder<Post> $query */\nfunction run($query) {\n    return " + c.call + "\n}\n"
+		idx.IndexFile("file:///app/Http/run.php", src)
+		file := parser.ParseFile(src, token.Latest)
+		at := strings.LastIndex(src, "where(") + len("where(")
+		line := strings.Count(src[:at], "\n")
+		pos := textpos.Position{Line: line, Character: at - strings.LastIndex(src[:at], "\n") - 1}
+		if got := BuilderModel(resolve.NewResolver(idx), idx, c.method, src, pos, file).FQN; got != c.want {
+			t.Errorf("BuilderModel(%q, %q) = %q, want %q", c.call, c.method, got, c.want)
 		}
+	}
+	if got := BuilderModel(resolve.NewResolver(queriedModelIndex()), queriedModelIndex(), "where", "<?php\nPost::where('a');", textpos.Position{Line: 1, Character: 12}, nil).FQN; got != "" {
+		t.Errorf("BuilderModel without a file = %q, want none", got)
 	}
 }

@@ -68,14 +68,8 @@ func (t *syntaxTree) text(n ast.Node) string {
 }
 
 func (t *syntaxTree) offset(p textpos.Position) uint32 {
-	end := uint32(len(t.src))
-	if p.Line >= len(t.lines) {
-		return end
-	}
-	if p.Line+1 < len(t.lines) {
-		end = t.lines[p.Line+1] - 1
-	}
-	return min(t.lines[p.Line]+uint32(p.Character), end)
+	off, _ := t.lines.Offset(p.Line, p.Character, len(t.src))
+	return off
 }
 
 func (t *syntaxTree) assignmentAt(off uint32, name string) (assignment, bool) {

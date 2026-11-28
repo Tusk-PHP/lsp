@@ -36,9 +36,9 @@ func benchProvider(b *testing.B) (*Provider, string, []string) {
 
 func benchComplete(b *testing.B, typed string) {
 	p, src, _ := benchProvider(b)
-	line := strings.Count(src[:strings.Index(src, "CURSOR")], "\n")
 	source := strings.Replace(src, "CURSOR", typed, 1)
-	pos := protocol.Position{Line: line, Character: 8 + len(typed)}
+	before := source[:strings.Index(src, "CURSOR")+len(typed)]
+	pos := protocol.Position{Line: strings.Count(before, "\n"), Character: len(before) - strings.LastIndex(before, "\n") - 1}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -51,3 +51,6 @@ func benchComplete(b *testing.B, typed string) {
 func BenchmarkCompleteNames(b *testing.B)     { benchComplete(b, "User1") }
 func BenchmarkCompleteMembers(b *testing.B)   { benchComplete(b, "$user->") }
 func BenchmarkCompleteVariables(b *testing.B) { benchComplete(b, "$v1") }
+func BenchmarkCompleteMemberOnNextLine(b *testing.B) {
+	benchComplete(b, "$user\n            ->load(1);\n        $user\n            // ->x\n            ->sa")
+}

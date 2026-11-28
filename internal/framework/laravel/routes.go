@@ -488,12 +488,17 @@ func isLaravelRouteFile(uri string) bool {
 	return strings.HasSuffix(path, ".php") && strings.Contains(path, "/routes/")
 }
 
-var routeCallPatterns = []string{
-	"route(",
-	"to_route(",
-	"->route(",
-	"::route(",
-	"->routeIs(",
+var routeCallPatterns = routePatterns()
+
+func routePatterns() []string {
+	patterns := make([]string, 0, len(routeNameFunctions)+2*len(routeNameMethods))
+	for _, f := range routeNameFunctions {
+		patterns = append(patterns, f+"(")
+	}
+	for _, m := range routeNameMethods {
+		patterns = append(patterns, "->"+m+"(", "::"+m+"(")
+	}
+	return patterns
 }
 
 func ExtractRouteNameArgContext(trimmed string) (string, string, bool) {

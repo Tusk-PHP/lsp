@@ -20,7 +20,7 @@ func (p *Provider) ResolveTypes(ca *container.ContainerAnalyzer) {
 		return engine.DiagnosticType(expr, source, textpos.Position{Line: line, Character: col}, file)
 	}
 	p.BuilderModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
-		return frameworklaravel.BuilderModel(engine.Resolver(), p.index, prefix, method, source, textpos.Position{Line: line, Character: len(prefix)}, file)
+		return frameworklaravel.BuilderModel(engine.Resolver(), p.index, method, source, textpos.Position{Line: line, Character: len(prefix)}, file)
 	}
 }
 

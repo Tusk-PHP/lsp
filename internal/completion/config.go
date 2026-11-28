@@ -1,10 +1,12 @@
 package completion
 
 import (
+	"slices"
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
@@ -15,127 +17,34 @@ type configResultArrayContext struct {
 	Quote      string
 }
 
-func parseConfigResultArrayContext(prefix string) *configResultArrayContext {
-	i := len(prefix) - 1
+const configHelper = "config"
 
-	partialStart := i + 1
-	for i >= 0 && prefix[i] != '\'' && prefix[i] != '"' && prefix[i] != '[' {
-		i--
-	}
-	if i < 0 {
+func configResultContext(ctx *sourcectx.CursorContext) *configResultArrayContext {
+	dim, ok := ctx.StringDim()
+	if !ok {
 		return nil
 	}
-
-	var partial, quote string
-	if prefix[i] == '\'' || prefix[i] == '"' {
-		quote = string(prefix[i])
-		partial = prefix[i+1 : partialStart]
-		i--
-	} else if prefix[i] == '[' {
-		partial = ""
+	src := ctx.File.Source
+	var keys []string
+	e := dim.Fetch.Array
+	for fetch, ok := e.(*ast.ArrayDimFetch); ok; fetch, ok = e.(*ast.ArrayDimFetch) {
+		key, isString := ast.StringValue(src, fetch.Dim)
+		if !isString {
+			return nil
+		}
+		keys = append(keys, key)
+		e = fetch.Array
 	}
-
-	for i >= 0 && (prefix[i] == ' ' || prefix[i] == '\t') {
-		i--
-	}
-	if i < 0 {
+	call, ok := e.(*ast.Call)
+	if !ok || ast.FunctionName(src, call) != configHelper || len(call.Args.Args) == 0 {
 		return nil
 	}
-	if prefix[i] == '[' {
-		i--
-	} else if quote != "" {
+	configArg, ok := ast.StringValue(src, call.Args.Args[0].Value)
+	if !ok || configArg == "" {
 		return nil
 	}
-
-	var accessKeys []string
-	for i >= 0 {
-		for i >= 0 && (prefix[i] == ' ' || prefix[i] == '\t') {
-			i--
-		}
-		if i < 0 || prefix[i] != ']' {
-			break
-		}
-		i--
-		if i < 0 || (prefix[i] != '\'' && prefix[i] != '"') {
-			break
-		}
-		closeQ := prefix[i]
-		i--
-		keyEnd := i + 1
-		for i >= 0 && prefix[i] != closeQ {
-			i--
-		}
-		if i < 0 {
-			break
-		}
-		key := prefix[i+1 : keyEnd]
-		i--
-		for i >= 0 && (prefix[i] == ' ' || prefix[i] == '\t') {
-			i--
-		}
-		if i < 0 || prefix[i] != '[' {
-			break
-		}
-		i--
-		accessKeys = append([]string{key}, accessKeys...)
-	}
-
-	for i >= 0 && (prefix[i] == ' ' || prefix[i] == '\t') {
-		i--
-	}
-	if i < 0 || prefix[i] != ')' {
-		return nil
-	}
-	i--
-
-	depth := 1
-	for i >= 0 && depth > 0 {
-		if prefix[i] == ')' {
-			depth++
-		} else if prefix[i] == '(' {
-			depth--
-		}
-		if depth > 0 {
-			i--
-		}
-	}
-	if i < 0 || prefix[i] != '(' {
-		return nil
-	}
-	argContent := prefix[i+1:]
-	closeP := strings.Index(argContent, ")")
-	if closeP < 0 {
-		return nil
-	}
-	argContent = strings.TrimSpace(argContent[:closeP])
-	configArg := ""
-	if len(argContent) >= 2 && (argContent[0] == '\'' || argContent[0] == '"') && argContent[len(argContent)-1] == argContent[0] {
-		configArg = argContent[1 : len(argContent)-1]
-	}
-	if configArg == "" {
-		return nil
-	}
-
-	i--
-
-	for i >= 0 && (prefix[i] == ' ' || prefix[i] == '\t') {
-		i--
-	}
-	end := i + 1
-	for i >= 0 && resolve.IsWordChar(prefix[i]) {
-		i--
-	}
-	funcName := prefix[i+1 : end]
-	if funcName != "config" {
-		return nil
-	}
-
-	return &configResultArrayContext{
-		ConfigArg:  configArg,
-		AccessKeys: accessKeys,
-		Partial:    partial,
-		Quote:      quote,
-	}
+	slices.Reverse(keys)
+	return &configResultArrayContext{ConfigArg: configArg, AccessKeys: keys, Partial: dim.Partial, Quote: dim.Quote}
 }
 
 func (p *Provider) completeConfigResultKeys(ctx *configResultArrayContext) []protocol.CompletionItem {
@@ -217,35 +126,15 @@ func (p *Provider) completeConfigResultKeys(ctx *configResultArrayContext) []pro
 	return items
 }
 
-func extractConfigArgContext(trimmed string) (configPath, partial, quote string, ok bool) {
-	idx := strings.LastIndex(trimmed, "config(")
-	if idx < 0 {
-		return
+func configArgContext(arg ast.CallArg) (configPath, partial, quote string, ok bool) {
+	if arg.Function != configHelper || arg.Index != 0 || arg.InArray {
+		return "", "", "", false
 	}
-	after := trimmed[idx+len("config("):]
-	if strings.Contains(after, ")") {
-		return
+	lastDot := strings.LastIndex(arg.Partial, ".")
+	if lastDot < 0 {
+		return "", arg.Partial, arg.Quote, true
 	}
-	if len(after) > 0 && (after[0] == '\'' || after[0] == '"') {
-		quote = string(after[0])
-		after = after[1:]
-	} else if len(after) == 0 {
-		ok = true
-		return
-	}
-	if quote != "" && len(after) > 0 && after[len(after)-1] == quote[0] {
-		after = after[:len(after)-1]
-	}
-
-	lastDot := strings.LastIndex(after, ".")
-	if lastDot >= 0 {
-		configPath = after[:lastDot]
-		partial = after[lastDot+1:]
-	} else {
-		partial = after
-	}
-	ok = true
-	return
+	return arg.Partial[:lastDot], arg.Partial[lastDot+1:], arg.Quote, true
 }
 
 func (p *Provider) completeConfigKeys(configPath, partial, quote string) []protocol.CompletionItem {
