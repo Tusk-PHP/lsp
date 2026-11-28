@@ -140,3 +140,52 @@ func TestMemberAccessReadsTheFormOfTheAccess(t *testing.T) {
 		}
 	}
 }
+
+func TestCalledVariableAtFindsOnlyAVariableBeingCalled(t *testing.T) {
+	cases := []struct {
+		src      string
+		name     string
+		argument int
+	}{
+		{"$fn(|", "$fn", 0},
+		{"$fn(1, |", "$fn", 1},
+		{"$fn([1, 2], f(3), |", "$fn", 2},
+		{"$x = $greet('Hi', |)", "$greet", 1},
+		{"$obj->$method(|", "", 0},
+		{"Foo::$method(|", "", 0},
+		{"new $class(|", "", 0},
+		{"area(|", "", 0},
+		{"(|", "", 0},
+		{"$fn(1); |", "", 0},
+	}
+	for _, tc := range cases {
+		cursor := strings.Index(tc.src, "|")
+		src := "<?php\n" + tc.src[:cursor] + tc.src[cursor+1:]
+		doc := NewDocument("file:///t.php", src)
+		name, at, argument, ok := doc.CalledVariableAt(protocol.Position{Line: 1, Character: cursor})
+		if tc.name == "" {
+			if ok {
+				t.Errorf("%q: want no called variable, got %s", tc.src, name)
+			}
+			continue
+		}
+		if !ok || name != tc.name || argument != tc.argument {
+			t.Errorf("%q: got %q argument %d (ok %v), want %q argument %d", tc.src, name, argument, ok, tc.name, tc.argument)
+			continue
+		}
+		if got := doc.Lines()[at.Line][at.Character:]; !strings.HasPrefix(got, tc.name) {
+			t.Errorf("%q: position points at %q, want the variable", tc.src, got)
+		}
+	}
+}
+
+func TestCallAtFindsANamedCallee(t *testing.T) {
+	src := "<?php\narea(1, f(2), "
+	callee, argument, ok := CallAt("file:///t.php", src, protocol.Position{Line: 1, Character: len("area(1, f(2), ")})
+	if !ok || callee == nil || argument != 2 {
+		t.Fatalf("got callee %v argument %d ok %v, want area's third argument", callee, argument, ok)
+	}
+	if _, _, ok := CallAt("file:///t.php", "<?php\n$fn(1, ", protocol.Position{Line: 1, Character: len("$fn(1, ")}); ok {
+		t.Error("a variable being called has no named callee")
+	}
+}
