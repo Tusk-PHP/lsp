@@ -111,9 +111,6 @@ func declaredClasses(index *symbols.Index, uri string) []string {
 // (the type of a cast class) is current. Its work grows with those files,
 // so it runs in the background, like re-indexing.
 func (ws *Bootstrapped) RefreshModels(uris []string) {
-	if ws == nil {
-		return
-	}
 	for _, uri := range uris {
 		if source := ws.Index.GetFileSource(uri); source != "" {
 			ws.AnalyzeModelFile(uri, source)
