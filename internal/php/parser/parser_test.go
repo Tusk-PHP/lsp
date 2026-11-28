@@ -580,6 +580,11 @@ var programs = []string{
 	"<?php $this->\nreturn $x;",
 	"<?php $this->\nif ($x) {}",
 	"<?php Foo::\nreturn $x;",
+	"<?php class A { case X; }",
+	"<?php trait T { case X = 1; }",
+	"<?php interface I {\n#[A]\ncase X;\n}",
+	"<?php new class { case X; };",
+	"<?php enum E: string implements I { case X = 'x'; const Y = self::X; }",
 }
 
 func TestParserAgreesWithPHPOnPrograms(t *testing.T) {
@@ -1080,6 +1085,15 @@ func TestVersionedSyntaxMatchesPHP(t *testing.T) {
 		{"<?php Foo::BAR[0]; FOO[0]; 'abc'->x; [1]->x; 'f'();", token.PHP74},
 		{"<?php #[A] function f() {}", token.PHP74},
 		{"<?php use \\A\\B, C\\D; use \\E\\{F, G\\H}; try {} catch (\\A\\B | C\\D $e) {} class X extends \\A\\B implements C\\D { use \\T\\U { \\T\\U::m insteadof V; } public function f(\\A $a, ?\\B\\C $b): \\D { return new \\A\\B instanceof namespace\\C; } }", token.PHP74},
+		{"<?php class A { case X; }", token.PHP81},
+		{"<?php trait T { case X = 1; }", token.PHP81},
+		{"<?php interface I { #[A] case X; }", token.PHP81},
+		{"<?php new class { case X; };", token.PHP81},
+		{"<?php enum E: int { case X = 1; }", token.PHP81},
+		{"<?php class A { const case = 1; function case() {} } A::case; A::case();", token.PHP74},
+		{"<?php function f(A&B $x) {}", token.PHP81},
+		{"<?php class A { public readonly int $x; }", token.PHP81},
+		{"<?php $a = 0o17;", token.PHP81},
 		{"<?php class C { $a; }", never},
 		{"<?php 1[0];", never},
 		{"<?php $a++ ++;", never},
