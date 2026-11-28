@@ -2,6 +2,7 @@ package diagnostics
 
 import (
 	"log"
+	"runtime/debug"
 	"slices"
 	"sync"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/rule"
+	"github.com/Tusk-PHP/lsp/internal/strict"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -88,10 +90,10 @@ func (p *Provider) analyze(uri, source string, withSaveRules bool) []Diagnostic 
 		// is found in that PHP is reported, at its place in the view.
 		in := p.ViewTypes.For(uri)
 		doc := blade.CompileWith(source, blade.CompileOptions{Vars: in.BladeVars(), Defined: in.Complete, Custom: p.bladeCustom()})
-		diags = toTemplate(doc, p.analyzeNative(doc.PHP, shared, true, !in.Complete))
+		diags = toTemplate(doc, p.analyzeNative(uri, doc.PHP, shared, true, !in.Complete))
 		diags = append(diags, p.analyzeBlade(source)...)
 	} else {
-		diags = p.analyzeNative(source, shared, false, workspace.IsTemplate(uri))
+		diags = p.analyzeNative(uri, source, shared, false, workspace.IsTemplate(uri))
 	}
 	p.mu.RLock()
 	if cached, ok := p.toolResults[uri]; ok {
@@ -116,9 +118,9 @@ func (p *Provider) analyze(uri, source string, withSaveRules bool) []Diagnostic 
 	return p.dropSuppressed(uri, source, shared, diags)
 }
 
-func (p *Provider) analyzeNative(source string, shared *checks.Shared, bladePHP, includedFile bool) []Diagnostic {
+func (p *Provider) analyzeNative(uri, source string, shared *checks.Shared, bladePHP, includedFile bool) []Diagnostic {
 	rules := EditRules(p.ruleOptions(bladePHP, includedFile), shared)
-	return p.toDiagnostics(p.runRules(rules, parser.ParseFile(source), source))
+	return p.toDiagnostics(p.runRules(uri, rules, parser.ParseFile(source), source))
 }
 
 func (p *Provider) ruleOptions(bladePHP, includedFile bool) NativeRulesOptions {
@@ -140,14 +142,27 @@ func (p *Provider) BuiltinUnavailableRule() *checks.BuiltinUnavailableRule {
 	return &checks.BuiltinUnavailableRule{PHPVersion: profile.PHPVersion, Extensions: profile.Extensions}
 }
 
-func (p *Provider) runRules(rules []checks.Rule, file *parser.FileNode, source string) []checks.Finding {
+func (p *Provider) runRules(uri string, rules []checks.Rule, file *parser.FileNode, source string) []checks.Finding {
 	var findings []checks.Finding
 	for _, r := range rules {
 		if slices.ContainsFunc(r.Codes(), p.cfg.IsRuleEnabled) {
-			findings = append(findings, r.Check(file, source, p.index)...)
+			findings = append(findings, p.runRule(uri, r, file, source)...)
 		}
 	}
 	return findings
+}
+
+func (p *Provider) runRule(uri string, r checks.Rule, file *parser.FileNode, source string) (findings []checks.Finding) {
+	defer func() {
+		if v := recover(); v != nil {
+			p.logger.Printf("Panic in rule %v on %s: %v\n%s", r.Codes(), uri, v, debug.Stack())
+			if strict.Enabled() {
+				panic(v)
+			}
+			findings = nil
+		}
+	}()
+	return r.Check(file, source, p.index)
 }
 
 func (p *Provider) toDiagnostics(findings []checks.Finding) []Diagnostic {
@@ -225,7 +240,7 @@ func (p *Provider) saveDiagnostics(uri, source string) []Diagnostic {
 		doc = blade.CompileWith(source, blade.CompileOptions{Vars: p.ViewTypes.For(uri).BladeVars(), Custom: p.bladeCustom()})
 		source = doc.PHP
 	}
-	diags := p.toDiagnostics(p.runRules(SaveRules(p.ruleOptions(doc != nil, false)), parser.ParseFile(source), source))
+	diags := p.toDiagnostics(p.runRules(uri, SaveRules(p.ruleOptions(doc != nil, false)), parser.ParseFile(source), source))
 	if doc != nil {
 		diags = toTemplate(doc, diags)
 	}
