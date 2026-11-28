@@ -382,11 +382,7 @@ func (r *Resolver) ResolveClassNameLoose(name string, file *parser.FileNode) str
 	}
 	// Already fully qualified
 	if strings.HasPrefix(name, "\\") {
-		fqn := strings.TrimPrefix(name, "\\")
-		if r.Index.Lookup(fqn) != nil {
-			return fqn
-		}
-		return fqn
+		return r.declaredClassName(strings.TrimPrefix(name, "\\"))
 	}
 
 	if file == nil {
@@ -399,23 +395,22 @@ func (r *Resolver) ResolveClassNameLoose(name string, file *parser.FileNode) str
 	// Check use statements
 	parts := strings.SplitN(name, "\\", 2)
 	for _, u := range file.Uses {
-		if u.Alias == parts[0] {
+		if symbols.EqualFold(u.Alias, parts[0]) {
 			if len(parts) > 1 {
-				return u.FullName + "\\" + parts[1]
+				return r.declaredClassName(u.FullName + "\\" + parts[1])
 			}
-			return u.FullName
+			return r.declaredClassName(u.FullName)
 		}
 	}
 	// Try in current namespace
 	if file.Namespace != "" {
-		fqn := file.Namespace + "\\" + name
-		if r.Index.Lookup(fqn) != nil {
-			return fqn
+		if sym := r.Index.LookupFold(file.Namespace+"\\"+name, nil); sym != nil {
+			return sym.FQN
 		}
 	}
 	// Try as global
-	if r.Index.Lookup(name) != nil {
-		return name
+	if sym := r.Index.LookupFold(name, nil); sym != nil {
+		return sym.FQN
 	}
 	if cls := r.classNamed(name); cls != nil {
 		return cls.FQN

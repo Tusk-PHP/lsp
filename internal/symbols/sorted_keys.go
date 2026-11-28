@@ -5,7 +5,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"unicode/utf8"
 )
 
 // sortedKeys keeps a set of strings in case-insensitive order for prefix
@@ -154,45 +153,27 @@ func compareKeys(a, b string) int {
 	return strings.Compare(a, b)
 }
 
-// compareFold compares strings.ToLower(a) with strings.ToLower(b) without
-// allocating when both are ASCII, which PHP identifiers almost always are.
+// compareFold compares FoldName(a) with FoldName(b) without allocating.
 func compareFold(a, b string) int {
 	for i := 0; i < len(a) && i < len(b); i++ {
-		ca, cb := a[i], b[i]
-		if ca >= utf8.RuneSelf || cb >= utf8.RuneSelf {
-			return strings.Compare(strings.ToLower(a), strings.ToLower(b))
-		}
-		ca, cb = lowerASCII(ca), lowerASCII(cb)
+		ca, cb := lowerASCII(a[i]), lowerASCII(b[i])
 		if ca != cb {
 			return cmp.Compare(ca, cb)
 		}
 	}
-	// One is a prefix of the other ignoring case. The rest of the longer one
-	// may hold non-ASCII text, but never text that lowercases to nothing.
 	return cmp.Compare(len(a), len(b))
 }
 
-// hasFoldPrefix reports strings.HasPrefix(strings.ToLower(s), lowerPrefix),
-// without allocating when the compared bytes are ASCII.
-func hasFoldPrefix(s, lowerPrefix string) bool {
-	for i := 0; i < len(lowerPrefix); i++ {
-		if i >= len(s) {
-			return false
-		}
-		c, p := s[i], lowerPrefix[i]
-		if c >= utf8.RuneSelf || p >= utf8.RuneSelf {
-			return strings.HasPrefix(strings.ToLower(s), lowerPrefix)
-		}
-		if lowerASCII(c) != p {
+// hasFoldPrefix reports strings.HasPrefix(FoldName(s), foldedPrefix) without
+// allocating.
+func hasFoldPrefix(s, foldedPrefix string) bool {
+	if len(s) < len(foldedPrefix) {
+		return false
+	}
+	for i := 0; i < len(foldedPrefix); i++ {
+		if lowerASCII(s[i]) != foldedPrefix[i] {
 			return false
 		}
 	}
 	return true
-}
-
-func lowerASCII(c byte) byte {
-	if 'A' <= c && c <= 'Z' {
-		return c + ('a' - 'A')
-	}
-	return c
 }

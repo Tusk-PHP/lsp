@@ -1,6 +1,7 @@
 package symbols
 
 import (
+	"slices"
 	"strings"
 	"sync"
 )
@@ -19,39 +20,42 @@ type memberTables struct {
 }
 
 // ClassMembersNamed returns the members of classFQN named name or "$"+name,
-// in the order GetClassMembers lists them (the class's own first). The
-// slice is shared: don't modify it.
+// in the order GetClassMembers lists them (the class's own first). Methods
+// match ignoring case, as PHP calls them; properties, constants and enum
+// cases match exactly. The slice may be shared: don't modify it.
 func (idx *Index) ClassMembersNamed(classFQN, name string) []*Symbol {
 	if strings.ContainsAny(classFQN, "|&(") {
 		// Unions and intersections are rare and not worth a table.
 		var out []*Symbol
 		for _, m := range idx.GetClassMembers(classFQN) {
-			if m.Name == name || m.Name == "$"+name {
+			if memberNamed(m, name) {
 				out = append(out, m)
 			}
 		}
 		return out
 	}
-	table := idx.memberTable(classFQN)
-	own, prop := table[name], table["$"+name]
-	switch {
-	case len(prop) == 0:
-		return own
-	case len(own) == 0:
-		return prop
+	var buf [64]byte
+	bucket := idx.memberTable(classFQN)[string(FoldKey(&buf, strings.TrimPrefix(name, "$")))]
+	for i, m := range bucket {
+		if memberNamed(m, name) {
+			continue
+		}
+		out := slices.Clone(bucket[:i])
+		for _, m := range bucket[i+1:] {
+			if memberNamed(m, name) {
+				out = append(out, m)
+			}
+		}
+		return out
 	}
-	// Both a `name` and a `$name` member: keep the hierarchy's order.
-	return mergeByOrder(idx.GetClassMembers(classFQN), name)
+	return bucket
 }
 
-func mergeByOrder(members []*Symbol, name string) []*Symbol {
-	var out []*Symbol
-	for _, m := range members {
-		if m.Name == name || m.Name == "$"+name {
-			out = append(out, m)
-		}
+func memberNamed(m *Symbol, name string) bool {
+	if m.Kind == KindMethod {
+		return EqualFold(m.Name, name)
 	}
-	return out
+	return m.Name == name || len(m.Name) == len(name)+1 && m.Name[0] == '$' && m.Name[1:] == name
 }
 
 func (idx *Index) memberTable(classFQN string) map[string][]*Symbol {
@@ -71,7 +75,8 @@ func (idx *Index) memberTable(classFQN string) map[string][]*Symbol {
 	members := idx.GetClassMembers(classFQN)
 	table := make(map[string][]*Symbol, len(members))
 	for _, m := range members {
-		table[m.Name] = append(table[m.Name], m)
+		key := FoldName(strings.TrimPrefix(m.Name, "$"))
+		table[key] = append(table[key], m)
 	}
 
 	t.mu.Lock()

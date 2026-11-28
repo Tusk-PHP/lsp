@@ -112,7 +112,7 @@ func (idx *Index) classLikeFoldLocked(fqn string) bool {
 	if sym := idx.symbols[fqn]; sym.IsClassLike() {
 		return true
 	}
-	for _, candidate := range idx.foldIndex[strings.ToLower(fqn)] {
+	for _, candidate := range idx.foldIndex[FoldName(fqn)] {
 		if sym := idx.symbols[candidate]; sym.IsClassLike() {
 			return true
 		}
