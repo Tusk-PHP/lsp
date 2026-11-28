@@ -166,6 +166,15 @@ var compileErrorCases = []struct {
 		{token.PHP81, token.PHP81, `Case A of non-backed enum E must not have a value, try adding ": string" to the enum declaration`},
 		{token.PHP82, token.Latest, "Case A of non-backed enum E must not have a value"},
 	}},
+	{"integer value of a pure enum case", `enum E { case A = 1; }`, []compileErrorFrom{
+		{token.PHP81, token.PHP81, `Case A of non-backed enum E must not have a value, try adding ": int" to the enum declaration`},
+		{token.PHP82, token.Latest, "Case A of non-backed enum E must not have a value"},
+	}},
+	{"float value of a pure enum case", `enum E { case A = 1.5; }`, since(token.PHP81, "Case A of non-backed enum E must not have a value")},
+	{"case in a class", `class A { case X; }`, since(token.PHP81, "Case can only be used in enums")},
+	{"case in an interface", `interface I { case X; }`, since(token.PHP81, "Case can only be used in enums")},
+	{"case in a trait", `trait T { case X = 1; }`, since(token.PHP81, "Case can only be used in enums")},
+	{"case in an anonymous class", `new class { case X; };`, since(token.PHP81, "Case can only be used in enums")},
 	{"constant value of a pure enum case", `enum E { case A = E::B; const B = 1; }`, []compileErrorFrom{
 		{token.PHP82, token.Latest, "Case A of non-backed enum E must not have a value"},
 	}},

@@ -192,33 +192,30 @@ func (c *compileChecker) hooks(hooks []*ast.PropertyHook, property *ast.Variable
 }
 
 func (c *compileChecker) enumCase(n *ast.EnumCase) {
-	if c.class == nil || c.class.kind != kindEnum {
+	if c.class.kind != kindEnum {
+		if c.since(token.PHP81) {
+			c.report(n, "Case can only be used in enums")
+		}
 		return
 	}
 	display := c.text(n.Name) + " of "
+	pure := "Case " + display + "non-backed enum " + c.class.name + " must not have a value"
 	switch {
 	case c.class.backed && n.Value == nil:
 		c.report(n.Name, "Case "+display+"backed enum "+c.class.name+" must have a value")
 	case c.class.backed || n.Value == nil:
 	case c.since(token.PHP82):
-		c.report(n.Name, "Case "+display+"non-backed enum "+c.class.name+" must not have a value")
+		c.report(n.Name, pure)
 	default:
-		if backing, ok := c.literalType(n.Value); ok {
-			c.report(n.Name, "Case "+display+"non-backed enum "+c.class.name+` must not have a value, try adding ": `+backing+`" to the enum declaration`)
+		lit, ok := n.Value.(*ast.Literal)
+		switch {
+		case !ok:
+		case lit.Kind == token.IntegerLiteral:
+			c.report(n.Name, pure+`, try adding ": int" to the enum declaration`)
+		case lit.Kind == token.ConstantString:
+			c.report(n.Name, pure+`, try adding ": string" to the enum declaration`)
+		default:
+			c.report(n.Name, pure)
 		}
 	}
-}
-
-func (c *compileChecker) literalType(e ast.Expr) (string, bool) {
-	lit, ok := e.(*ast.Literal)
-	if !ok {
-		return "", false
-	}
-	switch lit.Kind {
-	case token.IntegerLiteral:
-		return "int", true
-	case token.ConstantString:
-		return "string", true
-	}
-	return "", false
 }
