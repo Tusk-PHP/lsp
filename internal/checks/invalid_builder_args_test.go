@@ -390,3 +390,20 @@ $s = "Category::where('quoted')";
 		t.Errorf("got\n%s", strings.Join(got, "\n"))
 	}
 }
+
+func TestInvalidBuilderArgFindsTheOperatorBeforeSpacedName(t *testing.T) {
+	checker := setupBuilderArgRule()
+	source := `<?php
+use App\Models\Category;
+Category::join('products', 'products.category_id', '=', 'categories.id')->  where('title', 1);
+Category::query()->  where('missing', 1);
+`
+	var got []string
+	for _, f := range checker.Check(parser.ParseFile(source, token.Latest), source, nil) {
+		got = append(got, fmt.Sprintf("%d:%d-%d %s", f.StartLine, f.StartCol, f.EndCol, f.Message))
+	}
+	want := []string{"3:28-35 Unknown column 'missing' on model 'Category'"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got\n%s", strings.Join(got, "\n"))
+	}
+}
