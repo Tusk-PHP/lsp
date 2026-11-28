@@ -159,7 +159,7 @@ func (idx *Index) registerBuiltinRegistryLocked(profile BuiltinProfile) {
 		if !builtinAvailable(sig.Name, profile) {
 			continue
 		}
-		idx.addBuiltinFunctionLocked(sig.Name, sig.Params, sig.ReturnType, sig.docFor(profile.PHPVersion))
+		idx.addBuiltinFunctionLocked(sig.Name, sig.Params, sig.ReturnType, sig.Docs.docFor(profile.PHPVersion))
 	}
 
 	for _, fn := range builtinFunctions {

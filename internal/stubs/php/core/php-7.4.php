@@ -9,10 +9,6 @@ function implode(string $separator, array $array): string {}
 /** Class used to represent anonymous functions. */
 final class Closure
 {
-    public static function bind(Closure $closure, ?object $newThis, object|string|null $newScope = 'static'): ?Closure {}
-
-    public function bindTo(?object $newThis, object|string|null $newScope = 'static'): ?Closure {}
-
     public function call(object $newThis, mixed ...$args): mixed {}
 
     public static function fromCallable(callable $callback): Closure {}

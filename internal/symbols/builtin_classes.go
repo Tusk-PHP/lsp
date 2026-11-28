@@ -31,6 +31,7 @@ type builtinMember struct {
 	Value      string
 	ReturnType string
 	Params     []ParamInfo
+	Docs       builtinDocs
 	Since      string
 	Removed    string
 }
@@ -63,7 +64,7 @@ func (idx *Index) addBuiltinClassLikeWithMembersLocked(c builtinClassLike, profi
 		}
 		members = append(members, Symbol{Name: m.Name, FQN: c.Name + "::" + m.Name, Kind: m.Kind, Source: SourceBuiltin, URI: builtinRegistryURI,
 			ParentFQN: c.Name, Visibility: m.Visibility, IsStatic: m.IsStatic, IsAbstract: m.IsAbstract, IsFinal: m.IsFinal,
-			IsReadonly: m.IsReadonly, Type: m.Type, Value: m.Value, ReturnType: m.ReturnType, Params: m.Params})
+			IsReadonly: m.IsReadonly, Type: m.Type, Value: m.Value, ReturnType: m.ReturnType, Params: m.Params, DocComment: m.Docs.docFor(profile.PHPVersion)})
 		member := &members[len(members)-1]
 		class.Children = append(class.Children, member)
 		if hidden {

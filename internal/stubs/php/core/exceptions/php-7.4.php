@@ -15,8 +15,6 @@ interface Throwable
 
     public function getPrevious(): ?\Throwable;
 
-    public function getTrace(): array;
-
     public function getTraceAsString(): string;
 }
 
@@ -53,8 +51,6 @@ class Exception implements \Throwable
     public final function getMessage(): string {}
 
     public final function getPrevious(): ?\Throwable {}
-
-    public final function getTrace(): array {}
 
     public final function getTraceAsString(): string {}
 }
@@ -101,8 +97,6 @@ class Error implements \Throwable
     public final function getMessage(): string {}
 
     public final function getPrevious(): ?\Throwable {}
-
-    public final function getTrace(): array {}
 
     public final function getTraceAsString(): string {}
 }

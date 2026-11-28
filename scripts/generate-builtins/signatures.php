@@ -3,8 +3,9 @@
 declare(strict_types=1);
 
 /**
- * Functions whose PHPStan function map types were checked against PHP and
- * found wrong for some version, so they keep their native signature:
+ * Functions and methods (lower-case Class::method) whose PHPStan function map
+ * types were checked against PHP and found wrong for some version, so they
+ * keep their native signature:
  * strcmp() and its kin return the byte difference (-2 for "a" and "c"), not
  * int<-1, 1>; array_unshift() returns 0 for an empty array and no values;
  * proc_get_status() gained "cached" in 8.3 and stream_context_get_params()
@@ -14,7 +15,8 @@ declare(strict_types=1);
  * preg_replace_callback() matches (with flags), round() modes, unserialize()
  * options (max_depth since 8.1), ob_list_handlers() (never false) and
  * opcache_get_configuration() directives are narrower than what PHP accepts
- * or returns.
+ * or returns. PDOStatement::rowCount() passes on what the driver reports,
+ * which is -1 from ODBC when it doesn't know.
  *
  * @return array<string, true>
  */
@@ -26,6 +28,7 @@ function unverifiedPhpstanSignatures(): array
         'ob_list_handlers',
         'opcache_get_configuration',
         'password_get_info',
+        'pdostatement::rowcount',
         'pg_fetch_all',
         'preg_replace_callback',
         'proc_get_status',
@@ -477,10 +480,11 @@ function normalizedTypeParts(string $type): array
  *
  * Parameters are matched by position, and named after $params, the
  * signature the table keeps. A build without native types (7.4 has few) is
- * checked against $reference, the native signature of the first PHP 8 build:
- * its return may add false or null, which PHP 8 replaced by exceptions, and
- * its parameters are left as they are, since PHP 8 turned resources into
- * objects.
+ * checked against $reference, the native signature of the first PHP 8 build
+ * with a native return type (methods got theirs, tentative, in 8.1), and its
+ * parameters are left as they are, since PHP 8 turned resources into objects.
+ * Before PHP 8 ($beforePhp8) its return may also add false or null, which
+ * PHP 8 replaced by exceptions.
  *
  * @param array<int|string, string> $phpstan
  * @param array{0:string, 1:list<array>, 2:string} $build
@@ -488,17 +492,18 @@ function normalizedTypeParts(string $type): array
  * @param list<array> $params
  * @param array<string, true> $classes
  */
-function phpstanDocBlock(array $phpstan, array $build, array $reference, array $params, array $classes): string
+function phpstanDocBlock(array $phpstan, array $build, array $reference, array $params, array $classes, bool $beforePhp8): string
 {
     [, $buildParams, $buildReturn] = $build;
     $extra = [];
-    if ($buildReturn === '') {
+    $fallback = $buildReturn === '';
+    if ($fallback) {
         [, $buildParams, $buildReturn] = $reference;
-        $extra = ['false', 'null'];
+        $extra = $beforePhp8 ? ['false', 'null'] : [];
     }
     $lines = [];
     $docParams = array_slice($phpstan, 1, null, true);
-    if ($extra === [] && count($docParams) === count($buildParams) && count($buildParams) === count($params)) {
+    if (!$fallback && count($docParams) === count($buildParams) && count($buildParams) === count($params)) {
         $i = 0;
         foreach ($docParams as $docName => $docType) {
             [$name, $nativeType, , $variadic, $byRef] = $buildParams[$i];
@@ -517,6 +522,46 @@ function phpstanDocBlock(array $phpstan, array $build, array $reference, array $
         $lines[] = ' * @return ' . $return;
     }
     return $lines === [] ? '' : "/**\n" . implode("\n", $lines) . "\n */";
+}
+
+/**
+ * The Go []builtinDoc of a function or method (lower-case $name, Class::method
+ * for a method), or null when no version has a doc block: one entry per
+ * version whose doc block differs from the previous version's, the first
+ * without Since. $entries holds, by version, what that version's builds
+ * reflect of it ([extension, params, return], null where none has it).
+ *
+ * @param array<string, ?array{0:string, 1:list<array>, 2:string}> $entries
+ * @param list<array> $params
+ * @param array<string, array<string, array<int|string, string>>> $maps
+ * @param array<string, array<string, true>> $classes by version
+ * @param array<string, true> $unverified
+ */
+function renderGoDocLayers(array $entries, string $name, array $params, array $maps, array $classes, array $unverified): ?string
+{
+    $reference = null;
+    foreach ($entries as $version => $entry) {
+        if ($entry !== null && $entry[2] !== '' && version_compare((string) $version, '8.0', '>=')) {
+            $reference = $entry;
+            break;
+        }
+    }
+    $docs = [];
+    $previous = null;
+    foreach ($entries as $version => $entry) {
+        if ($entry === null) {
+            continue;
+        }
+        $phpstan = $maps[$version][$name] ?? null;
+        $doc = $phpstan === null || isset($unverified[$name]) || isset($maps[$version][$name . "'1"])
+            ? ''
+            : phpstanDocBlock($phpstan, $entry, $reference ?? $entry, $params, $classes[$version], version_compare((string) $version, '8.0', '<'));
+        if ($doc !== $previous) {
+            $docs[] = renderGoStruct(['Since' => $previous === null ? null : renderGoString((string) $version), 'Doc' => goStringOrNull($doc)]);
+            $previous = $doc;
+        }
+    }
+    return $docs === [] || $docs === ['{}'] ? null : '[]builtinDoc{' . implode(', ', $docs) . '}';
 }
 
 /**
@@ -539,46 +584,27 @@ function generateGoFunctionSignatures(array $defaultDumps, array $extensionDumps
     $unverified = unverifiedPhpstanSignatures();
 
     $latest = [];
-    $reference = [];
-    foreach ($byVersion as $version => $builds) {
+    foreach ($byVersion as $builds) {
         foreach ($builds['functions'] as $name => $function) {
             if (isset($stubExtensions[$function[0]]) || isLanguageConstruct((string) $name)) {
                 continue;
             }
             $latest[$name] = $function;
-            if (version_compare((string) $version, '8.0', '>=')) {
-                $reference[$name] ??= $function;
-            }
         }
     }
     ksort($latest, SORT_STRING);
 
     $lines = [];
     foreach ($latest as $name => [, $params, $return]) {
-        $docs = [];
-        $previous = null;
-        foreach ($byVersion as $version => $builds) {
-            $function = $builds['functions'][$name] ?? null;
-            if ($function === null) {
-                continue;
-            }
-            $phpstan = $maps[$version][$name] ?? null;
-            $doc = $phpstan === null || isset($unverified[$name]) || isset($maps[$version][$name . "'1"])
-                ? ''
-                : phpstanDocBlock($phpstan, $function, $reference[$name] ?? $function, $params, $builds['classes']);
-            if ($doc !== $previous) {
-                $docs[] = renderGoStruct(['Since' => $previous === null ? null : renderGoString((string) $version), 'Doc' => goStringOrNull($doc)]);
-                $previous = $doc;
-            }
-        }
-        if ($docs === ['{}']) {
-            $docs = [];
-        }
+        $docs = renderGoDocLayers(array_map(
+            static fn(array $builds): ?array => $builds['functions'][$name] ?? null,
+            $byVersion
+        ), $name, $params, $maps, array_map(static fn(array $builds): array => $builds['classes'], $byVersion), $unverified);
         $lines[] = "\t" . renderGoStruct([
             'Name' => renderGoString((string) $name),
             'Params' => $params === [] ? null : '[]ParamInfo{' . implode(', ', array_map('renderGoParam', $params)) . '}',
             'ReturnType' => goStringOrNull($return),
-            'Docs' => $docs === [] ? null : '[]builtinDoc{' . implode(', ', $docs) . '}',
+            'Docs' => $docs,
         ]) . ',';
     }
 

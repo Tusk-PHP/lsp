@@ -29,7 +29,7 @@ func TestBuiltinInterfacesAndClassesHaveTheirMembers(t *testing.T) {
 			t.Errorf("%s is known", fqn)
 		}
 	}
-	if sym := idx.Lookup("ArrayIterator::count"); sym == nil || sym.URI == builtinRegistryURI {
+	if sym := idx.Lookup("ArrayIterator::offsetExists"); sym == nil || sym.URI == builtinRegistryURI {
 		t.Errorf("a member the hand-written stubs declare keeps their declaration: %+v", sym)
 	}
 }

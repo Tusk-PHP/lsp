@@ -4,7 +4,7 @@ type builtinFunctionSignature struct {
 	Name       string
 	Params     []ParamInfo
 	ReturnType string
-	Docs       []builtinDoc
+	Docs       builtinDocs
 }
 
 type builtinDoc struct {
@@ -12,9 +12,11 @@ type builtinDoc struct {
 	Doc   string
 }
 
-func (s *builtinFunctionSignature) docFor(version string) string {
+type builtinDocs []builtinDoc
+
+func (docs builtinDocs) docFor(version string) string {
 	doc := ""
-	for _, d := range s.Docs {
+	for _, d := range docs {
 		if d.Since != "" && compareBuiltinVersions(d.Since, version) > 0 {
 			break
 		}

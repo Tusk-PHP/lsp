@@ -56,6 +56,26 @@ func TestBuiltinFunctionsCarryPHPDocTypesByVersion(t *testing.T) {
 	}
 }
 
+func TestBuiltinMethodsCarryPHPDocTypesByVersion(t *testing.T) {
+	cases := []struct{ version, name, ret string }{
+		{"7.4", "ArrayObject::count", "0|positive-int"},
+		{"8.4", "ArrayObject::count", "0|positive-int"},
+		{"8.4", "DateTimeZone::listIdentifiers", "list<string>"},
+		{"8.4", "Exception::getTrace", "list<array{function:string,line?:int,file?:string,class?:class-string,type?:'::'|'->',args?:list<mixed>,object?:object}>"},
+		{"8.2", "ReflectionClass::getStaticProperties", ""},
+		{"8.3", "ReflectionClass::getStaticProperties", "array<string, mixed>"},
+		{"7.4", "Phar::copy", "bool"},
+		{"8.4", "Phar::copy", ""},
+		{"8.4", "ReflectionClass::getName", "class-string<T>"},
+		{"8.4", "PDOStatement::rowCount", ""},
+	}
+	for _, c := range cases {
+		if got := builtinDocFor(t, c.version, c.name).Return.Type; got != c.ret {
+			t.Errorf("%s on PHP %s returns %q, want %q", c.name, c.version, got, c.ret)
+		}
+	}
+}
+
 func TestBuiltinFunctionsHaveTheirNativeSignatures(t *testing.T) {
 	idx := NewIndex()
 	idx.RegisterBuiltinsForProfile(BuiltinProfile{PHPVersion: "8.4"})
@@ -68,31 +88,41 @@ func TestBuiltinFunctionsHaveTheirNativeSignatures(t *testing.T) {
 func TestGeneratedBuiltinDocsParse(t *testing.T) {
 	for i := range generatedBuiltinFunctionSignatures {
 		sig := &generatedBuiltinFunctionSignatures[i]
-		names := map[string]bool{}
-		for _, p := range sig.Params {
-			names[p.Name] = true
+		checkGeneratedDocs(t, sig.Name, sig.Params, sig.Docs)
+	}
+	for _, c := range generatedBuiltinClassLikes {
+		for _, m := range c.Members {
+			checkGeneratedDocs(t, c.Name+"::"+m.Name, m.Params, m.Docs)
 		}
-		for _, d := range sig.Docs {
-			if d.Doc == "" {
-				continue
+	}
+}
+
+func checkGeneratedDocs(t *testing.T, name string, params []ParamInfo, docs builtinDocs) {
+	t.Helper()
+	names := map[string]bool{}
+	for _, p := range params {
+		names[p.Name] = true
+	}
+	for _, d := range docs {
+		if d.Doc == "" {
+			continue
+		}
+		doc := parser.ParseDocBlock(d.Doc)
+		tags := strings.Count(d.Doc, " * @")
+		read := len(doc.Params)
+		if doc.Return.Type != "" {
+			read++
+			if doc.Return.ParsedType == nil || doc.Return.Description != "" {
+				t.Errorf("%s: @return %q isn't read whole", name, doc.Return.Type)
 			}
-			doc := parser.ParseDocBlock(d.Doc)
-			tags := strings.Count(d.Doc, " * @")
-			read := len(doc.Params)
-			if doc.Return.Type != "" {
-				read++
-				if doc.Return.ParsedType == nil || doc.Return.Description != "" {
-					t.Errorf("%s: @return %q isn't read whole", sig.Name, doc.Return.Type)
-				}
+		}
+		for _, p := range doc.Params {
+			if !names[p.Name] || p.ParsedType == nil || p.Description != "" {
+				t.Errorf("%s: @param %q %s isn't read whole or names no parameter", name, p.Type, p.Name)
 			}
-			for _, p := range doc.Params {
-				if !names[p.Name] || p.ParsedType == nil || p.Description != "" {
-					t.Errorf("%s: @param %q %s isn't read whole or names no parameter", sig.Name, p.Type, p.Name)
-				}
-			}
-			if read != tags {
-				t.Errorf("%s: read %d of the %d tags in %q", sig.Name, read, tags, d.Doc)
-			}
+		}
+		if read != tags {
+			t.Errorf("%s: read %d of the %d tags in %q", name, read, tags, d.Doc)
 		}
 	}
 }
@@ -104,12 +134,31 @@ func TestEmbeddedStubsDontHideGeneratedBuiltinDocs(t *testing.T) {
 	idx.RegisterBuiltinsForProfile(profile)
 	for i := range generatedBuiltinFunctionSignatures {
 		sig := &generatedBuiltinFunctionSignatures[i]
-		want := sig.docFor(normalizeBuiltinProfile(profile).PHPVersion)
+		want := sig.Docs.docFor(normalizeBuiltinProfile(profile).PHPVersion)
 		if want == "" {
 			continue
 		}
 		if sym := idx.Lookup(sig.Name); sym != nil && sym.DocComment != want {
 			t.Errorf("%s is declared by %s, which hides its generated PHPDoc types", sig.Name, sym.URI)
+		}
+	}
+}
+
+func TestEmbeddedStubsDontHideGeneratedBuiltinMethodDocs(t *testing.T) {
+	profile := normalizeBuiltinProfile(DefaultBuiltinProfile())
+	idx := NewIndex()
+	idx.RegisterBuiltinsForProfile(profile)
+	for _, c := range generatedBuiltinClassLikes {
+		for _, m := range c.Members {
+			want := m.Docs.docFor(profile.PHPVersion)
+			if want == "" || !builtinInVersion(m.Since, m.Removed, profile.PHPVersion) {
+				continue
+			}
+			sym := idx.Lookup(c.Name + "::" + m.Name)
+			if sym == nil || sym.DocComment == want || sym.URI != builtinRegistryURI && (sym.DocComment != "" || len(sym.Attributes) > 0) {
+				continue
+			}
+			t.Errorf("%s::%s is declared by %s without PHPDoc or attributes of its own, which hides its generated PHPDoc types", c.Name, m.Name, sym.URI)
 		}
 	}
 }
