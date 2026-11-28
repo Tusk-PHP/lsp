@@ -36,6 +36,10 @@ type source struct {
 // what the analyzer knows with what it found.
 func (ca *ContainerAnalyzer) Analyze() {
 	seq := ca.seq.Add(1)
+	ca.storeAll(seq, ca.readAll(seq))
+}
+
+func (ca *ContainerAnalyzer) readAll(seq uint64) map[string]source {
 	found := make(map[string]source)
 	for _, dir := range ca.sourceDirs() {
 		filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
@@ -54,6 +58,10 @@ func (ca *ContainerAnalyzer) Analyze() {
 			return nil
 		})
 	}
+	return found
+}
+
+func (ca *ContainerAnalyzer) storeAll(seq uint64, found map[string]source) {
 	ca.sourcesMu.Lock()
 	defer ca.sourcesMu.Unlock()
 	for path, src := range ca.sources {
@@ -79,23 +87,35 @@ func (ca *ContainerAnalyzer) Update(path string) error {
 	if !ok {
 		return nil
 	}
+	src, err := ca.read(path, phase)
+	if err != nil {
+		return err
+	}
+	ca.store(path, src)
+	return nil
+}
+
+func (ca *ContainerAnalyzer) read(path string, phase sourcePhase) (source, error) {
 	src := source{seq: ca.seq.Add(1), phase: phase}
 	content, err := os.ReadFile(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 	case err != nil:
-		return fmt.Errorf("re-read container bindings from %s: %w", path, err)
+		return source{}, fmt.Errorf("re-read container bindings from %s: %w", path, err)
 	default:
 		src.contribution = ca.parse(phase, path, string(content))
 	}
+	return src, nil
+}
+
+func (ca *ContainerAnalyzer) store(path string, src source) {
 	ca.sourcesMu.Lock()
 	defer ca.sourcesMu.Unlock()
 	if current, ok := ca.sources[path]; ok && current.seq > src.seq {
-		return nil
+		return
 	}
 	ca.sources[path] = src
 	ca.view.Store(ca.rebuild())
-	return nil
 }
 
 // WatchGlobs returns the file watcher globs for sources the editor's PHP
