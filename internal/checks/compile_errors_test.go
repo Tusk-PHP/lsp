@@ -153,6 +153,7 @@ var compileErrorCases = []struct {
 	{"interface constructor return type", `interface I { function __construct(): void; }`, since(token.PHP80, "Method I::__construct() cannot declare a return type")},
 
 	{"redeclared method", `class A { function f() {} function F() {} }`, always("Cannot redeclare A::F()")},
+	{"redeclared method in the global namespace block", `namespace { class A { function f() {} function f() {} } }`, always("Cannot redeclare A::f()")},
 	{"redeclared method in a namespace", `namespace N; class A { function f() {} function f() {} }`, always(`Cannot redeclare N\A::f()`)},
 	{"redeclared property", `class A { public $p, $p; }`, always("Cannot redeclare A::$p")},
 	{"property redeclaring a promoted one", `class A { public function __construct(public $p) {} public $p; }`, since(token.PHP80, "Cannot redeclare A::$p")},
@@ -171,6 +172,8 @@ var compileErrorCases = []struct {
 		{token.PHP82, token.Latest, "Case A of non-backed enum E must not have a value"},
 	}},
 	{"float value of a pure enum case", `enum E { case A = 1.5; }`, since(token.PHP81, "Case A of non-backed enum E must not have a value")},
+	{"standalone null, false and true return types", `function f(): null { return; } function g(): false { return; } function h(): true { return; }`, nil},
+	{"class return types outside a class", `function f(): static { return; } function g(): self { return; } function h(): parent { return; }`, nil},
 	{"case in a class", `class A { case X; }`, since(token.PHP81, "Case can only be used in enums")},
 	{"case in an interface", `interface I { case X; }`, since(token.PHP81, "Case can only be used in enums")},
 	{"case in a trait", `trait T { case X = 1; }`, since(token.PHP81, "Case can only be used in enums")},
@@ -220,6 +223,8 @@ var compileErrorCases = []struct {
 	{"returns", `function f(): void { return; $g = function () { return 1; }; } function g(): Generator { yield 1; return; } function i(): ?int { return null; }`, nil},
 
 	{"positional after named", `f(a: 1, 2);`, since(token.PHP80, "Cannot use positional argument after named argument")},
+	{"positional after named in a method call", `$o->m(a: 1, 2);`, since(token.PHP80, "Cannot use positional argument after named argument")},
+	{"positional after named in a static call", `A::m(a: 1, 2);`, since(token.PHP80, "Cannot use positional argument after named argument")},
 	{"positional after named in new", `new class(a: 1, 2) {};`, since(token.PHP80, "Cannot use positional argument after named argument")},
 	{"positional after named in an attribute", `#[Attr(a: 1, 2)] function g() {}`, since(token.PHP80, "Cannot use positional argument after named argument")},
 	{"placeholder after named", `echo f(a: 1, ?);`, since(token.PHP86, "Cannot use positional argument after named argument")},
@@ -336,5 +341,11 @@ func TestCompileErrorsWaitForTheFileToParse(t *testing.T) {
 	src := "<?php\n$x = 1 ? 2 : 3 ? 4 : 5;\nfunction (\n"
 	if got := (&CompileErrorRule{}).Check(parser.ParseFile(src, token.PHP83), src, nil); len(got) != 0 {
 		t.Errorf("got %+v for a file with a syntax error", got)
+	}
+}
+
+func TestCompileErrorRuleReportsCompileError(t *testing.T) {
+	if got := (&CompileErrorRule{}).Codes(); !slices.Equal(got, []rule.Code{rule.CompileError}) {
+		t.Errorf("codes %v", got)
 	}
 }
