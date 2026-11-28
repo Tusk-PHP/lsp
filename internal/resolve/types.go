@@ -102,17 +102,38 @@ func (rt ResolvedType) String() string {
 	return single.FullString()
 }
 
-// writeUnionPart writes one part of a union or intersection. A callable with
-// a return type is put in parentheses, as `(callable(T): float)|int`, since
-// `callable(T): float|int` would read as returning float|int.
-func writeUnionPart(sb *strings.Builder, part ResolvedType) {
-	if part.Callable != nil && part.Callable.Return != nil && len(part.Union) == 0 && len(part.Intersection) == 0 {
+// writeCompoundPart writes one part of a union or intersection, in
+// parentheses where it would otherwise bind to its neighbours: an intersection
+// in a union, as PHP 8.2 writes `(A&B)|int`, a union in an intersection, and a
+// callable with a return type, since `callable(T): float|int` would read as
+// returning float|int. A nullable part of an intersection is written as the
+// union it is, `A&(B|null)`, since PHP has no `?` inside a compound type.
+func writeCompoundPart(sb *strings.Builder, part ResolvedType, inUnion bool) {
+	if !inUnion && part.Nullable && len(part.Union) == 0 && len(part.Intersection) == 0 {
+		inner := part
+		inner.Nullable = false
 		sb.WriteByte('(')
-		sb.WriteString(part.FullString())
-		sb.WriteByte(')')
+		writeCompoundPart(sb, inner, true)
+		sb.WriteString("|null)")
 		return
 	}
+	if !needsParentheses(part, inUnion) {
+		sb.WriteString(part.FullString())
+		return
+	}
+	sb.WriteByte('(')
 	sb.WriteString(part.FullString())
+	sb.WriteByte(')')
+}
+
+func needsParentheses(part ResolvedType, inUnion bool) bool {
+	switch {
+	case len(part.Union) > 0:
+		return !inUnion
+	case len(part.Intersection) > 0:
+		return inUnion || part.Nullable
+	}
+	return part.Callable != nil && part.Callable.Return != nil
 }
 
 // FullString is like String but shows every part of a union or intersection,
@@ -124,7 +145,7 @@ func (rt ResolvedType) FullString() string {
 			if i > 0 {
 				sb.WriteByte('|')
 			}
-			writeUnionPart(&sb, part)
+			writeCompoundPart(&sb, part, true)
 		}
 		if rt.Nullable {
 			sb.WriteString("|null")
@@ -134,16 +155,16 @@ func (rt ResolvedType) FullString() string {
 	if len(rt.Intersection) > 0 {
 		var sb strings.Builder
 		if rt.Nullable {
-			sb.WriteString("?(")
+			sb.WriteByte('(')
 		}
 		for i, part := range rt.Intersection {
 			if i > 0 {
 				sb.WriteByte('&')
 			}
-			writeUnionPart(&sb, part)
+			writeCompoundPart(&sb, part, false)
 		}
 		if rt.Nullable {
-			sb.WriteByte(')')
+			sb.WriteString(")|null")
 		}
 		return sb.String()
 	}
