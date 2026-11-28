@@ -41,6 +41,16 @@ func TestQualifyDocTypes(t *testing.T) {
 		{"tag without a value", "/**\n * @return\n * @param Product $p\n */", "/**\n * @return\n * @param \\Magento\\Catalog\\Model\\Product $p\n */"},
 		{"assert", "/** @phpstan-assert !Product $p */", "/** @phpstan-assert !\\Magento\\Catalog\\Model\\Product $p */"},
 		{"template bound and default", "/** @template T of Product = Product */", "/** @template T of \\Magento\\Catalog\\Model\\Product = \\Magento\\Catalog\\Model\\Product */"},
+		{"global", "/** @global Product $product */", "/** @global \\Magento\\Catalog\\Model\\Product $product */"},
+		{"var with the name first", "/* @var $p Product */", "/* @var $p \\Magento\\Catalog\\Model\\Product */"},
+		{"WordPress hash type", "/** @type Product $product */", "/** @type \\Magento\\Catalog\\Model\\Product $product */"},
+		{"require extends and sealed", "/**\n * @phpstan-require-extends Product\n * @phpstan-sealed Product|Collection\n */",
+			"/**\n * @phpstan-require-extends \\Magento\\Catalog\\Model\\Product\n * @phpstan-sealed \\Magento\\Catalog\\Model\\Product|\\Illuminate\\Support\\Collection\n */"},
+		{"type alias body", "/** @phpstan-type Row array{product: Product} */", "/** @phpstan-type Row array{product: \\Magento\\Catalog\\Model\\Product} */"},
+		{"imported type alias source", "/** @phpstan-import-type Row from Product as ProductRow */", "/** @phpstan-import-type Row from \\Magento\\Catalog\\Model\\Product as ProductRow */"},
+		{"covariant template and call-site variance", "/**\n * @template-covariant T of Product\n * @param Collection<covariant Product> $c\n */",
+			"/**\n * @template-covariant T of \\Magento\\Catalog\\Model\\Product\n * @param \\Illuminate\\Support\\Collection<covariant \\Magento\\Catalog\\Model\\Product> $c\n */"},
+		{"description naming an import stays", "/** @param int $n the Product count */", "/** @param int $n the Product count */"},
 		{"other tags stay", "/** @see Product\n * Product description */", "/** @see Product\n * Product description */"},
 	}
 	for _, tt := range tests {

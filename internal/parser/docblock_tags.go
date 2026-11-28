@@ -66,39 +66,127 @@ type docTagSpec struct {
 	read   docTagRead
 }
 
-// docTagSpecOf is the one list of the PHPDoc tags this package knows, keyed by
+// docTagSpecs is the one list of the PHPDoc tags this package knows, keyed by
 // the base name docTagName gives: where each holds types, and whether
-// ParseDocBlock interprets it.
+// ParseDocBlock interprets it. It is never modified.
+var docTagSpecs = map[string]docTagSpec{
+	"param":              {docLayoutVariableType, docReadAlways},
+	"var":                {docLayoutVariableType, docReadAlways},
+	"param-out":          {docLayoutVariableType, docReadAlways},
+	"param-closure-this": {docLayoutVariableType, docReadAlways},
+	"property":           {docLayoutVariableType, docReadPlain},
+	"property-read":      {docLayoutVariableType, docReadPlain},
+	"property-write":     {docLayoutVariableType, docReadPlain},
+	"global":             {docLayoutVariableType, docReadNever},
+	"return":             {docLayoutLeadingType, docReadAlways},
+	"extends":            {docLayoutLeadingType, docReadAlways},
+	"implements":         {docLayoutLeadingType, docReadAlways},
+	"use":                {docLayoutLeadingType, docReadAlways},
+	"self-out":           {docLayoutLeadingType, docReadAlways},
+	"mixin":              {docLayoutLeadingType, docReadAlways},
+	"throws":             {docLayoutLeadingType, docReadPlain},
+	"require-extends":    {docLayoutLeadingType, docReadNever},
+	"require-implements": {docLayoutLeadingType, docReadNever},
+	"sealed":             {docLayoutLeadingType, docReadNever},
+	"inheritors":         {docLayoutLeadingType, docReadNever},
+	"if-this-is":         {docLayoutLeadingType, docReadNever},
+	"scope-this":         {docLayoutLeadingType, docReadNever},
+	"yield":              {docLayoutLeadingType, docReadNever},
+	"expectedException":  {docLayoutLeadingType, docReadNever},
+	"assert":             {docLayoutAssert, docReadPrefixed},
+	"assert-if-true":     {docLayoutAssert, docReadPrefixed},
+	"assert-if-false":    {docLayoutAssert, docReadPrefixed},
+	"template":           {docLayoutTemplate, docReadAlways},
+	"type":               {docLayoutTypeAlias, docReadPrefixed},
+	"import-type":        {docLayoutImportType, docReadPrefixed},
+	"method":             {docLayoutMethod, docReadPlain},
+	"deprecated":         {docLayoutProse, docReadPlain},
+	"see":                {docLayoutReference, docReadNever},
+	"link":               {docLayoutReference, docReadNever},
+	"covers":             {docLayoutReference, docReadNever},
+	"coversDefaultClass": {docLayoutReference, docReadNever},
+	"uses":               {docLayoutReference, docReadNever},
+}
+
 func docTagSpecOf(base string) docTagSpec {
-	switch base {
-	case "param", "var", "param-out", "param-closure-this":
-		return docTagSpec{docLayoutVariableType, docReadAlways}
-	case "property", "property-read", "property-write":
-		return docTagSpec{docLayoutVariableType, docReadPlain}
-	case "global":
-		return docTagSpec{docLayoutVariableType, docReadNever}
-	case "return", "extends", "implements", "use", "self-out", "mixin":
-		return docTagSpec{docLayoutLeadingType, docReadAlways}
-	case "throws":
-		return docTagSpec{docLayoutLeadingType, docReadPlain}
-	case "require-extends", "require-implements", "sealed", "inheritors", "if-this-is", "scope-this", "yield", "expectedException":
-		return docTagSpec{docLayoutLeadingType, docReadNever}
-	case "assert", "assert-if-true", "assert-if-false":
-		return docTagSpec{docLayoutAssert, docReadPrefixed}
-	case "template":
-		return docTagSpec{docLayoutTemplate, docReadAlways}
-	case "type":
-		return docTagSpec{docLayoutTypeAlias, docReadPrefixed}
-	case "import-type":
-		return docTagSpec{docLayoutImportType, docReadPrefixed}
-	case "method":
-		return docTagSpec{docLayoutMethod, docReadPlain}
-	case "deprecated":
-		return docTagSpec{docLayoutProse, docReadPlain}
-	case "see", "link", "covers", "coversDefaultClass", "uses":
-		return docTagSpec{docLayoutReference, docReadNever}
+	return docTagSpecs[base]
+}
+
+// ForEachDocTagType calls fn with each type the value of a PHPDoc tag holds
+// and its offset in value, at the positions docTagSpecOf gives the tag: the
+// type of @param, @return and the like, a @template's bound and default, a
+// @phpstan-type's body, a @phpstan-import-type's class, and a @method's return
+// and parameter types. name is the tag's name without the @.
+func ForEachDocTagType(name, value string, fn func(start int, typ string)) {
+	base, prio := docTagName(name)
+	off := docFieldStart(value, 0)
+	forEachDocTagType(base, prio, value[off:], func(start int, typ string) { fn(off+start, typ) })
+}
+
+func forEachDocTagType(base string, prio int, value string, fn func(start int, typ string)) {
+	layout := docTagSpecOf(base).layout
+	if layout == docLayoutTypeAlias && prio == 0 {
+		layout = docLayoutVariableType
 	}
-	return docTagSpec{}
+	switch layout {
+	case docLayoutVariableType:
+		start := 0
+		if strings.HasPrefix(value, "$") {
+			if start = strings.IndexAny(value, " \t"); start < 0 {
+				return
+			}
+		}
+		emitDocType(value, start, types.ExtractDocTypeString, fn)
+	case docLayoutLeadingType:
+		emitDocType(value, 0, types.ExtractDocTypeString, fn)
+	case docLayoutAssert:
+		emitDocType(value, len(value)-len(strings.TrimLeft(value, " \t!=")), types.ExtractDocTypeString, fn)
+	case docLayoutTemplate:
+		_, bound, def := docTemplateParts(value)
+		emitDocType(value, bound, types.ExtractDocTypeString, fn)
+		emitDocType(value, def, types.ExtractDocTypeString, fn)
+	case docLayoutTypeAlias:
+		emitDocType(value, docFieldEnd(value, docFieldStart(value, 0)), types.ExtractDocTypeString, fn)
+	case docLayoutImportType:
+		from := docFieldStart(value, docFieldEnd(value, docFieldStart(value, 0)))
+		if !strings.HasPrefix(value[from:], "from ") && !strings.HasPrefix(value[from:], "from\t") {
+			return
+		}
+		emitDocType(value, from+len("from"), types.ExtractDocTypeString, fn)
+	case docLayoutMethod:
+		readDocMethod(value, func(start int) {
+			emitDocType(value, start, types.ExtractParamListType, fn)
+		})
+	}
+}
+
+func emitDocType(value string, start int, extract func(string) (string, string), fn func(start int, typ string)) {
+	if start < 0 {
+		return
+	}
+	start = docFieldStart(value, start)
+	if start >= len(value) {
+		return
+	}
+	typ, _ := extract(value[start:])
+	if typ == "" || !strings.HasPrefix(value[start:], typ) {
+		return
+	}
+	fn(start, typ)
+}
+
+func docFieldStart(s string, i int) int {
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+		i++
+	}
+	return i
+}
+
+func docFieldEnd(s string, i int) int {
+	for i < len(s) && s[i] != ' ' && s[i] != '\t' {
+		i++
+	}
+	return i
 }
 
 // docTagBase maps a tag name to the tag it stands for and its precedence:
@@ -302,23 +390,39 @@ func docTagRepeats(base string) bool {
 // parseDocTemplate parses "@template TModel", "@template TModel of Model" and
 // "@template T of array<int, Foo> = array<int, Foo>".
 func parseDocTemplate(value string) DocTemplate {
-	t := DocTemplate{}
 	value = strings.TrimSpace(value)
-	end := strings.IndexAny(value, " \t")
-	if end < 0 {
-		t.Name = value
-		return t
-	}
-	t.Name = value[:end]
-	rest := strings.TrimSpace(value[end:])
-	if strings.HasPrefix(rest, "of ") || strings.HasPrefix(rest, "as ") {
-		t.Bound, rest = types.ExtractDocTypeString(rest[3:])
+	name, bound, def := docTemplateParts(value)
+	t := DocTemplate{Name: name}
+	if bound >= 0 {
+		t.Bound, _ = types.ExtractDocTypeString(value[bound:])
 		t.ParsedBound = parseDocTypeExprPtr(t.Bound)
 	}
-	if strings.HasPrefix(rest, "=") {
-		t.Default, _ = types.ExtractDocTypeString(strings.TrimSpace(rest[1:]))
+	if def >= 0 {
+		t.Default, _ = types.ExtractDocTypeString(value[def:])
 	}
 	return t
+}
+
+// docTemplateParts splits a @template value into its name and the offsets of
+// its bound (after `of` or `as`) and its default (after `=`), -1 when absent.
+func docTemplateParts(value string) (name string, bound, def int) {
+	bound, def = -1, -1
+	start := docFieldStart(value, 0)
+	end := docFieldEnd(value, start)
+	name = value[start:end]
+	rest := docFieldStart(value, end)
+	if rest == end {
+		return name, bound, def
+	}
+	if strings.HasPrefix(value[rest:], "of ") || strings.HasPrefix(value[rest:], "as ") {
+		bound = docFieldStart(value, rest+3)
+		typ, _ := types.ExtractDocTypeString(value[bound:])
+		rest = docFieldStart(value, bound+len(typ))
+	}
+	if strings.HasPrefix(value[rest:], "=") {
+		def = docFieldStart(value, rest+1)
+	}
+	return name, bound, def
 }
 
 // parseDocAssert parses "!Foo $value", "=int $this->count" and the like.

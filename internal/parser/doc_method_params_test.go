@@ -2,9 +2,8 @@ package parser
 
 import (
 	"slices"
+	"strings"
 	"testing"
-
-	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
 func TestParseDocMethodParams(t *testing.T) {
@@ -110,7 +109,7 @@ func TestParseDocMethodReturnTypes(t *testing.T) {
 	}
 }
 
-func TestForEachDocMethodType(t *testing.T) {
+func TestForEachDocTagTypeOfMethod(t *testing.T) {
 	tests := []struct {
 		value string
 		want  []string
@@ -123,8 +122,10 @@ func TestForEachDocMethodType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.value, func(t *testing.T) {
 			var got []string
-			ForEachDocMethodType(tt.value, func(start int) {
-				typ, _ := types.ExtractParamListType(tt.value[start:])
+			ForEachDocTagType("method", tt.value, func(start int, typ string) {
+				if !strings.HasPrefix(tt.value[start:], typ) {
+					t.Errorf("type %q is not at offset %d", typ, start)
+				}
 				got = append(got, typ)
 			})
 			if !slices.Equal(got, tt.want) {

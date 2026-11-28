@@ -51,47 +51,18 @@ func (c *importCollector) markDocTag(tag string) {
 	name, value := splitDocTag(tag)
 	base, prio := docTagName(name)
 	switch docTagSpecOf(base).layout {
-	case docLayoutVariableType:
-		c.markDocType(docVariableType(value))
-	case docLayoutLeadingType:
-		typ, _ := types.ExtractDocTypeString(value)
-		c.markDocType(typ)
-	case docLayoutAssert:
-		c.markDocType(parseDocAssert(value, AssertAlways).Type)
-	case docLayoutTemplate:
-		tmpl := parseDocTemplate(value)
-		c.markDocType(tmpl.Bound)
-		c.markDocType(tmpl.Default)
-	case docLayoutTypeAlias:
-		if prio == 0 {
-			c.markDocType(docVariableType(value))
-			return
+	case docLayoutProse:
+		if isDocAnnotation(name) {
+			tokens, _ := tokenizeFrom(tag, false)
+			c.collect(tokens, nil)
 		}
-		c.markDocType(parseDocTypeAlias(value).Type)
-	case docLayoutImportType:
-		c.markDocType(parseDocImportedTypeAlias(value).From)
 	case docLayoutMethod:
 		c.markDocMethod(value)
 	case docLayoutReference:
 		c.markDocTarget(value)
 	default:
-		if isDocAnnotation(name) {
-			tokens, _ := tokenizeFrom(tag, false)
-			c.collect(tokens, nil)
-		}
+		forEachDocTagType(base, prio, value, func(_ int, typ string) { c.markDocType(typ) })
 	}
-}
-
-func docVariableType(value string) string {
-	if strings.HasPrefix(value, "$") {
-		end := strings.IndexAny(value, " \t")
-		if end < 0 {
-			return ""
-		}
-		value = value[end+1:]
-	}
-	typ, _ := types.ExtractDocTypeString(value)
-	return typ
 }
 
 func (c *importCollector) markDocMethod(value string) {

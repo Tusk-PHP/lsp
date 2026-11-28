@@ -437,13 +437,6 @@ func parseDocMethod(value string) DocMethod {
 	return readDocMethod(value, nil)
 }
 
-// ForEachDocMethodType calls fn with the offset in value, the value of an
-// @method tag, of each type it names: its return type and its parameters'
-// types, in order.
-func ForEachDocMethodType(value string, fn func(start int)) {
-	readDocMethod(value, fn)
-}
-
 func readDocMethod(value string, typeAt func(start int)) DocMethod {
 	value = strings.TrimRight(value, " \t\r\n")
 	var at func(s string)
