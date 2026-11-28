@@ -130,3 +130,51 @@ func TestExtractDocTypeString(t *testing.T) {
 		})
 	}
 }
+
+func TestUnionMembersKeepBracketsWhole(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want []string
+	}{
+		{"(A&B)|null", []string{"(A & B)", "null"}},
+		{"array{a: int|string}|false", []string{"array{a: int | string}", "false"}},
+		{"callable(int|string): void|null", []string{"callable(int | string): void", "null"}},
+		{"Collection<int, A|B>", []string{"Collection<int, A | B>"}},
+		{"?Foo", []string{"Foo"}},
+	}
+	for _, c := range cases {
+		members := ParseTypeExpr(c.raw).UnionMembers()
+		got := make([]string, 0, len(members))
+		for _, m := range members {
+			got = append(got, m.String())
+		}
+		if len(got) != len(c.want) {
+			t.Errorf("%s: members %q, want %q", c.raw, got, c.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("%s: members %q, want %q", c.raw, got, c.want)
+				break
+			}
+		}
+	}
+}
+
+func TestIsNullOnlyAtTheTop(t *testing.T) {
+	for raw, want := range map[string]bool{
+		"null":           true,
+		"NULL":           true,
+		"array{a: ?int}": false,
+		"array{a: null}": false,
+		"Foo":            false,
+		"?Foo":           false,
+	} {
+		if got := ParseTypeExpr(raw).IsNull(); got != want {
+			t.Errorf("IsNull(%s) = %v, want %v", raw, got, want)
+		}
+	}
+	if expr := ParseTypeExpr("array{a: ?int}"); expr.Nullable {
+		t.Error("array{a: ?int} is not nullable")
+	}
+}

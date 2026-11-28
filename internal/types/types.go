@@ -81,6 +81,28 @@ func RenderTypeExpr(raw string) string {
 	return ParseTypeExpr(raw).String()
 }
 
+// UnionMembers returns the members of a union, or the type itself when it is
+// not one. The `?` of a nullable type is left out of them: Nullable on expr
+// says whether it is there.
+func (expr TypeExpr) UnionMembers() []TypeExpr {
+	if expr.Kind == TypeKindUnion {
+		return expr.Types
+	}
+	expr.Nullable = false
+	return []TypeExpr{expr}
+}
+
+// IsNull reports whether the type is null itself.
+func (expr TypeExpr) IsNull() bool {
+	switch expr.Kind {
+	case TypeKindLiteral:
+		return expr.Literal == "null"
+	case TypeKindNamed:
+		return strings.EqualFold(expr.Name, "null")
+	}
+	return false
+}
+
 func (expr TypeExpr) String() string {
 	if expr.Kind == TypeKindNamed && expr.Name == "" && !expr.Nullable {
 		return ""

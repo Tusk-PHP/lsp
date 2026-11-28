@@ -58,7 +58,7 @@ func (r *Resolver) narrowInstanceof(t ResolvedType, name string, value bool, fil
 		return t
 	}
 	cls := ResolvedType{FQN: fqn}
-	t = splitWrittenUnion(t)
+	t = r.splitWrittenUnion(t)
 	if !value {
 		return r.removeType(t, cls)
 	}
@@ -434,24 +434,11 @@ func assertedCondition(stmt string) (string, bool) {
 
 // splitWrittenUnion makes a union kept as written in its name, as a
 // parameter's declared `Foo|Bar` is, into its parts.
-func splitWrittenUnion(t ResolvedType) ResolvedType {
-	if len(t.Union) > 0 || len(t.Intersection) > 0 || !strings.Contains(t.FQN, "|") || strings.ContainsAny(t.FQN, "<({&") {
+func (r *Resolver) splitWrittenUnion(t ResolvedType) ResolvedType {
+	if len(t.Union) > 0 || len(t.Intersection) > 0 || !strings.Contains(t.FQN, "|") {
 		return t
 	}
-	var parts []ResolvedType
-	nullable := t.Nullable
-	for _, part := range strings.Split(t.FQN, "|") {
-		part = strings.TrimPrefix(strings.TrimSpace(part), "?")
-		switch {
-		case part == "":
-		case strings.EqualFold(part, "null"):
-			nullable = true
-		default:
-			parts = append(parts, ResolvedType{FQN: part})
-		}
-	}
-	if len(parts) == 0 {
-		return t
-	}
-	return MakeUnion(parts, nullable)
+	parsed := r.parseType(t.FQN)
+	parsed.Nullable = parsed.Nullable || t.Nullable
+	return parsed
 }

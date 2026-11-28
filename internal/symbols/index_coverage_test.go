@@ -306,8 +306,7 @@ func TestPickBestStandaloneSkipsProperties(t *testing.T) {
 	})
 }
 
-func TestSplitTypeExpr(t *testing.T) {
-	// splitTypeExpr is unexported, test through index behavior
+func TestUnionPropertyType(t *testing.T) {
 	idx := NewIndex()
 	// Union type in property should resolve both parts
 	idx.IndexFile("file:///test.php", `<?php

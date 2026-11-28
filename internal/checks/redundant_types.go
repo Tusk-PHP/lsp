@@ -7,6 +7,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
 // RedundantNullsafeRule reports `?->` on a receiver that can't be null.
@@ -163,12 +164,12 @@ func isNullable(typ string) bool {
 	if typ == "" || typ == "mixed" || typ == "null" {
 		return true
 	}
-	if strings.HasPrefix(typ, "?") {
+	expr := types.ParseTypeExpr(typ)
+	if expr.Nullable {
 		return true
 	}
-	// Union with null
-	for _, part := range strings.Split(typ, "|") {
-		if strings.TrimSpace(part) == "null" {
+	for _, member := range expr.UnionMembers() {
+		if member.IsNull() {
 			return true
 		}
 	}
@@ -216,29 +217,29 @@ var supertypes = map[string][]string{
 	"iterable": {"array"},
 }
 
+func writtenMember(member types.TypeExpr) string {
+	if member.Kind == types.TypeKindNamed {
+		return member.Name
+	}
+	return member.String()
+}
+
 func checkUnionType(typeStr string, line int, index *symbols.Index) []Finding {
 	if typeStr == "" {
 		return nil
 	}
 
-	// Handle ?Type as Type|null
-	normalized := typeStr
-	if strings.HasPrefix(normalized, "?") {
-		normalized = normalized[1:] + "|null"
+	expr := types.ParseTypeExpr(typeStr)
+	members := expr.UnionMembers()
+	parts := make([]string, 0, len(members)+1)
+	for _, member := range members {
+		parts = append(parts, writtenMember(member))
 	}
-
-	if !strings.Contains(normalized, "|") {
-		return nil
+	if expr.Nullable {
+		parts = append(parts, "null")
 	}
-
-	parts := strings.Split(normalized, "|")
 	if len(parts) < 2 {
 		return nil
-	}
-
-	// Trim whitespace from each part
-	for i := range parts {
-		parts[i] = strings.TrimSpace(parts[i])
 	}
 
 	var findings []Finding
@@ -262,10 +263,9 @@ func checkUnionType(typeStr string, line int, index *symbols.Index) []Finding {
 	}
 
 	// Check ?Type|null redundancy (the ? already makes it nullable)
-	if strings.HasPrefix(typeStr, "?") {
-		// Only what's written counts, not the |null this function adds for the `?`.
-		for _, p := range strings.Split(typeStr[1:], "|") {
-			if strings.ToLower(strings.TrimSpace(p)) == "null" {
+	if expr.Nullable {
+		for _, member := range members {
+			if member.IsNull() {
 				findings = append(findings, Finding{
 					StartLine: line,
 					StartCol:  0,

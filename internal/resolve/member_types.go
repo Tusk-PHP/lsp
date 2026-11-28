@@ -15,11 +15,7 @@ func (r *Resolver) ReturnsCallingClass(member *symbols.Symbol) bool {
 	if member == nil || member.Kind != symbols.KindMethod {
 		return false
 	}
-	t := strings.TrimPrefix(strings.TrimSpace(r.rawMemberReturnType(member)), "?")
-	if strings.Contains(t, "|") {
-		t = PickBestUnionPart(t)
-	}
-	switch strings.TrimPrefix(t, "?") {
+	switch r.parseType(r.rawMemberReturnType(member)).FQN {
 	case "static", "self", "$this":
 		return true
 	}

@@ -34,7 +34,8 @@ Templates are stored at index time (`symbols.Symbol.Templates` on classes, metho
 ## Conventions
 
 - Prefer `ResolvedType` over passing raw type strings around. The string form is fine for hover output, but internal flow should be structured.
-- `PickBestUnionPart`, `HasNullInUnion`, `IndexOutsideBrackets` are intentionally exported — they're used by completion/hover and tested via `*_coverage_test.go`. Don't inline-copy them.
+- `IndexOutsideBrackets` is intentionally exported — it's used by completion/hover and tested via `*_coverage_test.go`. Don't inline-copy it.
+- Union members come from the structured type: `ResolvedType.Parts()` and the mirrored best part, or `types.TypeExpr.UnionMembers()` outside this package. Never split a type string at `|` by hand.
 - Recursion guards exist (`recursion_test.go`) because chain resolution and template expansion can loop on self-referential generics. Preserve them. The guard lives on the request's `Resolver`, so it only holds while one `Resolver` is passed through the whole request.
 - New PHPDoc handling belongs in `internal/types` (the structured type) and here (reading it into `ResolvedType`), not in feature-specific string parsing.
 

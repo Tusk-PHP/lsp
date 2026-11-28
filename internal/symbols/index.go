@@ -1733,24 +1733,6 @@ func resolveTypeName(name string, currentNs string, uses []parser.UseNode) strin
 	return prefix + name
 }
 
-func splitTypeExpr(name string) []string {
-	var parts []string
-	start := 0
-	for i := 0; i < len(name); i++ {
-		// A DNF type's parentheses, as in (A&B)|null, only group its parts.
-		if name[i] == '|' || name[i] == '&' || name[i] == '(' || name[i] == ')' {
-			if i > start {
-				parts = append(parts, name[start:i])
-			}
-			start = i + 1
-		}
-	}
-	if start < len(name) {
-		parts = append(parts, name[start:])
-	}
-	return parts
-}
-
 func appendUnique(slice []string, item string) []string {
 	for _, s := range slice {
 		if s == item {
