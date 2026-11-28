@@ -172,6 +172,7 @@ return [
         'Cache' => Cache::class,
         'Store' => Store::class,
         'Local' => Local::class,
+        'Redis' => Redis::class,
         'Nameless' => \::class,
     ],
 ];
@@ -180,6 +181,7 @@ return [
 		"Cache": `Illuminate\Support\Facades\Cache`,
 		"Store": `Illuminate\Support\Facades\Redis`,
 		"Local": `Config\Local`,
+		"Redis": `Config\Redis`,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("configAliases = %v, want %v", got, want)
@@ -188,5 +190,12 @@ return [
 		if got[k] != v {
 			t.Errorf("configAliases[%s] = %q, want %q", k, got[k], v)
 		}
+	}
+}
+
+func TestConfigAliasesKeepAnUnimportedNameOutsideANamespace(t *testing.T) {
+	got := configAliases("<?php\nreturn ['aliases' => ['Local' => Local::class]];\n")
+	if len(got) != 1 || got["Local"] != "Local" {
+		t.Fatalf("configAliases = %v", got)
 	}
 }

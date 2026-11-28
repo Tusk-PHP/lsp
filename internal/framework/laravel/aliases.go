@@ -253,18 +253,13 @@ func resolveImportedClassName(name string, file *parser.FileNode) string {
 	if strings.Contains(name, `\`) {
 		return name
 	}
-	if file != nil {
-		for _, use := range file.Uses {
-			if use.Alias == name {
-				return use.FullName
-			}
-			if last := filepath.Base(strings.ReplaceAll(use.FullName, `\`, `/`)); last == name {
-				return use.FullName
-			}
+	for _, use := range file.Uses {
+		if use.Alias == name {
+			return use.FullName
 		}
-		if file.Namespace != "" {
-			return file.Namespace + `\` + name
-		}
+	}
+	if file.Namespace != "" {
+		return file.Namespace + `\` + name
 	}
 	return name
 }
