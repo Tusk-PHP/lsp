@@ -7,12 +7,9 @@ vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Admin/ManagingCatalogPromotion
 vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Admin/ManagingProductsContext.php	argument-count-mismatch	Too few arguments to getTranslationValue(): 2 passed, at least 3 required
 vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Admin/ManagingPromotionCouponsContext.php	unused-private-property	Private property 'ManagingPromotionCouponsContext::$iriConverter' is never used
 vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Admin/ManagingPromotionCouponsContext.php	unused-private-property	Private property 'ManagingPromotionCouponsContext::$requestFactory' is never used
-vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Admin/ResettingPasswordContext.php	unused-import	Unused import 'Symfony\Component\HttpFoundation\Request'
 vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Shop/CheckoutContext.php	unused-private-method	Private method 'CheckoutContext::selectShippingMethod' is never used
 vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Shop/CheckoutContext.php	unused-variable	Variable $response is assigned but never read
 vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Shop/CustomerContext.php	unused-variable	Variable $response is assigned but never read
-vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Shop/LoginContext.php	unused-import	Unused import 'Symfony\Component\HttpFoundation\Request'
-vendor/sylius/sylius/src/Sylius/Behat/Context/Api/Shop/PaymentRequestContext.php	unused-import	Unused import 'Symfony\Component\HttpFoundation\Request'
 vendor/sylius/sylius/src/Sylius/Behat/Context/Cli/InstallerContext.php	unknown-member	Unknown member 'add' on 'Application'
 vendor/sylius/sylius/src/Sylius/Behat/Context/Setup/ProductContext.php	unused-private-method	Private method 'ProductContext::removeProductTranslation' is never used
 vendor/sylius/sylius/src/Sylius/Behat/Context/Setup/PromotionContext.php	unused-variable	Variable $rule is assigned but never read
@@ -24,8 +21,6 @@ vendor/sylius/sylius/src/Sylius/Behat/Page/Admin/Product/UpdateConfigurableProdu
 vendor/sylius/sylius/src/Sylius/Behat/Service/Clock.php	unknown-member	Unknown member 'timezone' on 'Clock'
 vendor/sylius/sylius/src/Sylius/Bundle/AdminBundle/Notification/HubNotificationProvider.php	unused-private-property	Private property 'HubNotificationProvider::$clock' is never used
 vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/Serializer/Denormalizer/ChannelPriceHistoryConfigDenormalizer.php	unused-private-property	Private property 'ChannelPriceHistoryConfigDenormalizer::$channelPriceHistoryConfigFactory' is never used
-vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/Serializer/Denormalizer/ProductAttributeValueDenormalizer.php	unused-import	Unused import 'Sylius\Component\Attribute\AttributeType\DatetimeAttributeType'
-vendor/sylius/sylius/src/Sylius/Bundle/ApiBundle/Serializer/Normalizer/ProductAttributeValueNormalizer.php	unused-import	Unused import 'Sylius\Component\Attribute\AttributeType\DatetimeAttributeType'
 vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Doctrine/ORM/Promotion/Modifier/AtomicOrderPromotionsUsageModifier.php	unused-private-property	Private property 'AtomicOrderPromotionsUsageModifier::$decoratedModifier' is never used
 vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Migrations/Version20251126120000.php	unknown-member	Unknown member 'getSchemaManager' on 'Connection'
 vendor/sylius/sylius/src/Sylius/Bundle/CoreBundle/Migrations/Version20251126120001.php	unknown-member	Unknown member 'getSchemaManager' on 'Connection'

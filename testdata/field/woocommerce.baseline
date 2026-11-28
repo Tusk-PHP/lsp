@@ -75,6 +75,7 @@ wp-content/plugins/woocommerce/includes/admin/helper/class-wc-helper-updater.php
 wp-content/plugins/woocommerce/includes/admin/helper/class-wc-helper.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/admin/helper/class-wc-helper.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/admin/helper/class-wc-helper.php	unknown-class	Unknown class 'Constants'
+wp-content/plugins/woocommerce/includes/admin/importers/class-wc-product-csv-importer-controller.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\Utilities\URL'
 wp-content/plugins/woocommerce/includes/admin/importers/class-wc-tax-rate-importer.php	deprecated	utf8_encode() is deprecated since PHP 8.2, use mb_convert_encoding()
 wp-content/plugins/woocommerce/includes/admin/list-tables/class-wc-admin-list-table-orders.php	unknown-member	Unknown member 'get_product_id' on 'WC_Order_Item'
 wp-content/plugins/woocommerce/includes/admin/list-tables/class-wc-admin-list-table-orders.php	unknown-member	Unknown member 'get_total' on 'WC_Order_Item'
@@ -137,6 +138,7 @@ wp-content/plugins/woocommerce/includes/class-wc-cli.php	unknown-class	Unknown c
 wp-content/plugins/woocommerce/includes/class-wc-cli.php	unknown-class	Unknown class 'WP_CLI'
 wp-content/plugins/woocommerce/includes/class-wc-cli.php	unknown-class	Unknown class 'WP_CLI'
 wp-content/plugins/woocommerce/includes/class-wc-cli.php	unknown-class	Unknown class 'WP_CLI'
+wp-content/plugins/woocommerce/includes/class-wc-cli.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\CLI\Migrator\Runner'
 wp-content/plugins/woocommerce/includes/class-wc-discounts.php	unknown-member	Unknown member 'get_product' on 'WC_Order_Item'
 wp-content/plugins/woocommerce/includes/class-wc-discounts.php	unknown-member	Unknown member 'get_subtotal' on 'WC_Order_Item'
 wp-content/plugins/woocommerce/includes/class-wc-discounts.php	unknown-member	Unknown member 'get_subtotal_tax' on 'WC_Order_Item'
@@ -154,6 +156,7 @@ wp-content/plugins/woocommerce/includes/class-wc-frontend-scripts.php	unused-imp
 wp-content/plugins/woocommerce/includes/class-wc-geolite-integration.php	unknown-class	Unknown class 'MaxMind\Db\Reader'
 wp-content/plugins/woocommerce/includes/class-wc-install.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/includes/class-wc-install.php	unknown-class	Unknown class 'Constants'
+wp-content/plugins/woocommerce/includes/class-wc-install.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\API\Reports\Orders\Stats\DataStore'
 wp-content/plugins/woocommerce/includes/class-wc-install.php	unused-import	Unused import 'Automattic\WooCommerce\Utilities\PluginUtil'
 wp-content/plugins/woocommerce/includes/class-wc-order-item-fee.php	argument-count-mismatch	Too many arguments to wc_array_merge_recursive_numeric(): 2 passed, at most 0 expected
 wp-content/plugins/woocommerce/includes/class-wc-order-item-fee.php	unknown-member	Unknown member 'get_total' on 'WC_Order_Item'
@@ -416,9 +419,12 @@ wp-content/plugins/woocommerce/includes/widgets/class-wc-widget-price-filter.php
 wp-content/plugins/woocommerce/includes/widgets/class-wc-widget-price-filter.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/lib/classes/symfony/polyfill-php80/Resources/stubs/PhpToken.php	unknown-class	Unknown class 'Symfony\Polyfill\Php80\WC_Vendor_PhpToken'
 wp-content/plugins/woocommerce/patterns/page-coming-soon-modern-black.php	unused-variable	Variable $current_theme is assigned but never read
+wp-content/plugins/woocommerce/src/Admin/API/Init.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Features\Features'
+wp-content/plugins/woocommerce/src/Admin/API/NoteActions.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Notes\Note'
 wp-content/plugins/woocommerce/src/Admin/API/Notes.php	unused-private-method	Private method 'Notes::is_tasklist_experiment_assigned_treatment' is never used
 wp-content/plugins/woocommerce/src/Admin/API/Notice.php	unknown-class	Unknown class 'WP_Error'
 wp-content/plugins/woocommerce/src/Admin/API/OnboardingProfile.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\Admin\Onboarding\OnboardingProducts'
+wp-content/plugins/woocommerce/src/Admin/API/OnboardingTasks.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Features\Features'
 wp-content/plugins/woocommerce/src/Admin/API/OnboardingTasks.php	unused-variable	Variable $update is assigned but never read
 wp-content/plugins/woocommerce/src/Admin/API/OnboardingTasks.php	unused-variable	Variable $update is assigned but never read
 wp-content/plugins/woocommerce/src/Admin/API/ProductAttributeTerms.php	unknown-class	Unknown class 'WP_Error'
@@ -432,6 +438,7 @@ wp-content/plugins/woocommerce/src/Admin/API/Reports/DataStore.php	unused-variab
 wp-content/plugins/woocommerce/src/Admin/API/Reports/DataStore.php	unused-variable	Variable $lookup_name is assigned but never read
 wp-content/plugins/woocommerce/src/Admin/API/Reports/DataStore.php	unused-variable	Variable $operator is assigned but never read
 wp-content/plugins/woocommerce/src/Admin/API/Reports/Downloads/Stats/DataStore.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\API\Reports\TimeInterval'
+wp-content/plugins/woocommerce/src/Admin/API/Reports/GenericQuery.php	unused-import	Unused import 'WC_Data_Store'
 wp-content/plugins/woocommerce/src/Admin/API/Reports/Orders/DataStore.php	unused-variable	Variable $have_joined_products_table is assigned but never read
 wp-content/plugins/woocommerce/src/Admin/API/Reports/PerformanceIndicators/Controller.php	unused-variable	Variable $base is assigned but never read
 wp-content/plugins/woocommerce/src/Admin/API/Reports/PerformanceIndicators/Controller.php	unused-variable	Variable $is_error is assigned but never read
@@ -452,9 +459,11 @@ wp-content/plugins/woocommerce/src/Admin/API/Reports/Products/Stats/Segmenter.ph
 wp-content/plugins/woocommerce/src/Admin/API/Reports/Products/Stats/Segmenter.php	unused-variable	Variable $product_segmenting_table is assigned but never read
 wp-content/plugins/woocommerce/src/Admin/API/Reports/Variations/DataStore.php	unused-variable	Variable $order_item_meta_table is assigned but never read
 wp-content/plugins/woocommerce/src/Admin/API/Reports/Variations/Stats/DataStore.php	unused-variable	Variable $order_item_meta_table is assigned but never read
+wp-content/plugins/woocommerce/src/Admin/API/Reports/Variations/Stats/Segmenter.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\API\Reports\ParameterException'
 wp-content/plugins/woocommerce/src/Admin/API/Reports/Variations/Stats/Segmenter.php	unused-variable	Variable $product_segmenting_table is assigned but never read
 wp-content/plugins/woocommerce/src/Admin/API/Reports/Variations/Stats/Segmenter.php	unused-variable	Variable $product_segmenting_table is assigned but never read
 wp-content/plugins/woocommerce/src/Admin/Composer/Package.php	unused-private-method	Private method 'Package::is_notes_initialized' is never used
+wp-content/plugins/woocommerce/src/Admin/Features/Blueprint/RestApi.php	unused-import	Unused import 'WP_Error'
 wp-content/plugins/woocommerce/src/Admin/Features/Features.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\Admin\WCAdminAssets'
 wp-content/plugins/woocommerce/src/Admin/Features/Fulfillments/FulfillmentsManager.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Features\Fulfillments\Providers\AbstractShippingProvider'
 wp-content/plugins/woocommerce/src/Admin/Features/Fulfillments/Providers/DHLShippingProvider.php	unused-variable	Variable $is_major_country is assigned but never read
@@ -476,6 +485,7 @@ wp-content/plugins/woocommerce/src/Admin/Features/OnboardingTasks/Tasks/Marketin
 wp-content/plugins/woocommerce/src/Admin/Features/OnboardingTasks/Tasks/StoreCreation.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Features\Onboarding'
 wp-content/plugins/woocommerce/src/Admin/Features/OnboardingTasks/Tasks/StoreDetails.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\Admin\Onboarding\OnboardingProfile'
 wp-content/plugins/woocommerce/src/Admin/Features/OnboardingTasks/Tasks/Tax.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\API\Reports\Taxes\Stats\DataStore'
+wp-content/plugins/woocommerce/src/Admin/Features/OnboardingTasks/Tasks/Tax.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Features\Features'
 wp-content/plugins/woocommerce/src/Admin/Features/TransientNotices.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\Admin\Loader'
 wp-content/plugins/woocommerce/src/Admin/Notes/Note.php	unused-variable	Variable $allowed_type is assigned but never read
 wp-content/plugins/woocommerce/src/Admin/Overrides/OrderTraits.php	unknown-member	Unknown member 'get_subtotal' on 'WC_Order_Item'
@@ -507,6 +517,7 @@ wp-content/plugins/woocommerce/src/Blocks/BlockTypes/MiniCart.php	unknown-class	
 wp-content/plugins/woocommerce/src/Blocks/BlockTypes/MiniCart.php	unknown-class	Unknown class 'Block_Delimiter'
 wp-content/plugins/woocommerce/src/Blocks/BlockTypes/MiniCart.php	unknown-class	Unknown class 'Block_Delimiter'
 wp-content/plugins/woocommerce/src/Blocks/BlockTypes/MiniCart.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Features\Features'
+wp-content/plugins/woocommerce/src/Blocks/BlockTypes/MiniCart.php	unused-import	Unused import 'Automattic\WooCommerce\Blocks\Utils\Utils'
 wp-content/plugins/woocommerce/src/Blocks/BlockTypes/MiniCartProductsTableBlock.php	unused-variable	Variable $remove_item_label is assigned but never read
 wp-content/plugins/woocommerce/src/Blocks/BlockTypes/NextPreviousButtons.php	unused-import	Unused import 'Automattic\WooCommerce\Blocks\Utils\ProductGalleryUtils'
 wp-content/plugins/woocommerce/src/Blocks/BlockTypes/OrderConfirmation/CreateAccount.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Features\Features'
@@ -675,8 +686,10 @@ wp-content/plugins/woocommerce/src/Internal/Admin/Logging/Settings.php	unknown-c
 wp-content/plugins/woocommerce/src/Internal/Admin/Logging/Settings.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/src/Internal/Admin/Logging/Settings.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/src/Internal/Admin/Logging/Settings.php	unknown-class	Unknown class 'Constants'
+wp-content/plugins/woocommerce/src/Internal/Admin/Logging/Settings.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\Admin\Logging\FileV2\File'
 wp-content/plugins/woocommerce/src/Internal/Admin/Notes/InstallJPAndWCSPlugins.php	unknown-member	Unknown member 'activate_plugins' on 'OnboardingPlugins'
 wp-content/plugins/woocommerce/src/Internal/Admin/Notes/InstallJPAndWCSPlugins.php	unknown-member	Unknown member 'install_plugin' on 'OnboardingPlugins'
+wp-content/plugins/woocommerce/src/Internal/Admin/Notes/MagentoMigration.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Features\Onboarding'
 wp-content/plugins/woocommerce/src/Internal/Admin/Notes/MarketingJetpack.php	unused-import	Unused import 'Automattic\Jetpack\Constants'
 wp-content/plugins/woocommerce/src/Internal/Admin/Notes/UnsecuredReportFiles.php	unknown-class	Unknown class 'WC_Admin_Note'
 wp-content/plugins/woocommerce/src/Internal/Admin/Onboarding/OnboardingProducts.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Loader'
@@ -714,6 +727,7 @@ wp-content/plugins/woocommerce/src/Internal/Admin/Settings/PaymentsProviders/Pay
 wp-content/plugins/woocommerce/src/Internal/Admin/Settings/PaymentsProviders/PaymentGateway.php	unknown-member	Unknown member 'extension_type' on 'WC_Payment_Gateway'
 wp-content/plugins/woocommerce/src/Internal/Admin/Settings/PaymentsProviders/PaymentGateway.php	unknown-member	Unknown member 'is_in_dev_mode' on 'WC_Payment_Gateway'
 wp-content/plugins/woocommerce/src/Internal/Admin/Settings/PaymentsProviders/PaymentGateway.php	unknown-member	Unknown member 'is_in_test_mode' on 'WC_Payment_Gateway'
+wp-content/plugins/woocommerce/src/Internal/Admin/Settings/PaymentsProviders/Paymob.php	unused-import	Unused import 'Throwable'
 wp-content/plugins/woocommerce/src/Internal/Admin/Settings/PaymentsProviders/PseudoWCPaymentGateway.php	unknown-member	Unknown member 'connection_url' on 'PseudoWCPaymentGateway'
 wp-content/plugins/woocommerce/src/Internal/Admin/Settings/PaymentsProviders/PseudoWCPaymentGateway.php	unknown-member	Unknown member 'settings_url' on 'PseudoWCPaymentGateway'
 wp-content/plugins/woocommerce/src/Internal/Admin/Settings/PaymentsProviders/Razorpay.php	unknown-member	Unknown member 'getSetting' on 'WC_Payment_Gateway'
@@ -734,12 +748,14 @@ wp-content/plugins/woocommerce/src/Internal/Admin/Settings/PaymentsProviders/Woo
 wp-content/plugins/woocommerce/src/Internal/Admin/Settings/PaymentsProviders/WooPayments/WooPaymentsService.php	unknown-class	Unknown class 'WPCOM_Connection_Manager'
 wp-content/plugins/woocommerce/src/Internal/Admin/Settings/PaymentsProviders/WooPayments/WooPaymentsService.php	unused-private-method	Private method 'WooPaymentsService::is_onboarding_step_completed' is never used
 wp-content/plugins/woocommerce/src/Internal/Admin/Settings/PaymentsProviders/WooPayments/WooPaymentsService.php	unused-private-method	Private method 'WooPaymentsService::mark_onboarding_step_blocked' is never used
+wp-content/plugins/woocommerce/src/Internal/Admin/Settings/Utils.php	unused-import	Unused import 'WP_REST_Request'
 wp-content/plugins/woocommerce/src/Internal/Admin/ShippingLabelBanner.php	unused-import	Unused import 'WP_CLI\Utils\get_plugin_name'
 wp-content/plugins/woocommerce/src/Internal/Admin/ShippingLabelBanner.php	unused-private-method	Private method 'ShippingLabelBanner::count_shippable_items' is never used
 wp-content/plugins/woocommerce/src/Internal/Admin/Suggestions/PaymentsExtensionSuggestions.php	unused-private-method	Private method 'PaymentsExtensionSuggestions::is_merchant_selling_online' is never used
 wp-content/plugins/woocommerce/src/Internal/Admin/Translations.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\Admin\Loader'
 wp-content/plugins/woocommerce/src/Internal/Admin/WCAdminAssets.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\Admin\Loader'
 wp-content/plugins/woocommerce/src/Internal/Admin/WCPayPromotion/Init.php	unused-import	Unused import 'Automattic\WooCommerce\Utilities\FeaturesUtil'
+wp-content/plugins/woocommerce/src/Internal/Admin/WcPayWelcomePage.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\Features\Features'
 wp-content/plugins/woocommerce/src/Internal/Admin/WcPayWelcomePage.php	unused-import	Unused import 'Automattic\WooCommerce\Admin\PageController'
 wp-content/plugins/woocommerce/src/Internal/Admin/WcPayWelcomePage.php	unused-import	Unused import 'Automattic\WooCommerce\Utilities\FeaturesUtil'
 wp-content/plugins/woocommerce/src/Internal/Admin/WcPayWelcomePage.php	unused-private-method	Private method 'WcPayWelcomePage::get_active_payments_task_slug' is never used
@@ -854,6 +870,7 @@ wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Runner.php	unknown-clas
 wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Runner.php	unknown-class	Unknown class 'WP_CLI'
 wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Runner.php	unknown-class	Unknown class 'WP_CLI'
 wp-content/plugins/woocommerce/src/Internal/CLI/Migrator/Runner.php	unused-import	Unused import 'WC_Product_Factory'
+wp-content/plugins/woocommerce/src/Internal/Caches/ProductVersionStringInvalidator.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\Features\FeaturesController'
 wp-content/plugins/woocommerce/src/Internal/Checkout/DateFormatLimit.php	unknown-class	Unknown class 'JsonPointer'
 wp-content/plugins/woocommerce/src/Internal/Checkout/DateFormatLimit.php	unknown-class	Unknown class 'Keyword'
 wp-content/plugins/woocommerce/src/Internal/Checkout/DateFormatLimitParser.php	unknown-class	Unknown class 'KeywordParser'
@@ -861,6 +878,7 @@ wp-content/plugins/woocommerce/src/Internal/ComingSoon/ComingSoonRequestHandler.
 wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/LegacyDataHandler.php	unknown-member	Unknown member 'current_class_name' on 'LegacyDataHandler'
 wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/LegacyDataHandler.php	unknown-member	Unknown member 'instance' on 'LegacyDataHandler'
 wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/LegacyDataHandler.php	unused-import	Unused import 'Automattic\WooCommerce\Internal\Utilities\DatabaseUtil'
+wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/LegacyDataHandler.php	unused-import	Unused import 'WC_Abstract_Order'
 wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/OrdersTableDataStore.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/OrdersTableDataStore.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/src/Internal/DataStores/Orders/OrdersTableDataStore.php	unused-private-method	Private method 'OrdersTableDataStore::get_cpt_order' is never used
@@ -916,12 +934,14 @@ wp-content/plugins/woocommerce/src/Internal/ReceiptRendering/ReceiptRenderingEng
 wp-content/plugins/woocommerce/src/Internal/ReceiptRendering/ReceiptRenderingEngine.php	unknown-member	Unknown member 'get_subtotal' on 'WC_Order_Item'
 wp-content/plugins/woocommerce/src/Internal/ReceiptRendering/ReceiptRenderingEngine.php	unused-private-constant	Private constant 'ReceiptRenderingEngine::KNOWN_CARD_TYPES' is never used
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/AbstractCollectionQuery.php	unused-import	Unused import 'WC_Order'
+wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Customers/CollectionQuery.php	unused-import	Unused import 'WP_User_Query'
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/OrderNotes/CollectionQuery.php	argument-count-mismatch	Too many arguments to remove_filter(): 4 passed, at most 3 expected
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/OrderNotes/CollectionQuery.php	unused-import	Unused import 'WC_Order'
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Orders/ActionController.php	unused-private-method	Private method 'ActionController::action_payment_complete' is never used
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Orders/ActionController.php	unused-private-method	Private method 'ActionController::action_reset_download_permissions' is never used
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Orders/Schema/OrderItemSchema.php	unused-import	Unused import 'Automattic\WooCommerce\Enums\ProductType'
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Orders/Schema/OrderItemSchema.php	unused-import	Unused import 'Automattic\WooCommerce\Utilities\OrderUtil'
+wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Orders/Schema/OrderItemSchema.php	unused-import	Unused import 'WC_Product'
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Products/Controller.php	unknown-member	Unknown member 'set_button_text' on 'WC_Product'
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Products/Controller.php	unknown-member	Unknown member 'set_children' on 'WC_Product'
 wp-content/plugins/woocommerce/src/Internal/RestApi/Routes/V4/Products/Controller.php	unknown-member	Unknown member 'set_product_url' on 'WC_Product'
@@ -949,6 +969,7 @@ wp-content/plugins/woocommerce/src/Internal/StockNotifications/Emails/EmailManag
 wp-content/plugins/woocommerce/src/Internal/StockNotifications/Frontend/ProductPageIntegration.php	unknown-member	Unknown member 'has_purchasable_variations' on 'WC_Product'
 wp-content/plugins/woocommerce/src/Internal/StockNotifications/StockNotifications.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/src/Internal/Traits/ScriptDebug.php	unknown-class	Unknown class 'Constants'
+wp-content/plugins/woocommerce/src/Internal/Utilities/DatabaseUtil.php	unused-import	Unused import 'Vtiful\Kernel\Format'
 wp-content/plugins/woocommerce/src/Internal/Utilities/FilesystemUtil.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/src/Internal/Utilities/FilesystemUtil.php	unknown-class	Unknown class 'Constants'
 wp-content/plugins/woocommerce/src/Internal/Utilities/FilesystemUtil.php	unknown-class	Unknown class 'Constants'
