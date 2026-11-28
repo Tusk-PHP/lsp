@@ -81,7 +81,55 @@ func RenderTypeExpr(raw string) string {
 	return ParseTypeExpr(raw).String()
 }
 
+// UnionMembers returns the members of a union, or the type itself when it is
+// not one. The `?` of a nullable type is left out of them: Nullable on expr
+// says whether it is there.
+func (expr TypeExpr) UnionMembers() []TypeExpr {
+	if expr.Kind == TypeKindUnion {
+		return expr.Types
+	}
+	expr.Nullable = false
+	return []TypeExpr{expr}
+}
+
+// IsNull reports whether the type is null itself.
+func (expr TypeExpr) IsNull() bool {
+	switch expr.Kind {
+	case TypeKindLiteral:
+		return expr.Literal == "null"
+	case TypeKindNamed:
+		return strings.EqualFold(expr.Name, "null")
+	}
+	return false
+}
+
 func (expr TypeExpr) String() string {
+	return expr.render(spaced)
+}
+
+// CompactWithNames renders the type as PHP writes a declared type, with no
+// spaces around | and &, and with the name of every named and generic type
+// in it, at any depth, replaced by what name gives for it. Names are passed
+// as written, with any leading backslash.
+func (expr TypeExpr) CompactWithNames(name func(string) string) string {
+	return expr.render(renderStyle{union: "|", intersection: "&", name: name})
+}
+
+type renderStyle struct {
+	union, intersection string
+	name                func(string) string
+}
+
+var spaced = renderStyle{union: " | ", intersection: " & "}
+
+func (style renderStyle) nameOf(name string) string {
+	if style.name != nil {
+		name = style.name(name)
+	}
+	return trimLeadingSlash(name)
+}
+
+func (expr TypeExpr) render(style renderStyle) string {
 	if expr.Kind == TypeKindNamed && expr.Name == "" && !expr.Nullable {
 		return ""
 	}
@@ -89,17 +137,17 @@ func (expr TypeExpr) String() string {
 	var out string
 	switch expr.Kind {
 	case TypeKindUnion:
-		out = joinTypeExprs(expr.Types, " | ")
+		out = joinTypeExprs(expr.Types, style.union, style)
 	case TypeKindIntersection:
-		out = joinTypeExprs(expr.Types, " & ")
+		out = joinTypeExprs(expr.Types, style.intersection, style)
 	case TypeKindGeneric:
-		out = trimLeadingSlash(expr.Name)
+		out = style.nameOf(expr.Name)
 		if len(expr.Params) > 0 {
-			out += "<" + joinTypeExprs(expr.Params, ", ") + ">"
+			out += "<" + joinTypeExprs(expr.Params, ", ", style) + ">"
 		}
 	case TypeKindConditional:
 		if expr.Condition != nil {
-			out = expr.Condition.Subject + " is " + expr.Condition.Target.String() + " ? " + expr.Condition.IfTrue.String() + " : " + expr.Condition.IfFalse.String()
+			out = expr.Condition.Subject + " is " + expr.Condition.Target.render(style) + " ? " + expr.Condition.IfTrue.render(style) + " : " + expr.Condition.IfFalse.render(style)
 		}
 	case TypeKindShape:
 		out = trimLeadingSlash(expr.Name)
@@ -110,15 +158,15 @@ func (expr TypeExpr) String() string {
 				if field.Optional {
 					key += "?"
 				}
-				parts = append(parts, key+": "+field.Type.String())
+				parts = append(parts, key+": "+field.Type.render(style))
 				continue
 			}
-			parts = append(parts, field.Type.String())
+			parts = append(parts, field.Type.render(style))
 		}
 		out += "{" + strings.Join(parts, ", ") + "}"
 	case TypeKindArray:
 		if expr.Element != nil {
-			out = expr.Element.String() + "[]"
+			out = expr.Element.render(style) + "[]"
 		}
 	case TypeKindCallable:
 		out = trimLeadingSlash(expr.Name)
@@ -126,19 +174,19 @@ func (expr TypeExpr) String() string {
 			out = "callable"
 		}
 		if expr.ParamTypes != nil || expr.ReturnType != nil {
-			out += "(" + joinTypeExprs(expr.ParamTypes, ", ") + ")"
+			out += "(" + joinTypeExprs(expr.ParamTypes, ", ", style) + ")"
 			if expr.ReturnType != nil {
-				out += ": " + expr.ReturnType.String()
+				out += ": " + expr.ReturnType.render(style)
 			}
 		}
 	case TypeKindLiteral:
 		out = expr.Literal
 	case TypeKindOffset:
 		if expr.Element != nil && len(expr.Params) == 1 {
-			out = expr.Element.String() + "[" + expr.Params[0].String() + "]"
+			out = expr.Element.render(style) + "[" + expr.Params[0].render(style) + "]"
 		}
 	default:
-		out = trimLeadingSlash(expr.Name)
+		out = style.nameOf(expr.Name)
 	}
 
 	if expr.Wrapped && out != "" {
@@ -372,10 +420,10 @@ func parseTypeExprs(parts []string) []TypeExpr {
 	return out
 }
 
-func joinTypeExprs(parts []TypeExpr, sep string) string {
+func joinTypeExprs(parts []TypeExpr, sep string, style renderStyle) string {
 	rendered := make([]string, 0, len(parts))
 	for _, part := range parts {
-		rendered = append(rendered, part.String())
+		rendered = append(rendered, part.render(style))
 	}
 	return strings.Join(rendered, sep)
 }

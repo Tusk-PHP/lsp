@@ -1023,11 +1023,10 @@ func docblockVarType(sym *symbols.Symbol) string {
 	if doc == nil {
 		return ""
 	}
-	if vars, ok := doc.Tags["var"]; ok && len(vars) > 0 {
-		typ, _ := types.ExtractDocTypeString(vars[0])
-		return types.RenderTypeExpr(typ)
+	if len(doc.Vars) == 0 {
+		return ""
 	}
-	return ""
+	return types.RenderTypeExpr(doc.Vars[0].Type)
 }
 
 func formatDocumentation(sym *symbols.Symbol) string {

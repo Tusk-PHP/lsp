@@ -183,7 +183,7 @@ func (r *Resolver) caughtType(names []string, file *parser.FileNode) ResolvedTyp
 // next iteration can't give another: `$q = $q->where()` on a query builder
 // stays the builder. Otherwise its value isn't known.
 func (r *Resolver) feedsItself(varName string, lines []string, file *parser.FileNode, b *scope.Binding, w int, pos textpos.Position, t ResolvedType) ResolvedType {
-	classes := namedClasses(t)
+	classes := r.namedClasses(t)
 	if len(classes) == 0 {
 		return t
 	}
@@ -203,7 +203,7 @@ func (r *Resolver) feedsItself(varName string, lines []string, file *parser.File
 		if rt.IsEmpty() && !rt.Nullable {
 			return ResolvedType{}
 		}
-		others = append(others, namedClasses(rt)...)
+		others = append(others, r.namedClasses(rt)...)
 	}
 	for _, c := range classes {
 		if !slices.Contains(others, c) {
@@ -215,15 +215,14 @@ func (r *Resolver) feedsItself(varName string, lines []string, file *parser.File
 
 // namedClasses returns the classes a type names, also those of a union kept
 // as written in its name, as a builtin function's "string|array" is.
-func namedClasses(rt ResolvedType) []string {
+func (r *Resolver) namedClasses(rt ResolvedType) []string {
 	var out []string
 	for _, name := range rt.ClassNames() {
-		for _, part := range strings.Split(name, "|") {
-			part = strings.TrimPrefix(strings.TrimSpace(part), "?")
-			if part != "" && !IsBuiltinTypeName(part) {
-				out = append(out, part)
-			}
+		if !strings.ContainsAny(name, "|?") {
+			out = append(out, name)
+			continue
 		}
+		out = append(out, r.parseType(name).ClassNames()...)
 	}
 	return out
 }

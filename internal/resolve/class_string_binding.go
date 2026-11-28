@@ -103,48 +103,19 @@ func classStringConstructorParam(r *Resolver, sym *symbols.Symbol, classFQN stri
 // or is a union that includes class-string<T>, where T is in templateNames.
 // Returns the template name T if found, otherwise "".
 func extractClassStringTemplate(rawType string, templateNames map[string]bool) string {
-	// Split union parts and check each one
-	parts := splitUnionParts(rawType)
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		// class-string<T>
-		if strings.HasPrefix(part, "class-string<") && strings.HasSuffix(part, ">") {
-			inner := part[len("class-string<") : len(part)-1]
-			inner = strings.TrimSpace(inner)
-			if templateNames[inner] {
-				return inner
-			}
+	for _, part := range ParseGenericType(rawType).Parts() {
+		name := part.FQN
+		switch {
+		case name == "class-string" && len(part.Params) == 1:
+			name = part.Params[0].FQN
+		case len(part.Params) > 0:
+			continue
 		}
-		// bare template name (e.g., @param T $cls)
-		if templateNames[part] {
-			return part
+		if templateNames[name] {
+			return name
 		}
 	}
 	return ""
-}
-
-// splitUnionParts splits a type string by | at depth 0.
-func splitUnionParts(raw string) []string {
-	var parts []string
-	depth := 0
-	start := 0
-	for i := 0; i < len(raw); i++ {
-		switch raw[i] {
-		case '<', '(', '[':
-			depth++
-		case '>', ')', ']':
-			if depth > 0 {
-				depth--
-			}
-		case '|':
-			if depth == 0 {
-				parts = append(parts, raw[start:i])
-				start = i + 1
-			}
-		}
-	}
-	parts = append(parts, raw[start:])
-	return parts
 }
 
 // nthConstructorArg splits a constructor argument string by top-level commas

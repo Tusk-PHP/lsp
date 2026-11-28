@@ -17,7 +17,6 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/scope"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
-	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
 // maxResolveDepth is the maximum re-entrancy depth for ResolveVariableType and
@@ -141,16 +140,20 @@ func (r *Resolver) ResolveClassName(name string, file *parser.FileNode) string {
 	if file == nil {
 		return name
 	}
+	if strings.ContainsAny(name, "|&(<{") {
+		return r.parseTypeExpr(name).CompactWithNames(func(part string) string {
+			return r.resolveOneClassName(part, file)
+		})
+	}
+	return r.resolveOneClassName(name, file)
+}
+
+func (r *Resolver) resolveOneClassName(name string, file *parser.FileNode) string {
 	if strings.HasPrefix(name, "\\") {
 		return strings.TrimPrefix(name, "\\")
 	}
 	if strings.HasPrefix(name, "?") {
 		name = name[1:]
-	}
-	if strings.ContainsAny(name, "|&(") {
-		return typeNamePartRe.ReplaceAllStringFunc(name, func(part string) string {
-			return r.ResolveClassName(part, file)
-		})
 	}
 	parts := strings.SplitN(name, "\\", 2)
 	for _, u := range file.Uses {
@@ -169,9 +172,6 @@ func (r *Resolver) ResolveClassName(name string, file *parser.FileNode) string {
 	}
 	return name
 }
-
-// typeNamePartRe matches each name in a union, intersection or DNF type.
-var typeNamePartRe = regexp.MustCompile(`[^|&()\s]+`)
 
 // classLike is the part of a class, trait, interface or enum that positions are
 // matched against.
@@ -319,71 +319,6 @@ func (r *Resolver) FindAccessedMember(classFQN, memberName string, access Member
 // It's MemberTypeForCall without the call's arguments.
 func (r *Resolver) MemberTypeResolved(member *symbols.Symbol, file *parser.FileNode, callerFQN string, typeContext []ResolvedType) ResolvedType {
 	return r.MemberTypeForCall(member, file, callerFQN, typeContext, nil)
-}
-
-// pickBestUnionPart selects the most informative part from a union type string.
-// Prefers parts with generic syntax (Builder<static>) over bare types (Category).
-// Skips null/void/mixed. For "Builder<static>|Category", returns "Builder<static>".
-func PickBestUnionPart(union string) string {
-	// Split union respecting < > nesting
-	var parts []string
-	depth := 0
-	start := 0
-	for i := 0; i < len(union); i++ {
-		switch union[i] {
-		case '<':
-			depth++
-		case '>':
-			depth--
-		case '|':
-			if depth == 0 {
-				parts = append(parts, strings.TrimSpace(union[start:i]))
-				start = i + 1
-			}
-		}
-	}
-	parts = append(parts, strings.TrimSpace(union[start:]))
-
-	// Prefer the first part with generics; otherwise first non-null part
-	var bestGeneric, bestPlain string
-	for _, p := range parts {
-		p = strings.TrimPrefix(p, "\\")
-		if p == "" || p == "null" || p == "void" || p == "mixed" {
-			continue
-		}
-		if strings.Contains(p, "<") && bestGeneric == "" {
-			bestGeneric = p
-		}
-		if bestPlain == "" {
-			bestPlain = p
-		}
-	}
-	if bestGeneric != "" {
-		return bestGeneric
-	}
-	return bestPlain
-}
-
-// hasNullInUnion checks if a union type string contains "null" as one of its parts.
-func HasNullInUnion(union string) bool {
-	depth := 0
-	start := 0
-	for i := 0; i < len(union); i++ {
-		switch union[i] {
-		case '<':
-			depth++
-		case '>':
-			depth--
-		case '|':
-			if depth == 0 {
-				if strings.TrimSpace(union[start:i]) == "null" {
-					return true
-				}
-				start = i + 1
-			}
-		}
-	}
-	return strings.TrimSpace(union[start:]) == "null"
 }
 
 // buildTemplateSubst builds a map from template parameter names to concrete types
@@ -699,10 +634,8 @@ func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) str
 	case symbols.KindProperty:
 		typeName = member.Type
 		if typeName == "" && member.DocComment != "" {
-			if doc := parser.ParseDocBlock(member.DocComment); doc != nil {
-				if vars, ok := doc.Tags["var"]; ok && len(vars) > 0 {
-					typeName = strings.Fields(vars[0])[0]
-				}
+			if doc := r.parseDoc(member.DocComment); doc != nil && len(doc.Vars) > 0 {
+				typeName = doc.Vars[0].Type
 			}
 		}
 	case symbols.KindConstant:
@@ -719,33 +652,19 @@ func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) str
 	default:
 		return ""
 	}
-	typeName = r.expandTypeAliases(typeName, ownerFQN, file)
-	if typeName == "" || typeName == "void" || typeName == "mixed" {
+	rt := r.parseType(r.expandTypeAliases(typeName, ownerFQN, file))
+	switch rt.FQN {
+	case "", "void", "mixed":
 		return ""
-	}
-	if fields := types.ParseArrayShape(typeName); len(fields) > 0 {
+	case "array":
 		return "array"
-	}
-	if typeName == "self" || typeName == "static" || typeName == "$this" {
+	case "self", "static", "$this":
 		return member.ParentFQN
 	}
-	// Strip leading backslash for FQN types from docblocks
-	typeName = strings.TrimPrefix(typeName, "\\")
-	// Strip generic type parameters: Builder<static> → Builder
-	if idx := strings.IndexByte(typeName, '<'); idx > 0 {
-		typeName = typeName[:idx]
+	if rt.Qualified {
+		return rt.FQN
 	}
-	// Handle union types: take the first non-null type
-	if strings.Contains(typeName, "|") {
-		for _, part := range strings.Split(typeName, "|") {
-			part = strings.TrimSpace(part)
-			if part != "" && part != "null" && part != "void" && part != "mixed" {
-				typeName = part
-				break
-			}
-		}
-	}
-	return r.ResolveClassName(typeName, file)
+	return r.ResolveClassName(rt.FQN, file)
 }
 
 // ResolveVariableTypeTyped infers the type of a variable preserving generic context.

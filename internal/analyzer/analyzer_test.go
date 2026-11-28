@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/container"
+	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -236,5 +237,24 @@ func TestDefinitionNoResult(t *testing.T) {
 	loc := a.FindDefinition("file:///project/src/Service.php", src, pos)
 	if loc != nil {
 		t.Errorf("expected nil for keyword, got %s", loc.URI)
+	}
+}
+
+func TestLocationsForTypeNameReadUnionPartsWhole(t *testing.T) {
+	a, src := setupAnalyzer(t)
+	r := a.engine.Resolver()
+	file := parser.ParseFile(src)
+	for _, typeName := range []string{
+		`(Logger&\Countable)|null`,
+		`?Logger`,
+		`\Monolog\Logger|null`,
+	} {
+		locs := a.locationsForTypeName(r, typeName, file)
+		if len(locs) != 1 || !strings.HasSuffix(locs[0].URI, "Monolog/Logger.php") {
+			t.Errorf("locationsForTypeName(%s) = %v, want Monolog\\Logger", typeName, locs)
+		}
+	}
+	if locs := a.locationsForTypeName(r, "int|null", file); locs != nil {
+		t.Errorf("locationsForTypeName(int|null) = %v, want none", locs)
 	}
 }

@@ -65,6 +65,15 @@ class Foo {}
 		{"in current namespace", "Service", "App\\Service"},
 		{"unknown stays as-is", "Unknown", "Unknown"},
 		{"nil file returns name", "Foo", "Foo"},
+		{"union", "Logger|Service|null", "Monolog\\Logger|App\\Service|null"},
+		{"DNF", "(Logger&\\Countable)|null", "(Monolog\\Logger&Countable)|null"},
+		{"shape key that looks like a class", "array{Logger: Logger}|null", "array{Logger: Monolog\\Logger}|null"},
+		{"literal string", "'Logger'|Logger", "'Logger'|Monolog\\Logger"},
+		{"generic", "Collection<int, Logger|Service>", "Collection<int, Monolog\\Logger|App\\Service>"},
+		{"callable", "callable(Logger): Service", "callable(Monolog\\Logger): App\\Service"},
+		{"unclosed generic", "Logger<", "Logger<"},
+		{"unclosed shape", "array{a", "array{a"},
+		{"qualified union", "\\Monolog\\Logger|null", "Monolog\\Logger|null"},
 	}
 
 	for _, tt := range tests {
@@ -673,5 +682,97 @@ class Category { public $status; public function status() {} public function sco
 	}
 	if m := r.AccessedMemberOn(builder, "missing", CallAccess); m != nil {
 		t.Errorf("AccessedMemberOn(Builder, missing) = %s, want nil", m.FQN)
+	}
+}
+
+func TestMemberTypeReadsUnionPartsWhole(t *testing.T) {
+	idx := symbols.NewIndex()
+	src := `<?php
+namespace App;
+use Monolog\Logger;
+class Logs {
+    public function pair(): (Logger&\Countable)|null {}
+    /** @return array{a: int|string}|Logger */
+    public function shaped() {}
+    /** @return callable(int|string): void|Logger */
+    public function handler() {}
+    /** @return self|null */
+    public function maybeSelf() {}
+}
+`
+	idx.IndexFile("file:///app/Logs.php", src)
+	idx.IndexFile("file:///vendor/Logger.php", `<?php
+namespace Monolog;
+class Logger {}
+`)
+	r := NewResolver(idx)
+	file := parser.ParseFile(src)
+	for member, want := range map[string]string{
+		"pair":      `Monolog\Logger`,
+		"shaped":    "array",
+		"handler":   "callable",
+		"maybeSelf": `App\Logs`,
+	} {
+		if got := r.MemberType(r.FindMember(`App\Logs`, member), file); got != want {
+			t.Errorf("MemberType(%s) = %q, want %q", member, got, want)
+		}
+	}
+}
+
+func BenchmarkMemberTypeOfAUnion(b *testing.B) {
+	r := setupResolver()
+	file := parser.ParseFile(`<?php
+namespace App;
+use Monolog\Logger;
+`)
+	m := r.FindMember(`App\Service`, "getLogger")
+	b.ReportAllocs()
+	for b.Loop() {
+		if r.MemberType(m, file) != `Monolog\Logger` {
+			b.Fatal("wrong type")
+		}
+	}
+}
+
+func TestMemberTypeReadsTheWholeVarType(t *testing.T) {
+	src := `<?php
+namespace App;
+use Monolog\Logger;
+use Illuminate\Support\Collection;
+class Holder {
+    /** @var array{a: int, b: string} */
+    public $row;
+    /** @var callable(int, string): void */
+    public $handler;
+    /** @var Collection<int, Logger> the loggers */
+    public $loggers;
+}
+`
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///app/Holder.php", src)
+	r := NewResolver(idx)
+	file := parser.ParseFile(src)
+	for member, want := range map[string]string{
+		"row":     "array",
+		"handler": "callable",
+		"loggers": `Illuminate\Support\Collection`,
+	} {
+		if got := r.MemberType(r.FindMember(`App\Holder`, member), file); got != want {
+			t.Errorf("MemberType($%s) = %q, want %q", member, got, want)
+		}
+	}
+}
+
+func BenchmarkResolveClassName(b *testing.B) {
+	r := setupResolver()
+	file := parser.ParseFile(`<?php
+namespace App;
+use Monolog\Logger;
+`)
+	b.ReportAllocs()
+	for b.Loop() {
+		r.ResolveClassName("Logger", file)
+		r.ResolveClassName("Logger|Service|null", file)
+		r.ResolveClassName("(Logger&\\Countable)|null", file)
 	}
 }
