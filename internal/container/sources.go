@@ -169,10 +169,9 @@ func (ca *ContainerAnalyzer) parse(phase sourcePhase, path, content string) cont
 		return parseSymfonyServicesYAML(path, content)
 	case phaseSymfonyServicesPHP:
 		return ca.parseSymfonyPHPConfigFile(path, content)
-	case phaseSymfonyClass:
+	default:
 		return ca.parseSymfonyClasses(path, content)
 	}
-	panic(fmt.Sprintf("container: no reader for source phase %d of %s", phase, path))
 }
 
 func (ca *ContainerAnalyzer) rebuild() *bindingSet {

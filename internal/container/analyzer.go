@@ -536,9 +536,6 @@ func compactExpr(s string) string {
 
 func (ca *ContainerAnalyzer) parseSymfonyClasses(path string, content string) classBindings {
 	file := parser.ParseFileIn(content, ca.index.Grammars())
-	if file == nil {
-		return nil
-	}
 	var bindings classBindings
 	ns := file.Namespace
 	uri := pathToFileURI(path)
