@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -122,6 +123,9 @@ func TestMayMentionNeedsTheNameAsAWord(t *testing.T) {
 		{"return new \\App\\Room();", &symbols.Symbol{Name: "Room", Kind: symbols.KindClass}, true},
 		{"use App\\Room;", &symbols.Symbol{Name: "Room", Kind: symbols.KindClass}, true},
 		{"use App\\Rooms;", &symbols.Symbol{Name: "Room", Kind: symbols.KindClass}, false},
+		{"$r->are", method, false},
+		{"class {", &symbols.Symbol{Kind: symbols.KindClass}, false},
+		{"$r->area", &symbols.Symbol{Name: "$", Kind: symbols.KindProperty}, false},
 	} {
 		if got := mayMention(c.src, c.sym); got != c.want {
 			t.Errorf("mayMention(%q, %s) = %v, want %v", c.src, c.sym.Name, got, c.want)
@@ -222,6 +226,7 @@ func TestReferencesOfAClassIncludeItsPHPDocTypes(t *testing.T) {
 	sources := map[string]string{
 		"file:///User.php":  "<?php\nnamespace App\\Models;\nclass User {}\n",
 		"file:///Other.php": "<?php\nnamespace Other;\nclass User {}\n",
+		"file:///doc.php":   "<?php\nnamespace App\\Http;\n/** @var \\App\\Models\\User $u */\n$u = null;\n",
 		"file:///use.php": `<?php
 namespace App\Http;
 use App\Models\User;
@@ -243,7 +248,7 @@ class Show {
 		got = append(got, fmt.Sprintf("%s:%d:%d", strings.TrimPrefix(l.URI, "file:///"), l.Range.Start.Line, l.Range.Start.Character))
 	}
 	slices.Sort(got)
-	want := []string{"User.php:2:6", "use.php:2:15", "use.php:7:14", "use.php:9:38"}
+	want := []string{"User.php:2:6", "doc.php:2:21", "use.php:2:15", "use.php:7:14", "use.php:9:38"}
 	if !slices.Equal(got, want) {
 		t.Errorf("the class's references include the PHPDoc types that resolve to it, not the description or another User:\n got %v\nwant %v", got, want)
 	}
@@ -258,7 +263,7 @@ func TestReferencesIncludeFullyQualifiedNamesAndOtherBladeTemplates(t *testing.T
 	const quiet = "file:///views/quiet.blade.php"
 	templates := map[string]string{
 		view:  "<div>{{ \\App\\Room::class }}</div>\n  <span>{{ new \\App\\Room() }}</span>\n",
-		quiet: "<p>{{ $title }}</p>\n",
+		quiet: "<p>{{ $title }} in the Room</p>\n",
 	}
 	a, read := setupRenameAnalyzer(map[string]string{
 		"file:///Room.php": referencesRoom,
@@ -281,5 +286,35 @@ func TestReferencesIncludeFullyQualifiedNamesAndOtherBladeTemplates(t *testing.T
 	want := []string{"Room.php:3:6", "make.php:1:34", "views/room.blade.php:0:13", "views/room.blade.php:1:20"}
 	if !slices.Equal(got, want) {
 		t.Errorf("references of Room = %v, want %v", got, want)
+	}
+}
+
+func TestReferencesFromABladeTemplateIncludeItsOwnAndTheOtherFiles(t *testing.T) {
+	const view = "file:///views/room.blade.php"
+	const other = "file:///views/other.blade.php"
+	templates := map[string]string{
+		view:  "<div>{{ \\App\\Room::class }}</div>\n",
+		other: "<span>{{ new \\App\\Room() }}</span>\n",
+	}
+	a, read := setupRenameAnalyzer(map[string]string{"file:///Room.php": referencesRoom})
+	for uri := range templates {
+		a.index.AddTemplateFile(uri)
+	}
+	readAll := func(uri string) string {
+		if src, ok := templates[uri]; ok {
+			return src
+		}
+		return read(uri)
+	}
+	php := blade.Compile(templates[view]).PHP
+	var got []string
+	for _, l := range a.FindAllReferences(view, php, positionOf(t, php, "Room::class"), readAll) {
+		got = append(got, fmt.Sprintf("%s:%d:%d", strings.TrimPrefix(l.URI, "file:///"), l.Range.Start.Line, l.Range.Start.Character))
+	}
+	slices.Sort(got)
+	roomAt := positionOf(t, php, "Room::class")
+	want := []string{"Room.php:3:6", "views/other.blade.php:0:18", fmt.Sprintf("views/room.blade.php:%d:%d", roomAt.Line, roomAt.Character)}
+	if !slices.Equal(got, want) {
+		t.Errorf("references of Room from a template = %v, want %v", got, want)
 	}
 }
