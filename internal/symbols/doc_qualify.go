@@ -30,9 +30,6 @@ func qualifyDocTypes(doc string, uses []parser.UseNode) string {
 	var b strings.Builder
 	last := 0
 	forEachDocType(doc, func(ts int, typeStr string) {
-		if ts < last {
-			return
-		}
 		forEachImportedName(typeStr, uses, func(start, end int, fqn string) {
 			if b.Len() == 0 {
 				b.Grow(len(doc) + 64)
@@ -88,6 +85,9 @@ func forEachDocType(doc string, fn func(ts int, typeStr string)) {
 		}
 		starts, n := docTagTypeStarts(tag, doc, j, lineEnd)
 		for _, ts := range starts[:n] {
+			if ts < i {
+				continue
+			}
 			typeStr, _ := types.ExtractDocTypeString(doc[ts:lineEnd])
 			if typeStr == "" || !strings.HasPrefix(doc[ts:], typeStr) {
 				continue

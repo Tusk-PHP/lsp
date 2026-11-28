@@ -85,3 +85,16 @@ func TestForEachDocClassNameGivesEveryNameWithItsPlace(t *testing.T) {
 		t.Errorf("names = %q, want %q", got, want)
 	}
 }
+
+func TestADocTypeInsideAnotherIsReadOnce(t *testing.T) {
+	doc := "/** @template T of Foo<A =B> */"
+	var got []string
+	ForEachDocClassName(doc, func(_, _ int, name string) { got = append(got, name) })
+	if want := []string{"Foo", "A", "B"}; !slices.Equal(got, want) {
+		t.Errorf("names = %q, want %q: the default after = lies inside the bound and is not a type of its own", got, want)
+	}
+	uses := []parser.UseNode{{FullName: "Vendor\\B", Alias: "B"}}
+	if got, want := qualifyDocTypes(doc, uses), "/** @template T of Foo<A =\\Vendor\\B> */"; got != want {
+		t.Errorf("qualified to %q, want %q", got, want)
+	}
+}
