@@ -724,3 +724,32 @@ use Monolog\Logger;
 		}
 	}
 }
+
+func TestMemberTypeReadsTheWholeVarType(t *testing.T) {
+	src := `<?php
+namespace App;
+use Monolog\Logger;
+use Illuminate\Support\Collection;
+class Holder {
+    /** @var array{a: int, b: string} */
+    public $row;
+    /** @var callable(int, string): void */
+    public $handler;
+    /** @var Collection<int, Logger> the loggers */
+    public $loggers;
+}
+`
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///app/Holder.php", src)
+	r := NewResolver(idx)
+	file := parser.ParseFile(src)
+	for member, want := range map[string]string{
+		"row":     "array",
+		"handler": "callable",
+		"loggers": `Illuminate\Support\Collection`,
+	} {
+		if got := r.MemberType(r.FindMember(`App\Holder`, member), file); got != want {
+			t.Errorf("MemberType($%s) = %q, want %q", member, got, want)
+		}
+	}
+}

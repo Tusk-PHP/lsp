@@ -306,12 +306,9 @@ func extractShapeFromDocParams(docComment, paramBare string) []types.ShapeField 
 			return types.ParseArrayShape(param.Type)
 		}
 	}
-	if vars, ok := doc.Tags["var"]; ok {
-		for _, v := range vars {
-			typeStr, rest := types.ExtractDocTypeString(v)
-			if strings.Contains(rest, target) {
-				return types.ParseArrayShape(typeStr)
-			}
+	for _, v := range doc.Vars {
+		if v.Name == target {
+			return types.ParseArrayShape(v.Type)
 		}
 	}
 	return nil

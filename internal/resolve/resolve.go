@@ -633,10 +633,8 @@ func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) str
 	case symbols.KindProperty:
 		typeName = member.Type
 		if typeName == "" && member.DocComment != "" {
-			if doc := parser.ParseDocBlock(member.DocComment); doc != nil {
-				if vars, ok := doc.Tags["var"]; ok && len(vars) > 0 {
-					typeName = strings.Fields(vars[0])[0]
-				}
+			if doc := r.parseDoc(member.DocComment); doc != nil && len(doc.Vars) > 0 {
+				typeName = doc.Vars[0].Type
 			}
 		}
 	case symbols.KindConstant:
