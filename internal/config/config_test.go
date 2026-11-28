@@ -709,4 +709,13 @@ func TestToolTimeouts(t *testing.T) {
 	if problems := cfg.Problems(); len(problems) != 0 {
 		t.Errorf("valid timeouts report nothing, got %v", problems)
 	}
+
+	negative := -1
+	cfg = cfg.WithClientOptions(&ClientOptions{PHPStanTimeoutMs: &negative})
+	if cfg.PHPStanTimeout() != time.Minute {
+		t.Errorf("a negative phpstanTimeoutMs leaves the default, got %s", cfg.PHPStanTimeout())
+	}
+	if problems := cfg.Problems(); len(problems) != 1 || !strings.Contains(problems[0].Error(), "phpstanTimeoutMs") {
+		t.Errorf("a negative phpstanTimeoutMs is reported, got %v", problems)
+	}
 }

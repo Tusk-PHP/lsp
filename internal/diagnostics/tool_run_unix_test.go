@@ -3,8 +3,14 @@
 package diagnostics
 
 import (
+	"errors"
+	"io"
+	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -161,5 +167,110 @@ func TestToolFindingsOfAFileChangedMeanwhileAreDropped(t *testing.T) {
 	}
 	if got := f.phpstanMessages(); len(got) != 1 || got[0] != "Parameter #1 expects string" {
 		t.Errorf("findings worked out for a file that changed meanwhile are dropped, got %v", got)
+	}
+}
+
+func TestStopToolsStopsEveryRunInProgress(t *testing.T) {
+	f := newToolFixture(t, 0)
+	f.block(t)
+	started := time.Now()
+	run := f.runInBackground()
+	f.waitUntilStarted(t)
+	f.p.StopTools()
+	if receive(t, run, time.Second) {
+		t.Error("a run StopTools stopped is reported as stopped")
+	}
+	if got := f.phpstanMessages(); len(got) != 0 {
+		t.Errorf("a stopped run keeps no findings, got %v", got)
+	}
+	f.assertWorkerKilled(t, started)
+}
+
+func TestKillingAProcessGroupThatIsGoneReportsTheProcessDone(t *testing.T) {
+	cmd := exec.Command("true")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if err := killProcessGroup(cmd.Process.Pid); !errors.Is(err, os.ErrProcessDone) {
+		t.Errorf("a process group that already ended is done, got %v", err)
+	}
+}
+
+func writeScript(t *testing.T, dir, name, script string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func toolsProvider(t *testing.T, phpstan, pint string) (*Provider, *strings.Builder) {
+	t.Helper()
+	p := newTestProvider()
+	logs := &strings.Builder{}
+	p.logger = log.New(logs, "", 0)
+	cfg := *p.settings.Load().cfg
+	enabled := true
+	cfg.PHPStanEnabled, cfg.PHPStanPath = &enabled, phpstan
+	cfg.PintEnabled, cfg.PintPath = &enabled, pint
+	p.SetConfig(&cfg)
+	return p, logs
+}
+
+func TestToolsThatFailOrCannotStartReportNothingAndSayWhy(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "Order.php")
+	if err := os.WriteFile(file, []byte("<?php\nstrlen(1);\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pint := writeScript(t, dir, "pint", "echo 'config is broken' >&2\nexit 2\n")
+	p, logs := toolsProvider(t, filepath.Join(dir, "missing-phpstan"), pint)
+	if !p.RunTools("file://"+file, file, unchanged) {
+		t.Fatal("a run whose tools fail still ends")
+	}
+	if diags := p.Analyze("file://"+file, "<?php\nstrlen(1);\n"); len(filterBySource(diags, "phpstan")) != 0 || len(filterBySource(diags, "pint")) != 0 {
+		t.Errorf("tools that fail report nothing, got %+v", diags)
+	}
+	if got := logs.String(); !strings.Contains(got, "PHPStan on "+file+" could not run") || !strings.Contains(got, "Pint on "+file+" failed (exit 2): config is broken") {
+		t.Errorf("the log says why each tool reported nothing, got %q", got)
+	}
+}
+
+func TestAToolThatExitsCleanlyReportsItsOutput(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "Order.php")
+	if err := os.WriteFile(file, []byte("<?php\nstrlen(1);\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	phpstan := writeScript(t, dir, "phpstan", "cat <<'JSON'\n"+phpstanFinding(file, "Parameter #1 expects string")+"\nJSON\n")
+	p, _ := toolsProvider(t, phpstan, "")
+	p.RunTools("file://"+file, file, unchanged)
+	if stan := filterBySource(p.Analyze("file://"+file, "<?php\nstrlen(1);\n"), "phpstan"); len(stan) != 1 {
+		t.Errorf("the finding of a run that exits 0 is reported, got %+v", stan)
+	}
+}
+
+func TestToolsAreFoundInVendorBinThenOnThePath(t *testing.T) {
+	root := t.TempDir()
+	vendorBin := filepath.Join(root, "vendor", "bin")
+	if err := os.MkdirAll(vendorBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	vendored := writeScript(t, vendorBin, "phpstan", "exit 0\n")
+	path := t.TempDir()
+	onPath := writeScript(t, path, "pint", "exit 0\n")
+	t.Setenv("PATH", path)
+	logger := log.New(io.Discard, "", 0)
+
+	if tool := newExternalTool("PHPStan", "phpstan", root, "", nil, time.Second, logger); !tool.available() || tool.binPath != vendored {
+		t.Errorf("the project's vendor/bin tool is used, got %+v", tool)
+	}
+	if tool := newExternalTool("Pint", "pint", root, "", nil, time.Second, logger); !tool.available() || tool.binPath != onPath {
+		t.Errorf("a tool on the PATH is used when vendor/bin has none, got %+v", tool)
+	}
+	if tool := newExternalTool("Psalm", "psalm", root, "", nil, time.Second, logger); tool.available() {
+		t.Errorf("a tool found nowhere is unavailable, got %+v", tool)
 	}
 }
