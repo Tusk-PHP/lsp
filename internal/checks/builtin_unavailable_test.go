@@ -45,16 +45,17 @@ str_contains($a, $b);
 	}
 }
 
-// TestBuiltinUnavailableFunctionExtension verifies that a function requiring a
-// specific extension is flagged when that extension is absent from the profile.
+// TestBuiltinUnavailableFunctionExtension verifies that a function of a PECL
+// extension is flagged when that extension is absent from the profile. json,
+// always part of PHP since 8.0, needs no ext-json.
 func TestBuiltinUnavailableFunctionExtension(t *testing.T) {
 	source := `<?php
-$a = '{"key": "value"}';
+$a = 'data';
+brotli_compress($a);
 json_validate($a);
 `
 	file := parser.ParseFile(source)
 	idx := symbols.NewIndex()
-	// Register builtins for PHP 8.3 without ext-json — json_validate is excluded.
 	idx.RegisterBuiltinsForProfile(symbols.BuiltinProfile{PHPVersion: "8.3", Extensions: []string{}})
 
 	checker := &BuiltinUnavailableRule{PHPVersion: "8.3", Extensions: []string{}}
@@ -71,13 +72,15 @@ json_validate($a);
 	}
 	found := false
 	for _, f := range relevant {
-		if strings.Contains(f.Message, "ext-json") {
+		if strings.Contains(f.Message, "json_validate") {
+			t.Errorf("json_validate needs no extension: %s", f.Message)
+		}
+		if strings.Contains(f.Message, "ext-brotli") {
 			found = true
-			break
 		}
 	}
 	if !found {
-		t.Errorf("expected a finding with message containing 'ext-json', got: %v", relevant)
+		t.Errorf("expected a finding with message containing 'ext-brotli', got: %v", relevant)
 	}
 }
 

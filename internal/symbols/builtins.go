@@ -118,6 +118,15 @@ type BuiltinProfile struct {
 type BuiltinAvailability struct {
 	Since     string
 	Extension string
+	Removed   string
+}
+
+func (a BuiltinAvailability) RemovedBy(version string) bool {
+	return a.Removed != "" && compareBuiltinVersions(a.Removed, version) <= 0
+}
+
+func (a BuiltinAvailability) InVersion(version string) bool {
+	return builtinInVersion(a.Since, a.Removed, version)
 }
 
 var builtinAvailabilityByName = map[string]BuiltinAvailability{
@@ -139,120 +148,35 @@ var builtinAvailabilityByName = map[string]BuiltinAvailability{
 
 	// Optional PECL APIs; keep these names available to builtin-unavailable
 	// without loading any extension stub source into the symbol index.
-	"APCUIterator":                  {Extension: "apcu"},
-	"Imagick":                       {Extension: "imagick"},
-	"ImagickDraw":                   {Extension: "imagick"},
-	"ImagickDrawException":          {Extension: "imagick"},
-	"ImagickException":              {Extension: "imagick"},
-	"ImagickKernel":                 {Extension: "imagick"},
-	"ImagickKernelException":        {Extension: "imagick"},
-	"ImagickPixel":                  {Extension: "imagick"},
-	"ImagickPixelException":         {Extension: "imagick"},
-	"ImagickPixelIterator":          {Extension: "imagick"},
-	"ImagickPixelIteratorException": {Extension: "imagick"},
-	"Memcached":                     {Extension: "memcached"},
-	"MemcachedException":            {Extension: "memcached"},
-	"Redis":                         {Extension: "redis"},
-	"RedisArray":                    {Extension: "redis"},
-	"RedisCluster":                  {Extension: "redis"},
-	"RedisClusterException":         {Extension: "redis"},
-	"RedisException":                {Extension: "redis"},
-	"RedisSentinel":                 {Extension: "redis"},
-	"SSH2_DEFAULT_TERMINAL":         {Extension: "ssh2"},
-	"SSH2_DEFAULT_TERM_HEIGHT":      {Extension: "ssh2"},
-	"SSH2_DEFAULT_TERM_UNIT":        {Extension: "ssh2"},
-	"SSH2_DEFAULT_TERM_WIDTH":       {Extension: "ssh2"},
-	"SSH2_FINGERPRINT_HEX":          {Extension: "ssh2"},
-	"SSH2_FINGERPRINT_MD5":          {Extension: "ssh2"},
-	"SSH2_FINGERPRINT_RAW":          {Extension: "ssh2"},
-	"SSH2_FINGERPRINT_SHA1":         {Extension: "ssh2"},
-	"SSH2_FINGERPRINT_SHA256":       {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_DSS":         {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_ECDSA_256":   {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_ECDSA_384":   {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_ECDSA_521":   {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_ED25519":     {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_RSA":         {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_UNKNOWN":     {Extension: "ssh2"},
-	"SSH2_POLLERR":                  {Extension: "ssh2"},
-	"SSH2_POLLEXT":                  {Extension: "ssh2"},
-	"SSH2_POLLHUP":                  {Extension: "ssh2"},
-	"SSH2_POLLIN":                   {Extension: "ssh2"},
-	"SSH2_POLLNVAL":                 {Extension: "ssh2"},
-	"SSH2_POLLOUT":                  {Extension: "ssh2"},
-	"SSH2_POLL_CHANNEL_CLOSED":      {Extension: "ssh2"},
-	"SSH2_POLL_LISTENER_CLOSED":     {Extension: "ssh2"},
-	"SSH2_POLL_SESSION_CLOSED":      {Extension: "ssh2"},
-	"SSH2_STREAM_STDERR":            {Extension: "ssh2"},
-	"SSH2_STREAM_STDIO":             {Extension: "ssh2"},
-	"SSH2_TERM_UNIT_CHARS":          {Extension: "ssh2"},
-	"SSH2_TERM_UNIT_PIXELS":         {Extension: "ssh2"},
-	"apcu_add":                      {Extension: "apcu"},
-	"apcu_cache_info":               {Extension: "apcu"},
-	"apcu_cas":                      {Extension: "apcu"},
-	"apcu_clear_cache":              {Extension: "apcu"},
-	"apcu_dec":                      {Extension: "apcu"},
-	"apcu_delete":                   {Extension: "apcu"},
-	"apcu_enabled":                  {Extension: "apcu"},
-	"apcu_entry":                    {Extension: "apcu"},
-	"apcu_exists":                   {Extension: "apcu"},
-	"apcu_fetch":                    {Extension: "apcu"},
-	"apcu_inc":                      {Extension: "apcu"},
-	"apcu_key_info":                 {Extension: "apcu"},
-	"apcu_sma_info":                 {Extension: "apcu"},
-	"apcu_store":                    {Extension: "apcu"},
-	"igbinary_serialize":            {Extension: "igbinary"},
-	"igbinary_unserialize":          {Extension: "igbinary"},
-	"ssh2_auth_agent":               {Extension: "ssh2"},
-	"ssh2_auth_hostbased_file":      {Extension: "ssh2"},
-	"ssh2_auth_none":                {Extension: "ssh2"},
-	"ssh2_auth_password":            {Extension: "ssh2"},
-	"ssh2_auth_pubkey":              {Extension: "ssh2"},
-	"ssh2_auth_pubkey_file":         {Extension: "ssh2"},
-	"ssh2_connect":                  {Extension: "ssh2"},
-	"ssh2_disconnect":               {Extension: "ssh2"},
-	"ssh2_exec":                     {Extension: "ssh2"},
-	"ssh2_fetch_stream":             {Extension: "ssh2"},
-	"ssh2_fingerprint":              {Extension: "ssh2"},
-	"ssh2_forward_accept":           {Extension: "ssh2"},
-	"ssh2_forward_listen":           {Extension: "ssh2"},
-	"ssh2_hostkey":                  {Extension: "ssh2"},
-	"ssh2_keepalive_config":         {Extension: "ssh2"},
-	"ssh2_keepalive_send":           {Extension: "ssh2"},
-	"ssh2_methods_negotiated":       {Extension: "ssh2"},
-	"ssh2_poll":                     {Extension: "ssh2"},
-	"ssh2_publickey_add":            {Extension: "ssh2"},
-	"ssh2_publickey_init":           {Extension: "ssh2"},
-	"ssh2_publickey_list":           {Extension: "ssh2"},
-	"ssh2_publickey_remove":         {Extension: "ssh2"},
-	"ssh2_scp_recv":                 {Extension: "ssh2"},
-	"ssh2_scp_send":                 {Extension: "ssh2"},
-	"ssh2_send_eof":                 {Extension: "ssh2"},
-	"ssh2_send_signal":              {Extension: "ssh2"},
-	"ssh2_set_timeout":              {Extension: "ssh2"},
-	"ssh2_sftp":                     {Extension: "ssh2"},
-	"ssh2_sftp_chmod":               {Extension: "ssh2"},
-	"ssh2_sftp_lstat":               {Extension: "ssh2"},
-	"ssh2_sftp_mkdir":               {Extension: "ssh2"},
-	"ssh2_sftp_readlink":            {Extension: "ssh2"},
-	"ssh2_sftp_realpath":            {Extension: "ssh2"},
-	"ssh2_sftp_rename":              {Extension: "ssh2"},
-	"ssh2_sftp_rmdir":               {Extension: "ssh2"},
-	"ssh2_sftp_stat":                {Extension: "ssh2"},
-	"ssh2_sftp_symlink":             {Extension: "ssh2"},
-	"ssh2_sftp_unlink":              {Extension: "ssh2"},
-	"ssh2_shell":                    {Extension: "ssh2"},
-	"ssh2_shell_resize":             {Extension: "ssh2"},
-	"ssh2_tunnel":                   {Extension: "ssh2"},
-
-	"str_contains":     {Since: "8.0"},
-	"str_starts_with":  {Since: "8.0"},
-	"str_ends_with":    {Since: "8.0"},
-	"json_validate":    {Since: "8.3", Extension: "json"},
-	"Fiber":            {Since: "8.1"},
-	"WeakMap":          {Since: "8.0"},
-	"ReflectionMethod": {Since: "7.4"},
-	"ReflectionObject": {Since: "7.4"},
+	"SSH2_DEFAULT_TERMINAL":       {Extension: "ssh2"},
+	"SSH2_DEFAULT_TERM_HEIGHT":    {Extension: "ssh2"},
+	"SSH2_DEFAULT_TERM_UNIT":      {Extension: "ssh2"},
+	"SSH2_DEFAULT_TERM_WIDTH":     {Extension: "ssh2"},
+	"SSH2_FINGERPRINT_HEX":        {Extension: "ssh2"},
+	"SSH2_FINGERPRINT_MD5":        {Extension: "ssh2"},
+	"SSH2_FINGERPRINT_RAW":        {Extension: "ssh2"},
+	"SSH2_FINGERPRINT_SHA1":       {Extension: "ssh2"},
+	"SSH2_FINGERPRINT_SHA256":     {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_DSS":       {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_ECDSA_256": {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_ECDSA_384": {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_ECDSA_521": {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_ED25519":   {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_RSA":       {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_UNKNOWN":   {Extension: "ssh2"},
+	"SSH2_POLLERR":                {Extension: "ssh2"},
+	"SSH2_POLLEXT":                {Extension: "ssh2"},
+	"SSH2_POLLHUP":                {Extension: "ssh2"},
+	"SSH2_POLLIN":                 {Extension: "ssh2"},
+	"SSH2_POLLNVAL":               {Extension: "ssh2"},
+	"SSH2_POLLOUT":                {Extension: "ssh2"},
+	"SSH2_POLL_CHANNEL_CLOSED":    {Extension: "ssh2"},
+	"SSH2_POLL_LISTENER_CLOSED":   {Extension: "ssh2"},
+	"SSH2_POLL_SESSION_CLOSED":    {Extension: "ssh2"},
+	"SSH2_STREAM_STDERR":          {Extension: "ssh2"},
+	"SSH2_STREAM_STDIO":           {Extension: "ssh2"},
+	"SSH2_TERM_UNIT_CHARS":        {Extension: "ssh2"},
+	"SSH2_TERM_UNIT_PIXELS":       {Extension: "ssh2"},
 
 	// PHP 7.3 constants
 	"JSON_THROW_ON_ERROR": {Since: "7.3"},
@@ -319,7 +243,17 @@ func (idx *Index) registerBuiltinRegistryLocked(profile BuiltinProfile) {
 		idx.addBuiltinFunctionLocked(name, nil, "mixed", "PHP built-in function")
 	}
 
+	for _, c := range generatedBuiltinClassLikes {
+		idx.addBuiltinClassLikeWithMembersLocked(c, profile)
+	}
+
 	for _, cls := range builtinClasses {
+		if sym := idx.builtinLocked(cls.Name); sym != nil {
+			if sym.DocComment == "" {
+				sym.DocComment = cls.Doc
+			}
+			continue
+		}
 		if !builtinAvailable(cls.Name, profile) {
 			continue
 		}
@@ -377,7 +311,7 @@ func builtinAvailable(name string, profile BuiltinProfile) bool {
 	if !ok {
 		return true
 	}
-	if availability.Since != "" && compareBuiltinVersions(availability.Since, profile.PHPVersion) > 0 {
+	if !availability.InVersion(profile.PHPVersion) {
 		return false
 	}
 	if availability.Extension != "" {
@@ -392,15 +326,18 @@ func builtinAvailable(name string, profile BuiltinProfile) bool {
 }
 
 // LookupAvailability reports whether name is a known PHP built-in subject
-// to a version or extension constraint. The hand-authored override map
-// (builtinAvailabilityByName in this file) wins over the generated table
-// (builtin_availability_generated.go) so we can correct upstream stub data
-// without regenerating.
+// to a version or extension constraint. Class-likes and functions come from
+// the generated tables (builtin_classes_generated.go,
+// builtin_functions_generated.go); constants from builtinAvailabilityByName in
+// this file.
 func LookupAvailability(name string) (BuiltinAvailability, bool) {
-	if a, ok := builtinAvailabilityByName[name]; ok {
+	if a, ok := generatedBuiltinClassAvailability[name]; ok {
 		return a, true
 	}
-	if a, ok := generatedBuiltinAvailability[name]; ok {
+	if a, ok := generatedBuiltinFunctionAvailabilityByName[name]; ok {
+		return a, true
+	}
+	if a, ok := builtinAvailabilityByName[name]; ok {
 		return a, true
 	}
 	return BuiltinAvailability{}, false
@@ -438,11 +375,11 @@ func parseBuiltinMajorMinor(version string) (int, int) {
 }
 
 func (idx *Index) addBuiltinFunctionLocked(name string, params []ParamInfo, ret string, doc string) {
-	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: "builtin", ReturnType: ret, DocComment: doc, Params: params})
+	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: builtinRegistryURI, ReturnType: ret, DocComment: doc, Params: params})
 }
 
 func (idx *Index) addBuiltinClassLikeLocked(name string, doc string) {
-	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: "builtin", DocComment: doc})
+	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: builtinRegistryURI, DocComment: doc})
 }
 
 func (idx *Index) storeBuiltinLocked(sym *Symbol) {

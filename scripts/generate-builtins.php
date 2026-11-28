@@ -20,7 +20,8 @@ function main(array $argv): void
     }
 
     $mode = array_shift($argv);
-    if (!in_array($mode, ['registry', 'stubs', 'availability'], true)) {
+    $modes = modes();
+    if (!in_array($mode, ['registry', 'stubs'], true) && !isset($modes[$mode])) {
         fwrite(STDERR, "Unknown mode: {$mode}\n\n");
         fwrite(STDERR, usage());
         exit(1);
@@ -28,9 +29,8 @@ function main(array $argv): void
 
     $options = parseOptions($argv);
 
-    if ($mode === 'availability') {
-        $output = generateGoAvailability($options);
-        writeOutput($output, $options['output'] ?? (dirname(__DIR__) . '/internal/symbols/builtin_availability_generated.go'));
+    if (isset($modes[$mode])) {
+        ($modes[$mode]['run'])($options);
         return;
     }
 
@@ -44,40 +44,74 @@ function main(array $argv): void
     writeOutput($output, $options['output']);
 }
 
+/**
+ * The modes in scripts/generate-builtins/, one file each. A file defines the
+ * mode's functions and returns its name, its usage line, its help and the
+ * function that runs it with the parsed options.
+ *
+ * @return array<string, array{name:string, usage:string, help:string, run:callable(array):void}>
+ */
+function modes(): array
+{
+    static $modes = null;
+    if ($modes !== null) {
+        return $modes;
+    }
+    $modes = [];
+    $files = glob(__DIR__ . '/generate-builtins/*.php');
+    if ($files === false) {
+        fwrite(STDERR, "Can't list " . __DIR__ . "/generate-builtins\n");
+        exit(1);
+    }
+    sort($files, SORT_STRING);
+    foreach ($files as $file) {
+        $mode = require $file;
+        $modes[$mode['name']] = $mode;
+    }
+    return $modes;
+}
+
 function usage(): string
 {
+    $modeUsage = implode('', array_map(static fn(array $m): string => '  ' . $m['usage'] . "\n", modes()));
+    $modeHelp = implode('', array_map(static fn(array $m): string => $m['help'], modes()));
+
     return <<<TXT
 Usage:
   php scripts/generate-builtins.php registry [--keep=PATH] [--output=PATH]
   php scripts/generate-builtins.php stubs [--output=PATH]
-  php scripts/generate-builtins.php availability --stubs=PATH [--output=PATH]
-
+{$modeUsage}
 Modes:
   registry      Emit the Go builtin name registry from the local PHP runtime.
   stubs         Emit simple global PHP builtin stub declarations from runtime reflection.
-  availability  Read phpstorm-stubs PHPDoc @since annotations and emit a
-                Go availability map. Requires --stubs=<path> pointing at a
-                local phpstorm-stubs checkout. Output defaults to
-                internal/symbols/builtin_availability_generated.go.
-
+{$modeHelp}
 Options:
-  --stubs=PATH   Path to a local phpstorm-stubs checkout (required for availability mode).
   --keep=PATH    Registry mode: also keep every name already listed in this
                  generated Go registry, so names from extensions the running
                  PHP doesn't have (redis, brotli, ...) aren't dropped.
-  --output=PATH  Write to PATH instead of stdout (availability mode writes to
-                 internal/symbols/builtin_availability_generated.go by default).
+  --output=PATH  Write to PATH instead of the mode's default (stdout for
+                 registry and stubs).
+  --php=COMMANDS PHP's default builds, one per supported version, for the modes
+                 that read several builds: commands separated by ';', each split
+                 on spaces and run as an argv array, e.g.
+                 'docker run --rm php:7.4-cli php;docker run --rm php:8.6-cli php'.
+  --extensions-php=COMMANDS
+                 More builds, with the extensions of PHP's own source the
+                 default builds lack (intl, gd, ffi, ...), in the same form.
+  --pecl-php=COMMANDS
+                 Builds with PECL extensions (redis, brotli, ...). What only
+                 these builds have needs its extension in the project's profile.
   -h, --help     Show this help.
 
 TXT;
 }
 
 /**
- * @return array{output:?string, stubs:?string}
+ * @return array{output:?string, keep:?string, php:string, extensions-php:string, pecl-php:string}
  */
 function parseOptions(array $argv): array
 {
-    $options = ['output' => null, 'stubs' => null, 'keep' => null];
+    $options = ['output' => null, 'keep' => null, 'php' => '', 'extensions-php' => '', 'pecl-php' => ''];
 
     foreach ($argv as $arg) {
         if (str_starts_with($arg, '--output=')) {
@@ -90,9 +124,11 @@ function parseOptions(array $argv): array
             continue;
         }
 
-        if (str_starts_with($arg, '--stubs=')) {
-            $options['stubs'] = substr($arg, strlen('--stubs='));
-            continue;
+        foreach (['php', 'extensions-php', 'pecl-php'] as $builds) {
+            if (str_starts_with($arg, "--{$builds}=")) {
+                $options[$builds] = substr($arg, strlen("--{$builds}="));
+                continue 2;
+            }
         }
 
         fwrite(STDERR, "Unknown option: {$arg}\n\n");
@@ -824,302 +860,53 @@ function indentBlock(string $block): string
 }
 
 /**
- * Known phpstorm-stubs extension directory names that map to PHP extension names.
- * Files at the top level or under 'Core'/'core' are treated as core (no extension).
- */
-function knownStubExtensions(): array
-{
-    return [
-        'bcmath', 'bz2', 'calendar', 'com_dotnet', 'ctype', 'curl', 'date',
-        'dba', 'dom', 'enchant', 'fileinfo', 'filter', 'fpm', 'ftp', 'gd',
-        'gettext', 'gmp', 'hash', 'iconv', 'imagick', 'imap', 'intl', 'json',
-        'ldap', 'mbstring', 'mcrypt', 'memcache', 'memcached', 'mongodb',
-        'mysql', 'mysqli', 'mysqlnd', 'oauth', 'odbc', 'opcache', 'openssl',
-        'parallel', 'parle', 'pcntl', 'pcov', 'pcre', 'pdo', 'pgsql', 'phar',
-        'posix', 'pspell', 'random', 'rar', 'readline', 'recode', 'redis',
-        'reflection', 'session', 'shmop', 'simplexml', 'snmp', 'soap',
-        'sockets', 'sodium', 'solr', 'spl', 'sqlite3', 'ssh2', 'standard',
-        'sysvmsg', 'sysvsem', 'sysvshm', 'tidy', 'tokenizer', 'uopz', 'uuid',
-        'wddx', 'wikidiff2', 'xdebug', 'xsl', 'yaml', 'zip', 'zlib',
-        // Mixed-case directory names that phpstorm-stubs uses:
-        'Reflection', 'SPL',
-    ];
-}
-
-/**
- * Derive an extension name from a file's relative path under the stubs root.
- * Returns '' for core symbols (top-level files or 'Core'/'core' subdirectory).
- */
-function extensionFromRelativePath(string $relativePath): string
-{
-    $parts = explode('/', str_replace(DIRECTORY_SEPARATOR, '/', $relativePath));
-    if (count($parts) < 2) {
-        // Top-level file — core.
-        return '';
-    }
-
-    $topDir = $parts[0];
-    $topDirLower = strtolower($topDir);
-
-    // 'Core' / 'core' directories are PHP core, not an extension.
-    if ($topDirLower === 'core') {
-        return '';
-    }
-
-    $known = knownStubExtensions();
-    $knownLower = array_map('strtolower', $known);
-
-    $pos = array_search($topDirLower, $knownLower, true);
-    if ($pos !== false) {
-        // Return the lowercased version for consistent Go map keys.
-        return $topDirLower;
-    }
-
-    // Unknown directory — treat as extension anyway so we don't silently drop it.
-    return $topDirLower;
-}
-
-/**
- * Parse @since X.Y or @since X.Y.Z from a doc-comment and return 'X.Y' (major.minor only).
- * Returns '' if no @since tag is found.
- */
-function parseSinceFromDocComment(string $docComment): string
-{
-    if (preg_match('/@since\s+(\d+)\.(\d+)/', $docComment, $m)) {
-        return $m[1] . '.' . $m[2];
-    }
-    return '';
-}
-
-/**
- * Walk phpstorm-stubs and collect availability data from @since/@removed PHPDoc tags.
+ * Runs $code with each PHP build in $commands (separated by ';', each split on
+ * spaces and run as an argv array, without the parent's ini settings) and
+ * returns the JSON each prints, oldest version first.
  *
- * @param array{stubs:?string, output:?string} $options
+ * @return list<array<string, mixed>>
  */
-function generateGoAvailability(array $options): string
+function runPhpDumps(string $commands, string $code): array
 {
-    $stubsRoot = $options['stubs'] ?? null;
-    if ($stubsRoot === null || $stubsRoot === '') {
-        fwrite(STDERR, "availability mode requires --stubs=<path> pointing at a local phpstorm-stubs checkout.\n");
-        exit(1);
-    }
-
-    $stubsRoot = rtrim($stubsRoot, '/\\');
-
-    if (!is_dir($stubsRoot)) {
-        fwrite(STDERR, "Stubs path does not exist or is not a directory: {$stubsRoot}\n");
-        exit(1);
-    }
-
-    // Directories to skip entirely.
-    $skipDirs = ['meta', 'tests', '.git', '.idea'];
-
-    $availability = [];
-
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($stubsRoot, FilesystemIterator::SKIP_DOTS | FilesystemIterator::UNIX_PATHS),
-        RecursiveIteratorIterator::SELF_FIRST
-    );
-
-    foreach ($iterator as $fileInfo) {
-        assert($fileInfo instanceof SplFileInfo);
-
-        if ($fileInfo->isDir()) {
-            $dirName = strtolower($fileInfo->getBasename());
-            foreach ($skipDirs as $skip) {
-                if ($dirName === $skip) {
-                    $iterator->next();
-                    continue 2;
-                }
-            }
-            continue;
+    $env = getenv();
+    unset($env['PHP_INI_SCAN_DIR'], $env['PHPRC']);
+    $dumps = [];
+    foreach (array_filter(array_map('trim', explode(';', $commands))) as $command) {
+        $argv = array_merge(array_values(array_filter(explode(' ', $command), 'strlen')), ['-r', $code]);
+        $process = proc_open($argv, [1 => ['pipe', 'w'], 2 => STDERR], $pipes, null, $env);
+        if (!is_resource($process)) {
+            fwrite(STDERR, "Failed to run: {$command}\n");
+            exit(1);
         }
-
-        if ($fileInfo->getExtension() !== 'php') {
-            continue;
+        $json = stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        if (proc_close($process) !== 0) {
+            fwrite(STDERR, "PHP failed: {$command}\n");
+            exit(1);
         }
-
-        $fullPath = $fileInfo->getPathname();
-        $relativePath = ltrim(substr($fullPath, strlen($stubsRoot)), '/\\');
-
-        // Skip .phpstorm.meta.php files — they contain IDE magic, not stubs.
-        if (str_contains($relativePath, '.phpstorm.meta.php')) {
-            continue;
-        }
-
-        // Skip files inside 'tests' or 'meta' subdirectories at any depth.
-        $pathParts = explode('/', str_replace(DIRECTORY_SEPARATOR, '/', $relativePath));
-        $skipThisFile = false;
-        foreach ($pathParts as $part) {
-            if (in_array(strtolower($part), $skipDirs, true)) {
-                $skipThisFile = true;
-                break;
-            }
-        }
-        if ($skipThisFile) {
-            continue;
-        }
-
-        $extension = extensionFromRelativePath($relativePath);
-
-        $source = @file_get_contents($fullPath);
-        if ($source === false) {
-            continue;
-        }
-
-        $tokens = @token_get_all($source);
-        if (!is_array($tokens)) {
-            continue;
-        }
-
-        $currentNamespace = '';
-        $lastDocComment = '';
-        $i = 0;
-        $count = count($tokens);
-
-        while ($i < $count) {
-            $token = $tokens[$i];
-
-            if (!is_array($token)) {
-                $lastDocComment = '';
-                $i++;
-                continue;
-            }
-
-            [$type, $text] = $token;
-
-            // Track namespace declarations so we can skip non-global symbols.
-            if ($type === T_NAMESPACE) {
-                // Collect the namespace name (tokens after T_NAMESPACE until ';' or '{').
-                $ns = '';
-                $j = $i + 1;
-                while ($j < $count) {
-                    $t = $tokens[$j];
-                    if (!is_array($t)) {
-                        $char = $t;
-                        if ($char === ';' || $char === '{') {
-                            break;
-                        }
-                        $j++;
-                        continue;
-                    }
-                    if (in_array($t[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
-                        $j++;
-                        continue;
-                    }
-                    if (in_array($t[0], [T_STRING, T_NS_SEPARATOR, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED], true)) {
-                        $ns .= $t[1];
-                        $j++;
-                        continue;
-                    }
-                    break;
-                }
-                $currentNamespace = trim($ns);
-                $lastDocComment = '';
-                $i = $j;
-                continue;
-            }
-
-            // Accumulate the most recent doc-comment (reset on any non-whitespace, non-comment).
-            if ($type === T_DOC_COMMENT) {
-                $lastDocComment = $text;
-                $i++;
-                continue;
-            }
-
-            if ($type === T_WHITESPACE || $type === T_COMMENT) {
-                $i++;
-                continue;
-            }
-
-            // Symbol-introducing keywords.
-            if (in_array($type, [T_FUNCTION, T_CLASS, T_INTERFACE, T_TRAIT, T_ENUM], true)) {
-                // Only process global-namespace symbols.
-                if ($currentNamespace !== '') {
-                    $lastDocComment = '';
-                    $i++;
-                    continue;
-                }
-
-                $since = parseSinceFromDocComment($lastDocComment);
-
-                if ($since === '') {
-                    // No version constraint — skip (not interesting for the availability map).
-                    $lastDocComment = '';
-                    $i++;
-                    continue;
-                }
-
-                // Grab the symbol name: next non-whitespace T_STRING token.
-                $name = '';
-                $j = $i + 1;
-                while ($j < $count) {
-                    $t = $tokens[$j];
-                    if (!is_array($t)) {
-                        break;
-                    }
-                    if ($t[0] === T_WHITESPACE) {
-                        $j++;
-                        continue;
-                    }
-                    if ($t[0] === T_STRING || $t[0] === T_NAME_QUALIFIED) {
-                        $name = $t[1];
-                    }
-                    break;
-                }
-
-                // Skip anonymous or unnamed constructs.
-                if ($name === '' || !preg_match('/^[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*$/', $name)) {
-                    $lastDocComment = '';
-                    $i++;
-                    continue;
-                }
-
-                $entry = ['Since' => $since];
-                if ($extension !== '') {
-                    $entry['Extension'] = $extension;
-                }
-                // Later entries win (a symbol defined in multiple files gets the
-                // last-seen version, which is usually the most informative).
-                $availability[$name] = $entry;
-
-                $lastDocComment = '';
-                $i++;
-                continue;
-            }
-
-            // Any other substantive token resets the pending doc-comment.
-            $lastDocComment = '';
-            $i++;
+        try {
+            $dumps[] = json_decode((string) $json, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            fwrite(STDERR, "Unreadable output from {$command}: {$e->getMessage()}\n");
+            exit(1);
         }
     }
+    usort($dumps, static fn(array $a, array $b): int => version_compare($a['version'], $b['version']));
+    return $dumps;
+}
 
-    // Sort deterministically by symbol name.
-    ksort($availability, SORT_STRING);
-
-    // Emit the Go file.
-    $lines = [
-        '// Code generated by scripts/generate-builtins.php — DO NOT EDIT.',
-        '// Run: php scripts/generate-builtins.php availability --stubs=<phpstorm-stubs-path>',
-        '',
-        'package symbols',
-        '',
-        'var generatedBuiltinAvailability = map[string]BuiltinAvailability{',
-    ];
-
-    foreach ($availability as $name => $entry) {
-        $since = $entry['Since'];
-        $fields = 'Since: ' . renderGoString($since);
-        if (isset($entry['Extension'])) {
-            $fields .= ', Extension: ' . renderGoString($entry['Extension']);
-        }
-        $lines[] = "\t" . renderGoString($name) . ': {' . $fields . '},';
-    }
-
-    $lines[] = '}';
-    $lines[] = '';
-
-    return implode("\n", $lines);
+/**
+ * The PHP type name of a gettype() result.
+ */
+function phpTypeName(string $gettype): string
+{
+    return match ($gettype) {
+        'integer' => 'int',
+        'double' => 'float',
+        'boolean' => 'bool',
+        'NULL' => 'null',
+        default => $gettype,
+    };
 }
 
 function writeOutput(string $output, ?string $path): void

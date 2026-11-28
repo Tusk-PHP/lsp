@@ -1,0 +1,222 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * The functions the embedded stubs of an optional extension declare, by
+ * lower-case name, each with that extension.
+ *
+ * @param array<string, true> $defaultExtensions
+ * @return array<string, string>
+ */
+function extensionStubFunctions(string $dir, array $defaultExtensions): array
+{
+    $out = [];
+    foreach (extensionStubSources($dir, $defaultExtensions) as [$extension, $source]) {
+        foreach (declaredFunctions($source) as $name) {
+            $out[$name] = $extension;
+        }
+    }
+    return $out;
+}
+
+/**
+ * @return list<string> the lower-case fully qualified functions a PHP file
+ *                      declares outside class-likes
+ */
+function declaredFunctions(string $source): array
+{
+    $tokens = array_values(array_filter(
+        token_get_all($source),
+        static fn($t): bool => !is_array($t) || !in_array($t[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)
+    ));
+    $namespace = '';
+    $names = [];
+    $braces = [];
+    $classPending = false;
+    foreach ($tokens as $i => $token) {
+        $kind = is_array($token) ? $token[0] : $token;
+        if ($kind === T_NAMESPACE) {
+            $next = $tokens[$i + 1] ?? null;
+            $namespace = is_array($next) && in_array($next[0], [T_STRING, T_NAME_QUALIFIED], true) ? strtolower($next[1]) . '\\' : '';
+            continue;
+        }
+        if (in_array($kind, [T_CLASS, T_INTERFACE, T_TRAIT, T_ENUM], true)) {
+            $previous = $tokens[$i - 1] ?? null;
+            $classPending = !(is_array($previous) && $previous[0] === T_DOUBLE_COLON);
+            continue;
+        }
+        if ($kind === '{' || $kind === T_CURLY_OPEN || $kind === T_DOLLAR_OPEN_CURLY_BRACES) {
+            $braces[] = $classPending;
+            $classPending = false;
+            continue;
+        }
+        if ($kind === '}') {
+            array_pop($braces);
+            continue;
+        }
+        if ($kind !== T_FUNCTION || in_array(true, $braces, true)) {
+            continue;
+        }
+        $next = $tokens[$i + 1] ?? null;
+        if ($next === '&') {
+            $next = $tokens[$i + 2] ?? null;
+        }
+        if (is_array($next) && $next[0] === T_STRING) {
+            $names[] = $namespace . strtolower($next[1]);
+        }
+    }
+    return $names;
+}
+
+function functionDumpCode(): string
+{
+    return dumpHeaderCode() . <<<'PHP'
+$out['functions'] = [];
+foreach (get_defined_functions()['internal'] as $name) {
+    $f = new ReflectionFunction($name);
+    $out['functions'][strtolower($name)] = strtolower((string) $f->getExtensionName());
+}
+echo json_encode($out, JSON_INVALID_UTF8_SUBSTITUTE);
+PHP;
+}
+
+/**
+ * @param list<array{version:string, extensions:list<string>, functions:array<string, string>}> $defaultDumps
+ * @param list<array{version:string, extensions:list<string>, functions:array<string, string>}> $extensionDumps
+ * @param list<array{version:string, extensions:list<string>, functions:array<string, string>}> $peclDumps
+ */
+function generateGoFunctionAvailability(array $defaultDumps, array $extensionDumps, array $peclDumps, string $extensionStubsDir): string
+{
+    $defaultExtensions = loadedExtensions($defaultDumps);
+    $phpSourceExtensions = loadedExtensions(array_merge($defaultDumps, $extensionDumps));
+    $stubFunctions = extensionStubFunctions($extensionStubsDir, $defaultExtensions);
+    $stubExtensions = array_flip(array_values($stubFunctions));
+    $peclExtensions = array_diff_key(loadedExtensions($peclDumps), $phpSourceExtensions) + $stubExtensions;
+    $dumps = array_merge($defaultDumps, $extensionDumps, $peclDumps);
+    usort($dumps, static fn(array $a, array $b): int => version_compare($a['version'], $b['version']));
+    $versions = new BuildVersions($dumps);
+
+    $in = [];
+    $extensionOf = [];
+    foreach ($dumps as $build => $dump) {
+        foreach ($dump['functions'] as $name => $extension) {
+            if (isset($stubExtensions[$extension]) || isLanguageConstruct((string) $name)) {
+                continue;
+            }
+            $in[$name][] = $build;
+            $extensionOf[$name] = $extension;
+        }
+    }
+
+    $removed = removedFunctions($defaultDumps, $dumps);
+    $rows = [];
+    foreach ($extensionOf as $name => $extension) {
+        $rows[$name] = [
+            $versions->since($in[$name], [$extension => true]),
+            isset($peclExtensions[$extension]) ? $extension : '',
+            $removed[$name] ?? '',
+        ];
+    }
+    foreach ($stubFunctions as $name => $extension) {
+        $rows[$name] ??= ['', $extension, ''];
+    }
+    ksort($rows, SORT_STRING);
+
+    $lines = [];
+    foreach ($rows as $name => [$since, $extension, $removedIn]) {
+        if ($since === '' && $extension === '' && $removedIn === '') {
+            continue;
+        }
+        $lines[] = "\t" . renderGoStruct([
+            'Name' => renderGoString((string) $name),
+            'Since' => goStringOrNull($since),
+            'Extension' => goStringOrNull($extension),
+            'Removed' => goStringOrNull($removedIn),
+        ]) . ',';
+    }
+
+
+    return implode("\n", [
+        'package symbols',
+        '',
+        '// Code generated from PHP runtime builtin symbols; DO NOT EDIT.',
+        "// Generated by scripts/generate-builtins.php functions from reflection of PHP " . implode(', ', $versions->versions) . '.',
+        '',
+        'var generatedBuiltinFunctionAvailability = []builtinNamedAvailability{',
+        ...$lines,
+        '}',
+        '',
+    ]);
+}
+
+/**
+ * @param list<array{version:string, zts:bool, extensions:list<string>, functions:array<string, string>}> $defaultDumps
+ * @param list<array{version:string, functions:array<string, string>}> $allDumps
+ * @return array<string, string>
+ */
+function removedFunctions(array $defaultDumps, array $allDumps): array
+{
+    usort($defaultDumps, static fn(array $a, array $b): int => version_compare($a['version'], $b['version']));
+    $removed = [];
+    foreach ($defaultDumps as $i => $dump) {
+        $next = $defaultDumps[$i + 1] ?? null;
+        if ($next === null || $next['zts'] !== $dump['zts']) {
+            continue;
+        }
+        foreach ($dump['functions'] as $name => $extension) {
+            if (!isset($next['functions'][$name]) && in_array($extension, $next['extensions'], true)) {
+                $removed[$name] = $next['version'];
+            }
+        }
+    }
+    foreach ($allDumps as $dump) {
+        foreach ($removed as $name => $version) {
+            if (isset($dump['functions'][$name]) && version_compare($dump['version'], $version, '>=')) {
+                unset($removed[$name]);
+            }
+        }
+    }
+    return $removed;
+}
+
+/**
+ * Whether a function's name is a keyword of the language: exit and die were
+ * constructs before 8.4 made them functions, clone before 8.5, so calling them
+ * never needed a newer PHP.
+ */
+function isLanguageConstruct(string $name): bool
+{
+    if (str_contains($name, '\\')) {
+        return false;
+    }
+    $tokens = token_get_all('<?php ' . $name);
+    return !isset($tokens[1]) || !is_array($tokens[1]) || $tokens[1][0] !== T_STRING;
+}
+
+return [
+    'name' => 'functions',
+    'usage' => 'php scripts/generate-builtins.php functions --php=COMMANDS [--extensions-php=COMMANDS] [--pecl-php=COMMANDS] [--output=PATH]',
+    'help' => '  functions     Run the same builds as classes mode and emit, for each built-in
+                function that needs it, the version that added it, the one
+                that removed it (from the default builds only) and, for a
+                PECL extension or one with embedded stubs, the extension.
+                Output defaults to
+                internal/symbols/builtin_functions_generated.go.
+',
+    'run' => static function (array $options): void {
+        if ($options['php'] === '') {
+            fwrite(STDERR, "Functions mode needs PHP's default builds (--php).\n");
+            exit(1);
+        }
+        writeOutput(
+            generateGoFunctionAvailability(
+                runPhpDumps($options['php'], functionDumpCode()),
+                runPhpDumps($options['extensions-php'], functionDumpCode()),
+                runPhpDumps($options['pecl-php'], functionDumpCode()),
+                dirname(__DIR__, 2) . '/internal/stubs/php/extensions'
+            ),
+            $options['output'] ?? dirname(__DIR__, 2) . '/internal/symbols/builtin_functions_generated.go'
+        );
+    },
+];
