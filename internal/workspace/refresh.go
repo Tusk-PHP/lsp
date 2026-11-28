@@ -25,6 +25,7 @@ type Refreshed struct {
 	EditorOpened   []string
 	Failed         []string
 	Composer       bool
+	Config         *config.Config
 	ProfileChanged bool
 	Profile        symbols.BuiltinProfile
 	ProfileSource  string
@@ -156,6 +157,7 @@ func (ws *Bootstrapped) reloadConfig(r Refresh, out *Refreshed) error {
 		return &ConfigError{Err: err}
 	}
 	next := newSettings(cfg)
+	out.Config = cfg
 	if old := ws.current.Swap(next); scopeChanged(old.config, next.config) {
 		return ws.rescope(old, next, r.editorOwns, out)
 	}
