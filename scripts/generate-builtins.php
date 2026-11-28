@@ -113,17 +113,19 @@ Options:
   --pecl-php=COMMANDS
                  Builds with PECL extensions (redis, brotli, ...). What only
                  these builds have needs its extension in the project's profile.
+  --dumps=DIR    Directory of JSON dumps that builds wrote themselves, for the
+                 modes that read builds the generator can't run.
   -h, --help     Show this help.
 
 TXT;
 }
 
 /**
- * @return array{output:?string, stubs:?string, keep:?string, php:string, extensions-php:string, pecl-php:string}
+ * @return array{output:?string, stubs:?string, keep:?string, php:string, extensions-php:string, pecl-php:string, dumps:?string}
  */
 function parseOptions(array $argv): array
 {
-    $options = ['output' => null, 'stubs' => null, 'keep' => null, 'php' => '', 'extensions-php' => '', 'pecl-php' => ''];
+    $options = ['output' => null, 'stubs' => null, 'keep' => null, 'php' => '', 'extensions-php' => '', 'pecl-php' => '', 'dumps' => null];
 
     foreach ($argv as $arg) {
         if (str_starts_with($arg, '--output=')) {
@@ -133,6 +135,11 @@ function parseOptions(array $argv): array
 
         if (str_starts_with($arg, '--keep=')) {
             $options['keep'] = substr($arg, strlen('--keep='));
+            continue;
+        }
+
+        if (str_starts_with($arg, '--dumps=')) {
+            $options['dumps'] = substr($arg, strlen('--dumps='));
             continue;
         }
 

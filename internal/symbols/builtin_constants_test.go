@@ -135,3 +135,15 @@ func TestReplacingBuiltinsLooksConstantsUpForTheNewProfile(t *testing.T) {
 		t.Errorf("DATE_ISO8601_EXPANDED, added in PHP 8.2, is gone on 8.1: %+v", sym)
 	}
 }
+
+func TestABuiltinConstantWhoseValueDiffersBetweenPlatformsHasNone(t *testing.T) {
+	idx := builtinIndex("8.4")
+	for _, name := range []string{"AF_INET6", "SIGBUS", "LC_ALL", "ICONV_IMPL"} {
+		if sym := idx.Lookup(name); sym == nil || sym.Type == "" || sym.Value != "" {
+			t.Errorf("%s differs between Linux, macOS and Windows, so it keeps its type and has no value: %+v", name, sym)
+		}
+	}
+	if sym := idx.Lookup("SIGKILL"); sym == nil || sym.Value != "9" {
+		t.Errorf("SIGKILL is 9 wherever pcntl exists; Windows has no pcntl, which doesn't make it disagree: %+v", sym)
+	}
+}
