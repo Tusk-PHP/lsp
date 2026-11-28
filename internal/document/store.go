@@ -50,7 +50,9 @@ func (s *Store) Open(uri string, version int, text string, unsaved bool) Snapsho
 }
 
 func (s *Store) Change(uri string, version int, enc Encoding, changes []Change) (Snapshot, error) {
-	current, ok := s.Get(uri)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current, ok := s.docs[uri]
 	if !ok {
 		return Snapshot{}, fmt.Errorf("change to %s, which is not open", uri)
 	}
@@ -58,18 +60,9 @@ func (s *Store) Change(uri string, version int, enc Encoding, changes []Change) 
 		return Snapshot{}, fmt.Errorf("change to %s, version %d: %w", uri, version, ErrDiverged)
 	}
 	text, err := Apply(current.Text, enc, changes)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	latest, open := s.docs[uri]
-	if !open {
-		return Snapshot{}, fmt.Errorf("change to %s, version %d: the document was closed while the edit was applied", uri, version)
-	}
-	if err == nil && latest.revision != current.revision {
-		err = errors.New("the document changed while the edit was applied")
-	}
 	if err != nil {
-		latest.diverged = true
-		s.putLocked(latest)
+		current.diverged = true
+		s.putLocked(current)
 		return Snapshot{}, fmt.Errorf("change to %s, version %d: %w", uri, version, err)
 	}
 	file := s.files[uri]
