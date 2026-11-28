@@ -1,0 +1,246 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * The snippet each build runs, from dumps/constants.php without its opening
+ * tag, so it can be passed with -r. Builds the generator can't run, such as
+ * other platforms' in CI, run the file itself.
+ */
+function constantDumpCode(): string
+{
+    $file = __DIR__ . '/dumps/constants.php';
+    $code = file_get_contents($file);
+    if ($code === false || !str_starts_with($code, "<?php\n")) {
+        fwrite(STDERR, "Can't read the constant dump snippet {$file}\n");
+        exit(1);
+    }
+    return substr($code, strlen("<?php\n"));
+}
+
+/**
+ * Constants whose value depends on the platform, not on the PHP version. Like
+ * the versions of PHP and of the libraries it was built with, which any name
+ * containing VERSION is taken to be, their type is kept and their value is not.
+ */
+function platformConstants(): array
+{
+    return [
+        'DIRECTORY_SEPARATOR', 'PATH_SEPARATOR', 'PHP_EOL', 'PHP_OS', 'PHP_OS_FAMILY',
+        'PHP_SHLIB_SUFFIX', 'PHP_MAXPATHLEN', 'PHP_FD_SETSIZE', 'PHP_BINARY', 'PHP_SAPI',
+    ];
+}
+
+/**
+ * Whether name's value depends on the build rather than on the PHP version: a
+ * platform constant, or a version of PHP or of a library it was built with.
+ */
+function isBuildDependent(string $name): bool
+{
+    return in_array($name, platformConstants(), true) || str_contains($name, 'VERSION');
+}
+
+/**
+ * Constants PHP's grammar handles itself, which are never looked up by name.
+ */
+function languageConstants(): array
+{
+    return ['TRUE', 'FALSE', 'NULL'];
+}
+
+/**
+ * @return list<array{version:string, kind:string, extensions:list<string>, constants:array<string, array<string, array{0:string, 1:?string}>>}>
+ */
+function dumpConstantsWith(string $commands, string $kind): array
+{
+    return array_map(static fn(array $dump): array => $dump + ['kind' => $kind], runPhpDumps($commands, constantDumpCode()));
+}
+
+/**
+ * @param list<array{version:string, kind:string, extensions:list<string>, constants:array<string, array<string, array{0:string, 1:?string}>>}> $dumps
+ * @param list<array{os:string, builds:list<string>, values:array<string, ?string>}> $platforms
+ */
+function generateGoConstants(array $dumps, array $platforms): string
+{
+    if ($dumps === []) {
+        fwrite(STDERR, "Constants mode needs at least one PHP (--php).\n");
+        exit(1);
+    }
+    usort($dumps, static fn(array $a, array $b): int => version_compare($a['version'], $b['version']));
+    $baseline = $dumps[0]['version'];
+    $peclExtensions = peclExtensions($dumps);
+
+    $seen = [];
+    foreach ($dumps as $dump) {
+        foreach ($dump['constants'] as $extension => $constants) {
+            foreach ($constants as $name => [$type, $value]) {
+                if (in_array($name, languageConstants(), true) || str_starts_with($name, '__')) {
+                    continue;
+                }
+                $seen[$name][] = ['dump' => $dump, 'extension' => $extension, 'type' => phpTypeName($type), 'value' => $value];
+            }
+        }
+    }
+    uksort($seen, static fn(string $a, string $b): int => strcmp(strtolower($a), strtolower($b)) ?: strcmp($a, $b));
+
+    $lines = [];
+    $differing = [];
+    foreach ($seen as $name => $occurrences) {
+        $latest = $occurrences[count($occurrences) - 1];
+        $extension = $latest['extension'];
+        $types = array_values(array_unique(array_column($occurrences, 'type')));
+        sort($types, SORT_STRING);
+        $values = array_unique(array_map(static fn(array $o): string => (string) $o['value'], $occurrences));
+        $type = implode('|', $types);
+        $value = count($values) === 1 && $occurrences[0]['value'] !== null && !isBuildDependent($name) ? $occurrences[0]['value'] : '';
+        $disagreeing = $value === '' ? [] : platformsDisagreeing($name, $value, $platforms);
+        if ($disagreeing !== []) {
+            $value = '';
+            foreach ($disagreeing as $os) {
+                $differing[$os][$extension] = ($differing[$os][$extension] ?? 0) + 1;
+            }
+        }
+        $since = sinceVersion($name, $occurrences, $dumps, $baseline);
+        $lines[] = sprintf(
+            "	{Name: %s, Type: %s, Value: %s, Extension: %s%s%s},",
+            renderGoString($name),
+            renderGoString($type),
+            renderGoValue($value),
+            renderGoString($extension),
+            $since === '' ? '' : ', Since: ' . renderGoString($since),
+            isset($peclExtensions[$extension]) ? ', PECL: true' : ''
+        );
+    }
+
+    $versions = implode(', ', array_map(static fn(array $d): string => $d['version'] . buildKindLabel($d['kind']), $dumps));
+    $systems = implode(' and ', array_column($platforms, 'os'));
+    reportDifferingValues($differing);
+
+    return implode("\n", [
+        'package symbols',
+        '',
+        '// Code generated from PHP runtime builtin symbols; DO NOT EDIT.',
+        "// Generated by scripts/generate-builtins.php constants from get_defined_constants(true) of PHP {$versions},",
+        "// without the values that differ on {$systems} (scripts/generate-builtins/platform-constants/).",
+        '',
+        'var generatedBuiltinConstants = []builtinConstant{',
+        ...$lines,
+        '}',
+        '',
+    ]);
+}
+
+/**
+ * The platforms whose builds give name a value other than $value. A platform
+ * whose builds lack the constant, or its extension, doesn't disagree.
+ *
+ * @param list<array{os:string, builds:list<string>, values:array<string, ?string>}> $platforms
+ * @return list<string>
+ */
+function platformsDisagreeing(string $name, string $value, array $platforms): array
+{
+    $disagreeing = [];
+    foreach ($platforms as $platform) {
+        if (array_key_exists($name, $platform['values']) && $platform['values'][$name] !== $value) {
+            $disagreeing[] = $platform['os'];
+        }
+    }
+    return $disagreeing;
+}
+
+/**
+ * @param array<string, array<string, int>> $differing
+ */
+function reportDifferingValues(array $differing): void
+{
+    ksort($differing, SORT_STRING);
+    foreach ($differing as $os => $byExtension) {
+        arsort($byExtension);
+        $counts = implode(', ', array_map(static fn(string $e, int $n): string => "{$e} {$n}", array_keys($byExtension), $byExtension));
+        fwrite(STDERR, 'Values that differ on ' . $os . ': ' . array_sum($byExtension) . " ({$counts})\n");
+    }
+}
+
+function buildKindLabel(string $kind): string
+{
+    return match ($kind) {
+        'default' => '',
+        'extensions' => ' with more extensions',
+        'pecl' => ' with PECL extensions',
+    };
+}
+
+/**
+ * Extensions only the PECL builds have. Their constants need the extension in
+ * the project's profile; those of PHP's own extensions are not gated, like
+ * their functions and classes.
+ *
+ * @return array<string, true>
+ */
+function peclExtensions(array $dumps): array
+{
+    $own = [];
+    $pecl = [];
+    foreach ($dumps as $dump) {
+        foreach ($dump['extensions'] as $extension) {
+            if ($dump['kind'] === 'pecl') {
+                $pecl[$extension] = true;
+            } else {
+                $own[$extension] = true;
+            }
+        }
+    }
+    return array_diff_key($pecl, $own);
+}
+
+/**
+ * The version that added name: the first one that has it, when an earlier
+ * build had its extension without it. A constant of an extension no earlier
+ * build had is taken to be as old as the baseline.
+ */
+function sinceVersion(string $name, array $occurrences, array $dumps, string $baseline): string
+{
+    $first = $occurrences[0]['dump']['version'];
+    if ($first === $baseline) {
+        return '';
+    }
+    $extensions = array_unique(array_column($occurrences, 'extension'));
+    foreach ($dumps as $dump) {
+        if (version_compare($dump['version'], $first, '>=')) {
+            break;
+        }
+        if (array_intersect($extensions, $dump['extensions']) !== []) {
+            return $first;
+        }
+    }
+    return '';
+}
+
+function renderGoValue(string $value): string
+{
+    return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
+}
+
+return [
+    'name' => 'constants',
+    'usage' => 'php scripts/generate-builtins.php constants --php=COMMANDS [--extensions-php=COMMANDS] [--pecl-php=COMMANDS] [--output=PATH]',
+    'help' => '  constants     Run each PHP given with --php and --extensions-php, read its
+                get_defined_constants(true), and emit the Go table of PHP\'s
+                global constants with their type, value, extension and the
+                version that added them. A value is dropped when another
+                platform\'s builds, in
+                scripts/generate-builtins/platform-constants/, disagree.
+                Output defaults to
+                internal/symbols/builtin_constants_generated.go.
+',
+    'run' => static function (array $options): void {
+        writeOutput(
+            generateGoConstants(array_merge(
+                dumpConstantsWith($options['php'], 'default'),
+                dumpConstantsWith($options['extensions-php'], 'extensions'),
+                dumpConstantsWith($options['pecl-php'], 'pecl')
+            ), readPlatformConstantValues()),
+            $options['output'] ?? dirname(__DIR__, 2) . '/internal/symbols/builtin_constants_generated.go'
+        );
+    },
+];

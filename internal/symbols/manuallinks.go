@@ -80,13 +80,12 @@ func PHPManualURL(sym *Symbol, owner *Symbol, locale string) string {
 			constName := strings.ToLower(sym.Name)
 			return base + "class." + ownerSlug + ".php#" + ownerSlug + ".constants." + constName
 		}
-		// Predefined constant — derive extension from URI
-		ext := extensionFromURI(sym.URI)
-		nameSlug := strings.ReplaceAll(strings.ToLower(sym.Name), "_", "-")
-		if ext != "" {
-			return base + ext + ".constants.php#constant." + nameSlug
+		page, ok := constantManualPage(constantExtension(sym))
+		if !ok {
+			return ""
 		}
-		return base + "reserved.constants.php#constant." + nameSlug
+		slug := constantSlug.Replace(strings.ToLower(fqnOrName(sym)))
+		return base + page + ".constants.php#constant." + slug
 	}
 
 	return ""
@@ -106,6 +105,37 @@ func fqnOrName(sym *Symbol) string {
 func classSlug(fqn string) string {
 	fqn = strings.TrimLeft(fqn, "\\")
 	return strings.ReplaceAll(strings.ToLower(fqn), "\\", "-")
+}
+
+func constantExtension(sym *Symbol) string {
+	if found := builtinConstantNamed(fqnOrName(sym)); sym.URI == builtinRegistryURI && len(found) == 1 {
+		return found[0].Extension
+	}
+	if ext := extensionFromURI(sym.URI); ext != "" {
+		return ext
+	}
+	return "core"
+}
+
+var constantSlug = strings.NewReplacer("_", "-", "\\", "-")
+
+var constantManualPages = map[string]string{
+	"core":     "reserved",
+	"date":     "datetime",
+	"gd":       "image",
+	"sysvmsg":  "sem",
+	"standard": "",
+	"brotli":   "",
+	"zstd":     "",
+	"pdo_odbc": "",
+}
+
+func constantManualPage(ext string) (string, bool) {
+	page, ok := constantManualPages[ext]
+	if !ok {
+		return ext, true
+	}
+	return page, page != ""
 }
 
 // extensionFromURI extracts the extension name from a stub URI of the form

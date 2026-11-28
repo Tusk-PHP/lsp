@@ -149,6 +149,7 @@ type Index struct {
 	members              memberTables
 	mu                   sync.RWMutex
 	symbols              map[string]*Symbol
+	builtinProfile       *BuiltinProfile
 	shadowed             map[string][]*Symbol
 	nameIndex            map[string][]string
 	foldIndex            map[string][]string // lowercase FQN → FQNs of class-likes and functions, whose names PHP matches case-insensitively
@@ -605,6 +606,7 @@ func (idx *Index) indexNamesLocked(sym *Symbol, pending pendingRemovals) {
 // class and not a function of the same name).
 func (idx *Index) LookupFold(fqn string, match func(*Symbol) bool) *Symbol {
 	idx.ensureClass(fqn)
+	idx.loadBuiltinConstants(builtinConstantNamed(fqn))
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	if sym := idx.symbols[fqn]; sym != nil && (match == nil || match(sym)) {
@@ -798,6 +800,10 @@ func namespaceForFQN(fqn string) string {
 		return fqn[:i]
 	}
 	return ""
+}
+
+func shortName(fqn string) string {
+	return fqn[strings.LastIndex(fqn, "\\")+1:]
 }
 
 func (idx *Index) indexMethods(uri string, parent *Symbol, parentFQN string, methods []parser.MethodNode, src SymbolSource, resolve func(string) string, uses []parser.UseNode) {
@@ -1023,6 +1029,7 @@ func parseDocMethodParams(raw string, resolve func(string) string) []ParamInfo {
 }
 
 func (idx *Index) Lookup(fqn string) *Symbol {
+	idx.loadBuiltinConstants(builtinConstantNamed(fqn))
 	idx.mu.RLock()
 	sym := idx.symbols[fqn]
 	idx.mu.RUnlock()
@@ -1048,6 +1055,7 @@ func (idx *Index) LookupTypeAlias(ownerFQN, aliasName string) (TypeAlias, bool) 
 }
 
 func (idx *Index) LookupByName(name string) []*Symbol {
+	idx.loadBuiltinConstants(builtinConstantNamed(name))
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	var results []*Symbol
@@ -1144,6 +1152,7 @@ func (idx *Index) FirstDeclaredByName(limit int, keep func(SymbolKind) bool) []*
 }
 
 func (idx *Index) SearchByPrefix(prefix string) []*Symbol {
+	idx.loadBuiltinConstants(builtinConstantsWithPrefix(prefix))
 	// Empty prefix: return all symbols without touching the sorted slice.
 	if prefix == "" {
 		idx.mu.RLock()
@@ -1334,6 +1343,7 @@ func (idx *Index) getClassMembersRecursive(fqn string, visited map[string]bool) 
 
 func (idx *Index) Definitions(fqn string) []*Symbol {
 	idx.ensureClass(fqn)
+	idx.loadBuiltinConstants(builtinConstantNamed(fqn))
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	current := idx.symbols[fqn]

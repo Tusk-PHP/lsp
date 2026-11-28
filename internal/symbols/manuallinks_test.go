@@ -151,3 +151,26 @@ func TestPHPManualURL(t *testing.T) {
 		})
 	}
 }
+
+func TestBuiltinConstantsLinkToTheirExtensionsManualPage(t *testing.T) {
+	idx := builtinIndex("8.4", "brotli")
+	for name, want := range map[string]string{
+		"AF_INET6":           "https://www.php.net/manual/en/sockets.constants.php#constant.af-inet6",
+		"CURLOPT_URL":        "https://www.php.net/manual/en/curl.constants.php#constant.curlopt-url",
+		"PHP_EOL":            "https://www.php.net/manual/en/reserved.constants.php#constant.php-eol",
+		"IMG_PNG":            "https://www.php.net/manual/en/image.constants.php#constant.img-png",
+		"DATE_ATOM":          "https://www.php.net/manual/en/datetime.constants.php#constant.date-atom",
+		"MSG_IPC_NOWAIT":     "https://www.php.net/manual/en/sem.constants.php#constant.msg-ipc-nowait",
+		`Dom\INDEX_SIZE_ERR`: "https://www.php.net/manual/en/dom.constants.php#constant.dom-index-size-err",
+		"SORT_STRING":        "",
+		"BROTLI_GENERIC":     "",
+	} {
+		sym := idx.Lookup(name)
+		if sym == nil {
+			t.Fatalf("%s is a builtin constant", name)
+		}
+		if got := PHPManualURL(sym, nil, "en"); got != want {
+			t.Errorf("%s links to %q, want %q", name, got, want)
+		}
+	}
+}

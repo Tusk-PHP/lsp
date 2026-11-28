@@ -335,6 +335,13 @@ func (idx *Index) registerBuiltinRegistryLocked(profile BuiltinProfile) {
 		}
 		idx.addBuiltinClassLikeLocked(name, "PHP built-in class-like symbol")
 	}
+
+	idx.builtinProfile = &profile
+	for _, c := range generatedBuiltinConstants {
+		if strings.Contains(c.Name, "\\") && idx.builtinConstantMissingLocked(c) {
+			idx.storeBuiltinLocked(c.symbol())
+		}
+	}
 }
 
 // RegisterBuiltinStubs indexes embedded PHP stub declarations as built-in
@@ -374,9 +381,10 @@ func normalizeBuiltinProfile(profile BuiltinProfile) BuiltinProfile {
 
 func builtinAvailable(name string, profile BuiltinProfile) bool {
 	availability, ok := LookupAvailability(name)
-	if !ok {
-		return true
-	}
+	return !ok || availableIn(availability, profile)
+}
+
+func availableIn(availability BuiltinAvailability, profile BuiltinProfile) bool {
 	if availability.Since != "" && compareBuiltinVersions(availability.Since, profile.PHPVersion) > 0 {
 		return false
 	}
@@ -438,11 +446,11 @@ func parseBuiltinMajorMinor(version string) (int, int) {
 }
 
 func (idx *Index) addBuiltinFunctionLocked(name string, params []ParamInfo, ret string, doc string) {
-	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: "builtin", ReturnType: ret, DocComment: doc, Params: params})
+	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: builtinRegistryURI, ReturnType: ret, DocComment: doc, Params: params})
 }
 
 func (idx *Index) addBuiltinClassLikeLocked(name string, doc string) {
-	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: "builtin", DocComment: doc})
+	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: builtinRegistryURI, DocComment: doc})
 }
 
 func (idx *Index) storeBuiltinLocked(sym *Symbol) {

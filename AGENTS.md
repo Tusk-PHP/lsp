@@ -48,6 +48,8 @@ go test -v -race -run TestHoverMethodChain ./internal/hover/   # one test
 TUSK_PHP_TOKENIZERS='php;docker run --rm -i -v /tmp:/tmp:ro php:7.4-cli php' go test ./internal/php/lexer/   # lexer against each PHP's token_get_all
 php scripts/generate-builtins.php registry --output=internal/symbols/builtin_registry_generated.go
 php scripts/generate-builtins.php stubs --output=/tmp/php-builtins.generated.php
+php scripts/generate-builtins.php constants --php='docker run --rm php:7.4-cli php;docker run --rm php:8.0-cli php;…;docker run --rm php:8.6-cli php' --extensions-php='/path/to/php-with-extensions-8.4/bin/php;…'   # internal/symbols/builtin_constants_generated.go
+php scripts/generate-builtins.php platform-constants --dumps=DIR --output=scripts/generate-builtins/platform-constants/darwin.json   # from dumps/constants.php run by macOS (or Windows) builds
 ```
 
 Project config is `.tusk-php.json` in the workspace root, merged under the
