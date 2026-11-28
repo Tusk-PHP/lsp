@@ -208,3 +208,41 @@ func TestAPropertyOlderBuildsHandledInternallyIsKnownOnThem(t *testing.T) {
 		t.Error("DOMNode::$isConnected, added in 8.3, is dated by the builds that declare DOMNode's properties")
 	}
 }
+
+func TestBuiltinClassesFollowTheirVersionAndPECLExtension(t *testing.T) {
+	cases := []struct {
+		fqn, version string
+		extensions   []string
+		present      bool
+	}{
+		{"Attribute", "7.4", nil, false},
+		{"Attribute", "8.0", nil, true},
+		{"IntlListFormatter", "8.4", nil, false},
+		{"IntlListFormatter", "8.5", nil, true},
+		{"Collator", "7.4", nil, true},
+		{"Redis", "8.4", nil, false},
+		{"Redis", "8.4", []string{"redis"}, true},
+		{"Brotli\\Compress\\Context", "8.4", nil, false},
+		{"Brotli\\Compress\\Context", "8.4", []string{"brotli"}, true},
+		{"Imagick", "8.4", nil, false},
+	}
+	for _, c := range cases {
+		idx := NewIndex()
+		idx.RegisterBuiltinsForProfile(BuiltinProfile{PHPVersion: c.version, Extensions: c.extensions})
+		if got := idx.Lookup(c.fqn) != nil; got != c.present {
+			t.Errorf("%s on PHP %s with %v: present %v, want %v", c.fqn, c.version, c.extensions, got, c.present)
+		}
+	}
+	if a, ok := LookupAvailability("SensitiveParameter"); !ok || a.Since != "8.2" || a.Extension != "" {
+		t.Errorf("SensitiveParameter: %+v %v", a, ok)
+	}
+	if a, ok := LookupAvailability("Random\\Randomizer"); !ok || a.Since != "8.2" {
+		t.Errorf("Random\\Randomizer came with the random extension, in PHP's default build from 8.2: %+v %v", a, ok)
+	}
+	if _, ok := LookupAvailability("Collator"); ok {
+		t.Error("Collator is as old as the oldest build with intl: it isn't gated")
+	}
+	if a, ok := LookupAvailability("RedisCluster"); !ok || a.Extension != "redis" {
+		t.Errorf("RedisCluster: %+v %v", a, ok)
+	}
+}

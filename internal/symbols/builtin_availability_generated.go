@@ -5,12 +5,6 @@
 package symbols
 
 var generatedBuiltinAvailability = map[string]BuiltinAvailability{
-	// PHP 8.0 — class-likes / attributes
-	"Attribute":           {Since: "8.0"},
-	"ReflectionUnionType": {Since: "8.0"},
-	"Stringable":          {Since: "8.0"},
-	"WeakMap":             {Since: "8.0"},
-
 	// PHP 8.0 — functions
 	"fdiv":                {Since: "8.0"},
 	"get_debug_type":      {Since: "8.0"},
@@ -20,42 +14,20 @@ var generatedBuiltinAvailability = map[string]BuiltinAvailability{
 	"str_ends_with":       {Since: "8.0"},
 	"str_starts_with":     {Since: "8.0"},
 
-	// PHP 8.1 — class-likes / attributes
-	"AllowDynamicProperties":     {Since: "8.1"},
-	"BackedEnum":                 {Since: "8.1"},
-	"Fiber":                      {Since: "8.1"},
-	"ReflectionEnum":             {Since: "8.1"},
-	"ReflectionEnumBackedCase":   {Since: "8.1"},
-	"ReflectionEnumUnitCase":     {Since: "8.1"},
-	"ReflectionFiber":            {Since: "8.1"},
-	"ReflectionIntersectionType": {Since: "8.1"},
-	"ReturnTypeWillChange":       {Since: "8.1"},
-	"UnitEnum":                   {Since: "8.1"},
-
 	// PHP 8.1 — functions
 	"array_is_list": {Since: "8.1"},
 	"enum_exists":   {Since: "8.1"},
 	"fdatasync":     {Since: "8.1"},
 	"fsync":         {Since: "8.1"},
 
-	// PHP 8.2 — class-likes / attributes
-	"SensitiveParameter":      {Since: "8.2"},
-	"SensitiveParameterValue": {Since: "8.2"},
-
 	// PHP 8.2 — functions
 	"mb_str_pad":                {Since: "8.2"},
 	"openssl_cipher_key_length": {Since: "8.2"},
-
-	// PHP 8.3 — class-likes / attributes
-	"Override": {Since: "8.3"},
 
 	// PHP 8.3 — functions
 	"json_validate": {Since: "8.3", Extension: "json"},
 	"str_decrement": {Since: "8.3"},
 	"str_increment": {Since: "8.3"},
-
-	// PHP 8.4 — class-likes / attributes
-	"Deprecated": {Since: "8.4"},
 
 	// PHP 8.4 — functions
 	"array_all":      {Since: "8.4"},
@@ -68,19 +40,6 @@ var generatedBuiltinAvailability = map[string]BuiltinAvailability{
 	"mb_trim":        {Since: "8.4"},
 	"mb_ucfirst":     {Since: "8.4"},
 
-	// PHP 8.5 — class-likes / attributes
-	"DelayedTargetValidation":             {Since: "8.5"},
-	"NoDiscard":                           {Since: "8.5"},
-	"Uri\\InvalidUriException":            {Since: "8.5"},
-	"Uri\\Rfc3986\\Uri":                   {Since: "8.5"},
-	"Uri\\UriComparisonMode":              {Since: "8.5"},
-	"Uri\\UriError":                       {Since: "8.5"},
-	"Uri\\UriException":                   {Since: "8.5"},
-	"Uri\\WhatWg\\InvalidUrlException":    {Since: "8.5"},
-	"Uri\\WhatWg\\Url":                    {Since: "8.5"},
-	"Uri\\WhatWg\\UrlValidationError":     {Since: "8.5"},
-	"Uri\\WhatWg\\UrlValidationErrorType": {Since: "8.5"},
-
 	// PHP 8.5 — functions
 	"array_first":                {Since: "8.5"},
 	"array_last":                 {Since: "8.5"},
@@ -90,51 +49,6 @@ var generatedBuiltinAvailability = map[string]BuiltinAvailability{
 	"get_exception_handler":      {Since: "8.5"},
 	"grapheme_levenshtein":       {Since: "8.5"},
 	"locale_is_right_to_left":    {Since: "8.5"},
-
-	// PHP 8.6 — class-likes
-	"IntlNumberRangeFormatter":                       {Since: "8.6"},
-	"Io\\IoException":                                {Since: "8.6"},
-	"Io\\Poll\\Backend":                              {Since: "8.6"},
-	"Io\\Poll\\BackendUnavailableException":          {Since: "8.6"},
-	"Io\\Poll\\Context":                              {Since: "8.6"},
-	"Io\\Poll\\Event":                                {Since: "8.6"},
-	"Io\\Poll\\FailedContextInitializationException": {Since: "8.6"},
-	"Io\\Poll\\FailedHandleAddException":             {Since: "8.6"},
-	"Io\\Poll\\FailedPollOperationException":         {Since: "8.6"},
-	"Io\\Poll\\FailedPollWaitException":              {Since: "8.6"},
-	"Io\\Poll\\FailedWatcherModificationException":   {Since: "8.6"},
-	"Io\\Poll\\Handle":                               {Since: "8.6"},
-	"Io\\Poll\\HandleAlreadyWatchedException":        {Since: "8.6"},
-	"Io\\Poll\\InactiveWatcherException":             {Since: "8.6"},
-	"Io\\Poll\\InvalidHandleException":               {Since: "8.6"},
-	"Io\\Poll\\PollException":                        {Since: "8.6"},
-	"Io\\Poll\\Watcher":                              {Since: "8.6"},
-	"Openssl\\OpensslException":                      {Since: "8.6"},
-	"Openssl\\Psk":                                   {Since: "8.6"},
-	"Openssl\\Session":                               {Since: "8.6"},
-	"Snmp\\Mib":                                      {Since: "8.6"},
-	"Snmp\\OidOutput":                                {Since: "8.6"},
-	"Snmp\\Output":                                   {Since: "8.6"},
-	"Snmp\\StringOutput":                             {Since: "8.6"},
-	"SodiumCryptoXofShake128State":                   {Since: "8.6"},
-	"SodiumCryptoXofShake256State":                   {Since: "8.6"},
-	"SodiumCryptoXofTurboshake128State":              {Since: "8.6"},
-	"SodiumCryptoXofTurboshake256State":              {Since: "8.6"},
-	"SortDirection":                                  {Since: "8.6"},
-	"StreamError":                                    {Since: "8.6"},
-	"StreamErrorCode":                                {Since: "8.6"},
-	"StreamErrorMode":                                {Since: "8.6"},
-	"StreamErrorStore":                               {Since: "8.6"},
-	"StreamException":                                {Since: "8.6"},
-	"StreamPollHandle":                               {Since: "8.6"},
-	"Time\\Duration":                                 {Since: "8.6"},
-	"Time\\TimeException":                            {Since: "8.6"},
-	"Uri\\Rfc3986\\UriBuilder":                       {Since: "8.6"},
-	"Uri\\Rfc3986\\UriHostType":                      {Since: "8.6"},
-	"Uri\\Rfc3986\\UriType":                          {Since: "8.6"},
-	"Uri\\WhatWg\\UrlBuilder":                        {Since: "8.6"},
-	"Uri\\WhatWg\\UrlHostType":                       {Since: "8.6"},
-	"Uri\\WhatWg\\UrlPercentEncodingMode":            {Since: "8.6"},
 
 	// PHP 8.6 — functions
 	"clamp":                                   {Since: "8.6"},

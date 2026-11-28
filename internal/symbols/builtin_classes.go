@@ -9,6 +9,7 @@ type builtinClassLike struct {
 	Implements          []string
 	VersionedImplements []builtinRelation
 	Since               string
+	Extension           string
 	Members             []builtinMember
 }
 
@@ -34,8 +35,20 @@ type builtinMember struct {
 	Removed    string
 }
 
+var generatedBuiltinClassAvailability = builtinClassAvailability(generatedBuiltinClassLikes)
+
+func builtinClassAvailability(classes []builtinClassLike) map[string]BuiltinAvailability {
+	out := make(map[string]BuiltinAvailability)
+	for _, c := range classes {
+		if c.Since != "" || c.Extension != "" {
+			out[c.Name] = BuiltinAvailability{Since: c.Since, Extension: c.Extension}
+		}
+	}
+	return out
+}
+
 func (idx *Index) addBuiltinClassLikeWithMembersLocked(c builtinClassLike, profile BuiltinProfile) {
-	if !builtinInVersion(c.Since, "", profile.PHPVersion) || !builtinAvailable(c.Name, profile) {
+	if !builtinAvailable(c.Name, profile) {
 		return
 	}
 	class := &Symbol{Name: shortName(c.Name), FQN: c.Name, Kind: c.Kind, Source: SourceBuiltin, URI: builtinRegistryURI,
