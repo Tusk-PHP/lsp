@@ -87,6 +87,8 @@ func TestLivewireLocationsFromTheReturnedArray(t *testing.T) {
         # app_path('Gone'),
     ],
 ];`, []string{"resources/views/livewire"}, true},
+		{"a hole before the key", `<?php return ['x' => 1, , 'component_locations' => [resource_path('views/livewire')]];`, []string{"resources/views/livewire"}, true},
+		{"a hole among the locations", `<?php return ['component_locations' => [resource_path('views/livewire'), , app_path('Livewire')]];`, nil, false},
 		{"Livewire 3", `<?php
 // 'component_locations' => [resource_path('views/x')],
 return ['class_namespace' => 'App\\Livewire'];`, nil, true},

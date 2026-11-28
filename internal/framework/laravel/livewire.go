@@ -31,6 +31,9 @@ func livewireLocations(root string) (dirs []string, known bool) {
 		return nil, false
 	}
 	for _, item := range config.Items {
+		if item == nil {
+			continue
+		}
 		if key, ok := ast.StringValue(item.Key, src); ok && key == "component_locations" {
 			return livewireLocationDirs(root, item.Value, src)
 		}
@@ -55,6 +58,9 @@ func livewireLocationDirs(root string, value ast.Expr, src string) ([]string, bo
 }
 
 func livewireLocationDir(root string, item *ast.ArrayItem, src string) (string, bool) {
+	if item == nil {
+		return "", false
+	}
 	call, ok := item.Value.(*ast.Call)
 	if !ok || item.Key != nil || item.Unpack || call.Args == nil || len(call.Args.Args) != 1 {
 		return "", false

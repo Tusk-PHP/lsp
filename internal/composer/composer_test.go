@@ -170,6 +170,7 @@ return array(
     'f' => $vendorDir . '/kept/package/readme.txt',
     'g' => __DIR__ . '/relative.php',
     'h' => $vendorDir,
+    ,
 );
 `
 	if err := os.WriteFile(filepath.Join(composerDir, "autoload_files.php"), []byte(content), 0644); err != nil {

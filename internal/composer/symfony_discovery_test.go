@@ -210,6 +210,7 @@ return [
     'Old\StringBundle::class' => ['all' => true],
     D\Bundle::NAME => ['all' => true],
     $dynamic::class => ['all' => true],
+    ,
 ];
 `)
 	want := []string{`A\FirstBundle`, `C\SecondBundle`}

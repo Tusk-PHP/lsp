@@ -73,6 +73,9 @@ func bundleClasses(src string) []string {
 	}
 	fqns := make([]string, 0, len(bundles.Items))
 	for _, item := range bundles.Items {
+		if item == nil {
+			continue
+		}
 		fetch, ok := item.Key.(*ast.ClassConstFetch)
 		if !ok {
 			continue

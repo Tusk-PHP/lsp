@@ -243,6 +243,9 @@ func appendComposerAutoloadFiles(entries []AutoloadEntry, rootPath string) []Aut
 	vendorDir := filepath.Join(rootPath, "vendor")
 	dirs := map[string]string{"$vendorDir": vendorDir, "$baseDir": rootPath}
 	for _, item := range files.Items {
+		if item == nil {
+			continue
+		}
 		concat, ok := item.Value.(*ast.Binary)
 		if !ok || concat.Op != token.Dot {
 			continue
