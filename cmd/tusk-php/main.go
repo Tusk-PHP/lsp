@@ -186,22 +186,18 @@ func runIntrospect(args []string) error {
 		return fmt.Errorf("invalid --verbosity %q: must be one of compact, full", *verbosityFlag)
 	}
 
-	// Resolve the file to an absolute path.
-	absFile, err := filepath.Abs(filePath)
+	absFile, _, err := workspace.ResolvePath(filePath)
 	if err != nil {
-		return fmt.Errorf("resolving file path: %w", err)
+		return err
 	}
 
-	// Determine the project root: use --root if given, otherwise the directory
-	// containing the file (mirrors runDeps convention).
 	root := *rootFlag
 	if root == "" {
 		root = filepath.Dir(absFile)
-	} else {
-		root, err = filepath.Abs(root)
-		if err != nil {
-			return fmt.Errorf("resolving root path: %w", err)
-		}
+	}
+	root, err = workspace.ResolveRoot(root)
+	if err != nil {
+		return err
 	}
 
 	ws, framework, err := buildWorkspace(root, "tusk-php introspect")
@@ -269,14 +265,9 @@ func runDepsUnused(args []string) error {
 		return err
 	}
 
-	// Resolve root directory.
-	root := *rootFlag
-	if root == "" {
-		var err error
-		root, err = os.Getwd()
-		if err != nil {
-			return fmt.Errorf("unable to determine working directory: %w", err)
-		}
+	root, err := workspace.ResolveRoot(*rootFlag)
+	if err != nil {
+		return err
 	}
 
 	// Validate --format.
@@ -323,14 +314,9 @@ func runDepsTree(args []string) error {
 		return err
 	}
 
-	// Resolve root directory.
-	root := *rootFlag
-	if root == "" {
-		var err error
-		root, err = os.Getwd()
-		if err != nil {
-			return fmt.Errorf("unable to determine working directory: %w", err)
-		}
+	root, err := workspace.ResolveRoot(*rootFlag)
+	if err != nil {
+		return err
 	}
 
 	// Validate --format.
@@ -364,14 +350,9 @@ func runDepsUsage(args []string) error {
 		return err
 	}
 
-	// Resolve root directory.
-	root := *rootFlag
-	if root == "" {
-		var err error
-		root, err = os.Getwd()
-		if err != nil {
-			return fmt.Errorf("unable to determine working directory: %w", err)
-		}
+	root, err := workspace.ResolveRoot(*rootFlag)
+	if err != nil {
+		return err
 	}
 
 	// Validate --format.

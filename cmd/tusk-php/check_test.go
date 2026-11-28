@@ -182,3 +182,53 @@ func TestCheckUsesTheConfigFilesPHPVersion(t *testing.T) {
 		t.Errorf(".tusk-php.json's phpVersion applies when composer.json names none: %+v %v", profile, err)
 	}
 }
+
+func symlinkedProject(t *testing.T) (root, link string) {
+	t.Helper()
+	root = writeProject(t, map[string]string{
+		"composer.json":                  `{"autoload": {"psr-4": {"App\\": "src/"}}}`,
+		"vendor/composer/installed.json": `{"packages": [{"name": "acme/lib", "install-path": "../acme/lib", "autoload": {"psr-4": {"Acme\\": "src/"}}}]}`,
+		"vendor/acme/lib/src/Lib.php":    "<?php\nnamespace Acme;\nclass Lib { public function run() { return $nope; } }\n",
+		"src/Uses.php":                   "<?php\nnamespace App;\nclass Uses {\n    public function run(): int\n    {\n        new \\Acme\\Lib();\n        new \\Acme\\Missing();\n        return $missing;\n    }\n}\n",
+		"src/Clean.php":                  "<?php\nnamespace App;\nclass Clean { public function run(): int { return 1; } }\n",
+		"empty/readme.txt":               "nothing to check\n",
+	})
+	link = filepath.Join(t.TempDir(), "app")
+	if err := os.Symlink(root, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	return root, link
+}
+
+func TestCheckThroughASymlinkedRoot(t *testing.T) {
+	root, link := symlinkedProject(t)
+	want := "src/Uses.php:7:13: warning unknown-class: Unknown class 'Acme\\Missing'\n" +
+		"src/Uses.php:8:16: warning undefined-variable: Undefined variable $missing\n"
+	for _, args := range [][]string{
+		{"--root", root},
+		{"--root", link},
+		{"--root", link, "src"},
+		{"--root", link, filepath.Join(link, "src")},
+		{"--root", root, filepath.Join(link, "src", "Uses.php")},
+		{"--root", link, "src/U*.php"},
+	} {
+		_, out, summary := check(t, args...)
+		if out != want {
+			t.Errorf("check %v:\n%s\nwant\n%s", args, out, want)
+		}
+		if strings.HasPrefix(summary, "0 files") {
+			t.Errorf("check %v checked no files: %s", args, summary)
+		}
+	}
+}
+
+func TestCheckFailsWhenAPathNamesNoFile(t *testing.T) {
+	_, link := symlinkedProject(t)
+	for _, arg := range []string{"empty", "src/*.inc"} {
+		var out, errOut bytes.Buffer
+		code, err := runCheck([]string{"--root", link, arg}, &out, &errOut)
+		if code != 2 || err == nil || !strings.Contains(err.Error(), arg) {
+			t.Errorf("check %s: exit %d, error %v", arg, code, err)
+		}
+	}
+}

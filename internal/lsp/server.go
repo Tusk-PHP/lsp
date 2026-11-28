@@ -73,6 +73,7 @@ type Server struct {
 	diagDebounce diagDebouncer
 	encoding     document.Encoding
 	rootPath     string
+	clientRoot   atomic.Pointer[rootURIs]
 	framework    string
 	reader       *bufio.Reader
 	writer       io.Writer

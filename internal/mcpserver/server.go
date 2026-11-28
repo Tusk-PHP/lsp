@@ -321,24 +321,17 @@ func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, e
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	if rootPath == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil, err
-		}
-		rootPath = cwd
-	}
-	rootPath, err := filepath.Abs(rootPath)
+	root, err := workspace.ResolveRoot(rootPath)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg, framework, profile, source, err := loadProjectMetadata(rootPath, logger)
+	cfg, framework, profile, source, err := loadProjectMetadata(root, logger)
 	if err != nil {
 		return nil, err
 	}
 	ws, files, err := buildWorkspace(ctx, workspace.Options{
-		RootPath:       rootPath,
+		RootPath:       root,
 		Framework:      framework,
 		Config:         cfg,
 		Logger:         newStdLogger(logger),
@@ -349,7 +342,7 @@ func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, e
 	}
 
 	svc := &Service{
-		RootPath:          rootPath,
+		RootPath:          root,
 		Framework:         framework,
 		Config:            cfg,
 		logger:            logger,
@@ -360,7 +353,7 @@ func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, e
 		laravelRoutesURI:  "tusk://laravel/routes",
 		laravelModelsURI:  "tusk://laravel/models",
 		symfonyRoutesURI:  "tusk://symfony/routes",
-		coverage:          coverage.NewStore(rootPath, cfg.CoverageReportPath, newStdLogger(logger)),
+		coverage:          coverage.NewStore(root, cfg.CoverageReportPath, newStdLogger(logger)),
 	}
 	svc.profileSource.Store(&source)
 	svc.installRuntime(svc.buildRuntime(ws))
@@ -565,7 +558,8 @@ func (s *Service) registerTools() {
 		Name:        "php_coverage",
 		Description: "Read test coverage from the Clover report your tests last wrote; never runs tests. With `path`, returns that file's uncovered lines and its untested and partly tested methods. Without it, returns project totals and the least covered files.",
 	}, func(_ context.Context, _ *mcp.CallToolRequest, in PhpCoverageInput) (*mcp.CallToolResult, PhpCoverageOutput, error) {
-		return nil, s.phpCoverage(in.Path), nil
+		out, err := s.phpCoverage(in.Path)
+		return nil, out, err
 	})
 
 	// php_container_bindings is framework-agnostic: it surfaces resolved DI
@@ -896,11 +890,7 @@ func (s *Service) projectDiagnostics(path string) (DiagnosticsOutput, error) {
 		return DiagnosticsOutput{}, err
 	}
 	out := DiagnosticsOutput{Files: make([]FileDiagnostics, 0, len(targets))}
-	for _, relPath := range targets {
-		absPath := relPath
-		if !filepath.IsAbs(absPath) {
-			absPath = filepath.Join(s.RootPath, relPath)
-		}
+	for _, absPath := range targets {
 		if !workspace.IsPHPSource(absPath) {
 			continue
 		}
@@ -921,7 +911,10 @@ func (s *Service) projectDiagnostics(path string) (DiagnosticsOutput, error) {
 
 func (s *Service) diagnosticTargets(path string) ([]string, error) {
 	if strings.TrimSpace(path) != "" {
-		absPath := s.resolveDiagnosticPath(path)
+		absPath, err := s.workspacePath(path)
+		if err != nil {
+			return nil, err
+		}
 		if !s.isPathReadable(absPath) {
 			return nil, fmt.Errorf("path %q is outside MCP allowed roots or inside denied paths", path)
 		}
@@ -944,18 +937,18 @@ func (s *Service) diagnosticTargets(path string) ([]string, error) {
 			continue
 		}
 		seen[rel] = true
-		files = append(files, rel)
+		files = append(files, absPath)
 	}
 	sort.Strings(files)
 	return files, nil
 }
 
-func (s *Service) resolveDiagnosticPath(path string) string {
-	path = filepath.Clean(path)
-	if filepath.IsAbs(path) {
-		return path
+func (s *Service) workspacePath(path string) (string, error) {
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(s.RootPath, path)
 	}
-	return filepath.Join(s.RootPath, path)
+	resolved, _, err := workspace.ResolvePath(path)
+	return resolved, err
 }
 
 func (s *Service) findColumn(name string) FindColumnOutput {

@@ -35,7 +35,7 @@ const (
 
 func (s *Server) decodeParams[P any](msg *jsonRPCMessage) (P, bool) {
 	var params P
-	if err := json.Unmarshal(msg.Params, &params); err != nil {
+	if err := json.Unmarshal(s.clientRoot.Load().toServer(msg.Params), &params); err != nil {
 		s.rejectParams(msg, err)
 		return params, false
 	}
