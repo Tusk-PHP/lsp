@@ -67,7 +67,31 @@ func (r *BuiltinUnavailableRule) Check(file *parser.FileNode, source string, ind
 	}
 	// Code that checks for an extension or symbol first runs only where it
 	// exists, so it is fine on a profile without it.
-	return dropGuarded(findings, lines, findExtensionGuards(source))
+	return dropInstanceofTargets(dropGuarded(findings, lines, findExtensionGuards(source)), parser.Tokenize(source))
+}
+
+// dropInstanceofTargets drops findings on the class an instanceof tests: PHP
+// doesn't need that class to exist, the test is just false without it.
+func dropInstanceofTargets(findings []Finding, tokens []parser.Token) []Finding {
+	targets := make(map[[2]int]bool)
+	for i, tok := range tokens {
+		if tok.Kind != parser.TokenIdentifier || !strings.EqualFold(tok.Value, "instanceof") {
+			continue
+		}
+		if next := parser.NextSignificant(tokens, i+1); next >= 0 {
+			targets[[2]int{tokens[next].Line, tokens[next].Column}] = true
+		}
+	}
+	if len(targets) == 0 {
+		return findings
+	}
+	kept := findings[:0]
+	for _, f := range findings {
+		if !targets[[2]int{f.StartLine, f.StartCol}] {
+			kept = append(kept, f)
+		}
+	}
+	return kept
 }
 
 func (r *BuiltinUnavailableRule) checkFunctions(line string, lineNum int, file *parser.FileNode, index *symbols.Index) []Finding {
@@ -303,7 +327,7 @@ func (r *BuiltinUnavailableRule) constantMessage(name string, avail symbols.Buil
 // satisfies reports whether the rule's profile satisfies the given availability
 // constraint. Returns true if the builtin can be used under the current profile.
 func (r *BuiltinUnavailableRule) satisfies(avail symbols.BuiltinAvailability) bool {
-	if avail.Since != "" && compareBuiltinVersionsStrings(avail.Since, r.PHPVersion) > 0 {
+	if !avail.InVersion(r.PHPVersion) {
 		return r.versionChecked && avail.Extension == ""
 	}
 	if avail.Extension != "" {
@@ -350,6 +374,9 @@ func parseMajorMinor(v string) (int, int) {
 }
 
 func (r *BuiltinUnavailableRule) functionMessage(name string, avail symbols.BuiltinAvailability) string {
+	if avail.RemovedBy(r.PHPVersion) {
+		return fmt.Sprintf("Function '%s' was removed in PHP %s", name, avail.Removed)
+	}
 	if avail.Extension != "" {
 		return fmt.Sprintf("Function '%s' requires ext-%s%s", name, avail.Extension, sinceSuffix(avail))
 	}

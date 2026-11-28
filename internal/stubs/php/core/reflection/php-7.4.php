@@ -30,15 +30,9 @@ abstract class ReflectionFunctionAbstract implements \Reflector
 
     public function getDocComment(): string|false {}
 
-    public function getEndLine(): int|false {}
-
     public function getExtension(): ?\ReflectionExtension {}
 
     public function getExtensionName(): string|false {}
-
-    public function getFileName(): string|false {}
-
-    public function getName(): string {}
 
     public function getNamespaceName(): string {}
 
@@ -52,8 +46,6 @@ abstract class ReflectionFunctionAbstract implements \Reflector
     public function getReturnType(): ?\ReflectionType {}
 
     public function getShortName(): string {}
-
-    public function getStartLine(): int|false {}
 
     public function getStaticVariables(): array {}
 
@@ -106,8 +98,6 @@ final class ReflectionGenerator
     public function getFunction(): \ReflectionFunctionAbstract {}
 
     public function getThis(): ?object {}
-
-    public function getTrace(int $options = DEBUG_BACKTRACE_PROVIDE_OBJECT): array {}
 }
 
 class ReflectionMethod extends \ReflectionFunctionAbstract
@@ -179,23 +169,13 @@ class ReflectionClass implements \Reflector
 
     public function getConstant(string $name): mixed {}
 
-    public function getConstants(?int $filter = null): array {}
-
     public function getConstructor(): ?\ReflectionMethod {}
 
-    public function getDefaultProperties(): array {}
-
     public function getDocComment(): string|false {}
-
-    public function getEndLine(): int|false {}
 
     public function getExtension(): ?\ReflectionExtension {}
 
     public function getExtensionName(): string|false {}
-
-    public function getFileName(): string|false {}
-
-    public function getInterfaceNames(): array {}
 
     /** @return array<string, ReflectionClass> */
     public function getInterfaces(): array {}
@@ -226,15 +206,7 @@ class ReflectionClass implements \Reflector
 
     public function getShortName(): string {}
 
-    public function getStartLine(): int|false {}
-
-    public function getStaticProperties(): array {}
-
     public function getStaticPropertyValue(string $name, mixed $default = null): mixed {}
-
-    public function getTraitAliases(): array {}
-
-    public function getTraitNames(): array {}
 
     /** @return array<string, ReflectionClass> */
     public function getTraits(): array {}
@@ -318,8 +290,6 @@ class ReflectionProperty implements \Reflector
 
     public function getModifiers(): int {}
 
-    public function getName(): string {}
-
     public function getType(): ?\ReflectionType {}
 
     public function getValue(?object $object = null): mixed {}
@@ -395,8 +365,6 @@ class ReflectionParameter implements \Reflector
     public function getDefaultValue(): mixed {}
 
     public function getDefaultValueConstantName(): ?string {}
-
-    public function getName(): string {}
 
     public function getPosition(): int {}
 

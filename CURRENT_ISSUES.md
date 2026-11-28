@@ -170,10 +170,8 @@ _None open._
   `installedPackageWithVersion` and `installedJSONWithVersion` removed from `packages.go`;
   `InstalledPackages` repoints at the unified struct. Behaviour is identical.
 
-### L14 — Hand-authored availability entries overlap with the generated table
-- **Where:** `internal/symbols/builtins.go` (`builtinAvailabilityByName`) vs `internal/symbols/builtin_availability_generated.go` (`generatedBuiltinAvailability`).
-- **What:** `str_contains`, `str_starts_with`, `str_ends_with`, `json_validate`, `Fiber`, `WeakMap` are present in both with matching values. No correctness problem (precedence is well-defined and values agree), but the hand-authored entries become redundant once the real generator produces the comprehensive table.
-- **Fix:** After the real `phpstorm-stubs` generator run lands (license review pending), prune redundant hand-authored entries. Keep only ones that genuinely need to override the generator.
+### ~~L14~~ — Hand-authored availability entries overlap with the generated table — **RESOLVED**
+- Class and function availability come from `scripts/generate-builtins.php classes` and `functions`, which read PHP's own builds. The hand-seeded `builtin_availability_generated.go` and the phpstorm-stubs `availability` mode are gone; `builtinAvailabilityByName` keeps constants only.
 
 ### L16 — `builtin-unavailable` method signature deltas scope deferred
 - **Where:** future `internal/checks/builtin_unavailable.go`.

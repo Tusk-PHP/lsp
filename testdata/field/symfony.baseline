@@ -172,10 +172,6 @@ src/Symfony/Component/BrowserKit/Test/Constraint/BrowserCookieValueSame.php	unkn
 src/Symfony/Component/BrowserKit/Test/Constraint/BrowserHasCookie.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/BrowserKit/Test/Constraint/BrowserHistoryIsOnFirstPage.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/BrowserKit/Test/Constraint/BrowserHistoryIsOnLastPage.php	unknown-class	Unknown class 'Constraint'
-src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
-src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
-src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
-src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Couchbase\Collection'
 src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Relay\Cluster'
 src/Symfony/Component/Cache/Adapter/AbstractAdapter.php	unknown-class	Unknown class 'Relay\Relay'
@@ -201,9 +197,6 @@ src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'Redis' requires ext-redis
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis
-src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	builtin-unavailable	Class 'RedisException' requires ext-redis
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'ClusterInterface'
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'PredisCluster'
 src/Symfony/Component/Cache/Adapter/RedisTagAwareAdapter.php	unknown-class	Unknown class 'PredisCluster'
@@ -309,11 +302,8 @@ src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-membe
 src/Symfony/Component/Form/Test/Traits/ValidatorExtensionTrait.php	unknown-member	Unknown member 'method' on 'ValidatorInterface'
 src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
 src/Symfony/Component/HttpClient/HttpClientBundle.php	unknown-class	Unknown class 'Rize\UriTemplate'
-src/Symfony/Component/HttpClient/Recorder/Redactor/DefaultRedactor.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/HttpClient/Resources/config/http_client.php	unknown-class	Unknown class 'GuzzleHttp\UriTemplate\UriTemplate'
 src/Symfony/Component/HttpClient/Resources/config/http_client.php	unknown-class	Unknown class 'Rize\UriTemplate'
-src/Symfony/Component/HttpClient/Response/JsonMockResponse.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
-src/Symfony/Component/HttpFoundation/RequestMatcher/IsJsonRequestMatcher.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MemcachedSessionHandler.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
@@ -322,12 +312,6 @@ src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandl
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'BulkWrite'
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/MongoDbSessionHandler.php	unknown-class	Unknown class 'Query'
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/RedisSessionHandler.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/RedisSessionHandler.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'Redis' requires ext-redis
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
-src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 src/Symfony/Component/HttpFoundation/Session/Storage/Handler/SessionHandlerFactory.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/HttpFoundation/Test/Constraint/RequestAttributeValueSame.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/HttpFoundation/Test/Constraint/ResponseCookieValueSame.php	unknown-class	Unknown class 'Constraint'
@@ -362,7 +346,6 @@ src/Symfony/Component/JsonPath/Test/JsonPathNotContains.php	unknown-class	Unknow
 src/Symfony/Component/JsonPath/Test/JsonPathNotEquals.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/JsonPath/Test/JsonPathNotSame.php	unknown-class	Unknown class 'Constraint'
 src/Symfony/Component/JsonPath/Test/JsonPathSame.php	unknown-class	Unknown class 'Constraint'
-src/Symfony/Component/JsonStreamer/Read/Decoder.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/JsonStreamer/Write/StreamWriterGenerator.php	unused-variable	Variable $classReflection is assigned but never read
 src/Symfony/Component/KeyManagement/Bridge/DoctrineOrm/EventListener/EncryptedColumnListener.php	unknown-function	Unknown function 'readonly'
 src/Symfony/Component/KeyManagement/Bridge/Kmip/Kmip/StreamTransport.php	undefined-variable	Undefined variable $written
@@ -384,17 +367,9 @@ src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $r
 src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $result is assigned but never read
 src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $result is assigned but never read
 src/Symfony/Component/Lock/Store/PostgreSqlStore.php	unused-variable	Variable $result is assigned but never read
-src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'Redis' requires ext-redis
-src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
-src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
-src/Symfony/Component/Lock/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'RelayCluster'
 src/Symfony/Component/Lock/Store/RedisStore.php	unknown-class	Unknown class 'RelayCluster'
-src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'Memcached' requires ext-memcached
-src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'Redis' requires ext-redis
-src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
-src/Symfony/Component/Lock/Store/StoreFactory.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/Lock/Store/StoreFactory.php	unknown-class	Unknown class 'Zookeeper'
 src/Symfony/Component/Lock/Store/ZookeeperStore.php	unknown-class	Unknown class 'Zookeeper'
@@ -459,7 +434,6 @@ src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-
 src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'WriteConcern'
 src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/Connection.php	unknown-class	Unknown class 'WriteConcern'
 src/Symfony/Component/Messenger/Bridge/MongoDb/Transport/MongoDbReceiver.php	unknown-class	Unknown class 'BSONDocument'
-src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	undefined-variable	Undefined variable $auth
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
 src/Symfony/Component/Messenger/Bridge/Redis/Transport/Connection.php	unknown-class	Unknown class 'Relay\Exception'
@@ -521,24 +495,15 @@ src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown 
 src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'Factory'
 src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'PluginInterface'
 src/Symfony/Component/Runtime/Internal/ComposerPlugin.php	unknown-class	Unknown class 'ScriptEvents'
-src/Symfony/Component/Runtime/Runner/FrankenPhpWorkerRunner.php	unused-variable	Variable $sfRequest is assigned but never read
-src/Symfony/Component/Runtime/Runner/FrankenPhpWorkerRunner.php	unused-variable	Variable $sfResponse is assigned but never read
 src/Symfony/Component/Security/Core/Role/SwitchUserRole.php	unused-private-property	Private property 'SwitchUserRole::$deprecationTriggered' is never used
 src/Symfony/Component/Security/Core/Role/SwitchUserRole.php	unused-private-property	Private property 'SwitchUserRole::$source' is never used
 src/Symfony/Component/Security/Core/Test/AccessDecisionStrategyTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Security/Core/Test/AccessDecisionStrategyTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Security/Http/AccessToken/OAuth2/Oauth2TokenHandler.php	unknown-class	Unknown class 'Symfony\Component\String\u'
 src/Symfony/Component/Security/Http/Firewall/ContextListener.php	unknown-class	Unknown class 'LazyLoadingInterface'
-src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'Redis' requires ext-redis
-src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
-src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
-src/Symfony/Component/Semaphore/Store/RedisStore.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'RelayCluster'
 src/Symfony/Component/Semaphore/Store/RedisStore.php	unknown-class	Unknown class 'RelayCluster'
-src/Symfony/Component/Semaphore/Store/StoreFactory.php	builtin-unavailable	Class 'Redis' requires ext-redis
-src/Symfony/Component/Semaphore/Store/StoreFactory.php	builtin-unavailable	Class 'RedisArray' requires ext-redis
-src/Symfony/Component/Semaphore/Store/StoreFactory.php	builtin-unavailable	Class 'RedisCluster' requires ext-redis
 src/Symfony/Component/Semaphore/Store/StoreFactory.php	unknown-class	Unknown class 'Relay'
 src/Symfony/Component/Semaphore/Store/StoreFactory.php	unknown-class	Unknown class 'RelayCluster'
 src/Symfony/Component/Serializer/Normalizer/ArrayDenormalizer.php	unknown-class	Unknown class 'LegacyType'
@@ -558,7 +523,6 @@ src/Symfony/Component/Translation/Test/ProviderTestCase.php	unknown-class	Unknow
 src/Symfony/Component/Translation/Test/ProviderTestCase.php	unknown-class	Unknown class 'TestCase'
 src/Symfony/Component/Tui/Input/KeyParser.php	unused-variable	Variable $isDigit is assigned but never read
 src/Symfony/Component/TypeInfo/TypeContext/TypeContextFactory.php	unused-variable	Variable $typeContext is assigned but never read
-src/Symfony/Component/Validator/Constraints/JsonValidator.php	builtin-unavailable	Function 'json_validate' requires ext-json (PHP >= 8.3)
 src/Symfony/Component/Validator/Constraints/NoSuspiciousCharactersValidator.php	unused-private-constant	Private constant 'NoSuspiciousCharactersValidator::CHECK_SINGLE_SCRIPT' is never used
 src/Symfony/Component/Validator/Test/CompoundConstraintTestCase.php	unknown-class	Unknown class 'ExpectationFailedException'
 src/Symfony/Component/Validator/Test/CompoundConstraintTestCase.php	unknown-class	Unknown class 'TestCase'
@@ -606,7 +570,6 @@ src/Symfony/Component/VarDumper/Caster/SymfonyCaster.php	unknown-member	Unknown 
 src/Symfony/Component/VarDumper/Test/VarDumperTestTrait.php	unknown-class	Unknown attribute 'After'
 src/Symfony/Component/Webhook/Test/AbstractRequestParserTestCase.php	unknown-class	Unknown attribute 'DataProvider'
 src/Symfony/Component/Webhook/Test/AbstractRequestParserTestCase.php	unknown-class	Unknown class 'TestCase'
-src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	undefined-variable	Undefined variable $steps
 src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'Group'
 src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'Group'
 src/Symfony/Contracts/HttpClient/Test/HttpClientTestCase.php	unknown-class	Unknown attribute 'Group'

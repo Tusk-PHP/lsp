@@ -2,32 +2,67 @@ package symbols
 
 import "testing"
 
-// TestLookupAvailabilityHandPicked verifies that a symbol present in the
-// hand-authored builtinAvailabilityByName map is returned correctly.
-func TestLookupAvailabilityHandPicked(t *testing.T) {
-	got, ok := LookupAvailability("str_contains")
-	if !ok {
-		t.Fatal("LookupAvailability(\"str_contains\") returned ok=false, want true")
+func TestFunctionAvailabilityComesFromPHPsBuilds(t *testing.T) {
+	cases := []struct {
+		name string
+		want BuiltinAvailability
+	}{
+		{"str_contains", BuiltinAvailability{Since: "8.0"}},
+		{"array_is_list", BuiltinAvailability{Since: "8.1"}},
+		{"mb_str_pad", BuiltinAvailability{Since: "8.3"}},
+		{"json_validate", BuiltinAvailability{Since: "8.3"}},
+		{"apcu_fetch", BuiltinAvailability{Extension: "apcu"}},
+		{"brotli_compress", BuiltinAvailability{Extension: "brotli"}},
 	}
-	want := BuiltinAvailability{Since: "8.0"}
-	if got != want {
-		t.Errorf("LookupAvailability(\"str_contains\") = %+v, want %+v", got, want)
+	for _, c := range cases {
+		if got, ok := LookupAvailability(c.name); !ok || got != c.want {
+			t.Errorf("%s: got %+v %v, want %+v", c.name, got, ok, c.want)
+		}
+	}
+	for _, name := range []string{"strlen", "exit", "die", "opcache_get_status", "intl_get_error_code"} {
+		if got, ok := LookupAvailability(name); ok {
+			t.Errorf("%s needs no version or extension: %+v", name, got)
+		}
 	}
 }
 
-// TestLookupAvailabilityFromGenerated verifies that a symbol present only in
-// the generated table (not in the hand-authored map) is resolved.
-func TestLookupAvailabilityFromGenerated(t *testing.T) {
-	// array_is_list is in generatedBuiltinAvailability but not in
-	// builtinAvailabilityByName.
-	got, ok := LookupAvailability("array_is_list")
-	if !ok {
-		t.Fatal("LookupAvailability(\"array_is_list\") returned ok=false, want true")
+func TestRemovedFunctionsComeFromPHPsDefaultBuilds(t *testing.T) {
+	for _, name := range []string{"each", "create_function", "money_format", "get_magic_quotes_gpc"} {
+		got, ok := LookupAvailability(name)
+		if !ok || got != (BuiltinAvailability{Removed: "8.0"}) {
+			t.Errorf("%s: got %+v %v, want removed in 8.0", name, got, ok)
+		}
+		if !got.InVersion("7.4") || got.InVersion("8.0") || got.InVersion("8.4") {
+			t.Errorf("%s is there on 7.4 only", name)
+		}
 	}
-	want := BuiltinAvailability{Since: "8.1"}
-	if got != want {
-		t.Errorf("LookupAvailability(\"array_is_list\") = %+v, want %+v", got, want)
+	for _, name := range []string{"chroot", "ftp_connect", "mb_strlen"} {
+		if got, ok := LookupAvailability(name); ok {
+			t.Errorf("%s is only missing from some builds, not removed: %+v", name, got)
+		}
 	}
+	since := BuiltinAvailability{Since: "8.1"}
+	if since.InVersion("8.0") || !since.InVersion("8.1") || since.RemovedBy("8.6") {
+		t.Errorf("%+v is there from 8.1 on", since)
+	}
+}
+
+func TestPECLFunctionsNeedTheirExtension(t *testing.T) {
+	if newIndexForProfile("8.4").Lookup("brotli_compress") != nil {
+		t.Error("brotli_compress needs ext-brotli")
+	}
+	if newIndexForProfile("8.4", "brotli").Lookup("brotli_compress") == nil {
+		t.Error("brotli_compress is there with ext-brotli")
+	}
+	if newIndexForProfile("8.3").Lookup("array_find") != nil || newIndexForProfile("8.4").Lookup("array_find") == nil {
+		t.Error("array_find comes with PHP 8.4")
+	}
+}
+
+func newIndexForProfile(version string, extensions ...string) *Index {
+	idx := NewIndex()
+	idx.RegisterBuiltinsForProfile(BuiltinProfile{PHPVersion: version, Extensions: extensions})
+	return idx
 }
 
 // TestLookupAvailabilityUnknown verifies that a name not present in either map
@@ -40,35 +75,6 @@ func TestLookupAvailabilityUnknown(t *testing.T) {
 	zero := BuiltinAvailability{}
 	if got != zero {
 		t.Errorf("LookupAvailability(unknown) = %+v, want zero value", got)
-	}
-}
-
-// TestLookupAvailabilityHandOverridesGenerated verifies the precedence contract:
-// hand-authored entries in builtinAvailabilityByName shadow any conflicting
-// entry in generatedBuiltinAvailability. "str_contains" appears in both maps
-// with identical values ({Since: "8.0"}), which is intentional — the test
-// documents that the hand-authored map is consulted first (ordering in
-// LookupAvailability), and equal values here are acceptable.
-func TestLookupAvailabilityHandOverridesGenerated(t *testing.T) {
-	// Confirm the hand-authored entry exists.
-	handAuthored, inHand := builtinAvailabilityByName["str_contains"]
-	if !inHand {
-		t.Fatal("expected \"str_contains\" in builtinAvailabilityByName")
-	}
-	// Confirm the generated entry also exists.
-	generated, inGenerated := generatedBuiltinAvailability["str_contains"]
-	if !inGenerated {
-		t.Fatal("expected \"str_contains\" in generatedBuiltinAvailability")
-	}
-
-	got, ok := LookupAvailability("str_contains")
-	if !ok {
-		t.Fatal("LookupAvailability(\"str_contains\") returned ok=false, want true")
-	}
-	// The hand-authored value must win.
-	if got != handAuthored {
-		t.Errorf("LookupAvailability(\"str_contains\") = %+v, want hand-authored %+v (generated was %+v)",
-			got, handAuthored, generated)
 	}
 }
 

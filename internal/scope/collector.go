@@ -28,7 +28,8 @@ const (
 	BindingImport       BindingKind = "import"
 	BindingClosureUse   BindingKind = "closure-use"
 	// BindingImplicit is a variable first written by something other than an
-	// assignment: `$a[] = 1`, or an argument the callee may write to.
+	// assignment: `$a[] = 1`, an argument the callee may write to, or a
+	// closure's `use (&$a)`, which creates it.
 	BindingImplicit BindingKind = "implicit"
 )
 
@@ -548,6 +549,9 @@ func parseFunctionLike(tokens []parser.Token, start int, parent *Scope, doc *Doc
 					continue
 				}
 				origin := resolveVariable([]scopeFrame{{scope: parent}}, tokens[i].Value)
+				if prev := parser.PrevSignificant(tokens, i-1); origin == nil && prev > j && tokens[prev].Kind == parser.TokenAmpersand {
+					origin = doc.addBinding(parent, tokens[i].Value, BindingImplicit, tokenRange(tokens[i]), nil)
+				}
 				binding := doc.addBinding(scope, tokens[i].Value, BindingClosureUse, tokenRange(tokens[i]), origin)
 				decls[i] = binding
 			}

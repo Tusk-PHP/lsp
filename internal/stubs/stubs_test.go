@@ -76,8 +76,8 @@ func TestBuiltinPHPForProfileSelectsExtensionLayers(t *testing.T) {
 	}
 
 	json74 := mustEntries(t, Profile{PHPVersion: "7.4", Extensions: []string{"json"}})
-	if !containsSource(json74, "json_decode") {
-		t.Fatal("expected json_decode with ext-json PHP 7.4 profile")
+	if !containsSource(json74, "json_last_error") {
+		t.Fatal("expected json_last_error with ext-json PHP 7.4 profile")
 	}
 	if containsSource(json74, "json_validate") {
 		t.Fatal("did not expect json_validate before PHP 8.3")

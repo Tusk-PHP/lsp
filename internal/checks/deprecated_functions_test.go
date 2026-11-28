@@ -110,11 +110,22 @@ func TestDeprecatedFunctionRuleFollowsPHPVersion(t *testing.T) {
 	if got := names("7.4"); len(got) != 1 || got[0] != "each" {
 		t.Errorf("PHP 7.4: want only each(), got %v", got)
 	}
-	if got := names("8.2"); len(got) != 2 {
-		t.Errorf("PHP 8.2: want utf8_encode() and each(), got %v", got)
+	if got := names("8.2"); len(got) != 1 || got[0] != "utf8_encode" {
+		t.Errorf("PHP 8.2: want only utf8_encode(), each() is gone, got %v", got)
 	}
 	if got := names(""); len(got) != 2 {
 		t.Errorf("unknown version: want every deprecation, got %v", got)
+	}
+}
+
+func TestDeprecatedFunctionRuleLeavesRemovedFunctionsToBuiltinUnavailable(t *testing.T) {
+	src := "<?php\n$a = each($arr);\n$b = create_function('$a', 'return $a;');\n"
+	file := parser.ParseFile(src)
+	if got := (&DeprecatedFunctionRule{PHPVersion: "8.0"}).Check(file, src, nil); len(got) != 0 {
+		t.Errorf("PHP 8.0 removed them: got %+v", got)
+	}
+	if got := (&DeprecatedFunctionRule{PHPVersion: "7.4"}).Check(file, src, nil); len(got) != 2 {
+		t.Errorf("PHP 7.4 deprecates both: got %+v", got)
 	}
 }
 

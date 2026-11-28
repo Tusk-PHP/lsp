@@ -143,8 +143,6 @@ class ArrayIterator implements \SeekableIterator, \ArrayAccess, \Serializable, \
     /** @return array<TKey, TValue> */
     public function getArrayCopy(): array {}
 
-    public function count(): int {}
-
     public function getFlags(): int {}
 
     public function setFlags(int $flags): void {}
@@ -225,8 +223,6 @@ class ArrayObject implements \IteratorAggregate, \ArrayAccess, \Serializable, \C
     /** @return array<TKey, TValue> */
     public function getArrayCopy(): array {}
 
-    public function count(): int {}
-
     public function getFlags(): int {}
 
     public function setFlags(int $flags): void {}
@@ -236,8 +232,6 @@ class ArrayObject implements \IteratorAggregate, \ArrayAccess, \Serializable, \C
     public function ksort(int $flags = SORT_REGULAR): bool {}
 
     public function uasort(callable $callback): bool {}
-
-    public function uksort(callable $callback): bool {}
 
     public function natsort(): bool {}
 
@@ -298,8 +292,6 @@ class SplObjectStorage implements \Countable, \Iterator, \Serializable, \ArrayAc
 
     /** @param TData $info */
     public function setInfo(mixed $info): void {}
-
-    public function count(int $mode = COUNT_NORMAL): int {}
 
     public function rewind(): void {}
 

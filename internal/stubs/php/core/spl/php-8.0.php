@@ -28,8 +28,6 @@ final class WeakMap implements \ArrayAccess, \Countable, \IteratorAggregate, \Tr
     /** @param TKey $object */
     public function offsetUnset($object): void {}
 
-    public function count(): int {}
-
     /** @return \Iterator<TKey, TValue> */
     public function getIterator(): \Iterator {}
 }

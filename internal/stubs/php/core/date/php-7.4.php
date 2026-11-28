@@ -63,8 +63,6 @@ class DateTime implements \DateTimeInterface
 
     public function format(string $format): string {}
 
-    public static function getLastErrors(): array|false {}
-
     public function getOffset(): int {}
 
     public function getTimestamp(): int {}
@@ -103,8 +101,6 @@ class DateTimeImmutable implements \DateTimeInterface
     public function diff(\DateTimeInterface $targetObject, bool $absolute = false): \DateInterval {}
 
     public function format(string $format): string {}
-
-    public static function getLastErrors(): array|false {}
 
     public function getOffset(): int {}
 
@@ -163,17 +159,11 @@ class DateTimeZone
 
     public function __wakeup(): void {}
 
-    public function getLocation(): array|false {}
-
     public function getName(): string {}
 
     public function getOffset(\DateTimeInterface $datetime): int {}
 
     public function getTransitions(int $timestampBegin = PHP_INT_MIN, int $timestampEnd = 2147483647): array|false {}
-
-    public static function listAbbreviations(): array {}
-
-    public static function listIdentifiers(int $timezoneGroup = DateTimeZone::ALL, ?string $countryCode = null): array {}
 }
 
 class DateInterval
