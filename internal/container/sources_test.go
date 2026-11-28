@@ -362,3 +362,12 @@ func TestAnalyzeKeepsAnUpdateThatFinishedWhileItRead(t *testing.T) {
 		t.Errorf("bindings %v, want the update's", ca.GetBindings())
 	}
 }
+
+func TestAliasCyclesResolveTheSameEveryTime(t *testing.T) {
+	set := applied(parseSymfonyServicesYAML("/app/config/services.yaml", "services:\n    app.a:\n        alias: app.b\n    app.b:\n        alias: app.a\n    app.c:\n        alias: app.missing\n"))
+	for id, concrete := range map[string]string{"app.a": "app.a", "app.b": "app.b", "app.c": "app.missing"} {
+		if b := set.bindings[id]; b == nil || b.Concrete != concrete {
+			t.Errorf("%s = %+v, want concrete %s", id, b, concrete)
+		}
+	}
+}

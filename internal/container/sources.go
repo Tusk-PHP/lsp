@@ -257,14 +257,16 @@ func (set *bindingSet) resolve(name string, seen map[string]bool) *ServiceBindin
 }
 
 func (set *bindingSet) resolveAliases() {
+	resolved := make(map[*ServiceBinding]ServiceBinding)
 	for serviceID, binding := range set.bindings {
 		if binding.Alias == "" || binding.Concrete != binding.Alias {
 			continue
 		}
-		if resolved := set.resolve(serviceID, map[string]bool{}); resolved != nil {
-			binding.Concrete = resolved.Concrete
-			binding.Singleton = resolved.Singleton
-		}
+		resolved[binding] = *set.resolve(serviceID, map[string]bool{})
+	}
+	for binding, target := range resolved {
+		binding.Concrete = target.Concrete
+		binding.Singleton = target.Singleton
 	}
 }
 
