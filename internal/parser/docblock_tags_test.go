@@ -160,6 +160,7 @@ func TestForEachDocTagTypeForms(t *testing.T) {
 		{"phpstan-import-type", "Row of Post", nil},
 		{"phpstan-assert-if-false", "= Post $p", []string{"Post"}},
 		{"group", "Post", nil},
+		{"method", "Post find(}) Finds", []string{"Post"}},
 	}
 	for _, tt := range tests {
 		var got []string
