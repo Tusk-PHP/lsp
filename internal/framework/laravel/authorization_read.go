@@ -106,16 +106,13 @@ func (r authReader) isGate(call *ast.StaticCall) bool {
 }
 
 func (r authReader) instanceDefine(args *ast.ArgList, out *authFile) {
-	if args == nil {
-		return
-	}
 	if name, lit, ok := r.argString(args.Args, 0); ok {
 		out.abilities = append(out.abilities, Ability{Name: name, URI: r.uri, Range: r.literalRange(lit)})
 	}
 }
 
 func (r authReader) routerCall(method string, args *ast.ArgList, out *authFile) {
-	if args == nil || !isOneOf(method, middlewareRegistrations) {
+	if !isOneOf(method, middlewareRegistrations) {
 		return
 	}
 	name, lit, ok := r.argString(args.Args, 0)
@@ -130,9 +127,6 @@ func (r authReader) routerCall(method string, args *ast.ArgList, out *authFile) 
 }
 
 func (r authReader) gateCall(call *ast.StaticCall, out *authFile) {
-	if call.Args == nil {
-		return
-	}
 	args := call.Args.Args
 	switch strings.ToLower(ast.MethodName(r.src, call)) {
 	case "define":
@@ -162,12 +156,9 @@ func (r authReader) gateCall(call *ast.StaticCall, out *authFile) {
 }
 
 func (r authReader) middlewareConfiguration(args *ast.ArgList, out *authFile) {
-	if args == nil {
-		return
-	}
 	ast.Walk(args, func(n ast.Node) bool {
 		call, ok := n.(*ast.MethodCall)
-		if !ok || call.Args == nil {
+		if !ok {
 			return true
 		}
 		switch strings.ToLower(ast.MethodName(r.src, call)) {
