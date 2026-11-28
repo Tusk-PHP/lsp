@@ -222,11 +222,13 @@ func (c *useCollector) collectStaticAccess(code codeTokens, name int) {
 }
 
 // ownClassName reports whether code.tokens[i] names the class itself: self,
-// static or its own name, qualified or not.
+// static, $this or its own name, qualified or not.
 func (c *useCollector) ownClassName(code codeTokens, i int) bool {
 	switch code.kind(i) {
 	case token.Static:
 		return true
+	case token.Variable:
+		return code.isThis(i)
 	case token.Identifier, token.NameQualified, token.NameFullyQualified:
 		text := code.text(i)
 		name := text[strings.LastIndexByte(text, '\\')+1:]
