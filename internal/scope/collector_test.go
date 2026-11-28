@@ -550,3 +550,28 @@ func TestCollectReadsVariablesInsideInterpolatedStrings(t *testing.T) {
 		}
 	}
 }
+
+func TestStatementEndingAtACloseTagStopsBeforeIt(t *testing.T) {
+	for name, tc := range map[string]struct {
+		source string
+		end    textpos.Position
+		direct bool
+	}{
+		"a semicolon":         {"<?php $title = 'Home'; ?>", textpos.Position{Line: 0, Character: 22}, true},
+		"a close tag":         {"<?php $title = 'Home' ?>", textpos.Position{Line: 0, Character: 21}, true},
+		"an echo tag":         {"<?= $title = 'Home' ?>", textpos.Position{Line: 0, Character: 19}, false},
+		"an echo tag closing": {"<?= $title = 'Home'; ?>", textpos.Position{Line: 0, Character: 20}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			at := textpos.Position{Line: 0, Character: strings.Index(tc.source, "$title")}
+			b := Collect(tc.source).BindingAt(at)
+			if b == nil || len(b.Assignments) != 1 {
+				t.Fatalf("$title = %+v, want one assignment", b)
+			}
+			a := b.Assignments[0]
+			if a.Statement.End != tc.end || a.DirectStatement != tc.direct {
+				t.Errorf("statement ends at %+v (direct %v), want %+v (direct %v)", a.Statement.End, a.DirectStatement, tc.end, tc.direct)
+			}
+		})
+	}
+}

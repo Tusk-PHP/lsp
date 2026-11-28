@@ -1305,13 +1305,22 @@ func buildAssignment(tokens []parser.Token, variableIdx, equalsIdx, relativeBrac
 		return nil
 	}
 
+	stmtLast := stmtEnd
+	if tokens[stmtEnd].Value != ";" {
+		stmtLast = exprEnd
+	}
 	return &Assignment{
 		Variable:           tokenRange(tokens[variableIdx]),
 		Expression:         textpos.Range{Start: tokenRange(tokens[exprStart]).Start, End: tokenRange(tokens[exprEnd]).End},
-		Statement:          textpos.Range{Start: tokenRange(tokens[stmtStart]).Start, End: tokenRange(tokens[stmtEnd]).End},
+		Statement:          textpos.Range{Start: tokenRange(tokens[stmtStart]).Start, End: tokenRange(tokens[stmtLast]).End},
 		RelativeBraceDepth: relativeBraceDepth,
-		DirectStatement:    stmtStart == variableIdx && tokens[stmtEnd].Kind == parser.TokenSemicolon,
+		DirectStatement:    stmtStart == variableIdx && tokens[stmtEnd].Kind == parser.TokenSemicolon && !followsEchoTag(tokens, stmtStart),
 	}
+}
+
+func followsEchoTag(tokens []parser.Token, stmtStart int) bool {
+	prev := parser.PrevSignificant(tokens, stmtStart-1)
+	return prev >= 0 && tokens[prev].Kind == parser.TokenPHP && tokens[prev].Value == "<?="
 }
 
 func findStatementEnd(tokens []parser.Token, start int) int {

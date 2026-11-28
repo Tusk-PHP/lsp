@@ -56,7 +56,7 @@ func newInlineVariablePlan(source string, result *parser.ParseResult, doc *scope
 	if binding == nil || binding.Kind != scope.BindingVariable || binding.Scope == nil {
 		return inlineVariablePlan{}, false
 	}
-	if binding.Scope.Kind == scope.ScopeFile {
+	if binding.Scope.Kind == scope.ScopeFile || scopeAccessesVariablesByName(result.Tokens, doc, binding.Scope) {
 		return inlineVariablePlan{}, false
 	}
 	if len(binding.Assignments) != 1 {
@@ -118,6 +118,101 @@ func newInlineVariablePlan(source string, result *parser.ParseResult, doc *scope
 		deleteRange: expandInlineDeleteRange(source, assignment.Statement),
 		useRanges:   append([]protocol.Range(nil), binding.References...),
 	}, true
+}
+
+var nameScopeFunctions = map[string]bool{"compact": true, "extract": true, "get_defined_vars": true, "eval": true}
+
+var includeConstructs = map[string]bool{"include": true, "include_once": true, "require": true, "require_once": true}
+
+func scopeAccessesVariablesByName(tokens []parser.Token, doc *scope.Document, owner *scope.Scope) bool {
+	for i, tok := range tokens {
+		if accessesVariablesByName(tokens, i) && variableScopeAt(doc, tokenRange(tok).Start) == owner {
+			return true
+		}
+	}
+	return false
+}
+
+func variableScopeAt(doc *scope.Document, pos protocol.Position) *scope.Scope {
+	s := doc.ScopeAt(pos)
+	for s != nil && s.ExprBody {
+		s = s.Parent
+	}
+	return s
+}
+
+func accessesVariablesByName(tokens []parser.Token, i int) bool {
+	tok := tokens[i]
+	prev := parser.PrevSignificant(tokens, i-1)
+	switch tok.Kind {
+	case parser.TokenUnknown:
+		return tok.Value == "$" && (prev < 0 || tokens[prev].Kind != parser.TokenDoubleColon)
+	case parser.TokenIdentifier:
+		name := strings.ToLower(tok.Value)
+		if includeConstructs[name] {
+			return isIncludeConstruct(tokens, prev, i)
+		}
+		if !nameScopeFunctions[name] && name != "parse_str" {
+			return false
+		}
+		open := parser.NextSignificant(tokens, i+1)
+		if open < 0 || tokens[open].Kind != parser.TokenOpenParen {
+			return false
+		}
+		if prev >= 0 {
+			switch tokens[prev].Kind {
+			case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenFunction, parser.TokenNew:
+				return false
+			}
+		}
+		return name != "parse_str" || callArgumentCount(tokens, open) < 2
+	}
+	return false
+}
+
+func isIncludeConstruct(tokens []parser.Token, prev, i int) bool {
+	if prev >= 0 {
+		switch tokens[prev].Kind {
+		case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenConst:
+			return false
+		}
+	}
+	next := parser.NextSignificant(tokens, i+1)
+	return next < 0 || tokens[next].Kind != parser.TokenColon
+}
+
+func callArgumentCount(tokens []parser.Token, open int) int {
+	end := parser.MatchingClose(tokens, open)
+	if end < 0 {
+		return 0
+	}
+	count, depth, argumentStart := 0, 0, true
+	for i := open + 1; i < end; i++ {
+		tok := tokens[i]
+		if tok.Kind.IsComment() {
+			continue
+		}
+		switch tok.Kind {
+		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
+			depth++
+		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
+			depth--
+		case parser.TokenComma:
+			if depth == 0 {
+				argumentStart = true
+				continue
+			}
+		}
+		if !argumentStart {
+			continue
+		}
+		if tok.Kind == parser.TokenUnknown && tok.Value == "." {
+			return 0
+		}
+		argumentStart = false
+		count++
+	}
+	return count
 }
 
 func inlineExpressionIsSafe(tokens []parser.Token, first, last int) bool {
