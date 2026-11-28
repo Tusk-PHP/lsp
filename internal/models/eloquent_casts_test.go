@@ -95,6 +95,16 @@ class Location implements Castable
 {
     public static function castUsing(array $arguments): AddressCast {}
 }
+
+class EitherCast implements CastsAttributes
+{
+    public function get($model, string $key, mixed $value, array $attributes): \App\Money|\App\Address {}
+}
+
+class BothCast implements CastsAttributes
+{
+    public function get($model, string $key, mixed $value, array $attributes): \App\Money&\App\Address {}
+}
 `,
 	`<?php
 namespace App;
@@ -315,5 +325,73 @@ func TestEloquentCastPointsAtItsEntry(t *testing.T) {
 	}
 	if sym.DocComment != "Cast: 'datetime'" {
 		t.Errorf("doc: got %q", sym.DocComment)
+	}
+}
+
+func TestEloquentCastsItCantReadLeaveTheColumn(t *testing.T) {
+	entries := []string{
+		"0 => 'int'",
+		"'' => 'int'",
+		"'missing_class' => 'App\\Missing'",
+		"'dynamic' => $caster::using(OptionCollection::class)",
+		"'joined' => 'App' . 'Casts'",
+		"'suffixed' => MoneyCast::class . $suffix",
+		"'plain_suffix' => MoneyCast::class . 'EUR'",
+		"'created' => new MoneyCast()",
+	}
+	columns := map[string]*MigrationColumn{}
+	for _, name := range []string{"missing_class", "dynamic", "joined", "suffixed", "plain_suffix", "created"} {
+		columns[name] = &MigrationColumn{Name: name, Type: "string"}
+	}
+	for form, source := range castForms("        " + strings.Join(entries, ",\n        ") + ",") {
+		idx := analyzeOrder(t, source, nil, map[string]map[string]*MigrationColumn{"orders": columns})
+		for name := range columns {
+			if got := propertyType(t, idx, name); got != "string" {
+				t.Errorf("%s: $%s: got %q, want the column's string", form, name, got)
+			}
+		}
+		if idx.Lookup(`App\Models\Order::$`) != nil || idx.Lookup(`App\Models\Order::$0`) != nil {
+			t.Errorf("%s: a cast without a name made a property", form)
+		}
+	}
+}
+
+func TestEloquentCastsReadOnlyTheArrayCastsReturns(t *testing.T) {
+	source := castModel(`    protected function casts(): array
+    {
+        $later = function () {
+            return ['inner' => 'int'];
+        };
+        return ['outer' => 'bool'];
+    }`)
+	idx := analyzeOrder(t, source, nil, nil)
+	if got := propertyType(t, idx, "outer"); got != "bool" {
+		t.Errorf("$outer: got %q, want bool", got)
+	}
+	if idx.Lookup(`App\Models\Order::$inner`) != nil {
+		t.Error("an array a closure in casts() returns was read as casts")
+	}
+}
+
+func TestEloquentNullableColumnsMakeTheirCastsNullable(t *testing.T) {
+	source := castModel(`    protected $casts = [
+        'total' => MoneyCast::class,
+        'either' => \App\Casts\EitherCast::class,
+        'both' => \App\Casts\BothCast::class,
+    ];`)
+	migrations := map[string]map[string]*MigrationColumn{"orders": {
+		"total":  {Name: "total", Type: "string", Nullable: true},
+		"either": {Name: "either", Type: "string", Nullable: true},
+		"both":   {Name: "both", Type: "string", Nullable: true},
+	}}
+	idx := analyzeOrder(t, source, nil, migrations)
+	for name, want := range map[string]string{
+		"total":  `?App\Money`,
+		"either": `App\Money|App\Address|null`,
+		"both":   `(App\Money&App\Address)|null`,
+	} {
+		if got := propertyType(t, idx, name); got != want {
+			t.Errorf("$%s: got %q, want %q", name, got, want)
+		}
 	}
 }

@@ -146,3 +146,16 @@ func TestMapNames(t *testing.T) {
 		t.Errorf("MapNames modified its receiver: %q", expr.Name)
 	}
 }
+
+func TestMapNamesReachesShapesCallablesAndConditionals(t *testing.T) {
+	mark := func(name string) string { return "[" + name + "]" }
+	for _, tc := range []struct{ written, want string }{
+		{`array{total: Money, items?: list<Item>}`, `array{total: [Money], items?: [list]<[Item]>}`},
+		{`Closure(Money): Item`, `Closure([Money]): [Item]`},
+		{`($value is Money ? Item : Other)`, `($value is [Money] ? [Item] : [Other])`},
+	} {
+		if got := ParseTypeExpr(tc.written).MapNames(mark).String(); got != tc.want {
+			t.Errorf("MapNames(%s) = %q, want %q", tc.written, got, tc.want)
+		}
+	}
+}

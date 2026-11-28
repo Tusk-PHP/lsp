@@ -48,6 +48,18 @@ class Order extends Model
 
     /** @return string */
     protected function label(): Attribute { return Attribute::make(get: fn () => ''); }
+
+    abstract protected function nickname(): Attribute;
+
+    protected function rating(): Attribute
+    {
+        $rating = Attribute::make(get: fn (): float => 1.0);
+        return $rating;
+    }
+
+    protected function helper(): Attribute { return Helper::make(fn (): int => 1); }
+
+    protected function flag(): Attribute { return Attribute::make(set: fn ($value): string => $value, get: fn (): bool => true); }
 }
 `
 	idx := symbols.NewIndex()
@@ -66,6 +78,10 @@ class Order extends Model
 		"secret":    "mixed",
 		"plain":     "mixed",
 		"label":     "string",
+		"nickname":  "mixed",
+		"rating":    "float",
+		"helper":    "mixed",
+		"flag":      "bool",
 	}
 	for name, typ := range want {
 		sym := idx.Lookup(`App\Models\Order::$` + name)
