@@ -42,3 +42,32 @@ class Hidden extends Room { private function secret() {} }
 		t.Errorf("no member, no family: %v", got)
 	}
 }
+
+func TestMemberFamilyWalksADiamondAndACycleOnce(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///diamond.php", `<?php
+namespace App;
+interface Base { public function run(): void; }
+interface Left extends Base {}
+interface Right extends Base {}
+class Job implements Left, Right { public function run(): void {} }
+class Loop extends Knot { public function run(): void {} }
+class Knot extends Loop { public function run(): void {} }
+`)
+	var got []string
+	for _, s := range idx.MemberFamily(idx.Lookup(`App\Job::run`)) {
+		got = append(got, s.FQN)
+	}
+	slices.Sort(got)
+	if want := []string{`App\Base::run`, `App\Job::run`}; !slices.Equal(got, want) {
+		t.Errorf("family across a diamond = %v, want %v, each once", got, want)
+	}
+	got = got[:0]
+	for _, s := range idx.MemberFamily(idx.Lookup(`App\Loop::run`)) {
+		got = append(got, s.FQN)
+	}
+	slices.Sort(got)
+	if want := []string{`App\Knot::run`, `App\Loop::run`}; !slices.Equal(got, want) {
+		t.Errorf("family across a cycle = %v, want %v", got, want)
+	}
+}
