@@ -149,3 +149,62 @@ func TestAStubThatDeclaresNoMembersLeavesTheClassOpen(t *testing.T) {
 		t.Error("a stub that names a parent declares the class's shape")
 	}
 }
+
+func TestAMemberAnotherExtensionAddsIsNotDatedByTheBuildsWithoutIt(t *testing.T) {
+	idx := newIndexForPHP("7.4")
+	for _, fqn := range []string{"PDO::MYSQL_ATTR_INIT_COMMAND", "PDO::MYSQL_ATTR_SSL_CA", "PDO::PGSQL_ATTR_DISABLE_PREPARES", "PDO::ODBC_ATTR_ASSUME_UTF8"} {
+		if idx.Lookup(fqn) == nil {
+			t.Errorf("%s, which a PDO driver adds, is known on 7.4", fqn)
+		}
+	}
+}
+
+func TestABuiltinClassBringsItsMembersFromTheVersionThatAddedIt(t *testing.T) {
+	cases := []struct{ class, member, since string }{
+		{"Dom\\HTMLDocument", "createFromString", "8.4"},
+		{"Pdo\\Mysql", "getWarningCount", "8.4"},
+		{"BcMath\\Number", "add", "8.4"},
+		{"Random\\Randomizer", "getInt", "8.2"},
+	}
+	old := newIndexForPHP("7.4")
+	for _, c := range cases {
+		if old.Lookup(c.class+"::"+c.member) != nil {
+			t.Errorf("%s::%s is absent on 7.4", c.class, c.member)
+		}
+		if sym := old.Lookup(c.class); sym != nil && len(sym.Children) > 0 {
+			t.Errorf("%s has no members on 7.4: %d", c.class, len(sym.Children))
+		}
+		if newIndexForPHP(c.since).Lookup(c.class+"::"+c.member) == nil {
+			t.Errorf("%s::%s is known on %s", c.class, c.member, c.since)
+		}
+	}
+}
+
+func TestABuiltinClassImplementsTheInterfacesOfTheProjectsVersion(t *testing.T) {
+	old := newIndexForPHP("7.4")
+	if !old.IsSubtypeOf("SplFixedArray", "Iterator") || old.IsSubtypeOf("SplFixedArray", "IteratorAggregate") {
+		t.Errorf("on 7.4 SplFixedArray implements Iterator, not IteratorAggregate: %v", old.Lookup("SplFixedArray").Implements)
+	}
+	if old.IsSubtypeOf("ArithmeticError", "Stringable") || !old.IsSubtypeOf("ArithmeticError", "Throwable") {
+		t.Errorf("on 7.4 ArithmeticError is Throwable, not Stringable: %v", old.Lookup("ArithmeticError").Implements)
+	}
+	current := newIndexForPHP("8.4")
+	if current.IsSubtypeOf("SplFixedArray", "Iterator") || !current.IsSubtypeOf("SplFixedArray", "IteratorAggregate") {
+		t.Errorf("from 8.0 SplFixedArray implements IteratorAggregate, not Iterator: %v", current.Lookup("SplFixedArray").Implements)
+	}
+	if !current.IsSubtypeOf("ArithmeticError", "Stringable") {
+		t.Errorf("from 8.0 ArithmeticError is Stringable: %v", current.Lookup("ArithmeticError").Implements)
+	}
+}
+
+func TestAPropertyOlderBuildsHandledInternallyIsKnownOnThem(t *testing.T) {
+	idx := newIndexForPHP("7.4")
+	for _, fqn := range []string{"XMLReader::$nodeType", "SoapFault::$faultstring", "DOMNode::$nodeName", "DatePeriod::$start"} {
+		if idx.Lookup(fqn) == nil {
+			t.Errorf("%s, which PHP 7.4 has without declaring it to reflection, is known on 7.4", fqn)
+		}
+	}
+	if newIndexForPHP("8.2").Lookup("DOMNode::$isConnected") != nil || newIndexForPHP("8.3").Lookup("DOMNode::$isConnected") == nil {
+		t.Error("DOMNode::$isConnected, added in 8.3, is dated by the builds that declare DOMNode's properties")
+	}
+}

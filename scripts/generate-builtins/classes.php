@@ -88,46 +88,202 @@ PHP;
 }
 
 /**
- * The version that added something first seen in $first: that version, when an
- * earlier build had the extension it belongs to without it. Something of an
- * extension no earlier build had is taken to be as old as the baseline.
+ * When builds disagree about a class or member, which versions it is in.
+ *
+ * Each build lists the extensions it loaded. A build without something proves
+ * it absent only when that build loaded the extensions that provide it, or
+ * lacked just extensions that had not come to PHP yet (ones every build has
+ * from the version that brought them, as random did with 8.2). A build that
+ * lacked a provider, such as a default build without pdo_mysql for
+ * PDO::MYSQL_ATTR_*, proves nothing.
  */
-function addedIn(string $first, string $extension, array $dumps): string
+final class BuildVersions
 {
-    if ($first === $dumps[0]['version']) {
+    /** @var list<string> */
+    public readonly array $versions;
+    /** @var list<array<string, true>> */
+    private array $extensions = [];
+    /** @var array<string, true> */
+    private array $arrived = [];
+
+    /**
+     * @param list<array{version:string, extensions:list<string>}> $dumps sorted by version
+     */
+    public function __construct(private readonly array $dumps)
+    {
+        $first = [];
+        foreach ($dumps as $i => $dump) {
+            $this->extensions[$i] = array_fill_keys($dump['extensions'], true);
+            foreach ($dump['extensions'] as $extension) {
+                $first[$extension] ??= $dump['version'];
+            }
+        }
+        foreach ($first as $extension => $since) {
+            $everywhere = true;
+            foreach ($dumps as $i => $dump) {
+                if (version_compare($dump['version'], $since, '>=') && !isset($this->extensions[$i][$extension])) {
+                    $everywhere = false;
+                    break;
+                }
+            }
+            if ($everywhere) {
+                $this->arrived[$extension] = true;
+            }
+        }
+        $this->versions = array_values(array_unique(array_map(static fn(array $d): string => $d['version'], $dumps)));
+    }
+
+    public function version(int $build): string
+    {
+        return $this->dumps[$build]['version'];
+    }
+
+    /**
+     * The version that added something present in the builds $in, '' when
+     * it is as old as the oldest build or no build can show its absence.
+     * Of the builds in $candidates (all builds when null), one before its
+     * first version that lacked it while having its providers shows it
+     * absent; it was added in the version after the newest such build.
+     *
+     * @param non-empty-list<int> $in
+     * @param array<string, true> $providers
+     * @param ?list<int> $candidates
+     */
+    public function since(array $in, array $providers, ?array $candidates = null): string
+    {
+        $first = $this->version($in[0]);
+        $proof = null;
+        foreach ($candidates ?? array_keys($this->dumps) as $build) {
+            if (version_compare($this->version($build), $first, '>=')) {
+                break;
+            }
+            if (array_diff_key($providers, $this->extensions[$build], $this->arrived) === []) {
+                $proof = $this->version($build);
+            }
+        }
+        return $proof === null ? '' : $this->versionAfter($proof);
+    }
+
+    /**
+     * The version that removed something present in the builds $in: the
+     * first build of $candidates after its last version that lacked it
+     * while having its providers, '' when there is none.
+     *
+     * @param non-empty-list<int> $in
+     * @param array<string, true> $providers
+     * @param list<int> $candidates
+     */
+    public function removed(array $in, array $providers, array $candidates): string
+    {
+        $last = $this->version($in[array_key_last($in)]);
+        foreach ($candidates as $build) {
+            if (version_compare($this->version($build), $last, '>') && array_diff_key($providers, $this->extensions[$build]) === []) {
+                return $this->version($build);
+            }
+        }
         return '';
     }
-    foreach ($dumps as $dump) {
-        if (version_compare($dump['version'], $first, '>=')) {
-            break;
+
+    /**
+     * The extensions a member present in the builds $in needs, when
+     * reflection doesn't say: its class's extension, and those every build
+     * in $in loaded that a build of $witnesses without it lacks, from its
+     * first version on. A driver (pdo_mysql for PDO::MYSQL_ATTR_*) is one of
+     * them; an extension every build of those versions loads (opcache) is
+     * not.
+     *
+     * @param non-empty-list<int> $in
+     * @param list<int> $witnesses
+     * @return array<string, true>
+     */
+    public function memberProviders(array $in, string $classExtension, array $witnesses): array
+    {
+        $shared = array_intersect_key(...array_map(fn(int $build): array => $this->extensions[$build], $in));
+        $first = $this->version($in[0]);
+        $has = array_fill_keys($in, true);
+        $providers = [$classExtension => true];
+        foreach ($witnesses as $build) {
+            if (!isset($has[$build]) && version_compare($this->version($build), $first, '>=')) {
+                $providers += array_diff_key($shared, $this->extensions[$build]);
+            }
         }
-        if ($extension === '' || in_array($extension, $dump['extensions'], true)) {
-            return $first;
-        }
+        return $providers;
     }
-    return '';
+
+    private function versionAfter(string $version): string
+    {
+        return $this->versions[array_search($version, $this->versions, true) + 1];
+    }
 }
 
 /**
+ * The interfaces a class implements in every version that has it, and the
+ * ones it gained or lost, with the versions that did (SplFixedArray
+ * implements Iterator in 7.4, IteratorAggregate from 8.0). A parent that
+ * changes between builds can't be written to the table and stops the
+ * generator.
+ *
+ * @param list<int> $builds the builds that have the class, sorted by version
+ * @param array<int, array{extends:string, implements:list<string>}> $classIn the class in each build
+ * @return array{0:list<string>, 1:list<array{0:string, 1:string, 2:string}>}
+ */
+function classRelations(string $name, array $builds, array $classIn, BuildVersions $versions): array
+{
+    $extends = array_unique(array_map(static fn(int $b): string => $classIn[$b]['extends'], $builds));
+    if (count($extends) > 1) {
+        fwrite(STDERR, "The parent of {$name} differs between builds: " . implode(', ', $extends) . "\n");
+        exit(1);
+    }
+    $classVersions = [];
+    $held = [];
+    foreach (array_reverse($builds) as $build) {
+        $version = $versions->version($build);
+        $classVersions[$version] = true;
+        foreach ($classIn[$build]['implements'] as $interface) {
+            $held[$interface][$version] = true;
+        }
+    }
+    $classVersions = array_reverse(array_keys($classVersions));
+    $always = [];
+    $changed = [];
+    foreach ($held as $interface => $in) {
+        $run = array_values(array_intersect($classVersions, array_keys($in)));
+        $start = array_search($run[0], $classVersions, true);
+        if ($run !== array_slice($classVersions, $start, count($run))) {
+            fwrite(STDERR, "{$name} implements {$interface} in versions " . implode(', ', $run) . ", which are not consecutive\n");
+            exit(1);
+        }
+        if (count($run) === count($classVersions)) {
+            $always[] = (string) $interface;
+            continue;
+        }
+        $changed[] = [(string) $interface, $start === 0 ? '' : $run[0], $classVersions[$start + count($run)] ?? ''];
+    }
+    return [$always, $changed];
+}
+
+/**
+ * A member is dated only by builds that have its class. Properties are dated
+ * only by builds whose class declares some: before 8.1, DOM, SOAP and SNMP
+ * classes handled their properties internally and declared none to
+ * reflection.
+ *
  * @param list<array{version:string, extensions:list<string>, classes:array<string, array>}> $dumps
  */
 function generateGoClassLikes(array $dumps): string
 {
-    $first = [];
+    $versions = new BuildVersions($dumps);
     $latest = [];
-    $memberFirst = [];
-    $memberLast = [];
-    $classVersions = [];
-    foreach ($dumps as $dump) {
+    $classIn = [];
+    $memberIn = [];
+    foreach ($dumps as $build => $dump) {
         foreach ($dump['classes'] as $name => $class) {
-            $first[$name] ??= $dump['version'];
-            $classVersions[$name][$dump['version']] = true;
+            $classIn[$name][$build] = $class;
             $merged = $class;
             foreach (['methods', 'properties', 'constants', 'cases'] as $group) {
                 $merged[$group] = $class[$group] + ($latest[$name][$group] ?? []);
                 foreach (array_keys($class[$group]) as $member) {
-                    $memberFirst[$name][$group][$member] ??= $dump['version'];
-                    $memberLast[$name][$group][$member] = $dump['version'];
+                    $memberIn[$name][$group][$member][] = $build;
                 }
             }
             $latest[$name] = $merged;
@@ -137,19 +293,22 @@ function generateGoClassLikes(array $dumps): string
 
     $lines = [];
     foreach ($latest as $name => $class) {
-        $since = static function (string $group, string $member) use ($memberFirst, $name, $first, $class, $dumps): ?string {
-            $at = $memberFirst[$name][$group][$member];
-            return $at === $first[$name] ? null : goStringOrNull(addedIn($at, $class['extension'], $dumps));
+        $builds = array_keys($classIn[$name]);
+        $witnesses = [
+            'methods' => $builds,
+            'properties' => array_keys(array_filter($classIn[$name], static fn(array $c): bool => $c['properties'] !== [])),
+            'constants' => $builds,
+            'cases' => $builds,
+        ];
+        $member = static function (string $group, string $member) use ($memberIn, $name, $class, $witnesses, $versions): array {
+            $in = $memberIn[$name][$group][$member];
+            $providers = $versions->memberProviders($in, $class['extension'], $witnesses[$group]);
+            return [
+                'Since' => goStringOrNull($versions->since($in, $providers, $witnesses[$group])),
+                'Removed' => goStringOrNull($versions->removed($in, $providers, $witnesses[$group])),
+            ];
         };
-        $removed = static function (string $group, string $member) use ($memberLast, $name, $classVersions): ?string {
-            $last = $memberLast[$name][$group][$member];
-            foreach (array_keys($classVersions[$name]) as $version) {
-                if (version_compare((string) $version, $last, '>')) {
-                    return renderGoString((string) $version);
-                }
-            }
-            return null;
-        };
+        [$implements, $versionedImplements] = classRelations($name, $builds, $classIn[$name], $versions);
         $members = [];
         foreach (sortedKeys($class['methods']) as $method) {
             [$visibility, $static, $abstract, $final, $params, $return] = $class['methods'][$method];
@@ -162,8 +321,7 @@ function generateGoClassLikes(array $dumps): string
                 'IsFinal' => goTrueOrNull($final),
                 'ReturnType' => goStringOrNull($return),
                 'Params' => $params === [] ? null : '[]ParamInfo{' . implode(', ', array_map('renderGoParam', $params)) . '}',
-                'Since' => $since('methods', $method),
-                'Removed' => $removed('methods', $method),
+                ...$member('methods', $method),
             ]);
         }
         foreach (sortedKeys($class['properties']) as $property) {
@@ -175,8 +333,7 @@ function generateGoClassLikes(array $dumps): string
                 'IsStatic' => goTrueOrNull($static),
                 'IsReadonly' => goTrueOrNull($readonly),
                 'Type' => goStringOrNull($type),
-                'Since' => $since('properties', $property),
-                'Removed' => $removed('properties', $property),
+                ...$member('properties', $property),
             ]);
         }
         foreach (sortedKeys($class['constants']) as $constant) {
@@ -187,12 +344,11 @@ function generateGoClassLikes(array $dumps): string
                 'Visibility' => renderGoString($visibility),
                 'Type' => renderGoString(phpTypeName($type)),
                 'Value' => $value === null ? null : renderGoString(renderPhpValue($value['value'])),
-                'Since' => $since('constants', $constant),
-                'Removed' => $removed('constants', $constant),
+                ...$member('constants', $constant),
             ]);
         }
         foreach (sortedKeys($class['cases']) as $case) {
-            $members[] = renderGoStruct(['Name' => renderGoString($case), 'Kind' => 'KindEnumCase', 'Since' => $since('cases', $case), 'Removed' => $removed('cases', $case)]);
+            $members[] = renderGoStruct(['Name' => renderGoString($case), 'Kind' => 'KindEnumCase', ...$member('cases', $case)]);
         }
         $lines[] = "\t" . renderGoStruct([
             'Name' => renderGoString($name),
@@ -200,18 +356,23 @@ function generateGoClassLikes(array $dumps): string
             'IsAbstract' => goTrueOrNull($class['abstract']),
             'IsFinal' => goTrueOrNull($class['final']),
             'Extends' => goStringOrNull($class['extends']),
-            'Implements' => $class['implements'] === [] ? null : '[]string{' . implode(', ', array_map('renderGoString', $class['implements'])) . '}',
+            'Implements' => $implements === [] ? null : '[]string{' . implode(', ', array_map('renderGoString', $implements)) . '}',
+            'VersionedImplements' => $versionedImplements === [] ? null : '[]builtinRelation{' . implode(', ', array_map(
+                static fn(array $r): string => renderGoStruct(['Name' => renderGoString($r[0]), 'Since' => goStringOrNull($r[1]), 'Removed' => goStringOrNull($r[2])]),
+                $versionedImplements
+            )) . '}',
+            'Since' => goStringOrNull($versions->since($builds, [$class['extension'] => true])),
             'Members' => $members === [] ? null : "[]builtinMember{\n" . implode('', array_map(static fn(string $m): string => "\t\t" . $m . ",\n", $members)) . "\t}",
         ]) . ',';
     }
 
-    $versions = implode(', ', array_unique(array_map(static fn(array $d): string => $d['version'], $dumps)));
+    $header = implode(', ', $versions->versions);
 
     return implode("\n", [
         'package symbols',
         '',
         '// Code generated from PHP runtime builtin symbols; DO NOT EDIT.',
-        "// Generated by scripts/generate-builtins.php classes from reflection of PHP {$versions}.",
+        "// Generated by scripts/generate-builtins.php classes from reflection of PHP {$header}.",
         '',
         'var generatedBuiltinClassLikes = []builtinClassLike{',
         ...$lines,
@@ -275,11 +436,14 @@ return [
     'usage' => 'php scripts/generate-builtins.php classes --php=COMMANDS [--output=PATH]',
     'help' => '  classes       Run each PHP given with --php and emit the Go table of PHP\'s
                 built-in classes, interfaces, traits and enums with their
-                public and protected methods, properties and constants, the
-                version that added each member and the one that removed it.
-                A class has the members any build gives it (an extension such
+                public and protected methods, properties and constants. A
+                class has the members any build gives it (an extension such
                 as pdo_mysql adds constants to PDO); each signature comes from
-                the newest PHP that has it.
+                the newest PHP that has it. Each class, member and interface
+                carries the version that added it and the one that removed
+                it, when a build that had the extensions providing it shows
+                it missing; pass builds with extensions for every version to
+                date more of them.
                 Output defaults to internal/symbols/builtin_classes_generated.go.
 ',
     'run' => static function (array $options): void {

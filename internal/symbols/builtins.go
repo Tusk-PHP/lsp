@@ -387,7 +387,7 @@ func builtinAvailable(name string, profile BuiltinProfile) bool {
 	if !ok {
 		return true
 	}
-	if availability.Since != "" && compareBuiltinVersions(availability.Since, profile.PHPVersion) > 0 {
+	if !builtinInVersion(availability.Since, "", profile.PHPVersion) {
 		return false
 	}
 	if availability.Extension != "" {

@@ -1,13 +1,21 @@
 package symbols
 
 type builtinClassLike struct {
-	Name       string
-	Kind       SymbolKind
-	IsAbstract bool
-	IsFinal    bool
-	Extends    string
-	Implements []string
-	Members    []builtinMember
+	Name                string
+	Kind                SymbolKind
+	IsAbstract          bool
+	IsFinal             bool
+	Extends             string
+	Implements          []string
+	VersionedImplements []builtinRelation
+	Since               string
+	Members             []builtinMember
+}
+
+type builtinRelation struct {
+	Name    string
+	Since   string
+	Removed string
 }
 
 type builtinMember struct {
@@ -27,17 +35,17 @@ type builtinMember struct {
 }
 
 func (idx *Index) addBuiltinClassLikeWithMembersLocked(c builtinClassLike, profile BuiltinProfile) {
-	if !builtinAvailable(c.Name, profile) {
+	if !builtinInVersion(c.Since, "", profile.PHPVersion) || !builtinAvailable(c.Name, profile) {
 		return
 	}
 	class := &Symbol{Name: shortName(c.Name), FQN: c.Name, Kind: c.Kind, Source: SourceBuiltin, URI: builtinRegistryURI,
-		IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, Extends: c.Extends, Implements: c.Implements}
+		IsAbstract: c.IsAbstract, IsFinal: c.IsFinal, Extends: c.Extends, Implements: c.implementsIn(profile.PHPVersion)}
 	hidden := idx.declaredOverBuiltinLocked(class)
 	idx.storeBuiltinLocked(class)
 	members := make([]Symbol, 0, len(c.Members))
 	class.Children = make([]*Symbol, 0, len(c.Members))
 	for _, m := range c.Members {
-		if !m.availableIn(profile.PHPVersion) {
+		if !builtinInVersion(m.Since, m.Removed, profile.PHPVersion) {
 			continue
 		}
 		members = append(members, Symbol{Name: m.Name, FQN: c.Name + "::" + m.Name, Kind: m.Kind, Source: SourceBuiltin, URI: builtinRegistryURI,
@@ -56,9 +64,23 @@ func (idx *Index) addBuiltinClassLikeWithMembersLocked(c builtinClassLike, profi
 	}
 }
 
-func (m builtinMember) availableIn(version string) bool {
-	return (m.Since == "" || compareBuiltinVersions(m.Since, version) <= 0) &&
-		(m.Removed == "" || compareBuiltinVersions(m.Removed, version) > 0)
+func (c builtinClassLike) implementsIn(version string) []string {
+	if len(c.VersionedImplements) == 0 {
+		return c.Implements
+	}
+	out := make([]string, len(c.Implements), len(c.Implements)+len(c.VersionedImplements))
+	copy(out, c.Implements)
+	for _, r := range c.VersionedImplements {
+		if builtinInVersion(r.Since, r.Removed, version) {
+			out = append(out, r.Name)
+		}
+	}
+	return out
+}
+
+func builtinInVersion(since, removed, version string) bool {
+	return (since == "" || compareBuiltinVersions(since, version) <= 0) &&
+		(removed == "" || compareBuiltinVersions(removed, version) > 0)
 }
 
 func HasStubbedMembers(sym *Symbol) bool {
