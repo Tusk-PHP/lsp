@@ -20,12 +20,6 @@ type indexedParses struct {
 }
 
 func (p *indexedParses) put(entry indexedParse) {
-	for i := range p.entries {
-		if p.entries[i].uri == entry.uri {
-			p.entries[i] = entry
-			return
-		}
-	}
 	p.entries[p.next] = entry
 	p.next = (p.next + 1) % keptParses
 }
