@@ -365,3 +365,36 @@ func TestCommandIndexUpdateFile(t *testing.T) {
 		t.Error("a nil index should be empty")
 	}
 }
+
+func TestDiscoverCommandsReadsUnindexedSourcesWithTheProjectGrammar(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "composer.json"), "{}\n")
+	kernel := filepath.Join(root, "src", "Kernel.php")
+	mustWriteFile(t, kernel, "<?php\nnamespace App;\nclass Kernel {}\n")
+	mustWriteFile(t, filepath.Join(root, "src", "Command", "AttributeCommand.php"), `<?php
+namespace App\Command;
+use Symfony\Component\Console\Attribute\AsCommand;
+#[AsCommand('app:attribute')]
+class AttributeCommand {}
+`)
+	mustWriteFile(t, filepath.Join(root, "src", "Command", "LegacyCommand.php"), `<?php
+namespace App\Command;
+class LegacyCommand {
+    protected static $defaultName = 'app:legacy';
+}
+`)
+	for _, tt := range []struct {
+		grammar token.Version
+		want    string
+	}{
+		{token.PHP74, "app:legacy"},
+		{token.PHP80, "app:attribute app:legacy"},
+	} {
+		idx := symbols.NewIndexFor(phpparser.OnlyGrammar(tt.grammar))
+		idx.IndexFile("file://"+filepath.ToSlash(kernel), "<?php\nnamespace App;\nclass Kernel {}\n")
+		names := DiscoverCommands(idx).Names()
+		if got := strings.Join(names, " "); got != tt.want {
+			t.Errorf("PHP %s: commands %q, want %q", tt.grammar, got, tt.want)
+		}
+	}
+}
