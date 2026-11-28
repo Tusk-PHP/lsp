@@ -24,7 +24,7 @@ func (r *Resolver) MixinTypes(rt ResolvedType) []ResolvedType {
 			continue
 		}
 		doc := r.parseDoc(sym.DocComment)
-		if doc == nil || len(doc.Mixins) == 0 {
+		if len(doc.Mixins) == 0 {
 			continue
 		}
 		subst := r.classSubst(cls, rt.FQN, rt.Params)

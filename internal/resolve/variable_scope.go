@@ -245,9 +245,6 @@ func varDocAbove(lines []string, i int, varName string) string {
 		return ""
 	}
 	doc := parser.ParseDocBlock(raw)
-	if doc == nil {
-		return ""
-	}
 	for _, v := range doc.Vars {
 		if v.Name == varName || v.Name == "" {
 			return v.Type

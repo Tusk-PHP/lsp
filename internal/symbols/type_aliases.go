@@ -7,7 +7,7 @@ import (
 )
 
 func indexTypeAliases(owner *Symbol, doc *parser.DocBlock, resolve func(string) string) {
-	if owner == nil || doc == nil {
+	if owner == nil {
 		return
 	}
 

@@ -83,12 +83,9 @@ type paramPattern struct {
 func (r *Resolver) paramPatterns(sym *symbols.Symbol, doc *parser.DocBlock) []paramPattern {
 	out := make([]paramPattern, 0, len(sym.Params))
 	for _, p := range sym.Params {
-		raw := ""
-		if doc != nil {
-			raw = resolveDocParam(doc, p.Name)
-			if raw == "" {
-				raw = resolveDocParam(doc, "..."+p.Name)
-			}
+		raw := resolveDocParam(doc, p.Name)
+		if raw == "" {
+			raw = resolveDocParam(doc, "..."+p.Name)
 		}
 		if raw == "" {
 			raw = p.Type
@@ -275,12 +272,8 @@ func (r *Resolver) MemberTypeForCall(member *symbols.Symbol, file *parser.FileNo
 
 	var params []paramPattern
 	if member.Kind == symbols.KindMethod {
-		var doc *parser.DocBlock
-		if member.DocComment != "" && (len(member.Templates) > 0 || pattern.hasConditional()) {
-			doc = r.parseDoc(member.DocComment)
-		}
 		if len(member.Templates) > 0 || pattern.hasConditional() {
-			params = r.paramPatterns(member, doc)
+			params = r.paramPatterns(member, r.parseDoc(member.DocComment))
 		}
 		if len(member.Templates) > 0 {
 			bound := r.bindCallTemplates(params, call, templateNames(member.Templates), subst, member.ParentFQN, file)
@@ -361,13 +354,7 @@ func (r *Resolver) FunctionTypeForCall(fn *symbols.Symbol, file *parser.FileNode
 // functionReturnType is a function's return type, preferring PHPDoc where it
 // says more than the signature.
 func (r *Resolver) functionReturnType(fn *symbols.Symbol) string {
-	var docType string
-	if fn.DocComment != "" {
-		if doc := r.parseDoc(fn.DocComment); doc != nil {
-			docType = doc.Return.Type
-		}
-	}
-	return r.preferDocType(fn.ReturnType, docType, fn.Templates, "")
+	return r.preferDocType(fn.ReturnType, r.parseDoc(fn.DocComment).Return.Type, fn.Templates, "")
 }
 
 // hasConditional reports whether a conditional type appears anywhere in rt.
@@ -659,7 +646,7 @@ func (r *Resolver) inheritedDocMethod(member *symbols.Symbol) *symbols.Symbol {
 			}
 			visited[anc] = true
 			if m := r.Index.Lookup(anc + "::" + member.Name); m != nil && m.Kind == symbols.KindMethod && strings.Contains(m.DocComment, "return") {
-				if doc := r.parseDoc(m.DocComment); doc != nil && doc.Return.Type != "" {
+				if r.parseDoc(m.DocComment).Return.Type != "" {
 					return m
 				}
 			}

@@ -1007,7 +1007,7 @@ func resolveReturnType(sym *symbols.Symbol) string {
 		return types.RenderTypeExpr(sym.ReturnType)
 	}
 	if sym.DocComment != "" {
-		if doc := parser.ParseDocBlock(sym.DocComment); doc != nil && doc.Return.Type != "" {
+		if doc := parser.ParseDocBlock(sym.DocComment); doc.Return.Type != "" {
 			return types.RenderTypeExpr(doc.Return.Type)
 		}
 	}
@@ -1020,9 +1020,6 @@ func docblockVarType(sym *symbols.Symbol) string {
 		return ""
 	}
 	doc := parser.ParseDocBlock(sym.DocComment)
-	if doc == nil {
-		return ""
-	}
 	if vars, ok := doc.Tags["var"]; ok && len(vars) > 0 {
 		typ, _ := types.ExtractDocTypeString(vars[0])
 		return types.RenderTypeExpr(typ)
@@ -1034,11 +1031,7 @@ func formatDocumentation(sym *symbols.Symbol) string {
 	if sym.DocComment == "" {
 		return ""
 	}
-	doc := parser.ParseDocBlock(sym.DocComment)
-	if doc == nil || doc.Summary == "" {
-		return ""
-	}
-	return doc.Summary
+	return parser.ParseDocBlock(sym.DocComment).Summary
 }
 
 // scopeItem is the completion item for a model's local scope, called by its

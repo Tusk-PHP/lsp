@@ -2,6 +2,7 @@ package hover
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
@@ -286,7 +287,7 @@ func (p *Provider) hoverVariable(r *resolve.Resolver, lines []string, pos protoc
 			sb.WriteString("\n" + summary + "\n")
 		} else if sym := p.index.Lookup(typeName); sym != nil {
 			if sym.DocComment != "" {
-				if doc := parser.ParseDocBlock(sym.DocComment); doc != nil && doc.Summary != "" {
+				if doc := parser.ParseDocBlock(sym.DocComment); doc.Summary != "" {
 					sb.WriteString("\n" + doc.Summary + "\n")
 				}
 			}
@@ -318,7 +319,7 @@ func (p *Provider) formatHover(sym *symbols.Symbol) string {
 	sb.WriteString("\n" + phpFence(p.formatHoverDeclaration(sym, doc)))
 
 	// === 3. Summary (from docblock) ===
-	if doc != nil && doc.Summary != "" {
+	if doc.Summary != "" {
 		sb.WriteString("\n" + doc.Summary + "\n")
 	}
 
@@ -401,45 +402,25 @@ func (p *Provider) appendMethodOrigin(sb *strings.Builder, sym *symbols.Symbol) 
 
 // getEffectiveDocBlock returns the docblock for a symbol, falling back to parent/interface docs.
 func (p *Provider) getEffectiveDocBlock(sym *symbols.Symbol) *parser.DocBlock {
-	if sym.DocComment != "" {
-		if doc := parser.ParseDocBlock(sym.DocComment); doc != nil {
-			return doc
-		}
+	own := parser.ParseDocBlock(sym.DocComment)
+	if !own.IsEmpty() || sym.Kind != symbols.KindMethod || sym.ParentFQN == "" {
+		return own
 	}
-	// For methods, try inheriting from parent or interface
-	if sym.Kind == symbols.KindMethod && sym.ParentFQN != "" {
-		// Check interfaces
-		ifaces := p.index.GetImplementedInterfaces(sym.ParentFQN)
-		for _, ifaceFQN := range ifaces {
-			ifaceSym := p.index.Lookup(ifaceFQN)
-			if ifaceSym == nil {
-				continue
-			}
-			for _, child := range ifaceSym.Children {
-				if child.Kind == symbols.KindMethod && child.Name == sym.Name && child.DocComment != "" {
-					if doc := parser.ParseDocBlock(child.DocComment); doc != nil {
-						return doc
-					}
-				}
-			}
+	for _, ownerFQN := range slices.Concat(p.index.GetImplementedInterfaces(sym.ParentFQN), p.index.GetInheritanceChain(sym.ParentFQN)) {
+		owner := p.index.Lookup(ownerFQN)
+		if owner == nil {
+			continue
 		}
-		// Check parent chain
-		chain := p.index.GetInheritanceChain(sym.ParentFQN)
-		for _, parentFQN := range chain {
-			parentSym := p.index.Lookup(parentFQN)
-			if parentSym == nil {
+		for _, child := range owner.Children {
+			if child.Kind != symbols.KindMethod || child.Name != sym.Name {
 				continue
 			}
-			for _, child := range parentSym.Children {
-				if child.Kind == symbols.KindMethod && child.Name == sym.Name && child.DocComment != "" {
-					if doc := parser.ParseDocBlock(child.DocComment); doc != nil {
-						return doc
-					}
-				}
+			if doc := parser.ParseDocBlock(child.DocComment); !doc.IsEmpty() {
+				return doc
 			}
 		}
 	}
-	return nil
+	return own
 }
 
 // hoverArrayKeyContext holds the parsed context for hovering an array key.
@@ -741,15 +722,10 @@ func (p *Provider) resolveArrayShape(source string, pos protocol.Position, varNa
 	for _, cls := range file.Classes {
 		for _, m := range cls.Methods {
 			if pos.Line >= m.StartLine {
-				if m.DocComment != "" {
-					doc := parser.ParseDocBlock(m.DocComment)
-					if doc != nil {
-						for _, param := range doc.Params {
-							if param.Name == "$"+bare {
-								if fields := types.ParseArrayShape(param.Type); len(fields) > 0 {
-									return fields
-								}
-							}
+				for _, param := range parser.ParseDocBlock(m.DocComment).Params {
+					if param.Name == "$"+bare {
+						if fields := types.ParseArrayShape(param.Type); len(fields) > 0 {
+							return fields
 						}
 					}
 				}
@@ -765,15 +741,10 @@ func (p *Provider) resolveArrayShape(source string, pos protocol.Position, varNa
 	}
 	for _, fn := range file.Functions {
 		if pos.Line >= fn.StartLine {
-			if fn.DocComment != "" {
-				doc := parser.ParseDocBlock(fn.DocComment)
-				if doc != nil {
-					for _, param := range doc.Params {
-						if param.Name == "$"+bare {
-							if fields := types.ParseArrayShape(param.Type); len(fields) > 0 {
-								return fields
-							}
-						}
+			for _, param := range parser.ParseDocBlock(fn.DocComment).Params {
+				if param.Name == "$"+bare {
+					if fields := types.ParseArrayShape(param.Type); len(fields) > 0 {
+						return fields
 					}
 				}
 			}
