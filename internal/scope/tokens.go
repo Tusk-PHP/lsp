@@ -123,9 +123,6 @@ func (t *tokens) matchingClose(open int) int {
 
 func (t *tokens) matchingOpen(close int) int {
 	closer := t.kind(close)
-	if closer != token.RightParen && closer != token.RightBracket && closer != token.RightBrace {
-		return -1
-	}
 	depth := 0
 	for i := close; i >= 0; i-- {
 		switch k := t.kind(i); {
@@ -142,9 +139,6 @@ func (t *tokens) matchingOpen(close int) int {
 }
 
 func (t *tokens) arrowExpressionEnd(start int) int {
-	if start < 0 {
-		return -1
-	}
 	depth := 0
 	for i := start; i < len(t.list); i++ {
 		switch k := t.kind(i); {

@@ -582,7 +582,7 @@ func parseFunctionLike(t *tokens, start int, parent *Scope, doc *Document, named
 	if j >= 0 && j < len(t.list) && t.kind(j) == token.DoubleArrow {
 		bodyStart := t.next(j + 1)
 		bodyEnd := t.arrowExpressionEnd(bodyStart)
-		if bodyStart < 0 || bodyEnd < 0 {
+		if bodyEnd < 0 {
 			scope.Range.End = scope.Range.Start
 			return nil, decls
 		}
@@ -1024,7 +1024,7 @@ func parsePropertyHook(t *tokens, start int, parent *Scope, doc *Document) (*pen
 	case token.DoubleArrow:
 		bodyStart := t.next(j + 1)
 		bodyEnd := t.arrowExpressionEnd(bodyStart)
-		if bodyStart < 0 || bodyEnd < 0 {
+		if bodyEnd < 0 {
 			return nil, nil
 		}
 		scope.ExprBody = true
