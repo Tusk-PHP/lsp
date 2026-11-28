@@ -59,9 +59,6 @@ func (v *Views) Invalidate() {
 // deleted, can change which views exist or where they are: a file under a
 // view directory, or the view and Livewire config.
 func (v *Views) FilesChanged(paths []string) {
-	if v == nil {
-		return
-	}
 	watched := append(v.cache.Load().viewDirs(v.rootPath),
 		filepath.Join(v.rootPath, "config", "view.php"),
 		filepath.Join(v.rootPath, "config", "livewire.php"))
@@ -354,13 +351,11 @@ func (v *Views) addFromDisk(name, base string) (string, bool) {
 			view := View{Name: name, URI: "file://" + filepath.ToSlash(base+ext)}
 			c := v.load()
 			c.mu.Lock()
-			if _, ok := c.byName[name]; ok {
-				c.mu.Unlock()
-				return view.URI, true
+			if _, ok := c.byName[name]; !ok {
+				c.byName[name] = view
+				c.views = append(c.views, view)
+				sort.Slice(c.views, func(i, j int) bool { return c.views[i].Name < c.views[j].Name })
 			}
-			c.byName[name] = view
-			c.views = append(c.views, view)
-			sort.Slice(c.views, func(i, j int) bool { return c.views[i].Name < c.views[j].Name })
 			c.mu.Unlock()
 			return view.URI, true
 		}

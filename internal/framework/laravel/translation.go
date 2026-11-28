@@ -60,9 +60,6 @@ func translationDirs(rootPath string) []string {
 // deleted, is a translation file or config/app.php, which sets the
 // preferred locale.
 func (r *TranslationResolver) FilesChanged(paths []string) {
-	if r == nil || r.rootPath == "" {
-		return
-	}
 	watched := append(translationDirs(r.rootPath), r.appConfigPath())
 	for _, path := range paths {
 		if touchesAny(path, watched) {

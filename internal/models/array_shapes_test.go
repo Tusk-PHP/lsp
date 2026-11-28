@@ -413,3 +413,21 @@ func mustReadFile(t *testing.T, path string) []byte {
 	}
 	return data
 }
+
+func TestProjectConfigWithoutAnArrayShadowsTheVendorOne(t *testing.T) {
+	dir, idx := setupTestProject(t)
+	for path, content := range map[string]string{
+		filepath.Join(dir, "vendor", "laravel", "sanctum", "config", "sanctum.php"): "<?php\nreturn ['guard' => ['web']];\n",
+		filepath.Join(dir, "config", "sanctum.php"):                                 "<?php\nreturn require __DIR__.'/shared.php';\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if fields := NewFrameworkArrayResolver(idx, dir, "laravel").ParseConfigFile("sanctum"); len(fields) != 0 {
+		t.Errorf("the project's config/sanctum.php, which returns no array literal, gave %v; the vendor's keys don't apply to it", fields)
+	}
+}
