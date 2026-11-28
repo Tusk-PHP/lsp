@@ -108,10 +108,8 @@ func classSlug(fqn string) string {
 }
 
 func constantExtension(sym *Symbol) string {
-	if sym.URI == builtinRegistryURI {
-		if c, ok := lookupBuiltinConstant(fqnOrName(sym)); ok {
-			return c.Extension
-		}
+	if found := builtinConstantNamed(fqnOrName(sym)); sym.URI == builtinRegistryURI && len(found) == 1 {
+		return found[0].Extension
 	}
 	if ext := extensionFromURI(sym.URI); ext != "" {
 		return ext

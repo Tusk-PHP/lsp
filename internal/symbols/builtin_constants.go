@@ -37,13 +37,6 @@ func compareBuiltinConstantNames(a, b string) int {
 	return strings.Compare(a, b)
 }
 
-func lookupBuiltinConstant(fqn string) (builtinConstant, bool) {
-	if found := builtinConstantNamed(fqn); len(found) == 1 {
-		return found[0], true
-	}
-	return builtinConstant{}, false
-}
-
 func builtinConstantNamed(fqn string) []builtinConstant {
 	i, ok := slices.BinarySearchFunc(generatedBuiltinConstants, fqn, func(c builtinConstant, fqn string) int {
 		return compareBuiltinConstantNames(c.Name, fqn)
