@@ -17,80 +17,8 @@ type builtinFunction struct {
 }
 
 var builtinFunctions = []builtinFunction{
-	{"array_map", []ParamInfo{{Name: "$callback", Type: "?callable"}, {Name: "$array", Type: "array"}}, "array", "Applies callback to elements"},
-	{"array_filter", []ParamInfo{{Name: "$array", Type: "array"}, {Name: "$callback", Type: "?callable"}}, "array", "Filters elements using callback"},
-	{"array_reduce", []ParamInfo{{Name: "$array", Type: "array"}, {Name: "$callback", Type: "callable"}, {Name: "$initial", Type: "mixed"}}, "mixed", "Reduces array to single value"},
-	{"array_keys", []ParamInfo{{Name: "$array", Type: "array"}}, "array", "Return all keys of an array"},
-	{"array_values", []ParamInfo{{Name: "$array", Type: "array"}}, "array", "Return all values of an array"},
-	{"array_merge", []ParamInfo{{Name: "$arrays", Type: "array", IsVariadic: true}}, "array", "Merge arrays"},
-	{"array_push", []ParamInfo{{Name: "$array", Type: "array", IsReference: true}, {Name: "$values", Type: "mixed", IsVariadic: true}}, "int", "Push onto end of array"},
-	{"array_pop", []ParamInfo{{Name: "$array", Type: "array", IsReference: true}}, "mixed", "Pop last element"},
-	{"array_unique", []ParamInfo{{Name: "$array", Type: "array"}}, "array", "Remove duplicates"},
-	{"array_search", []ParamInfo{{Name: "$needle", Type: "mixed"}, {Name: "$haystack", Type: "array"}}, "int|string|false", "Search for value"},
-	{"array_key_exists", []ParamInfo{{Name: "$key", Type: "string|int"}, {Name: "$array", Type: "array"}}, "bool", "Checks if key exists in array"},
-	{"array_column", []ParamInfo{{Name: "$array", Type: "array"}, {Name: "$column_key", Type: "int|string|null"}, {Name: "$index_key", Type: "int|string|null"}}, "array", "Return values from a single column"},
-	{"in_array", []ParamInfo{{Name: "$needle", Type: "mixed"}, {Name: "$haystack", Type: "array"}}, "bool", "Check if value exists in array"},
-	{"count", []ParamInfo{{Name: "$value", Type: "Countable|array"}}, "int", "Count elements"},
-	{"sizeof", []ParamInfo{{Name: "$value", Type: "Countable|array"}}, "int", "Alias of count"},
 	{"isset", []ParamInfo{{Name: "$var", Type: "mixed"}}, "bool", "Check if variable is set"},
 	{"empty", []ParamInfo{{Name: "$var", Type: "mixed"}}, "bool", "Check if variable is empty"},
-	{"strlen", []ParamInfo{{Name: "$string", Type: "string"}}, "int", "Get string length"},
-	{"str_contains", []ParamInfo{{Name: "$haystack", Type: "string"}, {Name: "$needle", Type: "string"}}, "bool", "Check if string contains substring"},
-	{"str_starts_with", []ParamInfo{{Name: "$haystack", Type: "string"}, {Name: "$needle", Type: "string"}}, "bool", "Check if string starts with"},
-	{"str_ends_with", []ParamInfo{{Name: "$haystack", Type: "string"}, {Name: "$needle", Type: "string"}}, "bool", "Check if string ends with"},
-	{"substr", []ParamInfo{{Name: "$string", Type: "string"}, {Name: "$offset", Type: "int"}}, "string", "Return part of string"},
-	{"strpos", []ParamInfo{{Name: "$haystack", Type: "string"}, {Name: "$needle", Type: "string"}}, "int|false", "Find position of substring"},
-	{"str_replace", []ParamInfo{{Name: "$search", Type: "string|array"}, {Name: "$replace", Type: "string|array"}, {Name: "$subject", Type: "string|array"}}, "string|array", "Replace occurrences"},
-	{"explode", []ParamInfo{{Name: "$separator", Type: "string"}, {Name: "$string", Type: "string"}}, "array", "Split string by separator"},
-	{"implode", []ParamInfo{{Name: "$separator", Type: "string"}, {Name: "$array", Type: "array"}}, "string", "Join array elements"},
-	{"sprintf", []ParamInfo{{Name: "$format", Type: "string"}, {Name: "$values", Type: "mixed", IsVariadic: true}}, "string", "Return formatted string"},
-	{"json_encode", []ParamInfo{{Name: "$value", Type: "mixed"}}, "string|false", "JSON encode a value"},
-	{"json_decode", []ParamInfo{{Name: "$json", Type: "string"}, {Name: "$associative", Type: "?bool"}}, "mixed", "Decode JSON string"},
-	{"file_get_contents", []ParamInfo{{Name: "$filename", Type: "string"}}, "string|false", "Read entire file"},
-	{"file_put_contents", []ParamInfo{{Name: "$filename", Type: "string"}, {Name: "$data", Type: "mixed"}}, "int|false", "Write data to file"},
-	{"file_exists", []ParamInfo{{Name: "$filename", Type: "string"}}, "bool", "Check if file exists"},
-	{"var_dump", []ParamInfo{{Name: "$value", Type: "mixed", IsVariadic: true}}, "void", "Dump variable info"},
-	{"print_r", []ParamInfo{{Name: "$value", Type: "mixed"}, {Name: "$return", Type: "bool"}}, "string|true", "Print human-readable info"},
-	{"defined", []ParamInfo{{Name: "$constant_name", Type: "string"}}, "bool", "Checks whether a constant exists"},
-	{"define", []ParamInfo{{Name: "$constant_name", Type: "string"}, {Name: "$value", Type: "mixed"}}, "bool", "Defines a named constant"},
-	{"class_exists", []ParamInfo{{Name: "$class", Type: "string"}}, "bool", "Check if class is defined"},
-	{"get_class", []ParamInfo{{Name: "$object", Type: "?object"}}, "string", "Returns the class name of an object"},
-	{"get_called_class", nil, "string", "Returns the late static binding class name"},
-	{"get_parent_class", []ParamInfo{{Name: "$object_or_class", Type: "object|string"}}, "string|false", "Retrieves the parent class name"},
-	{"is_subclass_of", []ParamInfo{{Name: "$object_or_class", Type: "object|string"}, {Name: "$class", Type: "string"}}, "bool", "Checks if an object or class is a subclass"},
-	{"is_a", []ParamInfo{{Name: "$object_or_class", Type: "object|string"}, {Name: "$class", Type: "string"}}, "bool", "Checks object or class type"},
-	{"get_class_vars", []ParamInfo{{Name: "$class", Type: "string"}}, "array", "Returns default properties of a class"},
-	{"get_object_vars", []ParamInfo{{Name: "$object", Type: "object"}}, "array", "Gets object properties"},
-	{"get_class_methods", []ParamInfo{{Name: "$object_or_class", Type: "object|string"}}, "array", "Gets class methods"},
-	{"method_exists", []ParamInfo{{Name: "$object_or_class", Type: "object|string"}, {Name: "$method", Type: "string"}}, "bool", "Checks if a method exists"},
-	{"property_exists", []ParamInfo{{Name: "$object_or_class", Type: "object|string"}, {Name: "$property", Type: "string"}}, "bool", "Checks if a property exists"},
-	{"interface_exists", []ParamInfo{{Name: "$interface", Type: "string"}}, "bool", "Checks if an interface exists"},
-	{"trait_exists", []ParamInfo{{Name: "$trait", Type: "string"}}, "bool", "Checks if a trait exists"},
-	{"enum_exists", []ParamInfo{{Name: "$enum", Type: "string"}}, "bool", "Checks if an enum exists"},
-	{"function_exists", []ParamInfo{{Name: "$function", Type: "string"}}, "bool", "Checks if a function exists"},
-	{"preg_match", []ParamInfo{{Name: "$pattern", Type: "string"}, {Name: "$subject", Type: "string"}, {Name: "$matches", Type: "array", IsReference: true}}, "int|false", "Perform regex match"},
-	{"preg_replace", []ParamInfo{{Name: "$pattern", Type: "string|array"}, {Name: "$replacement", Type: "string|array"}, {Name: "$subject", Type: "string|array"}}, "string|array|null", "Perform a regular expression search and replace"},
-	{"preg_split", []ParamInfo{{Name: "$pattern", Type: "string"}, {Name: "$subject", Type: "string"}}, "array|false", "Split string by a regular expression"},
-	{"abs", []ParamInfo{{Name: "$num", Type: "int|float"}}, "int|float", "Absolute value"},
-	{"round", []ParamInfo{{Name: "$num", Type: "int|float"}, {Name: "$precision", Type: "int"}}, "float", "Round a float"},
-	{"max", []ParamInfo{{Name: "$value", Type: "mixed", IsVariadic: true}}, "mixed", "Find highest value"},
-	{"min", []ParamInfo{{Name: "$value", Type: "mixed", IsVariadic: true}}, "mixed", "Find lowest value"},
-	{"time", nil, "int", "Return current Unix timestamp"},
-	{"date", []ParamInfo{{Name: "$format", Type: "string"}, {Name: "$timestamp", Type: "?int"}}, "string", "Format a local time/date"},
-	{"is_string", []ParamInfo{{Name: "$value", Type: "mixed"}}, "bool", "Check if type is string"},
-	{"is_int", []ParamInfo{{Name: "$value", Type: "mixed"}}, "bool", "Check if type is int"},
-	{"is_bool", []ParamInfo{{Name: "$value", Type: "mixed"}}, "bool", "Check if type is bool"},
-	{"is_float", []ParamInfo{{Name: "$value", Type: "mixed"}}, "bool", "Check if type is float"},
-	{"is_numeric", []ParamInfo{{Name: "$value", Type: "mixed"}}, "bool", "Check if value is numeric"},
-	{"is_object", []ParamInfo{{Name: "$value", Type: "mixed"}}, "bool", "Check if type is object"},
-	{"is_callable", []ParamInfo{{Name: "$value", Type: "mixed"}}, "bool", "Check if value can be called as a function"},
-	{"is_array", []ParamInfo{{Name: "$value", Type: "mixed"}}, "bool", "Check if type is array"},
-	{"is_null", []ParamInfo{{Name: "$value", Type: "mixed"}}, "bool", "Check if variable is null"},
-	{"intval", []ParamInfo{{Name: "$value", Type: "mixed"}}, "int", "Get integer value"},
-	{"strval", []ParamInfo{{Name: "$value", Type: "mixed"}}, "string", "Get string value"},
-	{"trim", []ParamInfo{{Name: "$string", Type: "string"}}, "string", "Strip whitespace"},
-	{"strtolower", []ParamInfo{{Name: "$string", Type: "string"}}, "string", "Make lowercase"},
-	{"strtoupper", []ParamInfo{{Name: "$string", Type: "string"}}, "string", "Make uppercase"},
 	{"class_basename", []ParamInfo{{Name: "$class", Type: "string|object"}}, "string", "Get the class basename of the given object or class"},
 }
 
@@ -118,6 +46,15 @@ type BuiltinProfile struct {
 type BuiltinAvailability struct {
 	Since     string
 	Extension string
+	Removed   string
+}
+
+func (a BuiltinAvailability) RemovedBy(version string) bool {
+	return a.Removed != "" && compareBuiltinVersions(a.Removed, version) <= 0
+}
+
+func (a BuiltinAvailability) InVersion(version string) bool {
+	return builtinInVersion(a.Since, a.Removed, version)
 }
 
 var builtinAvailabilityByName = map[string]BuiltinAvailability{
@@ -139,120 +76,35 @@ var builtinAvailabilityByName = map[string]BuiltinAvailability{
 
 	// Optional PECL APIs; keep these names available to builtin-unavailable
 	// without loading any extension stub source into the symbol index.
-	"APCUIterator":                  {Extension: "apcu"},
-	"Imagick":                       {Extension: "imagick"},
-	"ImagickDraw":                   {Extension: "imagick"},
-	"ImagickDrawException":          {Extension: "imagick"},
-	"ImagickException":              {Extension: "imagick"},
-	"ImagickKernel":                 {Extension: "imagick"},
-	"ImagickKernelException":        {Extension: "imagick"},
-	"ImagickPixel":                  {Extension: "imagick"},
-	"ImagickPixelException":         {Extension: "imagick"},
-	"ImagickPixelIterator":          {Extension: "imagick"},
-	"ImagickPixelIteratorException": {Extension: "imagick"},
-	"Memcached":                     {Extension: "memcached"},
-	"MemcachedException":            {Extension: "memcached"},
-	"Redis":                         {Extension: "redis"},
-	"RedisArray":                    {Extension: "redis"},
-	"RedisCluster":                  {Extension: "redis"},
-	"RedisClusterException":         {Extension: "redis"},
-	"RedisException":                {Extension: "redis"},
-	"RedisSentinel":                 {Extension: "redis"},
-	"SSH2_DEFAULT_TERMINAL":         {Extension: "ssh2"},
-	"SSH2_DEFAULT_TERM_HEIGHT":      {Extension: "ssh2"},
-	"SSH2_DEFAULT_TERM_UNIT":        {Extension: "ssh2"},
-	"SSH2_DEFAULT_TERM_WIDTH":       {Extension: "ssh2"},
-	"SSH2_FINGERPRINT_HEX":          {Extension: "ssh2"},
-	"SSH2_FINGERPRINT_MD5":          {Extension: "ssh2"},
-	"SSH2_FINGERPRINT_RAW":          {Extension: "ssh2"},
-	"SSH2_FINGERPRINT_SHA1":         {Extension: "ssh2"},
-	"SSH2_FINGERPRINT_SHA256":       {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_DSS":         {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_ECDSA_256":   {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_ECDSA_384":   {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_ECDSA_521":   {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_ED25519":     {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_RSA":         {Extension: "ssh2"},
-	"SSH2_HOSTKEY_TYPE_UNKNOWN":     {Extension: "ssh2"},
-	"SSH2_POLLERR":                  {Extension: "ssh2"},
-	"SSH2_POLLEXT":                  {Extension: "ssh2"},
-	"SSH2_POLLHUP":                  {Extension: "ssh2"},
-	"SSH2_POLLIN":                   {Extension: "ssh2"},
-	"SSH2_POLLNVAL":                 {Extension: "ssh2"},
-	"SSH2_POLLOUT":                  {Extension: "ssh2"},
-	"SSH2_POLL_CHANNEL_CLOSED":      {Extension: "ssh2"},
-	"SSH2_POLL_LISTENER_CLOSED":     {Extension: "ssh2"},
-	"SSH2_POLL_SESSION_CLOSED":      {Extension: "ssh2"},
-	"SSH2_STREAM_STDERR":            {Extension: "ssh2"},
-	"SSH2_STREAM_STDIO":             {Extension: "ssh2"},
-	"SSH2_TERM_UNIT_CHARS":          {Extension: "ssh2"},
-	"SSH2_TERM_UNIT_PIXELS":         {Extension: "ssh2"},
-	"apcu_add":                      {Extension: "apcu"},
-	"apcu_cache_info":               {Extension: "apcu"},
-	"apcu_cas":                      {Extension: "apcu"},
-	"apcu_clear_cache":              {Extension: "apcu"},
-	"apcu_dec":                      {Extension: "apcu"},
-	"apcu_delete":                   {Extension: "apcu"},
-	"apcu_enabled":                  {Extension: "apcu"},
-	"apcu_entry":                    {Extension: "apcu"},
-	"apcu_exists":                   {Extension: "apcu"},
-	"apcu_fetch":                    {Extension: "apcu"},
-	"apcu_inc":                      {Extension: "apcu"},
-	"apcu_key_info":                 {Extension: "apcu"},
-	"apcu_sma_info":                 {Extension: "apcu"},
-	"apcu_store":                    {Extension: "apcu"},
-	"igbinary_serialize":            {Extension: "igbinary"},
-	"igbinary_unserialize":          {Extension: "igbinary"},
-	"ssh2_auth_agent":               {Extension: "ssh2"},
-	"ssh2_auth_hostbased_file":      {Extension: "ssh2"},
-	"ssh2_auth_none":                {Extension: "ssh2"},
-	"ssh2_auth_password":            {Extension: "ssh2"},
-	"ssh2_auth_pubkey":              {Extension: "ssh2"},
-	"ssh2_auth_pubkey_file":         {Extension: "ssh2"},
-	"ssh2_connect":                  {Extension: "ssh2"},
-	"ssh2_disconnect":               {Extension: "ssh2"},
-	"ssh2_exec":                     {Extension: "ssh2"},
-	"ssh2_fetch_stream":             {Extension: "ssh2"},
-	"ssh2_fingerprint":              {Extension: "ssh2"},
-	"ssh2_forward_accept":           {Extension: "ssh2"},
-	"ssh2_forward_listen":           {Extension: "ssh2"},
-	"ssh2_hostkey":                  {Extension: "ssh2"},
-	"ssh2_keepalive_config":         {Extension: "ssh2"},
-	"ssh2_keepalive_send":           {Extension: "ssh2"},
-	"ssh2_methods_negotiated":       {Extension: "ssh2"},
-	"ssh2_poll":                     {Extension: "ssh2"},
-	"ssh2_publickey_add":            {Extension: "ssh2"},
-	"ssh2_publickey_init":           {Extension: "ssh2"},
-	"ssh2_publickey_list":           {Extension: "ssh2"},
-	"ssh2_publickey_remove":         {Extension: "ssh2"},
-	"ssh2_scp_recv":                 {Extension: "ssh2"},
-	"ssh2_scp_send":                 {Extension: "ssh2"},
-	"ssh2_send_eof":                 {Extension: "ssh2"},
-	"ssh2_send_signal":              {Extension: "ssh2"},
-	"ssh2_set_timeout":              {Extension: "ssh2"},
-	"ssh2_sftp":                     {Extension: "ssh2"},
-	"ssh2_sftp_chmod":               {Extension: "ssh2"},
-	"ssh2_sftp_lstat":               {Extension: "ssh2"},
-	"ssh2_sftp_mkdir":               {Extension: "ssh2"},
-	"ssh2_sftp_readlink":            {Extension: "ssh2"},
-	"ssh2_sftp_realpath":            {Extension: "ssh2"},
-	"ssh2_sftp_rename":              {Extension: "ssh2"},
-	"ssh2_sftp_rmdir":               {Extension: "ssh2"},
-	"ssh2_sftp_stat":                {Extension: "ssh2"},
-	"ssh2_sftp_symlink":             {Extension: "ssh2"},
-	"ssh2_sftp_unlink":              {Extension: "ssh2"},
-	"ssh2_shell":                    {Extension: "ssh2"},
-	"ssh2_shell_resize":             {Extension: "ssh2"},
-	"ssh2_tunnel":                   {Extension: "ssh2"},
-
-	"str_contains":     {Since: "8.0"},
-	"str_starts_with":  {Since: "8.0"},
-	"str_ends_with":    {Since: "8.0"},
-	"json_validate":    {Since: "8.3", Extension: "json"},
-	"Fiber":            {Since: "8.1"},
-	"WeakMap":          {Since: "8.0"},
-	"ReflectionMethod": {Since: "7.4"},
-	"ReflectionObject": {Since: "7.4"},
+	"SSH2_DEFAULT_TERMINAL":       {Extension: "ssh2"},
+	"SSH2_DEFAULT_TERM_HEIGHT":    {Extension: "ssh2"},
+	"SSH2_DEFAULT_TERM_UNIT":      {Extension: "ssh2"},
+	"SSH2_DEFAULT_TERM_WIDTH":     {Extension: "ssh2"},
+	"SSH2_FINGERPRINT_HEX":        {Extension: "ssh2"},
+	"SSH2_FINGERPRINT_MD5":        {Extension: "ssh2"},
+	"SSH2_FINGERPRINT_RAW":        {Extension: "ssh2"},
+	"SSH2_FINGERPRINT_SHA1":       {Extension: "ssh2"},
+	"SSH2_FINGERPRINT_SHA256":     {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_DSS":       {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_ECDSA_256": {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_ECDSA_384": {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_ECDSA_521": {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_ED25519":   {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_RSA":       {Extension: "ssh2"},
+	"SSH2_HOSTKEY_TYPE_UNKNOWN":   {Extension: "ssh2"},
+	"SSH2_POLLERR":                {Extension: "ssh2"},
+	"SSH2_POLLEXT":                {Extension: "ssh2"},
+	"SSH2_POLLHUP":                {Extension: "ssh2"},
+	"SSH2_POLLIN":                 {Extension: "ssh2"},
+	"SSH2_POLLNVAL":               {Extension: "ssh2"},
+	"SSH2_POLLOUT":                {Extension: "ssh2"},
+	"SSH2_POLL_CHANNEL_CLOSED":    {Extension: "ssh2"},
+	"SSH2_POLL_LISTENER_CLOSED":   {Extension: "ssh2"},
+	"SSH2_POLL_SESSION_CLOSED":    {Extension: "ssh2"},
+	"SSH2_STREAM_STDERR":          {Extension: "ssh2"},
+	"SSH2_STREAM_STDIO":           {Extension: "ssh2"},
+	"SSH2_TERM_UNIT_CHARS":        {Extension: "ssh2"},
+	"SSH2_TERM_UNIT_PIXELS":       {Extension: "ssh2"},
 
 	// PHP 7.3 constants
 	"JSON_THROW_ON_ERROR": {Since: "7.3"},
@@ -302,6 +154,14 @@ func (idx *Index) registerBuiltinRegistry(profile BuiltinProfile) {
 }
 
 func (idx *Index) registerBuiltinRegistryLocked(profile BuiltinProfile) {
+	for i := range generatedBuiltinFunctionSignatures {
+		sig := &generatedBuiltinFunctionSignatures[i]
+		if !builtinAvailable(sig.Name, profile) {
+			continue
+		}
+		idx.addBuiltinFunctionLocked(sig.Name, sig.Params, sig.ReturnType, sig.docFor(profile.PHPVersion))
+	}
+
 	for _, fn := range builtinFunctions {
 		if !builtinAvailable(fn.Name, profile) {
 			continue
@@ -319,7 +179,17 @@ func (idx *Index) registerBuiltinRegistryLocked(profile BuiltinProfile) {
 		idx.addBuiltinFunctionLocked(name, nil, "mixed", "PHP built-in function")
 	}
 
+	for _, c := range generatedBuiltinClassLikes {
+		idx.addBuiltinClassLikeWithMembersLocked(c, profile)
+	}
+
 	for _, cls := range builtinClasses {
+		if sym := idx.builtinLocked(cls.Name); sym != nil {
+			if sym.DocComment == "" {
+				sym.DocComment = cls.Doc
+			}
+			continue
+		}
 		if !builtinAvailable(cls.Name, profile) {
 			continue
 		}
@@ -377,7 +247,7 @@ func builtinAvailable(name string, profile BuiltinProfile) bool {
 	if !ok {
 		return true
 	}
-	if availability.Since != "" && compareBuiltinVersions(availability.Since, profile.PHPVersion) > 0 {
+	if !availability.InVersion(profile.PHPVersion) {
 		return false
 	}
 	if availability.Extension != "" {
@@ -392,15 +262,18 @@ func builtinAvailable(name string, profile BuiltinProfile) bool {
 }
 
 // LookupAvailability reports whether name is a known PHP built-in subject
-// to a version or extension constraint. The hand-authored override map
-// (builtinAvailabilityByName in this file) wins over the generated table
-// (builtin_availability_generated.go) so we can correct upstream stub data
-// without regenerating.
+// to a version or extension constraint. Class-likes and functions come from
+// the generated tables (builtin_classes_generated.go,
+// builtin_functions_generated.go); constants from builtinAvailabilityByName in
+// this file.
 func LookupAvailability(name string) (BuiltinAvailability, bool) {
-	if a, ok := builtinAvailabilityByName[name]; ok {
+	if a, ok := generatedBuiltinClassAvailability[name]; ok {
 		return a, true
 	}
-	if a, ok := generatedBuiltinAvailability[name]; ok {
+	if a, ok := generatedBuiltinFunctionAvailabilityByName[name]; ok {
+		return a, true
+	}
+	if a, ok := builtinAvailabilityByName[name]; ok {
 		return a, true
 	}
 	return BuiltinAvailability{}, false
@@ -438,11 +311,11 @@ func parseBuiltinMajorMinor(version string) (int, int) {
 }
 
 func (idx *Index) addBuiltinFunctionLocked(name string, params []ParamInfo, ret string, doc string) {
-	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: "builtin", ReturnType: ret, DocComment: doc, Params: params})
+	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: builtinRegistryURI, ReturnType: ret, DocComment: doc, Params: params})
 }
 
 func (idx *Index) addBuiltinClassLikeLocked(name string, doc string) {
-	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: "builtin", DocComment: doc})
+	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: builtinRegistryURI, DocComment: doc})
 }
 
 func (idx *Index) storeBuiltinLocked(sym *Symbol) {

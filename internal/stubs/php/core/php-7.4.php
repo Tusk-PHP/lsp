@@ -6,8 +6,6 @@ function var_export(mixed $value, bool $return = false): string {}
 
 function implode(string $separator, array $array): string {}
 
-function get_class(object $object): string {}
-
 /** Class used to represent anonymous functions. */
 final class Closure
 {

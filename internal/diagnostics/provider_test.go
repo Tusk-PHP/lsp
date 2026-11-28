@@ -221,7 +221,7 @@ json_validate('{}');
 	if unavailable[0].Message != "Function 'str_contains' requires PHP >= 8.0" {
 		t.Fatalf("expected str_contains first, got %q", unavailable[0].Message)
 	}
-	if unavailable[1].Message != "Function 'json_validate' requires ext-json (PHP >= 8.3)" {
+	if unavailable[1].Message != "Function 'json_validate' requires PHP >= 8.3" {
 		t.Fatalf("expected json_validate second, got %q", unavailable[1].Message)
 	}
 }
