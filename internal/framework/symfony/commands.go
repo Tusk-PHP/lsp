@@ -151,9 +151,6 @@ const asCommandFQN = `Symfony\Component\Console\Attribute\AsCommand`
 // DiscoverCommands scans indexed project PHP sources for Symfony console commands,
 // recognising both #[AsCommand(...)] attributes and legacy $defaultName properties.
 func DiscoverCommands(index *symbols.Index) *CommandIndex {
-	if index == nil {
-		return NewCommandIndex(phpparser.AnyGrammar())
-	}
 	ci := NewCommandIndex(index.Grammars())
 
 	for _, uri := range index.GetAllFileURIs() {
