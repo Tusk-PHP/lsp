@@ -57,8 +57,6 @@ func scalarType(e ast.Expr, src string) (general, literal string) {
 			return "int", decimal(text)
 		case token.FloatLiteral:
 			return "float", decimal(text)
-		case token.StartHeredoc:
-			return "string", ""
 		}
 	case *ast.Unary:
 		lit, ok := n.Operand.(*ast.Literal)
