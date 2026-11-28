@@ -275,10 +275,7 @@ func (r *Resolver) computeClosureExpectations(closure *scope.Scope, lines []stri
 	if !found {
 		return ResolvedType{}, ResolvedType{}, false
 	}
-	var doc *parser.DocBlock
-	if member.DocComment != "" {
-		doc = r.parseDoc(member.DocComment)
-	}
+	doc := r.parseDoc(member.DocComment)
 	params := r.paramPatterns(member, doc)
 	idx := -1
 	for i, p := range params {
@@ -320,11 +317,9 @@ func (r *Resolver) computeClosureExpectations(closure *scope.Scope, lines []stri
 	subst = r.fillUnbound(subst, r.templatesOf(member.ParentFQN), owner, file)
 	env := typeEnv{subst: subst, static: receiver, owner: owner, file: file}
 	expected = r.applyEnv(params[idx].pattern, env)
-	if doc != nil {
-		for _, ct := range doc.ClosureThis {
-			if ct.Name == params[idx].name {
-				closureThis = r.applyEnv(r.parseType(ct.Type), env)
-			}
+	for _, ct := range doc.ClosureThis {
+		if ct.Name == params[idx].name {
+			closureThis = r.applyEnv(r.parseType(ct.Type), env)
 		}
 	}
 	return expected, closureThis, true

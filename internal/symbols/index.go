@@ -260,54 +260,52 @@ func (idx *Index) IndexIDEHelperFile(uri string, source string) {
 			// Class already exists — only inject virtual members from this file's docblock
 			if c.DocComment != "" {
 				doc := parser.ParseDocBlock(c.DocComment)
-				if doc != nil {
-					indexTypeAliases(existing, doc, resolve)
-					for _, prop := range doc.Properties {
-						if prop.Name == "" {
-							continue
-						}
-						propName := "$" + prop.Name
-						if idx.symbols[fqn+"::"+propName] != nil {
-							continue
-						}
-						ps := &Symbol{
-							Name:       propName,
-							FQN:        fqn + "::" + propName,
-							Kind:       KindProperty,
-							URI:        uri,
-							Visibility: "public",
-							Type:       resolve(prop.Type),
-							ParentFQN:  fqn,
-							IsVirtual:  true,
-							DocComment: prop.Description,
-						}
-						existing.Children = append(existing.Children, ps)
-						idx.addSymbolWithSource(uri, ps, SourceProject)
+				indexTypeAliases(existing, doc, resolve)
+				for _, prop := range doc.Properties {
+					if prop.Name == "" {
+						continue
 					}
-					for _, method := range doc.Methods {
-						if method.Name == "" {
-							continue
-						}
-						if idx.symbols[fqn+"::"+method.Name] != nil {
-							continue
-						}
-						ms := &Symbol{
-							Name:       method.Name,
-							FQN:        fqn + "::" + method.Name,
-							Kind:       KindMethod,
-							URI:        uri,
-							Visibility: "public",
-							ReturnType: resolve(method.ReturnType),
-							ParentFQN:  fqn,
-							IsVirtual:  true,
-							DocComment: method.Description,
-						}
-						if method.Params != "" {
-							ms.Params = parseDocMethodParams(method.Params, resolve)
-						}
-						existing.Children = append(existing.Children, ms)
-						idx.addSymbolWithSource(uri, ms, SourceProject)
+					propName := "$" + prop.Name
+					if idx.symbols[fqn+"::"+propName] != nil {
+						continue
 					}
+					ps := &Symbol{
+						Name:       propName,
+						FQN:        fqn + "::" + propName,
+						Kind:       KindProperty,
+						URI:        uri,
+						Visibility: "public",
+						Type:       resolve(prop.Type),
+						ParentFQN:  fqn,
+						IsVirtual:  true,
+						DocComment: prop.Description,
+					}
+					existing.Children = append(existing.Children, ps)
+					idx.addSymbolWithSource(uri, ps, SourceProject)
+				}
+				for _, method := range doc.Methods {
+					if method.Name == "" {
+						continue
+					}
+					if idx.symbols[fqn+"::"+method.Name] != nil {
+						continue
+					}
+					ms := &Symbol{
+						Name:       method.Name,
+						FQN:        fqn + "::" + method.Name,
+						Kind:       KindMethod,
+						URI:        uri,
+						Visibility: "public",
+						ReturnType: resolve(method.ReturnType),
+						ParentFQN:  fqn,
+						IsVirtual:  true,
+						DocComment: method.Description,
+					}
+					if method.Params != "" {
+						ms.Params = parseDocMethodParams(method.Params, resolve)
+					}
+					existing.Children = append(existing.Children, ms)
+					idx.addSymbolWithSource(uri, ms, SourceProject)
 				}
 			}
 		} else {
@@ -925,9 +923,6 @@ func (idx *Index) indexVirtualMembers(uri string, parent *Symbol, src SymbolSour
 		return
 	}
 	doc := parser.ParseDocBlock(parent.DocComment)
-	if doc == nil {
-		return
-	}
 	fqn := parent.FQN
 
 	indexTypeAliases(parent, doc, resolve)

@@ -76,16 +76,6 @@ func classStringConstructorParam(r *Resolver, sym *symbols.Symbol, classFQN stri
 	}
 
 	doc := parser.ParseDocBlock(ctor.DocComment)
-	if doc == nil {
-		// Fall back to plain param types
-		for i, p := range ctor.Params {
-			if t := extractClassStringTemplate(p.Type, templateNames); t != "" {
-				return i, t
-			}
-		}
-		return -1, ""
-	}
-
 	// Match @param annotations by position against ctor.Params
 	for i, p := range ctor.Params {
 		docType := resolveDocParam(doc, p.Name)

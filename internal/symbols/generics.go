@@ -19,7 +19,7 @@ func docTemplates(doc string, resolve func(string) string) []TemplateParam {
 // templateParams turns a docblock's @template tags into template parameters,
 // with their bounds and defaults resolved like any other type in the file.
 func templateParams(doc *parser.DocBlock, resolve func(string) string) []TemplateParam {
-	if doc == nil || len(doc.Templates) == 0 {
+	if len(doc.Templates) == 0 {
 		return nil
 	}
 	names := make(map[string]bool, len(doc.Templates))
@@ -43,7 +43,7 @@ func templateParams(doc *parser.DocBlock, resolve func(string) string) []Templat
 // supertypes reads @extends, @implements and @use (and their @template- and
 // prefixed forms) into the parents they give type arguments to.
 func supertypes(doc *parser.DocBlock, resolve func(string) string) []Supertype {
-	if doc == nil || len(doc.Extends)+len(doc.Implements)+len(doc.Uses) == 0 {
+	if len(doc.Extends)+len(doc.Implements)+len(doc.Uses) == 0 {
 		return nil
 	}
 	var out []Supertype

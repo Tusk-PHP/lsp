@@ -188,7 +188,7 @@ func (r *Resolver) ResolveSymbolTemplateReturn(sym *symbols.Symbol, methodName s
 
 	retType := member.ReturnType
 	if retType == "" && member.DocComment != "" {
-		if doc := parser.ParseDocBlock(member.DocComment); doc != nil && doc.Return.Type != "" {
+		if doc := parser.ParseDocBlock(member.DocComment); doc.Return.Type != "" {
 			retType = doc.Return.Type
 		}
 	}

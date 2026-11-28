@@ -297,9 +297,6 @@ func (p *Provider) calledMethod(expr, source string, pos protocol.Position, file
 
 func extractShapeFromDocParams(docComment, paramBare string) []types.ShapeField {
 	doc := parser.ParseDocBlock(docComment)
-	if doc == nil {
-		return nil
-	}
 	target := "$" + paramBare
 	for _, param := range doc.Params {
 		if param.Name == target {

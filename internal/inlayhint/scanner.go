@@ -532,7 +532,7 @@ func (p *Provider) collectMethodReturnHints(result *parser.ParseResult, file *pa
 				continue
 			}
 			doc := parser.ParseDocBlock(m.DocComment)
-			if doc == nil || doc.Return.Type == "" {
+			if doc.Return.Type == "" {
 				continue
 			}
 			retType := shortenFQNs(doc.Return.Type)

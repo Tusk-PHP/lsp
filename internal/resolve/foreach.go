@@ -26,11 +26,7 @@ func (r *Resolver) enclosingReturnType(lines []string, pos textpos.Position, fil
 			}
 		}
 	}
-	docType := ""
-	if d := parser.ParseDocBlock(doc); d != nil {
-		docType = d.Return.Type
-	}
-	raw := r.preferDocType(native, docType, nil, owner)
+	raw := r.preferDocType(native, parser.ParseDocBlock(doc).Return.Type, nil, owner)
 	if raw == "" {
 		return ResolvedType{}
 	}

@@ -256,7 +256,7 @@ func (r *Resolver) applyStatementCall(varName string, t ResolvedType, stmt strin
 		return t
 	}
 	doc := r.parseDoc(callee.member.DocComment)
-	if doc == nil || len(doc.Asserts)+len(doc.ParamOuts) == 0 && doc.SelfOut == "" {
+	if len(doc.Asserts)+len(doc.ParamOuts) == 0 && doc.SelfOut == "" {
 		return t
 	}
 	if strings.TrimSpace(receiverExpr) == varName {
@@ -646,9 +646,6 @@ func (r *Resolver) applyCondition(varName string, t ResolvedType, cond string, n
 			continue
 		}
 		doc := r.parseDoc(callee.member.DocComment)
-		if doc == nil {
-			continue
-		}
 		env := r.calleeEnv(callee, args, lines, pos, file)
 		byParam := argumentsByParam(callee.params, args)
 		for _, a := range doc.Asserts {

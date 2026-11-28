@@ -508,11 +508,9 @@ func (r *Resolver) resolveResolvedType(rt ResolvedType, file *parser.FileNode) R
 // (PHP 8.6), else the function's `@param` for it.
 func paramDocType(param parser.ParamNode, fnDoc *parser.DocBlock, varName string) string {
 	if param.DocComment != "" {
-		if doc := parser.ParseDocBlock(param.DocComment); doc != nil {
-			for _, v := range doc.Vars {
-				if v.Type != "" && (v.Name == "" || v.Name == varName) {
-					return v.Type
-				}
+		for _, v := range parser.ParseDocBlock(param.DocComment).Vars {
+			if v.Type != "" && (v.Name == "" || v.Name == varName) {
+				return v.Type
 			}
 		}
 	}
@@ -520,9 +518,6 @@ func paramDocType(param parser.ParamNode, fnDoc *parser.DocBlock, varName string
 }
 
 func resolveDocParam(doc *parser.DocBlock, varName string) string {
-	if doc == nil {
-		return ""
-	}
 	for _, param := range doc.Params {
 		if param.Name == varName {
 			return param.Type
@@ -699,10 +694,8 @@ func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) str
 	case symbols.KindProperty:
 		typeName = member.Type
 		if typeName == "" && member.DocComment != "" {
-			if doc := parser.ParseDocBlock(member.DocComment); doc != nil {
-				if vars, ok := doc.Tags["var"]; ok && len(vars) > 0 {
-					typeName = strings.Fields(vars[0])[0]
-				}
+			if vars := parser.ParseDocBlock(member.DocComment).Tags["var"]; len(vars) > 0 {
+				typeName = strings.Fields(vars[0])[0]
 			}
 		}
 	case symbols.KindConstant:
@@ -712,7 +705,7 @@ func (r *Resolver) MemberType(member *symbols.Symbol, file *parser.FileNode) str
 	case symbols.KindMethod:
 		typeName = member.ReturnType
 		if typeName == "" && member.DocComment != "" {
-			if doc := parser.ParseDocBlock(member.DocComment); doc != nil && doc.Return.Type != "" {
+			if doc := parser.ParseDocBlock(member.DocComment); doc.Return.Type != "" {
 				typeName = doc.Return.Type
 			}
 		}
@@ -1482,7 +1475,7 @@ func ParamDocSummary(file *parser.FileNode, pos textpos.Position, varName string
 		if p.Name != varName || p.DocComment == "" {
 			continue
 		}
-		if doc := parser.ParseDocBlock(p.DocComment); doc != nil && doc.Summary != "" {
+		if doc := parser.ParseDocBlock(p.DocComment); doc.Summary != "" {
 			return doc.Summary
 		}
 	}

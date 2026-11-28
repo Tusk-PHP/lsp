@@ -22,9 +22,6 @@ type parseCache struct {
 
 // parseDoc is parser.ParseDocBlock, cached. The result is read-only.
 func (r *Resolver) parseDoc(raw string) *parser.DocBlock {
-	if raw == "" {
-		return nil
-	}
 	c := &r.parsed
 	c.mu.Lock()
 	if doc, ok := c.docs[raw]; ok {

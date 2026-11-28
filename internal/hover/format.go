@@ -147,7 +147,7 @@ func (p *Provider) formatHoverDeclaration(sym *symbols.Symbol, doc *parser.DocBl
 }
 
 func constantType(sym *symbols.Symbol, doc *parser.DocBlock) string {
-	if sym.Type != "" || doc == nil || len(doc.Vars) == 0 {
+	if sym.Type != "" || len(doc.Vars) == 0 {
 		return sym.Type
 	}
 	return doc.Vars[0].Type
@@ -244,9 +244,6 @@ func coverageBar(covered, total int) string {
 }
 
 func (p *Provider) formatDocBlockDetails(doc *parser.DocBlock) string {
-	if doc == nil {
-		return ""
-	}
 
 	var sb strings.Builder
 

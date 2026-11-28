@@ -165,7 +165,7 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source stri
 			propName := "$" + snakeCase(m[1])
 			retType := method.ReturnType.Name
 			if retType == "" && method.DocComment != "" {
-				if doc := parser.ParseDocBlock(method.DocComment); doc != nil && doc.Return.Type != "" {
+				if doc := parser.ParseDocBlock(method.DocComment); doc.Return.Type != "" {
 					retType = doc.Return.Type
 				}
 			}
@@ -190,7 +190,7 @@ func analyzeModelSource(index *symbols.Index, model *symbols.Symbol, source stri
 			// Try to infer type from docblock @return
 			retType := ""
 			if method.DocComment != "" {
-				if doc := parser.ParseDocBlock(method.DocComment); doc != nil && doc.Return.Type != "" {
+				if doc := parser.ParseDocBlock(method.DocComment); doc.Return.Type != "" {
 					retType = doc.Return.Type
 				}
 			}

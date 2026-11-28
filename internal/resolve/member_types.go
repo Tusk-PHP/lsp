@@ -32,19 +32,13 @@ func (r *Resolver) rawMemberReturnType(member *symbols.Symbol) string {
 	ownerFQN := ownerScopeFQN(member, textpos.Position{}, nil)
 	switch member.Kind {
 	case symbols.KindMethod:
-		var docType string
-		if member.DocComment != "" {
-			if doc := r.parseDoc(member.DocComment); doc != nil {
-				docType = doc.Return.Type
-			}
-		}
-		if t := r.preferDocType(member.ReturnType, docType, member.Templates, ownerFQN); t != "" {
+		if t := r.preferDocType(member.ReturnType, r.parseDoc(member.DocComment).Return.Type, member.Templates, ownerFQN); t != "" {
 			return r.expandTypeAliases(t, ownerFQN, nil)
 		}
 	case symbols.KindProperty:
 		var docType string
 		if member.DocComment != "" && strings.Contains(member.DocComment, "var") {
-			if doc := r.parseDoc(member.DocComment); doc != nil && len(doc.Vars) > 0 {
+			if doc := r.parseDoc(member.DocComment); len(doc.Vars) > 0 {
 				docType = doc.Vars[0].Type
 			}
 		}

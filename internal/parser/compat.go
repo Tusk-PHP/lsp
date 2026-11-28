@@ -311,12 +311,7 @@ func FileNodeOf(result *ParseResult) (file *FileNode) {
 }
 
 func ParseDocBlock(raw string) *DocBlock {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil
-	}
-
-	trimmed = strings.TrimPrefix(trimmed, "/**")
+	trimmed := strings.TrimPrefix(strings.TrimSpace(raw), "/**")
 	trimmed = strings.TrimSuffix(trimmed, "*/")
 	lines := strings.Split(trimmed, "\n")
 	doc := &DocBlock{Tags: make(map[string][]string)}
@@ -340,11 +335,11 @@ func ParseDocBlock(raw string) *DocBlock {
 		}
 	}
 	applyDocTags(doc, tagged)
-
-	if doc.Summary == "" && len(doc.Tags) == 0 {
-		return nil
-	}
 	return doc
+}
+
+func (d *DocBlock) IsEmpty() bool {
+	return d.Summary == "" && len(d.Tags) == 0
 }
 
 // parseDocParam parses "@param Type $name Description" into structured DocParam.
