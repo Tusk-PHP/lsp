@@ -606,9 +606,6 @@ func (r *Resolver) classStringFromLiteral(a ResolvedType) ResolvedType {
 	}
 	name := a.Literal[1 : len(a.Literal)-1]
 	name = strings.TrimPrefix(strings.ReplaceAll(name, `\\`, `\`), `\`)
-	if !isValidPHPClassName(name) {
-		return a
-	}
 	if sym := r.Index.Lookup(name); sym != nil {
 		switch sym.Kind {
 		case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:

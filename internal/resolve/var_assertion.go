@@ -88,11 +88,7 @@ func (t *syntaxTree) assignsTo(stmt ast.Node, varName string) bool {
 // docVarType returns the type doc gives varName with `@var Type $name`, or,
 // when bare is set, with a bare `@var Type`.
 func (t *syntaxTree) docVarType(doc ast.Span, varName string, bare bool) string {
-	parsed := parser.ParseDocBlock(t.text(doc))
-	if parsed == nil {
-		return ""
-	}
-	for _, v := range parsed.Vars {
+	for _, v := range parser.ParseDocBlock(t.text(doc)).Vars {
 		if v.Name == varName || bare && v.Name == "" {
 			return v.Type
 		}
@@ -167,10 +163,7 @@ func (t *syntaxTree) statementVarDoc(off uint32, varName string) string {
 // the statement the closure is in.
 func (r *Resolver) closureDoc(param *scope.Binding, lines []string, file *parser.FileNode) *parser.DocBlock {
 	t := r.syntaxTree(lines, file)
-	off, ok := t.offset(param.Scope.Range.Start)
-	if !ok {
-		return nil
-	}
+	off := t.offset(param.Scope.Range.Start)
 	doc, ok := t.root.DocBefore(off)
 	if !ok {
 		doc, ok = t.statementDoc(off)

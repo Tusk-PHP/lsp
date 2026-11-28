@@ -60,9 +60,7 @@ func (vs variableScope) severalValues() bool {
 func (r *Resolver) scopeDocument(lines []string) *scope.Document {
 	r.scopeMu.Lock()
 	defer r.scopeMu.Unlock()
-	if r.cachedLines == nil || !sameLines(r.cachedLines, lines) {
-		r.setSourceLocked(strings.Join(lines, "\n"), lines)
-	}
+	r.useLinesLocked(lines)
 	if r.scopeDoc == nil {
 		r.scopeDoc = scope.Collect(r.scopeSource)
 	}

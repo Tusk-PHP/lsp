@@ -56,15 +56,7 @@ func (r *Resolver) reachingType(varName string, lines []string, pos textpos.Posi
 
 func (r *Resolver) assertedAfterWrite(varName string, lines []string, pos textpos.Position, file *parser.FileNode, b *scope.Binding, w int) (ResolvedType, bool) {
 	t := r.syntaxTree(lines, file)
-	after, ok := t.offset(b.Site(w).At)
-	if !ok {
-		return ResolvedType{}, false
-	}
-	off, ok := t.offset(pos)
-	if !ok {
-		return ResolvedType{}, false
-	}
-	return r.varAssertion(varName, pos, file, t, after, off)
+	return r.varAssertion(varName, pos, file, t, t.offset(b.Site(w).At), t.offset(pos))
 }
 
 // reachingValuesType is the type of a variable that may hold the value of any

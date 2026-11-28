@@ -15,10 +15,7 @@ func (vs variableScope) assignedValue(t *syntaxTree, line int, varName string) (
 	if w == nil || line != w.At.Line {
 		return t.assignmentStartingLine(line, varName)
 	}
-	off, ok := t.offset(w.At)
-	if !ok {
-		return nil, false
-	}
+	off := t.offset(w.At)
 	a, ok := t.assignmentAt(off, varName)
 	if !ok || !a.statement && !t.startsLine(off) {
 		return nil, false
@@ -138,27 +135,12 @@ func (r *Resolver) assignedNewType(t *syntaxTree, n *ast.New, ctx ExprContext) (
 	if rt := r.newExpressionType(className, args, ctx); rt.FQN == classFQN && len(rt.Params) > 0 {
 		return rt, true
 	}
-	if argRT := r.firstArgType(t, n.Args.Args[0].Value, ctx); !argRT.IsEmpty() && (argRT.IsGeneric() || argRT.Shape != "") {
+	if argRT := r.ExpressionType(args[0].Expr, ctx); !argRT.IsEmpty() && (argRT.IsGeneric() || argRT.Shape != "") {
 		if rt := r.inferConstructorGenerics(classFQN, argRT); !rt.IsEmpty() {
 			return rt, true
 		}
 	}
-	if rt := r.inferClassStringBinding(classFQN, args, ctx.Lines, ctx.Pos, ctx.File); !rt.IsEmpty() {
-		return rt, true
-	}
 	return ResolvedType{FQN: classFQN}, true
-}
-
-func (r *Resolver) firstArgType(t *syntaxTree, arg ast.Expr, ctx ExprContext) ResolvedType {
-	switch n := arg.(type) {
-	case *ast.Array:
-		if n.Short {
-			return InferArrayLiteralType(t.text(n))
-		}
-	case *ast.Variable:
-		return r.ResolveVariableTypeTyped(t.text(n), ctx.Lines, ctx.Pos, ctx.File)
-	}
-	return ResolvedType{}
 }
 
 // documentedAssignment returns the type an assignment declares: the closure
@@ -175,52 +157,14 @@ func (r *Resolver) documentedAssignment(varName string, t *syntaxTree, v assigne
 	return ResolvedType{}, false
 }
 
-func (r *Resolver) assignedPlainType(varName string, t *syntaxTree, v assignedValue, lines []string, pos textpos.Position, file *parser.FileNode) (string, bool) {
-	if rt, ok := r.documentedAssignment(varName, t, v, pos, file); ok {
-		return rt.String(), true
-	}
+func (r *Resolver) assignedPlainType(t *syntaxTree, v assignedValue) (string, bool) {
 	text := t.text(v.expr)
-	if v.called {
-		return PlainTypeName(r.InvokeType(r.ExpressionType(text, ExprContext{Lines: lines, Pos: pos, File: file}))), true
-	}
-	switch n := v.expr.(type) {
-	case *ast.Binary:
-		if n.Op == token.Coalesce {
-			return PlainTypeName(r.eitherType(t, n.Left, n.Right, ExprContext{Lines: lines, Pos: pos, File: file})), true
-		}
-	case *ast.Ternary:
-		return PlainTypeName(r.ternaryType(t, n, ExprContext{Lines: lines, Pos: pos, File: file})), true
-	case *ast.New:
-		if name, ok := n.Class.(*ast.ConstFetch); ok && n.Anonymous == nil {
-			className := t.text(name)
-			if fqn, isKeyword := r.ClassKeywordFQN(className, pos, file); isKeyword {
-				return fqn, true
-			}
-			return r.ResolveClassName(className, file), true
-		}
-	case *ast.Variable:
-		if text != varName {
-			if typ := r.ResolveVariableType(text, lines, pos, file); typ != "" {
-				return typ, true
-			}
-		}
-	case *ast.Call:
-		if name, ok := n.Callee.(*ast.ConstFetch); ok && r.Index != nil {
-			if isCallableArgList(n.Args) {
-				return "Closure", true
-			}
-			if fn := r.CalledFunction(t.text(name), file); fn != nil && fn.ReturnType != "" {
-				return fn.ReturnType, true
-			}
-		}
-	}
 	if typ := InferLiteralType(text); typ != "" {
 		return typ, true
 	}
-	if r.ChainResolver == nil || !isMemberChain(v.expr) {
-		return "", false
-	}
-	return r.ChainResolver(r, text, r.JoinLines(lines), pos, file), true
+	_, ternary := v.expr.(*ast.Ternary)
+	coalesce, _ := v.expr.(*ast.Binary)
+	return "", v.called || ternary || coalesce != nil && coalesce.Op == token.Coalesce || r.ChainResolver != nil && isMemberChain(v.expr)
 }
 
 func variableOffsets(t *syntaxTree, e *ast.ArrayDimFetch) (origin string, dims []string, ok bool) {

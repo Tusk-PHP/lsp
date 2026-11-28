@@ -31,11 +31,16 @@ func sameLines(a, b []string) bool {
 func (r *Resolver) JoinLines(lines []string) string {
 	r.scopeMu.Lock()
 	defer r.scopeMu.Unlock()
-	if r.cachedLines != nil && sameLines(r.cachedLines, lines) {
-		return r.scopeSource
-	}
-	r.setSourceLocked(strings.Join(lines, "\n"), lines)
+	r.useLinesLocked(lines)
 	return r.scopeSource
+}
+
+// useLinesLocked switches the cache to the file lines were split from, unless
+// it already holds it.
+func (r *Resolver) useLinesLocked(lines []string) {
+	if r.cachedLines == nil || !sameLines(r.cachedLines, lines) {
+		r.setSourceLocked(strings.Join(lines, "\n"), lines)
+	}
 }
 
 // Lines returns the source split into lines, reusing the last result while

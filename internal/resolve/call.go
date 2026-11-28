@@ -668,3 +668,39 @@ func (r *Resolver) inheritedDocMethod(member *symbols.Symbol) *symbols.Symbol {
 	}
 	return nil
 }
+
+// splitArgList splits a function argument list by top-level commas.
+func splitArgList(argStr string) []string {
+	var args []string
+	depth := 0
+	inStr := byte(0)
+	start := 0
+	for i := 0; i < len(argStr); i++ {
+		ch := argStr[i]
+		if inStr != 0 {
+			if ch == inStr && (i == 0 || argStr[i-1] != '\\') {
+				inStr = 0
+			}
+			continue
+		}
+		switch ch {
+		case '\'', '"':
+			inStr = ch
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				args = append(args, strings.TrimSpace(argStr[start:i]))
+				start = i + 1
+			}
+		}
+	}
+	if tail := strings.TrimSpace(argStr[start:]); tail != "" {
+		args = append(args, tail)
+	}
+	return args
+}

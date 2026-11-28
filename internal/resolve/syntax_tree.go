@@ -1,8 +1,6 @@
 package resolve
 
 import (
-	"strings"
-
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
@@ -32,9 +30,7 @@ func newSyntaxTree(src string, tree *ast.File) *syntaxTree {
 func (r *Resolver) syntaxTree(lines []string, file *parser.FileNode) *syntaxTree {
 	r.scopeMu.Lock()
 	defer r.scopeMu.Unlock()
-	if r.cachedLines == nil || !sameLines(r.cachedLines, lines) {
-		r.setSourceLocked(strings.Join(lines, "\n"), lines)
-	}
+	r.useLinesLocked(lines)
 	if r.scopeTree != nil && r.scopeTree.grammar == file.Grammar {
 		return r.scopeTree
 	}
@@ -86,15 +82,15 @@ func (t *syntaxTree) text(n ast.Node) string {
 	return n.Bounds().Text(t.src)
 }
 
-func (t *syntaxTree) offset(p textpos.Position) (uint32, bool) {
-	if p.Line < 0 || p.Line >= len(t.lines) || p.Character < 0 {
-		return 0, false
+func (t *syntaxTree) offset(p textpos.Position) uint32 {
+	end := uint32(len(t.src))
+	if p.Line >= len(t.lines) {
+		return end
 	}
-	off := t.lines[p.Line] + uint32(p.Character)
-	if int(off) > len(t.src) {
-		return 0, false
+	if p.Line+1 < len(t.lines) {
+		end = t.lines[p.Line+1] - 1
 	}
-	return off, true
+	return min(t.lines[p.Line]+uint32(p.Character), end)
 }
 
 func (t *syntaxTree) assignmentAt(off uint32, name string) (assignment, bool) {
@@ -103,11 +99,7 @@ func (t *syntaxTree) assignmentAt(off uint32, name string) (assignment, bool) {
 }
 
 func (t *syntaxTree) assignmentStartingLine(line int, name string) (ast.Expr, bool) {
-	off, ok := t.offset(textpos.Position{Line: line})
-	if !ok {
-		return nil, false
-	}
-	a, ok := t.assignmentAt(t.indented(off), name)
+	a, ok := t.assignmentAt(t.indented(t.offset(textpos.Position{Line: line})), name)
 	return a.value, ok
 }
 
@@ -185,8 +177,6 @@ func callArgs(e ast.Expr) *ast.ArgList {
 		return n.Args
 	case *ast.StaticCall:
 		return n.Args
-	case *ast.New:
-		return n.Args
 	}
 	return nil
 }
@@ -208,9 +198,6 @@ func isCallableArgList(args *ast.ArgList) bool {
 }
 
 func (t *syntaxTree) argsText(args *ast.ArgList) string {
-	if args == nil {
-		return ""
-	}
 	var text string
 	if n := len(args.Args); n > 0 {
 		text = t.src[args.Args[0].Start:args.Args[n-1].End]
@@ -242,9 +229,8 @@ func (t *syntaxTree) callArgList(args *ast.ArgList) []CallArg {
 	return out
 }
 
-func spreadOnlyVariable(t *syntaxTree, e ast.Expr) string {
-	arr, ok := e.(*ast.Array)
-	if !ok || len(arr.Items) == 0 {
+func spreadOnlyVariable(t *syntaxTree, arr *ast.Array) string {
+	if len(arr.Items) == 0 {
 		return ""
 	}
 	for _, item := range arr.Items {
@@ -310,11 +296,6 @@ func (r *Resolver) syntaxType(t *syntaxTree, e ast.Expr, ctx ExprContext) Resolv
 			return ResolvedType{}
 		}
 		return r.OffsetType(cur, t.text(n.Dim))
-	case *ast.ConstFetch:
-		if lit := literalExprType(t.text(n)); !lit.IsEmpty() {
-			return lit
-		}
-		return r.chainOriginType(chainOrigin{kind: 'c', text: t.text(n)}, ctx)
 	}
 	return r.ExpressionType(t.text(e), ctx)
 }
@@ -323,7 +304,12 @@ func (r *Resolver) memberStep(t *syntaxTree, receiver ast.Expr, op string, name 
 	if _, ok := name.(*ast.IdentifierExpr); !ok && op == "->" {
 		return ResolvedType{}
 	}
-	cur := r.syntaxType(t, receiver, ctx)
+	var cur ResolvedType
+	if class, ok := receiver.(*ast.ConstFetch); ok && op == "::" {
+		cur = r.chainOriginType(chainOrigin{kind: 'c', text: t.text(class)}, ctx)
+	} else {
+		cur = r.syntaxType(t, receiver, ctx)
+	}
 	if cur.IsEmpty() {
 		return ResolvedType{}
 	}

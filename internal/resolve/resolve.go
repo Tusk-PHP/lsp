@@ -944,7 +944,7 @@ func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos 
 		if !ok {
 			continue
 		}
-		typ, stop := r.assignedPlainType(varName, tree, tree.reduce(value), lines, pos, file)
+		typ, stop := r.assignedPlainType(tree, tree.reduce(value))
 		if typ != "" {
 			return typ
 		}
@@ -954,12 +954,8 @@ func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos 
 	}
 
 	// 4. An inline `@var Type $var` on a statement before the read.
-	from, okFrom := tree.offset(textpos.Position{Line: vs.firstLine})
-	off, okOff := tree.offset(pos)
-	if okFrom && okOff {
-		if rt, ok := r.varAssertion(varName, pos, file, tree, from, off); ok {
-			return rt.String()
-		}
+	if rt, ok := r.varAssertion(varName, pos, file, tree, tree.offset(textpos.Position{Line: vs.firstLine}), tree.offset(pos)); ok {
+		return rt.String()
 	}
 	return ""
 }
