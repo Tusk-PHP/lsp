@@ -727,7 +727,7 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.Completion.SetSymfonyTranslationResolver(symfonyTranslations)
 	rt.Completion.SetSymfonyCommands(ws.SymfonyCommands)
 
-	rt.InlayHint = inlayhint.NewProvider(ws.Index)
+	rt.InlayHint = inlayhint.NewProvider(ws.Index, ws.Container)
 
 	rt.Hover = hover.NewProvider(ws.Index, ws.Container, s.Framework)
 	rt.Hover.SetArrayResolver(arrayResolver)

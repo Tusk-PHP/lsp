@@ -285,17 +285,10 @@ func (r *Resolver) callType(t *syntaxTree, n *ast.Call, ctx ExprContext) Resolve
 }
 
 func (r *Resolver) containerCallType(t *syntaxTree, call ast.Expr, ctx ExprContext) (ResolvedType, bool) {
-	if r.ContainerCall == nil || len(ctx.Lines) == 0 {
+	if r.ContainerCall == nil {
 		return ResolvedType{}, false
 	}
-	switch concrete := r.ContainerCall(r, t.text(call), r.JoinLines(ctx.Lines), ctx.File); concrete {
-	case "":
-		return ResolvedType{}, false
-	case "-":
-		return ResolvedType{}, true
-	default:
-		return ResolvedType{FQN: concrete}, true
-	}
+	return r.ContainerCall(r, t.src, ctx.File, call)
 }
 
 type memberLink struct {

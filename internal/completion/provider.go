@@ -38,10 +38,7 @@ type Provider struct {
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
-	p := &Provider{index: index, container: ca, engine: resolve.NewChainEngine(index), framework: framework}
-	if ca != nil {
-		p.engine.ContainerCall = container.CallTypes(ca, index)
-	}
+	p := &Provider{index: index, container: ca, engine: container.NewEngine(index, ca), framework: framework}
 	return p
 }
 

@@ -424,30 +424,6 @@ func TestIsWordChar(t *testing.T) {
 	}
 }
 
-func TestExtractContainerCallArg(t *testing.T) {
-	tests := []struct {
-		input, want string
-	}{
-		{"app('request')", "request"},
-		{`app("cache")`, "cache"},
-		{"resolve('log')", "log"},
-		{"$container->get('mailer')", "mailer"},
-		{"$this->app->make('auth')", "auth"},
-		{"app('request', 'extra')", "request"},
-		{"someFunc('x')", ""},
-		{"no parens", ""},
-		{"app(Request::class)", "Request::class"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			if got := ExtractContainerCallArg(tt.input); got != tt.want {
-				t.Errorf("ExtractContainerCallArg(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestGetLineAt(t *testing.T) {
 	source := "line0\nline1\nline2"
 	if got := GetLineAt(source, 1); got != "line1" {

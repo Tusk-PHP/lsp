@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
@@ -166,14 +167,14 @@ func TestClassNamesNeedAnIndex(t *testing.T) {
 
 func TestContainerCallsInAChain(t *testing.T) {
 	r, ctx := expressionFormsFixture(t)
-	r.ContainerCall = func(_ *Resolver, call, _ string, _ *parser.FileNode) string {
-		switch call {
+	r.ContainerCall = func(_ *Resolver, src string, _ *parser.FileNode, call ast.Expr) (ResolvedType, bool) {
+		switch call.Bounds().Text(src) {
 		case "$any->make('user')":
-			return `App\User`
+			return ResolvedType{FQN: `App\User`}, true
 		case "$any->make('none')":
-			return "-"
+			return ResolvedType{}, true
 		}
-		return ""
+		return ResolvedType{}, false
 	}
 	for expr, want := range map[string]string{
 		"$any->make('user')->name()": "string",

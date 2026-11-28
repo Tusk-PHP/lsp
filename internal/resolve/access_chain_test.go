@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 )
 
 // The plain walker gives the class each kind of chain ends with.
@@ -45,18 +46,18 @@ func TestExpressionClassWithoutFile(t *testing.T) {
 	}
 }
 
-// A container call is typed by the ContainerCall hook, and "-" stops the
-// chain.
+// A container call is typed by the ContainerCall hook, and one that gives a
+// value stops the chain.
 func TestAccessChainClassContainerCall(t *testing.T) {
 	r, file, pos := chainFixture(t)
-	r.ContainerCall = func(_ *Resolver, callExpr, _ string, _ *parser.FileNode) string {
-		switch callExpr {
+	r.ContainerCall = func(_ *Resolver, src string, _ *parser.FileNode, call ast.Expr) (ResolvedType, bool) {
+		switch call.Bounds().Text(src) {
 		case "app('person')":
-			return `App\Person`
+			return ResolvedType{FQN: `App\Person`}, true
 		case "config('x')":
-			return "-"
+			return ResolvedType{}, true
 		}
-		return ""
+		return ResolvedType{}, false
 	}
 	for expr, want := range map[string]string{
 		"app('person')->logger()": `App\Logger`,

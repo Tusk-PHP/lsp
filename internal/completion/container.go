@@ -5,32 +5,21 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
-)
-
-// ExtractContainerCallArg is a backward-compatible wrapper for resolve.ExtractContainerCallArg.
-// Deprecated: use resolve.ExtractContainerCallArg directly.
-func ExtractContainerCallArg(expr string) string {
-	return resolve.ExtractContainerCallArg(expr)
-}
-
-var (
-	containerFunctions = []string{"app", "resolve"}
-	containerMethods   = []string{"get", "make"}
 )
 
 func isContainerArg(arg ast.CallArg, src string) bool {
 	if arg.Index != 0 || arg.InArray {
 		return false
 	}
-	if slices.Contains(containerFunctions, arg.Function) {
+	if slices.Contains(container.ResolvingFunctions, arg.Function) {
 		return true
 	}
-	if arg.Static || !slices.Contains(containerMethods, arg.Method) {
+	if arg.Static || !slices.Contains(container.ResolvingMethods, arg.Method) {
 		return false
 	}
 	switch recv := arg.Receiver.(type) {

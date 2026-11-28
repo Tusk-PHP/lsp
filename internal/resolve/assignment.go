@@ -87,6 +87,9 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 	case *ast.Closure, *ast.ArrowFunction:
 		return r.typeOf(t, n, nil, ctx), true
 	case *ast.Call:
+		if rt, ok := r.containerCallType(t, n, ctx); ok {
+			return rt, !rt.IsEmpty()
+		}
 		if name, ok := n.Callee.(*ast.ConstFetch); ok && r.Index != nil {
 			if rt := r.functionCallType(t.text(name), t.callArgList(n.Args), ctx); !rt.IsEmpty() {
 				return rt, true

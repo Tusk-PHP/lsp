@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
+	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
@@ -89,7 +90,7 @@ class Cases
 	idx.IndexFile("file:///Cases.php", src)
 	idx.MarkReady()
 	p := NewProvider(idx, "none", "/tmp", nil, config.DefaultConfig())
-	engine := TypeEngine(idx, nil)
+	engine := container.NewEngine(idx, nil)
 	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
 		return engine.Resolver().ExpressionClass(expr, source, textpos.Position{Line: line}, file)
 	}

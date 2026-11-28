@@ -583,35 +583,6 @@ class TestController {
 	}
 }
 
-// --- ExtractContainerCallArg tests ---
-
-func TestExtractContainerCallArg(t *testing.T) {
-	tests := []struct {
-		name string
-		expr string
-		want string
-	}{
-		{"app string", "app('request')", "request"},
-		{"app double quote", `app("request")`, "request"},
-		{"app class", "app(Request::class)", "Request::class"},
-		{"resolve string", "resolve('cache')", "cache"},
-		{"container get", "$container->get('log')", "log"},
-		{"container make", "$this->app->make('auth')", "auth"},
-		{"not container", "foo('bar')", ""},
-		{"no closing paren", "app('request'", ""},
-		{"with second arg", "app('request', true)", "request"},
-		{"empty", "", ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ExtractContainerCallArg(tt.expr)
-			if got != tt.want {
-				t.Errorf("ExtractContainerCallArg(%q) = %q, want %q", tt.expr, got, tt.want)
-			}
-		})
-	}
-}
-
 // --- Symfony tests ---
 
 func TestSymfonyContainerBindingsLoaded(t *testing.T) {
