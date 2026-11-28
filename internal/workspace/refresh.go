@@ -93,9 +93,12 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 		profile = profile || paths[i] == configPath || paths[i] == manifest
 	}
 	if profile {
-		if err := ws.reloadConfig(r, &out); err != nil {
-			errs = append(errs, err)
+		cfg, err := r.Config()
+		if err != nil {
+			errs = append(errs, &ConfigError{Err: err})
 			profile = false
+		} else if err := ws.applyConfig(cfg, r.editorOwns, &out); err != nil {
+			errs = append(errs, err)
 		}
 	}
 	seen := make(map[string]struct{}, len(paths))
@@ -151,15 +154,11 @@ func (ws *Bootstrapped) Refresh(r Refresh) (Refreshed, error) {
 	return out, errors.Join(errs...)
 }
 
-func (ws *Bootstrapped) reloadConfig(r Refresh, out *Refreshed) error {
-	cfg, err := r.Config()
-	if err != nil {
-		return &ConfigError{Err: err}
-	}
+func (ws *Bootstrapped) applyConfig(cfg *config.Config, editorOwns func(path string) bool, out *Refreshed) error {
 	next := newSettings(cfg)
 	out.Config = cfg
 	if old := ws.current.Swap(next); scopeChanged(old.config, next.config) {
-		return ws.rescope(old, next, r.editorOwns, out)
+		return ws.rescope(old, next, editorOwns, out)
 	}
 	return nil
 }

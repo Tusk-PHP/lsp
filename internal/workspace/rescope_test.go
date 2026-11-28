@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -75,5 +76,33 @@ func TestRescopeReportsAFileItCannotReadAndIndexesTheRest(t *testing.T) {
 	}
 	if ws.Config().ExcludePaths[0] != "vendor" || len(ws.Config().ExcludePaths) != 1 {
 		t.Errorf("the new settings apply despite the error: %v", ws.Config().ExcludePaths)
+	}
+}
+
+func TestRescopeErrorKeepsThePHPVersionOfTheSameSave(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("file permissions don't stop this user from reading")
+	}
+	ws, root := newRefreshWorkspace(t, excluding("vendor", "legacy"), map[string]string{
+		"legacy/Locked.php": "<?php\nclass LockedLegacy {}\n",
+	})
+	locked := filepath.Join(root, "legacy/Locked.php")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o644) })
+	writeFiles(t, root, map[string]string{config.FileName: `{"excludePaths": ["vendor"], "phpVersion": "7.4"}`})
+
+	out, err := ws.Refresh(Refresh{Paths: []string{ws.ConfigPath()}, Config: func() (*config.Config, error) {
+		return config.LoadFromFile(ws.ConfigPath())
+	}})
+	if err == nil || !strings.Contains(err.Error(), "index "+locked) {
+		t.Errorf("the file that can't be read is reported: %v", err)
+	}
+	if configErr := (*ConfigError)(nil); errors.As(err, &configErr) {
+		t.Errorf("a file the rescope can't read is no config error: %v", err)
+	}
+	if !out.ProfileChanged || ws.Profile().PHPVersion != "7.4" {
+		t.Errorf("the PHP version saved with the new excludePaths applies: %+v", ws.Profile())
 	}
 }
