@@ -56,6 +56,7 @@ func TestUnusedPrivateConstantStaysQuietWhenUnsure(t *testing.T) {
 		"getConstants()":                       "<?php\nclass A {\n    private const X = 1;\n    public function f() { return (new \\ReflectionClass($this))->getConstants(); }\n}\n",
 		"getConstant()":                        "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return (new \\ReflectionClass(self::class))->getConstant($n); }\n}\n",
 		"ReflectionClassConstant":              "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return new \\ReflectionClassConstant(self::class, $n); }\n}\n",
+		"dynamic fetch inside a string":        "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return \"v={$this->r->getConstant($n)}\"; }\n}\n",
 		"class attribute":                      "<?php\n#[AsCommand(name: self::NAME)]\nfinal class FooCommand {\n    private const NAME = 'app:foo';\n}\n",
 		"multi-line class attribute":           "<?php\nuse Doctrine\\ORM\\Mapping as ORM;\n#[ORM\\Entity]\n#[ORM\\Table(\n    name: self::TABLE,\n)]\nclass Post {\n    private const TABLE = 'posts';\n}\n",
 	} {
