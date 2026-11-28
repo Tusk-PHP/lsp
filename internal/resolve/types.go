@@ -34,6 +34,9 @@ type ResolvedType struct {
 // CallableType is the signature of a callable or Closure type.
 type CallableType struct {
 	Params []ResolvedType
+	// Names are the parameters' names, with their $, when the signature
+	// comes from a declaration or closure: one per entry of Params, or none.
+	Names  []string
 	Return *ResolvedType
 }
 

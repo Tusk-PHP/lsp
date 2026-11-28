@@ -74,7 +74,11 @@ func inAttribute(tokens []parser.Token, i int) bool {
 }
 
 func CallAt(uri, source string, pos protocol.Position) (callee *CursorContext, argument int, ok bool) {
-	doc := NewDocument(uri, source)
+	return NewDocument(uri, source).CallAt(pos)
+}
+
+// CallAt is the package's CallAt on an already parsed document.
+func (doc *Document) CallAt(pos protocol.Position) (callee *CursorContext, argument int, ok bool) {
 	calleePos, argument, ok := calleeAt(doc.Tokens(), pos)
 	if !ok {
 		return nil, 0, false
@@ -83,7 +87,37 @@ func CallAt(uri, source string, pos protocol.Position) (callee *CursorContext, a
 	return callee, argument, callee != nil
 }
 
+// CalledVariableAt finds the call pos is in the arguments of when what is
+// called is a variable, `$fn(…)`: the variable's name and position, and
+// which argument pos is in. A dynamic member call (`$obj->$name(…)`,
+// `Foo::$name(…)`) and `new $class(…)` don't count.
+func (doc *Document) CalledVariableAt(pos protocol.Position) (name string, at protocol.Position, argument int, ok bool) {
+	tokens := doc.Tokens()
+	callee, argument, ok := calleeTokenAt(tokens, pos)
+	if !ok || tokens[callee].Kind != parser.TokenVariable {
+		return "", protocol.Position{}, 0, false
+	}
+	if prev := parser.PrevSignificant(tokens, callee-1); prev >= 0 {
+		switch tokens[prev].Kind {
+		case parser.TokenArrow, parser.TokenDoubleColon, parser.TokenNew:
+			return "", protocol.Position{}, 0, false
+		}
+	}
+	tok := tokens[callee]
+	return tok.Value, protocol.Position{Line: tok.Line, Character: tok.Column}, argument, true
+}
+
 func calleeAt(tokens []parser.Token, pos protocol.Position) (callee protocol.Position, argument int, ok bool) {
+	i, argument, ok := calleeTokenAt(tokens, pos)
+	if !ok || tokens[i].Kind != parser.TokenIdentifier {
+		return protocol.Position{}, 0, false
+	}
+	return protocol.Position{Line: tokens[i].Line, Character: tokens[i].Column}, argument, true
+}
+
+// calleeTokenAt returns the index of the token right before the `(` of the
+// call whose arguments pos is in, and which argument that is.
+func calleeTokenAt(tokens []parser.Token, pos protocol.Position) (callee int, argument int, ok bool) {
 	cursor := sort.Search(len(tokens), func(i int) bool { return !tokenEndsBeforePos(tokens[i], pos) })
 	depth := 0
 	for k := cursor - 1; k >= 0; k-- {
@@ -98,7 +132,7 @@ func calleeAt(tokens []parser.Token, pos protocol.Position) (callee protocol.Pos
 			argument = 0
 		case parser.TokenOpenBrace:
 			if depth == 0 {
-				return protocol.Position{}, 0, false
+				return 0, 0, false
 			}
 			depth--
 		case parser.TokenOpenParen:
@@ -107,21 +141,21 @@ func calleeAt(tokens []parser.Token, pos protocol.Position) (callee protocol.Pos
 				continue
 			}
 			name := parser.PrevSignificant(tokens, k-1)
-			if name < 0 || tokens[name].Kind != parser.TokenIdentifier {
-				return protocol.Position{}, 0, false
+			if name < 0 {
+				return 0, 0, false
 			}
-			return protocol.Position{Line: tokens[name].Line, Character: tokens[name].Column}, argument, true
+			return name, argument, true
 		case parser.TokenComma:
 			if depth == 0 {
 				argument++
 			}
 		case parser.TokenSemicolon:
 			if depth == 0 {
-				return protocol.Position{}, 0, false
+				return 0, 0, false
 			}
 		}
 	}
-	return protocol.Position{}, 0, false
+	return 0, 0, false
 }
 
 func tokenEndsBeforePos(tok parser.Token, pos protocol.Position) bool {

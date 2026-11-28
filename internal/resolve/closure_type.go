@@ -91,6 +91,7 @@ func (r *Resolver) closureType(expr string, expected *ResolvedType, ctx ExprCont
 			pt = expParams[i]
 		}
 		sig.Params = append(sig.Params, pt)
+		sig.Names = append(sig.Names, name)
 		if name != "" && !pt.IsEmpty() {
 			locals[name] = pt
 		}
