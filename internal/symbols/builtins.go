@@ -319,7 +319,17 @@ func (idx *Index) registerBuiltinRegistryLocked(profile BuiltinProfile) {
 		idx.addBuiltinFunctionLocked(name, nil, "mixed", "PHP built-in function")
 	}
 
+	for _, c := range generatedBuiltinClassLikes {
+		idx.addBuiltinClassLikeWithMembersLocked(c, profile)
+	}
+
 	for _, cls := range builtinClasses {
+		if sym := idx.builtinLocked(cls.Name); sym != nil {
+			if sym.DocComment == "" {
+				sym.DocComment = cls.Doc
+			}
+			continue
+		}
 		if !builtinAvailable(cls.Name, profile) {
 			continue
 		}
@@ -377,7 +387,7 @@ func builtinAvailable(name string, profile BuiltinProfile) bool {
 	if !ok {
 		return true
 	}
-	if availability.Since != "" && compareBuiltinVersions(availability.Since, profile.PHPVersion) > 0 {
+	if !builtinInVersion(availability.Since, "", profile.PHPVersion) {
 		return false
 	}
 	if availability.Extension != "" {
@@ -438,11 +448,11 @@ func parseBuiltinMajorMinor(version string) (int, int) {
 }
 
 func (idx *Index) addBuiltinFunctionLocked(name string, params []ParamInfo, ret string, doc string) {
-	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: "builtin", ReturnType: ret, DocComment: doc, Params: params})
+	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindFunction, Source: SourceBuiltin, URI: builtinRegistryURI, ReturnType: ret, DocComment: doc, Params: params})
 }
 
 func (idx *Index) addBuiltinClassLikeLocked(name string, doc string) {
-	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: "builtin", DocComment: doc})
+	idx.storeBuiltinLocked(&Symbol{Name: name, FQN: name, Kind: KindClass, Source: SourceBuiltin, URI: builtinRegistryURI, DocComment: doc})
 }
 
 func (idx *Index) storeBuiltinLocked(sym *Symbol) {

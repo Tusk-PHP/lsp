@@ -443,10 +443,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 			Implements: resolveNames(c.Implements, resolve), Traits: resolveNames(c.Traits, resolve), traitRules: newTraitRules(fqn, c.TraitRules, resolve),
 			Attributes: indexAttributes(c.Attributes, resolve),
 			Range:      symRange(c.StartLine, c.StartCol, len(c.Name))}
-		var previous *Symbol
-		if src == SourceBuiltin {
-			previous = idx.builtinLocked(fqn)
-		}
+		previous := idx.earlierBuiltinLayerLocked(fqn, src)
 		if c.Extends != "" {
 			sym.Extends = resolve(c.Extends)
 		}
@@ -456,9 +453,7 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		idx.indexConstants(uri, sym, fqn, c.Constants, file.Uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 		sym.Supertypes = append(sym.Supertypes, traitUseSupertypes(c.TraitUseDoc, file.Uses, resolve)...)
-		if src == SourceBuiltin {
-			mergeEarlierLayer(sym, previous)
-		}
+		mergeEarlierLayer(sym, previous)
 		idx.linkTypeLocked(sym)
 	}
 
@@ -467,12 +462,14 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		sym := &Symbol{Name: iface.Name, FQN: fqn, Kind: KindInterface, URI: uri, DocComment: qualifyDocTypes(iface.DocComment, file.Uses),
 			Implements: resolveNames(iface.Extends, resolve), Attributes: indexAttributes(iface.Attributes, resolve),
 			Range: symRange(iface.StartLine, iface.StartCol, len(iface.Name))}
+		previous := idx.earlierBuiltinLayerLocked(fqn, src)
 		idx.addSymbolWithSource(uri, sym, src)
-		idx.linkTypeLocked(sym)
 		idx.indexProperties(uri, sym, fqn, iface.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, iface.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, iface.Constants, file.Uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
+		mergeEarlierLayer(sym, previous)
+		idx.linkTypeLocked(sym)
 	}
 
 	for _, tr := range file.Traits {
@@ -480,13 +477,15 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		sym := &Symbol{Name: tr.Name, FQN: fqn, Kind: KindTrait, URI: uri, DocComment: qualifyDocTypes(tr.DocComment, file.Uses),
 			Traits: resolveNames(tr.Traits, resolve), traitRules: newTraitRules(fqn, tr.TraitRules, resolve),
 			Range: symRange(tr.StartLine, tr.StartCol, len(tr.Name))}
+		previous := idx.earlierBuiltinLayerLocked(fqn, src)
 		idx.addSymbolWithSource(uri, sym, src)
-		idx.linkTypeLocked(sym)
 		idx.indexProperties(uri, sym, fqn, tr.Properties, src, resolve, file.Uses)
 		idx.indexMethods(uri, sym, fqn, tr.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, tr.Constants, file.Uses, src, resolve)
 		idx.indexVirtualMembers(uri, sym, src, resolve)
 		sym.Supertypes = append(sym.Supertypes, traitUseSupertypes(tr.TraitUseDoc, file.Uses, resolve)...)
+		mergeEarlierLayer(sym, previous)
+		idx.linkTypeLocked(sym)
 	}
 
 	for _, en := range file.Enums {
@@ -496,8 +495,8 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 			traitRules: newTraitRules(fqn, en.TraitRules, resolve),
 			Attributes: indexAttributes(en.Attributes, resolve),
 			Range:      symRange(en.StartLine, en.StartCol, len(en.Name))}
+		previous := idx.earlierBuiltinLayerLocked(fqn, src)
 		idx.addSymbolWithSource(uri, sym, src)
-		idx.linkTypeLocked(sym)
 		for _, ec := range en.Cases {
 			cs := &Symbol{Name: ec.Name, FQN: fqn + "::" + ec.Name, Kind: KindEnumCase, URI: uri, ParentFQN: fqn, Value: ec.Value,
 				DocComment: ec.DocComment, Attributes: indexAttributes(ec.Attributes, resolve),
@@ -509,6 +508,8 @@ func (idx *Index) indexParsedLocked(uri string, file *parser.FileNode, src Symbo
 		idx.indexMethods(uri, sym, fqn, en.Methods, src, resolve, file.Uses)
 		idx.indexConstants(uri, sym, fqn, en.Constants, file.Uses, src, resolve)
 		idx.indexEnumMembers(uri, sym, src)
+		mergeEarlierLayer(sym, previous)
+		idx.linkTypeLocked(sym)
 	}
 
 	idx.indexConstants(uri, nil, ns, file.Constants, file.Uses, src, resolve)
@@ -800,6 +801,10 @@ func namespaceForFQN(fqn string) string {
 	return ""
 }
 
+func shortName(fqn string) string {
+	return fqn[strings.LastIndex(fqn, "\\")+1:]
+}
+
 func (idx *Index) indexMethods(uri string, parent *Symbol, parentFQN string, methods []parser.MethodNode, src SymbolSource, resolve func(string) string, uses []parser.UseNode) {
 	for _, m := range methods {
 		ms := &Symbol{
@@ -869,6 +874,13 @@ func (idx *Index) indexEnumMembers(uri string, enum *Symbol, src SymbolSource) {
 	add(&Symbol{Name: "tryFrom", Kind: KindMethod, IsStatic: true, ReturnType: "?" + enum.FQN, Params: value})
 }
 
+func (idx *Index) earlierBuiltinLayerLocked(fqn string, src SymbolSource) *Symbol {
+	if src != SourceBuiltin {
+		return nil
+	}
+	return idx.builtinLocked(fqn)
+}
+
 // mergeEarlierLayer keeps what an earlier stub layer declared when a later one
 // only adds members to the same class, as version deltas do.
 func mergeEarlierLayer(sym, previous *Symbol) {
@@ -883,6 +895,9 @@ func mergeEarlierLayer(sym, previous *Symbol) {
 		if !declared[child.Name] {
 			sym.Children = append(sym.Children, child)
 		}
+	}
+	if previous.URI == builtinRegistryURI {
+		return
 	}
 	if sym.DocComment == "" {
 		sym.DocComment = previous.DocComment
