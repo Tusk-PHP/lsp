@@ -105,17 +105,38 @@ func (rt ResolvedType) String() string {
 	return single.FullString()
 }
 
-// writeUnionPart writes one part of a union or intersection. A callable with
-// a return type is put in parentheses, as `(callable(T): float)|int`, since
-// `callable(T): float|int` would read as returning float|int.
-func writeUnionPart(sb *strings.Builder, part ResolvedType) {
-	if part.Callable != nil && part.Callable.Return != nil && len(part.Union) == 0 && len(part.Intersection) == 0 {
+// writeCompoundPart writes one part of a union or intersection, in
+// parentheses where it would otherwise bind to its neighbours: an intersection
+// in a union, as PHP 8.2 writes `(A&B)|int`, a union in an intersection, and a
+// callable with a return type, since `callable(T): float|int` would read as
+// returning float|int. A nullable part of an intersection is written as the
+// union it is, `A&(B|null)`, since PHP has no `?` inside a compound type.
+func writeCompoundPart(sb *strings.Builder, part ResolvedType, inUnion bool) {
+	if !inUnion && part.Nullable && len(part.Union) == 0 && len(part.Intersection) == 0 {
+		inner := part
+		inner.Nullable = false
 		sb.WriteByte('(')
-		sb.WriteString(part.FullString())
-		sb.WriteByte(')')
+		writeCompoundPart(sb, inner, true)
+		sb.WriteString("|null)")
 		return
 	}
+	if !needsParentheses(part, inUnion) {
+		sb.WriteString(part.FullString())
+		return
+	}
+	sb.WriteByte('(')
 	sb.WriteString(part.FullString())
+	sb.WriteByte(')')
+}
+
+func needsParentheses(part ResolvedType, inUnion bool) bool {
+	switch {
+	case len(part.Union) > 0:
+		return !inUnion
+	case len(part.Intersection) > 0:
+		return inUnion || part.Nullable
+	}
+	return part.Callable != nil && part.Callable.Return != nil
 }
 
 // FullString is like String but shows every part of a union or intersection,
@@ -127,7 +148,7 @@ func (rt ResolvedType) FullString() string {
 			if i > 0 {
 				sb.WriteByte('|')
 			}
-			writeUnionPart(&sb, part)
+			writeCompoundPart(&sb, part, true)
 		}
 		if rt.Nullable {
 			sb.WriteString("|null")
@@ -137,16 +158,16 @@ func (rt ResolvedType) FullString() string {
 	if len(rt.Intersection) > 0 {
 		var sb strings.Builder
 		if rt.Nullable {
-			sb.WriteString("?(")
+			sb.WriteByte('(')
 		}
 		for i, part := range rt.Intersection {
 			if i > 0 {
 				sb.WriteByte('&')
 			}
-			writeUnionPart(&sb, part)
+			writeCompoundPart(&sb, part, false)
 		}
 		if rt.Nullable {
-			sb.WriteByte(')')
+			sb.WriteString(")|null")
 		}
 		return sb.String()
 	}
@@ -169,7 +190,7 @@ func (rt ResolvedType) FullString() string {
 		sb.WriteByte(']')
 		return sb.String()
 	}
-	sb.WriteString(rt.FQN)
+	sb.WriteString(rt.name())
 	if rt.Callable != nil {
 		sb.WriteByte('(')
 		for i, p := range rt.Callable.Params {
@@ -196,6 +217,24 @@ func (rt ResolvedType) FullString() string {
 		sb.WriteByte('>')
 	}
 	return sb.String()
+}
+
+// name is the type's name as PHP writes it: the value of a literal type,
+// whose FQN is its base type, else the FQN.
+func (rt ResolvedType) name() string {
+	if rt.Literal != "" {
+		return rt.Literal
+	}
+	return rt.FQN
+}
+
+// generalized is rt with every literal type in it widened to its base type:
+// 'asc'|'desc' is string, and 1|2 is int.
+func (rt ResolvedType) generalized() ResolvedType {
+	return rt.transform(func(t ResolvedType) ResolvedType {
+		t.Literal = ""
+		return t
+	})
 }
 
 // ParseGenericType parses a type string like "Collection<int, Category>" into
@@ -552,6 +591,7 @@ func MakeUnion(parts []ResolvedType, nullable bool) ResolvedType {
 	for _, part := range parts {
 		add(part)
 	}
+	flat = absorbLiterals(flat)
 	switch len(flat) {
 	case 0:
 		if nullable {
@@ -574,6 +614,77 @@ func MakeUnion(parts []ResolvedType, nullable bool) ResolvedType {
 	best.Nullable = nullable
 	best.Conditional = nil
 	return best
+}
+
+// absorbLiterals drops the literals a union holds beside their base type,
+// as 'a' beside string or 1 beside int, and writes true and false together
+// as bool.
+func absorbLiterals(parts []ResolvedType) []ResolvedType {
+	var bases, trueOrFalse scalarSet
+	for _, p := range parts {
+		bit := scalarBit(p)
+		switch {
+		case bit == 0:
+		case p.Literal == "":
+			bases |= bit
+		case p.Literal == "true":
+			trueOrFalse |= 1
+		case p.Literal == "false":
+			trueOrFalse |= 2
+		}
+	}
+	if trueOrFalse == 3 {
+		bases |= scalarBool
+	}
+	if bases == 0 {
+		return parts
+	}
+	out := parts[:0]
+	placedBool := false
+	for _, p := range parts {
+		bit := scalarBit(p)
+		switch {
+		case bases&bit == 0:
+		case bit == scalarBool:
+			if placedBool {
+				continue
+			}
+			placedBool = true
+			p = ResolvedType{FQN: "bool"}
+		case p.Literal != "":
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+type scalarSet uint8
+
+const (
+	scalarBool scalarSet = 1 << iota
+	scalarInt
+	scalarFloat
+	scalarString
+)
+
+// scalarBit is the scalar a union part is, or a literal of, or 0 for any
+// other part.
+func scalarBit(rt ResolvedType) scalarSet {
+	if rt.Conditional != nil || len(rt.Union) > 0 || len(rt.Intersection) > 0 {
+		return 0
+	}
+	switch rt.FQN {
+	case "bool":
+		return scalarBool
+	case "int":
+		return scalarInt
+	case "float":
+		return scalarFloat
+	case "string":
+		return scalarString
+	}
+	return 0
 }
 
 func makeIntersection(parts []ResolvedType, nullable bool) ResolvedType {

@@ -131,27 +131,36 @@ func argumentsByParam(params []paramPattern, args []CallArg) [][]CallArg {
 	return out
 }
 
-// templateNames is the set of names in tmpls.
-func templateNames(tmpls ...[]symbols.TemplateParam) map[string]bool {
+// templateGroup is templates declared together, on owner, whose bounds are
+// read in owner's PHPDoc.
+type templateGroup struct {
+	tmpls []symbols.TemplateParam
+	owner string
+}
+
+// templateNames is the set of names in groups.
+func templateNames(groups []templateGroup) map[string]bool {
 	n := 0
-	for _, t := range tmpls {
-		n += len(t)
+	for _, g := range groups {
+		n += len(g.tmpls)
 	}
 	names := make(map[string]bool, n)
-	for _, t := range tmpls {
-		for _, p := range t {
+	for _, g := range groups {
+		for _, p := range g.tmpls {
 			names[p.Name] = true
 		}
 	}
 	return names
 }
 
-// bindCallTemplates binds the templates in names from a call's arguments,
-// matching each argument's type against its parameter's declared type. Class
-// templates already known from the receiver (in fixed) are substituted into
-// the parameter types first, so a closure passed to map(callable(TValue))
-// sees the collection's value type.
-func (r *Resolver) bindCallTemplates(params []paramPattern, call *CallSite, names map[string]bool, fixed map[string]ResolvedType, owner string, file *parser.FileNode) map[string]ResolvedType {
+// bindCallTemplates binds the templates in groups from a call's arguments,
+// matching each argument's type against its parameter's declared type, and
+// settles each binding against its template's bound. Class templates already
+// known from the receiver (in fixed) are substituted into the parameter types
+// first, so a closure passed to map(callable(TValue)) sees the collection's
+// value type.
+func (r *Resolver) bindCallTemplates(params []paramPattern, call *CallSite, fixed map[string]ResolvedType, owner string, file *parser.FileNode, groups ...templateGroup) map[string]ResolvedType {
+	names := templateNames(groups)
 	bound := make(map[string]ResolvedType, len(names))
 	if len(names) == 0 {
 		return bound
@@ -205,23 +214,54 @@ func (r *Resolver) bindCallTemplates(params []paramPattern, call *CallSite, name
 			r.bindTemplates(p.pattern, actual, names, bound, 0)
 		}
 	}
+	for _, g := range groups {
+		r.settleBindings(bound, g.tmpls, g.owner, file)
+	}
 	return bound
 }
 
-// dropOutOfBound forgets bindings that can't be right because they break
-// their template's bound, as a string given for `T of object`. The call is
-// wrong there, and PHPStan reports it; the template is left unbound.
-func (r *Resolver) dropOutOfBound(bound map[string]ResolvedType, tmpls []symbols.TemplateParam, owner string, file *parser.FileNode) {
+// settleBindings checks what the arguments bound each template to against
+// its bound. A binding that breaks it, as a string given for `T of object`,
+// is forgotten: the call is wrong there, and PHPStan reports it, so the
+// template is left unbound. A literal is widened to its base type unless the
+// bound asks for scalars other than array keys, as PHPStan infers 5 for
+// `T of int` but int for a T without a bound.
+func (r *Resolver) settleBindings(bound map[string]ResolvedType, tmpls []symbols.TemplateParam, owner string, file *parser.FileNode) {
 	for _, t := range tmpls {
 		v, ok := bound[t.Name]
-		if !ok || t.Bound == "" {
+		if !ok {
 			continue
 		}
-		b := r.applyEnv(r.parseType(t.Bound), typeEnv{owner: owner, file: file})
-		if r.typeMatches(v, b) == matchNo {
-			delete(bound, t.Name)
+		var b ResolvedType
+		if t.Bound != "" {
+			b = r.applyEnv(r.parseType(t.Bound), typeEnv{owner: owner, file: file})
+			if r.typeMatches(v, b) == matchNo {
+				delete(bound, t.Name)
+				continue
+			}
+		}
+		if !r.keepsLiterals(b) {
+			bound[t.Name] = v.generalized()
 		}
 	}
+}
+
+// keepsLiterals reports whether a template bound to b keeps the literal
+// types it's given: when b is made of scalars and isn't an array key, which
+// takes every int and every string.
+func (r *Resolver) keepsLiterals(b ResolvedType) bool {
+	if b.IsEmpty() || b.FQN == "array-key" {
+		return false
+	}
+	if r.typeMatches(ResolvedType{FQN: "int"}, b) == matchYes && r.typeMatches(ResolvedType{FQN: "string"}, b) == matchYes {
+		return false
+	}
+	for _, p := range b.Parts() {
+		if r.typeMatches(p, ResolvedType{FQN: "scalar"}) != matchYes {
+			return false
+		}
+	}
+	return true
 }
 
 // MemberTypeForCall returns what a member gives where it's used: a
@@ -283,8 +323,7 @@ func (r *Resolver) MemberTypeForCall(member *symbols.Symbol, file *parser.FileNo
 			params = r.paramPatterns(member, doc)
 		}
 		if len(member.Templates) > 0 {
-			bound := r.bindCallTemplates(params, call, templateNames(member.Templates), subst, member.ParentFQN, file)
-			r.dropOutOfBound(bound, member.Templates, member.ParentFQN, file)
+			bound := r.bindCallTemplates(params, call, subst, member.ParentFQN, file, templateGroup{member.Templates, member.ParentFQN})
 			if len(bound) > 0 && subst == nil {
 				subst = make(map[string]ResolvedType, len(bound))
 			}
@@ -347,8 +386,7 @@ func (r *Resolver) FunctionTypeForCall(fn *symbols.Symbol, file *parser.FileNode
 	if len(fn.Templates) > 0 || pattern.hasConditional() {
 		params = r.paramPatterns(fn, r.parseDoc(fn.DocComment))
 		if len(fn.Templates) > 0 {
-			subst = r.bindCallTemplates(params, call, templateNames(fn.Templates), nil, fn.FQN, file)
-			r.dropOutOfBound(subst, fn.Templates, fn.FQN, file)
+			subst = r.bindCallTemplates(params, call, nil, fn.FQN, file, templateGroup{fn.Templates, fn.FQN})
 		}
 	}
 	subst = r.fillUnbound(subst, fn.Templates, fn.FQN, file)

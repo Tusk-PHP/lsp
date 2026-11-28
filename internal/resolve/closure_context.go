@@ -308,7 +308,7 @@ func (r *Resolver) computeClosureExpectations(closure *scope.Scope, lines []stri
 	}
 	if len(member.Templates) > 0 && site.argsBefore != "" {
 		ctx := ExprContext{Lines: lines, Pos: site.at, File: file}
-		bound := r.bindCallTemplates(append([]paramPattern(nil), params...), r.CallSiteFor(site.argsBefore, ctx), templateNames(member.Templates), subst, owner, file)
+		bound := r.bindCallTemplates(append([]paramPattern(nil), params...), r.CallSiteFor(site.argsBefore, ctx), subst, owner, file, templateGroup{member.Templates, owner})
 		if subst == nil {
 			subst = make(map[string]ResolvedType, len(bound))
 		}

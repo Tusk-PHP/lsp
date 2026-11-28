@@ -395,7 +395,7 @@ func (r *Resolver) calleeEnv(c resolvedCallee, args []CallArg, lines []string, p
 		ctx := ExprContext{Lines: lines, Pos: pos, File: file}
 		bound := r.bindCallTemplates(append([]paramPattern(nil), c.params...), &CallSite{Args: args, ArgType: func(expr string, expected *ResolvedType) ResolvedType {
 			return r.ExpressionTypeExpecting(expr, expected, ctx)
-		}}, templateNames(c.member.Templates), subst, owner, file)
+		}}, subst, owner, file, templateGroup{c.member.Templates, owner})
 		if subst == nil {
 			subst = make(map[string]ResolvedType, len(bound))
 		}

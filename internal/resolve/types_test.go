@@ -261,3 +261,57 @@ func TestFullStringParenthesisesCallablesInUnions(t *testing.T) {
 		t.Errorf("without a return type: FullString = %q, want %q", got, want)
 	}
 }
+
+func TestFullStringShowsTrueAndFalse(t *testing.T) {
+	for raw, want := range map[string]string{
+		"string|false":      "string|false",
+		"?true":             "?true",
+		"false":             "false",
+		"true|false":        "bool",
+		"false|int|true":    "bool|int",
+		"bool|false":        "bool",
+		"true|null":         "?true",
+		"array<int, false>": "array<int, false>",
+		"'asc'|'desc'":      "'asc'|'desc'",
+		"1|2|1":             "1|2",
+		"int|1":             "int",
+		"'a'|string|1":      "string|1",
+		"float|1.5":         "float",
+		"(A&B)|int|1":       "(A&B)|int",
+	} {
+		if got := ParseGenericType(raw).FullString(); got != want {
+			t.Errorf("ParseGenericType(%q).FullString() = %q, want %q", raw, got, want)
+		}
+	}
+}
+
+func TestFullStringParenthesisesNestedIntersectionsAndUnions(t *testing.T) {
+	for raw, want := range map[string]string{
+		"(A&B)|int":                  "(A&B)|int",
+		"int|(A&B)|null":             "int|(A&B)|null",
+		"X&((A&B)|null)":             "X&((A&B)|null)",
+		"A&((callable(): int)|null)": "A&((callable(): int)|null)",
+		"(A&B)|(C&D)":                "(A&B)|(C&D)",
+		"A&(B|C)":                    "A&(B|C)",
+		"A&(B|null)":                 "A&(B|null)",
+		"?(A&B)":                     "(A&B)|null",
+		"(A&B)|null":                 "(A&B)|null",
+		"A&B":                        "A&B",
+		"A|B":                        "A|B",
+		"(A&B)|(callable(): int)":    "(A&B)|(callable(): int)",
+	} {
+		got := ParseGenericType(raw).FullString()
+		if got != want {
+			t.Errorf("ParseGenericType(%q).FullString() = %q, want %q", raw, got, want)
+		}
+		if again := ParseGenericType(got).FullString(); again != got {
+			t.Errorf("%q does not round-trip: parsed again it is %q", got, again)
+		}
+	}
+}
+
+func TestTrueOrFalseIsNotTheLiteralTrue(t *testing.T) {
+	if got := ParseGenericType("true|false"); got.Literal != "" || len(got.Union) != 0 {
+		t.Errorf("true|false is bool, got %+v", got)
+	}
+}
