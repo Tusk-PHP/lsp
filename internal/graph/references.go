@@ -242,7 +242,8 @@ type refEdgeKey struct{ from, to, kind string }
 // derived directly from the symbol index.
 //
 // Only a new with a written class name produces an edge: variables,
-// expressions, anonymous classes and self/static/parent are skipped.
+// expressions and anonymous classes are skipped, and self/static/parent
+// resolve to builtin names that never become targets.
 func scanNewExpressions(
 	idx *symbols.Index,
 	nodeMap map[string]Node,
@@ -300,11 +301,7 @@ func appendInstantiations(found []instantiation, src, namespace, enclosing strin
 		}
 	case *ast.New:
 		if class, ok := n.Class.(*ast.ConstFetch); ok && enclosing != "" && n.Anonymous == nil {
-			switch text := class.Name.Text(src); strings.ToLower(text) {
-			case "self", "static", "parent":
-			default:
-				found = append(found, instantiation{enclosing: enclosing, name: text})
-			}
+			found = append(found, instantiation{enclosing: enclosing, name: class.Name.Text(src)})
 		}
 	}
 	ast.Children(n, func(c ast.Node) {

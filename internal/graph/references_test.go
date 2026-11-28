@@ -340,3 +340,28 @@ class H {}
 		t.Errorf("an instantiation outside A was attributed to it: %v", g.Edges)
 	}
 }
+
+func TestBuildReferences_NewEdgeInGlobalNamespaceSkipsRelativeClassNames(t *testing.T) {
+	idx := symbols.NewIndex()
+	idx.IndexFileWithSource("file:///t/global.php", `<?php
+class Base {}
+class Child extends Base {
+    public function make() {
+        new self();
+        new static();
+        new parent();
+        return new Made();
+    }
+}
+class Made {}
+`, symbols.SourceProject)
+	g := BuildReferences(idx, Options{Deps: DepsFull})
+	if !findEdge(g, "Child", "Made", "new") {
+		t.Errorf("expected new edge Child → Made, not found in %v", g.Edges)
+	}
+	for _, e := range g.Edges {
+		if e.Kind == "new" && e.To != "Made" {
+			t.Errorf("self, static and parent must not become new edges, got %s → %s", e.From, e.To)
+		}
+	}
+}
