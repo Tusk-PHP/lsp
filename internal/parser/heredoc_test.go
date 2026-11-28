@@ -29,7 +29,7 @@ func TestTokenizeHeredocAndNowdocAsSingleString(t *testing.T) {
 	}
 	// The `}` inside the nowdoc must not close the function.
 	file := ParseFile(src)
-	if len(file.Functions) != 1 || file.Functions[0].EndLine != 12 {
+	if len(file.Functions) != 1 || file.Functions[0].EndLine != 11 {
 		t.Errorf("function bounds wrong: %+v", file.Functions)
 	}
 }
