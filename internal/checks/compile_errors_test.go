@@ -345,7 +345,11 @@ func TestCompileErrorsWaitForTheFileToParse(t *testing.T) {
 }
 
 func TestCompileErrorRuleReportsCompileError(t *testing.T) {
-	if got := (&CompileErrorRule{}).Codes(); !slices.Equal(got, []rule.Code{rule.CompileError}) {
+	r := &CompileErrorRule{}
+	if got := r.Codes(); !slices.Equal(got, []rule.Code{rule.CompileError}) {
 		t.Errorf("codes %v", got)
+	}
+	if got := r.Check(nil, "<?php break 0;", nil); got != nil {
+		t.Errorf("got %+v for a file that did not parse", got)
 	}
 }
