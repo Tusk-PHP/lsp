@@ -59,6 +59,16 @@ func (r *Resolver) rawMemberReturnType(member *symbols.Symbol) string {
 // way PHPStan does: the PHPDoc type is used when it says more, as a template, a
 // generic, a shape, a callable signature, a narrower union or a subclass, and
 // the native type is kept when the PHPDoc is vaguer or contradicts it.
+func (r *Resolver) saysOnlyMixed(doc string) bool {
+	parts := r.parseType(doc).Parts()
+	for _, part := range parts {
+		if part.FQN != "mixed" && part.FQN != "null" {
+			return false
+		}
+	}
+	return len(parts) > 0
+}
+
 func (r *Resolver) preferDocType(native, doc string, methodTemplates []symbols.TemplateParam, ownerFQN string) string {
 	native, doc = strings.TrimSpace(native), strings.TrimSpace(doc)
 	if doc == "" {
@@ -78,12 +88,12 @@ func (r *Resolver) preferDocType(native, doc string, methodTemplates []symbols.T
 				return native
 			}
 		}
-		if strings.EqualFold(doc, "mixed") {
+		if r.saysOnlyMixed(doc) {
 			return native
 		}
 		return doc
 	}
-	if strings.EqualFold(doc, "mixed") || strings.EqualFold(doc, "object") {
+	if r.saysOnlyMixed(doc) || strings.EqualFold(doc, "object") {
 		return native
 	}
 	if r.mentionsTemplate(doc, methodTemplates, ownerFQN) || strings.Contains(doc, " is ") {

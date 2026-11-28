@@ -47,6 +47,16 @@ class MoneyFactory implements Factory
 {
     public static function make(): MoneyHandler {}
 }
+
+class UnionReader implements Reader
+{
+    public function read(): Money|Handler {}
+}
+
+class ListReader implements Reader
+{
+    public function read(): array {}
+}
 `
 
 func TestInheritedPHPDocReturnAgainstTheNativeType(t *testing.T) {
@@ -58,6 +68,8 @@ func TestInheritedPHPDocReturnAgainstTheNativeType(t *testing.T) {
 		{`App\TypedReader::read`, `App\Money`},
 		{`App\TypedDocumentedReader::read`, `?App\Money`},
 		{`App\MoneyFactory::make`, `App\MoneyHandler`},
+		{`App\UnionReader::read`, `App\Money|App\Handler`},
+		{`App\ListReader::read`, "array"},
 	}
 	for _, tt := range tests {
 		member := idx.Lookup(tt.method)
@@ -66,6 +78,9 @@ func TestInheritedPHPDocReturnAgainstTheNativeType(t *testing.T) {
 		}
 		if got := r.MemberTypeForCall(member, nil, member.ParentFQN, nil, nil).FullString(); got != tt.want {
 			t.Errorf("%s: got %q, want %q", tt.method, got, tt.want)
+		}
+		if got := r.MemberTypeForCall(member, nil, "", nil, nil).FullString(); got != tt.want {
+			t.Errorf("%s without a caller: got %q, want %q, as from its own class", tt.method, got, tt.want)
 		}
 	}
 }
