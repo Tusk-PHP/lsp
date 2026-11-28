@@ -59,9 +59,6 @@ func isCastProperty(sym *symbols.Symbol) bool {
 }
 
 func (m modelSource) castItems(decl *ast.ClassDecl, methods map[string]*ast.Method) []*ast.ArrayItem {
-	if decl == nil {
-		return nil
-	}
 	var items []*ast.ArrayItem
 	for _, member := range decl.Members {
 		prop, ok := member.(*ast.Property)
