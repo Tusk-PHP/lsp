@@ -23,6 +23,9 @@ function run(Mailer $mailer) {
     $literal = fn (int $x, $y): int => $x;
     $literal(
     $mailer->$hello(
+    $none = fn (): int => 1;
+    $none(1, 
+    $hello('Ann', 'extra', 
     $notAClosure = 3;
     $notAClosure(
 }
@@ -51,6 +54,13 @@ function run(Mailer $mailer) {
 	}
 	if got, active := help("$rest('Ann', "); got != "$rest(string $name, int $times): string" || active != 1 {
 		t.Errorf("second argument of a partial application's closure: got %q, active %d", got, active)
+	}
+	// The active parameter stays within the closure's parameters.
+	if got, active := help("$none(1, "); got != "$none(): int" || active != 0 {
+		t.Errorf("a closure without parameters: got %q, active %d", got, active)
+	}
+	if got, active := help("$hello('Ann', 'extra', "); got != "$hello(string $name): string" || active != 0 {
+		t.Errorf("an argument past the last parameter: got %q, active %d", got, active)
 	}
 	for _, needle := range []string{"$mailer->$hello(", "$notAClosure("} {
 		if got, _ := help(needle); got != "" {
