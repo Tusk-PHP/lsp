@@ -7,6 +7,8 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -172,5 +174,24 @@ func BenchmarkLaravelAbilityCompletion(b *testing.B) {
 		if len(p.GetCompletions("file:///test.php", src, pos)) == 0 {
 			b.Fatal("no completion")
 		}
+	}
+}
+
+func TestProviderReadsAuthNamesForTheCheck(t *testing.T) {
+	p := setupLaravelAuthCompletion(t)
+	src := authUses + "Gate::allows('view-dashboard', Post::class);"
+	p.index.IndexFile("file:///test.php", src)
+	file := parser.ParseFile(src, token.Latest)
+	at := uint32(strings.Index(src, "view-dashboard"))
+	arg, ok := ast.CallArgAt(file.Tree, src, at)
+	if !ok {
+		t.Fatal("no call argument")
+	}
+	name, ok := p.AuthName(file, arg)
+	if !ok || name.Kind != frameworklaravel.AbilityName || name.Name != "view-dashboard" {
+		t.Errorf("AuthName = %+v, %v", name, ok)
+	}
+	if got := p.ModelClass(file, name.Model); got != "Post" && !strings.HasSuffix(got, `\Post`) {
+		t.Errorf("ModelClass = %q, want Post", got)
 	}
 }

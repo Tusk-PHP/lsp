@@ -267,3 +267,19 @@ func TestReceiverCall(t *testing.T) {
 		}
 	}
 }
+
+func TestCallArgOf(t *testing.T) {
+	file, src, off := cursorTree(t, "f('a', 'b|');")
+	call := file.Stmts[0].(*ast.ExprStmt).Expr
+	if arg, ok := ast.CallArgOf(file, src, call, off); !ok || arg.Index != 1 || arg.Partial != "b" {
+		t.Errorf("CallArgOf = %+v, %v", arg, ok)
+	}
+	bare, bareSrc, _ := cursorTree(t, "new Foo;|")
+	newFoo := bare.Stmts[0].(*ast.ExprStmt).Expr
+	if _, ok := ast.CallArgOf(bare, bareSrc, newFoo, 6); ok {
+		t.Error("new without parentheses has no argument")
+	}
+	if _, ok := ast.CallArgOf(file, src, call.(*ast.Call).Callee, off); ok {
+		t.Error("a name is no call")
+	}
+}

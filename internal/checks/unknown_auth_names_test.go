@@ -280,3 +280,24 @@ Route::get('/', fn () => 1)->middleware(['auht', 'admin-panel', 'still-bad']);
 		t.Errorf("names registered outside the providers are trusted: %v, want %v", got, want)
 	}
 }
+
+func TestUnknownAuthNamesEdges(t *testing.T) {
+	src := authCheckUses + `
+function f(User $user, array $names) {
+    Gate::allows(ability: 'named-ability');
+    Gate::any(...$names);
+    Route::middleware(['k' => 'keyed-middleware', 'beside-a-key', ...$names]);
+}
+`
+	got := findingTexts(src, checkAuthNames(t, authFixture{}, src))
+	if len(got) != 0 {
+		t.Errorf("findings = %v, want none", got)
+	}
+	check := &UnknownAuthNameRule{}
+	if codes := check.Codes(); !slices.Equal(codes, []rule.Code{rule.UnknownAbility, rule.UnknownMiddleware}) {
+		t.Errorf("Codes = %v", codes)
+	}
+	if findings := check.Check(nil, "", nil); findings != nil {
+		t.Errorf("no file has no findings: %v", findings)
+	}
+}
