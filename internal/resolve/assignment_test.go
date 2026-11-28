@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
@@ -95,9 +96,16 @@ class Holder {
 // variable read on the line that ends with `// marker`.
 func assignedTypes(t *testing.T, src string) (typed, plain func(v, marker string) string) {
 	t.Helper()
+	return assignedTypesWith(t, src, func(*Resolver) {})
+}
+
+// assignedTypesWith is assignedTypes with the resolver set up by setup first.
+func assignedTypesWith(t *testing.T, src string, setup func(*Resolver)) (typed, plain func(v, marker string) string) {
+	t.Helper()
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///a.php", src)
 	r := NewResolver(idx)
+	setup(r)
 	file := parser.ParseFile(src, token.Latest)
 	lines := SplitLines(src)
 	read := func(v, marker string) textpos.Position {
@@ -404,5 +412,44 @@ func TestLongArraySyntaxIsTypedLikeTheShortOne(t *testing.T) {
 	pos := textpos.Position{Line: lineContaining(t, lines, "echo $long")}
 	if got := r.ResolveVariableTypeTyped("$long", lines, pos, file).Shape; got != "array{name: string, nested: array{id: int}}" {
 		t.Errorf("$long = %q, want the shape of its array() literal", got)
+	}
+}
+
+func TestAssignedValueIsTheValueOfTheWriteThatReaches(t *testing.T) {
+	src := "<?php\nfunction run($c): void {\n    $one = new \\stdClass();\n    echo $one;\n    if ($c) {\n        $two = 1;\n    } else {\n        $two = 2;\n    }\n    echo $two;\n    echo $none;\n}\n"
+	r := NewResolver(symbols.NewIndex())
+	file := parser.ParseFile(src, token.Latest)
+	read := func(name string) *ast.Variable {
+		var found *ast.Variable
+		ast.Walk(file.Tree, func(n ast.Node) bool {
+			if v, ok := n.(*ast.Variable); ok && v.Bounds().Text(src) == name {
+				found = v
+			}
+			return true
+		})
+		return found
+	}
+	if value, ok := r.AssignedValue(file, read("$one")); !ok || value.Bounds().Text(src) != `new \stdClass()` {
+		t.Errorf("AssignedValue($one) = %v, %v", value, ok)
+	}
+	for _, name := range []string{"$two", "$none"} {
+		if value, ok := r.AssignedValue(file, read(name)); ok {
+			t.Errorf("AssignedValue(%s) = %v, want none", name, value)
+		}
+	}
+}
+
+func TestContainerCallsAssignedToAVariable(t *testing.T) {
+	src := "<?php\nnamespace App;\nclass User {}\nfunction run(): void {\n    $user = app('user');\n    echo $user; // container\n}\n"
+	typed, _ := assignedTypesWith(t, src, func(r *Resolver) {
+		r.ContainerCall = func(_ *Resolver, src string, _ *parser.FileNode, call ast.Expr) (ResolvedType, bool) {
+			if call.Bounds().Text(src) == "app('user')" {
+				return ResolvedType{FQN: `App\User`}, true
+			}
+			return ResolvedType{}, false
+		}
+	})
+	if got := typed("$user", "container"); got != `App\User` {
+		t.Errorf("$user = %q, want App\\User", got)
 	}
 }
