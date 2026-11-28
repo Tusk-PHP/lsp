@@ -2,19 +2,20 @@
 
 declare(strict_types=1);
 
+/**
+ * The snippet each build runs, from dumps/constants.php without its opening
+ * tag, so it can be passed with -r. Builds the generator can't run, such as
+ * other platforms' in CI, run the file itself.
+ */
 function constantDumpCode(): string
 {
-    return <<<'PHP'
-$groups = get_defined_constants(true);
-unset($groups['user']);
-$out = ['version' => PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION, 'extensions' => array_map('strtolower', get_loaded_extensions()), 'constants' => []];
-foreach ($groups as $extension => $constants) {
-    foreach ($constants as $name => $value) {
-        $out['constants'][strtolower($extension)][$name] = [gettype($value), is_scalar($value) || $value === null ? var_export($value, true) : null];
+    $file = __DIR__ . '/dumps/constants.php';
+    $code = file_get_contents($file);
+    if ($code === false || !str_starts_with($code, "<?php\n")) {
+        fwrite(STDERR, "Can't read the constant dump snippet {$file}\n");
+        exit(1);
     }
-}
-echo json_encode($out, JSON_INVALID_UTF8_SUBSTITUTE);
-PHP;
+    return substr($code, strlen("<?php\n"));
 }
 
 /**
