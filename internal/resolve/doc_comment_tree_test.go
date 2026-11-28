@@ -151,3 +151,16 @@ func TestDocLookupsOutsideTheSourceFindNothing(t *testing.T) {
 		}
 	}
 }
+
+func TestVarDocTypeIsTheWrittenType(t *testing.T) {
+	src := "<?php\nfunction run($rows): void {\n    /** @var array{id: int} $rows */\n    echo $rows;\n}\n"
+	lines := SplitLines(src)
+	r := NewResolver(symbols.NewIndex())
+	pos := textpos.Position{Line: 3, Character: 10}
+	if got := r.VarDocType("$rows", lines, pos, parser.ParseFile(src, token.Latest)); got != "array{id: int}" {
+		t.Errorf("VarDocType = %q, want array{id: int}", got)
+	}
+	if got := r.VarDocType("$rows", lines, pos, nil); got != "" {
+		t.Errorf("VarDocType without a file = %q", got)
+	}
+}
