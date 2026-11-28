@@ -33,7 +33,7 @@ func (r *UnusedPrivateRule) Check(file *parser.FileNode, source string, index *s
 		var traits []string
 		if len(cls.Traits) > 0 {
 			var ok bool
-			if traits, ok = traitSources(file.Namespace, cls.Name, index); !ok {
+			if traits, ok = traitSources(cls.FullName, index); !ok {
 				// A trait the server can't read might use any of them.
 				continue
 			}
@@ -47,13 +47,9 @@ func (r *UnusedPrivateRule) Check(file *parser.FileNode, source string, index *s
 
 // traitSources returns the source of every trait the class uses, directly or
 // through other traits. ok is false when one of them isn't indexed.
-func traitSources(namespace, class string, index *symbols.Index) (sources []string, ok bool) {
+func traitSources(fqn string, index *symbols.Index) (sources []string, ok bool) {
 	if index == nil {
 		return nil, false
-	}
-	fqn := class
-	if namespace != "" {
-		fqn = namespace + "\\" + class
 	}
 	seen := map[string]bool{}
 	pending := index.TraitsOf(fqn)

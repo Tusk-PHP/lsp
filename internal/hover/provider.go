@@ -175,7 +175,7 @@ func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol
 	}
 
 	if ctx.FunctionCall {
-		fn := r.CalledFunction(word, file)
+		fn := r.CalledFunction(word, file.NamespaceAt(pos.Line, pos.Character))
 		if fn == nil {
 			return nil
 		}

@@ -1155,7 +1155,7 @@ func (r *Resolver) resolveVariableTypePlain(varName string, lines []string, pos 
 			if IsFirstClassCallable(rhs) || isPartialApplicationCall(rhs) {
 				return "Closure" // strlen(...) and f(?, 1) make a Closure, they don't call
 			}
-			if fn := r.CalledFunction(funcName, file); fn != nil && fn.ReturnType != "" {
+			if fn := r.CalledFunction(funcName, file.NamespaceAt(pos.Line, pos.Character)); fn != nil && fn.ReturnType != "" {
 				return fn.ReturnType
 			}
 		}

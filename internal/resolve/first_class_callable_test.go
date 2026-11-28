@@ -32,7 +32,7 @@ func firstClassCallableResolver(t *testing.T) (*Resolver, *parser.FileNode) {
 func TestFirstClassCallableExpressionType(t *testing.T) {
 	r, file := firstClassCallableResolver(t)
 	boxOfFoo := ResolvedType{FQN: "App\\Box", Params: []ResolvedType{{FQN: "App\\Foo"}}}
-	ctx := ExprContext{File: file, Locals: map[string]ResolvedType{
+	ctx := ExprContext{Pos: textpos.Position{Line: 11}, File: file, Locals: map[string]ResolvedType{
 		"$b": boxOfFoo,
 		"$f": {FQN: "Closure", Callable: &CallableType{Params: []ResolvedType{{FQN: "int"}}, Return: &ResolvedType{FQN: "App\\Foo"}}},
 		"$x": {FQN: "App\\Foo"},

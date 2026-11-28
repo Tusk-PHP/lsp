@@ -215,3 +215,25 @@ func TestViewDataThroughTemplates(t *testing.T) {
 		t.Error("ViewName")
 	}
 }
+
+func TestViewDataKeepsTheNamespaceAcrossNamespaceCalls(t *testing.T) {
+	for _, call := range []string{"Route::namespace('Admin')->group(fn () => 1);", "$router->namespace('x');", `namespace\helper();`} {
+		d := NewViewData("/app")
+		d.IndexFile("file:///app/app/Mail/Welcome.php", `<?php
+namespace App\Mail;
+
+`+call+`
+
+class Welcome extends Mailable
+{
+    public function content(): Content
+    {
+        return new Content(view: 'mail.welcome', with: ['name' => 'x']);
+    }
+}
+`)
+		if in := d.Inputs("mail.welcome"); len(in.Classes) != 1 || in.Classes[0] != `App\Mail\Welcome` {
+			t.Errorf("after %s: classes rendering mail.welcome = %v, want App\\Mail\\Welcome", call, in.Classes)
+		}
+	}
+}

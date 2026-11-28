@@ -50,6 +50,7 @@ func (p *structParser) parseAnonymousClasses() {
 		if p.tokens[i].Kind != TokenNew {
 			continue
 		}
+		p.namespace = namespaceAt(p.result.Namespaces, p.tokens[i].Line, p.tokens[i].Column)
 		j := p.nextCode(i + 1)
 		isReadonly := false
 		if j < len(p.tokens) && p.tokens[j].Kind == TokenReadonly {
@@ -67,13 +68,9 @@ func (p *structParser) parseAnonymousClasses() {
 			}
 			fileHash = strconv.FormatUint(uint64(h.Sum32()), 36)
 		}
-		cls := ClassDef{Name: AnonymousClassName, Line: p.tokens[j].Line, IsReadonly: isReadonly}
+		cls := ClassDef{Namespace: p.namespace, Name: AnonymousClassName, Line: p.tokens[j].Line, IsReadonly: isReadonly}
 		name := AnonymousClassName + "@" + strconv.Itoa(cls.Line+1) + "@" + fileHash
-		if p.result.Namespace != "" {
-			cls.FullName = p.result.Namespace + "\\" + name
-		} else {
-			cls.FullName = name
-		}
+		cls.FullName = p.qualify(name)
 		p.pos = j + 1
 		p.attributes = nil
 		if p.peek().Kind == TokenOpenParen {

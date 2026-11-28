@@ -86,11 +86,12 @@ func (r *BuiltinUnavailableRule) checkFunctions(line string, lineNum int, file *
 		// handles it. We only fire when the function is NOT in the index but
 		// IS a known builtin — which means it was excluded by the profile.
 		written := writtenName(line, start, name)
-		if functionExists(written, file, index) {
+		ns := file.NamespaceAt(lineNum, start)
+		if functionExists(written, ns, file, index) {
 			continue
 		}
 
-		bare, avail, ok := builtinFunctionAvailability(written, file)
+		bare, avail, ok := builtinFunctionAvailability(written, ns)
 		if !ok {
 			// Not a known builtin — UnknownFunctionRule handles this.
 			continue
@@ -204,11 +205,11 @@ func (r *BuiltinUnavailableRule) classLikeFinding(name string, lineNum, start, e
 	// If the class-like is already resolved (locally defined or indexed), skip.
 	// classLikeExists returns true both for locally-defined types and for
 	// types present in the index (which includes builtins that passed the profile).
-	if classLikeExists(name, lineNum, file, index) {
+	if classLikeExists(name, lineNum, start, file, index) {
 		return nil
 	}
 
-	bare, avail, ok := builtinClassAvailability(name, lineNum, file)
+	bare, avail, ok := builtinClassAvailability(name, lineNum, start, file)
 	if !ok {
 		// Not a known builtin — UnknownClassRule handles this.
 		return nil
@@ -373,11 +374,11 @@ func (r *BuiltinUnavailableRule) attributeFinding(name string, lineNum, start, e
 		return nil
 	}
 	// If the class-like is already resolved (locally defined or indexed), skip.
-	if classLikeExists(name, lineNum, file, index) {
+	if classLikeExists(name, lineNum, start, file, index) {
 		return nil
 	}
 
-	bare, avail, ok := builtinClassAvailability(name, lineNum, file)
+	bare, avail, ok := builtinClassAvailability(name, lineNum, start, file)
 	if !ok {
 		// Not a known builtin — UnknownClassRule handles this.
 		return nil
@@ -413,8 +414,8 @@ func (r *BuiltinUnavailableRule) attributeMessage(name string, avail symbols.Bui
 // PHP looks it up (the namespaced name, then the global one). ok is false
 // when it isn't a builtin. Builtin function names are matched in lowercase,
 // as the registry lists them.
-func builtinFunctionAvailability(name string, file *parser.FileNode) (string, symbols.BuiltinAvailability, bool) {
-	fqns, ok := resolve.FunctionNames(name, file)
+func builtinFunctionAvailability(name string, ns *parser.NamespaceNode) (string, symbols.BuiltinAvailability, bool) {
+	fqns, ok := resolve.FunctionNames(name, ns)
 	if !ok {
 		return "", symbols.BuiltinAvailability{}, false
 	}
@@ -431,8 +432,8 @@ func builtinFunctionAvailability(name string, file *parser.FileNode) (string, sy
 
 // builtinClassAvailability is builtinFunctionAvailability for a class-like
 // name, resolved through the file's namespace and imports.
-func builtinClassAvailability(name string, line int, file *parser.FileNode) (string, symbols.BuiltinAvailability, bool) {
-	fqn, ok := resolveClassLikeName(name, line, file)
+func builtinClassAvailability(name string, line, col int, file *parser.FileNode) (string, symbols.BuiltinAvailability, bool) {
+	fqn, ok := resolveClassLikeName(name, line, col, file)
 	if !ok || fqn == "" {
 		return "", symbols.BuiltinAvailability{}, false
 	}

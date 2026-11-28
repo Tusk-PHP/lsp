@@ -174,8 +174,8 @@ func TestOutArgumentsAskTheCallee(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			source := "<?php\nclass Filler { function run() {\n    " + tc.code + "\n    return $out;\n} }\n"
 			var asked []call
-			c := &Collector{OutArg: func(callee string, arg int) bool {
-				asked = append(asked, call{callee, arg})
+			c := &Collector{OutArg: func(out OutArgument) bool {
+				asked = append(asked, call{out.Callee, out.Index})
 				return true
 			}}
 			doc := c.Collect(source)
@@ -196,8 +196,8 @@ func TestOutArgumentsAskTheCallee(t *testing.T) {
 		t.Run("not an out argument: "+code, func(t *testing.T) {
 			source := "<?php\nclass Filler { function run() {\n    " + code + "\n} }\n"
 			var asked []string
-			c := &Collector{OutArg: func(callee string, arg int) bool {
-				asked = append(asked, callee)
+			c := &Collector{OutArg: func(out OutArgument) bool {
+				asked = append(asked, out.Callee)
 				return true
 			}}
 			c.Collect(source)

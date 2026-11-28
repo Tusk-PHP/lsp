@@ -93,7 +93,7 @@ func (r *Resolver) resolveForeachValueType(varPrefix string, lines []string, pos
 			iterableType = r.ExpressionType(iterableExpr, ExprContext{Lines: lines, Pos: pos, File: file})
 			if iterableType.IsEmpty() {
 				if funcName := extractFunctionCallName(iterableExpr); funcName != "" && r.Index != nil {
-					iterableType = r.FunctionTypeForCall(r.typedFunction(funcName, file), file, nil)
+					iterableType = r.FunctionTypeForCall(r.typedFunction(funcName, file, file.NamespaceAt(pos.Line, pos.Character)), file, nil)
 				}
 			}
 		}

@@ -31,3 +31,13 @@ func SignificantTokens(tokens []Token) []Token {
 	}
 	return out
 }
+
+func IsNamespaceDeclaration(tokens []Token, at int) bool {
+	if prev := PrevSignificant(tokens, at-1); prev >= 0 {
+		if k := tokens[prev].Kind; k == TokenArrow || k == TokenDoubleColon {
+			return false
+		}
+	}
+	next := NextSignificant(tokens, at+1)
+	return next >= 0 && (tokens[next].Kind == TokenIdentifier || tokens[next].Kind == TokenOpenBrace)
+}

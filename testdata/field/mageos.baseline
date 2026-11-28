@@ -95,18 +95,7 @@ vendor/mage-os/framework/Data/Form/Element/Checkbox.php	unused-variable	Variable
 vendor/mage-os/framework/Data/Form/Element/Gallery.php	unused-variable	Variable $gallery is assigned but never read
 vendor/mage-os/framework/Data/Tree.php	unknown-member	Unknown member 'removeChild' on 'Tree'
 vendor/mage-os/framework/Filesystem/Directory/Write.php	unused-import	Unused import 'Magento\Framework\Config\Dom\ValidationException'
-vendor/mage-os/framework/Filesystem/Driver/File.php	argument-count-mismatch	Too many arguments to feof(): 1 passed, at most 0 expected
-vendor/mage-os/framework/Filesystem/Driver/File.php	argument-count-mismatch	Too many arguments to file_get_contents(): 3 passed, at most 0 expected
-vendor/mage-os/framework/Filesystem/Driver/File.php	argument-count-mismatch	Too many arguments to file_put_contents(): 3 passed, at most 0 expected
-vendor/mage-os/framework/Filesystem/Driver/File.php	argument-count-mismatch	Too many arguments to fwrite(): 2 passed, at most 0 expected
 vendor/mage-os/framework/Filesystem/Driver/File.php	undefined-variable	Undefined variable $fwrite
-vendor/mage-os/framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to feof(): 1 passed, at most 0 expected
-vendor/mage-os/framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to file_get_contents(): 3 passed, at most 0 expected
-vendor/mage-os/framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to file_put_contents(): 4 passed, at most 0 expected
-vendor/mage-os/framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to fsockopen(): 4 passed, at most 2 expected
-vendor/mage-os/framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to fwrite(): 2 passed, at most 0 expected
-vendor/mage-os/framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to get_headers(): 2 passed, at most 0 expected
-vendor/mage-os/framework/Filesystem/Driver/Http.php	argument-count-mismatch	Too many arguments to get_headers(): 2 passed, at most 0 expected
 vendor/mage-os/framework/Filesystem/Driver/Http.php	undefined-variable	Undefined variable $errorMessage
 vendor/mage-os/framework/Filesystem/Driver/Http.php	undefined-variable	Undefined variable $errorMessage
 vendor/mage-os/framework/Filesystem/Driver/Http.php	undefined-variable	Undefined variable $errorNumber
@@ -146,8 +135,6 @@ vendor/mage-os/framework/Search/Dynamic/DataProviderInterface.php	unused-import	
 vendor/mage-os/framework/Search/Response/Bucket.php	unused-import	Unused import 'Magento\Framework\Search\Response\Aggregation\Value'
 vendor/mage-os/framework/Session/SaveHandler/Redis.php	unused-import	Unused import 'Magento\Framework\App\Filesystem\DirectoryList'
 vendor/mage-os/framework/Session/SaveHandler/Redis.php	unused-private-property	Private property 'Redis::$filesystem' is never used
-vendor/mage-os/framework/Session/SessionManager.php	argument-count-mismatch	Too few arguments to session_regenerate_id(): 0 passed, at least 1 required
-vendor/mage-os/framework/Session/SessionManager.php	argument-count-mismatch	Too many arguments to session_set_save_handler(): 2 passed, at most 0 expected
 vendor/mage-os/framework/Setup/Declaration/Schema/Db/MySQL/DbSchemaWriter.php	unused-import	Unused import 'Magento\Framework\DB\Adapter\AdapterInterface'
 vendor/mage-os/framework/Setup/Declaration/Schema/Db/MySQL/Definition/Columns/Comment.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Columns\ColumnNullableAwareInterface'
 vendor/mage-os/framework/Setup/Declaration/Schema/Db/MySQL/Definition/Constraints/Internal.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Column'
@@ -159,7 +146,6 @@ vendor/mage-os/framework/Setup/Declaration/Schema/Operations/DropElement.php	unu
 vendor/mage-os/framework/Setup/Declaration/Schema/Operations/ModifyTable.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Db\DefinitionAggregator'
 vendor/mage-os/framework/Setup/Declaration/Schema/Operations/ModifyTable.php	unused-import	Unused import 'Magento\Framework\Setup\Declaration\Schema\Dto\Column'
 vendor/mage-os/framework/Setup/Patch/PatchReader.php	unused-import	Unused import 'Magento\Framework\Config\ReaderInterface'
-vendor/mage-os/framework/Stdlib/DateTime/DateTime.php	argument-count-mismatch	Too many arguments to gmdate(): 1 passed, at most 0 expected
 vendor/mage-os/framework/Stdlib/DateTime/DateTimeFormatter.php	unknown-member	Unknown member 'toDateTimeZone' on 'DateTimeZone'
 vendor/mage-os/framework/TestFramework/Unit/AbstractFactoryTestCase.php	unknown-class	Unknown class 'PHPUnit\Framework\TestCase'
 vendor/mage-os/framework/TestFramework/Unit/BaseTestCase.php	unknown-class	Unknown class 'PHPUnit\Framework\TestCase'
@@ -448,7 +434,6 @@ vendor/mage-os/module-directory/Setup/Patch/Data/AddDataForCroatia.php	unused-im
 vendor/mage-os/module-directory/Setup/Patch/Data/AddDataForIndia.php	unused-import	Unused import 'Magento\Framework\App\ResourceConnection'
 vendor/mage-os/module-directory/Setup/Patch/Data/AddRegionsForIndia.php	unused-import	Unused import 'Magento\Framework\Setup\Patch\PatchVersionInterface'
 vendor/mage-os/module-downloadable/Controller/Adminhtml/Downloadable/Product/Edit/Form.php	unknown-member	Unknown member '_initProduct' on 'Form'
-vendor/mage-os/module-downloadable/Helper/Download.php	argument-count-mismatch	Too many arguments to get_headers(): 2 passed, at most 0 expected
 vendor/mage-os/module-downloadable/Model/Link.php	unused-import	Unused import 'Magento\Downloadable\Model\ResourceModel\Link'
 vendor/mage-os/module-downloadable/Model/Link/Purchased/Item.php	unused-import	Unused import 'Magento\Downloadable\Model\ResourceModel\Link\Purchased\Item'
 vendor/mage-os/module-downloadable/Model/Sample/Builder.php	unused-import	Unused import 'Magento\Catalog\Model\Product'

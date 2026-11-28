@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -520,6 +521,25 @@ func TestUndefinedVariableBuiltinOutArguments(t *testing.T) {
 		if findings := (&UndefinedVariableRule{}).Check(parser.ParseFile(source), source, index); len(findings) != 1 {
 			t.Errorf("%s: want $o reported, got %+v", call, findings)
 		}
+	}
+}
+
+func TestUndefinedVariableOutArgumentsUseTheCallsNamespaceBlock(t *testing.T) {
+	source := `<?php
+namespace A;
+function fill(&$out) {}
+function a() { fill($o); return $o; }
+
+namespace B;
+function fill($in) {}
+function b() { fill($o); return $o; }
+`
+	var lines []int
+	for _, f := range (&UndefinedVariableRule{}).Check(parser.ParseFile(source), source, nil) {
+		lines = append(lines, f.StartLine)
+	}
+	if len(lines) == 0 || slices.ContainsFunc(lines, func(line int) bool { return line != 7 }) {
+		t.Errorf("A's fill() writes $o and B's doesn't: findings on lines %v, want only line 7", lines)
 	}
 }
 

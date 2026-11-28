@@ -184,3 +184,43 @@ foreach (items() ?: [] as $fallback) {
 		}
 	}
 }
+
+func TestFunctionCallTypeUsesTheNamespaceBlockOfTheCall(t *testing.T) {
+	src := `<?php
+namespace A;
+class Ra {}
+function make(): Ra {}
+$a = make();
+
+namespace B;
+class Rb {}
+function make(): Rb {}
+$b = make();
+
+namespace C;
+use function A\make as build;
+$c = build();
+
+namespace D;
+$d = build();
+`
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///blocks.php", src)
+	file := parser.ParseFile(src)
+	lines := SplitLines(src)
+	r := NewResolver(idx)
+	for variable, want := range map[string]string{
+		"$a": `A\Ra`,
+		"$b": `B\Rb`,
+		"$c": `A\Ra`,
+		"$d": "",
+	} {
+		pos := textpos.Position{Line: lineContaining(t, lines, variable+" =") + 1}
+		if got := r.ResolveVariableTypeTyped(variable, lines, pos, file).FullString(); got != want {
+			t.Errorf("%s = %q, want %q", variable, got, want)
+		}
+		if got := r.ResolveVariableType(variable, lines, pos, file); got != want {
+			t.Errorf("untyped %s = %q, want %q", variable, got, want)
+		}
+	}
+}

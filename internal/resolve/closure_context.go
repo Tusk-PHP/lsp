@@ -175,7 +175,7 @@ func (r *Resolver) calleeForClosure(site closureCallSite, lines []string, file *
 		}
 		return m, ResolvedType{FQN: fqn}, true
 	default:
-		fn := r.CalledFunction(site.name, file)
+		fn := r.CalledFunction(site.name, file.NamespaceAt(site.at.Line, site.at.Character))
 		if fn == nil {
 			return nil, ResolvedType{}, false
 		}

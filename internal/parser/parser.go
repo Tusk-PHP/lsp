@@ -13,9 +13,9 @@ func New() *PHPParser {
 
 // ParseResult holds the structured output of parsing a PHP file.
 type ParseResult struct {
-	Namespace string
-	Uses      []UseStatement
-	Classes   []ClassDef
+	Namespace  string
+	Namespaces []*NamespaceNode
+	Classes    []ClassDef
 	// AnonymousClasses are the `new class { ... }` expressions in the file,
 	// kept apart from Classes, whose entries are declarations.
 	AnonymousClasses []ClassDef
@@ -40,16 +40,10 @@ type ParseResult struct {
 	Calls callList
 }
 
-type UseStatement struct {
-	FullName string
-	Alias    string
-	Kind     string // "class", "function", "const"
-	Line     int
-}
-
 type ClassDef struct {
 	Name        string
 	FullName    string
+	Namespace   *NamespaceNode
 	Extends     string
 	Implements  []string
 	Traits      []string
@@ -76,6 +70,7 @@ type ClassDef struct {
 type InterfaceDef struct {
 	Name       string
 	FullName   string
+	Namespace  *NamespaceNode
 	Extends    []string
 	Methods    []MethodDef
 	Properties []PropertyDef
@@ -89,6 +84,7 @@ type InterfaceDef struct {
 type TraitDef struct {
 	Name        string
 	FullName    string
+	Namespace   *NamespaceNode
 	Properties  []PropertyDef
 	Methods     []MethodDef
 	Traits      []string
@@ -104,6 +100,7 @@ type TraitDef struct {
 type EnumDef struct {
 	Name        string
 	FullName    string
+	Namespace   *NamespaceNode
 	BackedType  string
 	Cases       []EnumCase
 	Methods     []MethodDef
@@ -131,6 +128,7 @@ type FunctionDef struct {
 	Attributes []AttributeDef
 	Name       string
 	FullName   string
+	Namespace  *NamespaceNode
 	Params     []ParamDef
 	ReturnType string
 	IsVariadic bool
@@ -198,6 +196,7 @@ type ConstantDef struct {
 	Attributes []AttributeDef
 	DocComment string
 	Line       int
+	Namespace  *NamespaceNode
 }
 
 type VariableDef struct {
@@ -788,6 +787,7 @@ func identifierToKind(word string) TokenKind {
 // the expression scanner to collect match expressions and call sites.
 func parseStructure(tokens []Token, result *ParseResult) {
 	p := &structParser{tokens: tokens, pos: 0, result: result}
+	p.enterNamespace(&NamespaceNode{})
 	p.parse()
 	p.parseAnonymousClasses()
 	// Expression scanner is a separate single-pass over the token stream.
@@ -809,7 +809,8 @@ type structParser struct {
 	traitRules   TraitAdaptations
 	// blocks holds the braces open at the top level: true for a braced
 	// namespace, false for any other block (if, else, try, …).
-	blocks []bool
+	blocks    []bool
+	namespace *NamespaceNode
 }
 
 // inBlock reports whether the parser is inside a top-level block other than
@@ -945,6 +946,10 @@ func (p *structParser) parse() {
 			p.attributes = append(p.attributes, p.parseAttributeGroup()...)
 			continue
 		case TokenNamespace:
+			if !IsNamespaceDeclaration(p.tokens, p.pos) {
+				p.advance()
+				break
+			}
 			p.parseNamespace()
 			if p.peek().Kind == TokenOpenBrace {
 				p.blocks = append(p.blocks, true)
@@ -1086,8 +1091,20 @@ func (p *structParser) takeAttributes() []AttributeDef {
 	return attrs
 }
 
+func (p *structParser) enterNamespace(ns *NamespaceNode) {
+	p.namespace = ns
+	p.result.Namespaces = append(p.result.Namespaces, ns)
+}
+
+func (p *structParser) qualify(name string) string {
+	if p.namespace.Name == "" {
+		return name
+	}
+	return p.namespace.Name + "\\" + name
+}
+
 func (p *structParser) parseNamespace() {
-	p.advance()
+	keyword := p.advance()
 	var parts []string
 	for {
 		t := p.peek()
@@ -1101,6 +1118,7 @@ func (p *structParser) parseNamespace() {
 		}
 	}
 	p.result.Namespace = strings.Join(parts, "\\")
+	p.enterNamespace(&NamespaceNode{Name: p.result.Namespace, StartLine: keyword.Line, StartCol: keyword.Column})
 	p.expect(TokenSemicolon)
 }
 
@@ -1111,19 +1129,19 @@ func (p *structParser) parseUse() {
 	// One statement can import several names: `use A\B, C\D as E;` or a
 	// group, `use A\{B, C as D, function f};`, whose prefix every item shares.
 	for {
-		line := p.peek().Line
+		start := p.peek()
 		name := p.readUseName()
 		if p.peek().Kind == TokenOpenBrace {
 			p.advance()
 			prefix := strings.TrimPrefix(name, "\\")
 			for p.peek().Kind != TokenCloseBrace && p.peek().Kind != TokenEOF && p.peek().Kind != TokenSemicolon {
 				itemKind := p.useKind(kind)
-				itemLine := p.peek().Line
+				itemStart := p.peek()
 				item := p.readUseName()
 				if item == "" {
 					break // not a name: leave the rest to the recovery below
 				}
-				p.addUse(prefix+strings.TrimPrefix(item, "\\"), p.readUseAlias(), itemKind, itemLine)
+				p.addUse(prefix+strings.TrimPrefix(item, "\\"), p.readUseAlias(), itemKind, itemStart)
 				if p.peek().Kind != TokenComma {
 					break
 				}
@@ -1131,7 +1149,7 @@ func (p *structParser) parseUse() {
 			}
 			p.expect(TokenCloseBrace)
 		} else if name != "" {
-			p.addUse(name, p.readUseAlias(), kind, line)
+			p.addUse(name, p.readUseAlias(), kind, start)
 		}
 		if p.peek().Kind != TokenComma {
 			break
@@ -1184,7 +1202,7 @@ func (p *structParser) readUseAlias() string {
 // addUse records one imported name. An imported name is always fully
 // qualified, so a leading backslash (`use \App\Thing;`) means the same as
 // none.
-func (p *structParser) addUse(fullName, alias, kind string, line int) {
+func (p *structParser) addUse(fullName, alias, kind string, start Token) {
 	fullName = strings.TrimPrefix(fullName, "\\")
 	if fullName == "" || strings.HasSuffix(fullName, "\\") {
 		return
@@ -1192,13 +1210,13 @@ func (p *structParser) addUse(fullName, alias, kind string, line int) {
 	if alias == "" {
 		alias = fullName[strings.LastIndex(fullName, "\\")+1:]
 	}
-	p.result.Uses = append(p.result.Uses, UseStatement{
-		FullName: fullName, Alias: alias, Kind: kind, Line: line,
+	p.namespace.Uses = append(p.namespace.Uses, UseNode{
+		FullName: fullName, Alias: alias, Kind: kind, StartLine: start.Line, StartCol: start.Column,
 	})
 }
 
 func (p *structParser) parseClass(docComment string) {
-	cls := ClassDef{DocComment: docComment, Attributes: p.takeAttributes()}
+	cls := ClassDef{Namespace: p.namespace, DocComment: docComment, Attributes: p.takeAttributes()}
 	for {
 		switch p.peek().Kind {
 		case TokenAbstract:
@@ -1221,11 +1239,7 @@ afterMod:
 	if t, ok := p.expect(TokenIdentifier); ok {
 		cls.Name = t.Value
 		cls.Line = t.Line
-		if p.result.Namespace != "" {
-			cls.FullName = p.result.Namespace + "\\" + cls.Name
-		} else {
-			cls.FullName = cls.Name
-		}
+		cls.FullName = p.qualify(cls.Name)
 	}
 	if p.peek().Kind == TokenExtends {
 		p.advance()
@@ -1262,15 +1276,11 @@ afterMod:
 
 func (p *structParser) parseInterface(docComment string) {
 	p.advance()
-	iface := InterfaceDef{Attributes: p.takeAttributes(), DocComment: docComment}
+	iface := InterfaceDef{Namespace: p.namespace, Attributes: p.takeAttributes(), DocComment: docComment}
 	if t, ok := p.expect(TokenIdentifier); ok {
 		iface.Name = t.Value
 		iface.Line = t.Line
-		if p.result.Namespace != "" {
-			iface.FullName = p.result.Namespace + "\\" + iface.Name
-		} else {
-			iface.FullName = iface.Name
-		}
+		iface.FullName = p.qualify(iface.Name)
 	}
 	if p.peek().Kind == TokenExtends {
 		p.advance()
@@ -1297,15 +1307,11 @@ func (p *structParser) parseInterface(docComment string) {
 
 func (p *structParser) parseTrait(docComment string) {
 	p.advance()
-	trait := TraitDef{Attributes: p.takeAttributes(), DocComment: docComment}
+	trait := TraitDef{Namespace: p.namespace, Attributes: p.takeAttributes(), DocComment: docComment}
 	if t, ok := p.expect(TokenIdentifier); ok {
 		trait.Name = t.Value
 		trait.Line = t.Line
-		if p.result.Namespace != "" {
-			trait.FullName = p.result.Namespace + "\\" + trait.Name
-		} else {
-			trait.FullName = trait.Name
-		}
+		trait.FullName = p.qualify(trait.Name)
 	}
 	if _, ok := p.expect(TokenOpenBrace); !ok {
 		return
@@ -1317,15 +1323,11 @@ func (p *structParser) parseTrait(docComment string) {
 
 func (p *structParser) parseEnum(docComment string) {
 	p.advance()
-	e := EnumDef{DocComment: docComment, Attributes: p.takeAttributes()}
+	e := EnumDef{Namespace: p.namespace, DocComment: docComment, Attributes: p.takeAttributes()}
 	if t, ok := p.expect(TokenIdentifier); ok {
 		e.Name = t.Value
 		e.Line = t.Line
-		if p.result.Namespace != "" {
-			e.FullName = p.result.Namespace + "\\" + e.Name
-		} else {
-			e.FullName = e.Name
-		}
+		e.FullName = p.qualify(e.Name)
 	}
 	if p.peek().Kind == TokenColon {
 		p.advance()
@@ -1358,7 +1360,7 @@ func (p *structParser) parseEnum(docComment string) {
 
 func (p *structParser) parseFunction(docComment string) {
 	p.advance()
-	fn := FunctionDef{DocComment: docComment, Attributes: p.takeAttributes()}
+	fn := FunctionDef{Namespace: p.namespace, DocComment: docComment, Attributes: p.takeAttributes()}
 	// By-reference function: function &get()
 	if p.peek().Kind == TokenAmpersand {
 		p.advance()
@@ -1366,11 +1368,7 @@ func (p *structParser) parseFunction(docComment string) {
 	if t, ok := p.expect(TokenIdentifier); ok {
 		fn.Name = t.Value
 		fn.Line = t.Line
-		if p.result.Namespace != "" {
-			fn.FullName = p.result.Namespace + "\\" + fn.Name
-		} else {
-			fn.FullName = fn.Name
-		}
+		fn.FullName = p.qualify(fn.Name)
 	}
 	fn.Params = p.parseParams()
 	if p.peek().Kind == TokenColon {
@@ -1436,7 +1434,7 @@ func (p *structParser) collectNestedFunctions(start, end int) {
 
 func (p *structParser) parseConst(docComment string) {
 	p.advance()
-	c := ConstantDef{DocComment: docComment, Line: p.peek().Line}
+	c := ConstantDef{Namespace: p.namespace, DocComment: docComment, Line: p.peek().Line}
 	if t, ok := p.expect(TokenIdentifier); ok {
 		c.Name = t.Value
 	}
@@ -1700,7 +1698,7 @@ func (p *structParser) parseClassConstants(visibility string, attributes []Attri
 	}
 	var consts []ConstantDef
 	for isNameToken(p.peek()) {
-		c := ConstantDef{Name: p.peek().Value, Type: typeName, Visibility: visibility, Attributes: attributes, DocComment: docComment, Line: p.peek().Line}
+		c := ConstantDef{Namespace: p.namespace, Name: p.peek().Value, Type: typeName, Visibility: visibility, Attributes: attributes, DocComment: docComment, Line: p.peek().Line}
 		p.advance()
 		if p.peek().Kind == TokenEquals {
 			p.advance()

@@ -321,7 +321,7 @@ func (r *Resolver) statementCalleeWith(stmt string, lines []string, pos textpos.
 		if origin.kind != 'f' {
 			return callee, "", nil, false
 		}
-		fn := r.CalledFunction(origin.text, file)
+		fn := r.CalledFunction(origin.text, file.NamespaceAt(pos.Line, pos.Character))
 		if fn == nil {
 			return callee, "", nil, false
 		}
