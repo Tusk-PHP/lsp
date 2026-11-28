@@ -140,16 +140,20 @@ func (r *Resolver) ResolveClassName(name string, file *parser.FileNode) string {
 	if file == nil {
 		return name
 	}
+	if strings.ContainsAny(name, "|&(<{") {
+		return r.parseTypeExpr(name).CompactWithNames(func(part string) string {
+			return r.resolveOneClassName(part, file)
+		})
+	}
+	return r.resolveOneClassName(name, file)
+}
+
+func (r *Resolver) resolveOneClassName(name string, file *parser.FileNode) string {
 	if strings.HasPrefix(name, "\\") {
 		return strings.TrimPrefix(name, "\\")
 	}
 	if strings.HasPrefix(name, "?") {
 		name = name[1:]
-	}
-	if strings.ContainsAny(name, "|&(") {
-		return typeNamePartRe.ReplaceAllStringFunc(name, func(part string) string {
-			return r.ResolveClassName(part, file)
-		})
 	}
 	parts := strings.SplitN(name, "\\", 2)
 	for _, u := range file.Uses {
@@ -168,9 +172,6 @@ func (r *Resolver) ResolveClassName(name string, file *parser.FileNode) string {
 	}
 	return name
 }
-
-// typeNamePartRe matches each name in a union, intersection or DNF type.
-var typeNamePartRe = regexp.MustCompile(`[^|&()\s]+`)
 
 // classLike is the part of a class, trait, interface or enum that positions are
 // matched against.

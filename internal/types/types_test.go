@@ -178,3 +178,26 @@ func TestIsNullOnlyAtTheTop(t *testing.T) {
 		t.Error("array{a: ?int} is not nullable")
 	}
 }
+
+func TestCompactWithNamesReplacesOnlyTypeNames(t *testing.T) {
+	mark := func(name string) string { return "[" + name + "]" }
+	for written, want := range map[string]string{
+		`Foo|\App\Bar|null`:                  `[Foo]|[\App\Bar]|null`,
+		`(A&B)|null`:                         `([A]&[B])|null`,
+		`array{Foo: Foo, 'Bar'?: list<Bar>}`: `array{Foo: [Foo], Bar?: [list]<[Bar]>}`,
+		`'Foo'|Foo`:                          `'Foo'|[Foo]`,
+		`Collection<int, A|B>`:               `[Collection]<[int], [A]|[B]>`,
+		`Closure(A): B`:                      `Closure([A]): [B]`,
+		`($value is A ? B : C)`:              `($value is [A] ? [B] : [C])`,
+		`list{Foo, int}`:                     `list{[Foo], [int]}`,
+		`Foo[Bar]`:                           `[Foo][[Bar]]`,
+		`A[]|?B`:                             `[A][]|?[B]`,
+	} {
+		if got := ParseTypeExpr(written).CompactWithNames(mark); got != want {
+			t.Errorf("CompactWithNames(%s) = %q, want %q", written, got, want)
+		}
+	}
+	if got := ParseTypeExpr(`A|B`).String(); got != `A | B` {
+		t.Errorf("String() = %q, want the spaced form", got)
+	}
+}

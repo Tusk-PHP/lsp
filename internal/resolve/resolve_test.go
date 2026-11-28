@@ -65,6 +65,15 @@ class Foo {}
 		{"in current namespace", "Service", "App\\Service"},
 		{"unknown stays as-is", "Unknown", "Unknown"},
 		{"nil file returns name", "Foo", "Foo"},
+		{"union", "Logger|Service|null", "Monolog\\Logger|App\\Service|null"},
+		{"DNF", "(Logger&\\Countable)|null", "(Monolog\\Logger&Countable)|null"},
+		{"shape key that looks like a class", "array{Logger: Logger}|null", "array{Logger: Monolog\\Logger}|null"},
+		{"literal string", "'Logger'|Logger", "'Logger'|Monolog\\Logger"},
+		{"generic", "Collection<int, Logger|Service>", "Collection<int, Monolog\\Logger|App\\Service>"},
+		{"callable", "callable(Logger): Service", "callable(Monolog\\Logger): App\\Service"},
+		{"unclosed generic", "Logger<", "Logger<"},
+		{"unclosed shape", "array{a", "array{a"},
+		{"qualified union", "\\Monolog\\Logger|null", "Monolog\\Logger|null"},
 	}
 
 	for _, tt := range tests {
@@ -751,5 +760,19 @@ class Holder {
 		if got := r.MemberType(r.FindMember(`App\Holder`, member), file); got != want {
 			t.Errorf("MemberType($%s) = %q, want %q", member, got, want)
 		}
+	}
+}
+
+func BenchmarkResolveClassName(b *testing.B) {
+	r := setupResolver()
+	file := parser.ParseFile(`<?php
+namespace App;
+use Monolog\Logger;
+`)
+	b.ReportAllocs()
+	for b.Loop() {
+		r.ResolveClassName("Logger", file)
+		r.ResolveClassName("Logger|Service|null", file)
+		r.ResolveClassName("(Logger&\\Countable)|null", file)
 	}
 }

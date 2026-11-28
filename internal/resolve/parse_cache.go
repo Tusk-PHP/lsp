@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
 // parseCacheSize bounds each of the resolver's parse caches. When one fills
@@ -18,6 +19,7 @@ type parseCache struct {
 	mu    sync.Mutex
 	docs  map[string]*parser.DocBlock
 	types map[string]ResolvedType
+	exprs map[string]types.TypeExpr
 }
 
 // parseDoc is parser.ParseDocBlock, cached. The result is read-only.
@@ -61,6 +63,25 @@ func (r *Resolver) parseType(raw string) ResolvedType {
 		c.types = make(map[string]ResolvedType, 256)
 	}
 	c.types[raw] = t
+	c.mu.Unlock()
+	return t
+}
+
+// parseTypeExpr is types.ParseTypeExpr, cached. The result is read-only.
+func (r *Resolver) parseTypeExpr(raw string) types.TypeExpr {
+	c := &r.parsed
+	c.mu.Lock()
+	if t, ok := c.exprs[raw]; ok {
+		c.mu.Unlock()
+		return t
+	}
+	c.mu.Unlock()
+	t := types.ParseTypeExpr(raw)
+	c.mu.Lock()
+	if c.exprs == nil || len(c.exprs) >= parseCacheSize {
+		c.exprs = make(map[string]types.TypeExpr, 256)
+	}
+	c.exprs[raw] = t
 	c.mu.Unlock()
 	return t
 }
