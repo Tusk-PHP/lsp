@@ -3,6 +3,7 @@ package resolve
 import (
 	"strings"
 	"sync"
+	"unsafe"
 
 	"github.com/Tusk-PHP/lsp/internal/scope"
 )
@@ -14,9 +15,13 @@ import (
 // forms, its scopes and the answers remembered for them; the Engine keeps the
 // most recently used ones, and each Resolver remembers the one it is on.
 
-// maxCachedFiles bounds the files an Engine keeps. A request works on one file
-// at a time, or on one per worker when it resolves many files in parallel.
-const maxCachedFiles = 32
+// maxCachedSourceBytes bounds the source an Engine keeps cached files for. A
+// file's scopes and remembered answers grow with its source, and every
+// keystroke makes a new version of the edited file, so a bound on bytes keeps
+// typing in a big file to a few versions while many small files fit for a
+// request that resolves them in parallel. The newest file always stays, even
+// when it is bigger than the bound.
+const maxCachedSourceBytes = 1 << 20
 
 const (
 	maxVarMemos     = 8192
@@ -64,52 +69,114 @@ func (m *generationMemo[K, V]) put(gen uint64, key K, v V, limit int) {
 	m.answers[key] = v
 }
 
-// fileCache is an Engine's bounded set of fileStates, keyed by source text: a
-// new version of a file is a new key, so nothing in it goes stale, and the
-// least recently used file leaves when the cache is full.
+// fileCache is an Engine's set of fileStates, keyed by source text: a new
+// version of a file is a new key, so nothing in it goes stale, and the least
+// recently used files leave once the cached sources pass
+// maxCachedSourceBytes. Lines split from a cached file's source are found by
+// where their first line starts, without joining them. recency is the head of
+// a ring of the cached files: its older neighbour is the newest file, its
+// newer neighbour the oldest.
 type fileCache struct {
-	mu    sync.Mutex
-	files map[string]*cachedFile
-	clock uint64
+	mu       sync.Mutex
+	bySource map[string]*cachedFile
+	byLines  map[linesID]*cachedFile
+	recency  cachedFile
+	bytes    int
 }
 
 type cachedFile struct {
 	state *fileState
-	used  uint64
+	newer *cachedFile
+	older *cachedFile
 }
 
-func (c *fileCache) get(source string, lines []string) *fileState {
+// linesID names a split of a source by where its first line's bytes start
+// and how many lines it has. Lines split from the same source string share
+// it; a match still has to hold the same lines.
+type linesID struct {
+	first *byte
+	count int
+}
+
+func idOfLines(lines []string) linesID {
+	if len(lines) == 0 {
+		return linesID{}
+	}
+	return linesID{first: unsafe.StringData(lines[0]), count: len(lines)}
+}
+
+func (c *fileCache) ofLines(lines []string) *fileState {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.clock++
-	if entry, ok := c.files[source]; ok {
-		entry.used = c.clock
+	entry := c.byLines[idOfLines(lines)]
+	if entry != nil {
+		c.touchLocked(entry)
+	}
+	c.mu.Unlock()
+	if entry != nil && sameLines(entry.state.lines, lines) {
 		return entry.state
 	}
-	if lines == nil {
-		lines = SplitLines(source)
-	}
-	if c.files == nil {
-		c.files = make(map[string]*cachedFile, maxCachedFiles)
-	}
-	if len(c.files) >= maxCachedFiles {
-		c.evictLocked()
-	}
-	state := &fileState{source: source, lines: lines}
-	c.files[source] = &cachedFile{state: state, used: c.clock}
-	return state
+	return c.add(strings.Join(lines, "\n"), lines)
 }
 
-func (c *fileCache) evictLocked() {
-	var oldest string
-	var oldestUse uint64
-	first := true
-	for source, entry := range c.files {
-		if first || entry.used < oldestUse {
-			oldest, oldestUse, first = source, entry.used, false
-		}
+func (c *fileCache) ofSource(source string) *fileState {
+	c.mu.Lock()
+	entry := c.bySource[source]
+	if entry != nil {
+		c.touchLocked(entry)
 	}
-	delete(c.files, oldest)
+	c.mu.Unlock()
+	if entry != nil {
+		return entry.state
+	}
+	return c.add(source, SplitLines(source))
+}
+
+func (c *fileCache) add(source string, lines []string) *fileState {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if entry, ok := c.bySource[source]; ok {
+		c.touchLocked(entry)
+		return entry.state
+	}
+	if c.bySource == nil {
+		c.bySource = make(map[string]*cachedFile)
+		c.byLines = make(map[linesID]*cachedFile)
+		c.recency.newer, c.recency.older = &c.recency, &c.recency
+	}
+	entry := &cachedFile{state: &fileState{source: source, lines: lines}}
+	c.bySource[source] = entry
+	c.byLines[idOfLines(lines)] = entry
+	c.pushNewestLocked(entry)
+	c.bytes += len(source)
+	for c.bytes > maxCachedSourceBytes && c.recency.newer != entry {
+		c.removeLocked(c.recency.newer)
+	}
+	return entry.state
+}
+
+func (c *fileCache) touchLocked(entry *cachedFile) {
+	c.unlinkLocked(entry)
+	c.pushNewestLocked(entry)
+}
+
+func (c *fileCache) pushNewestLocked(entry *cachedFile) {
+	entry.newer, entry.older = &c.recency, c.recency.older
+	entry.older.newer = entry
+	c.recency.older = entry
+}
+
+func (c *fileCache) unlinkLocked(entry *cachedFile) {
+	entry.newer.older = entry.older
+	entry.older.newer = entry.newer
+}
+
+func (c *fileCache) removeLocked(entry *cachedFile) {
+	c.unlinkLocked(entry)
+	delete(c.bySource, entry.state.source)
+	if id := idOfLines(entry.state.lines); c.byLines[id] == entry {
+		delete(c.byLines, id)
+	}
+	c.bytes -= len(entry.state.source)
 }
 
 // sameLines reports whether a and b hold the same lines. Lines split from the
@@ -134,7 +201,7 @@ func (r *Resolver) fileOfLines(lines []string) *fileState {
 	if r.file != nil && sameLines(r.file.lines, lines) {
 		return r.file
 	}
-	r.file = r.files.get(strings.Join(lines, "\n"), lines)
+	r.file = r.files.ofLines(lines)
 	return r.file
 }
 
@@ -142,7 +209,7 @@ func (r *Resolver) fileOfSource(source string) *fileState {
 	if r.file != nil && r.file.source == source {
 		return r.file
 	}
-	r.file = r.files.get(source, nil)
+	r.file = r.files.ofSource(source)
 	return r.file
 }
 

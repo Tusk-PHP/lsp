@@ -38,7 +38,7 @@ func manyFiles(n, padding int) (*symbols.Index, []resolvedFile) {
 }
 
 func TestParallelResolvesEachFileWithItsOwnScopes(t *testing.T) {
-	idx, files := manyFiles(3*maxCachedFiles, 5)
+	idx, files := manyFiles(96, 800)
 	e := NewEngine(idx)
 	const rounds = 4
 	got := make([]string, rounds*len(files))
@@ -51,11 +51,8 @@ func TestParallelResolvesEachFileWithItsOwnScopes(t *testing.T) {
 			t.Errorf("call %d: got %q, want %q", i, fqn, want)
 		}
 	}
-	e.files.mu.Lock()
-	cached := len(e.files.files)
-	e.files.mu.Unlock()
-	if cached > maxCachedFiles {
-		t.Errorf("the engine keeps at most %d files, kept %d", maxCachedFiles, cached)
+	if cached := cachedBytes(&e.files); cached > maxCachedSourceBytes {
+		t.Errorf("the engine keeps at most %d bytes of source, kept %d", maxCachedSourceBytes, cached)
 	}
 }
 
@@ -83,20 +80,89 @@ func TestParallelCallsEveryIndexOnce(t *testing.T) {
 	}
 }
 
+func cachedBytes(c *fileCache) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	total := 0
+	for source := range c.bySource {
+		total += len(source)
+	}
+	if total != c.bytes {
+		panic("the cache miscounts its bytes")
+	}
+	return total
+}
+
+func sourceOfSize(name string, size int) string {
+	return "<?php // " + name + "\n" + strings.Repeat("$a = 1;\n", size/8)
+}
+
 func TestFileCacheEvictsTheLeastRecentlyUsedFile(t *testing.T) {
 	var c fileCache
-	keep := c.get("<?php // kept", nil)
-	for i := range maxCachedFiles {
-		c.get("<?php // "+strconv.Itoa(i), nil)
-		if c.get("<?php // kept", nil) != keep {
+	kept := sourceOfSize("kept", maxCachedSourceBytes/8)
+	keep := c.ofSource(kept)
+	var others []string
+	for i := range 16 {
+		others = append(others, sourceOfSize(strconv.Itoa(i), maxCachedSourceBytes/8))
+		c.ofSource(others[i])
+		if c.ofSource(kept) != keep {
 			t.Fatal("a file in use stays cached")
 		}
 	}
-	if len(c.files) != maxCachedFiles {
-		t.Errorf("the cache holds %d files, want %d", len(c.files), maxCachedFiles)
+	if got := cachedBytes(&c); got > maxCachedSourceBytes {
+		t.Errorf("the cache holds %d bytes, want at most %d", got, maxCachedSourceBytes)
 	}
-	if _, ok := c.files["<?php // 0"]; ok {
+	if _, ok := c.bySource[others[0]]; ok {
 		t.Error("the least recently used file left the cache")
+	}
+	if _, ok := c.bySource[others[15]]; !ok {
+		t.Error("the newest file stays cached")
+	}
+}
+
+func TestTypingInABigFileKeepsAFewVersions(t *testing.T) {
+	e := NewEngine(symbols.NewIndex())
+	var last *fileState
+	for edit := range 40 {
+		source := sourceOfSize("edit "+strconv.Itoa(edit), 242<<10)
+		last = e.Resolver().fileOfLines(SplitLines(source))
+	}
+	if got := cachedBytes(&e.files); got > maxCachedSourceBytes {
+		t.Errorf("40 versions of a 242 KB file keep %d bytes of source, want at most %d", got, maxCachedSourceBytes)
+	}
+	huge := sourceOfSize("huge", 2*maxCachedSourceBytes)
+	state := e.Resolver().fileOfSource(huge)
+	if e.Resolver().fileOfSource(huge) != state {
+		t.Error("a file bigger than the bound stays cached while it is the newest")
+	}
+	if _, ok := e.files.bySource[last.source]; ok {
+		t.Error("older files leave to make room for a file bigger than the bound")
+	}
+}
+
+func TestNoLinesAreAnEmptyFile(t *testing.T) {
+	e := NewEngine(symbols.NewIndex())
+	empty := e.Resolver().fileOfLines(nil)
+	if empty.source != "" || e.Resolver().fileOfLines([]string{}) != empty {
+		t.Error("no lines are the empty file, cached like any other")
+	}
+}
+
+func TestFreshResolverFindsLinesSplitFromACachedSource(t *testing.T) {
+	e := NewEngine(symbols.NewIndex())
+	source := sourceOfSize("cached", 64<<10)
+	cached := e.Resolver().fileOfSource(source)
+	if got := e.Resolver().fileOfLines(strings.Split(source, "\n")); got != cached {
+		t.Fatal("lines split again from a cached source find its file")
+	}
+	edited := strings.Split(source, "\n")
+	edited[3] = "$b = 2;"
+	got := e.Resolver().fileOfLines(edited)
+	if got == cached || got.source != strings.Join(edited, "\n") {
+		t.Error("lines that share the first line of a cached file but differ from it are a file of their own")
+	}
+	if again := e.Resolver().fileOfLines(strings.Split(source, "\n")); again != cached {
+		t.Error("the cached file is still found by its lines after a file with the same first line was added")
 	}
 }
 
