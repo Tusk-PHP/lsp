@@ -8,6 +8,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
@@ -172,36 +173,24 @@ func (a *Aliases) Generate(fqn string, idx *symbols.Index) (string, string, bool
 // `'Name' => Some\Class::class` or `'Name' => 'Some\Class'` pair in its value,
 // including inside `Facade::defaultAliases()->merge([...])`.
 func configAliases(source string) map[string]string {
-	result := parser.New().Parse(source)
+	toks := phpTokens(source)
 	file := parser.ParseFile(source)
-	tokens := result.Tokens
 	aliases := map[string]string{}
-	for i := 0; i < len(tokens); i++ {
-		if tokens[i].Kind != parser.TokenStringLiteral || trimQuotedLiteral(tokens[i].Value) != "aliases" {
+	for i := 0; i+1 < len(toks); i++ {
+		if key, ok := firstStringLiteral(toks[i:]); !ok || key != "aliases" || toks[i+1].Kind != token.DoubleArrow {
 			continue
 		}
-		arrow := parser.NextSignificant(tokens, i+1)
-		if arrow < 0 || tokens[arrow].Kind != parser.TokenDoubleArrow {
-			continue
-		}
-		end := valueEnd(tokens, arrow+1)
-		for j := arrow + 1; j < end; j++ {
-			if tokens[j].Kind != parser.TokenStringLiteral {
+		end := valueEnd(toks, i+2)
+		for j := i + 2; j+1 < end; j++ {
+			name, ok := firstStringLiteral(toks[j:])
+			if !ok || toks[j+1].Kind != token.DoubleArrow {
 				continue
 			}
-			pairArrow := parser.NextSignificant(tokens, j+1)
-			if pairArrow < 0 || pairArrow >= end || tokens[pairArrow].Kind != parser.TokenDoubleArrow {
-				continue
-			}
-			valueStop := valueEnd(tokens, pairArrow+1)
-			if valueStop > end {
-				valueStop = end
-			}
-			value := tokens[pairArrow+1 : valueStop]
-			name := trimQuotedLiteral(tokens[j].Value)
+			valueStop := min(valueEnd(toks, j+2), end)
+			value := toks[j+2 : valueStop]
 			if target, ok := parseClassConstExpr(value, file); ok {
 				aliases[name] = target
-			} else if target, ok := firstStringLiteral(value); ok && len(trimInsignificantTokens(value)) == 1 {
+			} else if target, ok := firstStringLiteral(value); ok && len(value) == 1 {
 				aliases[name] = target
 			}
 			j = valueStop
@@ -211,24 +200,22 @@ func configAliases(source string) map[string]string {
 	return aliases
 }
 
-// valueEnd returns the index of the comma or closing bracket that ends the
-// expression starting at start.
-func valueEnd(tokens []parser.Token, start int) int {
+func valueEnd(toks []phpToken, start int) int {
 	depth := 0
-	for i := start; i < len(tokens); i++ {
-		switch tokens[i].Kind {
-		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
+	for i := start; i < len(toks); i++ {
+		switch toks[i].Kind {
+		case token.LeftParen, token.LeftBracket, token.Attribute, token.LeftBrace:
 			depth++
-		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
+		case token.RightParen, token.RightBracket, token.RightBrace:
 			if depth == 0 {
 				return i
 			}
 			depth--
-		case parser.TokenComma, parser.TokenSemicolon:
+		case token.Comma, token.Semicolon:
 			if depth == 0 {
 				return i
 			}
 		}
 	}
-	return len(tokens)
+	return len(toks)
 }

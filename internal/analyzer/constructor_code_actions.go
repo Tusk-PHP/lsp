@@ -4,10 +4,12 @@ import (
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
-func (a *Analyzer) generateConstructorCodeAction(uri, source string, result *parser.ParseResult, only []protocol.CodeActionKind, pos protocol.Position) *protocol.CodeAction {
+func (a *Analyzer) generateConstructorCodeAction(uri string, toks codeTokens, result *parser.ParseResult, only []protocol.CodeActionKind, pos protocol.Position) *protocol.CodeAction {
 	if result == nil || !protocol.CodeActionRefactor.In(only) {
 		return nil
 	}
@@ -22,18 +24,13 @@ func (a *Analyzer) generateConstructorCodeAction(uri, source string, result *par
 		return nil
 	}
 
-	openTok, closeTok, ok := classBodyTokens(result, classDef)
+	insertPos, ok := classBodyEnd(toks, classDef)
 	if !ok {
 		return nil
 	}
 
-	lines := strings.Split(source, "\n")
-	insertPos, memberIndent, indentUnit, ok := constructorInsertPosition(lines, classDef, openTok, closeTok)
-	if !ok {
-		return nil
-	}
-
-	newText := renderGeneratedConstructor(classDef, props, memberIndent, indentUnit, closeTok.Line == classDef.Line)
+	memberIndent, indentUnit := constructorIndent(toks, classDef)
+	newText := renderGeneratedConstructor(classDef, props, memberIndent, indentUnit, insertPos.Line == classDef.Line)
 	return &protocol.CodeAction{
 		Title: "Generate Constructor",
 		Kind:  protocol.CodeActionRefactor,
@@ -77,68 +74,41 @@ func constructorEligibleProperties(properties []parser.PropertyDef) []parser.Pro
 	return eligible
 }
 
-func classBodyTokens(result *parser.ParseResult, classDef parser.ClassDef) (parser.Token, parser.Token, bool) {
-	tokens := result.Tokens
-	for i := 0; i < len(tokens); i++ {
-		if tokens[i].Kind != parser.TokenClass || tokens[i].Line != classDef.Line {
+func classBodyEnd(toks codeTokens, classDef parser.ClassDef) (protocol.Position, bool) {
+	for i, tok := range toks.all {
+		if tok.Kind != token.Class || toks.position(tok.Start).Line != classDef.Line {
 			continue
 		}
-
-		nameMatched := false
-		for j := i + 1; j < len(tokens); j++ {
-			tok := tokens[j]
-			if tok.Kind == parser.TokenIdentifier && tok.Value == classDef.Name {
-				nameMatched = true
-			}
-			if tok.Kind == parser.TokenOpenBrace {
-				if !nameMatched {
-					break
-				}
-				depth := 1
-				for k := j + 1; k < len(tokens); k++ {
-					switch tokens[k].Kind {
-					case parser.TokenOpenBrace:
-						depth++
-					case parser.TokenCloseBrace:
-						depth--
-						if depth == 0 {
-							return tok, tokens[k], true
-						}
-					}
-				}
-				return parser.Token{}, parser.Token{}, false
-			}
-			if tok.Kind == parser.TokenSemicolon {
-				break
-			}
+		if open, ok := classBodyOpen(toks, i, classDef.Name); ok {
+			end := lexer.MatchingClose(toks.all, open)
+			return toks.position(toks.all[max(end, 0)].Start), end >= 0
 		}
 	}
-	return parser.Token{}, parser.Token{}, false
+	return protocol.Position{}, false
 }
 
-func constructorInsertPosition(lines []string, classDef parser.ClassDef, _ parser.Token, closeTok parser.Token) (protocol.Position, string, string, bool) {
-	if closeTok.Line < 0 || closeTok.Line >= len(lines) || classDef.Line < 0 || classDef.Line >= len(lines) {
-		return protocol.Position{}, "", "", false
-	}
-
-	classIndent := leadingWhitespace(lines[classDef.Line])
-	memberIndent := ""
-	for _, prop := range classDef.Properties {
-		if prop.Line >= 0 && prop.Line < len(lines) {
-			memberIndent = leadingWhitespace(lines[prop.Line])
-			break
+func classBodyOpen(toks codeTokens, class int, name string) (int, bool) {
+	named := false
+	for j := class + 1; ; j++ {
+		switch toks.kind(j) {
+		case token.Identifier:
+			named = named || toks.text(j) == name
+		case token.LeftBrace:
+			return j, named
+		case token.Semicolon, token.Invalid:
+			return 0, false
 		}
 	}
-	if memberIndent == "" {
-		for _, method := range classDef.Methods {
-			if method.Line >= 0 && method.Line < len(lines) {
-				memberIndent = leadingWhitespace(lines[method.Line])
-				break
-			}
-		}
+}
+
+func constructorIndent(toks codeTokens, classDef parser.ClassDef) (memberIndent, indentUnit string) {
+	classIndent := leadingWhitespace(toks.line(classDef.Line))
+	memberIndent = leadingWhitespace(toks.line(classDef.Properties[0].Line))
+	if memberIndent == "" && len(classDef.Methods) > 0 {
+		memberIndent = leadingWhitespace(toks.line(classDef.Methods[0].Line))
 	}
 
-	indentUnit := "    "
+	indentUnit = "    "
 	if strings.HasPrefix(memberIndent, classIndent) && len(memberIndent) > len(classIndent) {
 		indentUnit = memberIndent[len(classIndent):]
 	}
@@ -148,8 +118,7 @@ func constructorInsertPosition(lines []string, classDef parser.ClassDef, _ parse
 		}
 		memberIndent = classIndent + indentUnit
 	}
-
-	return protocol.Position{Line: closeTok.Line, Character: closeTok.Column}, memberIndent, indentUnit, true
+	return memberIndent, indentUnit
 }
 
 func renderGeneratedConstructor(classDef parser.ClassDef, props []parser.PropertyDef, memberIndent, indentUnit string, closingOnClassLine bool) string {

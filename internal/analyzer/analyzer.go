@@ -11,6 +11,8 @@ import (
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	frameworksymfony "github.com/Tusk-PHP/lsp/internal/framework/symfony"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/scope"
@@ -1509,15 +1511,16 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 	actions = append(actions, a.unknownClassCodeActions(uri, source, file, params)...)
 	actions = append(actions, a.importUnusedImportQuickFixes(uri, source, params)...)
 	actions = append(actions, IgnoreDiagnosticActions(uri, source, params)...)
-	if action := a.generateConstructorCodeAction(uri, source, parseResult, params.Context.Only, params.Range.Start); action != nil {
+	toks := newCodeTokens(source, lexer.Lex(source, token.Latest))
+	if action := a.generateConstructorCodeAction(uri, toks, parseResult, params.Context.Only, params.Range.Start); action != nil {
 		actions = append(actions, *action)
 	}
 	actions = append(actions, a.generateGetterSetterCodeActions(uri, source, parseResult, params.Context.Only, params.Range.Start)...)
 	actions = append(actions, a.implementMissingMethodsCodeActions(uri, source, parseResult, params.Context.Only, params.Range.Start)...)
-	if action := a.extractVariableCodeAction(uri, source, params); action != nil {
+	if action := a.extractVariableCodeAction(uri, toks, params); action != nil {
 		actions = append(actions, *action)
 	}
-	if action := a.inlineVariableCodeAction(uri, source, params); action != nil {
+	if action := a.inlineVariableCodeAction(uri, toks, params); action != nil {
 		actions = append(actions, *action)
 	}
 	if action := a.importOrganizeImportsAction(uri, source, file, params.Context.Only); action != nil {

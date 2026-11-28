@@ -4,24 +4,20 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 )
 
-func (a *Analyzer) inlineVariableCodeAction(uri, source string, params protocol.CodeActionParams) *protocol.CodeAction {
+func (a *Analyzer) inlineVariableCodeAction(uri string, toks codeTokens, params protocol.CodeActionParams) *protocol.CodeAction {
 	if !protocol.CodeActionRefactorInline.In(params.Context.Only) {
 		return nil
 	}
 
-	result := parser.New().Parse(source)
-	if result == nil {
-		return nil
-	}
-
-	doc := scope.Collect(source)
+	doc := scope.Collect(toks.src)
 	binding := doc.BindingAt(params.Range.Start)
-	plan, ok := newInlineVariablePlan(source, result, doc, binding)
+	plan, ok := newInlineVariablePlan(toks, doc, binding)
 	if !ok {
 		return nil
 	}
@@ -52,7 +48,7 @@ type inlineVariablePlan struct {
 	useRanges   []protocol.Range
 }
 
-func newInlineVariablePlan(source string, result *parser.ParseResult, doc *scope.Document, binding *scope.Binding) (inlineVariablePlan, bool) {
+func newInlineVariablePlan(toks codeTokens, doc *scope.Document, binding *scope.Binding) (inlineVariablePlan, bool) {
 	if binding == nil || binding.Kind != scope.BindingVariable || binding.Scope == nil {
 		return inlineVariablePlan{}, false
 	}
@@ -85,144 +81,99 @@ func newInlineVariablePlan(source string, result *parser.ParseResult, doc *scope
 		if comparePosition(ref.Start, assignment.Statement.End) <= 0 {
 			return inlineVariablePlan{}, false
 		}
-		if inlineReferenceIsMutation(result.Tokens, ref) {
+		if inlineReferenceIsMutation(toks, ref) {
 			return inlineVariablePlan{}, false
 		}
 	}
 
-	first, last := selectionTokenBounds(result.Tokens, assignment.Expression)
-	if first < 0 || last < first {
-		return inlineVariablePlan{}, false
-	}
-	if !inlineExpressionIsSafe(result.Tokens, first, last) {
-		return inlineVariablePlan{}, false
-	}
-
-	exprStart, ok := positionToOffset(source, assignment.Expression.Start)
-	if !ok {
-		return inlineVariablePlan{}, false
-	}
-	exprEnd, ok := positionToOffset(source, assignment.Expression.End)
-	if !ok || exprEnd <= exprStart {
+	exprStart, _ := toks.offset(assignment.Expression.Start)
+	exprEnd, _ := toks.offset(assignment.Expression.End)
+	first, last := selectionTokenBounds(toks, exprStart, exprEnd)
+	if first < 0 || !inlineExpressionIsSafe(toks, first, last) {
 		return inlineVariablePlan{}, false
 	}
 
-	exprText := source[exprStart:exprEnd]
+	exprText := toks.src[exprStart:exprEnd]
 	replacement := exprText
-	if !inlineExpressionIsAtomic(result.Tokens, first, last) {
+	if !inlineExpressionIsAtomic(toks, first, last) {
 		replacement = "(" + exprText + ")"
 	}
 
 	return inlineVariablePlan{
 		replacement: replacement,
-		deleteRange: expandInlineDeleteRange(source, assignment.Statement),
+		deleteRange: expandInlineDeleteRange(toks, assignment.Statement),
 		useRanges:   append([]protocol.Range(nil), binding.References...),
 	}, true
 }
 
-func inlineExpressionIsSafe(tokens []parser.Token, first, last int) bool {
+var inlineUnsafeKinds = map[token.Kind]bool{
+	token.Semicolon: true, token.CloseTag: true, token.LeftBrace: true, token.RightBrace: true,
+	token.ObjectOperator: true, token.NullsafeObjectOperator: true, token.DoubleColon: true,
+	token.New: true, token.At: true, token.Increment: true, token.Decrement: true,
+	token.Backtick: true, token.Dollar: true, token.Clone: true, token.Echo: true, token.Eval: true, token.Exit: true,
+	token.Include: true, token.IncludeOnce: true, token.Require: true, token.RequireOnce: true,
+	token.Print: true, token.Throw: true, token.Yield: true, token.YieldFrom: true,
+}
+
+func inlineExpressionIsSafe(toks codeTokens, first, last int) bool {
 	for i := first; i <= last; i++ {
-		tok := tokens[i]
-		if tok.Kind.IsComment() {
-			continue
-		}
-		switch tok.Kind {
-		case parser.TokenEquals, parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace,
-			parser.TokenArrow, parser.TokenDoubleColon, parser.TokenNew, parser.TokenAt:
+		kind := toks.all[i].Kind
+		if inlineUnsafeKinds[kind] || kind.IsAssignment() || isCallee(kind) && toks.kind(i+1) == token.LeftParen {
 			return false
-		case parser.TokenUnknown:
-			if !inlineUnknownTokenAllowed(tok.Value) {
-				return false
-			}
-		case parser.TokenIdentifier:
-			if inlineIdentifierHasSideEffects(tok.Value) {
-				return false
-			}
-			if next := parser.NextSignificant(tokens, i+1); next >= 0 && tokens[next].Kind == parser.TokenOpenParen {
-				return false
-			}
-		case parser.TokenVariable:
-			if next := parser.NextSignificant(tokens, i+1); next >= 0 && tokens[next].Kind == parser.TokenOpenParen {
-				return false
-			}
 		}
 	}
 	return true
 }
 
-func inlineReferenceIsMutation(tokens []parser.Token, ref protocol.Range) bool {
-	for i, tok := range tokens {
-		if tok.Kind != parser.TokenVariable || tokenRange(tok) != ref {
-			continue
-		}
-		if prev := parser.PrevSignificant(tokens, i-1); prev >= 0 &&
-			tokens[prev].Kind == parser.TokenUnknown &&
-			(strings.Contains(tokens[prev].Value, "++") || strings.Contains(tokens[prev].Value, "--")) {
-			return true
-		}
-		next := parser.NextSignificant(tokens, i+1)
-		if next < 0 {
-			return false
-		}
-		switch tokens[next].Kind {
-		case parser.TokenEquals:
-			return true
-		case parser.TokenUnknown:
-			return strings.Contains(tokens[next].Value, "++") ||
-				strings.Contains(tokens[next].Value, "--") ||
-				(parser.NextSignificant(tokens, next+1) >= 0 &&
-					tokens[parser.NextSignificant(tokens, next+1)].Kind == parser.TokenEquals)
-		}
+func isCallee(kind token.Kind) bool {
+	switch kind {
+	case token.Function, token.Fn:
 		return false
-	}
-	return true
-}
-
-func inlineExpressionIsAtomic(tokens []parser.Token, first, last int) bool {
-	first = parser.NextSignificant(tokens, first)
-	last = parser.PrevSignificant(tokens, last)
-	if first < 0 || last < first {
-		return false
-	}
-	if tokens[first].Kind == parser.TokenOpenParen && tokens[last].Kind == parser.TokenCloseParen && parser.MatchingClose(tokens, first) == last {
+	case token.Variable, token.NameQualified, token.NameFullyQualified, token.NameRelative:
 		return true
 	}
-	return first == last && (tokens[first].Kind == parser.TokenVariable || tokens[first].Kind == parser.TokenStringLiteral || tokens[first].Kind == parser.TokenNumber)
+	return kind.IsSemiReserved()
 }
 
-func inlineUnknownTokenAllowed(value string) bool {
-	return strings.ContainsRune("+-*/.%!<>~^", rune(value[0]))
-}
-
-func inlineIdentifierHasSideEffects(value string) bool {
-	switch strings.ToLower(value) {
-	case "clone", "echo", "eval", "exit", "include", "include_once", "print", "require", "require_once", "throw", "yield", "yieldfrom":
+func inlineReferenceIsMutation(toks codeTokens, ref protocol.Range) bool {
+	start, _ := toks.offset(ref.Start)
+	end, _ := toks.offset(ref.End)
+	i := sort.Search(len(toks.all), func(i int) bool { return int(toks.all[i].Start) >= start })
+	if i == len(toks.all) || toks.all[i].Kind != token.Variable || int(toks.all[i].Start) != start || int(toks.all[i].End) != end {
 		return true
-	default:
+	}
+	if prev := toks.kind(i - 1); prev == token.Increment || prev == token.Decrement {
+		return true
+	}
+	next := toks.kind(i + 1)
+	return next.IsAssignment() || next == token.Increment || next == token.Decrement
+}
+
+func inlineExpressionIsAtomic(toks codeTokens, first, last int) bool {
+	if toks.all[first].Kind == token.LeftParen && lexer.MatchingClose(toks.all, first) == last {
+		return true
+	}
+	if first != last {
 		return false
 	}
+	switch toks.all[first].Kind {
+	case token.Variable, token.ConstantString, token.DoubleQuote, token.StartHeredoc, token.IntegerLiteral, token.FloatLiteral:
+		return true
+	}
+	return false
 }
 
-func expandInlineDeleteRange(source string, stmt protocol.Range) protocol.Range {
+func expandInlineDeleteRange(toks codeTokens, stmt protocol.Range) protocol.Range {
 	start := protocol.Position{Line: stmt.Start.Line, Character: 0}
-	end := stmt.End
-
 	if stmt.Start.Line != stmt.End.Line {
-		return protocol.Range{Start: start, End: end}
+		return protocol.Range{Start: start, End: stmt.End}
 	}
-
-	lines := strings.Split(source, "\n")
-	if stmt.Start.Line < 0 || stmt.Start.Line >= len(lines) {
+	line := toks.line(stmt.Start.Line)
+	if strings.TrimSpace(line[:stmt.Start.Character]) != "" || strings.TrimSpace(line[stmt.End.Character:]) != "" {
 		return stmt
 	}
-	line := lines[stmt.Start.Line]
-	if strings.TrimSpace(line[:stmt.Start.Character]) != "" {
-		return stmt
-	}
-	if strings.TrimSpace(line[stmt.End.Character:]) != "" {
-		return stmt
-	}
-	if stmt.Start.Line+1 < len(lines) {
+	end := stmt.End
+	if stmt.Start.Line+1 < len(toks.lines) {
 		end = protocol.Position{Line: stmt.Start.Line + 1, Character: 0}
 	}
 	return protocol.Range{Start: start, End: end}

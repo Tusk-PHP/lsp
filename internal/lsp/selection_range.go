@@ -1,9 +1,16 @@
 package lsp
 
 import (
+	"cmp"
+	"slices"
+	"sort"
 	"unicode/utf8"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
+	oldparser "github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 )
 
@@ -15,344 +22,231 @@ func (s *Server) handleSelectionRange(msg *jsonRPCMessage) {
 
 	uri := params.TextDocument.URI
 	source := s.getDocument(uri)
-	pr := parser.New().Parse(source)
 	p := s.positionsOf(uri, source)
 
-	result := make([]protocol.SelectionRange, 0, len(params.Positions))
-	for _, pos := range params.Positions {
-		result = append(result, p.selectionRangeOut(uri, buildSelectionChain(pr, p.posIn(uri, pos), source)))
+	positions := make([]protocol.Position, len(params.Positions))
+	for i, pos := range params.Positions {
+		positions[i] = p.posIn(uri, pos)
 	}
-	s.sendResponse(msg.ID, result)
+	chains := buildSelectionChains(source, positions)
+	for i, chain := range chains {
+		chains[i] = p.selectionRangeOut(uri, chain)
+	}
+	s.sendResponse(msg.ID, chains)
 }
 
-// buildSelectionChain builds a nested SelectionRange chain for a given position.
-// The returned SelectionRange is the innermost (tightest) range; each Parent
-// field points to the next-larger enclosing range, up to the whole document.
-func buildSelectionChain(pr *parser.ParseResult, pos protocol.Position, source string) protocol.SelectionRange {
-	lastLine := 0
-	lastChar := 0
-	if len(pr.Lines) > 0 {
-		lastLine = len(pr.Lines) - 1
-		lastChar = len(pr.Lines[lastLine])
+type selectionCursors struct {
+	offsets []uint32
+	spans   [][]ast.Span
+}
+
+func (c selectionCursors) attach(span ast.Span) {
+	k, _ := slices.BinarySearch(c.offsets, span.Start)
+	for ; k < len(c.offsets) && c.offsets[k] <= span.End; k++ {
+		c.spans[k] = append(c.spans[k], span)
 	}
+}
 
-	// Collect candidate ranges from outermost to innermost.
-	// We'll build the parent chain by linking them in order.
-	type candidate struct {
-		r protocol.Range
-	}
-
-	var candidates []candidate
-
-	// Outermost: whole document
-	candidates = append(candidates, candidate{r: protocol.Range{
-		Start: protocol.Position{Line: 0, Character: 0},
-		End:   protocol.Position{Line: lastLine, Character: lastChar},
-	}})
-
-	// Class/interface/trait/enum range
-	if cr := findContainingClassRange(pr, pos); cr != nil {
-		candidates = append(candidates, candidate{r: *cr})
-	}
-
-	// Method/function range
-	if mr := findContainingMethodRange(pr, pos); mr != nil {
-		candidates = append(candidates, candidate{r: *mr})
-	}
-
-	// Innermost balanced bracket region
-	if br := findBracketRange(pr, pos); br != nil {
-		candidates = append(candidates, candidate{r: *br})
-	}
-
-	// Word range
-	if wr := findWordRange(pr, pos); wr != nil {
-		candidates = append(candidates, candidate{r: *wr})
-	}
-
-	// Deduplicate consecutive identical ranges (avoid cycles or no-ops)
-	deduped := make([]candidate, 0, len(candidates))
-	for i, c := range candidates {
-		if i == 0 || !rangeEquals(c.r, deduped[len(deduped)-1].r) {
-			deduped = append(deduped, c)
+func buildSelectionChains(source string, positions []protocol.Position) []protocol.SelectionRange {
+	lines := ast.NewLines(source)
+	offsets := make([]uint32, len(positions))
+	order := make([]int, 0, len(positions))
+	for i, pos := range positions {
+		if pos.Line < len(lines) {
+			offsets[i] = lineOffset(source, lines, pos)
+			order = append(order, i)
 		}
 	}
+	slices.SortStableFunc(order, func(a, b int) int { return cmp.Compare(offsets[a], offsets[b]) })
+	cursors := selectionCursors{offsets: make([]uint32, len(order)), spans: make([][]ast.Span, len(order))}
+	for k, i := range order {
+		cursors.offsets[k] = offsets[i]
+	}
+	file := parser.ParseSeeingTokens(source, token.Latest, func(toks []lexer.Token) {
+		for k, off := range cursors.offsets {
+			cursors.spans[k] = cursorSpans(source, toks, off)
+		}
+		attachLexicalSpans(source, toks, cursors)
+	})
 
-	if len(deduped) == 0 {
-		// Fallback: return the whole-document range with no parent
-		return protocol.SelectionRange{
-			Range: protocol.Range{
-				Start: protocol.Position{Line: 0, Character: 0},
-				End:   protocol.Position{Line: lastLine, Character: lastChar},
-			},
+	whole := protocol.SelectionRange{Range: spanRange(lines, file.Span)}
+	chains := make([]protocol.SelectionRange, len(positions))
+	for i := range chains {
+		chains[i] = whole
+	}
+	for k, i := range order {
+		spans := appendSyntaxSpans(cursors.spans[k], source, lines, file)
+		chains[i] = nestedChain(lines, spans)
+	}
+	return chains
+}
+
+func cursorSpans(source string, toks []lexer.Token, off uint32) []ast.Span {
+	at := sort.Search(len(toks), func(i int) bool { return toks[i].End > off })
+	for _, i := range [2]int{at, at - 1} {
+		if i < 0 || i >= len(toks) || off > toks[i].End {
+			continue
+		}
+		if word := wordAround(source, toks[i], off); word.Start < word.End {
+			return append(make([]ast.Span, 0, 16), word, tokenSpan(toks[i]))
 		}
 	}
-
-	// Build chain: deduped[0] is outermost (no parent), deduped[n-1] is innermost.
-	// Each node's Parent points to the next-outer node.
-	// We allocate all nodes upfront to avoid pointer aliasing issues with the loop.
-	nodes := make([]protocol.SelectionRange, len(deduped))
-	for i, c := range deduped {
-		nodes[i] = protocol.SelectionRange{Range: c.r}
+	spans := append(make([]ast.Span, 0, 16), ast.Span{Start: off, End: off})
+	if at < len(toks) && toks[at].Kind != token.Whitespace {
+		spans = append(spans, tokenSpan(toks[at]))
 	}
-	// Link: nodes[i].Parent = &nodes[i-1] (outermost = index 0, no parent)
-	for i := 1; i < len(nodes); i++ {
-		nodes[i].Parent = &nodes[i-1]
-	}
+	return spans
+}
 
+func wordAround(source string, tok lexer.Token, off uint32) ast.Span {
+	isWordChar := func(r rune) bool {
+		return r == '$' || oldparser.IsIdentByte(string(r)[0])
+	}
+	start := off
+	for start > tok.Start {
+		r, size := utf8.DecodeLastRuneInString(source[tok.Start:start])
+		if !isWordChar(r) {
+			break
+		}
+		start -= uint32(size)
+	}
+	end := off
+	for end < tok.End {
+		r, size := utf8.DecodeRuneInString(source[end:tok.End])
+		if !isWordChar(r) {
+			break
+		}
+		end += uint32(size)
+	}
+	return ast.Span{Start: start, End: end}
+}
+
+func attachLexicalSpans(source string, toks []lexer.Token, cursors selectionCursors) {
+	opens := make([]lexer.Token, 0, 16)
+	for i := 0; i < len(toks); i++ {
+		tok := toks[i]
+		if tok.Kind == token.ConstantString {
+			cursors.attach(quotedContents(source, tok))
+			continue
+		}
+		if lexer.OpensLiteral(tok.Kind) {
+			end := lexer.LiteralEnd(toks, i)
+			if closer := toks[end]; end > i && (closer.Kind == tok.Kind || closer.Kind == token.EndHeredoc) {
+				cursors.attach(ast.Span{Start: tok.End, End: closer.Start})
+			}
+			i = end
+			continue
+		}
+		var opener token.Kind
+		switch tok.Kind {
+		case token.LeftBrace, token.LeftParen, token.LeftBracket:
+			opens = append(opens, tok)
+			continue
+		case token.Attribute:
+			tok.Kind, tok.Start = token.LeftBracket, tok.End-1
+			opens = append(opens, tok)
+			continue
+		case token.RightBrace:
+			opener = token.LeftBrace
+		case token.RightParen:
+			opener = token.LeftParen
+		case token.RightBracket:
+			opener = token.LeftBracket
+		default:
+			continue
+		}
+		at := -1
+		for j := len(opens) - 1; j >= 0; j-- {
+			if opens[j].Kind == opener {
+				at = j
+				break
+			}
+		}
+		if at < 0 {
+			continue
+		}
+		cursors.attach(ast.Span{Start: opens[at].Start, End: tok.End})
+		cursors.attach(ast.Span{Start: opens[at].End, End: tok.Start})
+		opens = slices.Delete(opens, at, at+1)
+	}
+}
+
+func quotedContents(source string, tok lexer.Token) ast.Span {
+	start := tok.Start + 1
+	if source[tok.Start] == 'b' || source[tok.Start] == 'B' {
+		start++
+	}
+	return ast.Span{Start: start, End: tok.End - 1}
+}
+
+func appendSyntaxSpans(spans []ast.Span, source string, lines ast.Lines, file *ast.File) []ast.Span {
+	inner := spans[0]
+	ast.Walk(file, func(n ast.Node) bool {
+		span := n.Bounds()
+		if !spanContains(span, inner) {
+			return false
+		}
+		spans = append(spans, span)
+		switch n.(type) {
+		case *ast.ClassDecl, *ast.InterfaceDecl, *ast.TraitDecl, *ast.EnumDecl, *ast.Method, *ast.FunctionDecl:
+			spans = append(spans, wholeLines(source, lines, span))
+		}
+		return true
+	})
+	return spans
+}
+
+func nestedChain(lines ast.Lines, spans []ast.Span) protocol.SelectionRange {
+	outer := spans[1:]
+	slices.SortFunc(outer, func(a, b ast.Span) int {
+		return cmp.Or(cmp.Compare(a.End-a.Start, b.End-b.Start), cmp.Compare(a.Start, b.Start))
+	})
+	chain := spans[:1]
+	for _, s := range outer {
+		if last := chain[len(chain)-1]; s != last && spanContains(s, last) {
+			chain = append(chain, s)
+		}
+	}
+	nodes := make([]protocol.SelectionRange, len(chain))
+	for i := range nodes {
+		nodes[i].Range = spanRange(lines, chain[len(chain)-1-i])
+		if i > 0 {
+			nodes[i].Parent = &nodes[i-1]
+		}
+	}
 	return nodes[len(nodes)-1]
 }
 
-// rangeEquals returns true if two ranges are equal.
-func rangeEquals(a, b protocol.Range) bool {
-	return a.Start.Line == b.Start.Line && a.Start.Character == b.Start.Character &&
-		a.End.Line == b.End.Line && a.End.Character == b.End.Character
+func spanContains(outer, inner ast.Span) bool {
+	return outer.Start <= inner.Start && inner.End <= outer.End
 }
 
-// findWordRange returns the range of the word/identifier at the given position.
-func findWordRange(pr *parser.ParseResult, pos protocol.Position) *protocol.Range {
-	if pos.Line >= len(pr.Lines) {
-		return nil
-	}
-	line := pr.Lines[pos.Line]
-	ch := min(pos.Character, len(line))
-
-	isWordChar := func(r rune) bool {
-		return r == '$' || parser.IsIdentByte(string(r)[0])
-	}
-
-	start := ch
-	for start > 0 {
-		r, size := utf8.DecodeLastRuneInString(line[:start])
-		if !isWordChar(r) {
-			break
-		}
-		start -= size
-	}
-	end := ch
-	for end < len(line) {
-		r, size := utf8.DecodeRuneInString(line[end:])
-		if !isWordChar(r) {
-			break
-		}
-		end += size
-	}
-
-	if start == end {
-		// No word at position, return a zero-length range
-		return &protocol.Range{
-			Start: protocol.Position{Line: pos.Line, Character: pos.Character},
-			End:   protocol.Position{Line: pos.Line, Character: pos.Character},
-		}
-	}
-
-	return &protocol.Range{
-		Start: protocol.Position{Line: pos.Line, Character: start},
-		End:   protocol.Position{Line: pos.Line, Character: end},
-	}
+func tokenSpan(tok lexer.Token) ast.Span {
+	return ast.Span{Start: tok.Start, End: tok.End}
 }
 
-// findBracketRange finds the innermost balanced bracket pair ({}, (), []) that
-// contains the given position.
-func findBracketRange(pr *parser.ParseResult, pos protocol.Position) *protocol.Range {
-	// Walk tokens to find bracket pairs that contain the position
-	type bracket struct {
-		open  parser.Token
-		close parser.Token
-	}
-
-	// We need to track open brackets before position and find their closes after.
-	type openBracket struct {
-		tok   parser.Token
-		depth int
-	}
-
-	posLine := pos.Line
-	posChar := pos.Character
-
-	// Find the innermost open bracket before or at position
-	// and its matching close bracket after position.
-	type candidatePair struct {
-		startLine, startChar int
-		endLine, endChar     int
-		size                 int // (endLine-startLine)*big + endChar - startChar
-	}
-
-	var best *candidatePair
-
-	// Simple bracket matching: find all matching pairs and pick the smallest
-	// that contains the position.
-	openStack := make([]openBracket, 0, 16)
-	depth := 0
-
-	for _, tok := range pr.Tokens {
-		switch tok.Kind {
-		case parser.TokenOpenBrace, parser.TokenOpenParen, parser.TokenOpenBracket:
-			depth++
-			openStack = append(openStack, openBracket{tok: tok, depth: depth})
-		case parser.TokenCloseBrace, parser.TokenCloseParen, parser.TokenCloseBracket:
-			if len(openStack) == 0 {
-				continue
-			}
-			// Find matching open bracket
-			matchIdx := -1
-			for i := len(openStack) - 1; i >= 0; i-- {
-				open := openStack[i]
-				if (tok.Kind == parser.TokenCloseBrace && open.tok.Kind == parser.TokenOpenBrace) ||
-					(tok.Kind == parser.TokenCloseParen && open.tok.Kind == parser.TokenOpenParen) ||
-					(tok.Kind == parser.TokenCloseBracket && open.tok.Kind == parser.TokenOpenBracket) {
-					matchIdx = i
-					break
-				}
-			}
-			if matchIdx < 0 {
-				depth--
-				continue
-			}
-			open := openStack[matchIdx]
-			openStack = append(openStack[:matchIdx], openStack[matchIdx+1:]...)
-			depth--
-
-			// Check if this bracket pair contains the position
-			startLine := open.tok.Line
-			startChar := open.tok.Column
-			endLine := tok.Line
-			endChar := tok.Column + len(tok.Value)
-
-			// Position must be strictly inside
-			startBefore := startLine < posLine || (startLine == posLine && startChar <= posChar)
-			endAfter := endLine > posLine || (endLine == posLine && endChar >= posChar)
-
-			if !startBefore || !endAfter {
-				continue
-			}
-
-			size := (endLine-startLine)*10000000 + (endChar - startChar)
-			if best == nil || size < best.size {
-				best = &candidatePair{
-					startLine: startLine,
-					startChar: startChar,
-					endLine:   endLine,
-					endChar:   endChar,
-					size:      size,
-				}
-			}
-		}
-	}
-
-	if best == nil {
-		return nil
-	}
-
-	return &protocol.Range{
-		Start: protocol.Position{Line: best.startLine, Character: best.startChar},
-		End:   protocol.Position{Line: best.endLine, Character: best.endChar},
-	}
+func wholeLines(source string, lines ast.Lines, span ast.Span) ast.Span {
+	first, _ := lines.Position(span.Start)
+	last, _ := lines.Position(max(span.End, span.Start+1) - 1)
+	return ast.Span{Start: lines[first], End: lineEnd(source, lines, last)}
 }
 
-// findContainingMethodRange returns the range of the method or function body
-// that contains the given position.
-func findContainingMethodRange(pr *parser.ParseResult, pos protocol.Position) *protocol.Range {
-	type candidate struct {
-		startLine, endLine int
+func lineEnd(source string, lines ast.Lines, line int) uint32 {
+	if line+1 < len(lines) {
+		return lines[line+1] - 1
 	}
-	var best *candidate
-
-	checkMethod := func(m parser.MethodDef) {
-		if m.Line <= pos.Line && m.EndLine >= pos.Line {
-			if best == nil || (m.EndLine-m.Line) < (best.endLine-best.startLine) {
-				best = &candidate{startLine: m.Line, endLine: m.EndLine}
-			}
-		}
-	}
-
-	checkFunc := func(f parser.FunctionDef) {
-		if f.Line <= pos.Line && f.EndLine >= pos.Line {
-			if best == nil || (f.EndLine-f.Line) < (best.endLine-best.startLine) {
-				best = &candidate{startLine: f.Line, endLine: f.EndLine}
-			}
-		}
-	}
-
-	for _, cls := range pr.Classes {
-		for _, m := range cls.Methods {
-			checkMethod(m)
-		}
-	}
-	for _, iface := range pr.Interfaces {
-		for _, m := range iface.Methods {
-			checkMethod(m)
-		}
-	}
-	for _, trait := range pr.Traits {
-		for _, m := range trait.Methods {
-			checkMethod(m)
-		}
-	}
-	for _, e := range pr.Enums {
-		for _, m := range e.Methods {
-			checkMethod(m)
-		}
-	}
-	for _, fn := range pr.Functions {
-		checkFunc(fn)
-	}
-
-	if best == nil {
-		return nil
-	}
-
-	endChar := 0
-	if best.endLine < len(pr.Lines) {
-		endChar = len(pr.Lines[best.endLine])
-	}
-
-	return &protocol.Range{
-		Start: protocol.Position{Line: best.startLine, Character: 0},
-		End:   protocol.Position{Line: best.endLine, Character: endChar},
-	}
+	return uint32(len(source))
 }
 
-// findContainingClassRange returns the range of the class/interface/trait/enum
-// that contains the given position.
-func findContainingClassRange(pr *parser.ParseResult, pos protocol.Position) *protocol.Range {
-	type candidate struct {
-		startLine, endLine int
-	}
-	var best *candidate
+func lineOffset(source string, lines ast.Lines, pos protocol.Position) uint32 {
+	return min(lines[pos.Line]+uint32(pos.Character), lineEnd(source, lines, pos.Line))
+}
 
-	check := func(startLine, endLine int) {
-		if startLine <= pos.Line && endLine >= pos.Line {
-			if best == nil || (endLine-startLine) < (best.endLine-best.startLine) {
-				best = &candidate{startLine: startLine, endLine: endLine}
-			}
-		}
-	}
+func spanRange(lines ast.Lines, span ast.Span) protocol.Range {
+	return protocol.Range{Start: spanPosition(lines, span.Start), End: spanPosition(lines, span.End)}
+}
 
-	for _, cls := range pr.Classes {
-		check(cls.Line, cls.EndLine)
-	}
-	for _, iface := range pr.Interfaces {
-		check(iface.Line, iface.EndLine)
-	}
-	for _, trait := range pr.Traits {
-		check(trait.Line, trait.EndLine)
-	}
-	for _, e := range pr.Enums {
-		check(e.Line, e.EndLine)
-	}
-
-	if best == nil {
-		return nil
-	}
-
-	endChar := 0
-	if best.endLine < len(pr.Lines) {
-		endChar = len(pr.Lines[best.endLine])
-	}
-
-	return &protocol.Range{
-		Start: protocol.Position{Line: best.startLine, Character: 0},
-		End:   protocol.Position{Line: best.endLine, Character: endChar},
-	}
+func spanPosition(lines ast.Lines, offset uint32) protocol.Position {
+	line, col := lines.Position(offset)
+	return protocol.Position{Line: line, Character: col}
 }

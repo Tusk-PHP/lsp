@@ -2,14 +2,16 @@ package analyzer
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/scope"
 )
 
-func (a *Analyzer) extractVariableCodeAction(uri, source string, params protocol.CodeActionParams) *protocol.CodeAction {
+func (a *Analyzer) extractVariableCodeAction(uri string, toks codeTokens, params protocol.CodeActionParams) *protocol.CodeAction {
 	if !protocol.CodeActionRefactorExtract.In(params.Context.Only) {
 		return nil
 	}
@@ -20,7 +22,7 @@ func (a *Analyzer) extractVariableCodeAction(uri, source string, params protocol
 		return nil
 	}
 
-	doc := scope.Collect(source)
+	doc := scope.Collect(toks.src)
 	targetScope := doc.ScopeAt(params.Range.Start)
 	if targetScope == nil || targetScope.Kind == scope.ScopeFile || targetScope.ExprBody {
 		return nil
@@ -29,19 +31,14 @@ func (a *Analyzer) extractVariableCodeAction(uri, source string, params protocol
 		return nil
 	}
 
-	result := parser.New().Parse(source)
-	if result == nil {
-		return nil
-	}
-
-	selection, ok := newExtractSelection(source, result, params.Range)
+	selection, ok := newExtractSelection(toks, params.Range)
 	if !ok {
 		return nil
 	}
 
 	name := nextExtractVariableName(targetScope)
 	statementLine := selection.statementStart.Line
-	indent := leadingIndent(result.Lines[statementLine])
+	indent := leadingIndent(toks.line(statementLine))
 	insert := fmt.Sprintf("%s%s = %s;\n", indent, name, selection.text)
 
 	action := &protocol.CodeAction{
@@ -75,91 +72,74 @@ type extractSelection struct {
 	statementStart protocol.Position
 }
 
-func newExtractSelection(source string, result *parser.ParseResult, rng protocol.Range) (extractSelection, bool) {
-	startOffset, ok := positionToOffset(source, rng.Start)
+func newExtractSelection(toks codeTokens, rng protocol.Range) (extractSelection, bool) {
+	startOffset, ok := toks.offset(rng.Start)
 	if !ok {
 		return extractSelection{}, false
 	}
-	endOffset, ok := positionToOffset(source, rng.End)
+	endOffset, ok := toks.offset(rng.End)
 	if !ok || endOffset <= startOffset {
 		return extractSelection{}, false
 	}
 
-	selected := source[startOffset:endOffset]
+	selected := toks.src[startOffset:endOffset]
 	if strings.TrimSpace(selected) == "" {
 		return extractSelection{}, false
 	}
 
-	first, last := selectionTokenBounds(result.Tokens, rng)
+	first, last := selectionTokenBounds(toks, startOffset, endOffset)
 	if first < 0 || last < first {
 		return extractSelection{}, false
 	}
 
-	firstRange := tokenRange(result.Tokens[first])
-	lastRange := tokenRange(result.Tokens[last])
 	if trimStart := strings.IndexFunc(selected, func(r rune) bool { return r != ' ' && r != '\t' }); trimStart >= 0 {
-		if startOffset+trimStart != offsetAtPosition(source, firstRange.Start) {
+		if startOffset+trimStart != int(toks.all[first].Start) {
 			return extractSelection{}, false
 		}
 	}
-	trimmedEndOffset := startOffset + len(strings.TrimRight(selected, " \t"))
-	if trimmedEndOffset != offsetAtPosition(source, lastRange.End) {
+	if startOffset+len(strings.TrimRight(selected, " \t")) != int(toks.all[last].End) {
 		return extractSelection{}, false
 	}
 
-	if !extractSelectionIsSafe(result.Tokens, first, last) {
+	if !extractSelectionIsSafe(toks, first, last) {
 		return extractSelection{}, false
 	}
 
 	return extractSelection{
 		rng:            rng,
 		text:           selected,
-		statementStart: tokenRange(result.Tokens[parser.StatementStart(result.Tokens, first)]).Start,
+		statementStart: toks.position(toks.all[lexer.StatementStart(toks.all, first)].Start),
 	}, true
 }
 
-func selectionTokenBounds(tokens []parser.Token, rng protocol.Range) (int, int) {
-	first := -1
-	last := -1
-	for i, tok := range tokens {
-		if tok.Kind.IsComment() {
-			continue
-		}
-		tokRange := tokenRange(tok)
-		if comparePosition(tokRange.End, rng.Start) <= 0 {
-			continue
-		}
-		if comparePosition(tokRange.Start, rng.End) >= 0 {
-			break
-		}
-		if first == -1 {
-			first = i
-		}
-		last = i
+func selectionTokenBounds(toks codeTokens, start, end int) (int, int) {
+	first := sort.Search(len(toks.all), func(i int) bool { return int(toks.all[i].End) > start })
+	last := first - 1
+	for last+1 < len(toks.all) && int(toks.all[last+1].Start) < end {
+		last++
+	}
+	if last < first {
+		return -1, -1
 	}
 	return first, last
 }
 
-func extractSelectionIsSafe(tokens []parser.Token, first, last int) bool {
+func extractSelectionIsSafe(toks codeTokens, first, last int) bool {
 	depthParen := 0
 	depthBracket := 0
 	for i := first; i <= last; i++ {
-		switch tokens[i].Kind {
-		case parser.TokenOpenParen:
+		switch kind := toks.all[i].Kind; {
+		case kind == token.LeftParen:
 			depthParen++
-		case parser.TokenCloseParen:
+		case kind == token.RightParen:
 			depthParen--
-		case parser.TokenOpenBracket:
+		case kind == token.LeftBracket || kind == token.Attribute:
 			depthBracket++
-		case parser.TokenCloseBracket:
+		case kind == token.RightBracket:
 			depthBracket--
-		case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace:
+		case endsStatement(kind):
 			return false
-		case parser.TokenEquals:
-			if depthParen == 0 && depthBracket == 0 {
-				return false
-			}
-		case parser.TokenComma:
+		case kind.IsAssignment() || kind == token.Comma:
 			if depthParen == 0 && depthBracket == 0 {
 				return false
 			}
@@ -169,6 +149,10 @@ func extractSelectionIsSafe(tokens []parser.Token, first, last int) bool {
 		}
 	}
 	return depthParen == 0 && depthBracket == 0
+}
+
+func endsStatement(kind token.Kind) bool {
+	return kind == token.Semicolon || kind == token.CloseTag || kind == token.LeftBrace || kind == token.RightBrace
 }
 
 func nextExtractVariableName(targetScope *scope.Scope) string {
@@ -194,42 +178,6 @@ func scopeHasVisibleBinding(targetScope *scope.Scope, name string) bool {
 		}
 	}
 	return false
-}
-
-func positionToOffset(source string, pos protocol.Position) (int, bool) {
-	if pos.Line < 0 || pos.Character < 0 {
-		return 0, false
-	}
-	line := 0
-	col := 0
-	for idx, r := range source {
-		if line == pos.Line && col == pos.Character {
-			return idx, true
-		}
-		if r == '\n' {
-			line++
-			col = 0
-			continue
-		}
-		col++
-	}
-	if line == pos.Line && col == pos.Character {
-		return len(source), true
-	}
-	return 0, false
-}
-
-func offsetAtPosition(source string, pos protocol.Position) int {
-	offset, _ := positionToOffset(source, pos)
-	return offset
-}
-
-func tokenRange(tok parser.Token) protocol.Range {
-	end := tok.Column + len(tok.Value)
-	return protocol.Range{
-		Start: protocol.Position{Line: tok.Line, Character: tok.Column},
-		End:   protocol.Position{Line: tok.Line, Character: end},
-	}
 }
 
 func comparePosition(a, b protocol.Position) int {

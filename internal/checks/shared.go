@@ -1,6 +1,10 @@
 package checks
 
-import "github.com/Tusk-PHP/lsp/internal/parser"
+import (
+	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/lexer"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+)
 
 // Shared holds what several rules run over the same file would each work
 // out again: the file's tokens and structure. Make one per run over one
@@ -10,6 +14,9 @@ type Shared struct {
 	source string
 	result *parser.ParseResult
 	parsed bool
+
+	lexedSource string
+	lexed       []lexer.Token
 }
 
 // parse returns the parse of source, done once per Shared and source. The
@@ -24,9 +31,12 @@ func (s *Shared) parse(source string) *parser.ParseResult {
 	return s.result
 }
 
-func (s *Shared) tokens(source string) []parser.Token {
-	if s == nil || !s.parsed || s.source != source {
-		return parser.Tokenize(source)
+func (s *Shared) lex(source string) []lexer.Token {
+	if s == nil {
+		return lexer.Lex(source, token.Latest)
 	}
-	return s.result.Tokens
+	if s.lexed == nil || s.lexedSource != source {
+		s.lexedSource, s.lexed = source, lexer.Lex(source, token.Latest)
+	}
+	return s.lexed
 }

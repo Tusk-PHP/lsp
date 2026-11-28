@@ -56,6 +56,7 @@ func TestUnusedPrivateConstantStaysQuietWhenUnsure(t *testing.T) {
 		"getConstants()":                       "<?php\nclass A {\n    private const X = 1;\n    public function f() { return (new \\ReflectionClass($this))->getConstants(); }\n}\n",
 		"getConstant()":                        "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return (new \\ReflectionClass(self::class))->getConstant($n); }\n}\n",
 		"ReflectionClassConstant":              "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return new \\ReflectionClassConstant(self::class, $n); }\n}\n",
+		"dynamic fetch inside a string":        "<?php\nclass A {\n    private const X = 1;\n    public function f(string $n) { return \"v={$this->r->getConstant($n)}\"; }\n}\n",
 		"class attribute":                      "<?php\n#[AsCommand(name: self::NAME)]\nfinal class FooCommand {\n    private const NAME = 'app:foo';\n}\n",
 		"multi-line class attribute":           "<?php\nuse Doctrine\\ORM\\Mapping as ORM;\n#[ORM\\Entity]\n#[ORM\\Table(\n    name: self::TABLE,\n)]\nclass Post {\n    private const TABLE = 'posts';\n}\n",
 	} {
@@ -126,14 +127,14 @@ class A {
 	}
 }
 
-func TestUnusedPrivateConstantReadsTokensOnlyForClassesWithPrivateConstants(t *testing.T) {
-	src := "<?php\nclass A {\n    public const X = 1;\n    private int $p = 0;\n}\n"
+func TestUnusedPrivateReadsTokensOnlyForClassesWithPrivateMembers(t *testing.T) {
+	src := "<?php\nclass A {\n    public const X = 1;\n    protected int $p = 0;\n    public function f(): void {}\n}\n"
 	cls := parser.ParseFile(src).Classes[0]
-	tokens := func() []parser.Token {
-		t.Fatal("tokens fetched for a class without private constants")
-		return nil
+	tokens := func() fileCode {
+		t.Fatal("tokens fetched for a class without private members")
+		return fileCode{}
 	}
-	if got := checkUnusedPrivateConstants(cls, tokens, strings.Split(src, "\n"), nil); got != nil {
+	if got := checkUnusedPrivateMembers(cls, "", tokens, strings.Split(src, "\n"), nil); got != nil {
 		t.Errorf("got %v", got)
 	}
 }
