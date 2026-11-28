@@ -1397,6 +1397,7 @@ wp-content/plugins/woocommerce/templates/emails/plain/customer-reset-password.ph
 wp-content/plugins/woocommerce/templates/emails/plain/customer-reset-password.php	undefined-variable	Undefined variable $user_display_name
 wp-content/plugins/woocommerce/templates/emails/plain/customer-reset-password.php	undefined-variable	Undefined variable $user_id
 wp-content/plugins/woocommerce/templates/emails/plain/customer-reset-password.php	undefined-variable	Undefined variable $user_login
+wp-content/plugins/woocommerce/templates/emails/plain/customer-reset-password.php	undefined-variable	Undefined variable $user_login
 wp-content/plugins/woocommerce/templates/emails/plain/customer-review-request.php	undefined-variable	Undefined variable $additional_content
 wp-content/plugins/woocommerce/templates/emails/plain/customer-review-request.php	undefined-variable	Undefined variable $additional_content
 wp-content/plugins/woocommerce/templates/emails/plain/customer-review-request.php	undefined-variable	Undefined variable $email_heading

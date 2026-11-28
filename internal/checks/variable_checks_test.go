@@ -517,7 +517,7 @@ func TestUndefinedVariableBuiltinOutArguments(t *testing.T) {
 		}
 	}
 
-	for _, call := range []string{"count($o)", "preg_match($o, $s)", "str_replace($o, $s, $s)"} {
+	for _, call := range []string{"count($o)", "preg_match($o, $s)", "str_replace($o, $s, $s)", "rawurlencode($o)", "\\rawurlencode($o)"} {
 		source := "<?php\nfunction f($s) { return " + call + "; }\n"
 		if findings := (&UndefinedVariableRule{}).Check(parser.ParseFile(source), source, index); len(findings) != 1 {
 			t.Errorf("%s: want $o reported, got %+v", call, findings)
