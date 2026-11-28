@@ -221,3 +221,59 @@ return [
 		t.Fatalf("bundleClasses() without a returned array = %v, want nil", got)
 	}
 }
+
+func TestBundleClassesResolveUseImports(t *testing.T) {
+	got := bundleClasses(`<?php
+use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
+use Symfony\Bundle\TwigBundle\TwigBundle as Twig, Doctrine\Bundle;
+use Acme\{UiBundle, Extra\ToolBundle as Tools};
+use function Fn\HelperBundle;
+use const Konst\ConstBundle;
+
+return [
+    FrameworkBundle::class => ['all' => true],
+    twig::class => ['all' => true],
+    Bundle\DoctrineBundle\DoctrineBundle::class => ['all' => true],
+    UiBundle::class => ['all' => true],
+    Tools::class => ['dev' => true],
+    HelperBundle::class => ['all' => true],
+    ConstBundle::class => ['all' => true],
+    TwigBundle::class => ['all' => true],
+    \FrameworkBundle::class => ['all' => true],
+    namespace\Local\LocalBundle::class => ['all' => true],
+];
+`)
+	want := []string{
+		`Symfony\Bundle\FrameworkBundle\FrameworkBundle`,
+		`Symfony\Bundle\TwigBundle\TwigBundle`,
+		`Doctrine\Bundle\DoctrineBundle\DoctrineBundle`,
+		`Acme\UiBundle`,
+		`Acme\Extra\ToolBundle`,
+		`HelperBundle`,
+		`ConstBundle`,
+		`TwigBundle`,
+		`FrameworkBundle`,
+		`Local\LocalBundle`,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("bundleClasses() = %v, want %v", got, want)
+	}
+}
+
+func TestSymfonyBundlePackages_ImportedBundle(t *testing.T) {
+	root := buildSymfonyDiscoveryFixture(t)
+	writeBundlesFile(t, root, `<?php
+
+use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
+
+return [
+    FrameworkBundle::class => ['all' => true],
+];
+`)
+
+	got := SymfonyBundlePackages(root)
+	want := []string{"symfony/framework-bundle"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("SymfonyBundlePackages() = %v, want %v", got, want)
+	}
+}

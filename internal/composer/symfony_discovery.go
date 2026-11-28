@@ -67,10 +67,12 @@ func SymfonyBundlePackages(rootPath string) []string {
 }
 
 func bundleClasses(src string) []string {
-	bundles := phpparser.Parse(src, token.Latest).ReturnedArray()
+	file := phpparser.Parse(src, token.Latest)
+	bundles := file.ReturnedArray()
 	if bundles == nil {
 		return nil
 	}
+	imports := classImports(file, src)
 	fqns := make([]string, 0, len(bundles.Items))
 	for _, item := range bundles.Items {
 		if item == nil {
@@ -84,7 +86,52 @@ func bundleClasses(src string) []string {
 		if !ok || !strings.EqualFold(fetch.Name.Bounds().Text(src), "class") {
 			continue
 		}
-		fqns = append(fqns, strings.TrimPrefix(class.Name.Text(src), `\`))
+		fqns = append(fqns, resolveClassName(class.Name, imports, src))
 	}
 	return fqns
+}
+
+func classImports(file *ast.File, src string) map[string]string {
+	imports := make(map[string]string)
+	for _, stmt := range file.Stmts {
+		use, ok := stmt.(*ast.Use)
+		if !ok {
+			continue
+		}
+		prefix := ""
+		if use.Prefix != nil {
+			prefix = strings.TrimPrefix(use.Prefix.Text(src), `\`) + `\`
+		}
+		for _, item := range use.Items {
+			if item.Kind != token.Use || item.Name == nil {
+				continue
+			}
+			fqn := prefix + strings.TrimPrefix(item.Name.Text(src), `\`)
+			alias := fqn[strings.LastIndexByte(fqn, '\\')+1:]
+			if item.Alias != nil {
+				alias = item.Alias.Text(src)
+			}
+			imports[strings.ToLower(alias)] = fqn
+		}
+	}
+	return imports
+}
+
+func resolveClassName(name *ast.Name, imports map[string]string, src string) string {
+	text := name.Text(src)
+	switch name.Kind {
+	case token.NameFullyQualified:
+		return text[1:]
+	case token.NameRelative:
+		return text[len(`namespace\`):]
+	}
+	first, rest, qualified := strings.Cut(text, `\`)
+	fqn, ok := imports[strings.ToLower(first)]
+	if !ok {
+		return text
+	}
+	if !qualified {
+		return fqn
+	}
+	return fqn + `\` + rest
 }
