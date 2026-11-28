@@ -28,26 +28,12 @@ type Provider struct {
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
-	p := &Provider{index: index, container: ca, engine: container.NewEngine(index, ca), framework: framework}
-	p.engine.ChainResolver = resolveExpressionType
-	return p
+	return &Provider{index: index, container: ca, engine: container.NewEngine(index, ca), framework: framework}
 }
 
 // SetCoverage wires the workspace's test coverage reports into hover cards.
 func (p *Provider) SetCoverage(store *coverage.Store) {
 	p.coverage = store
-}
-
-// SetTypedChainResolver wires the generic-aware chain resolver for variable
-// type inference (so $categories = Category::get() shows Collection<int, Category>).
-func (p *Provider) SetTypedChainResolver(fn func(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType) {
-	p.engine.DelegateTypedChains(fn)
-}
-
-// resolveExpressionType gives the class a chain expression like
-// "Category::first()" ends with.
-func resolveExpressionType(r *resolve.Resolver, expr string, source string, pos protocol.Position, file *parser.FileNode) string {
-	return r.ChainType(expr, source, pos, file).BaseFQN()
 }
 
 // SetArrayResolver sets the framework array resolver for config hover.

@@ -51,7 +51,7 @@ func TestEloquentLocalScopes(t *testing.T) {
 	preamble := "<?php\nuse App\\Models\\Post;\n\n\n\n"
 	file := parser.ParseFile(preamble, token.Latest)
 	typed := func(expr string) string {
-		return p.ResolveExpressionTypeTyped(expr, preamble, protocol.Position{Line: 4}, file).String()
+		return p.exprTypeAt(expr, preamble, protocol.Position{Line: 4}, file).String()
 	}
 	for expr, want := range map[string]string{
 		"Post::published()":                       "Illuminate\\Database\\Eloquent\\Builder<App\\Models\\Post>",

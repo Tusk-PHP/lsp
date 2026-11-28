@@ -15,7 +15,7 @@ func TestE2EArrayShapeInference(t *testing.T) {
 
 	resolveTyped := func(expr, source string, line int) string {
 		file := parser.ParseFile(source, token.Latest)
-		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
+		rt := p.exprTypeAt(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
 
@@ -80,7 +80,7 @@ func TestE2EConstructorGenericPropagation(t *testing.T) {
 
 	resolveTyped := func(expr, source string, line int) string {
 		file := parser.ParseFile(source, token.Latest)
-		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
+		rt := p.exprTypeAt(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
 
@@ -151,7 +151,7 @@ func TestE2EMethodTemplateInference(t *testing.T) {
 
 	resolveTyped := func(expr, source string, line int) string {
 		file := parser.ParseFile(source, token.Latest)
-		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
+		rt := p.exprTypeAt(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
 

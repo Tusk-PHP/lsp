@@ -20,7 +20,7 @@ func TestChainReturnTypeResolution(t *testing.T) {
 
 	resolve := func(expr, source string) string {
 		file := parser.ParseFile(source, token.Latest)
-		return p.ResolveExpressionType(expr, source, protocol.Position{Line: 5}, file)
+		return p.plainExprTypeAt(expr, source, protocol.Position{Line: 5}, file)
 	}
 
 	preamble := "<?php\nuse App\\Models\\Category;\nuse App\\Models\\Product;\n\n\n"
@@ -252,7 +252,7 @@ func TestRealisticChainResolution(t *testing.T) {
 
 	resolve := func(expr, source string) string {
 		file := parser.ParseFile(source, token.Latest)
-		return p.ResolveExpressionType(expr, source, protocol.Position{Line: 5}, file)
+		return p.plainExprTypeAt(expr, source, protocol.Position{Line: 5}, file)
 	}
 
 	preamble := "<?php\nuse App\\Models\\Category;\n\n\n\n"
@@ -354,7 +354,7 @@ func TestMultiLineChainResolution(t *testing.T) {
 		source := "<?php\nuse App\\Models\\Category;\nCategory::query()\n    ->with('rel')\n    ->get()\n    ->all()"
 		file := parser.ParseFile(source, token.Latest)
 		// ResolveExpressionType works with single-line expressions, so join first
-		typ := p.ResolveExpressionType("Category::query()->with('rel')->get()", source, protocol.Position{Line: 4}, file)
+		typ := p.plainExprTypeAt("Category::query()->with('rel')->get()", source, protocol.Position{Line: 4}, file)
 		if typ != "Illuminate\\Database\\Eloquent\\Collection" {
 			t.Errorf("expected Collection, got %q", typ)
 		}

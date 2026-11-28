@@ -21,7 +21,7 @@ func TestVariableGenericPropagation(t *testing.T) {
 
 	resolveTyped := func(expr, source string, line int) string {
 		file := parser.ParseFile(source, token.Latest)
-		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
+		rt := p.exprTypeAt(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
 
@@ -166,7 +166,7 @@ class Category extends Model {
 
 	resolveTyped := func(expr, source string, line int) string {
 		file := parser.ParseFile(source, token.Latest)
-		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
+		rt := p.exprTypeAt(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
 
@@ -294,7 +294,7 @@ class Category extends Model {
 
 	resolveTyped := func(expr, source string, line int) string {
 		file := parser.ParseFile(source, token.Latest)
-		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
+		rt := p.exprTypeAt(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
 
@@ -374,7 +374,7 @@ func TestEloquentMagicMethodGenerics(t *testing.T) {
 
 	resolveTyped := func(expr, source string) string {
 		file := parser.ParseFile(source, token.Latest)
-		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: 5}, file)
+		rt := p.exprTypeAt(expr, source, protocol.Position{Line: 5}, file)
 		return rt.String()
 	}
 
@@ -515,7 +515,7 @@ class CategoryController {
 
 	resolveTyped := func(expr string, line int) string {
 		file := parser.ParseFile(source, token.Latest)
-		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
+		rt := p.exprTypeAt(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
 

@@ -3,7 +3,6 @@ package resolve
 import (
 	"testing"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -41,9 +40,6 @@ class Service {
 // what the function alone returns.
 func TestFunctionCallChainBindsMethodTemplate(t *testing.T) {
 	r, file, lines := setupBoxResolver(t, mapperChainSource)
-	r.TypedChainResolver = func(req *Resolver, expr, _ string, _ textpos.Position, f *parser.FileNode) ResolvedType {
-		return req.ExpressionType(expr, ExprContext{File: f})
-	}
 
 	pos := textpos.Position{Line: lineContaining(t, lines, "$data =")}
 	if got := r.ResolveVariableTypeTyped("$data", lines, pos, file).FullString(); got != "App\\CreateProjectData" {

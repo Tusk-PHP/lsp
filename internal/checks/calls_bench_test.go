@@ -39,7 +39,7 @@ function score(int $a, int $b = 0): int { return $a + $b; }
 	src.WriteString("        $this->user->rename(name: 'y');\n        $this->user->retire();\n    }\n}\n")
 	source := src.String()
 	idx.IndexFile("file:///service.php", source)
-	types := resolve.NewChainEngine(idx)
+	types := resolve.NewEngine(idx)
 	return callBenchmark{
 		index:    idx,
 		file:     parser.ParseFile(source, token.Latest),

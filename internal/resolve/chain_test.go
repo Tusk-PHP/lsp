@@ -93,7 +93,7 @@ func TestChainType(t *testing.T) {
 		"Article":                         `App\Models\Post`,
 		"":                                ``,
 	} {
-		if got := r.ChainType(expr, chainSource, pos, file).FullString(); got != want {
+		if got := r.chainTypeOf(expr, chainSource, pos, file).FullString(); got != want {
 			t.Errorf("ChainType(%q) = %q, want %q", expr, got, want)
 		}
 	}
@@ -105,7 +105,7 @@ func TestChainTypeWithoutFile(t *testing.T) {
 	for expr, want := range map[string]string{
 		"$this": ``, "self::make()": ``, "parent::make()": ``, "Person": `App\Person`, "$p->logger()": ``,
 	} {
-		if got := r.ChainType(expr, chainSource, pos, nil).FullString(); got != want {
+		if got := r.chainTypeOf(expr, chainSource, pos, nil).FullString(); got != want {
 			t.Errorf("ChainType(%q) without a file = %q, want %q", expr, got, want)
 		}
 	}
@@ -129,26 +129,9 @@ func TestChainTypeContainerCall(t *testing.T) {
 		"config('a')->x":   ``,
 		"app('other')->x":  ``,
 	} {
-		if got := r.ChainType(expr, chainSource, pos, file).FullString(); got != want {
+		if got := r.chainTypeOf(expr, chainSource, pos, file).FullString(); got != want {
 			t.Errorf("ChainType(%q) = %q, want %q", expr, got, want)
 		}
-	}
-}
-
-// A resolver wired to another one asks it, for whole chains and receivers.
-func TestChainTypeWired(t *testing.T) {
-	r, file, pos := chainFixture(t)
-	var asked []string
-	r.TypedChainResolver = func(_ *Resolver, expr, source string, pos textpos.Position, file *parser.FileNode) ResolvedType {
-		asked = append(asked, expr)
-		return ResolvedType{FQN: `App\Logger`}
-	}
-	if got := r.ChainType("$p->logger()", chainSource, pos, file).FQN; got != `App\Logger` {
-		t.Errorf("ChainType = %q", got)
-	}
-	want := []string{"$p->logger()"}
-	if strings.Join(asked, ",") != strings.Join(want, ",") {
-		t.Errorf("asked %q, want %q", asked, want)
 	}
 }
 
@@ -199,5 +182,24 @@ func TestResolveClassNameLooseFindsOnlyClasses(t *testing.T) {
 func TestClassKeyword(t *testing.T) {
 	if got := ClassKeyword("Self"); got != "self" {
 		t.Errorf("ClassKeyword = %q", got)
+	}
+}
+
+// DiagnosticType gives the full generic-aware type of a node.
+func TestDiagnosticType(t *testing.T) {
+	src := "<?php\nnamespace App;\nclass Logger {}\nclass Person { public function logger(): Logger { return new Logger(); } }\nfunction run(Person $p) {\n    $p->logger();\n    $nothing;\n}\n"
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///diagnostic.php", src)
+	file := parser.ParseFile(src, token.Latest)
+	e := NewEngine(idx)
+	for expr, want := range map[string]string{"$p->logger()": `App\Logger`, "$nothing": ""} {
+		at := uint32(strings.Index(src, expr))
+		node := ast.ExprSpanning(file.Tree, ast.Span{Start: at, End: at + uint32(len(expr))})
+		if node == nil {
+			t.Fatalf("no node spans %q", expr)
+		}
+		if got := e.DiagnosticType(file, node); got != want {
+			t.Errorf("DiagnosticType(%q) = %q, want %q", expr, got, want)
+		}
 	}
 }

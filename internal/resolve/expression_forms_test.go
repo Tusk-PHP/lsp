@@ -120,7 +120,7 @@ func TestExpressionForms(t *testing.T) {
 		{"$post->where()", `App\Post`},
 		{"$categories->active()", `App\Builder<App\Category>`},
 	} {
-		if got := r.ExpressionType(c.expr, ctx).FullString(); got != c.want {
+		if got := r.exprType(c.expr, ctx).FullString(); got != c.want {
 			t.Errorf("ExpressionType(%q) = %q, want %q", c.expr, got, c.want)
 		}
 	}
@@ -134,7 +134,7 @@ func TestListValuesOfDifferentTypesAreTheirUnion(t *testing.T) {
 		{"[$user, $admin]", `App\User|App\Admin`},
 		{"[(int) $any, User::class, -1]", `int|class-string<App\User>`},
 	} {
-		rt := r.ExpressionType(c.expr, ctx)
+		rt := r.exprType(c.expr, ctx)
 		if len(rt.Params) != 2 || rt.Params[1].FullString() != c.want {
 			t.Errorf("values of %q = %+v, want %s", c.expr, rt.Params, c.want)
 		}
@@ -144,12 +144,9 @@ func TestListValuesOfDifferentTypesAreTheirUnion(t *testing.T) {
 func TestExpressionTypeOfWhatIsNoExpression(t *testing.T) {
 	r, ctx := expressionFormsFixture(t)
 	for _, expr := range []string{"", "/* nothing */", "return 1", "class A {}"} {
-		if got := r.ExpressionType(expr, ctx); !got.IsEmpty() {
+		if got := r.exprType(expr, ctx); !got.IsEmpty() {
 			t.Errorf("ExpressionType(%q) = %q, want nothing", expr, got.FullString())
 		}
-	}
-	if site := r.CallSiteFor(") + (1", ctx); len(site.Args) != 0 {
-		t.Errorf("CallSiteFor of unbalanced arguments = %+v, want no arguments", site.Args)
 	}
 }
 
@@ -160,7 +157,7 @@ func TestCastResultOfTheUnsetCast(t *testing.T) {
 }
 
 func TestClassNamesNeedAnIndex(t *testing.T) {
-	if got := NewResolver(nil).ExpressionType("User", ExprContext{}); !got.IsEmpty() {
+	if got := NewResolver(nil).exprType("User", ExprContext{}); !got.IsEmpty() {
 		t.Errorf("a class name without an index = %q, want nothing", got.FullString())
 	}
 }
@@ -180,7 +177,7 @@ func TestContainerCallsInAChain(t *testing.T) {
 		"$any->make('user')->name()": "string",
 		"$any->make('none')->name()": "",
 	} {
-		if got := r.ExpressionType(expr, ctx).FullString(); got != want {
+		if got := r.exprType(expr, ctx).FullString(); got != want {
 			t.Errorf("ExpressionType(%q) = %q, want %q", expr, got, want)
 		}
 	}

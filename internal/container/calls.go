@@ -22,7 +22,7 @@ const (
 )
 
 func NewEngine(index *symbols.Index, ca *ContainerAnalyzer) *resolve.Engine {
-	e := resolve.NewChainEngine(index)
+	e := resolve.NewEngine(index)
 	if ca != nil {
 		e.ContainerCall = ca.CallType
 	}

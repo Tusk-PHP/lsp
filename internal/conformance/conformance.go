@@ -319,8 +319,8 @@ func runOperations(uri, source string, pos protocol.Position, kind anchorKind, p
 	// Hover and completion are exercised on use-import anchors and on all
 	// member-access anchors (->, ?->, ::). The chain-resolver re-entrancy guard
 	// (C1, fixed in internal/resolve) prevents the fatal stack overflow that
-	// previously occurred when AccessChainClass ↔ ResolveVariableType cycled
-	// via ChainResolver on self/mutually-referential assignments.
+	// previously occurred when resolveAccessChain ↔ ResolveVariableType cycled
+	// on self/mutually-referential assignments.
 	if kind == anchorUseImport || kind == anchorArrow || kind == anchorNullsafe || kind == anchorDoubleColon {
 		res.hover = prov.hov.GetHover(uri, source, pos)
 		res.completions = prov.comp.GetCompletions(uri, source, pos)

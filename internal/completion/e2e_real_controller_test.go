@@ -25,7 +25,7 @@ func TestE2ERealControllerFile(t *testing.T) {
 		if line < 0 {
 			t.Fatalf("line containing %q not found", lineSubstr)
 		}
-		return p.ResolveExpressionTypeTyped(varName, source, protocol.Position{Line: line + 1}, file)
+		return p.exprTypeAt(varName, source, protocol.Position{Line: line + 1}, file)
 	}
 
 	t.Run("$category = Category::first()", func(t *testing.T) {

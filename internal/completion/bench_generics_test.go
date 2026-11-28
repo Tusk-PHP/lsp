@@ -10,6 +10,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/container"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -80,14 +81,20 @@ func BenchmarkResolveGenericVariable(b *testing.B) {
 // completion items, so it measures resolution alone.
 func BenchmarkTypeGenericChain(b *testing.B) {
 	p := benchLaravelProvider(b)
-	source := "<?php\nuse App\\Models\\Category;\n\nfunction run(): void {\n    $cats = Category::query()->get();\n    foreach ($cats as $cat) {\n        $x = 1;\n    }\n}\n"
+	const chain = "Category::query()->where('a', 1)->get()->first()"
+	source := "<?php\nuse App\\Models\\Category;\n\nfunction run(): void {\n    $cats = Category::query()->get();\n    foreach ($cats as $cat) {\n        $cat;\n        " + chain + ";\n    }\n}\n"
 	file := parser.ParseFile(source, token.Latest)
-	pos := protocol.Position{Line: 6, Character: 8}
+	node := func(text string) ast.Expr {
+		start := uint32(strings.LastIndex(source, text))
+		return ast.ExprSpanning(file.Tree, ast.Span{Start: start, End: start + uint32(len(text))})
+	}
+	cat, query := node("$cat"), node(chain)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		p.ResolveExpressionTypeTyped("$cat", source, pos, file)
-		p.ResolveExpressionTypeTyped("Category::query()->where('a', 1)->get()->first()", source, pos, file)
+		r := p.engine.Resolver()
+		r.NodeType(file, cat)
+		r.NodeType(file, query)
 	}
 }
 
@@ -99,7 +106,7 @@ func TestBenchGenericChainsResolve(t *testing.T) {
 	source := "<?php\nuse App\\Models\\Category;\n\nfunction run(): void {\n    $cats = Category::query()->get();\n    foreach ($cats as $cat) {\n        $cat->\n    }\n}\n"
 	t.Logf("items: %d", len(p.GetCompletions("file:///s.php", source, protocol.Position{Line: 6, Character: 14})))
 	file := parser.ParseFile(source, token.Latest)
-	t.Logf("$cat: %s", p.ResolveExpressionTypeTyped("$cat", source, protocol.Position{Line: 6, Character: 8}, file).String())
+	t.Logf("$cat: %s", p.exprTypeAt("$cat", source, protocol.Position{Line: 6, Character: 8}, file).String())
 }
 
 // BenchmarkCompleteGenericChainLazy is BenchmarkCompleteGenericChain for a

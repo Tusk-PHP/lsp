@@ -15,7 +15,7 @@ func TestGenericChainResolution(t *testing.T) {
 
 	resolveTyped := func(expr, source string) string {
 		file := parser.ParseFile(source, token.Latest)
-		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: 5}, file)
+		rt := p.exprTypeAt(expr, source, protocol.Position{Line: 5}, file)
 		return rt.String()
 	}
 
@@ -88,7 +88,7 @@ func TestGenericChainResolution(t *testing.T) {
 		source := preamble
 		file := parser.ParseFile(source, token.Latest)
 		// Logger is not an Eloquent model, should resolve normally
-		rt := p.ResolveExpressionTypeTyped("Category::first()", source, protocol.Position{Line: 5}, file)
+		rt := p.exprTypeAt("Category::first()", source, protocol.Position{Line: 5}, file)
 		if rt.IsEmpty() {
 			t.Error("expected non-empty for Category::first()")
 		}

@@ -47,7 +47,7 @@ func TestE2ELaravelEloquentChains(t *testing.T) {
 		if line < 0 {
 			t.Fatalf("line containing %q not found", lineSubstr)
 		}
-		return p.ResolveExpressionTypeTyped(varName, source, protocol.Position{Line: line + 1}, file)
+		return p.exprTypeAt(varName, source, protocol.Position{Line: line + 1}, file)
 	}
 
 	t.Run("Category::first() returns Category", func(t *testing.T) {
@@ -148,7 +148,7 @@ func TestE2ELaravelArrayShapes(t *testing.T) {
 		if line < 0 {
 			t.Fatalf("line containing %q not found", lineSubstr)
 		}
-		return p.ResolveExpressionTypeTyped(varName, source, protocol.Position{Line: line + 1}, file)
+		return p.exprTypeAt(varName, source, protocol.Position{Line: line + 1}, file)
 	}
 
 	t.Run("associative array shape", func(t *testing.T) {
@@ -244,7 +244,7 @@ func TestE2ELaravelCollectionCallsFollowTheInstalledDocblocks(t *testing.T) {
 	src := "<?php\nuse App\\Models\\Category;\n\n\n\n"
 	file := parser.ParseFile(src, token.Latest)
 	typed := func(expr string) string {
-		return p.ResolveExpressionTypeTyped(expr, src, protocol.Position{Line: 4}, file).FullString()
+		return p.exprTypeAt(expr, src, protocol.Position{Line: 4}, file).FullString()
 	}
 	for expr, want := range map[string]string{
 		"Category::query()->get()->map(fn ($c) => $c)":                   "Illuminate\\Support\\Collection<int, App\\Models\\Category>|Illuminate\\Database\\Eloquent\\Collection<int, App\\Models\\Category>",

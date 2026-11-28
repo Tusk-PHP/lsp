@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/php/token"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -49,9 +49,14 @@ func TestHoverGenericReturnTypeReplacement(t *testing.T) {
 namespace App;
 
 class User {}
+/**
+ * @template TKey
+ * @template TValue
+ */
 class Collection {}
 
 class Service {
+    /** @return Collection<int, User> */
     public function fetch(): Collection {
         return new Collection();
     }
@@ -64,15 +69,6 @@ $service->fetch();
 	idx := symbols.NewIndex()
 	idx.IndexFile("file:///hover.php", source)
 	p := NewProvider(idx, nil, "none")
-	p.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		if expr == "$service" {
-			return resolve.ResolvedType{FQN: "App\\Service"}
-		}
-		return resolve.ResolvedType{
-			FQN:    "App\\Collection",
-			Params: []resolve.ResolvedType{{FQN: "int"}, {FQN: "App\\User"}},
-		}
-	})
 
 	pos := hoverLineContaining(t, source, "$service->fetch")
 	pos.Character = strings.Index(strings.Split(source, "\n")[pos.Line], "fetch")
@@ -117,15 +113,15 @@ $container->get(Foo::class);
 
 func TestHoverVariableShowsGenericType(t *testing.T) {
 	p := NewProvider(symbols.NewIndex(), nil, "none")
-	p.SetTypedChainResolver(func(expr, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-		if expr == "Factory::make()" {
+	p.engine.ContainerCall = func(_ *resolve.Resolver, src string, _ *parser.FileNode, call ast.Expr) (resolve.ResolvedType, bool) {
+		if call.Bounds().Text(src) == "Factory::make()" {
 			return resolve.ResolvedType{
 				FQN:    "App\\Collection",
 				Params: []resolve.ResolvedType{{FQN: "int"}, {FQN: "App\\User"}},
-			}
+			}, true
 		}
-		return resolve.ResolvedType{}
-	})
+		return resolve.ResolvedType{}, false
+	}
 
 	source := "<?php\n$items = Factory::make();\n$items;\n"
 	hover := p.GetHover("file:///vars.php", source, protocol.Position{Line: 2, Character: 2})
@@ -134,22 +130,5 @@ func TestHoverVariableShowsGenericType(t *testing.T) {
 	}
 	if !strings.Contains(hover.Contents.Value, "Collection<int, User> $items") {
 		t.Fatalf("expected generic variable hover, got:\n%s", hover.Contents.Value)
-	}
-}
-
-func TestResolveExpressionTypeCoverage(t *testing.T) {
-	p, src := setupProvider(t)
-	file := parser.ParseFile(src, token.Latest)
-	if file == nil {
-		t.Fatal("expected parsed file")
-	}
-
-	if got := resolveExpressionType(p.engine.Resolver(), "", src, protocol.Position{}, file); got != "" {
-		t.Fatalf("expected empty type for empty expression, got %q", got)
-	}
-
-	pos := charPosOf(t, src, "info", "getLogger()->info")
-	if got := resolveExpressionType(p.engine.Resolver(), "$handler->getLogger()", src, pos, file); got != "Monolog\\Logger" {
-		t.Fatalf("got %q", got)
 	}
 }

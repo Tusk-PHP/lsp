@@ -38,27 +38,13 @@ type Provider struct {
 }
 
 func NewProvider(index *symbols.Index, ca *container.ContainerAnalyzer, framework string) *Provider {
-	p := &Provider{index: index, container: ca, engine: container.NewEngine(index, ca), framework: framework}
-	return p
-}
-
-// ResolveExpressionType resolves the class of an expression like
-// "Category::first()" or "$foo->bar()->baz()", for the editor features that
-// delegate chains to completion.
-func (p *Provider) ResolveExpressionType(expr string, source string, pos protocol.Position, file *parser.FileNode) string {
-	return p.engine.Resolver().ExpressionClass(expr, source, pos, file)
+	return &Provider{index: index, container: ca, engine: container.NewEngine(index, ca), framework: framework}
 }
 
 // Resolver starts a request on completion's resolver, for the providers
 // that type the same expressions.
 func (p *Provider) Resolver() *resolve.Resolver {
 	return p.engine.Resolver()
-}
-
-// ResolveExpressionTypeTyped resolves the type of an expression preserving
-// generic parameters (e.g., returns Collection<int, Category> instead of bare Collection).
-func (p *Provider) ResolveExpressionTypeTyped(expr string, source string, pos protocol.Position, file *parser.FileNode) resolve.ResolvedType {
-	return p.engine.Resolver().ChainType(expr, source, pos, file)
 }
 
 // SetArrayResolver sets the framework array resolver for config/request/model key completion.

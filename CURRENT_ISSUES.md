@@ -72,7 +72,7 @@ _None open._
 - **Fix:** Split within the package before the next feature there: the assignment branches of `resolveVariableTypeTypedBase` into one file per right-hand-side form.
 
 ### ~~L49~~ — Hover's and the analyzer's fallback chain walkers read `f(...)` as a call — **RESOLVED**
-- The two fallback walkers are gone. Completion's generic-aware walker moved into `resolve` (`ChainType`, `AccessOwnerType`), and hover, the analyzer, inlay hints and the resolver itself call it, so `f(...)` is a `Closure` everywhere. The plain string walker that moved into `resolve` (`AccessChainClass`) is gone too: `ExpressionClass` gives the class names of `ChainType`'s result, which types the expression from the syntax tree.
+- The two fallback walkers are gone. Completion's generic-aware walker moved into `resolve` (`ChainType`, `AccessOwnerType`), and hover, the analyzer, inlay hints and the resolver itself call it, so `f(...)` is a `Closure` everywhere. The plain string walker that moved into `resolve` (`AccessChainClass`) is gone too, and so are the text entry points (`ChainType`, `ExpressionClass`) and the chain hooks: every feature types the syntax tree's nodes (`NodeType`, `ReceiverAt`, `CallTypeAt`).
 
 ### L48 — `unknown-member` stays quiet on a receiver typed `Closure(…): T`
 - **Where:** `internal/checks/unknown_symbols.go` (`collectClassLikes`, line 706).

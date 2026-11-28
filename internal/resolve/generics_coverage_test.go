@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
@@ -216,12 +217,12 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 
 	t.Run("argument and constructor helpers infer generic arrays", func(t *testing.T) {
 		pos := textpos.Position{Line: lineContaining(t, lines, "$collection =")}
-		argRT := r.ExpressionType(`$numbers`, ExprContext{Lines: lines, Pos: pos, File: file})
+		argRT := r.exprType(`$numbers`, ExprContext{Lines: lines, Pos: pos, File: file})
 		if argRT.String() != "array<int, int>" {
 			t.Fatalf("got %q", argRT.String())
 		}
 
-		literalRT := r.ExpressionType(`[1, 2]`, ExprContext{Lines: lines, Pos: pos, File: file})
+		literalRT := r.exprType(`[1, 2]`, ExprContext{Lines: lines, Pos: pos, File: file})
 		if literalRT.String() != "array<int, int>" {
 			t.Fatalf("got %q", literalRT.String())
 		}
@@ -242,21 +243,7 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 func TestResolveVariableTypeTypedCoverage(t *testing.T) {
 	r, _, _, file, lines := setupGenericResolverCoverage(t)
 
-	r.TypedChainResolver = func(_ *Resolver, expr string, source string, pos textpos.Position, file *parser.FileNode) ResolvedType {
-		if expr == "Factory::make()" {
-			return ResolvedType{
-				FQN:    "App\\Collection",
-				Params: []ResolvedType{{FQN: "int"}, {FQN: "App\\Logger"}},
-			}
-		}
-		return ResolvedType{}
-	}
-	r.ChainResolver = func(_ *Resolver, expr string, source string, pos textpos.Position, file *parser.FileNode) string {
-		if expr == "Factory::fallback()" {
-			return "App\\Logger"
-		}
-		return ""
-	}
+	r.ContainerCall = factoryCalls
 
 	assertType := func(varName, lineNeedle, want string) {
 		t.Helper()
@@ -423,28 +410,12 @@ func TestAssignmentStartingLine(t *testing.T) {
 	}
 }
 
-func TestDelegatedChainsAnswerChainAssignments(t *testing.T) {
-	r, _, _, file, lines := setupGenericResolverCoverage(t)
-	r.DelegateTypedChains(func(expr, _ string, _ textpos.Position, _ *parser.FileNode) ResolvedType {
-		if expr == "Factory::make()" {
-			return ResolvedType{FQN: "App\\Collection", Params: []ResolvedType{{FQN: "int"}, {FQN: "App\\Logger"}}}
-		}
-		return ResolvedType{}
-	})
-	r.DelegateChains(func(expr, _ string, _ textpos.Position, _ *parser.FileNode) string {
-		if expr == "Factory::fallback()" {
-			return "App\\Logger"
-		}
-		return ""
-	})
-
-	for _, tc := range []struct{ name, needle, want string }{
-		{"$fromChain", "$fromChain =", "App\\Collection<int, App\\Logger>"},
-		{"$fromFallback", "$fromFallback =", "App\\Logger"},
-	} {
-		rt := r.ResolveVariableTypeTyped(tc.name, lines, textpos.Position{Line: lineContaining(t, lines, tc.needle)}, file)
-		if got := rt.String(); got != tc.want {
-			t.Errorf("%s = %q, want the delegate's %q", tc.name, got, tc.want)
-		}
+func factoryCalls(_ *Resolver, src string, _ *parser.FileNode, call ast.Expr) (ResolvedType, bool) {
+	switch call.Bounds().Text(src) {
+	case "Factory::make()":
+		return ResolvedType{FQN: "App\\Collection", Params: []ResolvedType{{FQN: "int"}, {FQN: "App\\Logger"}}}, true
+	case "Factory::fallback()":
+		return ResolvedType{FQN: "App\\Logger"}, true
 	}
+	return ResolvedType{}, false
 }

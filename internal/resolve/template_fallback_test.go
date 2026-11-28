@@ -50,7 +50,7 @@ class Loose {
 		"$bag->unknownKey()": "key-of<Missing>",
 		"$typed->first()":    "",
 	} {
-		if got := r.ExpressionType(expr, ctx).FullString(); got != want {
+		if got := r.exprType(expr, ctx).FullString(); got != want {
 			t.Errorf("ExpressionType(%q) = %q, want %q", expr, got, want)
 		}
 	}

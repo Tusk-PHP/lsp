@@ -132,9 +132,6 @@ class Usage {
 func setupGenericsClosuresResolver(t *testing.T) (*Resolver, *parser.FileNode, []string) {
 	t.Helper()
 	r, file, lines := setupBoxResolver(t, genericsClosuresSource)
-	r.TypedChainResolver = func(req *Resolver, expr, _ string, _ textpos.Position, f *parser.FileNode) ResolvedType {
-		return req.ExpressionType(expr, ExprContext{File: f})
-	}
 	return r, file, lines
 }
 
@@ -182,7 +179,7 @@ func TestGenericExpressionTypes(t *testing.T) {
 		"['a' => new Person(), 'b' => 1]":    "array{a: App\\Person, b: int}",
 		"(new Collection())->map(fn (Person $p): Logger => $p->logger)->first()": "?App\\Logger",
 	} {
-		if got := r.ExpressionType(expr, ctx).FullString(); got != want {
+		if got := r.exprType(expr, ctx).FullString(); got != want {
 			t.Errorf("%s = %q, want %q", expr, got, want)
 		}
 	}

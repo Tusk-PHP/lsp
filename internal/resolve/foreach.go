@@ -80,9 +80,6 @@ func (t *syntaxTree) isVariable(e ast.Expr, name string) bool {
 }
 
 func (r *Resolver) iterableType(t *syntaxTree, e ast.Expr, ctx ExprContext) ResolvedType {
-	if isMemberChain(e) {
-		return r.delegatedType(t, e, ctx)
-	}
 	if rt := r.typeOf(t, e, nil, ctx); !rt.IsEmpty() {
 		return rt
 	}

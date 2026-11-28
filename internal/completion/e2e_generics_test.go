@@ -77,7 +77,7 @@ func TestE2EGenericChainResolution(t *testing.T) {
 
 	resolveTyped := func(expr, source string, line int) string {
 		file := parser.ParseFile(source, token.Latest)
-		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
+		rt := p.exprTypeAt(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
 
@@ -142,7 +142,7 @@ func TestE2EVariableGenericPropagation(t *testing.T) {
 
 	resolveTyped := func(expr, source string, line int) string {
 		file := parser.ParseFile(source, token.Latest)
-		rt := p.ResolveExpressionTypeTyped(expr, source, protocol.Position{Line: line}, file)
+		rt := p.exprTypeAt(expr, source, protocol.Position{Line: line}, file)
 		return rt.String()
 	}
 
@@ -285,12 +285,12 @@ func TestE2EMultiLineChainGenerics(t *testing.T) {
 		source := "<?php\nuse App\\Models\\Category;\n$categories = Category::query()->get()->all();\n$first = $categories[0];\n"
 		file := parser.ParseFile(source, token.Latest)
 
-		rt := p.ResolveExpressionTypeTyped("$categories", source, protocol.Position{Line: 3}, file)
+		rt := p.exprTypeAt("$categories", source, protocol.Position{Line: 3}, file)
 		if rt.String() != "array<int, App\\Models\\Category>" {
 			t.Errorf("$categories: got %q", rt.String())
 		}
 
-		rt2 := p.ResolveExpressionTypeTyped("$first", source, protocol.Position{Line: 4}, file)
+		rt2 := p.exprTypeAt("$first", source, protocol.Position{Line: 4}, file)
 		if rt2.String() != "App\\Models\\Category" {
 			t.Errorf("$first: got %q", rt2.String())
 		}

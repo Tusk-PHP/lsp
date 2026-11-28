@@ -85,7 +85,7 @@ func TestExpressionsAreTypedFromTheSyntaxTree(t *testing.T) {
 		"(clone $repo)->make()":                                   `App\User`,
 		"static::create()":                                        `App\Child`,
 	} {
-		if got := r.ExpressionType(expr, ctx).FullString(); got != want {
+		if got := r.exprType(expr, ctx).FullString(); got != want {
 			t.Errorf("ExpressionType(%q) = %q, want %q", expr, got, want)
 		}
 	}
@@ -109,7 +109,7 @@ func TestLongChainsAreTyped(t *testing.T) {
 		b.String() + "->make()->name()": "string",
 		b.String() + "->find(pick('q', $repo->find('x')->first()->name()))->first()": `App\User`,
 	} {
-		if got := r.ExpressionType(expr, ctx).FullString(); got != want {
+		if got := r.exprType(expr, ctx).FullString(); got != want {
 			t.Errorf("ExpressionType(%.40q…) = %q, want %q", expr, got, want)
 		}
 	}

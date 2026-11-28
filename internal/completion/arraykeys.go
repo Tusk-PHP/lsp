@@ -7,6 +7,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/phparray"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
@@ -173,36 +174,26 @@ func (p *Provider) resolveArrayKeysFromType(source string, pos protocol.Position
 			}
 		}
 
-		at := protocol.Position{Line: i, Character: len(lines[i])}
-		if retType := p.resolveCallReturnType(rhs, source, at, file); retType != "" {
-			if fields := types.ParseArrayShape(retType); len(fields) > 0 {
-				return fields
-			}
+		indent := len(lines[i]) - len(strings.TrimLeft(lines[i], " \t"))
+		value := assignedValueAt(file, sourcectx.Offset(source, protocol.Position{Line: i, Character: indent}))
+		if value == nil {
+			break
+		}
+		r := p.engine.Resolver()
+		if fields := types.ParseArrayShape(r.NodeType(file, value).FullString()); len(fields) > 0 {
+			return fields
 		}
 
-		if p.arrayResolver != nil {
-			if classFQN, methodName := p.calledMethod(rhs, source, at, file); classFQN != "" && methodName != "" {
-				if fields := p.arrayResolver.ResolveMethodReturnKeys(classFQN, methodName); len(fields) > 0 {
-					return fields
-				}
+		if call, ok := value.(*ast.MethodCall); ok && p.arrayResolver != nil {
+			classFQN, methodName := r.NodeType(file, call.Object).BaseFQN(), call.Name.Bounds().Text(file.Source)
+			if fields := p.arrayResolver.ResolveMethodReturnKeys(classFQN, methodName); classFQN != "" && len(fields) > 0 {
+				return fields
 			}
 		}
 		break
 	}
 
 	return nil
-}
-
-func (p *Provider) calledMethod(expr, source string, pos protocol.Position, file *parser.FileNode) (classFQN, methodName string) {
-	expr = strings.TrimSuffix(strings.TrimSpace(expr), ";")
-	if parenIdx := strings.Index(expr, "("); parenIdx > 0 {
-		expr = expr[:parenIdx]
-	}
-	arrow := strings.LastIndex(expr, "->")
-	if arrow < 0 {
-		return "", ""
-	}
-	return p.ResolveExpressionTypeTyped(strings.TrimSpace(expr[:arrow]), source, pos, file).BaseFQN(), strings.TrimSpace(expr[arrow+2:])
 }
 
 func extractShapeFromDocParams(docComment, paramBare string) []types.ShapeField {
@@ -227,12 +218,24 @@ func extractShapeFromDocParams(docComment, paramBare string) []types.ShapeField 
 	return nil
 }
 
-func (p *Provider) resolveCallReturnType(expr, source string, pos protocol.Position, file *parser.FileNode) string {
-	rt := p.ResolveExpressionTypeTyped(strings.TrimSuffix(strings.TrimSpace(expr), ";"), source, pos, file)
-	if rt.IsEmpty() {
-		return ""
+func assignedValueAt(file *parser.FileNode, target uint32) ast.Expr {
+	if file == nil || file.Tree == nil {
+		return nil
 	}
-	return rt.FullString()
+	var value ast.Expr
+	for _, stmt := range file.Tree.Stmts {
+		ast.Walk(stmt, func(n ast.Node) bool {
+			if value != nil {
+				return false
+			}
+			if a, ok := n.(*ast.Assign); ok && a.Target.Bounds().Start == target {
+				value = a.Value
+				return false
+			}
+			return true
+		})
+	}
+	return value
 }
 
 func scanLiteralArrayKeys(source string, pos protocol.Position, varName string) []types.ShapeField {

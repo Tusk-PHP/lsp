@@ -53,7 +53,7 @@ func TestFirstClassCallableExpressionType(t *testing.T) {
 		{"$f(1)", "App\\Foo"},
 	}
 	for _, tc := range tests {
-		if got := r.ExpressionType(tc.expr, ctx).FullString(); got != tc.want {
+		if got := r.exprType(tc.expr, ctx).FullString(); got != tc.want {
 			t.Errorf("ExpressionType(%q) = %q, want %q", tc.expr, got, tc.want)
 		}
 	}

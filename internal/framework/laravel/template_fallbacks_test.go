@@ -1,6 +1,7 @@
 package laravel
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -18,7 +19,10 @@ class User {}
 class Query {
     /** @param Builder<User> $q */
     public function run(Builder $q): void {
-        echo $q;
+        $first = $q->first();
+        $chained = $q->where()->first();
+        $all = $q->get();
+        echo $first, $chained, $all;
     }
 }
 `
@@ -36,14 +40,17 @@ class Collection {}
 	idx.IndexFile("file:///app.php", src)
 	idx.SetTemplateFallbacks(TemplateFallbacks())
 	r := resolve.NewResolver(idx)
-	ctx := resolve.ExprContext{Lines: resolve.SplitLines(src), Pos: textpos.Position{Line: 7, Character: 8}, File: parser.ParseFile(src, token.Latest)}
-	for expr, want := range map[string]string{
-		"$q->first()":          `?App\User`,
-		"$q->where()->first()": `?App\User`,
-		"$q->get()":            `Illuminate\Database\Eloquent\Collection<int, App\User>`,
+	file := parser.ParseFile(src, token.Latest)
+	lines := resolve.SplitLines(src)
+	line := strings.Count(src[:strings.Index(src, "echo $first")], "\n")
+	for v, want := range map[string]string{
+		"$first":   `?App\User`,
+		"$chained": `?App\User`,
+		"$all":     `Illuminate\Database\Eloquent\Collection<int, App\User>`,
 	} {
-		if got := r.ExpressionType(expr, ctx).FullString(); got != want {
-			t.Errorf("ExpressionType(%q) = %q, want %q", expr, got, want)
+		pos := textpos.Position{Line: line, Character: strings.Index(lines[line], v) + 1}
+		if got := r.ResolveVariableTypeTyped(v, lines, pos, file).FullString(); got != want {
+			t.Errorf("%s = %q, want %q", v, got, want)
 		}
 	}
 }

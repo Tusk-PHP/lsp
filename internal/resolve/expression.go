@@ -31,30 +31,6 @@ func (ctx ExprContext) grammar() token.Version {
 	return ctx.File.Grammar
 }
 
-func expressionTree(expr string, grammar token.Version) (*syntaxTree, ast.Expr) {
-	src := strings.TrimSpace(expr)
-	if src == "" {
-		return nil, nil
-	}
-	file := parser.ParseTree(src+";", grammar)
-	stmt, ok := file.Stmts[0].(*ast.ExprStmt)
-	if !ok || stmt.Expr == nil {
-		return nil, nil
-	}
-	return &syntaxTree{src: src + ";", grammar: grammar, lines: ast.NewLines(src)}, stmt.Expr
-}
-
-// CallSiteFor returns the call site for the text between a call's
-// parentheses, typing each argument where it's read.
-func (r *Resolver) CallSiteFor(argStr string, ctx ExprContext) *CallSite {
-	t, e := expressionTree("f("+argStr+")", ctx.grammar())
-	call, ok := e.(*ast.Call)
-	if !ok {
-		return &CallSite{}
-	}
-	return r.callSite(t.callArgList(call.Args), ctx)
-}
-
 func (r *Resolver) callSite(args []CallArg, ctx ExprContext) *CallSite {
 	if len(args) == 0 {
 		return &CallSite{}
@@ -62,21 +38,6 @@ func (r *Resolver) callSite(args []CallArg, ctx ExprContext) *CallSite {
 	return &CallSite{Args: args, ArgType: func(arg CallArg, expected *ResolvedType) ResolvedType {
 		return r.typeOf(arg.tree, arg.node, expected, ctx)
 	}}
-}
-
-// ExpressionType returns the type of a PHP expression: a variable, a literal,
-// `new Foo(…)`, `Foo::class`, an array, a closure, a function call or a
-// chain of member accesses. It's empty when the type can't be worked out.
-func (r *Resolver) ExpressionType(expr string, ctx ExprContext) ResolvedType {
-	return r.ExpressionTypeExpecting(expr, nil, ctx)
-}
-
-// ExpressionTypeExpecting is ExpressionType for an expression passed where
-// expected is declared. A closure takes its untyped parameters' types from an
-// expected callable(…) signature.
-func (r *Resolver) ExpressionTypeExpecting(expr string, expected *ResolvedType, ctx ExprContext) ResolvedType {
-	t, e := expressionTree(expr, ctx.grammar())
-	return r.typeOf(t, e, expected, ctx)
 }
 
 func (r *Resolver) typeOf(t *syntaxTree, e ast.Expr, expected *ResolvedType, ctx ExprContext) ResolvedType {

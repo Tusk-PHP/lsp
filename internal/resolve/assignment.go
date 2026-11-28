@@ -104,18 +104,8 @@ func (r *Resolver) assignedType(varName string, t *syntaxTree, v assignedValue, 
 	if !isMemberChain(v.expr) {
 		return ResolvedType{}, false
 	}
-	if rt := r.ChainType(text, r.JoinLines(lines), pos, file); !rt.IsEmpty() {
-		return rt, true
-	}
-	if rt := r.typeOf(t, v.expr, nil, ctx); !rt.IsEmpty() {
-		return rt, true
-	}
-	if r.ChainResolver != nil {
-		if fqn := r.ChainResolver(r, text, r.JoinLines(lines), pos, file); fqn != "" {
-			return ResolvedType{FQN: fqn}, true
-		}
-	}
-	return ResolvedType{}, false
+	rt := r.typeOf(t, v.expr, nil, ctx)
+	return rt, !rt.IsEmpty()
 }
 
 func (r *Resolver) assignedNewType(t *syntaxTree, n *ast.New, ctx ExprContext) (ResolvedType, bool) {
@@ -138,7 +128,7 @@ func (r *Resolver) assignedNewType(t *syntaxTree, n *ast.New, ctx ExprContext) (
 	if rt := r.newExpressionType(className, args, ctx); rt.FQN == classFQN && len(rt.Params) > 0 {
 		return rt, true
 	}
-	if argRT := r.ExpressionType(args[0].Expr, ctx); !argRT.IsEmpty() && (argRT.IsGeneric() || argRT.Shape != "") {
+	if argRT := r.typeOf(t, n.Args.Args[0].Value, nil, ctx); !argRT.IsEmpty() && (argRT.IsGeneric() || argRT.Shape != "") {
 		if rt := r.inferConstructorGenerics(classFQN, argRT); !rt.IsEmpty() {
 			return rt, true
 		}
@@ -166,7 +156,7 @@ func (r *Resolver) assignedPlainType(t *syntaxTree, v assignedValue) (string, bo
 	}
 	_, ternary := v.expr.(*ast.Ternary)
 	coalesce, _ := v.expr.(*ast.Binary)
-	return "", v.called || ternary || coalesce != nil && coalesce.Op == token.Coalesce || r.ChainResolver != nil && isMemberChain(v.expr)
+	return "", v.called || ternary || coalesce != nil && coalesce.Op == token.Coalesce || isMemberChain(v.expr)
 }
 
 func variableOffsets(t *syntaxTree, e *ast.ArrayDimFetch) (origin string, dims []string, ok bool) {
@@ -212,7 +202,7 @@ func (r *Resolver) ternaryType(t *syntaxTree, n *ast.Ternary, ctx ExprContext) R
 	if n.Then == nil {
 		return r.eitherType(t, n.Cond, n.Else, ctx)
 	}
-	then, els := r.valueType(t, n.Then, ctx), r.valueType(t, n.Else, ctx)
+	then, els := r.typeOf(t, n.Then, nil, ctx), r.typeOf(t, n.Else, nil, ctx)
 	if then.IsEmpty() && !then.Nullable || els.IsEmpty() && !els.Nullable {
 		return ResolvedType{}
 	}
@@ -220,7 +210,7 @@ func (r *Resolver) ternaryType(t *syntaxTree, n *ast.Ternary, ctx ExprContext) R
 }
 
 func (r *Resolver) eitherType(t *syntaxTree, left, right ast.Expr, ctx ExprContext) ResolvedType {
-	l, rt := r.valueType(t, left, ctx), r.valueType(t, right, ctx)
+	l, rt := r.typeOf(t, left, nil, ctx), r.typeOf(t, right, nil, ctx)
 	if l.IsEmpty() && !l.Nullable || rt.IsEmpty() && !rt.Nullable {
 		return ResolvedType{}
 	}
@@ -231,13 +221,4 @@ func withoutNull(rt ResolvedType) ResolvedType {
 	out := MakeUnion([]ResolvedType{rt}, false)
 	out.Nullable = false
 	return out
-}
-
-func (r *Resolver) valueType(t *syntaxTree, e ast.Expr, ctx ExprContext) ResolvedType {
-	if isMemberChain(e) && ctx.File != nil {
-		if rt := r.ChainType(t.text(e), r.JoinLines(ctx.Lines), ctx.Pos, ctx.File); !rt.IsEmpty() {
-			return rt
-		}
-	}
-	return r.typeOf(t, e, nil, ctx)
 }

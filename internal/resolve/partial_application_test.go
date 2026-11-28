@@ -7,7 +7,7 @@ import (
 )
 
 func parsedArgs(args string) []CallArg {
-	return NewResolver(nil).CallSiteFor(args, ExprContext{}).Args
+	return NewResolver(nil).callSiteFor(args, ExprContext{}).Args
 }
 
 func TestIsPartialApplicationArgs(t *testing.T) {
