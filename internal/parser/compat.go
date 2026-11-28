@@ -43,6 +43,7 @@ type UseNode struct {
 	Alias     string
 	Kind      string
 	StartLine int
+	StartCol  int
 }
 
 type ParamNode struct {

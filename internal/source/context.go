@@ -116,7 +116,7 @@ func (d *Document) At(pos protocol.Position) *CursorContext {
 	}
 	ctx := &CursorContext{NameContext: *name}
 	if ns := d.file.NamespaceAt(pos.Line, pos.Character); ns != nil {
-		ctx.Namespace, ctx.Uses = ns.Name, importsBefore(ns.Uses, pos.Line)
+		ctx.Namespace, ctx.Uses = ns.Name, importsBefore(ns.Uses, pos.Line, pos.Character)
 	}
 	ctx.Scope = scopeAt(d.result, pos, ctx.EnclosingFQN)
 	return ctx
@@ -415,8 +415,10 @@ func closureScopeAt(result *parser.ParseResult, pos protocol.Position, classFQN 
 	return best
 }
 
-func importsBefore(uses []parser.UseNode, line int) []parser.UseNode {
-	end := sort.Search(len(uses), func(i int) bool { return uses[i].StartLine > line })
+func importsBefore(uses []parser.UseNode, line, character int) []parser.UseNode {
+	end := sort.Search(len(uses), func(i int) bool {
+		return uses[i].StartLine > line || uses[i].StartLine == line && uses[i].StartCol > character
+	})
 	return uses[:end:end]
 }
 

@@ -1139,19 +1139,19 @@ func (p *structParser) parseUse() {
 	// One statement can import several names: `use A\B, C\D as E;` or a
 	// group, `use A\{B, C as D, function f};`, whose prefix every item shares.
 	for {
-		line := p.peek().Line
+		start := p.peek()
 		name := p.readUseName()
 		if p.peek().Kind == TokenOpenBrace {
 			p.advance()
 			prefix := strings.TrimPrefix(name, "\\")
 			for p.peek().Kind != TokenCloseBrace && p.peek().Kind != TokenEOF && p.peek().Kind != TokenSemicolon {
 				itemKind := p.useKind(kind)
-				itemLine := p.peek().Line
+				itemStart := p.peek()
 				item := p.readUseName()
 				if item == "" {
 					break // not a name: leave the rest to the recovery below
 				}
-				p.addUse(prefix+strings.TrimPrefix(item, "\\"), p.readUseAlias(), itemKind, itemLine)
+				p.addUse(prefix+strings.TrimPrefix(item, "\\"), p.readUseAlias(), itemKind, itemStart)
 				if p.peek().Kind != TokenComma {
 					break
 				}
@@ -1159,7 +1159,7 @@ func (p *structParser) parseUse() {
 			}
 			p.expect(TokenCloseBrace)
 		} else if name != "" {
-			p.addUse(name, p.readUseAlias(), kind, line)
+			p.addUse(name, p.readUseAlias(), kind, start)
 		}
 		if p.peek().Kind != TokenComma {
 			break
@@ -1212,7 +1212,7 @@ func (p *structParser) readUseAlias() string {
 // addUse records one imported name. An imported name is always fully
 // qualified, so a leading backslash (`use \App\Thing;`) means the same as
 // none.
-func (p *structParser) addUse(fullName, alias, kind string, line int) {
+func (p *structParser) addUse(fullName, alias, kind string, start Token) {
 	fullName = strings.TrimPrefix(fullName, "\\")
 	if fullName == "" || strings.HasSuffix(fullName, "\\") {
 		return
@@ -1221,7 +1221,7 @@ func (p *structParser) addUse(fullName, alias, kind string, line int) {
 		alias = fullName[strings.LastIndex(fullName, "\\")+1:]
 	}
 	p.namespace.Uses = append(p.namespace.Uses, UseNode{
-		FullName: fullName, Alias: alias, Kind: kind, StartLine: line,
+		FullName: fullName, Alias: alias, Kind: kind, StartLine: start.Line, StartCol: start.Column,
 	})
 }
 
