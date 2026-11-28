@@ -22,6 +22,8 @@ func (d Snapshot) Diverged() bool {
 
 var ErrDiverged = errors.New("the document's text diverged from the editor's; waiting for its full text")
 
+var ErrNotOpen = errors.New("the document is not open")
+
 type Store struct {
 	mu       sync.RWMutex
 	docs     map[string]Snapshot
@@ -54,7 +56,7 @@ func (s *Store) Change(uri string, version int, enc Encoding, changes []Change) 
 	defer s.mu.Unlock()
 	current, ok := s.docs[uri]
 	if !ok {
-		return Snapshot{}, fmt.Errorf("change to %s, which is not open", uri)
+		return Snapshot{}, fmt.Errorf("change to %s, version %d: %w", uri, version, ErrNotOpen)
 	}
 	if current.diverged && lastFullText(changes) < 0 {
 		return Snapshot{}, fmt.Errorf("change to %s, version %d: %w", uri, version, ErrDiverged)

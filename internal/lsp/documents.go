@@ -49,6 +49,9 @@ func (s *Server) handleDidChange(msg *jsonRPCMessage) {
 	switch {
 	case errors.Is(err, document.ErrDiverged):
 		return
+	case errors.Is(err, document.ErrNotOpen):
+		s.logger.Printf("didChange: %v", err)
+		return
 	case err != nil:
 		s.logger.Printf("didChange: %v", err)
 		s.sendNotification("window/showMessage", map[string]interface{}{

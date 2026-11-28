@@ -70,7 +70,7 @@ func TestStoreCurrentFollowsEveryWriteNotTheText(t *testing.T) {
 
 func TestStoreRejectsChangesItCannotApply(t *testing.T) {
 	s := NewStore(symbols.URIToPath)
-	if _, err := s.Change("file:///x.php", 2, UTF16, []Change{{Text: "x"}}); err == nil || !strings.Contains(err.Error(), "not open") {
+	if _, err := s.Change("file:///x.php", 2, UTF16, []Change{{Text: "x"}}); !errors.Is(err, ErrNotOpen) || !strings.Contains(err.Error(), "file:///x.php, version 2") {
 		t.Errorf("change to a closed document: %v", err)
 	}
 	s.Open("file:///x.php", 1, "<?php\n", false)

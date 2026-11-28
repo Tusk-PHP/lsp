@@ -215,6 +215,21 @@ func TestARejectedChangeReadsTheFileFromDiskUntilTheFullTextArrives(t *testing.T
 	}
 }
 
+func TestAChangeToADocumentThatIsNotOpenIsOnlyLogged(t *testing.T) {
+	var out, logs bytes.Buffer
+	s := NewServer(strings.NewReader(""), &out, log.New(&logs, "", 0))
+	s.handleMessage(changeMessage(t, "file:///closed.json", 2, map[string]any{"range": lspRange(0, 0, 0, 0), "text": "x"}))
+	if strings.Contains(out.String(), "window/showMessage") {
+		t.Errorf("a change to a document that is not open showed a message: %s", out.String())
+	}
+	if !strings.Contains(logs.String(), "file:///closed.json, version 2") {
+		t.Errorf("the ignored change was not logged: %q", logs.String())
+	}
+	if _, open := s.docs.Get("file:///closed.json"); open {
+		t.Error("a change to a document that is not open opened it")
+	}
+}
+
 func TestSavingADivergedDocumentReadsItBackFromDisk(t *testing.T) {
 	s := NewServer(strings.NewReader(""), io.Discard, log.New(io.Discard, "", 0))
 	path := filepath.Join(t.TempDir(), "a.json")
