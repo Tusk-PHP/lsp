@@ -588,9 +588,6 @@ func literalsEqual(a, b ResolvedType) (equal, known bool) {
 // plainStringValue is the value of a quoted string literal without escapes
 // or, in double quotes, interpolation.
 func plainStringValue(lit string) (string, bool) {
-	if len(lit) < 2 || lit[0] != lit[len(lit)-1] || lit[0] != '\'' && lit[0] != '"' {
-		return "", false
-	}
 	inner := lit[1 : len(lit)-1]
 	for i := 0; i < len(inner); i++ {
 		if inner[i] == '\\' || lit[0] == '"' && inner[i] == '$' {
