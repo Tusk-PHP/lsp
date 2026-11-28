@@ -339,7 +339,7 @@ func TestUnusedPrivateMethodNameVariables(t *testing.T) {
 		{"a closure parameter", "$m = 'format_'; return array_map(function ($m) { return $this->$m(); }, $keys);", nil},
 		{"a destructuring after a subscript", "$m = 'format_'; [$keys[0], $m] = $keys; return $this->$m();", nil},
 		{"a literal that starts an expression", "$m = 'format_x' ?: $key; return $this->$m();", nil},
-		{"an interpolated string that starts an expression", `$m = "format_{$key}" . $key; return $this->$m();`, nil},
+		{"an interpolated string that starts an expression", `$m = "format_{$key}" . $key; return $this->$m();`, []string{"Private method 'Foo::helper' is never used"}},
 		{"an interpolated string that starts with a variable", `$m = "$key"; return $this->$m();`, nil},
 		{"an array left open", "$m = 'format_'; $a = [$m; return $this->$m();", []string{"Private method 'Foo::helper' is never used"}},
 	} {
