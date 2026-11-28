@@ -78,6 +78,24 @@ func TestKeepParseKeepsOnlyTheIndexedText(t *testing.T) {
 	}
 }
 
+func TestKeepParseOfAKeptFileTakesItsSlot(t *testing.T) {
+	idx := NewIndex()
+	first, room := "<?php\nclass First {}\n", "<?php\nclass Room {}\n"
+	idx.IndexFile("file:///first.php", first)
+	idx.IndexFile("file:///room.php", room)
+	for i := range keptParses - 2 {
+		idx.IndexFile("file:///f"+strconv.Itoa(i)+".php", "<?php\n")
+	}
+	parsed, file := phpparserParse(room)
+	idx.KeepParse("file:///room.php", room, parsed, file)
+	if _, got, ok := idx.IndexedParse("file:///room.php", room); !ok || got != file {
+		t.Errorf("the request's parse replaces the kept one: ok %v", ok)
+	}
+	if _, _, ok := idx.IndexedParse("file:///first.php", first); !ok {
+		t.Error("keeping a parse of a file already kept evicted another file's")
+	}
+}
+
 func phpparserParse(text string) (phpparser.Parsed, *parser.FileNode) {
 	parsed := parser.ParseIn(text, phpparser.AnyGrammar())
 	return parsed, parser.FileNodeOf(text, parsed.Tree)
