@@ -20,13 +20,19 @@ function main(array $argv): void
     }
 
     $mode = array_shift($argv);
-    if (!in_array($mode, ['registry', 'stubs', 'availability'], true)) {
+    $modes = modes();
+    if (!in_array($mode, ['registry', 'stubs', 'availability'], true) && !isset($modes[$mode])) {
         fwrite(STDERR, "Unknown mode: {$mode}\n\n");
         fwrite(STDERR, usage());
         exit(1);
     }
 
     $options = parseOptions($argv);
+
+    if (isset($modes[$mode])) {
+        ($modes[$mode]['run'])($options);
+        return;
+    }
 
     if ($mode === 'availability') {
         $output = generateGoAvailability($options);
@@ -44,14 +50,44 @@ function main(array $argv): void
     writeOutput($output, $options['output']);
 }
 
+/**
+ * The modes in scripts/generate-builtins/, one file each. A file defines the
+ * mode's functions and returns its name, its usage line, its help and the
+ * function that runs it with the parsed options.
+ *
+ * @return array<string, array{name:string, usage:string, help:string, run:callable(array):void}>
+ */
+function modes(): array
+{
+    static $modes = null;
+    if ($modes !== null) {
+        return $modes;
+    }
+    $modes = [];
+    $files = glob(__DIR__ . '/generate-builtins/*.php');
+    if ($files === false) {
+        fwrite(STDERR, "Can't list " . __DIR__ . "/generate-builtins\n");
+        exit(1);
+    }
+    sort($files, SORT_STRING);
+    foreach ($files as $file) {
+        $mode = require $file;
+        $modes[$mode['name']] = $mode;
+    }
+    return $modes;
+}
+
 function usage(): string
 {
+    $modeUsage = implode('', array_map(static fn(array $m): string => '  ' . $m['usage'] . "\n", modes()));
+    $modeHelp = implode('', array_map(static fn(array $m): string => $m['help'], modes()));
+
     return <<<TXT
 Usage:
   php scripts/generate-builtins.php registry [--keep=PATH] [--output=PATH]
   php scripts/generate-builtins.php stubs [--output=PATH]
   php scripts/generate-builtins.php availability --stubs=PATH [--output=PATH]
-
+{$modeUsage}
 Modes:
   registry      Emit the Go builtin name registry from the local PHP runtime.
   stubs         Emit simple global PHP builtin stub declarations from runtime reflection.
@@ -59,7 +95,7 @@ Modes:
                 Go availability map. Requires --stubs=<path> pointing at a
                 local phpstorm-stubs checkout. Output defaults to
                 internal/symbols/builtin_availability_generated.go.
-
+{$modeHelp}
 Options:
   --stubs=PATH   Path to a local phpstorm-stubs checkout (required for availability mode).
   --keep=PATH    Registry mode: also keep every name already listed in this
@@ -67,17 +103,27 @@ Options:
                  PHP doesn't have (redis, brotli, ...) aren't dropped.
   --output=PATH  Write to PATH instead of stdout (availability mode writes to
                  internal/symbols/builtin_availability_generated.go by default).
+  --php=COMMANDS PHP's default builds, one per supported version, for the modes
+                 that read several builds: commands separated by ';', each split
+                 on spaces and run as an argv array, e.g.
+                 'docker run --rm php:7.4-cli php;docker run --rm php:8.6-cli php'.
+  --extensions-php=COMMANDS
+                 More builds, with the extensions of PHP's own source the
+                 default builds lack (intl, gd, ffi, ...), in the same form.
+  --pecl-php=COMMANDS
+                 Builds with PECL extensions (redis, brotli, ...). What only
+                 these builds have needs its extension in the project's profile.
   -h, --help     Show this help.
 
 TXT;
 }
 
 /**
- * @return array{output:?string, stubs:?string}
+ * @return array{output:?string, stubs:?string, keep:?string, php:string, extensions-php:string, pecl-php:string}
  */
 function parseOptions(array $argv): array
 {
-    $options = ['output' => null, 'stubs' => null, 'keep' => null];
+    $options = ['output' => null, 'stubs' => null, 'keep' => null, 'php' => '', 'extensions-php' => '', 'pecl-php' => ''];
 
     foreach ($argv as $arg) {
         if (str_starts_with($arg, '--output=')) {
@@ -88,6 +134,13 @@ function parseOptions(array $argv): array
         if (str_starts_with($arg, '--keep=')) {
             $options['keep'] = substr($arg, strlen('--keep='));
             continue;
+        }
+
+        foreach (['php', 'extensions-php', 'pecl-php'] as $builds) {
+            if (str_starts_with($arg, "--{$builds}=")) {
+                $options[$builds] = substr($arg, strlen("--{$builds}="));
+                continue 2;
+            }
         }
 
         if (str_starts_with($arg, '--stubs=')) {
@@ -1120,6 +1173,56 @@ function generateGoAvailability(array $options): string
     $lines[] = '';
 
     return implode("\n", $lines);
+}
+
+/**
+ * Runs $code with each PHP build in $commands (separated by ';', each split on
+ * spaces and run as an argv array, without the parent's ini settings) and
+ * returns the JSON each prints, oldest version first.
+ *
+ * @return list<array<string, mixed>>
+ */
+function runPhpDumps(string $commands, string $code): array
+{
+    $env = getenv();
+    unset($env['PHP_INI_SCAN_DIR'], $env['PHPRC']);
+    $dumps = [];
+    foreach (array_filter(array_map('trim', explode(';', $commands))) as $command) {
+        $argv = array_merge(array_values(array_filter(explode(' ', $command), 'strlen')), ['-r', $code]);
+        $process = proc_open($argv, [1 => ['pipe', 'w'], 2 => STDERR], $pipes, null, $env);
+        if (!is_resource($process)) {
+            fwrite(STDERR, "Failed to run: {$command}\n");
+            exit(1);
+        }
+        $json = stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        if (proc_close($process) !== 0) {
+            fwrite(STDERR, "PHP failed: {$command}\n");
+            exit(1);
+        }
+        try {
+            $dumps[] = json_decode((string) $json, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            fwrite(STDERR, "Unreadable output from {$command}: {$e->getMessage()}\n");
+            exit(1);
+        }
+    }
+    usort($dumps, static fn(array $a, array $b): int => version_compare($a['version'], $b['version']));
+    return $dumps;
+}
+
+/**
+ * The PHP type name of a gettype() result.
+ */
+function phpTypeName(string $gettype): string
+{
+    return match ($gettype) {
+        'integer' => 'int',
+        'double' => 'float',
+        'boolean' => 'bool',
+        'NULL' => 'null',
+        default => $gettype,
+    };
 }
 
 function writeOutput(string $output, ?string $path): void
