@@ -135,3 +135,25 @@ class Loud extends Speaker { use Talks { talk as speak; } }
 		t.Errorf("want Loud::speak as an alias of Talks::talk in the family, got %v", aliases)
 	}
 }
+
+func TestTraitRuleMethodIsTheMethodOfTheTraitTheRuleNames(t *testing.T) {
+	idx := NewIndex()
+	idx.IndexFile("file:///rules.php", `<?php
+namespace App;
+trait Talks { public function talk(): void {} }
+trait Waves { public function talk(): void {} public function wave(): void {} }
+class Both { use Talks, Waves { Waves::talk insteadof Talks; wave as hello; } }
+`)
+	for _, c := range []struct{ trait, method, want string }{
+		{`App\Waves`, "talk", `App\Waves::talk`},
+		{`App\Talks`, "talk", `App\Talks::talk`},
+		{"", "wave", `App\Waves::wave`},
+	} {
+		if got := idx.TraitRuleMethod(`App\Both`, c.trait, c.method); got == nil || got.FQN != c.want {
+			t.Errorf("TraitRuleMethod(Both, %q, %q) = %v, want %s", c.trait, c.method, got, c.want)
+		}
+	}
+	if got := idx.TraitRuleMethod(`App\Both`, `App\Talks`, "wave"); got != nil {
+		t.Errorf("Talks has no wave, got %s", got.FQN)
+	}
+}
