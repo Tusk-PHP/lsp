@@ -213,3 +213,16 @@ func TestPathExprNeedsTokens(t *testing.T) {
 		t.Error("an empty expression has no value")
 	}
 }
+
+func TestDocumentLinksEndAtACloseTagAndReadMagicConstantsInAnyCase(t *testing.T) {
+	if filepath.Separator != '/' {
+		t.Skip("the expected paths use a slash separator")
+	}
+	existing := map[string]bool{"/app/src/x.php": true, "/app/config/app.php": true}
+	source := "<?php require __dir__ . '/x.php' ?>\n<?php include \\App\\dirname(__DIR__) . '/config/app.php';\nrequire \"$base/x.php\";\n"
+	a, _ := setupRenameAnalyzer(nil)
+	links := a.DocumentLinks("file:///app/src/x.php", source, "", func(path string) bool { return existing[path] })
+	assertLinks(t, source, links, []foundLink{
+		{0, `__dir__ . '/x.php'`, "file:///app/src/x.php"},
+	})
+}

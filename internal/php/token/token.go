@@ -475,6 +475,14 @@ func (k Kind) IsTrivia() bool {
 	return k == Whitespace || k == Comment || k == DocComment
 }
 
+func (k Kind) IsAssignment() bool {
+	return k == Equals || k >= PlusEqual && k <= PowEqual
+}
+
+func (k Kind) IsSemiReserved() bool {
+	return k == Identifier || k >= Abstract && k <= TraitConst
+}
+
 var keywords = func() map[string]Kind {
 	m := map[string]Kind{"die": Exit}
 	for k := Abstract; k <= TraitConst; k++ {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -722,6 +723,19 @@ func TestParseCodeStartsInPHP(t *testing.T) {
 	}
 	if _, ok := file.Stmts[0].(*ast.ClassDecl); !ok {
 		t.Fatalf("got %T", file.Stmts[0])
+	}
+}
+
+func TestParseSeeingTokensShowsEveryTokenBeforeParsing(t *testing.T) {
+	for _, src := range programs {
+		var seen []lexer.Token
+		file := ParseSeeingTokens(src, token.Latest, func(toks []lexer.Token) { seen = slices.Clone(toks) })
+		if want := lexer.Lex(src, token.Latest); !slices.Equal(seen, want) {
+			t.Errorf("%q: saw %v, want %v", src, seen, want)
+		}
+		if !reflect.DeepEqual(file, Parse(src, token.Latest)) {
+			t.Errorf("%q: tree differs from Parse", src)
+		}
 	}
 }
 

@@ -100,3 +100,11 @@ func highlightKind(rng, decl protocol.Range, cursor protocol.Position) protocol.
 		return protocol.DocumentHighlightKindRead
 	}
 }
+
+func tokenRange(tok parser.Token) protocol.Range {
+	end := tok.Column + len(tok.Value)
+	return protocol.Range{
+		Start: protocol.Position{Line: tok.Line, Character: tok.Column},
+		End:   protocol.Position{Line: tok.Line, Character: end},
+	}
+}

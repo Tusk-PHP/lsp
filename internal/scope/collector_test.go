@@ -525,3 +525,28 @@ func TestFirstStatementStartsAfterTheOpenTag(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectReadsVariablesInsideInterpolatedStrings(t *testing.T) {
+	source := "<?php\nfunction run($n, $m) {\n    return \"$n {$m[\"{$n}\"]} \\$n ${n} {$m->f($n)} {$m['$n']}\" . <<<EOT\n    $n\n    EOT;\n}\n"
+	doc := Collect(source)
+	binding := doc.BindingAt(textpos.Position{Line: 1, Character: 14})
+	if binding == nil {
+		t.Fatal("expected parameter binding at $n")
+	}
+	want := []textpos.Range{
+		{Start: textpos.Position{Line: 1, Character: 13}, End: textpos.Position{Line: 1, Character: 15}},
+		{Start: textpos.Position{Line: 2, Character: 12}, End: textpos.Position{Line: 2, Character: 14}},
+		{Start: textpos.Position{Line: 2, Character: 21}, End: textpos.Position{Line: 2, Character: 23}},
+		{Start: textpos.Position{Line: 2, Character: 44}, End: textpos.Position{Line: 2, Character: 46}},
+		{Start: textpos.Position{Line: 3, Character: 4}, End: textpos.Position{Line: 3, Character: 6}},
+	}
+	got := doc.Occurrences(binding)
+	if len(got) != len(want) {
+		t.Fatalf("Occurrences = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("occurrence %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+}

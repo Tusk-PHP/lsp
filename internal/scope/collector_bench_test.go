@@ -27,3 +27,19 @@ func BenchmarkCollect(b *testing.B) {
 		Collect(src)
 	}
 }
+
+func BenchmarkCollectInterpolatedStrings(b *testing.B) {
+	var sb strings.Builder
+	sb.WriteString("<?php\nclass Big\n{\n")
+	for i := 0; i < 200; i++ {
+		n := strconv.Itoa(i)
+		sb.WriteString("    public function m" + n + "(Foo $a, array $items, $key)\n    {\n        $total = 0;\n")
+		sb.WriteString("        return \"Total {$a->name}: $total for {$items[$key]} and $a->id\";\n    }\n\n")
+	}
+	sb.WriteString("}\n")
+	src := sb.String()
+	b.ReportAllocs()
+	for b.Loop() {
+		Collect(src)
+	}
+}

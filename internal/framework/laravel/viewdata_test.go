@@ -215,3 +215,74 @@ func TestViewDataThroughTemplates(t *testing.T) {
 		t.Error("ViewName")
 	}
 }
+
+func TestViewDataResolvesAliasedAndFullyQualifiedComposers(t *testing.T) {
+	d := NewViewData("/app")
+	d.IndexFile("file:///app/app/Providers/AppServiceProvider.php", `<?php
+namespace App\Providers;
+
+use App\View\Composers\NavComposer as Nav;
+
+class AppServiceProvider
+{
+    public function boot()
+    {
+        View::composer('layouts.aliased', Nav::class);
+        View::composer('layouts.qualified', \App\View\Composers\NavComposer::class);
+    }
+}
+`)
+	d.IndexFile("file:///app/app/View/Composers/NavComposer.php", `<?php
+namespace App\View\Composers;
+
+class NavComposer
+{
+    public function compose(View $view): void
+    {
+        $view->with('links', []);
+    }
+}
+`)
+	for _, view := range []string{"layouts.aliased", "layouts.qualified"} {
+		if got := names(d.Inputs(view).Vars); got != "links" {
+			t.Errorf("%s: got %q, want the composer's links", view, got)
+		}
+	}
+}
+
+func TestViewDataReadsStringsAndAttributesAsOneArgument(t *testing.T) {
+	d := NewViewData("/app")
+	d.IndexFile("file:///app/app/Http/Controllers/PageController.php", `<?php
+class PageController
+{
+    public function show($a)
+    {
+        return view('pages.show', [
+            'title' => "x, {$a['k']}) ?>",
+            'body' => <<<EOT
+                ], {$a}
+                EOT,
+            'cb' => #[Pure] fn () => 1,
+        ])?->with('extra', 1);
+    }
+}
+`)
+	in := d.Inputs("pages.show")
+	if got := names(in.Vars); got != "body cb extra title" || !in.Complete {
+		t.Errorf("got %q complete=%v", got, in.Complete)
+	}
+}
+
+func TestViewDataStaysIncompleteWhereItCantRead(t *testing.T) {
+	d := NewViewData("/app")
+	d.IndexFile("file:///app/app/A.php", `<?php
+function a() { $data = ['a' => 1]; $data->x; return view('pages.changed', $data); }
+function b() { View::first($names); return new $content(view: 'pages.dynamic'); }
+`)
+	if d.Inputs("pages.changed").Complete {
+		t.Error("an array used for something else may change")
+	}
+	if d.Inputs("pages.a").Complete {
+		t.Error("View::first() with a computed list may render any view")
+	}
+}

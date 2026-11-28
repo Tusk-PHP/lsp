@@ -45,6 +45,12 @@ func Parse(src string, version token.Version) *ast.File {
 	return parse(src, version, lexer.Lex(src, version))
 }
 
+func ParseSeeingTokens(src string, version token.Version, see func([]lexer.Token)) *ast.File {
+	all := lexer.Lex(src, version)
+	see(all)
+	return parse(src, version, all)
+}
+
 func ParseCode(src string, version token.Version) *ast.File {
 	return parse(src, version, lexer.LexCode(src, version))
 }
@@ -377,7 +383,7 @@ func (p *parser) identifier() *ast.Identifier {
 }
 
 func (p *parser) memberName() *ast.Identifier {
-	if !isSemiReserved(p.peek()) {
+	if !p.peek().IsSemiReserved() {
 		p.unexpected("expected a name")
 		return nil
 	}
@@ -481,8 +487,4 @@ func isName(k token.Kind) bool {
 		return true
 	}
 	return false
-}
-
-func isSemiReserved(k token.Kind) bool {
-	return k == token.Identifier || k >= token.Abstract && k <= token.TraitConst
 }
