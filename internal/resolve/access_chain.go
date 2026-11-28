@@ -2,6 +2,7 @@ package resolve
 
 import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
@@ -22,10 +23,10 @@ func (r *Resolver) ExpressionClass(expr string, source string, pos textpos.Posit
 	return PlainTypeName(r.ChainType(expr, source, pos, file))
 }
 
-// DiagnosticType returns the type diagnostics check an expression against:
-// the generic-aware type, written out in full ("?Foo", "Foo|Bar",
-// "Collection<int, User>"), the same one hover and completion see. Each
-// lookup is a request of its own.
-func (e *Engine) DiagnosticType(expr string, source string, pos textpos.Position, file *parser.FileNode) string {
-	return e.Resolver().ChainType(expr, source, pos, file).FullString()
+// DiagnosticType returns the type diagnostics check an expression node of
+// file against: the generic-aware type, written out in full ("?Foo",
+// "Foo|Bar", "Collection<int, User>"), the same one hover and completion
+// see. Each lookup is a request of its own.
+func (e *Engine) DiagnosticType(file *parser.FileNode, node ast.Expr) string {
+	return e.Resolver().NodeType(file, node).FullString()
 }

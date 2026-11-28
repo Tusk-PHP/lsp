@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -36,7 +37,8 @@ class Svc {
 
 // typeOf types the receivers the test source uses, as the server's
 // resolver would.
-func typeOf(expr, _ string, _, _ int, _ *parser.FileNode) string {
+func typeOf(file *parser.FileNode, e ast.Expr) string {
+	expr := e.Bounds().Text(file.Source)
 	switch strings.TrimSpace(expr) {
 	case "$svc", "$svc->self()", "(new Svc())", "new Svc()":
 		return "Lib\\Svc"

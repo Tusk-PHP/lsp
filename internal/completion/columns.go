@@ -81,8 +81,8 @@ func isBuilderArg(arg ast.CallArg) bool {
 	return !arg.InArray || arrayArgMethods[m]
 }
 
-func (p *Provider) completeBuilderArg(r *resolve.Resolver, arg ast.CallArg, source string, file *parser.FileNode) []protocol.CompletionItem {
-	modelFQN := frameworklaravel.BuilderCallModel(r, p.index, arg.Call, source, file).FQN
+func (p *Provider) completeBuilderArg(r *resolve.Resolver, arg ast.CallArg, file *parser.FileNode) []protocol.CompletionItem {
+	modelFQN := frameworklaravel.BuilderModel(r, p.index, file, arg.Receiver).FQN
 	if modelFQN == "" {
 		return nil
 	}

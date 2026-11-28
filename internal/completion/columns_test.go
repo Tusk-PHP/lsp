@@ -312,22 +312,29 @@ func TestBuilderRelationCompletion(t *testing.T) {
 	})
 }
 
+func receiverNode(t *testing.T, file *parser.FileNode, receiver string) ast.Expr {
+	t.Helper()
+	start := uint32(strings.LastIndex(file.Source, receiver))
+	e := ast.ExprSpanning(file.Tree, ast.Span{Start: start, End: start + uint32(len(receiver))})
+	if e == nil {
+		t.Fatalf("no node %q in %q", receiver, file.Source)
+	}
+	return e
+}
+
 // TestBuilderModelForDiagnostics checks the model the unknown-column
-// and unknown-relation diagnostics get for a call, from the line up to the
-// call's opening parenthesis.
+// and unknown-relation diagnostics get for a call's receiver.
 func TestBuilderModelForDiagnostics(t *testing.T) {
 	p, _ := setupEloquentCompletionTest(t)
-	source := "<?php\nuse App\\Models\\Category;\nCategory::query()->where('name', 1)->with('products');\n"
+	source := "<?php\nuse App\\Models\\Category;\nCategory::query()->where('name', 1)->with('products');\n$unknown->where('a');\n"
 	file := parser.ParseFile(source, token.Latest)
-	for _, tc := range []struct{ prefix, method, want string }{
-		{"Category::query()->where(", "where", `App\Models\Category`},
-		{"Category::query()->where('name', 1)->with(", "with", `App\Models\Category`},
-		{"$unknown->where(", "where", ""},
-		{"where(", "where", ""},
-		{"::where(", "where", ""},
+	for _, tc := range []struct{ receiver, want string }{
+		{"Category::query()", `App\Models\Category`},
+		{"Category::query()->where('name', 1)", `App\Models\Category`},
+		{"$unknown", ""},
 	} {
-		if got := laravel.BuilderModel(p.engine.Resolver(), p.index, tc.method, source, protocol.Position{Line: 2, Character: len(tc.prefix)}, file).FQN; got != tc.want {
-			t.Errorf("%s: got %q, want %q", tc.prefix, got, tc.want)
+		if got := laravel.BuilderModel(p.engine.Resolver(), p.index, file, receiverNode(t, file, tc.receiver)).FQN; got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.receiver, got, tc.want)
 		}
 	}
 }
@@ -336,14 +343,8 @@ func TestBuilderModelOfACallOnAContinuationLine(t *testing.T) {
 	p, _ := setupEloquentCompletionTest(t)
 	source := "<?php\nuse App\\Models\\Category;\nCategory::query()\n    // ->with(\n    ->where('name', 1);\n"
 	file := parser.ParseFile(source, token.Latest)
-	if got := laravel.BuilderModel(p.engine.Resolver(), p.index, "where", source, protocol.Position{Line: 4, Character: len("    ->where(")}, file).FQN; got != `App\Models\Category` {
+	if got := laravel.BuilderModel(p.engine.Resolver(), p.index, file, receiverNode(t, file, "Category::query()")).FQN; got != `App\Models\Category` {
 		t.Errorf("diagnostics model = %q", got)
-	}
-	if got := laravel.BuilderModel(p.engine.Resolver(), p.index, "with", source, protocol.Position{Line: 4, Character: len("    ->where(")}, file).FQN; got != "" {
-		t.Errorf("a different method's model = %q", got)
-	}
-	if got := laravel.BuilderModel(p.engine.Resolver(), p.index, "where", source, protocol.Position{Line: 4, Character: len("    ->where(")}, nil).FQN; got != "" {
-		t.Errorf("model without a file = %q", got)
 	}
 
 	items := p.GetCompletions("file:///test.php", "<?php\nuse App\\Models\\Category;\nCategory::query()\n    ->with([\n        'products',\n        'pro'\n    ])\n    ->get();", protocol.Position{Line: 5, Character: 12})
@@ -358,15 +359,14 @@ func TestBuilderModelOfTheCallsReceiver(t *testing.T) {
 		source := "<?php\nuse App\\Models\\Category;\n" + body
 		return source, parser.ParseFile(source, token.Latest)
 	}
-	for _, tc := range []struct{ body, prefix, want string }{
-		{"Unknown::where('name');", "Unknown::where(", ""},
-		{"$q = Category::query();\n$q->where('name');", "$q->where(", `App\Models\Category`},
-		{"Category::query()->where('a', 1)->where('name');", "Category::query()->where('a', 1)->where(", `App\Models\Category`},
-		{"Category::query()->toBase()->where('name');", "Category::query()->toBase()->where(", ""},
+	for _, tc := range []struct{ body, receiver, want string }{
+		{"Unknown::where('name');", "Unknown", ""},
+		{"$q = Category::query();\n$q->where('name');", "$q", `App\Models\Category`},
+		{"Category::query()->where('a', 1)->where('name');", "Category::query()->where('a', 1)", `App\Models\Category`},
+		{"Category::query()->toBase()->where('name');", "Category::query()->toBase()", ""},
 	} {
-		source, f := file(tc.body)
-		line := strings.Count(source[:strings.LastIndex(source, tc.prefix)], "\n")
-		if got := laravel.BuilderModel(p.engine.Resolver(), p.index, "where", source, protocol.Position{Line: line, Character: len(tc.prefix)}, f).FQN; got != tc.want {
+		_, f := file(tc.body)
+		if got := laravel.BuilderModel(p.engine.Resolver(), p.index, f, receiverNode(t, f, tc.receiver)).FQN; got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.body, got, tc.want)
 		}
 	}

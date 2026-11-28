@@ -11,7 +11,7 @@ import (
 )
 
 type UnknownNamedArgumentRule struct {
-	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
+	TypeResolver TypeResolver
 	Shared       *Shared
 }
 

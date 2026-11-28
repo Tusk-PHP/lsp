@@ -40,10 +40,11 @@ var builderRelationMethods = map[string]bool{
 	"load": true, "loadMissing": true, "loadCount": true,
 }
 
-// ModelResolverFunc resolves the Eloquent model a builder call is made on.
-// prefix is the line up to and including the call's opening parenthesis
-// (`Post::query()->where(`). Its FQN is "" if the model cannot be determined.
-type ModelResolverFunc func(prefix string, method string, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel
+// ModelResolverFunc gives the Eloquent model a builder call is made on, from
+// the call's receiver node in file: the class of `Post::where(`, or the
+// builder or model `$query->where(` is called on. Its FQN is "" when the
+// model can't be worked out.
+type ModelResolverFunc func(file *parser.FileNode, receiver ast.Expr) frameworklaravel.QueriedModel
 
 // MemberChecker provides methods to verify columns and relations on a model.
 type MemberChecker interface {
@@ -101,7 +102,7 @@ func (r *InvalidBuilderArgRule) Check(file *parser.FileNode, source string, _ *s
 		}
 		method := syntax.text(m.name)
 		if builderRelationMethods[method] || builderColumnMethods[method] || builderDBColumnMethods[method] {
-			findings = append(findings, r.checkCall(syntax, m, method, source, file, joins)...)
+			findings = append(findings, r.checkCall(syntax, m, method, file, joins)...)
 		}
 	}
 	return findings
@@ -121,10 +122,10 @@ func (j *builderJoins) mayBeJoined(line, col int) bool {
 	return frameworklaravel.BuilderMayBeJoined(j.tokens, j.doc, line, col)
 }
 
-func (r *InvalidBuilderArgRule) checkCall(syntax *fileSyntax, call memberReference, method, source string, file *parser.FileNode, joins *builderJoins) []Finding {
+func (r *InvalidBuilderArgRule) checkCall(syntax *fileSyntax, call memberReference, method string, file *parser.FileNode, joins *builderJoins) []Finding {
 	lineNum := syntax.line(call.name)
-	prefix := source[syntax.lines[syntax.line(call.args)] : call.args.Start+1]
-	at := builderCall{line: lineNum, prefix: prefix}
+	owner := call.owner
+	at := builderCall{line: lineNum, owner: owner}
 	at.operatorLine, at.operatorCol = syntax.lines.Position(syntax.memberOperator(call.name))
 	onNameLine := func(n ast.Node) bool {
 		start, _ := syntax.lines.Position(n.Bounds().Start)
@@ -143,11 +144,11 @@ func (r *InvalidBuilderArgRule) checkCall(syntax *fileSyntax, call memberReferen
 		if len(args) > 1 && aggregateRelationMethods[method] {
 			if column, ok := syntax.stringLiteral(args[1].Value); ok && onNameLine(args[1].Value) {
 				startCol, endCol := syntax.stringContent(args[1].Value)
-				add(r.validateAggregateSecondArg(method, relation, column, lineNum, startCol, endCol, prefix, source, file))
+				add(r.validateAggregateSecondArg(method, relation, column, lineNum, startCol, endCol, owner, file))
 			}
 		}
 		startCol, endCol := syntax.stringContent(first)
-		add(r.validateArg(method, relation, at, startCol, endCol, source, file, joins))
+		add(r.validateArg(method, relation, at, startCol, endCol, file, joins))
 	}
 	if array, ok := first.(*ast.Array); ok && onNameLine(array) {
 		for _, item := range array.Items {
@@ -157,7 +158,7 @@ func (r *InvalidBuilderArgRule) checkCall(syntax *fileSyntax, call memberReferen
 			}
 			if value, ok := syntax.stringLiteral(name); ok {
 				startCol, endCol := syntax.stringContent(name)
-				add(r.validateArg(method, stripAlias(value), at, startCol, endCol, source, file, joins))
+				add(r.validateArg(method, stripAlias(value), at, startCol, endCol, file, joins))
 			}
 		}
 	}
@@ -182,12 +183,12 @@ func isPlainName(s string) bool {
 
 // validateAggregateSecondArg validates the second argument of aggregate methods
 // like withSum('relation', 'column') — the column must exist on the related model.
-func (r *InvalidBuilderArgRule) validateAggregateSecondArg(method, relationName, columnName string, lineNum, startCol, endCol int, prefix, source string, file *parser.FileNode) *Finding {
+func (r *InvalidBuilderArgRule) validateAggregateSecondArg(method, relationName, columnName string, lineNum, startCol, endCol int, owner ast.Expr, file *parser.FileNode) *Finding {
 	if !isPlainName(columnName) || relationName == "" {
 		return nil
 	}
 
-	modelFQN := r.ModelResolver(prefix, method, source, lineNum, file).FQN
+	modelFQN := r.ModelResolver(file, owner).FQN
 	if modelFQN == "" {
 		return nil
 	}
@@ -216,10 +217,10 @@ type builderCall struct {
 	line         int
 	operatorLine int
 	operatorCol  int
-	prefix       string
+	owner        ast.Expr
 }
 
-func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builderCall, startCol, endCol int, source string, file *parser.FileNode, joins *builderJoins) *Finding {
+func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builderCall, startCol, endCol int, file *parser.FileNode, joins *builderJoins) *Finding {
 	if argValue == "" {
 		return nil
 	}
@@ -262,8 +263,7 @@ func (r *InvalidBuilderArgRule) validateArg(method, argValue string, call builde
 		return nil
 	}
 
-	// Resolve the model from the line up to the method call
-	model := r.ModelResolver(call.prefix, method, source, call.line, file)
+	model := r.ModelResolver(file, call.owner)
 	modelFQN := model.FQN
 	if modelFQN == "" {
 		return nil

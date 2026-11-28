@@ -1,10 +1,13 @@
 package resolve
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // The plain walker gives the class each kind of chain ends with.
@@ -69,16 +72,22 @@ func TestAccessChainClassContainerCall(t *testing.T) {
 	}
 }
 
-// DiagnosticType gives the full generic-aware type, and the plain class when
-// the typed walker finds nothing.
+// DiagnosticType gives the full generic-aware type of a node.
 func TestDiagnosticType(t *testing.T) {
-	r, file, pos := chainFixture(t)
-	e := NewChainEngine(r.Index)
-	if got := e.DiagnosticType("$p->logger()", chainSource, pos, file); got != `App\Logger` {
-		t.Errorf("a chain: got %q", got)
-	}
-	if got := e.DiagnosticType("$nothing", chainSource, pos, file); got != "" {
-		t.Errorf("an unknown variable: got %q", got)
+	src := "<?php\nnamespace App;\nclass Logger {}\nclass Person { public function logger(): Logger { return new Logger(); } }\nfunction run(Person $p) {\n    $p->logger();\n    $nothing;\n}\n"
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///diagnostic.php", src)
+	file := parser.ParseFile(src, token.Latest)
+	e := NewChainEngine(idx)
+	for expr, want := range map[string]string{"$p->logger()": `App\Logger`, "$nothing": ""} {
+		at := uint32(strings.Index(src, expr))
+		node := ast.ExprSpanning(file.Tree, ast.Span{Start: at, End: at + uint32(len(expr))})
+		if node == nil {
+			t.Fatalf("no node spans %q", expr)
+		}
+		if got := e.DiagnosticType(file, node); got != want {
+			t.Errorf("DiagnosticType(%q) = %q, want %q", expr, got, want)
+		}
 	}
 }
 

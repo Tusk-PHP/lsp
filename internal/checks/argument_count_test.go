@@ -296,7 +296,7 @@ class Magic { public function __call($n, $a) {} }
 class Tagged {}
 `)
 	types := map[string]string{"$this": `App\Mailer`, "$mailer": `App\Mailer`, "$either": `App\Mailer|App\Other`, "$magic": `App\Magic`, "$tagged": `App\Tagged`}
-	checker := &ArgumentCountRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string { return types[expr] }}
+	checker := &ArgumentCountRule{TypeResolver: typesByText(func(expr string) string { return types[expr] })}
 	source := `<?php
 namespace App;
 $mailer->send('a@example.test');
@@ -338,7 +338,7 @@ class Kernel { const VERSION_ID = 70000; }
 function pair($a, $b) {}
 `)
 	types := map[string]string{"$instance": `App\Handler`}
-	checker := &ArgumentCountRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string { return types[expr] }}
+	checker := &ArgumentCountRule{TypeResolver: typesByText(func(expr string) string { return types[expr] })}
 	source := `<?php
 namespace App;
 if (version_compare(Version::id(), '12.3.4', '>=')) {
@@ -450,7 +450,7 @@ class Mailer {
 function pair($a, $b) {}
 `)
 	types := map[string]string{"$this": `App\Mailer`, "$this->mailer": `App\Mailer`, "$this->mailer()": `App\Mailer`, "$this->all[0]": `App\Mailer`, "$mailer": `App\Mailer`, "new Mailer()": `App\Mailer`}
-	checker := &ArgumentCountRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string { return types[expr] }}
+	checker := &ArgumentCountRule{TypeResolver: typesByText(func(expr string) string { return types[expr] })}
 	source := `<?php
 namespace App;
 $mailer /* the mailer */ ->send('a');
@@ -501,7 +501,7 @@ class Mailer {
 }
 `)
 	types := map[string]string{"$mailer": `App\Mailer`}
-	checker := &ArgumentCountRule{TypeResolver: func(expr, _ string, _, _ int, _ *parser.FileNode) string { return types[expr] }}
+	checker := &ArgumentCountRule{TypeResolver: typesByText(func(expr string) string { return types[expr] })}
 	source := `<?php
 namespace App;
 strlen(bar(1, 2, 3));

@@ -52,7 +52,7 @@ type callSite struct {
 	member memberReference
 }
 
-func eachResolvedCall(syntax *fileSyntax, file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string, wants func(*ast.ArgList) bool, visit func(resolvedCall)) {
+func eachResolvedCall(syntax *fileSyntax, file *parser.FileNode, source string, index *symbols.Index, typeResolver TypeResolver, wants func(*ast.ArgList) bool, visit func(resolvedCall)) {
 	refs := syntax.references()
 	sites := make([]callSite, 0, len(refs.calls)+len(refs.constructions)+len(refs.members))
 	for _, c := range refs.calls {
@@ -82,7 +82,7 @@ func eachResolvedCall(syntax *fileSyntax, file *parser.FileNode, source string, 
 	}
 }
 
-func (s callSite) callees(syntax *fileSyntax, file *parser.FileNode, source string, index *symbols.Index, typeResolver func(string, string, int, int, *parser.FileNode) string) []callee {
+func (s callSite) callees(syntax *fileSyntax, file *parser.FileNode, source string, index *symbols.Index, typeResolver TypeResolver) []callee {
 	name := syntax.text(s.name)
 	switch s.kind {
 	case callFunction:
@@ -112,7 +112,7 @@ func (s callSite) callees(syntax *fileSyntax, file *parser.FileNode, source stri
 	if syntax.onThis(recv.node) && syntax.inClosure(s.name) {
 		return nil
 	}
-	owners := recv.classLikes(source, file, index, typeResolver)
+	owners := recv.classLikes(file, index, typeResolver)
 	if len(owners) != 1 {
 		return nil
 	}

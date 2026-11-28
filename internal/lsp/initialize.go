@@ -132,12 +132,10 @@ func (s *Server) handleInitialize(msg *jsonRPCMessage) {
 	s.diag.Blade = s.bladeFeatures
 	if s.workspace.ViewData != nil {
 		s.viewTypes = &frameworklaravel.ViewTypes{
-			Data:  s.workspace.ViewData,
-			Index: s.index,
-			Read:  s.getDocumentReader(),
-			Resolve: func(expr, source string, file *parser.FileNode, line, col int) string {
-				return s.completion.ResolveExpressionType(expr, source, protocol.Position{Line: line, Character: col}, file)
-			},
+			Data:     s.workspace.ViewData,
+			Index:    s.index,
+			Read:     s.getDocumentReader(),
+			Resolver: s.completion.Resolver,
 		}
 		s.diag.ViewTypes = s.viewTypes
 	}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/rule"
@@ -98,7 +99,7 @@ class Foo {
 func TestSprint3BaselineUnknownDiagnostics(t *testing.T) {
 	p := newTestProvider()
 	p.index.MarkReady()
-	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
+	p.TypeResolver = func(*parser.FileNode, ast.Expr) string {
 		return ""
 	}
 

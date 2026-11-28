@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -32,7 +33,7 @@ function use_them( $p_archive ) {
 	var got []string
 	for _, checker := range []interface {
 		Check(*parser.FileNode, string, *symbols.Index) []Finding
-	}{&UnknownClassRule{}, &UnknownFunctionRule{}, &UnknownMemberRule{TypeResolver: func(string, string, int, int, *parser.FileNode) string { return "" }}} {
+	}{&UnknownClassRule{}, &UnknownFunctionRule{}, &UnknownMemberRule{TypeResolver: func(*parser.FileNode, ast.Expr) string { return "" }}} {
 		for _, f := range checker.Check(file, src, idx) {
 			got = append(got, f.Message)
 		}

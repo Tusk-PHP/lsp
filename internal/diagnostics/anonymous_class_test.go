@@ -6,10 +6,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
-	"github.com/Tusk-PHP/lsp/internal/container"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
-	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // Inside `new class { ... }`, $this, self and static are the anonymous class,
@@ -71,10 +68,7 @@ class AsCollection
 	idx.IndexFile("file:///AsCollection.php", src)
 	idx.MarkReady()
 	p := NewProvider(idx, "none", "/tmp", nil, config.DefaultConfig())
-	engine := container.NewEngine(idx, nil)
-	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		return engine.Resolver().ExpressionClass(expr, source, textpos.Position{Line: line}, file)
-	}
+	p.ResolveTypes(nil)
 	var got []string
 	for _, d := range p.Analyze("file:///AsCollection.php", src) {
 		if strings.HasPrefix(d.Message, "Unknown") {

@@ -7,17 +7,16 @@ import (
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/rule"
 )
 
 func TestEveryRuleCodeIsEmittedByARule(t *testing.T) {
 	rules := NativeRules(NativeRulesOptions{
-		TypeResolver:           func(expr, source string, line, col int, file *parser.FileNode) string { return "" },
+		TypeResolver:           func(*parser.FileNode, ast.Expr) string { return "" },
 		BuiltinUnavailableRule: &checks.BuiltinUnavailableRule{},
-		BuilderModelResolver: func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
-			return frameworklaravel.QueriedModel{}
-		},
-		BuilderMemberChecker: &stubMemberChecker{},
+		BuilderModelResolver:   func(*parser.FileNode, ast.Expr) frameworklaravel.QueriedModel { return frameworklaravel.QueriedModel{} },
+		BuilderMemberChecker:   &stubMemberChecker{},
 	})
 	emitted := map[rule.Code]bool{}
 	for _, r := range rules {
@@ -40,12 +39,10 @@ func TestEveryRuleCodeIsEmittedByARule(t *testing.T) {
 
 func TestEveryRuleAcceptsAFileThatDidNotParse(t *testing.T) {
 	rules := NativeRules(NativeRulesOptions{
-		TypeResolver:           func(expr, source string, line, col int, file *parser.FileNode) string { return "" },
+		TypeResolver:           func(*parser.FileNode, ast.Expr) string { return "" },
 		BuiltinUnavailableRule: &checks.BuiltinUnavailableRule{PHPVersion: "8.4"},
-		BuilderModelResolver: func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
-			return frameworklaravel.QueriedModel{}
-		},
-		BuilderMemberChecker: &stubMemberChecker{},
+		BuilderModelResolver:   func(*parser.FileNode, ast.Expr) frameworklaravel.QueriedModel { return frameworklaravel.QueriedModel{} },
+		BuilderMemberChecker:   &stubMemberChecker{},
 	})
 	for _, r := range rules {
 		if got := r.Check(nil, "<?php $a?->b; missing();", nil); len(got) != 0 {

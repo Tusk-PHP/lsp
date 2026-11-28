@@ -4,7 +4,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/container"
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/parser"
-	"github.com/Tusk-PHP/lsp/internal/textpos"
+	"github.com/Tusk-PHP/lsp/internal/php/ast"
 )
 
 // ResolveTypes turns on the type-aware rules (unknown members, argument
@@ -14,10 +14,8 @@ import (
 // isn't nil.
 func (p *Provider) ResolveTypes(ca *container.ContainerAnalyzer) {
 	engine := container.NewEngine(p.index, ca)
-	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		return engine.DiagnosticType(expr, source, textpos.Position{Line: line, Character: col}, file)
-	}
-	p.BuilderModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
-		return frameworklaravel.BuilderModel(engine.Resolver(), p.index, method, source, textpos.Position{Line: line, Character: len(prefix)}, file)
+	p.TypeResolver = engine.DiagnosticType
+	p.BuilderModelResolver = func(file *parser.FileNode, receiver ast.Expr) frameworklaravel.QueriedModel {
+		return frameworklaravel.BuilderModel(engine.Resolver(), p.index, file, receiver)
 	}
 }

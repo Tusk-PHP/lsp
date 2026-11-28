@@ -23,7 +23,7 @@ type ArgumentCountRule struct {
 	Shared *Shared
 	// TypeResolver types the receiver of a `->` call. Without it, those calls
 	// aren't checked.
-	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
+	TypeResolver TypeResolver
 }
 
 func (r *ArgumentCountRule) Codes() []rule.Code { return []rule.Code{rule.ArgumentCountMismatch} }
@@ -35,7 +35,7 @@ func (r *ArgumentCountRule) Check(file *parser.FileNode, source string, index *s
 	return checkArgumentCounts(file, source, index, r.Shared, r.TypeResolver)
 }
 
-func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.Index, shared *Shared, typeResolver func(string, string, int, int, *parser.FileNode) string) []Finding {
+func checkArgumentCounts(file *parser.FileNode, source string, index *symbols.Index, shared *Shared, typeResolver TypeResolver) []Finding {
 	var findings []Finding
 	var gatedSpans []ast.Span
 	gatedDone := false

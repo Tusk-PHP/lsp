@@ -6,10 +6,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
-	"github.com/Tusk-PHP/lsp/internal/container"
-	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
-	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 // A parameter given a new value has the new value's type from then on, as in
@@ -90,10 +87,7 @@ class Cases
 	idx.IndexFile("file:///Cases.php", src)
 	idx.MarkReady()
 	p := NewProvider(idx, "none", "/tmp", nil, config.DefaultConfig())
-	engine := container.NewEngine(idx, nil)
-	p.TypeResolver = func(expr, source string, line, col int, file *parser.FileNode) string {
-		return engine.Resolver().ExpressionClass(expr, source, textpos.Position{Line: line}, file)
-	}
+	p.ResolveTypes(nil)
 	var got []string
 	for _, d := range p.Analyze("file:///Cases.php", src) {
 		if strings.HasPrefix(d.Message, "Unknown") {

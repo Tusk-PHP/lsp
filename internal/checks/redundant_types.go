@@ -18,7 +18,7 @@ import (
 type RedundantNullsafeRule struct {
 	// TypeResolver is kept for the rule set's wiring; the rule no longer
 	// relies on it. If nil, the rule is a no-op.
-	TypeResolver func(expr string, source string, line, col int, file *parser.FileNode) string
+	TypeResolver TypeResolver
 }
 
 func (r *RedundantNullsafeRule) Codes() []rule.Code { return []rule.Code{rule.RedundantNullsafe} }

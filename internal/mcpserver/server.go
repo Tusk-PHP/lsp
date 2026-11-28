@@ -753,12 +753,10 @@ func (s *Service) buildRuntime(ws *workspace.Bootstrapped) *serviceRuntime {
 	rt.Diagnostics.Profile = ws.Profile
 	if ws.ViewData != nil {
 		rt.Diagnostics.ViewTypes = &frameworklaravel.ViewTypes{
-			Data:  ws.ViewData,
-			Index: ws.Index,
-			Read:  readFile,
-			Resolve: func(expr, source string, file *parser.FileNode, line, col int) string {
-				return rt.Completion.ResolveExpressionType(expr, source, protocol.Position{Line: line, Character: col}, file)
-			},
+			Data:     ws.ViewData,
+			Index:    ws.Index,
+			Read:     readFile,
+			Resolver: rt.Completion.Resolver,
 		}
 	}
 	providers := frameworklaravel.NewProviders(s.RootPath, ws.Index)
