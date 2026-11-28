@@ -100,3 +100,28 @@ func TestNamespaceAsAMemberOrRelativeNameStartsNoBlock(t *testing.T) {
 		}
 	}
 }
+
+func TestIsNamespaceDeclaration(t *testing.T) {
+	for src, want := range map[string]bool{
+		"<?php namespace App;":               true,
+		"<?php namespace App\\Http;":         true,
+		"<?php namespace { }":                true,
+		"<?php Route::namespace('Admin');":   false,
+		"<?php $r->namespace('x');":          false,
+		"<?php $r?->namespace('x');":         false,
+		"<?php $r-> /* c */ namespace('x');": false,
+		"<?php namespace\\helper();":         false,
+		"<?php namespace":                    false,
+	} {
+		toks := Tokenize(src)
+		at := -1
+		for i, tok := range toks {
+			if tok.Kind == TokenNamespace {
+				at = i
+			}
+		}
+		if got := IsNamespaceDeclaration(toks, at); got != want {
+			t.Errorf("IsNamespaceDeclaration(%q) = %v, want %v", src, got, want)
+		}
+	}
+}
