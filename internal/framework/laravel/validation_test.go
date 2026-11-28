@@ -572,8 +572,75 @@ func TestValidationExtensionsUnread(t *testing.T) {
 			t.Errorf("%s: removing the file forgets it", name)
 		}
 	}
-	e.IndexFile("file:///y.php", "<?php\n$app->resolving(Foo::class, fn () => null);\nCache::resolver(fn () => null);\n")
+	e.IndexFile("file:///y.php", "<?php\n$app->resolving(Foo::class, fn () => null);\nCache::resolver(fn () => null);\n$app->resolving();\n$app->resolving(Factory::NAME, fn () => null);\n$app->resolving($name::class, fn () => null);\n")
 	if unread() {
 		t.Error("other services' callbacks register no rules")
+	}
+}
+
+const ruleParserSource = `<?php
+namespace Illuminate\Validation;
+class ValidationRuleParser
+{
+    public static function parse($rule) { return match ($rule) { 'X' => 'Required' }; }
+
+    protected static function normalizeRule($rule)
+    {
+        return match ($rule) {
+            'Int' => 'Integer',
+            $short, 'Req' => 'Required',
+            'Gone' => 'Missing',
+            default => $rule,
+        };
+    }
+
+    abstract protected static function declared($rule);
+}
+`
+
+func TestValidationRulesCompleteOnlyWhenEveryRuleIsKnownAndExpandShortNames(t *testing.T) {
+	trait := `<?php
+namespace Illuminate\Validation\Concerns;
+trait ValidatesAttributes
+{
+    public function validateRequired($attribute, $value) {}
+    public function validateInteger($attribute, $value) {}
+}
+`
+	sources := map[string]string{
+		"file:///vendor/ValidatesAttributes.php":  trait,
+		"file:///vendor/ValidationRuleParser.php": ruleParserSource,
+	}
+	idx := symbols.NewIndex()
+	for uri, src := range sources {
+		idx.IndexFileWithSource(uri, src, symbols.SourceVendor)
+	}
+	ext := NewValidationExtensions()
+	v := NewValidationRules(idx, ext, func(uri string) string { return sources[uri] })
+	if v.Complete() {
+		t.Error("complete before the index is ready")
+	}
+	idx.MarkReady()
+	if !v.Complete() {
+		t.Error("not complete with the framework's rules indexed and nothing unread")
+	}
+	for alias, want := range map[string]string{"int": "integer", "req": "required"} {
+		if r, ok := v.Lookup(alias); !ok || r.Name != want {
+			t.Errorf("Lookup(%q) = %+v %v, want %s", alias, r, ok, want)
+		}
+	}
+	for _, name := range []string{"gone", "x"} {
+		if r, ok := v.Lookup(name); ok {
+			t.Errorf("Lookup(%q) = %+v: a short name for a rule that doesn't exist, or outside normalizeRule, is no rule", name, r)
+		}
+	}
+	ext.IndexFile("file:///app/Providers/AppServiceProvider.php", "<?php\nIlluminate\\Support\\Facades\\Validator::extend($name, fn () => true);\n")
+	if v.Complete() {
+		t.Error("complete while a rule registered under a computed name is unknown")
+	}
+
+	empty := NewValidationRules(idx, NewValidationExtensions(), func(string) string { return "" })
+	if r, ok := empty.Lookup("int"); ok {
+		t.Errorf("a rule parser whose source can't be read expands nothing: %+v", r)
 	}
 }

@@ -129,6 +129,7 @@ func TestUnknownValidationRule(t *testing.T) {
 		"aliases":          {`$request->validate(['n' => 'int|bool']);`, ""},
 		"custom rule":      {`$request->validate(['p' => 'phone_number|phoneNumber']);`, ""},
 		"empty segments":   {`$request->validate(['n' => 'required||', 'm' => '']);`, ""},
+		"not rule names":   {`$request->validate(['n' => 'my.rule|two words']);`, ""},
 		"regex piped":      {`$request->validate(['n' => 'required|regex:/^(a|b)$/']);`, ""},
 		"regex in array":   {`$request->validate(['n' => ['regex:/^(a|b)$/', 'nope']]);`, "nope: Unknown validation rule `nope`"},
 		"messages":         {`$request->validate(['n' => 'required'], ['n.required' => 'Needed']);`, ""},
@@ -207,5 +208,11 @@ func BenchmarkUnknownValidationRule(b *testing.B) {
 		if got := c.rule.Check(file, src, c.index); len(got) != 0 {
 			b.Fatal(got)
 		}
+	}
+}
+
+func TestUnknownValidationRuleReportsItsCode(t *testing.T) {
+	if codes := (&UnknownValidationRuleRule{}).Codes(); len(codes) != 1 || codes[0] != rule.UnknownValidationRule {
+		t.Errorf("Codes() = %v", codes)
 	}
 }
