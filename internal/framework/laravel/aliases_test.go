@@ -159,3 +159,34 @@ return [
 		t.Fatalf("configAliases = %v, want %v", got, want)
 	}
 }
+
+func TestConfigAliasesResolveImportedAndNamespacedNames(t *testing.T) {
+	got := configAliases(`<?php
+namespace Config;
+
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Redis as Store;
+
+return [
+    'aliases' => [
+        'Cache' => Cache::class,
+        'Store' => Store::class,
+        'Local' => Local::class,
+        'Nameless' => \::class,
+    ],
+];
+`)
+	want := map[string]string{
+		"Cache": `Illuminate\Support\Facades\Cache`,
+		"Store": `Illuminate\Support\Facades\Redis`,
+		"Local": `Config\Local`,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("configAliases = %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("configAliases[%s] = %q, want %q", k, got[k], v)
+		}
+	}
+}

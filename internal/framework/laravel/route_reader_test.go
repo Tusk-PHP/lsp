@@ -300,8 +300,21 @@ Route::singleton('photos.thumbnail', PhotoController::class)->only('show');`,
 			name: "options that are not literals hide the resource",
 			body: `Route::resource('photos', PhotoController::class)->only($actions);
 Route::resource('users', UserController::class, $options);
-Route::resource($name, PhotoController::class);`,
+Route::resource($name, PhotoController::class);
+Route::resources($map);
+Route::resources([$key => PhotoController::class]);
+Route::resource('a', PhotoController::class, [$key => 1]);
+Route::resource('b', PhotoController::class)->only(['index', $other]);
+Route::resource('c', PhotoController::class)->names('x', 'y');
+Route::resource('d', PhotoController::class)->name($action, 'x');
+Route::resource('e', PhotoController::class)->as('x', 'y');`,
 			want: map[string]string{},
+		},
+		{
+			name: "flags given a value",
+			body: `Route::resource('posts.notes', PhotoController::class)->shallow(false)->only('show');
+Route::singleton('avatar', PhotoController::class)->creatable(true)->only('create');`,
+			want: map[string]string{"posts.notes.show": "", "avatar.create": "/avatar/create"},
 		},
 	}
 	for _, tt := range tests {

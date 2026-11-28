@@ -232,7 +232,8 @@ func parseClassConstExpr(toks []phpToken, file *parser.FileNode) (string, bool) 
 	if len(toks) < 3 || toks[len(toks)-2].Kind != token.DoubleColon || toks[len(toks)-1].Kind != token.Class {
 		return "", false
 	}
-	return resolveImportedClassName(tokenText(toks[:len(toks)-2]), file), true
+	name := resolveImportedClassName(tokenText(toks[:len(toks)-2]), file)
+	return name, name != ""
 }
 
 func tokenText(toks []phpToken) string {
