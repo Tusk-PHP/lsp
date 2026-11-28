@@ -37,7 +37,7 @@ func BuilderMayBeJoined(tokens []parser.Token, doc *scope.Document, line, col in
 	}
 	since := lastValueWritten(binding, at)
 	for _, occurrence := range doc.Occurrences(binding) {
-		start := occurrence.Start
+		start := occurrence.Range.Start
 		if before(start, since) || !before(start, at) {
 			continue
 		}

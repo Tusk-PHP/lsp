@@ -56,7 +56,7 @@ func newInlineVariablePlan(source string, result *parser.ParseResult, doc *scope
 	if binding == nil || binding.Kind != scope.BindingVariable || binding.Scope == nil {
 		return inlineVariablePlan{}, false
 	}
-	if binding.Scope.Kind == scope.ScopeFile {
+	if binding.Scope.Kind == scope.ScopeFile || binding.Scope.AccessesVariablesByName {
 		return inlineVariablePlan{}, false
 	}
 	if len(binding.Assignments) != 1 {

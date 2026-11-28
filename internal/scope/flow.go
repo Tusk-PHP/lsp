@@ -2,9 +2,8 @@ package scope
 
 import (
 	"sort"
-	"strings"
 
-	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -53,10 +52,10 @@ type flowState struct {
 	ifs  map[int]int // `}` token of an if or elseif block → the block
 }
 
-func newFlowState(doc *Document, tokens []parser.Token) *flowState {
+func newFlowState(doc *Document, t *tokens) *flowState {
 	n := 0
-	for i := range tokens {
-		if tokens[i].Kind == parser.TokenOpenBrace {
+	for i := range t.list {
+		if t.kind(i) == token.LeftBrace {
 			n++
 		}
 	}
@@ -73,14 +72,14 @@ func (f *flowState) current() int {
 }
 
 // openBlock records the block opened by the `{` at token i and returns it.
-func (f *flowState) openBlock(tokens []parser.Token, i int) int {
-	b := block{open: tokenRange(tokens[i]).Start, parent: f.current(), prev: -1, next: -1}
-	b.kind, b.prev = f.blockOpener(tokens, i)
+func (f *flowState) openBlock(t *tokens, i int) int {
+	b := block{open: t.rng(i).Start, parent: f.current(), prev: -1, next: -1}
+	b.kind, b.prev = f.blockOpener(t, i)
 	b.head = b.open
 	if b.kind == blockLoop {
-		if c := parser.PrevSignificant(tokens, i-1); c >= 0 && tokens[c].Kind == parser.TokenCloseParen {
-			if o := parser.MatchingOpen(tokens, c); o >= 0 {
-				b.head = tokenRange(tokens[o]).Start
+		if c := t.prev(i - 1); c >= 0 && t.kind(c) == token.RightParen {
+			if o := t.matchingOpen(c); o >= 0 {
+				b.head = t.rng(o).Start
 			}
 		}
 	}
@@ -94,14 +93,14 @@ func (f *flowState) openBlock(tokens []parser.Token, i int) int {
 }
 
 // closeBlock ends the innermost block at the `}` at token i.
-func (f *flowState) closeBlock(tokens []parser.Token, i int) {
+func (f *flowState) closeBlock(t *tokens, i int) {
 	idx := f.current()
 	if idx < 0 {
 		return
 	}
 	f.open = f.open[:len(f.open)-1]
 	b := &f.doc.blocks[idx]
-	b.close = tokenRange(tokens[i]).Start
+	b.close = t.rng(i).Start
 	if b.kind == blockIf || b.kind == blockElseIf {
 		f.ifs[i] = idx
 	}
@@ -116,23 +115,23 @@ func (f *flowState) closeAll(end textpos.Position) {
 }
 
 // keyword records a jump or a case label at token i.
-func (f *flowState) keyword(tokens []parser.Token, i int) {
-	switch strings.ToLower(tokens[i].Value) {
-	case "break", "continue":
+func (f *flowState) keyword(t *tokens, i int) {
+	switch t.kind(i) {
+	case token.Break, token.Continue:
 		target := -1
 		// `break 2` leaves more than the innermost loop or switch.
-		if n := parser.NextSignificant(tokens, i+1); n < 0 || tokens[n].Kind != parser.TokenNumber {
+		if n := t.next(i + 1); n < 0 || (t.kind(n) != token.IntegerLiteral && t.kind(n) != token.FloatLiteral) {
 			target = f.innermost(blockLoop, blockSwitch)
 		}
-		f.doc.jumps = append(f.doc.jumps, flowMark{at: tokenRange(tokens[i]).Start, block: target})
-	case "goto":
-		f.doc.jumps = append(f.doc.jumps, flowMark{at: tokenRange(tokens[i]).Start, block: -1})
-	case "case", "default":
+		f.doc.jumps = append(f.doc.jumps, flowMark{at: t.rng(i).Start, block: target})
+	case token.Goto:
+		f.doc.jumps = append(f.doc.jumps, flowMark{at: t.rng(i).Start, block: -1})
+	case token.Case, token.Default:
 		if idx := f.current(); idx >= 0 {
 			if f.doc.labels == nil {
 				f.doc.labels = map[int][]textpos.Position{}
 			}
-			f.doc.labels[idx] = append(f.doc.labels[idx], tokenRange(tokens[i]).Start)
+			f.doc.labels[idx] = append(f.doc.labels[idx], t.rng(i).Start)
 		}
 	}
 }
@@ -150,39 +149,38 @@ func (f *flowState) innermost(kinds ...blockKind) int {
 
 // blockOpener tells what opens the `{` at token i and, for an elseif or else,
 // the block before it in its chain.
-func (f *flowState) blockOpener(tokens []parser.Token, i int) (blockKind, int) {
-	prev := parser.PrevSignificant(tokens, i-1)
+func (f *flowState) blockOpener(t *tokens, i int) (blockKind, int) {
+	prev := t.prev(i - 1)
 	if prev < 0 {
 		return blockOther, -1
 	}
 	kw := prev
-	if tokens[prev].Kind == parser.TokenCloseParen {
-		open := parser.MatchingOpen(tokens, prev)
+	if t.kind(prev) == token.RightParen {
+		open := t.matchingOpen(prev)
 		if open < 0 {
 			return blockOther, -1
 		}
-		kw = parser.PrevSignificant(tokens, open-1)
+		kw = t.prev(open - 1)
 	}
-	if kw < 0 || tokens[kw].Kind != parser.TokenIdentifier {
+	if kw < 0 {
 		return blockOther, -1
 	}
-	word := strings.ToLower(tokens[kw].Value)
-	switch {
-	case word == "if" && kw != prev:
+	switch word := t.kind(kw); {
+	case word == token.If && kw != prev:
 		// `else if (…) {` continues a chain like `elseif`.
-		if e := parser.PrevSignificant(tokens, kw-1); e >= 0 && tokens[e].Kind == parser.TokenIdentifier && strings.EqualFold(tokens[e].Value, "else") {
-			return blockElseIf, f.chainBefore(tokens, e)
+		if e := t.prev(kw - 1); e >= 0 && t.kind(e) == token.Else {
+			return blockElseIf, f.chainBefore(t, e)
 		}
 		return blockIf, -1
-	case word == "elseif" && kw != prev:
-		return blockElseIf, f.chainBefore(tokens, kw)
-	case word == "else" && kw == prev:
-		return blockElse, f.chainBefore(tokens, kw)
-	case (word == "while" || word == "for" || word == "foreach") && kw != prev, word == "do" && kw == prev:
+	case word == token.ElseIf && kw != prev:
+		return blockElseIf, f.chainBefore(t, kw)
+	case word == token.Else && kw == prev:
+		return blockElse, f.chainBefore(t, kw)
+	case (word == token.While || word == token.For || word == token.Foreach) && kw != prev, word == token.Do && kw == prev:
 		return blockLoop, -1
-	case word == "switch" && kw != prev:
+	case word == token.Switch && kw != prev:
 		return blockSwitch, -1
-	case word == "try" && kw == prev:
+	case word == token.Try && kw == prev:
 		return blockTry, -1
 	}
 	return blockOther, -1
@@ -190,9 +188,9 @@ func (f *flowState) blockOpener(tokens []parser.Token, i int) (blockKind, int) {
 
 // chainBefore returns the if or elseif block whose `}` comes right before the
 // keyword at token kw, or -1.
-func (f *flowState) chainBefore(tokens []parser.Token, kw int) int {
-	c := parser.PrevSignificant(tokens, kw-1)
-	if c < 0 || tokens[c].Kind != parser.TokenCloseBrace {
+func (f *flowState) chainBefore(t *tokens, kw int) int {
+	c := t.prev(kw - 1)
+	if c < 0 || t.kind(c) != token.RightBrace {
 		return -1
 	}
 	if idx, ok := f.ifs[c]; ok {
@@ -291,45 +289,45 @@ type effect struct {
 // assignment takes effect at the end of its expression, so `$x = $x->next()`
 // reads the previous value on its right; a foreach variable, or any other
 // write, right after the variable.
-func writeEffect(tokens []parser.Token, i int, foreach bool) effect {
-	end := tokenRange(tokens[i]).End
+func writeEffect(t *tokens, i int, foreach bool) effect {
+	end := t.rng(i).End
 	e := effect{rhs: end, end: end, foreach: foreach}
-	op := assignmentOperator(tokens, i)
+	op := assignmentOperator(t, i)
 	if foreach || op < 0 {
 		return e
 	}
-	if start := parser.NextSignificant(tokens, op+1); start >= 0 {
-		e.rhs = tokenRange(tokens[start]).Start
+	if start := t.next(op + 1); start >= 0 {
+		e.rhs = t.rng(start).Start
 	}
-	startsStatement := startsStatement(tokens, i)
+	startsStatement := startsStatement(t, i)
 	depth := 0
-	for j := op + 1; j < len(tokens); j++ {
-		switch tokens[j].Kind {
-		case parser.TokenOpenParen, parser.TokenOpenBracket, parser.TokenOpenBrace:
+	for j := op + 1; j < len(t.list); j++ {
+		switch k := t.kind(j); {
+		case opensBracket(k):
 			depth++
 			continue
-		case parser.TokenCloseParen, parser.TokenCloseBracket, parser.TokenCloseBrace:
+		case closesBracket(k):
 			if depth > 0 {
 				depth--
 				continue
 			}
-		case parser.TokenSemicolon:
+		case isStatementEnd(k):
 			if depth > 0 {
 				continue
 			}
-			e.statement = startsStatement && tokens[j].Value == ";"
-		case parser.TokenComma:
+			e.statement = startsStatement && k == token.Semicolon
+		case k == token.Comma:
 			if depth > 0 {
 				continue
 			}
 		default:
 			continue
 		}
-		e.end = tokenRange(tokens[j]).Start
+		e.end = t.rng(j).Start
 		return e
 	}
-	if n := len(tokens); n > 0 {
-		e.end = tokenRange(tokens[n-1]).End
+	if n := len(t.list); n > 0 {
+		e.end = t.rng(n - 1).End
 	}
 	return e
 }
@@ -337,45 +335,39 @@ func writeEffect(tokens []parser.Token, i int, foreach bool) effect {
 // startsStatement reports whether the variable at token i begins a statement:
 // it follows the end of another, a brace, an open tag, a `case …:` or the
 // condition of a braceless control structure.
-func startsStatement(tokens []parser.Token, i int) bool {
-	p := parser.PrevSignificant(tokens, i-1)
+func startsStatement(t *tokens, i int) bool {
+	p := t.prev(i - 1)
 	if p < 0 {
 		return true
 	}
-	switch tokens[p].Kind {
-	case parser.TokenSemicolon, parser.TokenOpenBrace, parser.TokenCloseBrace, parser.TokenPHP, parser.TokenColon, parser.TokenCloseParen:
+	switch t.kind(p) {
+	case token.Semicolon, token.CloseTag, token.LeftBrace, token.RightBrace, token.OpenTag, token.OpenTagWithEcho, token.Colon, token.RightParen, token.Else, token.Do:
 		return true
-	case parser.TokenIdentifier:
-		return strings.EqualFold(tokens[p].Value, "else") || strings.EqualFold(tokens[p].Value, "do")
 	}
 	return false
 }
 
 // isDynamicMemberName reports whether the variable at token i names a member,
 // as in `$this->$key = …`, which assigns to the property, not to $key.
-func isDynamicMemberName(tokens []parser.Token, i int) bool {
-	p := parser.PrevSignificant(tokens, i-1)
-	return p >= 0 && tokens[p].Kind == parser.TokenArrow
+func isDynamicMemberName(t *tokens, i int) bool {
+	p := t.prev(i - 1)
+	return p >= 0 && isMemberAccess(t.kind(p))
 }
 
 // isShortCircuitOperand reports whether the write at token i is on the right
 // of `&&`, `||`, `and`, `or`, `??` or a ternary `?`, possibly in parentheses,
 // so it may not run.
-func isShortCircuitOperand(tokens []parser.Token, i int) bool {
-	p := parser.PrevSignificant(tokens, i-1)
-	for p >= 0 && tokens[p].Kind == parser.TokenOpenParen {
-		p = parser.PrevSignificant(tokens, p-1)
+func isShortCircuitOperand(t *tokens, i int) bool {
+	p := t.prev(i - 1)
+	for p >= 0 && t.kind(p) == token.LeftParen {
+		p = t.prev(p - 1)
 	}
 	if p < 0 {
 		return false
 	}
-	switch tokens[p].Kind {
-	case parser.TokenQuestion:
+	switch t.kind(p) {
+	case token.Question, token.Coalesce, token.BooleanAnd, token.BooleanOr, token.And, token.Or:
 		return true
-	case parser.TokenAmpersand, parser.TokenPipe:
-		return p > 0 && tokens[p-1].Kind == tokens[p].Kind
-	case parser.TokenIdentifier:
-		return strings.EqualFold(tokens[p].Value, "and") || strings.EqualFold(tokens[p].Value, "or")
 	}
 	return false
 }
