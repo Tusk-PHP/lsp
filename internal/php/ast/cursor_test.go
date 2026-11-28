@@ -245,3 +245,25 @@ func TestCallAt(t *testing.T) {
 		t.Errorf("CallAt = %v, %v", call, args)
 	}
 }
+
+func TestReceiverCall(t *testing.T) {
+	for _, c := range []struct {
+		code, function, first string
+		ok                    bool
+	}{
+		{"app('translator')->get('a|');", "app", "translator", true},
+		{"app()->get('a|');", "", "", false},
+		{"app($x)->get('a|');", "app", "", false},
+		{"$fn('x')->get('a|');", "", "x", false},
+		{"$x->get('a|');", "", "", false},
+	} {
+		arg, ok := callArgAt(t, c.code)
+		if !ok {
+			t.Fatalf("no call argument in %q", c.code)
+		}
+		function, first, ok := arg.ReceiverCall()
+		if function != c.function || first != c.first || ok != c.ok {
+			t.Errorf("ReceiverCall(%q) = %q, %q, %v; want %q, %q, %v", c.code, function, first, ok, c.function, c.first, c.ok)
+		}
+	}
+}
