@@ -84,6 +84,7 @@ func TestNativeRulesDeterministicOrder(t *testing.T) {
 		rule.UnusedVariable,
 		rule.Deprecated,
 		rule.Deprecated,
+		rule.Deprecated,
 		rule.UnusedResult,
 		rule.InvalidOverride,
 		rule.ArgumentCountMismatch,

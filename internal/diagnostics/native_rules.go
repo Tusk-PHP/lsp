@@ -19,8 +19,10 @@ func EditRules(opts NativeRulesOptions, shared *checks.Shared) []checks.Rule {
 	typeResolver := MemoizeTypeResolver(opts.TypeResolver)
 	uses := &checks.MemberUseCache{Shared: shared}
 	deprecatedFunctions := &checks.DeprecatedFunctionRule{}
+	deprecatedSyntax := &checks.DeprecatedSyntaxRule{Shared: shared}
 	if opts.BuiltinUnavailableRule != nil {
 		deprecatedFunctions.PHPVersion = opts.BuiltinUnavailableRule.PHPVersion
+		deprecatedSyntax.PHPVersion = opts.BuiltinUnavailableRule.PHPVersion
 	}
 	rules := []checks.Rule{
 		&checks.SyntaxErrorRule{},
@@ -47,6 +49,7 @@ func EditRules(opts NativeRulesOptions, shared *checks.Shared) []checks.Rule {
 	return append(rules,
 		&checks.DeprecatedUsageRule{TypeResolver: typeResolver, Uses: uses},
 		deprecatedFunctions,
+		deprecatedSyntax,
 		&checks.UnusedResultRule{TypeResolver: typeResolver, Uses: uses},
 		&checks.InvalidOverrideRule{},
 		&checks.ArgumentCountRule{Shared: shared, TypeResolver: typeResolver},

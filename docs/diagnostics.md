@@ -47,7 +47,7 @@ disappear a moment later.
 | `unused-private-constant` | A private class constant nothing reads | Hint |
 | `unreachable-code` | Code after a `return`, `throw`, `exit` and the like | Warning |
 | `redundant-union-member` | A union type with a duplicate member, or a member already covered by another (`int\|mixed`) | Warning |
-| `deprecated` | Use of a PHP function deprecated in your PHP version, or of anything marked `#[\Deprecated]` | Warning |
+| `deprecated` | Use of a PHP function, constant, argument, name or construct deprecated in your PHP version (such as `return` in a `finally` block or a class called `let` on PHP 8.6), or of anything marked `#[\Deprecated]` | Warning |
 | `unused-result` | A call to something marked `#[\NoDiscard]` whose result is thrown away (cast to `(void)` to do that on purpose) | Warning |
 | `invalid-override` | A method with `#[\Override]` that doesn't override anything, which PHP refuses to compile | Error |
 | `redundant-nullsafe` | `?->` on a value that can't be null (*on save*) | Info |
