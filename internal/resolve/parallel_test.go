@@ -215,3 +215,31 @@ func BenchmarkResolveManyFiles(b *testing.B) {
 		}
 	})
 }
+
+func BenchmarkFreshResolverOnABigFile(b *testing.B) {
+	idx := symbols.NewIndex()
+	var src strings.Builder
+	src.WriteString("<?php\nnamespace App;\nclass Big {\n    public function run(Big $a) {\n")
+	for p := 0; src.Len() < 512<<10; p++ {
+		src.WriteString("        $pad" + strconv.Itoa(p) + " = $a->run($a);\n")
+	}
+	src.WriteString("    }\n}\n")
+	source := src.String()
+	file := parser.ParseFile(source)
+	pos := textpos.Position{Line: 3, Character: 30}
+	lines := SplitLines(source)
+	e := NewEngine(idx)
+	e.Resolver().ResolveVariableTypeTyped("$a", lines, pos, file)
+	b.Run("same-lines", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			e.Resolver().ResolveVariableTypeTyped("$a", lines, pos, file)
+		}
+	})
+	b.Run("split-per-request", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			e.Resolver().ResolveVariableTypeTyped("$a", SplitLines(source), pos, file)
+		}
+	})
+}
