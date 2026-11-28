@@ -2,9 +2,10 @@ package analyzer
 
 import (
 	"encoding/json"
-	"os"
 	"sort"
 	"strings"
+
+	"github.com/Tusk-PHP/lsp/internal/textpos"
 
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/container"
@@ -833,11 +834,11 @@ func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Posit
 // readFileFromDisk reads a file from disk given its URI.
 func (a *Analyzer) readFileFromDisk(uri string) string {
 	path := symbols.URIToPath(uri)
-	content, err := os.ReadFile(path)
+	content, err := textpos.ReadText(path)
 	if err != nil {
 		return ""
 	}
-	return string(content)
+	return content
 }
 
 // deduplicateLocations removes duplicate locations (same URI, line, character).

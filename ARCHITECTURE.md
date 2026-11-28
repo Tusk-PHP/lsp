@@ -32,7 +32,7 @@ cmd/tusk-php/                 Entry point: flags, subcommands, stdio
 internal/
 ├── protocol/                 1. LSP wire types, no logic
 │
-├── document/                 2. Columns between byte offsets and the client's position encoding
+├── document/                 2. Open documents' text and version, edits, and columns in the client's position encoding
 ├── parser/                      Tokenizer and lightweight AST (fault-tolerant)
 ├── types/                       Type model primitives (named, union, intersection, generic, …)
 ├── phparray/                    PHP array literal helpers
@@ -147,9 +147,9 @@ Requests are handled on the loop, so the loop does no work that grows with the w
 
 ### Documents
 
-Positions inside the server count columns in bytes. `initialize` picks the client's column unit: UTF-8 when the client offers it in `general.positionEncodings`, otherwise UTF-16, the LSP default, and advertises it as `positionEncoding`. Every handler converts request positions to bytes and every position it sends back to the client's unit, in `lsp/positions.go`, against the text of the file each position belongs to (the open document, else the source the index keeps, else the file on disk, read at most once per request). `document.Columns` does the conversion; a line that is ASCII up to the column needs none.
+Positions inside the server count columns in bytes. `initialize` picks the client's column unit: UTF-8 when the client offers it in `general.positionEncodings`, otherwise UTF-16, the LSP default, and advertises it as `positionEncoding`. Every handler converts request positions to bytes and every position it sends back to the client's unit, in `lsp/positions.go`, against the text of the file each position belongs to (the open document, else the source the index keeps, else the file on disk, read at most once per request). `document.Columns` does the conversion; a line that is ASCII up to the column needs none. LSP counts a lone `\r` as a line break, as PHP does; the language core splits lines on `\n`. So the core reads every file through `document.ReadText` and every open document through `document.Store`, both of which give it the text with each lone `\r` turned into `\n`: the same length, so byte offsets agree, and the same lines the client counts. The store keeps the editor's exact text to apply edits to.
 
-Open documents are a map guarded by an `RWMutex`. On `didChange` the server stores the new text and re-indexes the file: synchronously for files up to 5,000 lines, otherwise through a background queue that only ever indexes the latest version. Diagnostics run in the background after a 200 ms pause in typing, one pending run per file; a result for text that has changed since is dropped.
+Open documents live in a `document.Store`: each one's text and version, the path it was opened under (so a refresh finds the editor's copy of a file whatever spelling of its URI the editor used), and whether it has unsaved changes, all under one `RWMutex`. The server asks for incremental sync, so `didChange` carries range edits; the store converts each range from the client's units to bytes and splices the edits into one buffer in order, outside the lock, then swaps the new text in. A range past the last line is clamped to the end of the text. An edit that still doesn't fit (a negative position, an end before its start), or a document written by someone else while the edit was applied, marks the document diverged: the editor is told once, the server reads the file from disk instead, and later range edits are refused until the editor sends the whole text again or reopens it. A save meanwhile shows the saved file but doesn't end it: a keystroke that lands between the editor writing the file and `didSave` would leave the saved text one edit behind the editor's. After each change the server re-indexes the file: synchronously for files up to 5,000 lines, otherwise through a background queue that only ever indexes the latest version. Diagnostics run in the background after a 200 ms pause in typing, one pending run per file, on a snapshot of the document taken once; a result is dropped when the store has written that document since the snapshot (an edit, a save with different text, or a close and reopen), even if the text came back the same. A `didSave` for a document that isn't open is not stored.
 
 ### Methods
 
@@ -228,7 +228,7 @@ The engine stays in this module. Moving it into a module or repository of its ow
 ## Concurrency
 
 - **Index**: `sync.RWMutex`. The lock is held only to read or swap data; files are parsed and their symbols built outside it.
-- **Documents**: a map under an `RWMutex`; large-file indexing goes through a per-document queue that keeps only the latest version.
+- **Documents**: `document.Store`, a map under an `RWMutex` held only to read or swap a document; large-file indexing goes through a per-document queue that keeps only the latest version.
 - **Message loop**: single-threaded, one message at a time.
 - **Background work**: `goSafe` goroutines with panic recovery; their results are checked against the document version before they are used.
 - **Output**: one writer, so frames never interleave.

@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/Tusk-PHP/lsp/internal/textpos"
+
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/container"
@@ -183,8 +185,8 @@ func (ws *Bootstrapped) IndexWorkspace() IndexedFiles {
 		if IsBlade(path) {
 			ws.Index.AddTemplateFile(symbols.PathToURI(path))
 			if ws.ViewData != nil {
-				if content, err := os.ReadFile(path); err == nil {
-					ws.ViewData.IndexFile(symbols.PathToURI(path), string(content))
+				if content, err := textpos.ReadText(path); err == nil {
+					ws.ViewData.IndexFile(symbols.PathToURI(path), content)
 				}
 			}
 			return nil
@@ -198,16 +200,16 @@ func (ws *Bootstrapped) IndexWorkspace() IndexedFiles {
 			ideHelperFiles = append(ideHelperFiles, path)
 			return nil
 		}
-		if content, err := os.ReadFile(path); err == nil {
-			ws.Index.IndexFileWithSource(symbols.PathToURI(path), string(content), symbols.SourceProject)
-			ws.ViewData.IndexFile(symbols.PathToURI(path), string(content))
+		if content, err := textpos.ReadText(path); err == nil {
+			ws.Index.IndexFileWithSource(symbols.PathToURI(path), content, symbols.SourceProject)
+			ws.ViewData.IndexFile(symbols.PathToURI(path), content)
 		}
 		return nil
 	})
 
 	for _, path := range ideHelperFiles {
-		if content, err := os.ReadFile(path); err == nil {
-			ws.Index.IndexIDEHelperFile(symbols.PathToURI(path), string(content))
+		if content, err := textpos.ReadText(path); err == nil {
+			ws.Index.IndexIDEHelperFile(symbols.PathToURI(path), content)
 			ws.logf("Indexed IDE helper: %s", filepath.Base(path))
 		}
 	}
@@ -265,8 +267,8 @@ func (ws *Bootstrapped) IndexComposerDependencies() int {
 		}
 
 		if entry.IsFile {
-			if content, err := os.ReadFile(entry.Path); err == nil {
-				ws.Index.IndexFileWithSource(symbols.PathToURI(entry.Path), string(content), src)
+			if content, err := textpos.ReadText(entry.Path); err == nil {
+				ws.Index.IndexFileWithSource(symbols.PathToURI(entry.Path), content, src)
 				if entry.IsVendor {
 					vendorCount++
 				}
@@ -288,8 +290,8 @@ func (ws *Bootstrapped) IndexComposerDependencies() int {
 			if !strings.HasSuffix(path, ".php") {
 				return nil
 			}
-			if content, err := os.ReadFile(path); err == nil {
-				ws.Index.IndexFileWithSource(symbols.PathToURI(path), string(content), symbols.SourceVendor)
+			if content, err := textpos.ReadText(path); err == nil {
+				ws.Index.IndexFileWithSource(symbols.PathToURI(path), content, symbols.SourceVendor)
 				vendorCount++
 			}
 			return nil

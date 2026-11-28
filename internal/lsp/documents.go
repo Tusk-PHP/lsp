@@ -1,8 +1,12 @@
 package lsp
 
 import (
+	"errors"
 	"os"
 
+	"github.com/Tusk-PHP/lsp/internal/textpos"
+
+	"github.com/Tusk-PHP/lsp/internal/document"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -14,14 +18,7 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 		return
 	}
 	uri := params.TextDocument.URI
-	text := params.TextDocument.Text
-	path := symbols.URIToPath(uri)
-	unsaved := s.index.GetFileSource(symbols.PathToURI(path)) != text
-	s.docMu.Lock()
-	s.documents[uri] = text
-	s.openPaths[path] = uri
-	s.unsaved[uri] = unsaved
-	s.docMu.Unlock()
+	doc := s.openDocument(uri, params.TextDocument.Version, params.TextDocument.Text)
 	if !isPHPDocument(uri) {
 		// Non-PHP documents (composer.json, tsconfig.json, …) are only
 		// stored so providers that read source — e.g. composer-hover —
@@ -29,10 +26,15 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 		return
 	}
 	s.docIndex.reopened(uri)
-	s.indexDocumentMaybeAsync(uri, text)
+	s.indexDocumentMaybeAsync(uri, doc.Text)
 	if s.cfg.DiagnosticsEnabled {
-		s.publishDiagnostics(uri, text)
+		s.publishDiagnostics(doc)
 	}
+}
+
+func (s *Server) openDocument(uri string, version int, text string) document.Snapshot {
+	unsaved := s.index.GetFileSource(symbols.PathToURI(symbols.URIToPath(uri))) != textpos.CoreText(text)
+	return s.docs.Open(uri, version, text, unsaved)
 }
 
 func (s *Server) handleDidChange(msg *jsonRPCMessage) {
@@ -40,20 +42,47 @@ func (s *Server) handleDidChange(msg *jsonRPCMessage) {
 	if !ok {
 		return
 	}
-	if len(params.ContentChanges) > 0 {
-		source := params.ContentChanges[len(params.ContentChanges)-1].Text
-		uri := params.TextDocument.URI
-		s.docMu.Lock()
-		s.documents[uri] = source
-		s.unsaved[uri] = true
-		s.docMu.Unlock()
-		if !isPHPDocument(uri) {
-			return
-		}
-		s.indexDocumentMaybeAsync(uri, source)
-		if s.cfg.DiagnosticsEnabled {
-			s.scheduleDiagnostics(uri)
-		}
+	if len(params.ContentChanges) == 0 {
+		return
+	}
+	uri := params.TextDocument.URI
+	doc, err := s.docs.Change(uri, params.TextDocument.Version, s.encoding, documentChanges(params.ContentChanges))
+	switch {
+	case errors.Is(err, document.ErrDiverged):
+		return
+	case errors.Is(err, document.ErrNotOpen):
+		s.logger.Printf("didChange: %v", err)
+		return
+	case err != nil:
+		s.logger.Printf("didChange: %v", err)
+		s.sendNotification("window/showMessage", map[string]interface{}{
+			"type":    protocol.MessageTypeError,
+			"message": "Tusk PHP lost track of a document's text and reads it from disk until you close and reopen it: " + err.Error(),
+		})
+		s.showDivergedFromDisk(uri)
+		return
+	}
+	s.documentChanged(doc)
+}
+
+func (s *Server) showDivergedFromDisk(uri string) {
+	content, err := os.ReadFile(symbols.URIToPath(uri))
+	if err != nil {
+		s.logger.Printf("didChange: reading %s from disk while its text is unknown: %v; keeping the last text that applied", uri, err)
+		return
+	}
+	if doc, ok := s.docs.ShowDiverged(uri, string(content)); ok {
+		s.documentChanged(doc)
+	}
+}
+
+func (s *Server) documentChanged(doc document.Snapshot) {
+	if !isPHPDocument(doc.URI) {
+		return
+	}
+	s.indexDocumentMaybeAsync(doc.URI, doc.Text)
+	if s.cfg.DiagnosticsEnabled {
+		s.scheduleDiagnostics(doc.URI)
 	}
 }
 
@@ -72,14 +101,7 @@ func (s *Server) handleDidClose(msg *jsonRPCMessage) {
 	}
 	uri := params.TextDocument.URI
 	path := symbols.URIToPath(uri)
-	s.docMu.Lock()
-	delete(s.documents, uri)
-	if s.openPaths[path] == uri {
-		delete(s.openPaths, path)
-	}
-	unsaved := s.unsaved[uri]
-	delete(s.unsaved, uri)
-	s.docMu.Unlock()
+	unsaved := s.docs.Close(uri)
 	s.blade.forget(uri)
 	s.cancelDiagnostics(uri)
 	if s.analysis != nil {
@@ -104,16 +126,15 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 		return
 	}
 	uri := params.TextDocument.URI
-	s.docMu.Lock()
-	if _, open := s.documents[uri]; open {
-		s.unsaved[uri] = false
-	}
-	if params.Text != nil {
-		s.documents[uri] = *params.Text
-	}
-	s.docMu.Unlock()
-	if params.Text != nil && isPHPDocument(uri) {
-		s.indexDocumentMaybeAsync(uri, *params.Text)
+	if text, ok := s.savedText(uri, params.Text); ok {
+		if !s.docs.Save(uri, text) {
+			s.logger.Printf("didSave: %s is not open, so its saved text is not kept as an open document", uri)
+		}
+		if isPHPDocument(uri) {
+			s.indexDocumentMaybeAsync(uri, textpos.CoreText(text))
+		}
+	} else {
+		s.docs.MarkSaved(uri)
 	}
 	if !isPHPDocument(uri) {
 		return
@@ -130,30 +151,45 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 			if !workspace.IsTemplate(uri) {
 				s.analysis.RunTools(uri, filePath)
 			}
-			source := s.getDocument(uri)
-			s.analysis.Saved(uri, source)
-			s.publishDiagnostics(uri, source)
+			doc, open := s.docs.Get(uri)
+			if !open {
+				return
+			}
+			s.analysis.Saved(uri, doc.Text)
+			s.publishDiagnostics(doc)
 		})
 	}
+}
+
+func (s *Server) savedText(uri string, sent *string) (string, bool) {
+	if sent != nil {
+		return *sent, true
+	}
+	if doc, open := s.docs.Get(uri); !open || !doc.Diverged() {
+		return "", false
+	}
+	content, err := os.ReadFile(symbols.URIToPath(uri))
+	if err != nil {
+		s.logger.Printf("didSave: reading %s, whose text diverged from the editor's, from disk: %v", uri, err)
+		return "", false
+	}
+	return string(content), true
 }
 
 // getDocumentReader returns a function that reads document content by URI,
 // falling back to disk if the document isn't open in the editor.
 func (s *Server) getDocumentReader() func(string) string {
 	return func(uri string) string {
-		s.docMu.RLock()
-		source, ok := s.documents[uri]
-		s.docMu.RUnlock()
-		if ok {
+		if source, ok := s.docs.Text(uri); ok {
 			return source
 		}
 		// Fall back to reading from disk
 		path := symbols.URIToPath(uri)
-		content, err := os.ReadFile(path)
+		content, err := textpos.ReadText(path)
 		if err != nil {
 			return ""
 		}
-		return string(content)
+		return content
 	}
 }
 
@@ -164,9 +200,7 @@ func (s *Server) openDocumentReader() func(string) string {
 }
 
 func (s *Server) getDocument(uri string) string {
-	s.docMu.RLock()
-	source := s.documents[uri]
-	s.docMu.RUnlock()
+	source, _ := s.docs.Text(uri)
 	return source
 }
 
@@ -175,14 +209,21 @@ func (s *Server) getDocument(uri string) string {
 // that depended on a populated index (or were soft-moded during warm-up)
 // produce their authoritative result.
 func (s *Server) republishOpenDocuments() {
-	s.docMu.RLock()
-	pairs := make([][2]string, 0, len(s.documents))
-	for uri, source := range s.documents {
-		pairs = append(pairs, [2]string{uri, source})
+	for _, doc := range s.docs.All() {
+		s.publishDiagnostics(doc)
 	}
-	s.docMu.RUnlock()
+}
 
-	for _, p := range pairs {
-		s.publishDiagnostics(p[0], p[1])
+func documentChanges(events []protocol.TextDocumentContentChangeEvent) []document.Change {
+	changes := make([]document.Change, len(events))
+	for i, e := range events {
+		changes[i].Text = e.Text
+		if r := e.Range; r != nil {
+			changes[i].Range = &document.Range{
+				Start: document.Position{Line: r.Start.Line, Character: r.Start.Character},
+				End:   document.Position{Line: r.End.Line, Character: r.End.Character},
+			}
+		}
 	}
+	return changes
 }

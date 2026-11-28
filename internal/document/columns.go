@@ -46,8 +46,32 @@ type lineCursor struct {
 	units int
 }
 
+func newLineCursor(line int, text string) lineCursor {
+	ascii := asciiPrefix(text)
+	return lineCursor{line: line, text: text, ascii: ascii, bytes: ascii, units: ascii}
+}
+
 func (at *lineCursor) rewind() {
 	at.bytes, at.units = at.ascii, at.ascii
+}
+
+func (at *lineCursor) fromClient(col int) int {
+	if col <= at.ascii {
+		return col
+	}
+	if col < at.units {
+		at.rewind()
+	}
+	for at.bytes < len(at.text) {
+		r, size := utf8.DecodeRuneInString(at.text[at.bytes:])
+		units := utf16.RuneLen(r)
+		if at.units+units > col {
+			return at.bytes
+		}
+		at.units += units
+		at.bytes += size
+	}
+	return len(at.text) + col - at.units
 }
 
 func NewColumns(text string, enc Encoding) *Columns {
@@ -75,22 +99,10 @@ func (c *Columns) ToClient(line, col int) int {
 
 func (c *Columns) FromClient(line, col int) int {
 	at, ok := c.cursor(line, col)
-	if !ok || col <= at.ascii {
+	if !ok {
 		return col
 	}
-	if col < at.units {
-		at.rewind()
-	}
-	for at.bytes < len(at.text) {
-		r, size := utf8.DecodeRuneInString(at.text[at.bytes:])
-		units := utf16.RuneLen(r)
-		if at.units+units > col {
-			return at.bytes
-		}
-		at.units += units
-		at.bytes += size
-	}
-	return len(at.text) + col - at.units
+	return at.fromClient(col)
 }
 
 func (c *Columns) cursor(line, col int) (*lineCursor, bool) {
@@ -111,9 +123,7 @@ func (c *Columns) cursor(line, col int) (*lineCursor, bool) {
 		if line+1 < len(c.starts) {
 			end = c.starts[line+1] - 1
 		}
-		text := c.text[c.starts[line]:end]
-		ascii := asciiPrefix(text)
-		c.at = lineCursor{line: line, text: text, ascii: ascii, bytes: ascii, units: ascii}
+		c.at = newLineCursor(line, c.text[c.starts[line]:end])
 	}
 	return &c.at, true
 }

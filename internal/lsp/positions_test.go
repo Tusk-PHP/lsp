@@ -166,6 +166,7 @@ func TestPositionsAfterNonASCIIText(t *testing.T) {
 			c.checkDocumentLink()
 			c.checkDiagnostics()
 			c.checkCompletionAfterChange()
+			c.checkIncrementalChange()
 		})
 	}
 }
@@ -367,4 +368,31 @@ func TestCopyReferenceCommandConversion(t *testing.T) {
 		}()
 		copyPositions().convertCommand(copyURI, command(`"not a position"`))
 	})
+}
+
+func (c *positionsCase) checkIncrementalChange() {
+	start := c.col(c.useSrc, 2, "$shop->to")
+	end := c.lineEnd(c.useSrc, 2)
+	want := "<?php\nuse App\\Shop;\n$shop = new Shop(); $msg = 'Größe 😀 漢字'; $shop->total();\n// é\n"
+	c.h.notify("textDocument/didChange", map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": c.use, "version": 3},
+		"contentChanges": []interface{}{
+			map[string]interface{}{
+				"range": map[string]interface{}{"start": map[string]interface{}{"line": 2, "character": start}, "end": map[string]interface{}{"line": 2, "character": end}},
+				"text":  "$shop->total();\n// x",
+			},
+			map[string]interface{}{
+				"range": map[string]interface{}{"start": map[string]interface{}{"line": 3, "character": 3}, "end": map[string]interface{}{"line": 3, "character": 4}},
+				"text":  "é",
+			},
+		},
+	})
+	c.useSrc = want
+	loc, _ := c.request("textDocument/definition", map[string]interface{}{"position": c.at(2, "total();")}).(map[string]interface{})
+	if got, _ := c.h.server.docs.Text(c.use); got != want {
+		c.t.Fatalf("after the incremental change the server has\n%q\nwant\n%q", got, want)
+	}
+	if loc["uri"] != c.shop {
+		c.t.Errorf("definition after the incremental change: %v", loc)
+	}
 }

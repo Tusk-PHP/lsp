@@ -227,7 +227,8 @@ type WorkspaceSymbolParams struct {
 
 // TextDocumentContentChangeEvent describes a content change event.
 type TextDocumentContentChangeEvent struct {
-	Text string `json:"text"`
+	Range *Range `json:"range,omitempty"`
+	Text  string `json:"text"`
 }
 
 // DidOpenTextDocumentParams is for textDocument/didOpen.
@@ -340,11 +341,19 @@ type ServerInfo struct {
 	Version string `json:"version"`
 }
 
+type TextDocumentSyncKind int
+
+const (
+	TextDocumentSyncNone TextDocumentSyncKind = iota
+	TextDocumentSyncFull
+	TextDocumentSyncIncremental
+)
+
 // TextDocumentSyncOptions describes how text document syncing works.
 type TextDocumentSyncOptions struct {
-	OpenClose bool         `json:"openClose"`
-	Change    int          `json:"change"` // 0=None, 1=Full, 2=Incremental
-	Save      *SaveOptions `json:"save,omitempty"`
+	OpenClose bool                 `json:"openClose"`
+	Change    TextDocumentSyncKind `json:"change"`
+	Save      *SaveOptions         `json:"save,omitempty"`
 }
 
 // SaveOptions for textDocument/didSave notifications.

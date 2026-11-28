@@ -188,6 +188,9 @@ func TestServerInitialize(t *testing.T) {
 	if caps["hoverProvider"] != true {
 		t.Error("expected hoverProvider to be true")
 	}
+	if sync, _ := caps["textDocumentSync"].(map[string]interface{}); sync["change"] != float64(2) {
+		t.Errorf("expected incremental document sync, got %v", caps["textDocumentSync"])
+	}
 	if caps["completionProvider"] == nil {
 		t.Error("expected completionProvider")
 	}

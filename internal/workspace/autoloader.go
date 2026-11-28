@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/textpos"
+
 	"github.com/Tusk-PHP/lsp/internal/composer"
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
@@ -43,7 +45,7 @@ func (l autoloader) Load(fqn string) (symbols.LoadedClass, bool) {
 		if !ok || !file.IsVendor && !l.ws.walkerReaches(path) {
 			continue
 		}
-		content, err := os.ReadFile(path)
+		content, err := textpos.ReadText(path)
 		if err != nil {
 			continue
 		}
@@ -54,7 +56,7 @@ func (l autoloader) Load(fqn string) (symbols.LoadedClass, bool) {
 			}
 			from = symbols.SourceProject
 		}
-		return symbols.LoadedClass{URI: symbols.PathToURI(path), Source: string(content), From: from}, true
+		return symbols.LoadedClass{URI: symbols.PathToURI(path), Source: content, From: from}, true
 	}
 	return symbols.LoadedClass{}, false
 }
