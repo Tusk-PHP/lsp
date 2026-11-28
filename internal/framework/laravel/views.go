@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 type View struct {
@@ -113,7 +114,7 @@ func collectViews(root string) []View {
 		if !ok {
 			return nil
 		}
-		uri := "file://" + filepath.ToSlash(path)
+		uri := symbols.PathToURI(path)
 		views = append(views, View{Name: name, URI: uri})
 		if alias := aliasViewName(name); alias != "" {
 			views = append(views, View{Name: alias, URI: uri})
@@ -312,7 +313,7 @@ func (v *Views) ViewURI(name string) (string, bool) {
 func (v *Views) addFromDisk(name, base string) (string, bool) {
 	for _, ext := range []string{".blade.php", ".php"} {
 		if info, err := os.Stat(base + ext); err == nil && !info.IsDir() {
-			view := View{Name: name, URI: "file://" + filepath.ToSlash(base+ext)}
+			view := View{Name: name, URI: symbols.PathToURI(base + ext)}
 			v.mu.Lock()
 			if _, ok := v.byName[name]; ok {
 				v.mu.Unlock()

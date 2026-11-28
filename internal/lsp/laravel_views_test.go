@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func laravelLSPTestdataPath() string {
@@ -20,7 +22,7 @@ func TestLaravelViewCompletionAndDefinition(t *testing.T) {
 
 	root := laravelLSPTestdataPath()
 	initID := h.send("initialize", map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": map[string]interface{}{},
 		"processId":    nil,
 	})
@@ -28,7 +30,7 @@ func TestLaravelViewCompletionAndDefinition(t *testing.T) {
 	h.notify("initialized", map[string]interface{}{})
 	time.Sleep(500 * time.Millisecond)
 
-	uri := "file://" + filepath.ToSlash(filepath.Join(root, "app", "Providers", "FortifyServiceProvider.php"))
+	uri := symbols.PathToURI(filepath.Join(root, "app", "Providers", "FortifyServiceProvider.php"))
 	sourceBytes, err := os.ReadFile(filepath.Join(root, "app", "Providers", "FortifyServiceProvider.php"))
 	if err != nil {
 		t.Fatalf("failed to read Laravel provider fixture: %v", err)

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -821,5 +822,5 @@ func translationPathToURI(path string) string {
 	if a, err := filepath.Abs(path); err == nil {
 		abs = a
 	}
-	return "file://" + filepath.ToSlash(abs)
+	return symbols.PathToURI(abs)
 }

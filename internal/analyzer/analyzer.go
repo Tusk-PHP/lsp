@@ -1898,7 +1898,7 @@ func (a *Analyzer) MoveToNamespace(uri, source, targetNS string, autoloadEntries
 				RenameFile: &protocol.RenameFile{
 					Kind:   "rename",
 					OldURI: uri,
-					NewURI: "file://" + newPath,
+					NewURI: symbols.PathToURI(newPath),
 				},
 			})
 		}

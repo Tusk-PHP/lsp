@@ -18,6 +18,7 @@ import (
 
 	"github.com/Tusk-PHP/lsp/internal/rule"
 	"github.com/Tusk-PHP/lsp/internal/session"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
@@ -99,7 +100,7 @@ func runCheck(args []string, stdout, stderr io.Writer) (int, error) {
 			continue
 		}
 		rel := relativePath(root, path)
-		for _, d := range sess.AnalyzeAll("file://"+path, string(data)) {
+		for _, d := range sess.AnalyzeAll(symbols.PathToURI(path), string(data)) {
 			all = append(all, finding{
 				Path:     rel,
 				Line:     d.Range.Start.Line + 1,

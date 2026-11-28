@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // initHarnessWithCaps creates an initialized harness using the given capabilities map.
@@ -15,7 +16,7 @@ func initHarnessWithCaps(t *testing.T, caps map[string]interface{}) *lspHarness 
 	h := newHarness(t)
 	root := testdataPath()
 	initID := h.send("initialize", map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": caps,
 		"processId":    nil,
 	})

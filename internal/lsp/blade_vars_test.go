@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 const varsController = `<?php
@@ -62,12 +64,12 @@ func varsWorkspace(t *testing.T) (h *lspHarness, root, viewURI, layoutURI string
 	}
 	h = newHarness(t)
 	h.readResponse(h.send("initialize", map[string]interface{}{
-		"rootUri": "file://" + root, "capabilities": map[string]interface{}{}, "processId": nil,
+		"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}, "processId": nil,
 	}))
 	h.notify("initialized", map[string]interface{}{})
 	time.Sleep(500 * time.Millisecond)
-	viewURI = "file://" + filepath.ToSlash(filepath.Join(root, "resources", "views", "profile", "show.blade.php"))
-	layoutURI = "file://" + filepath.ToSlash(filepath.Join(root, "resources", "views", "layouts", "app.blade.php"))
+	viewURI = symbols.PathToURI(filepath.Join(root, "resources", "views", "profile", "show.blade.php"))
+	layoutURI = symbols.PathToURI(filepath.Join(root, "resources", "views", "layouts", "app.blade.php"))
 	for uri, text := range map[string]string{viewURI: varsView, layoutURI: varsLayout} {
 		h.notify("textDocument/didOpen", map[string]interface{}{
 			"textDocument": map[string]interface{}{"uri": uri, "languageId": "blade", "version": 1, "text": text},
@@ -143,7 +145,7 @@ func TestBladeViewVariableDefinition(t *testing.T) {
 
 	var locs []testLocation
 	request(t, h, "textDocument/definition", viewURI, posOf(t, varsView, "$user", 2), nil, &locs)
-	controller := "file://" + filepath.ToSlash(filepath.Join(root, "app", "Http", "Controllers", "ProfileController.php"))
+	controller := symbols.PathToURI(filepath.Join(root, "app", "Http", "Controllers", "ProfileController.php"))
 	want := posOf(t, varsController, "'user'", 1)
 	if len(locs) != 1 || locs[0].URI != controller || locs[0].Range.Start.Line != want["line"] || locs[0].Range.Start.Character != want["character"] {
 		t.Fatalf("expected the 'user' key at %v, got %+v", want, locs)
@@ -191,10 +193,10 @@ class ProfileController
 	}
 	h := newHarness(t)
 	defer h.close()
-	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": "file://" + root, "capabilities": map[string]interface{}{}, "processId": nil}))
+	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}, "processId": nil}))
 	h.notify("initialized", map[string]interface{}{})
 	time.Sleep(500 * time.Millisecond)
-	uri := "file://" + filepath.ToSlash(filepath.Join(root, "resources", "views", "profile", "show.blade.php"))
+	uri := symbols.PathToURI(filepath.Join(root, "resources", "views", "profile", "show.blade.php"))
 	h.notify("textDocument/didOpen", map[string]interface{}{
 		"textDocument": map[string]interface{}{"uri": uri, "languageId": "blade", "version": 1, "text": view},
 	})
@@ -280,12 +282,12 @@ class OrderShipped extends Mailable
 	}
 	h := newHarness(t)
 	defer h.close()
-	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": "file://" + root, "capabilities": map[string]interface{}{}, "processId": nil}))
+	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}, "processId": nil}))
 	h.notify("initialized", map[string]interface{}{})
 	time.Sleep(800 * time.Millisecond)
 
 	hover := func(rel, text, needle string) string {
-		uri := "file://" + filepath.ToSlash(filepath.Join(root, filepath.FromSlash(rel)))
+		uri := symbols.PathToURI(filepath.Join(root, filepath.FromSlash(rel)))
 		h.notify("textDocument/didOpen", map[string]interface{}{
 			"textDocument": map[string]interface{}{"uri": uri, "languageId": "blade", "version": 1, "text": text},
 		})
@@ -303,7 +305,7 @@ class OrderShipped extends Mailable
 		t.Errorf("a Mailable's public property: %q", v)
 	}
 	// The property's class is resolved through the Mailable's imports.
-	uri := "file://" + filepath.ToSlash(filepath.Join(root, "resources", "views", "mail", "shipped.blade.php"))
+	uri := symbols.PathToURI(filepath.Join(root, "resources", "views", "mail", "shipped.blade.php"))
 	var member struct{ Contents struct{ Value string } }
 	request(t, h, "textDocument/hover", uri, posOf(t, mailView, "->id", 2), nil, &member)
 	if !strings.Contains(member.Contents.Value, "int") {

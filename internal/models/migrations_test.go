@@ -69,7 +69,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class User extends Model {}
 `), 0644)
-	idx.IndexFile("file://"+modelPath, `<?php
+	idx.IndexFile(symbols.PathToURI(modelPath), `<?php
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class User extends Model {}
@@ -153,7 +153,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class Post extends Model {}
 `), 0644)
-	idx.IndexFile("file://"+modelPath, `<?php
+	idx.IndexFile(symbols.PathToURI(modelPath), `<?php
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class Post extends Model {}
@@ -203,7 +203,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class User extends Model {}
 `), 0644)
-	idx.IndexFile("file://"+modelPath, `<?php
+	idx.IndexFile(symbols.PathToURI(modelPath), `<?php
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class User extends Model {}
@@ -257,7 +257,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class User extends Model {}
 `), 0644)
-	idx.IndexFile("file://"+modelPath, `<?php
+	idx.IndexFile(symbols.PathToURI(modelPath), `<?php
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class User extends Model {}
@@ -303,7 +303,7 @@ class User extends Model {
 }
 `
 	os.WriteFile(modelPath, []byte(modelSource), 0644)
-	idx.IndexFile("file://"+modelPath, modelSource)
+	idx.IndexFile(symbols.PathToURI(modelPath), modelSource)
 
 	AnalyzeMigrations(idx, tmpDir)
 
@@ -350,7 +350,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class Post extends Model {}
 `), 0644)
-	idx.IndexFile("file://"+modelPath, `<?php
+	idx.IndexFile(symbols.PathToURI(modelPath), `<?php
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class Post extends Model {}

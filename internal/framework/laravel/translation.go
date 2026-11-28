@@ -2,12 +2,12 @@ package laravel
 
 import (
 	"encoding/json"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -298,7 +298,7 @@ func parsePHPTranslationFile(path, locale, prefix string) []TranslationEntry {
 	parser := &phpTranslationParser{
 		src:        src,
 		path:       path,
-		uri:        pathToURI(path),
+		uri:        symbols.PathToURI(path),
 		lineStarts: lineStarts(src),
 	}
 	parser.parseArray(open, prefix)
@@ -320,7 +320,7 @@ func discoverJSONTranslationEntries(path string) []TranslationEntry {
 	}
 
 	locale := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	uri := pathToURI(path)
+	uri := symbols.PathToURI(path)
 	src := string(data)
 
 	keys := make([]string, 0, len(raw))
@@ -532,10 +532,6 @@ func offsetPosition(starts []int, offset int) textpos.Position {
 		Line:      line,
 		Character: offset - starts[line],
 	}
-}
-
-func pathToURI(path string) string {
-	return (&url.URL{Scheme: "file", Path: filepath.ToSlash(path)}).String()
 }
 
 func min(a, b int) int {

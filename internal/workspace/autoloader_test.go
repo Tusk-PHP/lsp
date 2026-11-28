@@ -81,7 +81,7 @@ func TestClassLoaderUsesTheOnDiskCaseOfTheFile(t *testing.T) {
 	root := laravelModelsProject(t)
 	ws := loadingWorkspace(root, nil)
 	post := ws.Index.LookupFold(`App\models\post`, nil)
-	want := "file://" + filepath.Join(root, "app", "Models", "Post.php")
+	want := symbols.PathToURI(filepath.Join(root, "app", "Models", "Post.php"))
 	if post == nil || post.URI != want {
 		t.Fatalf("a name in another case loads the file under the URI the workspace walk gives it, %s: %+v", want, post)
 	}

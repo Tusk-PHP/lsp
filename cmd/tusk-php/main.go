@@ -216,10 +216,7 @@ func runIntrospect(args []string) error {
 	}
 	source := string(srcBytes)
 
-	// Derive the URI that the index uses as a key.
-	// workspace.Build indexes files with "file://" + absPath, which on Unix
-	// produces "file:///abs/path/file.php".
-	uri := "file://" + absFile
+	uri := symbols.PathToURI(absFile)
 
 	// Run the native rules synchronously, wired as the server wires them, for
 	// a self-consistent dump.

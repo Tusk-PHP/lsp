@@ -195,7 +195,7 @@ type providerScan struct {
 }
 
 func (ps *providerScan) scan(src string) {
-	uri := "file://" + filepath.ToSlash(ps.path)
+	uri := symbols.PathToURI(ps.path)
 	all := parser.Tokenize(src)
 	toks := make([]parser.Token, 0, len(all))
 	for _, t := range all {

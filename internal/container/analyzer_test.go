@@ -290,3 +290,37 @@ func TestParseComposerAutoload(t *testing.T) {
 		}
 	})
 }
+
+func TestSymfonyBindingsPointAtTheFileThatDefinesThem(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "my app")
+	yamlPath := filepath.Join(dir, "config", "services.yaml")
+	classPath := filepath.Join(dir, "src", "Service", "Mailer.php")
+	for path, content := range map[string]string{
+		yamlPath:  "services:\n    Psr\\Log\\LoggerInterface:\n        class: App\\Log\\Logger\n",
+		classPath: "<?php\nnamespace App\\Service;\nuse App\\Contract\\SendsMail;\nclass Mailer implements SendsMail {}\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ca := NewContainerAnalyzer(symbols.NewIndex(), dir, "symfony")
+	ca.Analyze()
+
+	for _, tc := range []struct{ service, file string }{
+		{`Psr\Log\LoggerInterface`, yamlPath},
+		{`App\Service\Mailer`, classPath},
+		{`App\Contract\SendsMail`, classPath},
+	} {
+		b := ca.LookupBinding(tc.service)
+		if b == nil {
+			t.Errorf("no binding for %s", tc.service)
+			continue
+		}
+		if want := symbols.PathToURI(tc.file); b.DefinitionURI != want {
+			t.Errorf("%s is defined at %q, want %q", tc.service, b.DefinitionURI, want)
+		}
+	}
+}

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func writeFiles(t *testing.T, root string, files map[string]string) {
@@ -31,7 +33,7 @@ func TestAnonymousComponents(t *testing.T) {
 		"resources/views/livewire/counter.blade.php":               "",
 	})
 	read := func(uri string) string {
-		data, _ := os.ReadFile(strings.TrimPrefix(uri, "file://"))
+		data, _ := os.ReadFile(symbols.URIToPath(uri))
 		return string(data)
 	}
 	c := NewComponents(root, nil, nil, read)
@@ -70,5 +72,20 @@ func TestLivewireLocationsUnreadable(t *testing.T) {
 func TestStudlyPath(t *testing.T) {
 	if got := studlyPath("forms.input-group"); got != `Forms\InputGroup` {
 		t.Fatalf("studlyPath: %s", got)
+	}
+}
+
+func TestClassComponentWrittenSinceTheIndexWasBuilt(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "my app")
+	writeFiles(t, root, map[string]string{
+		"app/View/Components/Forms/Button.php": "<?php\nnamespace App\\View\\Components\\Forms;\nclass Button {}\n",
+	})
+	c := NewComponents(root, symbols.NewIndex(), nil, nil)
+	comp, ok := c.Component("forms.button")
+	if !ok {
+		t.Fatal("a class component on disk but not yet indexed is found")
+	}
+	if want := symbols.PathToURI(filepath.Join(root, "app", "View", "Components", "Forms", "Button.php")); comp.URI != want {
+		t.Errorf("component URI = %q, want %q", comp.URI, want)
 	}
 }

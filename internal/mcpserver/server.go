@@ -908,7 +908,7 @@ func (s *Service) projectDiagnostics(path string) (DiagnosticsOutput, error) {
 		if err != nil {
 			continue
 		}
-		uri := "file://" + absPath
+		uri := symbols.PathToURI(absPath)
 		diags := rt.Session.AnalyzeAll(uri, string(data))
 		out.Files = append(out.Files, FileDiagnostics{
 			Path:        normalizedRelativePath(s.RootPath, absPath),

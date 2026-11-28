@@ -86,7 +86,7 @@ func collectCorpus() ([]corpusEntry, error) {
 				// Skip unreadable files; they are not a harness failure.
 				return nil
 			}
-			uri := pathToURI(path)
+			uri := symbols.PathToURI(path)
 			entries = append(entries, corpusEntry{
 				path:   path,
 				uri:    uri,
@@ -99,16 +99,6 @@ func collectCorpus() ([]corpusEntry, error) {
 		}
 	}
 	return entries, nil
-}
-
-// pathToURI converts an absolute file-system path to a file:// URI.
-func pathToURI(path string) string {
-	path = filepath.ToSlash(path)
-	if !strings.HasPrefix(path, "/") {
-		// Windows drive letter: /C:/...
-		path = "/" + path
-	}
-	return "file://" + path
 }
 
 // buildIndex constructs a symbols.Index over the provided corpus entries.

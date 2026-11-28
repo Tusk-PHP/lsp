@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 const componentClass = `<?php
@@ -59,11 +61,11 @@ func componentsWorkspace(t *testing.T, page string) (h *lspHarness, root, uri st
 	}
 	h = newHarness(t)
 	h.readResponse(h.send("initialize", map[string]interface{}{
-		"rootUri": "file://" + root, "capabilities": map[string]interface{}{}, "processId": nil,
+		"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}, "processId": nil,
 	}))
 	h.notify("initialized", map[string]interface{}{})
 	time.Sleep(500 * time.Millisecond)
-	uri = "file://" + filepath.ToSlash(filepath.Join(root, "resources", "views", "page.blade.php"))
+	uri = symbols.PathToURI(filepath.Join(root, "resources", "views", "page.blade.php"))
 	h.notify("textDocument/didOpen", map[string]interface{}{
 		"textDocument": map[string]interface{}{"uri": uri, "languageId": "blade", "version": 1, "text": page},
 	})
@@ -102,7 +104,7 @@ func TestBladeComponentDefinitionAndHover(t *testing.T) {
 
 	var locs []testLocation
 	request(t, h, "textDocument/definition", uri, posOf(t, componentPage, "alert", 1), nil, &locs)
-	classURI := "file://" + filepath.ToSlash(filepath.Join(root, "app", "View", "Components", "Alert.php"))
+	classURI := symbols.PathToURI(filepath.Join(root, "app", "View", "Components", "Alert.php"))
 	if len(locs) == 0 || locs[0].URI != classURI || locs[0].Range.Start.Line != 6 {
 		t.Fatalf("expected class Alert, got %+v", locs)
 	}

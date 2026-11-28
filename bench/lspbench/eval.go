@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Tusk-PHP/lsp/internal/document"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // Status values for a graded case.
@@ -243,7 +244,7 @@ func (s *session) grade(c Case, raw json.RawMessage, res *CaseResult, src string
 			return
 		}
 		for _, l := range locs {
-			p := uriToPath(l.URI)
+			p := symbols.URIToPath(l.URI)
 			if c.Expect.TargetFile != "" && !strings.HasSuffix(filepath.ToSlash(p), c.Expect.TargetFile) {
 				continue
 			}
@@ -330,7 +331,7 @@ func (s *session) grade(c Case, raw json.RawMessage, res *CaseResult, src string
 		for _, want := range c.Expect.Files {
 			found := false
 			for _, l := range locs {
-				if strings.HasSuffix(filepath.ToSlash(uriToPath(l.URI)), want) {
+				if strings.HasSuffix(filepath.ToSlash(symbols.URIToPath(l.URI)), want) {
 					found = true
 					break
 				}
@@ -554,7 +555,7 @@ func summarizeLocations(locs []location, root string, max int) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, l := range locs {
-		p := uriToPath(l.URI)
+		p := symbols.URIToPath(l.URI)
 		if rel, err := filepath.Rel(root, p); err == nil && !strings.HasPrefix(rel, "..") {
 			p = rel
 		}

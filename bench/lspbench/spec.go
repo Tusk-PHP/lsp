@@ -6,7 +6,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Tusk-PHP/lsp/internal/document"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // ServerSpec describes how to launch and configure one language server.
@@ -295,17 +295,5 @@ func pathToURI(p string) string {
 	if err != nil {
 		abs = p
 	}
-	u := url.URL{Scheme: "file", Path: abs}
-	return u.String()
-}
-
-func uriToPath(u string) string {
-	if !strings.HasPrefix(u, "file://") {
-		return u
-	}
-	parsed, err := url.Parse(u)
-	if err != nil {
-		return strings.TrimPrefix(u, "file://")
-	}
-	return parsed.Path
+	return symbols.PathToURI(abs)
 }

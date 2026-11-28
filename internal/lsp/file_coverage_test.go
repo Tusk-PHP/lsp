@@ -1,12 +1,13 @@
 package lsp
 
 import (
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 const fileCoverageClover = `<?xml version="1.0" encoding="UTF-8"?>
@@ -60,7 +61,7 @@ func coverageHarness(t *testing.T, root string, options map[string]interface{}) 
 	t.Helper()
 	h := newHarness(t)
 	id := h.send("initialize", map[string]interface{}{
-		"rootUri":               (&url.URL{Scheme: "file", Path: root}).String(),
+		"rootUri":               symbols.PathToURI(root),
 		"capabilities":          map[string]interface{}{},
 		"initializationOptions": options,
 	})
@@ -71,7 +72,7 @@ func coverageHarness(t *testing.T, root string, options map[string]interface{}) 
 
 func fileCoverageRequest(h *lspHarness, path string) interface{} {
 	id := h.send("tusk/fileCoverage", map[string]interface{}{
-		"textDocument": map[string]interface{}{"uri": (&url.URL{Scheme: "file", Path: path}).String()},
+		"textDocument": map[string]interface{}{"uri": symbols.PathToURI(path)},
 	})
 	return h.readResponse(id)["result"]
 }

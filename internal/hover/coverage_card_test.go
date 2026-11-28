@@ -55,7 +55,7 @@ func coverageCard(t *testing.T, report string, sourceAge time.Duration, word str
 		}
 	}
 
-	uri := "file://" + source
+	uri := symbols.PathToURI(source)
 	idx := symbols.NewIndex()
 	idx.IndexFile(uri, coverageCardSource)
 	p := NewProvider(idx, nil, "none")

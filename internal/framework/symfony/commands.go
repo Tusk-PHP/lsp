@@ -204,7 +204,7 @@ func discoverCommandsFromDir(dir string, byURI map[string][]CommandEntry) {
 		if a, err := filepath.Abs(path); err == nil {
 			abs = a
 		}
-		uri := "file://" + filepath.ToSlash(abs)
+		uri := symbols.PathToURI(abs)
 		if _, ok := byURI[uri]; ok {
 			return nil
 		}

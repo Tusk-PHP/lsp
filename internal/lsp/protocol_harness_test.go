@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // ---------------------------------------------------------------------------
@@ -164,7 +166,7 @@ func (rh *rawHarness) close() {
 // ---------------------------------------------------------------------------
 
 // rootURI returns the testdata project root as a file:// URI.
-func rootURI() string { return "file://" + testdataPath() }
+func rootURI() string { return symbols.PathToURI(testdataPath()) }
 
 // initParams produces a standard initialize parameter map.
 func initParams() map[string]interface{} {

@@ -129,7 +129,7 @@ func (t *ViewTypes) viewURI(view string) (string, bool) {
 	for _, dir := range t.Data.viewDirs {
 		path := dir + "/" + rel
 		if isFile(path) {
-			return "file://" + path, true
+			return symbols.PathToURI(path), true
 		}
 	}
 	return "", false

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // phpVersionCase checks one PHP language feature through the real server, so a
@@ -391,12 +393,12 @@ func runPHPVersionCase(t *testing.T, tc phpVersionCase) {
 	if err := os.WriteFile(filepath.Join(root, "composer.json"), []byte(composer), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	uri := "file://" + path
+	uri := symbols.PathToURI(path)
 
 	h := newHarness(t)
 	defer h.close()
 	h.readResponse(h.send("initialize", map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": map[string]interface{}{},
 	}))
 	h.notify("initialized", map[string]interface{}{})

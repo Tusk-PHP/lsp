@@ -19,7 +19,7 @@ func setupDoctrineIndex(t *testing.T, entitySource string) (*symbols.Index, stri
 		t.Fatal(err)
 	}
 
-	idx.IndexFile("file://"+entityPath, entitySource)
+	idx.IndexFile(symbols.PathToURI(entityPath), entitySource)
 
 	return idx, tmpDir
 }
@@ -277,7 +277,7 @@ class Product
 	if err := os.WriteFile(entityPath, []byte(entitySource), 0644); err != nil {
 		t.Fatal(err)
 	}
-	idx.IndexFile("file://"+entityPath, entitySource)
+	idx.IndexFile(symbols.PathToURI(entityPath), entitySource)
 
 	// Create XML mapping
 	xmlDir := filepath.Join(tmpDir, "config", "doctrine")

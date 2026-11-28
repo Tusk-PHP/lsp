@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // TestRuntimeWiresSymfonyTranslationsAndCommands checks that the MCP runtime
@@ -25,7 +26,7 @@ function probe(Application $application, TranslatorInterface $translator) {
     $translator->trans('nav.home');
 }
 `
-	uri := "file://" + filepath.Join(svc.RootPath, "src/Probe.php")
+	uri := symbols.PathToURI(filepath.Join(svc.RootPath, "src/Probe.php"))
 	pos := func(anchor string, offset int) protocol.Position {
 		i := strings.Index(src, anchor) + offset
 		return protocol.Position{Line: strings.Count(src[:i], "\n"), Character: i - strings.LastIndex(src[:i], "\n") - 1}
