@@ -74,3 +74,18 @@ func BenchmarkLexFile(b *testing.B) {
 		})
 	}
 }
+
+func BenchmarkLexSynthetic(b *testing.B) {
+	for _, bc := range []struct{ name, src string }{
+		{"echo", "<?php echo 1;"},
+		{"dense-then-html", "<?php " + strings.Repeat(";", 400000) + "?>" + strings.Repeat("<p>html</p>\n", 133000)},
+	} {
+		b.Run(bc.name, func(b *testing.B) {
+			b.SetBytes(int64(len(bc.src)))
+			b.ReportAllocs()
+			for b.Loop() {
+				lexer.Lex(bc.src, token.Latest)
+			}
+		})
+	}
+}

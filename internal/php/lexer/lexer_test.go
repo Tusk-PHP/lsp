@@ -179,7 +179,7 @@ func TestSpaceInAStringOffsetEndsItWithoutAnEmptyToken(t *testing.T) {
 }
 
 func TestDenseCodeGrowsTheTokensOnceOrTwice(t *testing.T) {
-	dense := strings.Repeat("$a=[1,2];", 20000)
+	dense := strings.Repeat("$alphabet = 'letters';\n", 8000)
 	for _, tc := range []struct {
 		name   string
 		src    string
@@ -198,5 +198,13 @@ func TestDenseCodeGrowsTheTokensOnceOrTwice(t *testing.T) {
 		if spare := cap(toks) - len(toks); spare > len(toks)/4 {
 			t.Errorf("%s: %d tokens reserve %d more", tc.name, len(toks), spare)
 		}
+	}
+}
+
+func TestAGrowthStepNeverMoreThanDoublesTheTokens(t *testing.T) {
+	src := "<?php " + strings.Repeat(";", 400000) + "?>" + strings.Repeat("<p>html</p>\n", 133000)
+	toks := Lex(src, token.Latest)
+	if limit := 2*len(toks) + 1; cap(toks) > limit {
+		t.Errorf("%d tokens reserve a capacity of %d, want at most %d", len(toks), cap(toks), limit)
 	}
 }
