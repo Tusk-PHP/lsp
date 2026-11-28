@@ -247,3 +247,61 @@ func changeMessage(t *testing.T, uri string, version int, changes ...map[string]
 	}
 	return &jsonRPCMessage{JSONRPC: "2.0", Method: "textDocument/didChange", Params: params}
 }
+
+func TestAChangeWithoutEditsLeavesTheDocumentAsItWas(t *testing.T) {
+	s := NewServer(strings.NewReader(""), io.Discard, log.New(io.Discard, "", 0))
+	uri := "file:///a.json"
+	before := s.openDocument(uri, 1, "{}\n")
+	s.handleMessage(changeMessage(t, uri, 2))
+	if doc, _ := s.docs.Get(uri); !s.docs.Current(before) || doc.Version != 1 {
+		t.Errorf("a change without edits made a new version of the document: %+v", doc)
+	}
+}
+
+func TestSavingADivergedDocumentWhoseFileIsGoneKeepsItDiverged(t *testing.T) {
+	var logs bytes.Buffer
+	s := NewServer(strings.NewReader(""), io.Discard, log.New(&logs, "", 0))
+	uri := symbols.PathToURI(filepath.Join(t.TempDir(), "gone.json"))
+	s.openDocument(uri, 1, "{}\n")
+	s.handleMessage(changeMessage(t, uri, 2, map[string]any{"range": lspRange(-1, 0, 0, 0), "text": "x"}))
+	params, err := json.Marshal(map[string]any{"textDocument": map[string]any{"uri": uri}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.handleMessage(&jsonRPCMessage{JSONRPC: "2.0", Method: "textDocument/didSave", Params: params})
+	if doc, _ := s.docs.Get(uri); !doc.Diverged() || doc.Text != "{}\n" {
+		t.Errorf("a save whose text can't be read from disk ended the divergence: %+v", doc)
+	}
+	if !strings.Contains(logs.String(), "didSave: reading "+uri) {
+		t.Errorf("the failed read was not logged: %q", logs.String())
+	}
+}
+
+func TestSavingAPHPDocumentThatIsNotOpenPublishesNoDiagnostics(t *testing.T) {
+	h := initHarness(t)
+	defer h.close()
+	uri := "file://" + filepath.Join(testdataPath(), "app/NeverOpenedSave.php")
+	h.notify("textDocument/didSave", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+		"text":         "<?php\nclass NeverOpenedSave { public function f() { return $undefined; } }\n",
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	for h.server.index.Lookup("NeverOpenedSave") == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the saved text was never indexed")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	quiet := time.After(500 * time.Millisecond)
+	for {
+		select {
+		case note := <-h.notes:
+			params, _ := note["params"].(map[string]any)
+			if note["method"] == "textDocument/publishDiagnostics" && params["uri"] == uri {
+				t.Fatalf("published diagnostics for a document that is not open: %v", note)
+			}
+		case <-quiet:
+			return
+		}
+	}
+}
