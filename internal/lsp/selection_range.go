@@ -1,6 +1,9 @@
 package lsp
 
 import (
+	"sort"
+	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -117,8 +120,12 @@ func findWordRange(pr *parser.ParseResult, pos protocol.Position) *protocol.Rang
 	line := pr.Lines[pos.Line]
 	ch := min(pos.Character, len(line))
 
+	isNameRune := isCodeNameRune
+	if inTextToken(pr.Tokens, pos.Line, ch) {
+		isNameRune = isProseNameRune
+	}
 	isWordChar := func(r rune) bool {
-		return r == '$' || parser.IsIdentByte(string(r)[0])
+		return r == '$' || isNameRune(r)
 	}
 
 	start := ch
@@ -150,6 +157,33 @@ func findWordRange(pr *parser.ParseResult, pos protocol.Position) *protocol.Rang
 		Start: protocol.Position{Line: pos.Line, Character: start},
 		End:   protocol.Position{Line: pos.Line, Character: end},
 	}
+}
+
+func isCodeNameRune(r rune) bool {
+	return r >= utf8.RuneSelf || parser.IsIdentByte(byte(r))
+}
+
+func isProseNameRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+func inTextToken(tokens []parser.Token, line, col int) bool {
+	i := sort.Search(len(tokens), func(i int) bool {
+		return tokens[i].Line > line || (tokens[i].Line == line && tokens[i].Column > col)
+	})
+	if i == 0 {
+		return false
+	}
+	tok := tokens[i-1]
+	if tok.Kind != parser.TokenComment && tok.Kind != parser.TokenDocComment && tok.Kind != parser.TokenStringLiteral {
+		return false
+	}
+	endLine, endCol := tok.Line, tok.Column+len(tok.Value)
+	if nl := strings.LastIndexByte(tok.Value, '\n'); nl >= 0 {
+		endLine += strings.Count(tok.Value, "\n")
+		endCol = len(tok.Value) - nl - 1
+	}
+	return line < endLine || (line == endLine && col <= endCol)
 }
 
 // findBracketRange finds the innermost balanced bracket pair ({}, (), []) that

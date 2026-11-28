@@ -1543,7 +1543,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 		return actions
 	}
 
-	file := parser.ParseFile(source)
+	file := parser.FileNodeOf(parseResult)
 	if file == nil {
 		return actions
 	}
@@ -1562,7 +1562,7 @@ func (a *Analyzer) GetCodeActions(uri, source string, params protocol.CodeAction
 	if action := a.inlineVariableCodeAction(uri, source, params); action != nil {
 		actions = append(actions, *action)
 	}
-	if action := a.importOrganizeImportsAction(uri, source, file, params.Context.Only); action != nil {
+	if action := a.importOrganizeImportsAction(uri, parseResult, file, params.Context.Only); action != nil {
 		actions = append(actions, *action)
 	}
 

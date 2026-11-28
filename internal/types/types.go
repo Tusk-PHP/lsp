@@ -19,6 +19,18 @@ const (
 	TypeKindOffset
 )
 
+// Variance is the call-site variance of a generic type argument, as in
+// Collection<covariant Animal>.
+type Variance int
+
+const (
+	VarianceInvariant Variance = iota
+	VarianceCovariant
+	VarianceContravariant
+)
+
+var varianceKeywords = [...]string{VarianceCovariant: "covariant", VarianceContravariant: "contravariant"}
+
 // TypeExpr is a small structured PHPDoc type model shared by hover/completion.
 // It currently focuses on round-tripping structured display output rather than
 // full semantic evaluation.
@@ -26,15 +38,22 @@ type TypeExpr struct {
 	Kind        TypeKind
 	Name        string
 	Nullable    bool
+	Variance    Variance
 	Wrapped     bool
 	Literal     string
 	Element     *TypeExpr
 	Params      []TypeExpr
 	Types       []TypeExpr
 	ShapeFields []ShapeExprField
+	Templates   []CallableTemplate
 	ParamTypes  []TypeExpr
 	ReturnType  *TypeExpr
 	Condition   *ConditionalType
+}
+
+type CallableTemplate struct {
+	Name  string
+	Bound *TypeExpr
 }
 
 type Type = TypeExpr
@@ -125,6 +144,16 @@ func (expr TypeExpr) String() string {
 		if out == "" {
 			out = "callable"
 		}
+		if len(expr.Templates) > 0 {
+			templates := make([]string, len(expr.Templates))
+			for i, tmpl := range expr.Templates {
+				templates[i] = tmpl.Name
+				if tmpl.Bound != nil {
+					templates[i] += " of " + tmpl.Bound.String()
+				}
+			}
+			out += "<" + strings.Join(templates, ", ") + ">"
+		}
 		if expr.ParamTypes != nil || expr.ReturnType != nil {
 			out += "(" + joinTypeExprs(expr.ParamTypes, ", ") + ")"
 			if expr.ReturnType != nil {
@@ -146,6 +175,9 @@ func (expr TypeExpr) String() string {
 	}
 	if expr.Nullable && out != "" {
 		out = "?" + out
+	}
+	if expr.Variance != VarianceInvariant && out != "" {
+		out = varianceKeywords[expr.Variance] + " " + out
 	}
 	return out
 }
@@ -272,37 +304,65 @@ found:
 // correctly returns ("array{name: string, age: int}", "$var desc").
 func ExtractDocTypeString(value string) (typeStr, rest string) {
 	value = trim(value)
-	if value == "" {
-		return "", ""
-	}
+	end := docTypeEnd(value, false)
+	return value[:end], trim(value[end:])
+}
 
+func ExtractParamListType(value string) (typeStr, rest string) {
+	value = trim(value)
+	end := docTypeEnd(value, true)
+	return trim(value[:end]), trim(value[end:])
+}
+
+func docTypeEnd(value string, inParamList bool) int {
 	depth := 0
 	inString := byte(0)
-	i := 0
-	for i < len(value) {
+	for i := 0; i < len(value); i++ {
 		ch := value[i]
 		if inString != 0 {
-			if ch == inString && (i == 0 || value[i-1] != '\\') {
+			if ch == inString && value[i-1] != '\\' {
 				inString = 0
 			}
-			i++
 			continue
 		}
 		switch ch {
 		case '\'', '"':
 			inString = ch
-		case '{', '<', '(':
+		case '{', '<', '(', '[':
 			depth++
-		case '}', '>', ')':
+		case '}', '>', ')', ']':
+			if depth == 0 && inParamList {
+				return i
+			}
 			depth--
+		case ',':
+			if depth == 0 && inParamList {
+				return i
+			}
+		case '&':
+			if depth == 0 && inParamList && startsByRefParam(value[i:]) {
+				return i
+			}
+		case '.':
+			if depth == 0 && inParamList && strings.HasPrefix(value[i:], "...") {
+				return i
+			}
 		case ' ', '\t':
-			if depth == 0 && !continuesTypeExpr(value, i) {
-				return value[:i], trim(value[i:])
+			if depth == 0 && (inParamList && startsByRefParam(value[i:]) || !continuesTypeExpr(value, i)) {
+				return i
 			}
 		}
-		i++
 	}
-	return value, ""
+	return len(value)
+}
+
+func startsByRefParam(s string) bool {
+	s = trim(s)
+	if !strings.HasPrefix(s, "&") {
+		return false
+	}
+	s = trim(s[1:])
+	return strings.HasPrefix(s, "$") || strings.HasPrefix(s, "...")
 }
 
 func parseTypeExpr(raw string) TypeExpr {
@@ -381,27 +441,28 @@ func joinTypeExprs(parts []TypeExpr, sep string) string {
 }
 
 func parseCallableExpr(raw string, nullable bool) (TypeExpr, bool) {
-	name := ""
-	switch {
-	case raw == "callable":
+	if raw == "callable" {
 		return TypeExpr{Kind: TypeKindCallable, Nullable: nullable, Name: "callable"}, true
-	case strings.HasPrefix(raw, "callable("):
-		name = "callable"
-	case strings.HasPrefix(raw, "Closure("):
-		name = "Closure"
-	case strings.HasPrefix(raw, "\\Closure("):
-		name = "\\Closure"
-	default:
-		return TypeExpr{}, false
 	}
-
-	open := strings.IndexByte(raw, '(')
-	close := findMatchingParen(raw, open)
-	if open < 0 || close < 0 {
+	name := callableName(raw)
+	if name == "" {
 		return TypeExpr{}, false
 	}
 
 	expr := TypeExpr{Kind: TypeKindCallable, Nullable: nullable, Name: name, ParamTypes: []TypeExpr{}}
+	open := len(name)
+	if raw[open] == '<' {
+		end := findMatchingBracket(raw, open)
+		if end < 0 {
+			return TypeExpr{}, false
+		}
+		expr.Templates = parseCallableTemplates(raw[open+1 : end])
+		open = end + 1
+	}
+	close := findMatchingBracket(raw, open)
+	if close < 0 {
+		return TypeExpr{}, false
+	}
 	paramsStr := strings.TrimSpace(raw[open+1 : close])
 	if paramsStr != "" {
 		expr.ParamTypes = parseTypeExprs(splitTopLevelByComma(paramsStr))
@@ -415,8 +476,41 @@ func parseCallableExpr(raw string, nullable bool) (TypeExpr, bool) {
 	return expr, true
 }
 
-func findMatchingParen(s string, open int) int {
-	if open < 0 || open >= len(s) || s[open] != '(' {
+func callableName(raw string) string {
+	for _, name := range [...]string{"callable", "Closure", "\\Closure"} {
+		if len(raw) > len(name) && strings.HasPrefix(raw, name) && (raw[len(name)] == '(' || raw[len(name)] == '<') {
+			return name
+		}
+	}
+	return ""
+}
+
+func parseCallableTemplates(list string) []CallableTemplate {
+	parts := splitTopLevelByComma(list)
+	templates := make([]CallableTemplate, 0, len(parts))
+	for _, part := range parts {
+		name, bound, bounded := strings.Cut(part, " of ")
+		tmpl := CallableTemplate{Name: strings.TrimSpace(name)}
+		if bounded {
+			expr := parseTypeExpr(strings.TrimSpace(bound))
+			tmpl.Bound = &expr
+		}
+		templates = append(templates, tmpl)
+	}
+	return templates
+}
+
+func findMatchingBracket(s string, open int) int {
+	if open >= len(s) {
+		return -1
+	}
+	var openCh, closeCh byte
+	switch s[open] {
+	case '(':
+		openCh, closeCh = '(', ')'
+	case '<':
+		openCh, closeCh = '<', '>'
+	default:
 		return -1
 	}
 	depth := 0
@@ -432,9 +526,9 @@ func findMatchingParen(s string, open int) int {
 		switch ch {
 		case '\'', '"':
 			inString = ch
-		case '(':
+		case openCh:
 			depth++
-		case ')':
+		case closeCh:
 			depth--
 			if depth == 0 {
 				return i
@@ -489,15 +583,10 @@ func expandAliases(expr *Type, aliases map[string]*Type, seen map[string]bool) *
 			if expanded == nil {
 				return cloneType(expr)
 			}
-			if expr.Nullable && !expanded.Nullable {
-				out := *expanded
-				out.Nullable = true
-				return &out
-			}
-			if expr.Wrapped && !expanded.Wrapped {
-				out := *expanded
-				out.Wrapped = true
-				return &out
+			expanded.Nullable = expanded.Nullable || expr.Nullable
+			expanded.Wrapped = expanded.Wrapped || expr.Wrapped
+			if expr.Variance != VarianceInvariant {
+				expanded.Variance = expr.Variance
 			}
 			return expanded
 		}
@@ -582,8 +671,8 @@ func derefType(expr *Type) TypeExpr {
 }
 
 func parseShapeExpr(raw string, nullable bool) (TypeExpr, bool) {
-	for _, prefix := range []string{"array", "list", "object"} {
-		if !strings.HasPrefix(raw, prefix+"{") {
+	for _, prefix := range [...]string{"array", "list", "object"} {
+		if len(raw) <= len(prefix) || raw[len(prefix)] != '{' || !strings.HasPrefix(raw, prefix) {
 			continue
 		}
 		if !strings.HasSuffix(raw, "}") {
@@ -672,7 +761,24 @@ func parseGenericExpr(raw string) (string, []TypeExpr, bool) {
 	if len(params) == 0 {
 		return name, nil, true
 	}
-	return name, parseTypeExprs(params), true
+	args := make([]TypeExpr, len(params))
+	for i, param := range params {
+		args[i] = parseTypeArg(param)
+	}
+	return name, args, true
+}
+
+func parseTypeArg(raw string) TypeExpr {
+	for variance := VarianceCovariant; variance <= VarianceContravariant; variance++ {
+		rest, ok := strings.CutPrefix(raw, varianceKeywords[variance])
+		if !ok || rest == "" || (rest[0] != ' ' && rest[0] != '\t') {
+			continue
+		}
+		expr := parseTypeExpr(strings.TrimSpace(rest))
+		expr.Variance = variance
+		return expr
+	}
+	return parseTypeExpr(raw)
 }
 
 func isLiteralType(raw string) bool {

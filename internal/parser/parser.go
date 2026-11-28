@@ -38,6 +38,8 @@ type ParseResult struct {
 	// $var->method chains, Type::method, new Type). The slice is populated by
 	// the expression scanner that runs after the declaration-level pass.
 	Calls callList
+
+	importSpans []tokenSpan
 }
 
 type UseStatement struct {
@@ -358,17 +360,39 @@ func nextOpenTag(source string, from int) (int, int) {
 	return len(source), 0
 }
 
+// IsIdentByte reports whether b can be part of a PHP name (a label: an
+// identifier or a variable name after `$`). It follows PHP's lexer rule
+// `[a-zA-Z0-9_\x80-\xff]`: ASCII letters, digits, `_`, and every byte at or
+// above 0x80, so a UTF-8 encoded name is whole whatever its characters are.
+// Whether a name may start with the byte (not a digit) is up to the caller.
 func IsIdentByte(b byte) bool {
 	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b >= 0x80
 }
 
+// IsIdentifier reports whether s is a whole PHP name: one or more
+// IsIdentByte bytes, not starting with a digit.
+func IsIdentifier(s string) bool {
+	if s == "" || (s[0] >= '0' && s[0] <= '9') {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if !IsIdentByte(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// Text outside <?php … ?> is inline HTML and produces no tokens. A source
+// with no open tag at all (a snippet) is read as PHP throughout.
 func tokenize(source string) ([]Token, []ParseError) {
+	return tokenizeFrom(source, HasOpenTag(source))
+}
+
+func tokenizeFrom(source string, inHTML bool) ([]Token, []ParseError) {
 	var errors []ParseError
-	tokens := make([]Token, 0, len(source)/4)
+	tokens := make([]Token, 0, len(source)/4+2)
 	line, col, offset := 0, 0, 0
-	// Text outside <?php … ?> is inline HTML and produces no tokens. A source
-	// with no open tag at all (a snippet) is read as PHP throughout.
-	inHTML := HasOpenTag(source)
 
 	for offset < len(source) {
 		if inHTML {
@@ -658,7 +682,7 @@ func tokenize(source string) ([]Token, []ParseError) {
 		case '\\':
 			kind = TokenBackslash
 		}
-		tokens = append(tokens, Token{kind, string(ch), line, col, offset})
+		tokens = append(tokens, Token{kind, source[offset : offset+1], line, col, offset})
 		offset++
 		col++
 	}
@@ -1105,6 +1129,7 @@ func (p *structParser) parseNamespace() {
 }
 
 func (p *structParser) parseUse() {
+	start := p.pos
 	p.advance()
 	kind := p.useKind("class")
 
@@ -1139,6 +1164,7 @@ func (p *structParser) parseUse() {
 		p.advance()
 	}
 	p.expect(TokenSemicolon)
+	p.result.importSpans = append(p.result.importSpans, tokenSpan{start: start, end: p.pos})
 }
 
 // useKind reads an optional `function` or `const` before an imported name,

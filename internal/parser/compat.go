@@ -214,9 +214,17 @@ type DocMethod struct {
 	ReturnType  string
 	ParsedType  *types.TypeExpr
 	Name        string
-	Params      string
+	Params      []DocMethodParam
 	Description string
 	IsStatic    bool
+}
+
+type DocMethodParam struct {
+	Type        string
+	Name        string
+	Default     string
+	IsVariadic  bool
+	IsReference bool
 }
 
 // DocTemplate represents a @template tag: @template T of SomeClass
@@ -316,19 +324,10 @@ func ParseDocBlock(raw string) *DocBlock {
 		return nil
 	}
 
-	trimmed = strings.TrimPrefix(trimmed, "/**")
-	trimmed = strings.TrimSuffix(trimmed, "*/")
-	lines := strings.Split(trimmed, "\n")
 	doc := &DocBlock{Tags: make(map[string][]string)}
 	var tagged []docTag
 
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		line = strings.TrimPrefix(line, "*")
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+	for line := range docLines(trimmed) {
 		if strings.HasPrefix(line, "@") {
 			name, value := splitDocTag(line[1:])
 			doc.Tags[name] = append(doc.Tags[name], value)
@@ -451,8 +450,14 @@ func parseDocMethod(value string) DocMethod {
 	// A method name will be followed by '(' while a type won't.
 	firstParen := strings.Index(value, "(")
 	if firstParen < 0 {
-		// No parens at all — malformed, just store as name
-		m.Name = value
+		parts := strings.Fields(value)
+		if len(parts) < 2 {
+			m.Name = docMethodName(value)
+			return m
+		}
+		m.ReturnType, m.Name = parts[0], docMethodName(parts[1])
+		m.ParsedType = parseDocTypeExprPtr(m.ReturnType)
+		m.Description = strings.Join(parts[2:], " ")
 		return m
 	}
 
@@ -464,38 +469,27 @@ func parseDocMethod(value string) DocMethod {
 		return m
 	case 1:
 		// Either "name(" or might be a type if there's no space before (
-		m.Name = parts[0]
+		m.Name = docMethodName(parts[0])
 	default:
 		// "ReturnType name(" — last part is name, everything before is return type
-		m.Name = parts[len(parts)-1]
+		m.Name = docMethodName(parts[len(parts)-1])
 		m.ReturnType = strings.Join(parts[:len(parts)-1], " ")
 		m.ParsedType = parseDocTypeExprPtr(m.ReturnType)
 	}
 
-	// Extract params between ( and matching )
-	rest := value[firstParen:]
-	depth := 0
-	closeIdx := -1
-	for i, ch := range rest {
-		if ch == '(' {
-			depth++
-		} else if ch == ')' {
-			depth--
-			if depth == 0 {
-				closeIdx = i
-				break
-			}
-		}
-	}
-	if closeIdx >= 0 {
-		m.Params = rest[1:closeIdx]
-		remaining := strings.TrimSpace(rest[closeIdx+1:])
-		if remaining != "" {
-			m.Description = remaining
-		}
+	if params, description, ok := parseDocMethodParams(value[firstParen+1:]); ok {
+		m.Params = params
+		m.Description = description
 	}
 
 	return m
+}
+
+func docMethodName(name string) string {
+	if !IsIdentifier(name) {
+		return ""
+	}
+	return name
 }
 
 func parseDocTypeAlias(value string) DocTypeAlias {

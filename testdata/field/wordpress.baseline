@@ -89,6 +89,7 @@ src/wp-includes/Requests/src/Iri.php	unknown-class	Unknown class 'UnexpectedValu
 src/wp-includes/SimplePie/src/Cache/Memcache.php	unknown-class	Unknown class 'NativeMemcache'
 src/wp-includes/SimplePie/src/HTTP/Psr18Client.php	unknown-class	Unknown class 'ClientExceptionInterface'
 src/wp-includes/SimplePie/src/Item.php	unused-variable	Variable $javascript is assigned but never read
+src/wp-includes/SimplePie/src/Locator.php	unused-import	Unused import 'DomDocument'
 src/wp-includes/Text/Diff/Engine/string.php	unknown-class	Unknown class 'PEAR'
 src/wp-includes/Text/Diff/Engine/string.php	unknown-class	Unknown class 'PEAR'
 src/wp-includes/Text/Diff/Engine/xdiff.php	unknown-function	Unknown function 'xdiff_string_diff'
