@@ -172,3 +172,18 @@ func TestClassStringBindingMakeMethodReturn(t *testing.T) {
 		t.Fatalf("make() return type = %q, want App\\MyModel", ret.FQN)
 	}
 }
+
+func TestExtractClassStringTemplateReadsUnionParts(t *testing.T) {
+	names := map[string]bool{"T": true}
+	for raw, want := range map[string]string{
+		"class-string<T>|T":                          "T",
+		"?class-string<T>":                           "T",
+		"callable(int|string): void|class-string<T>": "T",
+		"array{a: int|T}":                            "",
+		"array<T>|string":                            "",
+	} {
+		if got := extractClassStringTemplate(raw, names); got != want {
+			t.Errorf("extractClassStringTemplate(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}

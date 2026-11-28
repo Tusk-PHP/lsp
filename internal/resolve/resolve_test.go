@@ -675,3 +675,52 @@ class Category { public $status; public function status() {} public function sco
 		t.Errorf("AccessedMemberOn(Builder, missing) = %s, want nil", m.FQN)
 	}
 }
+
+func TestMemberTypeReadsUnionPartsWhole(t *testing.T) {
+	idx := symbols.NewIndex()
+	src := `<?php
+namespace App;
+use Monolog\Logger;
+class Logs {
+    public function pair(): (Logger&\Countable)|null {}
+    /** @return array{a: int|string}|Logger */
+    public function shaped() {}
+    /** @return callable(int|string): void|Logger */
+    public function handler() {}
+    /** @return self|null */
+    public function maybeSelf() {}
+}
+`
+	idx.IndexFile("file:///app/Logs.php", src)
+	idx.IndexFile("file:///vendor/Logger.php", `<?php
+namespace Monolog;
+class Logger {}
+`)
+	r := NewResolver(idx)
+	file := parser.ParseFile(src)
+	for member, want := range map[string]string{
+		"pair":      `Monolog\Logger`,
+		"shaped":    "array",
+		"handler":   "callable",
+		"maybeSelf": `App\Logs`,
+	} {
+		if got := r.MemberType(r.FindMember(`App\Logs`, member), file); got != want {
+			t.Errorf("MemberType(%s) = %q, want %q", member, got, want)
+		}
+	}
+}
+
+func BenchmarkMemberTypeOfAUnion(b *testing.B) {
+	r := setupResolver()
+	file := parser.ParseFile(`<?php
+namespace App;
+use Monolog\Logger;
+`)
+	m := r.FindMember(`App\Service`, "getLogger")
+	b.ReportAllocs()
+	for b.Loop() {
+		if r.MemberType(m, file) != `Monolog\Logger` {
+			b.Fatal("wrong type")
+		}
+	}
+}

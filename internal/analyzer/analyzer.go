@@ -423,7 +423,7 @@ func (a *Analyzer) definitionForVariable(r *resolve.Resolver, varName string, so
 		return nil
 	}
 	// A variable that may hold several values goes to the first class of them.
-	for _, name := range strings.Split(typeName, "|") {
+	for _, name := range resolve.ParseGenericType(typeName).ClassNames() {
 		if sym := a.index.Lookup(name); sym != nil {
 			return symbolLocation(sym)
 		}
@@ -641,19 +641,15 @@ func (a *Analyzer) locationsForMemberType(r *resolve.Resolver, member *symbols.S
 }
 
 func (a *Analyzer) locationsForTypeName(r *resolve.Resolver, typeName string, file *parser.FileNode) []protocol.Location {
-	typeName = strings.TrimSpace(typeName)
-	typeName = strings.TrimPrefix(typeName, "?")
-	if typeName == "" || symbols.IsPHPBuiltinType(typeName) {
+	rt := resolve.ParseGenericType(typeName)
+	if rt.FQN == "" || symbols.IsPHPBuiltinType(rt.FQN) {
 		return nil
 	}
-	if strings.Contains(typeName, "|") {
-		typeName = resolve.PickBestUnionPart(typeName)
+	name := rt.FQN
+	if !rt.Qualified {
+		name = r.ResolveClassName(name, file)
 	}
-	if idx := strings.IndexByte(typeName, '<'); idx > 0 {
-		typeName = typeName[:idx]
-	}
-	typeName = r.ResolveClassName(typeName, file)
-	return singleLocation(symbolLocation(a.index.Lookup(typeName)))
+	return singleLocation(symbolLocation(a.index.Lookup(name)))
 }
 
 func (a *Analyzer) findTypeImplementations(sym *symbols.Symbol) []protocol.Location {

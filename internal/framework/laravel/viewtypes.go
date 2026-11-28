@@ -10,6 +10,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
 // TypedVar is a variable a view receives, typed as the union of what each
@@ -155,10 +156,14 @@ func (c *varCollector) add(site ViewVar, typ string) {
 		c.types[site.Name] = map[string]bool{}
 	}
 	v.Sites = append(v.Sites, site)
-	for _, part := range strings.Split(typ, "|") {
-		if part = strings.TrimSpace(part); part != "" && part != "mixed" {
+	expr := types.ParseTypeExpr(typ)
+	for _, member := range expr.UnionMembers() {
+		if part := member.String(); part != "" && part != "mixed" {
 			c.types[site.Name][part] = true
 		}
+	}
+	if expr.Nullable {
+		c.types[site.Name]["null"] = true
 	}
 }
 
@@ -251,44 +256,50 @@ func (t *ViewTypes) qualify(typ, uri string, st *typingState) string {
 	if f.file == nil {
 		return typ
 	}
-	parts := strings.Split(typ, "|")
-	for i, part := range parts {
-		nullable := strings.HasPrefix(part, "?")
-		name := strings.TrimPrefix(part, "?")
-		switch {
-		case name == "" || scalarTypes[strings.ToLower(name)] || strings.ContainsAny(name, "<>{}()&"):
-		case strings.HasPrefix(name, `\`):
-			name = name[1:]
-		default:
-			first, rest, _ := strings.Cut(name, `\`)
-			resolved := ""
-			for _, u := range f.file.Uses {
-				alias := u.Alias
-				if alias == "" {
-					alias = u.FullName[strings.LastIndexByte(u.FullName, '\\')+1:]
-				}
-				if strings.EqualFold(alias, first) {
-					resolved = strings.TrimPrefix(u.FullName, `\`)
-					if rest != "" {
-						resolved += `\` + rest
-					}
-					break
-				}
-			}
-			// A qualified name is already resolved, as the index keeps types.
-			if resolved == "" && rest == "" && f.file.Namespace != "" {
-				resolved = f.file.Namespace + `\` + name
-			}
-			if resolved != "" {
-				name = resolved
-			}
-		}
-		if nullable {
-			name = "?" + name
-		}
-		parts[i] = name
+	expr := types.ParseTypeExpr(typ)
+	members := expr.UnionMembers()
+	parts := make([]string, 0, len(members)+1)
+	for _, member := range members {
+		parts = append(parts, qualifyMember(member, f.file))
+	}
+	if expr.Nullable {
+		parts = append(parts, "null")
 	}
 	return strings.Join(parts, "|")
+}
+
+func qualifyMember(member types.TypeExpr, file *parser.FileNode) string {
+	switch {
+	case member.Kind == types.TypeKindIntersection:
+		parts := make([]string, len(member.Types))
+		for i, part := range member.Types {
+			parts[i] = qualifyMember(part, file)
+		}
+		return "(" + strings.Join(parts, "&") + ")"
+	case member.Kind == types.TypeKindNamed && !scalarTypes[strings.ToLower(member.Name)]:
+		return qualifyName(member.Name, file)
+	}
+	return member.String()
+}
+
+func qualifyName(name string, file *parser.FileNode) string {
+	if strings.HasPrefix(name, `\`) {
+		return name[1:]
+	}
+	first, rest, _ := strings.Cut(name, `\`)
+	for _, u := range file.Uses {
+		if strings.EqualFold(u.Alias, first) {
+			resolved := u.FullName
+			if rest != "" {
+				resolved += `\` + rest
+			}
+			return resolved
+		}
+	}
+	if rest == "" && file.Namespace != "" {
+		return file.Namespace + `\` + name
+	}
+	return name
 }
 
 // componentOwnMethods are the methods a component has that aren't passed to

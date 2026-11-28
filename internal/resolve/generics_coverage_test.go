@@ -213,16 +213,31 @@ func TestGenericResolverHelperCoverage(t *testing.T) {
 		}
 	})
 
-	t.Run("union helpers respect generic branches and null", func(t *testing.T) {
-		union := `Collection<int, App\Logger>|App\Logger|null`
-		if got := PickBestUnionPart(union); got != `Collection<int, App\Logger>` {
-			t.Fatalf("got %q", got)
+	t.Run("union parts keep brackets whole", func(t *testing.T) {
+		cases := []struct {
+			raw      string
+			best     string
+			parts    int
+			nullable bool
+		}{
+			{`Collection<int, App\Logger>|App\Logger|null`, `?Collection<int, App\Logger>`, 2, true},
+			{`Collection<int, App\Logger>|App\Logger`, `Collection<int, App\Logger>`, 2, false},
+			{`(App\Logger&Countable)|null`, `?App\Logger`, 1, true},
+			{`array{a: int|string}|false`, `array{a: int | string}`, 2, false},
+			{`callable(int|string): void|null`, `?callable(int|string): void`, 1, true},
+			{`array{a: ?int}`, `array{a: ?int}`, 1, false},
 		}
-		if !HasNullInUnion(union) {
-			t.Fatal("expected null in union")
-		}
-		if HasNullInUnion(`Collection<int, App\Logger>|App\Logger`) {
-			t.Fatal("did not expect null in union")
+		for _, c := range cases {
+			rt := ParseGenericType(c.raw)
+			if got := rt.String(); got != c.best {
+				t.Errorf("%s: best part %q, want %q", c.raw, got, c.best)
+			}
+			if got := len(rt.Parts()); got != c.parts {
+				t.Errorf("%s: %d parts, want %d", c.raw, got, c.parts)
+			}
+			if rt.Nullable != c.nullable {
+				t.Errorf("%s: nullable %v, want %v", c.raw, rt.Nullable, c.nullable)
+			}
 		}
 	})
 
