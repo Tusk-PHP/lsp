@@ -201,13 +201,8 @@ func plainMemberName(lit string) (string, bool) {
 		return "", false
 	}
 	name := lit[1 : len(lit)-1]
-	if name[0] >= '0' && name[0] <= '9' {
+	if !parser.IsIdentifier(name) {
 		return "", false
-	}
-	for i := 0; i < len(name); i++ {
-		if !parser.IsIdentByte(name[i]) {
-			return "", false
-		}
 	}
 	return name, true
 }

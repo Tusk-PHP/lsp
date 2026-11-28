@@ -5,6 +5,7 @@ import (
 
 	frameworklaravel "github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
+	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
@@ -35,10 +36,10 @@ func (s *Server) bladeCustom() *blade.Custom {
 // variableAt returns the `$name` at offset in a template, without `$`.
 func variableAt(src string, offset int) (string, protocol.Range, bool) {
 	start, end := offset, offset
-	for start > 0 && isNameChar(src[start-1]) {
+	for start > 0 && parser.IsIdentByte(src[start-1]) {
 		start--
 	}
-	for end < len(src) && isNameChar(src[end]) {
+	for end < len(src) && parser.IsIdentByte(src[end]) {
 		end++
 	}
 	if start == 0 || src[start-1] != '$' || start == end {
@@ -50,10 +51,6 @@ func variableAt(src string, offset int) (string, protocol.Range, bool) {
 	}
 	lines := blade.NewLines(src)
 	return src[start:end], offsetRange(lines, start-1, end), true
-}
-
-func isNameChar(c byte) bool {
-	return c == '_' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9') || c >= 0x80
 }
 
 // assignedIn reports whether a template assigns the variable itself, in
@@ -69,7 +66,7 @@ func assignedIn(src, name string) bool {
 		at := i + k
 		end := at + len(v)
 		i = end
-		if end < len(src) && isNameChar(src[end]) {
+		if end < len(src) && parser.IsIdentByte(src[end]) {
 			continue // a longer name
 		}
 		after := strings.TrimLeft(src[end:], " \t")
@@ -83,7 +80,7 @@ func assignedIn(src, name string) bool {
 		if strings.HasSuffix(before, "=>") {
 			key := strings.TrimRight(strings.TrimSuffix(before, "=>"), " \t")
 			j := len(key)
-			for j > 0 && isNameChar(key[j-1]) {
+			for j > 0 && parser.IsIdentByte(key[j-1]) {
 				j--
 			}
 			if j > 0 && key[j-1] == '$' && strings.HasSuffix(strings.TrimRight(key[:j-1], " \t"), " as") {
@@ -100,7 +97,7 @@ func withViewVarCompletions(items []protocol.CompletionItem, vars []frameworklar
 		return items
 	}
 	start := offset
-	for start > 0 && isNameChar(src[start-1]) {
+	for start > 0 && parser.IsIdentByte(src[start-1]) {
 		start--
 	}
 	if start == 0 || src[start-1] != '$' {

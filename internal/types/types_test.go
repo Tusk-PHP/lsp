@@ -70,6 +70,14 @@ func TestParseTypeStructured(t *testing.T) {
 		{"generic", "Collection<int, User>", TypeKindGeneric, "Collection<int, User>"},
 		{"array suffix", "User[]", TypeKindArray, "User[]"},
 		{"callable", "callable(string, int): bool", TypeKindCallable, "callable(string, int): bool"},
+		{"generic callable", "callable<T of array<int, User>, U>(T, U): T", TypeKindCallable, "callable<T of array<int, User>, U>(T, U): T"},
+		{"bare callable", "callable", TypeKindCallable, "callable"},
+		{"callable with a quoted bracket", "callable('a)', \"b>\"): void", TypeKindCallable, "callable('a)', \"b>\"): void"},
+		{"generic callable with a quoted bracket", "callable<T of 'a>'>(T): T", TypeKindCallable, "callable<T of 'a>'>(T): T"},
+		{"generic closure followed by text", "Closure<T>x", TypeKindNamed, "Closure<T>x"},
+		{"unclosed callable", "callable(int", TypeKindNamed, "callable(int"},
+		{"generic closure without a signature", "Closure<T>", TypeKindGeneric, "Closure<T>"},
+		{"unclosed generic closure", "\\Closure<T(T): T", TypeKindNamed, "Closure<T(T): T"},
 		{"literal", "'ok'", TypeKindLiteral, "'ok'"},
 		{"conditional", "($input is class-string<T> ? T : object)", TypeKindConditional, "($input is class-string<T> ? T : object)"},
 		{"object shape", "object{name: string, age?: int}", TypeKindShape, "object{name: string, age?: int}"},
@@ -88,6 +96,43 @@ func TestParseTypeStructured(t *testing.T) {
 				t.Fatalf("String() = %q, want %q", got, tt.out)
 			}
 		})
+	}
+}
+
+func TestParseTypeCallSiteVariance(t *testing.T) {
+	tests := []struct {
+		input    string
+		name     string
+		variance Variance
+		nullable bool
+	}{
+		{"Box<covariant Animal>", "Animal", VarianceCovariant, false},
+		{"Box<contravariant ?Animal>", "Animal", VarianceContravariant, true},
+		{"Box<covariant\tAnimal>", "Animal", VarianceCovariant, false},
+		{"Box<covariantAnimal>", "covariantAnimal", VarianceInvariant, false},
+		{"Box<covariant>", "covariant", VarianceInvariant, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			parsed := ParseTypeExpr(tt.input)
+			if parsed.Kind != TypeKindGeneric || len(parsed.Params) != 1 {
+				t.Fatalf("ParseTypeExpr(%q) = %+v, want one generic argument", tt.input, parsed)
+			}
+			arg := parsed.Params[0]
+			if arg.Name != tt.name || arg.Variance != tt.variance || arg.Nullable != tt.nullable {
+				t.Errorf("argument = {Name: %q, Variance: %v, Nullable: %v}, want {%q, %v, %v}", arg.Name, arg.Variance, arg.Nullable, tt.name, tt.variance, tt.nullable)
+			}
+		})
+	}
+	if got, want := ParseTypeExpr("Box<covariant Animal, contravariant ?Food>").String(), "Box<covariant Animal, contravariant ?Food>"; got != want {
+		t.Errorf("String() = %q, want %q", got, want)
+	}
+}
+
+func TestExpandAliasesKeepsVariance(t *testing.T) {
+	aliases := map[string]*Type{"Pet": Parse("Cat|Dog")}
+	if got, want := ExpandAliases(Parse("Box<covariant Pet>"), aliases).String(), "Box<covariant Cat | Dog>"; got != want {
+		t.Errorf("ExpandAliases() = %q, want %q", got, want)
 	}
 }
 
@@ -117,6 +162,9 @@ func TestExtractDocTypeString(t *testing.T) {
 		{"Collection<User> $users", "Collection<User>", "$users"},
 		{"callable(string, int): bool $handler", "callable(string, int): bool", "$handler"},
 		{"($input is class-string<T> ? T : object) description", "($input is class-string<T> ? T : object)", "description"},
+		{"array<int, string>[] $rows", "array<int, string>[]", "$rows"},
+		{"T['a b'] $v", "T['a b']", "$v"},
+		{"", "", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
@@ -128,5 +176,53 @@ func TestExtractDocTypeString(t *testing.T) {
 				t.Errorf("rest = %q, want %q", rest, tt.wantRest)
 			}
 		})
+	}
+}
+
+func TestExtractParamListType(t *testing.T) {
+	tests := []struct {
+		input    string
+		wantType string
+		wantRest string
+	}{
+		{"string $name, int $n)", "string", "$name, int $n)"},
+		{"array{a: int, b: int} $opts)", "array{a: int, b: int}", "$opts)"},
+		{"Closure(A, B): C $cb)", "Closure(A, B): C", "$cb)"},
+		{"array<int, list<int>> $m", "array<int, list<int>>", "$m"},
+		{"'a, b' $x", "'a, b'", "$x"},
+		{`'it\'s, ok' $x`, `'it\'s, ok'`, "$x"},
+		{"int, string)", "int", ", string)"},
+		{"int)", "int", ")"},
+		{"int &$x", "int", "&$x"},
+		{"int& $x", "int", "& $x"},
+		{"int&$x", "int", "&$x"},
+		{"string &...$xs", "string", "&...$xs"},
+		{"int...$xs", "int", "...$xs"},
+		{"A & B $x", "A & B", "$x"},
+		{"A&B $x", "A&B", "$x"},
+		{"A & $x", "A", "& $x"},
+		{"A &", "A &", ""},
+		{"int[] $xs", "int[]", "$xs"},
+		{"int] $x", "int", "] $x"},
+		{"1.5 $x", "1.5", "$x"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			typ, rest := ExtractParamListType(tt.input)
+			if typ != tt.wantType {
+				t.Errorf("type = %q, want %q", typ, tt.wantType)
+			}
+			if rest != tt.wantRest {
+				t.Errorf("rest = %q, want %q", rest, tt.wantRest)
+			}
+		})
+	}
+}
+
+func TestIsCallableName(t *testing.T) {
+	for name, want := range map[string]bool{"callable": true, "Closure": true, `\Closure`: true, "closure": false, "Foo": false} {
+		if got := IsCallableName(name); got != want {
+			t.Errorf("IsCallableName(%q) = %v, want %v", name, got, want)
+		}
 	}
 }

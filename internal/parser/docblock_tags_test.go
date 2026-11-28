@@ -1,6 +1,9 @@
 package parser
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestDocBlockPrefixedTagsWin(t *testing.T) {
 	doc := ParseDocBlock(`/**
@@ -97,6 +100,73 @@ func TestDocBlockInheritanceAndNarrowingTags(t *testing.T) {
 	for i, w := range want {
 		if doc.Asserts[i] != w {
 			t.Errorf("assert %d = %+v, want %+v", i, doc.Asserts[i], w)
+		}
+	}
+}
+
+func TestForEachDocTagTypeCoversEveryTypeTag(t *testing.T) {
+	samples := map[docTagLayout]struct {
+		value string
+		want  []string
+	}{
+		docLayoutVariableType: {" Post|User $p the Tag to load", []string{"Post|User"}},
+		docLayoutLeadingType:  {"Post<User> when Tag", []string{"Post<User>"}},
+		docLayoutAssert:       {"!Post $p", []string{"Post"}},
+		docLayoutTemplate:     {"T of Post = User", []string{"Post", "User"}},
+		docLayoutTypeAlias:    {"Row array{post: Post}", []string{"array{post: Post}"}},
+		docLayoutImportType:   {"Row from Post as PostRow", []string{"Post"}},
+		docLayoutMethod:       {"static Post find(User $u, $n = Tag::X) Finds", []string{"Post", "User"}},
+		docLayoutProse:        {"Post", nil},
+		docLayoutReference:    {"Post::find()", nil},
+	}
+	for base, spec := range docTagSpecs {
+		sample, ok := samples[spec.layout]
+		if !ok {
+			t.Fatalf("no sample for the layout of @%s", base)
+		}
+		for _, name := range []string{base, "phpstan-" + base, "psalm-" + base} {
+			want := sample.want
+			if spec.layout == docLayoutTypeAlias && name == base {
+				want = []string{"Row"}
+			}
+			var got []string
+			ForEachDocTagType(name, sample.value, func(start int, typ string) {
+				if sample.value[start:start+len(typ)] != typ {
+					t.Errorf("@%s: type %q is not at offset %d", name, typ, start)
+				}
+				got = append(got, typ)
+			})
+			if !slices.Equal(got, want) {
+				t.Errorf("@%s %s: types = %q, want %q", name, sample.value, got, want)
+			}
+		}
+	}
+}
+
+func TestForEachDocTagTypeForms(t *testing.T) {
+	tests := []struct {
+		name, value string
+		want        []string
+	}{
+		{"var", "$p Post", []string{"Post"}},
+		{"var", "$p", nil},
+		{"param", "", nil},
+		{"type", "Post $post", []string{"Post"}},
+		{"template-covariant", "T of Post", []string{"Post"}},
+		{"template", "T", nil},
+		{"template", "T = Post", []string{"Post"}},
+		{"template-extends", "Post<User>", []string{"Post<User>"}},
+		{"phpstan-this-out", "Post<User>", []string{"Post<User>"}},
+		{"phpstan-import-type", "Row of Post", nil},
+		{"phpstan-assert-if-false", "= Post $p", []string{"Post"}},
+		{"group", "Post", nil},
+		{"method", "Post find(}) Finds", []string{"Post"}},
+	}
+	for _, tt := range tests {
+		var got []string
+		ForEachDocTagType(tt.name, tt.value, func(_ int, typ string) { got = append(got, typ) })
+		if !slices.Equal(got, tt.want) {
+			t.Errorf("@%s %s: types = %q, want %q", tt.name, tt.value, got, tt.want)
 		}
 	}
 }

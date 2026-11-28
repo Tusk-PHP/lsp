@@ -38,6 +38,8 @@ type ParseResult struct {
 	// $var->method chains, Type::method, new Type). The slice is populated by
 	// the expression scanner that runs after the declaration-level pass.
 	Calls callList
+
+	importSpans []tokenSpan
 }
 
 type UseStatement struct {
@@ -358,17 +360,66 @@ func nextOpenTag(source string, from int) (int, int) {
 	return len(source), 0
 }
 
+// IsIdentByte reports whether b can be part of a PHP name (a label: an
+// identifier or a variable name after `$`). It follows PHP's lexer rule
+// `[a-zA-Z0-9_\x80-\xff]`: ASCII letters, digits, `_`, and every byte at or
+// above 0x80, so a UTF-8 encoded name is whole whatever its characters are.
+// Whether a name may start with the byte (not a digit) is up to the caller.
 func IsIdentByte(b byte) bool {
 	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b >= 0x80
 }
 
+// IsIdentifier reports whether s is a whole PHP name: one or more
+// IsIdentByte bytes, not starting with a digit.
+func IsIdentifier(s string) bool {
+	if s == "" || (s[0] >= '0' && s[0] <= '9') {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if !IsIdentByte(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// Text outside <?php … ?> is inline HTML and produces no tokens. A source
+// with no open tag at all (a snippet) is read as PHP throughout.
 func tokenize(source string) ([]Token, []ParseError) {
+	return tokenizeFrom(source, HasOpenTag(source))
+}
+
+func blockCommentEnd(source string, offset, line, col int) (int, int, int, bool) {
+	for offset < len(source) {
+		if source[offset] == '*' && offset+1 < len(source) && source[offset+1] == '/' {
+			return offset + 2, line, col + 2, true
+		}
+		if source[offset] == '\n' {
+			line++
+			col = 0
+		} else {
+			col++
+		}
+		offset++
+	}
+	return offset, line, col, false
+}
+
+func isDocCommentStart(source string, offset int) bool {
+	if offset+3 >= len(source) || source[offset+2] != '*' {
+		return false
+	}
+	switch source[offset+3] {
+	case ' ', '\t', '\r', '\n':
+		return true
+	}
+	return false
+}
+
+func tokenizeFrom(source string, inHTML bool) ([]Token, []ParseError) {
 	var errors []ParseError
-	tokens := make([]Token, 0, len(source)/4)
+	tokens := make([]Token, 0, len(source)/4+2)
 	line, col, offset := 0, 0, 0
-	// Text outside <?php … ?> is inline HTML and produces no tokens. A source
-	// with no open tag at all (a snippet) is read as PHP throughout.
-	inHTML := HasOpenTag(source)
 
 	for offset < len(source) {
 		if inHTML {
@@ -417,56 +468,18 @@ func tokenize(source string) ([]Token, []ParseError) {
 			continue
 		}
 
-		// Doc comment /** ... */
-		if offset+2 < len(source) && source[offset:offset+3] == "/**" {
+		if offset+1 < len(source) && source[offset] == '/' && source[offset+1] == '*' {
 			start := offset
 			startLine, startCol := line, col
-			offset += 3
-			col += 3
-			for offset+1 < len(source) {
-				if source[offset] == '*' && source[offset+1] == '/' {
-					offset += 2
-					col += 2
-					break
-				}
-				if source[offset] == '\n' {
-					line++
-					col = 0
-				} else {
-					col++
-				}
-				offset++
+			kind, unterminated := TokenComment, "unterminated comment"
+			if isDocCommentStart(source, offset) {
+				kind, unterminated = TokenDocComment, "unterminated doc comment"
 			}
-			tokens = append(tokens, Token{TokenDocComment, source[start:offset], startLine, startCol, start})
-			if !strings.HasSuffix(source[start:offset], "*/") {
-				errors = append(errors, ParseError{Message: "unterminated doc comment", Line: startLine, Column: startCol})
-			}
-			continue
-		}
-
-		// Block comment
-		if offset+1 < len(source) && source[offset:offset+2] == "/*" {
-			start := offset
-			startLine, startCol := line, col
-			offset += 2
-			col += 2
-			for offset+1 < len(source) {
-				if source[offset] == '*' && source[offset+1] == '/' {
-					offset += 2
-					col += 2
-					break
-				}
-				if source[offset] == '\n' {
-					line++
-					col = 0
-				} else {
-					col++
-				}
-				offset++
-			}
-			tokens = append(tokens, Token{TokenComment, source[start:offset], startLine, startCol, start})
-			if !strings.HasSuffix(source[start:offset], "*/") {
-				errors = append(errors, ParseError{Message: "unterminated comment", Line: startLine, Column: startCol})
+			var closed bool
+			offset, line, col, closed = blockCommentEnd(source, offset+2, line, col+2)
+			tokens = append(tokens, Token{kind, source[start:offset], startLine, startCol, start})
+			if !closed {
+				errors = append(errors, ParseError{Message: unterminated, Line: startLine, Column: startCol})
 			}
 			continue
 		}
@@ -658,7 +671,7 @@ func tokenize(source string) ([]Token, []ParseError) {
 		case '\\':
 			kind = TokenBackslash
 		}
-		tokens = append(tokens, Token{kind, string(ch), line, col, offset})
+		tokens = append(tokens, Token{kind, source[offset : offset+1], line, col, offset})
 		offset++
 		col++
 	}
@@ -1105,6 +1118,7 @@ func (p *structParser) parseNamespace() {
 }
 
 func (p *structParser) parseUse() {
+	start := p.pos
 	p.advance()
 	kind := p.useKind("class")
 
@@ -1139,6 +1153,7 @@ func (p *structParser) parseUse() {
 		p.advance()
 	}
 	p.expect(TokenSemicolon)
+	p.result.importSpans = append(p.result.importSpans, tokenSpan{start: start, end: p.pos})
 }
 
 // useKind reads an optional `function` or `const` before an imported name,

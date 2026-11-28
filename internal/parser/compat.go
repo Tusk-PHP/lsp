@@ -214,9 +214,17 @@ type DocMethod struct {
 	ReturnType  string
 	ParsedType  *types.TypeExpr
 	Name        string
-	Params      string
+	Params      []DocMethodParam
 	Description string
 	IsStatic    bool
+}
+
+type DocMethodParam struct {
+	Type        string
+	Name        string
+	Default     string
+	IsVariadic  bool
+	IsReference bool
 }
 
 // DocTemplate represents a @template tag: @template T of SomeClass
@@ -316,19 +324,10 @@ func ParseDocBlock(raw string) *DocBlock {
 		return nil
 	}
 
-	trimmed = strings.TrimPrefix(trimmed, "/**")
-	trimmed = strings.TrimSuffix(trimmed, "*/")
-	lines := strings.Split(trimmed, "\n")
 	doc := &DocBlock{Tags: make(map[string][]string)}
 	var tagged []docTag
 
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		line = strings.TrimPrefix(line, "*")
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+	for line := range docLines(trimmed) {
 		if strings.HasPrefix(line, "@") {
 			name, value := splitDocTag(line[1:])
 			doc.Tags[name] = append(doc.Tags[name], value)
@@ -435,67 +434,86 @@ func parseDocProperty(value string, readOnly, writeOnly bool) DocProperty {
 // parseDocMethod parses "@method ReturnType name(params) Description" or
 // "@method name(params) Description" into structured DocMethod.
 func parseDocMethod(value string) DocMethod {
+	return readDocMethod(value, nil)
+}
+
+func readDocMethod(value string, typeAt func(start int)) DocMethod {
+	value = strings.TrimRight(value, " \t\r\n")
+	var at func(s string)
+	if typeAt != nil {
+		at = func(s string) { typeAt(len(value) - len(s)) }
+	}
 	m := DocMethod{}
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return m
-	}
-
-	// Check if there's a static keyword prefix
-	if strings.HasPrefix(value, "static ") {
+	rest := strings.TrimLeft(value, " \t\r\n")
+	if r, ok := strings.CutPrefix(rest, "static "); ok {
 		m.IsStatic = true
-		value = strings.TrimSpace(value[7:])
+		rest = strings.TrimLeft(r, " \t")
 	}
-
-	// Try to detect if first token is a return type or a method name.
-	// A method name will be followed by '(' while a type won't.
-	firstParen := strings.Index(value, "(")
-	if firstParen < 0 {
-		// No parens at all — malformed, just store as name
-		m.Name = value
+	if rest == "" {
 		return m
 	}
 
-	beforeParen := value[:firstParen]
-	parts := strings.Fields(beforeParen)
-
-	switch len(parts) {
-	case 0:
+	typ, afterType := types.ExtractDocTypeString(rest)
+	name, list, called := docMethodCall(rest)
+	if called && !types.IsCallableName(name) {
+		m.setCall(name, list, at)
 		return m
-	case 1:
-		// Either "name(" or might be a type if there's no space before (
-		m.Name = parts[0]
-	default:
-		// "ReturnType name(" — last part is name, everything before is return type
-		m.Name = parts[len(parts)-1]
-		m.ReturnType = strings.Join(parts[:len(parts)-1], " ")
-		m.ParsedType = parseDocTypeExprPtr(m.ReturnType)
 	}
-
-	// Extract params between ( and matching )
-	rest := value[firstParen:]
-	depth := 0
-	closeIdx := -1
-	for i, ch := range rest {
-		if ch == '(' {
-			depth++
-		} else if ch == ')' {
-			depth--
-			if depth == 0 {
-				closeIdx = i
-				break
-			}
-		}
+	if typedName, typedList, typedCall := docMethodCall(afterType); typedCall {
+		m.setReturnType(typ, rest, at)
+		m.setCall(typedName, typedList, at)
+		return m
 	}
-	if closeIdx >= 0 {
-		m.Params = rest[1:closeIdx]
-		remaining := strings.TrimSpace(rest[closeIdx+1:])
-		if remaining != "" {
-			m.Description = remaining
-		}
+	if called {
+		m.setCall(name, list, at)
+		return m
 	}
-
+	if typedName, description := docIdent(afterType); typedName != "" && (description == "" || description[0] == ' ' || description[0] == '\t') {
+		m.setReturnType(typ, rest, at)
+		m.Name = typedName
+		m.Description = strings.TrimSpace(description)
+		return m
+	}
+	if name, after := docIdent(rest); after == "" {
+		m.Name = name
+	}
 	return m
+}
+
+func (m *DocMethod) setReturnType(typ, from string, at func(string)) {
+	m.ReturnType = typ
+	m.ParsedType = parseDocTypeExprPtr(typ)
+	if at != nil {
+		at(from)
+	}
+}
+
+func (m *DocMethod) setCall(name, list string, at func(string)) {
+	m.Name = name
+	if params, description, ok := parseDocMethodParams(list, at); ok {
+		m.Params = params
+		m.Description = description
+	}
+}
+
+func docMethodCall(s string) (name, list string, ok bool) {
+	name, after := docIdent(s)
+	if name == "" {
+		return "", "", false
+	}
+	list, ok = strings.CutPrefix(strings.TrimLeft(after, " \t"), "(")
+	return name, list, ok
+}
+
+func docIdent(s string) (name, rest string) {
+	if s != "" && s[0] >= '0' && s[0] <= '9' {
+		return "", s
+	}
+	n := 0
+	for n < len(s) && IsIdentByte(s[n]) {
+		n++
+	}
+	return s[:n], s[n:]
 }
 
 func parseDocTypeAlias(value string) DocTypeAlias {
