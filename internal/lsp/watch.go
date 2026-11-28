@@ -74,9 +74,10 @@ func (s *Server) handleDidChangeConfiguration(msg *jsonRPCMessage) {
 		})
 		return
 	}
-	if settings != nil {
-		s.clientSettings.Store(settings)
+	if settings == nil {
+		return
 	}
+	s.clientSettings.Store(settings)
 	s.queueRefresh(nil, true)
 }
 

@@ -112,3 +112,19 @@ func TestAConfigFileWithASyntaxErrorKeepsItsExclusions(t *testing.T) {
 		t.Error("a half-edited config file keeps the last good rules")
 	}
 }
+
+func TestSettingsWithoutTuskPHPKeysQueueNoRefresh(t *testing.T) {
+	h, _ := startWatchedProject(t, map[string]string{"composer.json": `{"require": {"php": "^8.1"}}`}, map[string]interface{}{}, nil)
+	<-h.server.indexed
+	for _, settings := range []interface{}{map[string]interface{}{}, map[string]interface{}{"editor.tabSize": 4}, nil} {
+		h.notify("workspace/didChangeConfiguration", map[string]interface{}{"settings": settings})
+		symbolNames(t, h, "Anything")
+		w := &h.server.watch
+		w.mu.Lock()
+		queued := w.config
+		w.mu.Unlock()
+		if queued {
+			t.Errorf("settings %v hold no Tusk PHP keys and queue no refresh", settings)
+		}
+	}
+}
