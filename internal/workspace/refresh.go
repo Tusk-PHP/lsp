@@ -149,8 +149,8 @@ func (ws *Bootstrapped) refreshProfile(load func() (*config.Config, error), out 
 	}
 	timeout := time.Duration(cfg.PHPDetectTimeoutMs) * time.Millisecond
 	out.Profile, out.ProfileSource = ResolveBuiltinProfileWithConfig(ws.RootPath, cfg.PHPBinary, timeout, cfg, nil)
-	out.ProfileChanged, err = ws.SetProfile(out.Profile)
-	return err
+	out.ProfileChanged = ws.SetProfile(out.Profile)
+	return nil
 }
 
 func (r Refresh) editorOwns(path string) bool {

@@ -63,10 +63,7 @@ func TestOptionalExtensionSymbols(t *testing.T) {
 func TestOptionalExtensionAvailabilityAndIsolation(t *testing.T) {
 	// Walk declarations, not a hand-picked subset, so additions cannot silently
 	// miss availability metadata or leak into the unselected index.
-	entries, err := stubs.BuiltinPHPForProfile(stubs.Profile{PHPVersion: "7.4", Extensions: []string{"imagick", "ssh2", "redis", "memcached", "apcu", "igbinary"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	entries := stubs.BuiltinPHPForProfile(stubs.Profile{PHPVersion: "7.4", Extensions: []string{"imagick", "ssh2", "redis", "memcached", "apcu", "igbinary"}})
 	without := NewIndex()
 	without.RegisterBuiltinsForProfile(BuiltinProfile{PHPVersion: "7.4"})
 	for _, entry := range entries {

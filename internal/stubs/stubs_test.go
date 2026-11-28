@@ -4,20 +4,14 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
 )
 
 func TestBuiltinPHPReturnsDeterministicEntries(t *testing.T) {
-	entriesA, err := BuiltinPHP()
-	if err != nil {
-		t.Fatalf("BuiltinPHP() error = %v", err)
-	}
-
-	entriesB, err := BuiltinPHP()
-	if err != nil {
-		t.Fatalf("BuiltinPHP() second call error = %v", err)
-	}
+	entriesA := BuiltinPHP()
+	entriesB := BuiltinPHP()
 
 	if !reflect.DeepEqual(entriesA, entriesB) {
 		t.Fatal("BuiltinPHP() returned non-deterministic entries")
@@ -35,16 +29,34 @@ func TestBuiltinPHPReturnsDeterministicEntries(t *testing.T) {
 }
 
 func TestBuiltinPHPEntriesAreParseable(t *testing.T) {
-	entries, err := BuiltinPHP()
-	if err != nil {
-		t.Fatalf("BuiltinPHP() error = %v", err)
-	}
-
-	for _, entry := range entries {
+	for _, entry := range BuiltinPHP() {
 		file := parser.ParseFile(entry.Content)
 		if file == nil {
 			t.Fatalf("ParseFile(%q) returned nil", entry.Path)
 		}
+	}
+}
+
+func TestUnreadableStubTreePanicsWithTheCause(t *testing.T) {
+	defer func() {
+		msg, ok := recover().(string)
+		if !ok || !strings.Contains(msg, "build defect") || !strings.Contains(msg, "open php: file does not exist") {
+			t.Fatalf("a missing stub tree panics with its cause, got %v", msg)
+		}
+	}()
+	embeddedStubPaths(fstest.MapFS{})
+}
+
+func TestEmbeddedStubPathsListsPHPFilesInPathOrder(t *testing.T) {
+	got := embeddedStubPaths(fstest.MapFS{
+		"php/core/io/php-8.6.php":      {},
+		"php/core/io-poll/php-8.6.php": {},
+		"php/extensions/README.md":     {},
+		"php/core/php-7.4.php":         {},
+	})
+	want := []string{"php/core/io-poll/php-8.6.php", "php/core/io/php-8.6.php", "php/core/php-7.4.php"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("embeddedStubPaths = %v, want %v", got, want)
 	}
 }
 
@@ -178,11 +190,7 @@ func TestBuiltinPHPForProfileSelectsCoreDeltasFor83(t *testing.T) {
 
 func mustEntries(t *testing.T, profile Profile) []Entry {
 	t.Helper()
-	entries, err := BuiltinPHPForProfile(profile)
-	if err != nil {
-		t.Fatalf("BuiltinPHPForProfile() error = %v", err)
-	}
-	return entries
+	return BuiltinPHPForProfile(profile)
 }
 
 func hasEntry(entries []Entry, path string) bool {

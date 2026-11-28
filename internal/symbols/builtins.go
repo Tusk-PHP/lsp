@@ -341,11 +341,7 @@ func (idx *Index) registerBuiltinRegistryLocked(profile BuiltinProfile) {
 // symbols. Stubs intentionally run after the generated registry so richer
 // signatures, class kinds, methods, and constants replace generic fallbacks.
 func (idx *Index) RegisterBuiltinStubs(profile BuiltinProfile) {
-	entries, err := stubs.BuiltinPHPForProfile(stubs.Profile{PHPVersion: profile.PHPVersion, Extensions: profile.Extensions})
-	if err != nil {
-		return
-	}
-	for _, entry := range entries {
+	for _, entry := range stubs.BuiltinPHPForProfile(stubs.Profile{PHPVersion: profile.PHPVersion, Extensions: profile.Extensions}) {
 		idx.IndexFileWithSource("builtin://"+entry.Path, entry.Content, SourceBuiltin)
 	}
 }
