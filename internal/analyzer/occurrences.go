@@ -7,6 +7,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
+	"github.com/Tusk-PHP/lsp/internal/scope"
 	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
@@ -94,6 +95,7 @@ func (a *Analyzer) occurrencesInDocument(r *resolve.Resolver, target referenceTa
 	decls := target.declarationsIn(doc.URI())
 	tokens := doc.Tokens()
 	var ranges []protocol.Range
+	var bindings *scope.Document
 	for i, tok := range tokens {
 		if tok.Kind == parser.TokenDocComment && target.sym.Kind.IsClassLike() {
 			docNamesSpelledLike(tok, target.sym.Name, func(written string, last protocol.Range) {
@@ -109,6 +111,13 @@ func (a *Analyzer) occurrencesInDocument(r *resolve.Resolver, target referenceTa
 		rng := tokenRange(tok)
 		if tok.Kind == parser.TokenVariable && !follows(tokens, i, parser.TokenDoubleColon) {
 			if !slices.Contains(decls, rng) {
+				continue
+			}
+			if bindings == nil {
+				bindings = scope.Collect(source)
+			}
+			if param := bindings.BindingAt(rng.Start); param != nil && param.Kind == scope.BindingParameter {
+				ranges = append(ranges, bindings.Occurrences(param)...)
 				continue
 			}
 		} else if !target.is(a.resolveSymbolAt(r, doc.NameAt(rng.Start), source)) {

@@ -197,8 +197,24 @@ func TestReferencesOfAPromotedPropertyAreTheProperty(t *testing.T) {
 		got = append(got, fmt.Sprintf("%d:%d", l.Range.Start.Line, l.Range.Start.Character))
 	}
 	slices.Sort(got)
-	if want := []string{"3:46", "6:50", "9:30"}; !slices.Equal(got, want) {
-		t.Errorf("the promoted parameter's references are the property's:\n got %v\nwant %v", got, want)
+	if want := []string{"3:46", "4:13", "6:50", "9:30"}; !slices.Equal(got, want) {
+		t.Errorf("the promoted parameter's references are the property's and the parameter's in the constructor:\n got %v\nwant %v", got, want)
+	}
+}
+
+func TestRenameOfAPromotedPropertyRenamesTheParameterInTheConstructor(t *testing.T) {
+	a, read := setupRenameAnalyzer(map[string]string{"file:///Plot.php": referencesPlot})
+	edit := a.Rename("file:///Plot.php", referencesPlot, positionOf(t, referencesPlot, "$area)"), "$size", read)
+	if edit == nil {
+		t.Fatal("the promoted property can be renamed")
+	}
+	var got []string
+	for _, e := range edit.Changes["file:///Plot.php"] {
+		got = append(got, fmt.Sprintf("%d:%d %s", e.Range.Start.Line, e.Range.Start.Character, e.NewText))
+	}
+	slices.Sort(got)
+	if want := []string{"3:46 $size", "4:13 $size", "6:50 size", "9:30 size"}; !slices.Equal(got, want) {
+		t.Errorf("the declaration, the parameter's use in the constructor and the property's accesses are renamed, never the local:\n got %v\nwant %v", got, want)
 	}
 }
 
