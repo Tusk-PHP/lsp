@@ -93,7 +93,8 @@ func (e *editor) offset(p Position) (int, error) {
 	content = bytes.TrimSuffix(content, []byte{'\r'})
 	col := p.Character
 	if e.enc != UTF8 {
-		col = NewColumns(string(content), e.enc).FromClient(0, p.Character)
+		at := newLineCursor(0, unsafe.String(unsafe.SliceData(content), len(content)))
+		col = at.fromClient(col)
 	}
 	return start + min(col, len(content)), nil
 }
