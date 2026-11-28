@@ -55,3 +55,33 @@ func TestBuiltinUnavailableFollowsVersionChecksAndReportsOnce(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// Symfony's cache adapters test `$connection instanceof \Redis` without
+// ext-redis: the test is just false where PHP has no Redis class, so it is
+// never reported. Static access and `new` still are.
+func TestBuiltinUnavailableSkipsTheClassAnInstanceofTests(t *testing.T) {
+	src := "<?php\nfunction is_redis($c) {\n    return $c instanceof \\Redis || $c instanceof Redis;\n}\nfunction make() { return new \\Redis(); }\n"
+	got := unavailableAndUnknown(t, src, "8.4")
+	if len(got) != 1 || !strings.Contains(got[0], "Class 'Redis' requires ext-redis") {
+		t.Errorf("only the `new` is reported, got %q", got)
+	}
+}
+
+func TestBuiltinUnavailableKnowsClassesFromTheGeneratedTable(t *testing.T) {
+	cases := []struct{ src, version, want string }{
+		{"<?php\nnew \\WeakMap();\n", "7.4", "Class 'WeakMap' requires PHP >= 8.0"},
+		{"<?php\nnew \\ReflectionEnum('E');\n", "8.0", "Class 'ReflectionEnum' requires PHP >= 8.1"},
+		{"<?php\nfunction f($h) { return $h instanceof \\CurlHandle; }\nnew \\CurlHandle();\n", "7.4", "Class 'CurlHandle' requires PHP >= 8.0"},
+		{"<?php\nnew \\Brotli\\Compress\\Context();\n", "8.4", "Class 'Brotli\\Compress\\Context' requires ext-brotli"},
+		{"<?php\nnew \\Redis();\n", "8.4", "Class 'Redis' requires ext-redis"},
+	}
+	for _, c := range cases {
+		got := unavailableAndUnknown(t, c.src, c.version)
+		if len(got) != 1 || !strings.Contains(got[0], c.want) {
+			t.Errorf("%q on PHP %s: got %q, want one %q", c.src, c.version, got, c.want)
+		}
+	}
+	if got := unavailableAndUnknown(t, "<?php\nnew \\Collator('en');\nnew \\NumberFormatter('en', 1);\n", "8.4"); len(got) != 0 {
+		t.Errorf("intl ships with PHP's source; its classes aren't tied to ext-intl being declared: %q", got)
+	}
+}
