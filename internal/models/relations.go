@@ -1,7 +1,6 @@
 package models
 
 import (
-	"os"
 	"sort"
 	"strings"
 
@@ -96,8 +95,7 @@ func extractEloquentRelations(model *symbols.Symbol) (result []Relation) {
 		}
 	}()
 
-	path := symbols.URIToPath(model.URI)
-	content, err := os.ReadFile(path)
+	content, err := symbols.ReadURI(model.URI)
 	if err != nil {
 		return nil
 	}
@@ -184,8 +182,7 @@ func symfonyEntityClasses(index *symbols.Index) []*symbols.Symbol {
 	var result []*symbols.Symbol
 
 	for _, uri := range uris {
-		path := symbols.URIToPath(uri)
-		content, err := os.ReadFile(path)
+		content, err := symbols.ReadURI(uri)
 		if err != nil {
 			continue
 		}
@@ -255,8 +252,7 @@ func extractDoctrineRelations(entity *symbols.Symbol) (result []Relation) {
 		}
 	}()
 
-	path := symbols.URIToPath(entity.URI)
-	content, err := os.ReadFile(path)
+	content, err := symbols.ReadURI(entity.URI)
 	if err != nil {
 		return nil
 	}

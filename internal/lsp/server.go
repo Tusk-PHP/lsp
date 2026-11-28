@@ -59,7 +59,6 @@ type Server struct {
 	schemaCache *models.SchemaCache
 	docMu       sync.RWMutex
 	documents   map[string]string
-	openPaths   map[string]string
 	unsaved     map[string]bool
 	// blade keeps the compiled PHP of open Blade views (see blade.go).
 	blade bladeViews
@@ -68,7 +67,8 @@ type Server struct {
 	// publishMu orders diagnostics publishes (see publishDiagnostics).
 	publishMu sync.Mutex
 	// docIndex orders background indexing of open documents.
-	docIndex docIndexQueue
+	docIndex   docIndexQueue
+	clientURIs clientURIs
 	// diagDebounce delays diagnostics after edits (see scheduleDiagnostics).
 	diagDebounce diagDebouncer
 	encoding     document.Encoding
@@ -106,7 +106,7 @@ type Server struct {
 }
 
 func NewServer(reader io.Reader, writer io.Writer, logger *log.Logger) *Server {
-	return &Server{cfg: config.DefaultConfig(), index: symbols.NewIndex(), schemaCache: models.NewSchemaCache(), documents: make(map[string]string), openPaths: make(map[string]string), unsaved: make(map[string]bool), indexed: make(chan struct{}), reader: bufio.NewReader(reader), writer: writer, logger: logger, exitFunc: os.Exit}
+	return &Server{cfg: config.DefaultConfig(), index: symbols.NewIndex(), schemaCache: models.NewSchemaCache(), documents: make(map[string]string), unsaved: make(map[string]bool), indexed: make(chan struct{}), reader: bufio.NewReader(reader), writer: writer, logger: logger, exitFunc: os.Exit}
 }
 
 // SetStrict enables or disables strict panic mode.

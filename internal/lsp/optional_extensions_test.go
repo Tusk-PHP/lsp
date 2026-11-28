@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func TestSuggestedExtensionsReachLSPIndex(t *testing.T) {
@@ -14,7 +16,7 @@ func TestSuggestedExtensionsReachLSPIndex(t *testing.T) {
 	h := newHarness(t)
 	defer h.close()
 	id := h.send("initialize", map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": map[string]interface{}{},
 	})
 	if resp := h.readResponse(id); resp["error"] != nil {

@@ -193,7 +193,7 @@ class User extends Model {}
 namespace Illuminate\Database\Eloquent;
 abstract class Model {}
 `)
-	idx.IndexFile("file://"+modelPath, modelSource)
+	idx.IndexFile(symbols.PathToURI(modelPath), modelSource)
 
 	// Run database analysis
 	cache := NewSchemaCache()

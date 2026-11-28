@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // TestEloquentStaticCallsRightAfterStartup asks about an Eloquent model the
@@ -25,11 +27,11 @@ func TestEloquentStaticCallsRightAfterStartup(t *testing.T) {
 		t.Skip("testdata/laravel isn't available")
 	}
 	src := string(data)
-	uri := "file://" + path
+	uri := symbols.PathToURI(path)
 
 	h := newHarness(t)
 	defer h.close()
-	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": "file://" + root, "capabilities": map[string]interface{}{}}))
+	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}}))
 	h.notify("initialized", map[string]interface{}{})
 	h.notify("textDocument/didOpen", map[string]interface{}{
 		"textDocument": map[string]interface{}{"uri": uri, "languageId": "php", "version": 1, "text": src},
@@ -91,7 +93,7 @@ func TestEloquentLocalScopesThroughTheServer(t *testing.T) {
 	}
 	h := newHarness(t)
 	defer h.close()
-	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": "file://" + root, "capabilities": map[string]interface{}{}}))
+	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}}))
 	h.notify("initialized", map[string]interface{}{})
 	deadline := time.Now().Add(20 * time.Second)
 	for !h.server.index.Ready() {
@@ -101,7 +103,7 @@ func TestEloquentLocalScopesThroughTheServer(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	modelURI := "file://" + filepath.Join(root, "app/Models/ScopedPost.php")
+	modelURI := symbols.PathToURI(filepath.Join(root, "app/Models/ScopedPost.php"))
 	model := `<?php
 namespace App\Models;
 
@@ -119,7 +121,7 @@ class ScopedPost extends Model
     protected function popular(Builder $query): void {}
 }
 `
-	useURI := "file://" + filepath.Join(root, "app/Http/Controllers/ScopedPostController.php")
+	useURI := symbols.PathToURI(filepath.Join(root, "app/Http/Controllers/ScopedPostController.php"))
 	use := `<?php
 namespace App\Http\Controllers;
 

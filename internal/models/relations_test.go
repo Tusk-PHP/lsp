@@ -26,7 +26,7 @@ func setupRelationsIndex(t *testing.T) (*symbols.Index, string) {
 		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
 			t.Fatalf("write %s: %v", name, err)
 		}
-		idx.IndexFile("file://"+p, content)
+		idx.IndexFile(symbols.PathToURI(p), content)
 	}
 
 	// Base Eloquent Model (needs a real file so analyzeModel can os.ReadFile it;
@@ -163,7 +163,7 @@ func TestModelRelations_Laravel_ExplicitReturnType(t *testing.T) {
 		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
 			t.Fatalf("write %s: %v", name, err)
 		}
-		idx.IndexFile("file://"+p, content)
+		idx.IndexFile(symbols.PathToURI(p), content)
 	}
 
 	writeAndIndex("Model.php", `<?php

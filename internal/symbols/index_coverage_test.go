@@ -217,15 +217,11 @@ func TestIsPHPBuiltinType(t *testing.T) {
 }
 
 func TestURIToPath(t *testing.T) {
-	if got := URIToPath("file:///home/user/file.php"); got != "/home/user/file.php" {
-		t.Errorf("got %q", got)
+	if got, err := URIToPath("file:///home/user/file.php"); err != nil || got != "/home/user/file.php" {
+		t.Errorf("got %q, %v", got, err)
 	}
-	if got := URIToPath("/already/a/path"); got != "/already/a/path" {
-		t.Errorf("got %q", got)
-	}
-	// Percent-encoded characters should be decoded
-	if got := URIToPath("file:///home/user/my%20project/file.php"); got != "/home/user/my project/file.php" {
-		t.Errorf("percent decode: got %q", got)
+	if got, err := URIToPath("file:///home/user/my%20project/file.php"); err != nil || got != "/home/user/my project/file.php" {
+		t.Errorf("percent decode: got %q, %v", got, err)
 	}
 }
 

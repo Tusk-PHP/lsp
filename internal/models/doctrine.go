@@ -84,8 +84,7 @@ var doctrinePluralRelations = map[string]bool{
 func AnalyzeDoctrineEntities(index *symbols.Index, rootPath string) {
 	uris := index.GetAllFileURIs()
 	for _, uri := range uris {
-		path := symbols.URIToPath(uri)
-		content, err := os.ReadFile(path)
+		content, err := symbols.ReadURI(uri)
 		if err != nil {
 			continue
 		}

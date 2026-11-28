@@ -856,18 +856,23 @@ func (s *Service) findReferences(fqn string) ([]ReferenceLocation, error) {
 		}
 		return nil, fmt.Errorf("symbol %q has no source URI", fqn)
 	}
-	if !s.isPathReadable(symbols.URIToPath(sym.URI)) {
+	path, err := symbols.URIToPath(sym.URI)
+	if err != nil {
+		return nil, fmt.Errorf("symbol %q is not declared in a file: %w", fqn, err)
+	}
+	if !s.isPathReadable(path) {
 		return nil, fmt.Errorf("symbol %q is outside MCP allowed roots or inside denied paths", fqn)
 	}
 
 	readSource := func(uri string) (string, bool) {
-		if !s.isPathReadable(symbols.URIToPath(uri)) {
+		path, err := symbols.URIToPath(uri)
+		if err != nil || !s.isPathReadable(path) {
 			return "", false
 		}
 		if src := rt.Workspace.Index.GetFileSource(uri); src != "" {
 			return src, true
 		}
-		data, err := os.ReadFile(symbols.URIToPath(uri))
+		data, err := os.ReadFile(path)
 		if err != nil {
 			return "", false
 		}
@@ -908,7 +913,7 @@ func (s *Service) projectDiagnostics(path string) (DiagnosticsOutput, error) {
 		if err != nil {
 			continue
 		}
-		uri := "file://" + absPath
+		uri := symbols.PathToURI(absPath)
 		diags := rt.Session.AnalyzeAll(uri, string(data))
 		out.Files = append(out.Files, FileDiagnostics{
 			Path:        normalizedRelativePath(s.RootPath, absPath),
@@ -932,8 +937,8 @@ func (s *Service) diagnosticTargets(path string) ([]string, error) {
 	seen := map[string]bool{}
 	var files []string
 	for _, uri := range uris {
-		absPath := symbols.URIToPath(uri)
-		if absPath == "" || !strings.HasPrefix(absPath, s.RootPath) || !s.isPathReadable(absPath) {
+		absPath, err := symbols.URIToPath(uri)
+		if err != nil || !strings.HasPrefix(absPath, s.RootPath) || !s.isPathReadable(absPath) {
 			continue
 		}
 		rel := normalizedRelativePath(s.RootPath, absPath)
@@ -1470,7 +1475,7 @@ func (w *slogWriter) Write(p []byte) (int, error) {
 
 // readFile reads a file by URI, or returns "" when it can't be read.
 func readFile(uri string) string {
-	data, err := os.ReadFile(symbols.URIToPath(uri))
+	data, err := symbols.ReadURI(uri)
 	if err != nil {
 		return ""
 	}

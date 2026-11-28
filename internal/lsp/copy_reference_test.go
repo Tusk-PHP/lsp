@@ -232,7 +232,7 @@ func TestExecuteCommandCopyReference(t *testing.T) {
 
 	root := testdataPath()
 	initID := h.send("initialize", map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": map[string]interface{}{},
 		"processId":    nil,
 	})

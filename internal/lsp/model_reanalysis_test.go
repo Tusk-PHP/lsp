@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // TestModelMembersSurviveOpeningTheModel opens a model file, then edits it,
@@ -24,14 +26,14 @@ func TestModelMembersSurviveOpeningTheModel(t *testing.T) {
 		t.Skip("testdata/laravel isn't available")
 	}
 	modelSrc := string(data)
-	modelURI := "file://" + modelPath
+	modelURI := symbols.PathToURI(modelPath)
 
 	h := newHarness(t)
 	defer h.close()
-	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": "file://" + root, "capabilities": map[string]interface{}{}}))
+	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}}))
 	h.notify("initialized", map[string]interface{}{})
 
-	useURI := "file://" + filepath.Join(root, "app/Http/Controllers/ProductProbeController.php")
+	useURI := symbols.PathToURI(filepath.Join(root, "app/Http/Controllers/ProductProbeController.php"))
 	useSrc := `<?php
 namespace App\Http\Controllers;
 

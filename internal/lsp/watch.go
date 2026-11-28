@@ -47,7 +47,7 @@ func (s *Server) handleDidChangeWatchedFiles(msg *jsonRPCMessage) {
 	}
 	paths := make([]string, 0, len(params.Changes))
 	for _, change := range params.Changes {
-		if path := symbols.URIToPath(change.URI); path != "" {
+		if path, err := symbols.URIToPath(change.URI); err == nil {
 			paths = append(paths, path)
 		}
 	}
@@ -144,22 +144,15 @@ func (s *Server) refreshWorkspace() {
 
 func (s *Server) handBackToEditor(uris []string) {
 	for _, uri := range uris {
-		if editorURI, open := s.editorURIAt(symbols.URIToPath(uri)); open {
-			s.reindexOpenDocument(editorURI)
+		if _, open := s.openDocument(uri); open {
+			s.reindexOpenDocument(uri)
 		}
 	}
 }
 
 func (s *Server) isOpenAt(path string) bool {
-	_, open := s.editorURIAt(path)
+	_, open := s.openDocument(symbols.PathToURI(path))
 	return open
-}
-
-func (s *Server) editorURIAt(path string) (string, bool) {
-	s.docMu.RLock()
-	defer s.docMu.RUnlock()
-	uri, open := s.openPaths[path]
-	return uri, open
 }
 
 func (s *Server) openDocument(uri string) (string, bool) {

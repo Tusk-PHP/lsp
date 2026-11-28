@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func TestInvalidProjectConfigIsReported(t *testing.T) {
@@ -15,7 +17,7 @@ func TestInvalidProjectConfigIsReported(t *testing.T) {
 	}
 	h := newHarness(t)
 	defer h.close()
-	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": "file://" + root, "capabilities": map[string]interface{}{}, "processId": nil}))
+	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}, "processId": nil}))
 
 	note := h.readNotification("window/showMessage", 5*time.Second)
 	if note == nil {
@@ -35,7 +37,7 @@ func TestSkippedIgnoreRuleIsReported(t *testing.T) {
 	}
 	h := newHarness(t)
 	defer h.close()
-	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": "file://" + root, "capabilities": map[string]interface{}{}, "processId": nil}))
+	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}, "processId": nil}))
 
 	note := h.readNotification("window/showMessage", 5*time.Second)
 	if note == nil {

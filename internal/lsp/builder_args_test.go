@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // TestUnknownRelationOnSave saves a file that eager-loads relations of a
@@ -20,7 +22,7 @@ func TestUnknownRelationOnSave(t *testing.T) {
 	}
 	h := newHarness(t)
 	defer h.close()
-	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": "file://" + root, "capabilities": map[string]interface{}{}}))
+	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}}))
 	h.notify("initialized", map[string]interface{}{})
 
 	// Model analysis runs in the background once indexing is done.
@@ -32,7 +34,7 @@ func TestUnknownRelationOnSave(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	uri := "file://" + filepath.Join(root, "app/Http/Controllers/RelationProbeController.php")
+	uri := symbols.PathToURI(filepath.Join(root, "app/Http/Controllers/RelationProbeController.php"))
 	src := `<?php
 namespace App\Http\Controllers;
 

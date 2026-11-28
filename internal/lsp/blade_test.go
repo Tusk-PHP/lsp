@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 const bladeTestModel = `<?php
@@ -52,14 +54,14 @@ func bladeWorkspace(t *testing.T, view string) (h *lspHarness, modelURI, viewURI
 	}
 	h = newHarness(t)
 	id := h.send("initialize", map[string]interface{}{
-		"rootUri": "file://" + root, "capabilities": map[string]interface{}{}, "processId": nil,
+		"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}, "processId": nil,
 	})
 	h.readResponse(id)
 	h.notify("initialized", map[string]interface{}{})
 	time.Sleep(500 * time.Millisecond)
 
-	modelURI = "file://" + filepath.ToSlash(modelPath)
-	viewURI = "file://" + filepath.ToSlash(viewPath)
+	modelURI = symbols.PathToURI(modelPath)
+	viewURI = symbols.PathToURI(viewPath)
 	for uri, text := range map[string]string{modelURI: bladeTestModel, viewURI: view} {
 		lang := "php"
 		if uri == viewURI {

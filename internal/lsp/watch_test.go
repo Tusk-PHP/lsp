@@ -170,7 +170,7 @@ func TestFilesChangedOutsideTheEditorReachTheIndex(t *testing.T) {
 	}, map[string]interface{}{}, nil)
 	waitForSymbols(t, h, "Discount", func(names []string) bool { return slices.Contains(names, "Discount") })
 
-	user := "file://" + filepath.Join(root, "app/Checkout.php")
+	user := symbols.PathToURI(filepath.Join(root, "app/Checkout.php"))
 	openDocument(h, user, "<?php\nnamespace App;\nfunction checkout() { return new Discount(); }\n")
 	waitForDiagnostic(t, h, user, "unknown-class", false)
 
@@ -203,7 +203,7 @@ func TestOpenDocumentsKeepTheEditorsText(t *testing.T) {
 	}, map[string]interface{}{}, nil)
 	waitForSymbols(t, h, "Invoice", func(names []string) bool { return slices.Contains(names, "Invoice") })
 
-	uri := "file://" + filepath.Join(root, "app/Invoice.php")
+	uri := symbols.PathToURI(filepath.Join(root, "app/Invoice.php"))
 	openDocument(h, uri, "<?php\nnamespace App;\nclass Invoice {}\nclass EditedInEditor {}\n")
 	writeProjectFiles(t, root, map[string]string{
 		"app/Invoice.php": "<?php\nnamespace App;\nclass Invoice {}\nclass WrittenOnDisk {}\n",
@@ -231,7 +231,7 @@ func TestComposerPHPVersionChangeAppliesWithoutARestart(t *testing.T) {
 	h, root := startWatchedProject(t, map[string]string{
 		"composer.json": `{"require": {"php": "^8.1"}}`,
 	}, map[string]interface{}{}, nil)
-	uri := "file://" + filepath.Join(root, "check.php")
+	uri := symbols.PathToURI(filepath.Join(root, "check.php"))
 	openDocument(h, uri, usesPHP80)
 	waitForDiagnostic(t, h, uri, "builtin-unavailable", false)
 
@@ -249,7 +249,7 @@ func TestConfigFileAndClientSettingsChangeThePHPVersion(t *testing.T) {
 		"composer.json":  `{"name": "app/app"}`,
 		".tusk-php.json": `{"phpVersion": "8.3"}`,
 	}, map[string]interface{}{}, nil)
-	uri := "file://" + filepath.Join(root, "check.php")
+	uri := symbols.PathToURI(filepath.Join(root, "check.php"))
 	openDocument(h, uri, usesPHP80)
 	waitForDiagnostic(t, h, uri, "builtin-unavailable", false)
 
@@ -323,7 +323,7 @@ func TestRenamedDirectoryResolvesAtTheNewPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	notifyChanges(h, root, map[string]int{"app/Old": 3, "app/New": 1})
-	want := "file://" + filepath.Join(root, "app/New/Track/Leg.php")
+	want := symbols.PathToURI(filepath.Join(root, "app/New/Track/Leg.php"))
 	deadline := time.Now().Add(10 * time.Second)
 	for !slices.Equal(symbolURIs(t, h, "Leg"), []string{want}) {
 		if time.Now().After(deadline) {
@@ -331,7 +331,7 @@ func TestRenamedDirectoryResolvesAtTheNewPlace(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if got := symbolURIs(t, h, "Shipment"); !slices.Equal(got, []string{"file://" + filepath.Join(root, "app/New/Shipment.php")}) {
+	if got := symbolURIs(t, h, "Shipment"); !slices.Equal(got, []string{symbols.PathToURI(filepath.Join(root, "app/New/Shipment.php"))}) {
 		t.Errorf("Shipment is declared at the new place only: %v", got)
 	}
 }
@@ -420,7 +420,7 @@ func TestAConfigFileWithASyntaxErrorKeepsTheLastGoodOne(t *testing.T) {
 		"composer.json":  `{"name": "app/app"}`,
 		".tusk-php.json": `{"phpVersion": "7.4"}`,
 	}, map[string]interface{}{}, nil)
-	uri := "file://" + filepath.Join(root, "check.php")
+	uri := symbols.PathToURI(filepath.Join(root, "check.php"))
 	openDocument(h, uri, usesPHP80)
 	waitForDiagnostic(t, h, uri, "builtin-unavailable", true)
 
@@ -560,7 +560,10 @@ func TestAnOpenDocumentUnderAPathWithASpaceKeepsTheEditorsText(t *testing.T) {
 		editorURI func(path string) string
 	}{
 		{"the editor percent-encodes the space", symbols.PathToURI},
-		{"the editor spells the URI differently from the workspace", func(path string) string { return "file://" + path }},
+		{"the editor spells the URI differently from the workspace", func(path string) string { return strings.ReplaceAll(symbols.PathToURI(path), "%20", " ") }},
+		{"the editor percent-encodes what the workspace leaves plain", func(path string) string {
+			return strings.Replace(symbols.PathToURI(path), "/app/", "/%61pp/", 1)
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h, root := startWatchedProjectIn(t, filepath.Join(t.TempDir(), "my app"), map[string]string{
@@ -684,7 +687,7 @@ func TestClosingADocumentWhileItIsIndexedInTheBackgroundLetsTheDiskTextLandLast(
 		}
 	}
 
-	alias := "file://" + filepath.Join(root, "app") + "/./Big.php"
+	alias := symbols.PathToURI(filepath.Join(root, "app")) + "/./Big.php"
 	reopened := "<?php\nnamespace App;\nclass Reopened {}\n"
 	openDocument(h, alias, reopened)
 	inFlight(alias, reopened)

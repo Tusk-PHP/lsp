@@ -1,10 +1,11 @@
 package completion
 
 import (
-	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Tusk-PHP/lsp/internal/framework/laravel"
 
 	"github.com/Tusk-PHP/lsp/internal/models"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
@@ -91,7 +92,7 @@ class Category extends Model {
 }
 `
 	writeProjectFile(t, tmpDir, "app/Models/Category.php", categorySource)
-	idx.IndexFile("file://"+filepath.Join(tmpDir, "app/Models/Category.php"), categorySource)
+	idx.IndexFile(symbols.PathToURI(filepath.Join(tmpDir, "app/Models/Category.php")), categorySource)
 
 	productSource := `<?php
 namespace App\Models;
@@ -107,7 +108,7 @@ class Product extends Model {
 }
 `
 	writeProjectFile(t, tmpDir, "app/Models/Product.php", productSource)
-	idx.IndexFile("file://"+filepath.Join(tmpDir, "app/Models/Product.php"), productSource)
+	idx.IndexFile(symbols.PathToURI(filepath.Join(tmpDir, "app/Models/Product.php")), productSource)
 
 	// Create migrations
 	writeProjectFile(t, tmpDir, "database/migrations/2024_01_01_create_categories_table.php", `<?php

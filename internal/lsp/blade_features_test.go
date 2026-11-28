@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 const bladeTestLayout = `<html>
@@ -42,10 +44,10 @@ func viewsWorkspace(t *testing.T, views map[string]string, open string) (h *lspH
 	}
 	h = newHarness(t)
 	h.readResponse(h.send("initialize", map[string]interface{}{
-		"rootUri": "file://" + root, "capabilities": map[string]interface{}{}, "processId": nil,
+		"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}, "processId": nil,
 	}))
 	h.notify("initialized", map[string]interface{}{})
-	uri = "file://" + filepath.ToSlash(filepath.Join(root, "resources", "views", open))
+	uri = symbols.PathToURI(filepath.Join(root, "resources", "views", open))
 	h.notify("textDocument/didOpen", map[string]interface{}{
 		"textDocument": map[string]interface{}{"uri": uri, "languageId": "blade", "version": 1, "text": views[open]},
 	})
@@ -114,7 +116,7 @@ func TestBladeViewAndSectionDefinition(t *testing.T) {
 	h, root, uri := viewsWorkspace(t, pageViews(), "page.blade.php")
 	defer h.close()
 
-	layoutURI := "file://" + filepath.ToSlash(filepath.Join(root, "resources", "views", "layouts", "app.blade.php"))
+	layoutURI := symbols.PathToURI(filepath.Join(root, "resources", "views", "layouts", "app.blade.php"))
 	var locs []testLocation
 	request(t, h, "textDocument/definition", uri, posOf(t, bladeTestPage, "layouts.app", 1), nil, &locs)
 	if len(locs) != 1 || locs[0].URI != layoutURI {

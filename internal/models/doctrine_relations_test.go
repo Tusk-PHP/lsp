@@ -21,7 +21,7 @@ func TestModelRelations_Symfony_Doctrine(t *testing.T) {
 		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		idx.IndexFile("file://"+p, content)
+		idx.IndexFile(symbols.PathToURI(p), content)
 	}
 	write("Post.php", `<?php
 namespace App\Entity;
@@ -93,7 +93,7 @@ class Helper
 	}
 
 	// An entity whose file is gone has no relations to read.
-	if got := extractDoctrineRelations(&symbols.Symbol{FQN: "App\\Entity\\Gone", URI: "file://" + filepath.Join(dir, "Gone.php")}); got != nil {
+	if got := extractDoctrineRelations(&symbols.Symbol{FQN: "App\\Entity\\Gone", URI: symbols.PathToURI(filepath.Join(dir, "Gone.php"))}); got != nil {
 		t.Errorf("missing file gave %v", got)
 	}
 }

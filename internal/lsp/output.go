@@ -15,6 +15,7 @@ func (s *Server) writeMessage(msg interface{}) {
 		s.logger.Printf("Marshal error: %v", err)
 		return
 	}
+	body = s.clientURIs.respell(body)
 	frame := make([]byte, 0, len(body)+32)
 	frame = append(frame, "Content-Length: "...)
 	frame = strconv.AppendInt(frame, int64(len(body)), 10)

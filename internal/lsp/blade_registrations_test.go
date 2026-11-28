@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func TestBladeProviderRegistrations(t *testing.T) {
@@ -43,10 +45,10 @@ class AppServiceProvider
 	}
 	h := newHarness(t)
 	defer h.close()
-	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": "file://" + root, "capabilities": map[string]interface{}{}, "processId": nil}))
+	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}, "processId": nil}))
 	h.notify("initialized", map[string]interface{}{})
 	time.Sleep(800 * time.Millisecond)
-	uri := "file://" + filepath.ToSlash(filepath.Join(root, "resources", "views", "page.blade.php"))
+	uri := symbols.PathToURI(filepath.Join(root, "resources", "views", "page.blade.php"))
 	h.notify("textDocument/didOpen", map[string]interface{}{
 		"textDocument": map[string]interface{}{"uri": uri, "languageId": "blade", "version": 1, "text": view},
 	})

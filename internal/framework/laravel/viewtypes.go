@@ -1,7 +1,6 @@
 package laravel
 
 import (
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -129,7 +128,7 @@ func (t *ViewTypes) viewURI(view string) (string, bool) {
 	for _, dir := range t.Data.viewDirs {
 		path := dir + "/" + rel
 		if isFile(path) {
-			return "file://" + path, true
+			return symbols.PathToURI(path), true
 		}
 	}
 	return "", false
@@ -372,7 +371,7 @@ func (t *ViewTypes) source(uri string) string {
 			return src
 		}
 	}
-	data, err := os.ReadFile(symbols.URIToPath(uri))
+	data, err := symbols.ReadURI(uri)
 	if err != nil {
 		return ""
 	}

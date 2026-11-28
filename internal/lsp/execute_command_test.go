@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // TestExecuteCommandAdvertisement verifies that all three executeCommand
@@ -15,7 +17,7 @@ func TestExecuteCommandAdvertisement(t *testing.T) {
 
 	root := testdataPath()
 	initID := h.send("initialize", map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": map[string]interface{}{},
 		"processId":    nil,
 	})
@@ -118,7 +120,7 @@ func TestExecuteCommandDebugDocument(t *testing.T) {
 
 	root := testdataPath()
 	h.send("initialize", map[string]interface{}{
-		"rootUri":      "file://" + root,
+		"rootUri":      symbols.PathToURI(root),
 		"capabilities": map[string]interface{}{},
 		"processId":    nil,
 	})

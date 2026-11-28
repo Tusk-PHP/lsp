@@ -171,9 +171,11 @@ func (ws *Bootstrapped) sourcesAt(path string) ([]string, error) {
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		uris := ws.Index.FilesUnder(path)
-		paths := make([]string, len(uris))
-		for i, uri := range uris {
-			paths[i] = symbols.URIToPath(uri)
+		paths := make([]string, 0, len(uris))
+		for _, uri := range uris {
+			if file, err := symbols.URIToPath(uri); err == nil {
+				paths = append(paths, file)
+			}
 		}
 		return paths, nil
 	case err != nil:

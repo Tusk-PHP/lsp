@@ -18,20 +18,25 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 	}
 	switch params.Command {
 	case protocol.CommandCopyNamespace:
-		uri, ok := s.commandArg[string](msg, params, 0)
+		uri, ok := s.commandURI(msg, params, 0)
 		if !ok {
 			return
 		}
 		s.sendResponse(msg.ID, s.analyzer.GetFileNamespace(uri, s.getDocument(uri)))
 	case protocol.CommandNamespaceForPath:
-		uri, ok := s.commandArg[string](msg, params, 0)
+		uri, ok := s.commandURI(msg, params, 0)
 		if !ok {
 			return
 		}
+		path, err := symbols.URIToPath(uri)
+		if err != nil {
+			s.sendError(msg.ID, codeInvalidParams, err.Error())
+			return
+		}
 		autoload := composer.GetAutoloadPaths(s.rootPath)
-		s.sendResponse(msg.ID, composer.PathToNamespace(symbols.URIToPath(uri), autoload))
+		s.sendResponse(msg.ID, composer.PathToNamespace(path, autoload))
 	case protocol.CommandMoveToNamespace:
-		uri, ok := s.commandArg[string](msg, params, 0)
+		uri, ok := s.commandURI(msg, params, 0)
 		if !ok {
 			return
 		}
@@ -42,7 +47,7 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 		autoload := composer.GetAutoloadPaths(s.rootPath)
 		s.sendResponse(msg.ID, s.positions().workspaceEditOut(s.analyzer.MoveToNamespace(uri, s.getDocument(uri), targetNS, autoload, s.getDocumentReader())))
 	case protocol.CommandCreateObject:
-		dirURI, ok := s.commandArg[string](msg, params, 0)
+		dirURI, ok := s.commandURI(msg, params, 0)
 		if !ok {
 			return
 		}
@@ -57,7 +62,7 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 		autoload := composer.GetAutoloadPaths(s.rootPath)
 		s.sendResponse(msg.ID, buildCreateObjectEdit(dirURI, kind, name, autoload))
 	case protocol.CommandCopyReference:
-		uri, ok := s.commandArg[string](msg, params, 0)
+		uri, ok := s.commandURI(msg, params, 0)
 		if !ok {
 			return
 		}
@@ -68,7 +73,7 @@ func (s *Server) handleExecuteCommand(msg *jsonRPCMessage) {
 		source := s.getDocument(uri)
 		s.sendResponse(msg.ID, s.analyzer.CopyReference(uri, source, s.positionsOf(uri, source).posIn(uri, position)))
 	case protocol.CommandDebugDocument:
-		uri, ok := s.commandArg[string](msg, params, 0)
+		uri, ok := s.commandURI(msg, params, 0)
 		if !ok {
 			return
 		}
@@ -98,6 +103,11 @@ func (s *Server) commandArg[T any](msg *jsonRPCMessage, params protocol.ExecuteC
 		return arg, false
 	}
 	return arg, true
+}
+
+func (s *Server) commandURI(msg *jsonRPCMessage, params protocol.ExecuteCommandParams, i int) (string, bool) {
+	uri, ok := s.commandArg[string](msg, params, i)
+	return symbols.CanonicalURI(uri), ok
 }
 
 func (s *Server) debugDocument(uri string) string {

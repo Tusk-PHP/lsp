@@ -144,8 +144,8 @@ class AutowiredService {
 	os.WriteFile(autowiredPath, []byte(autowiredSrc), 0644)
 
 	idx := symbols.NewIndex()
-	idx.IndexFile("file://"+filepath.ToSlash(notifierPath), mustRead(t, notifierPath))
-	idx.IndexFile("file://"+filepath.ToSlash(autowiredPath), autowiredSrc)
+	idx.IndexFile(symbols.PathToURI(notifierPath), mustRead(t, notifierPath))
+	idx.IndexFile(symbols.PathToURI(autowiredPath), autowiredSrc)
 
 	ca := NewContainerAnalyzer(idx, dir, "symfony")
 	// Register app.notifier manually

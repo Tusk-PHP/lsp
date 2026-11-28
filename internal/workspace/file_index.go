@@ -8,7 +8,7 @@ func (ws *Bootstrapped) IndexFile(uri, source string) {
 		ws.Index.AddTemplateFile(uri)
 		return
 	}
-	if IsIDEHelperFile(symbols.URIToPath(uri)) {
+	if path, err := symbols.URIToPath(uri); err == nil && IsIDEHelperFile(path) {
 		ws.Index.IndexIDEHelperFile(uri, source)
 	} else {
 		ws.Index.IndexFile(uri, source)

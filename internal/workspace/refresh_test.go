@@ -221,7 +221,7 @@ func TestRefreshFollowsDirectoriesCreatedAndDeleted(t *testing.T) {
 		t.Errorf("two files left the old directory and two arrived in the new one: %v", out.Files)
 	}
 	for class, file := range map[string]string{`App\Invoice`: "app/Finance/Invoice.php", `App\Rate`: "app/Finance/Tax/Rate.php"} {
-		if sym := ws.Index.Lookup(class); sym == nil || sym.URI != "file://"+filepath.Join(root, file) {
+		if sym := ws.Index.Lookup(class); sym == nil || sym.URI != symbols.PathToURI(filepath.Join(root, file)) {
 			t.Errorf("%s is declared at the new place: %+v", class, sym)
 		}
 	}
@@ -315,10 +315,10 @@ func TestRefreshKeepsLaravelsViewsRoutesAndIDEHelperCurrent(t *testing.T) {
 	if ws.RouteIndex.Find("home") != nil || ws.RouteIndex.Find("dashboard") == nil {
 		t.Error("a renamed route is found under its new name only")
 	}
-	if !ws.Index.HasFile("file://" + filepath.Join(root, "resources/views/welcome.blade.php")) {
+	if !ws.Index.HasFile(symbols.PathToURI(filepath.Join(root, "resources/views/welcome.blade.php"))) {
 		t.Error("a new Blade view is listed for references and rename")
 	}
-	if sym := ws.Index.Lookup(`Illuminate\Support\Facades\Route`); sym == nil || sym.URI != "file://"+filepath.Join(root, "_ide_helper.php") {
+	if sym := ws.Index.Lookup(`Illuminate\Support\Facades\Route`); sym == nil || sym.URI != symbols.PathToURI(filepath.Join(root, "_ide_helper.php")) {
 		t.Errorf("the IDE helper's classes are read: %+v", sym)
 	}
 

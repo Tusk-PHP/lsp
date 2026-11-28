@@ -139,8 +139,8 @@ func discoverSymfonyRoots(index *symbols.Index) []string {
 		if strings.Contains(uri, "/vendor/") {
 			continue
 		}
-		path := symbols.URIToPath(uri)
-		if path == "" {
+		path, err := symbols.URIToPath(uri)
+		if err != nil {
 			continue
 		}
 
@@ -266,7 +266,7 @@ func discoverRoutesFromAttributeFile(path, pathPrefix, namePrefix string) []Rout
 
 	uri := path
 	if abs, err := filepath.Abs(path); err == nil {
-		uri = "file://" + filepath.ToSlash(abs)
+		uri = symbols.PathToURI(abs)
 	}
 
 	routes := discoverRoutesInFile(uri, string(source))
@@ -594,7 +594,7 @@ func parseYAMLRouteConfig(uri, source string) []routeConfigEntry {
 
 		entry := routeConfigEntry{
 			Name:      name,
-			URI:       "file://" + filepath.ToSlash(uri),
+			URI:       symbols.PathToURI(uri),
 			DeclRange: textpos.Range{Start: textpos.Position{Line: i, Character: 0}, End: textpos.Position{Line: i, Character: len(name)}},
 		}
 
@@ -675,7 +675,7 @@ func parseXMLRouteConfig(uri, source string) []routeConfigEntry {
 		entries = append(entries, routeConfigEntry{
 			Name:      route.ID,
 			Path:      route.Path,
-			URI:       "file://" + filepath.ToSlash(uri),
+			URI:       symbols.PathToURI(uri),
 			DeclRange: rng,
 		})
 	}
@@ -684,7 +684,7 @@ func parseXMLRouteConfig(uri, source string) []routeConfigEntry {
 			continue
 		}
 		entries = append(entries, routeConfigEntry{
-			URI:        "file://" + filepath.ToSlash(uri),
+			URI:        symbols.PathToURI(uri),
 			DeclRange:  findXMLDeclRange(source, "resource", imp.Resource),
 			IsImport:   true,
 			Resource:   imp.Resource,

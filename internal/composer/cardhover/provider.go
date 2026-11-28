@@ -12,6 +12,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/composer/lockfile"
 	"github.com/Tusk-PHP/lsp/internal/composer/manifest"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // Provider serves textDocument/hover and textDocument/definition for
@@ -46,13 +47,13 @@ func (p *Provider) SetEnabled(v bool) { p.enabled = v }
 // for the cursor's package. Off by default.
 func (p *Provider) SetOpenOnDefinition(v bool) { p.openOnDefinition = v }
 
-// IsComposerJSON reports whether the given URI/path refers to a
+// IsComposerJSON reports whether the given file URI refers to a
 // composer.json file the provider should answer for. Vendor composer.json
 // files are accepted — they get the same treatment as the workspace's own
 // file, per the design (see .claude/plans/composer-hover.md §1).
 func IsComposerJSON(uri string) bool {
-	path := uriPath(uri)
-	return filepath.Base(path) == "composer.json"
+	path, err := symbols.URIToPath(uri)
+	return err == nil && filepath.Base(path) == "composer.json"
 }
 
 // Hover renders the package card for the cursor's position, or nil when
@@ -140,13 +141,4 @@ func (p *Provider) buildCard(entry manifest.RequireEntry, repos []manifest.Repos
 		}
 	}
 	return c
-}
-
-// uriPath converts a "file://..." URI to a filesystem path. We accept a
-// plain path too, so tests don't need to URI-encode.
-func uriPath(uri string) string {
-	if strings.HasPrefix(uri, "file://") {
-		return strings.TrimPrefix(uri, "file://")
-	}
-	return uri
 }

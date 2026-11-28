@@ -2,7 +2,6 @@ package analyzer
 
 import (
 	"encoding/json"
-	"os"
 	"sort"
 	"strings"
 
@@ -832,8 +831,7 @@ func (a *Analyzer) findVariableReferences(uri, source string, pos protocol.Posit
 
 // readFileFromDisk reads a file from disk given its URI.
 func (a *Analyzer) readFileFromDisk(uri string) string {
-	path := symbols.URIToPath(uri)
-	content, err := os.ReadFile(path)
+	content, err := symbols.ReadURI(uri)
 	if err != nil {
 		return ""
 	}
@@ -1892,13 +1890,12 @@ func (a *Analyzer) MoveToNamespace(uri, source, targetNS string, autoloadEntries
 	// 3. Compute file move via PSR-4
 	newPath := composer.FQNToPath(newFQN, autoloadEntries)
 	if newPath != "" {
-		oldPath := symbols.URIToPath(uri)
-		if newPath != oldPath {
+		if oldPath, err := symbols.URIToPath(uri); err == nil && newPath != oldPath {
 			edit.DocumentChanges = append(edit.DocumentChanges, protocol.DocumentChange{
 				RenameFile: &protocol.RenameFile{
 					Kind:   "rename",
 					OldURI: uri,
-					NewURI: "file://" + newPath,
+					NewURI: symbols.PathToURI(newPath),
 				},
 			})
 		}

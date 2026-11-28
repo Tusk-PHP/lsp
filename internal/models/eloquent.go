@@ -1,7 +1,6 @@
 package models
 
 import (
-	"os"
 	"regexp"
 	"strings"
 	"unicode"
@@ -102,8 +101,7 @@ func injectEloquentStaticMethods(index *symbols.Index, model *symbols.Symbol) {
 
 func analyzeModel(index *symbols.Index, model *symbols.Symbol) {
 	// Read the source file to extract method bodies
-	path := symbols.URIToPath(model.URI)
-	content, err := os.ReadFile(path)
+	content, err := symbols.ReadURI(model.URI)
 	if err != nil {
 		return
 	}

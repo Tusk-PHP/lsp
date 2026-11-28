@@ -197,7 +197,10 @@ func viewVarDefinition(vars []frameworklaravel.TypedVar, src string, offset int)
 }
 
 func (s *Server) relativePath(uri string) string {
-	path := symbols.URIToPath(uri)
+	path, err := symbols.URIToPath(uri)
+	if err != nil {
+		return uri
+	}
 	root := strings.TrimSuffix(s.rootPath, "/") + "/"
 	return strings.TrimPrefix(path, root)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/diagnostics"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/rule"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
@@ -85,10 +86,10 @@ func TestReadFileReadsFromDisk(t *testing.T) {
 	if err := os.WriteFile(path, []byte("<?php"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := readFile("file://" + path); got != "<?php" {
+	if got := readFile(symbols.PathToURI(path)); got != "<?php" {
 		t.Errorf("readFile = %q", got)
 	}
-	if got := readFile("file://" + path + ".missing"); got != "" {
+	if got := readFile(symbols.PathToURI(path + ".missing")); got != "" {
 		t.Errorf("readFile of a missing file = %q", got)
 	}
 }
@@ -142,5 +143,19 @@ func TestEditorFeaturesShareTheSessionsResolvers(t *testing.T) {
 	}
 	if got := s.typedExpression("$foo->bar()", src, pos, file); got.FullString() != "Foo" {
 		t.Errorf("typedExpression = %q, want Foo", got.FullString())
+	}
+}
+
+func TestSourceFilesListsIndexedFilesAndViewsButNoDocumentThatIsNotAFile(t *testing.T) {
+	root := t.TempDir()
+	class := filepath.Join(root, "app", "Order.php")
+	view := filepath.Join(root, "resources", "views", "order.blade.php")
+	ws := workspace.New(workspace.Options{RootPath: root, Framework: "none"})
+	ws.Index.IndexFile(symbols.PathToURI(class), "<?php\n")
+	ws.Index.IndexFile("untitled:Scratch.php", "<?php\n")
+	ws.Index.AddTemplateFile(symbols.PathToURI(view))
+	ws.Index.AddTemplateFile("untitled:scratch.blade.php")
+	if got, want := New(ws, Options{}).SourceFiles(), []string{class, view}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }

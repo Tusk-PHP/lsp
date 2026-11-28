@@ -55,7 +55,7 @@ func coverageCard(t *testing.T, report string, sourceAge time.Duration, word str
 		}
 	}
 
-	uri := "file://" + source
+	uri := symbols.PathToURI(source)
 	idx := symbols.NewIndex()
 	idx.IndexFile(uri, coverageCardSource)
 	p := NewProvider(idx, nil, "none")
@@ -99,6 +99,26 @@ func TestHoverOmitsUnknownCoverage(t *testing.T) {
 			t.Errorf("%s: expected no coverage line, got:\n%s", name, val)
 		}
 	}
+}
+
+func TestHoverOmitsCoverageOfADocumentThatIsNotAFile(t *testing.T) {
+	const uri = "untitled:Service.php"
+	idx := symbols.NewIndex()
+	idx.IndexFile(uri, coverageCardSource)
+	p := NewProvider(idx, nil, "none")
+	store := coverage.NewStore(t.TempDir(), "", nil)
+	store.Refresh()
+	p.SetCoverage(store)
+	for i, l := range strings.Split(coverageCardSource, "\n") {
+		if strings.Contains(l, "function handle") {
+			h := p.GetHover(uri, coverageCardSource, protocol.Position{Line: i, Character: strings.Index(l, "handle") + 1})
+			if h == nil || strings.Contains(h.Contents.Value, "Coverage") {
+				t.Errorf("a document that is not a file has no coverage: %+v", h)
+			}
+			return
+		}
+	}
+	t.Fatal("no declaration of handle")
 }
 
 func TestCoverageBar(t *testing.T) {

@@ -147,7 +147,7 @@ func TestDiscoverCommandsFromFixtureFiles(t *testing.T) {
 			return nil
 		}
 		data, _ := os.ReadFile(path)
-		idx.IndexFile("file://"+filepath.ToSlash(path), string(data))
+		idx.IndexFile(symbols.PathToURI(path), string(data))
 		return nil
 	})
 
@@ -338,5 +338,33 @@ func TestCommandIndexUpdateFile(t *testing.T) {
 	nilIndex.UpdateFile(uri, "")
 	if nilIndex.All() != nil || nilIndex.Names() != nil || nilIndex.Find("x") != nil {
 		t.Error("a nil index should be empty")
+	}
+}
+
+func TestDiscoverCommandsReadsProjectFilesNotYetIndexed(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "my app")
+	kernel := filepath.Join(root, "src", "Kernel.php")
+	command := filepath.Join(root, "src", "Command", "PruneCommand.php")
+	for path, content := range map[string]string{
+		filepath.Join(root, "composer.json"): `{"name": "app/app"}`,
+		kernel:                               "<?php\nnamespace App;\nclass Kernel {}\n",
+		command:                              "<?php\nnamespace App\\Command;\nuse Symfony\\Component\\Console\\Attribute\\AsCommand;\n#[AsCommand(name: 'app:prune')]\nclass PruneCommand {}\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	idx := symbols.NewIndex()
+	idx.IndexFile(symbols.PathToURI(kernel), "<?php\nnamespace App;\nclass Kernel {}\n")
+
+	cmd := DiscoverCommands(idx).Find("app:prune")
+	if cmd == nil {
+		t.Fatal("a command written to src/ but not yet indexed is discovered")
+	}
+	if want := symbols.PathToURI(command); cmd.URI != want {
+		t.Errorf("command URI = %q, want %q", cmd.URI, want)
 	}
 }

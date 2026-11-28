@@ -1,12 +1,14 @@
 package lsp
 
 import (
+	"net/url"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/composer"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 func testdataAutoload() []composer.AutoloadEntry {
@@ -18,7 +20,7 @@ func testdataAutoload() []composer.AutoloadEntry {
 func testdataSrcDirURI() string {
 	_, file, _, _ := runtime.Caller(0)
 	root := filepath.Join(filepath.Dir(file), "..", "..", "testdata", "project")
-	return "file://" + filepath.ToSlash(filepath.Join(root, "src"))
+	return symbols.PathToURI(filepath.Join(root, "src"))
 }
 
 func TestBuildCreateObjectEdit_ClassInSubdir(t *testing.T) {
@@ -152,8 +154,8 @@ func TestBuildCreateObjectEdit_TrailingSlashDirURI(t *testing.T) {
 	createOp := edit.DocumentChanges[0].CreateFile
 	// Ensure the path portion has no double slash (file:// prefix is normal — check
 	// that the path segment after the scheme+host doesn't contain "//").
-	pathPart := strings.TrimPrefix(createOp.URI, "file://")
-	if strings.Contains(pathPart, "//") {
+	parsed, err := url.Parse(createOp.URI)
+	if err != nil || strings.Contains(parsed.Path, "//") {
 		t.Errorf("file URI path portion contains double slash: %q", createOp.URI)
 	}
 	if !strings.HasSuffix(createOp.URI, "/Auditable.php") {

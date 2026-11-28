@@ -161,7 +161,12 @@ func (p *Providers) read() *Registrations {
 			r.UnknownComponents = true
 			continue
 		}
-		files = append(files, symbols.URIToPath(sym.URI))
+		path, err := symbols.URIToPath(sym.URI)
+		if err != nil {
+			r.UnknownComponents = true
+			continue
+		}
+		files = append(files, path)
 	}
 	// Livewire 4's component locations are anonymous component paths.
 	dirs, known := livewireLocations(p.rootPath)
@@ -195,7 +200,7 @@ type providerScan struct {
 }
 
 func (ps *providerScan) scan(src string) {
-	uri := "file://" + filepath.ToSlash(ps.path)
+	uri := symbols.PathToURI(ps.path)
 	all := parser.Tokenize(src)
 	toks := make([]parser.Token, 0, len(all))
 	for _, t := range all {

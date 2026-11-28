@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 )
 
 // symfonyFixture starts a server on testdata/symfony, waits for indexing and
@@ -21,7 +23,7 @@ func symfonyFixture(t *testing.T, src string) (*lspHarness, string, string) {
 		t.Skip("testdata/symfony/vendor is missing")
 	}
 	h := newHarness(t)
-	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": "file://" + root, "capabilities": map[string]interface{}{}}))
+	h.readResponse(h.send("initialize", map[string]interface{}{"rootUri": symbols.PathToURI(root), "capabilities": map[string]interface{}{}}))
 	h.notify("initialized", map[string]interface{}{})
 	deadline := time.Now().Add(30 * time.Second)
 	for !h.server.index.Ready() || h.server.workspace.SymfonyCommands.Find("app:sync-products") == nil {
@@ -31,7 +33,7 @@ func symfonyFixture(t *testing.T, src string) (*lspHarness, string, string) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	uri := "file://" + filepath.Join(root, "src/Controller/ProbeController.php")
+	uri := symbols.PathToURI(filepath.Join(root, "src/Controller/ProbeController.php"))
 	h.notify("textDocument/didOpen", map[string]interface{}{
 		"textDocument": map[string]interface{}{"uri": uri, "languageId": "php", "version": 1, "text": src},
 	})
@@ -95,7 +97,7 @@ class ProbeController
 		"welcome_message')": "messages.en.xlf",
 		"logout'":           "security.en.php",
 	} {
-		if got := definitionURI(t, h, uri, positionOf(t, src, anchor, 2)); got != "file://"+filepath.Join(root, "translations", file) {
+		if got := definitionURI(t, h, uri, positionOf(t, src, anchor, 2)); got != symbols.PathToURI(filepath.Join(root, "translations", file)) {
 			t.Errorf("definition of %s: got %q, want %s", anchor, got, file)
 		}
 	}
@@ -134,7 +136,7 @@ class ProbeController
 		t.Errorf("$container->get(' offered console commands or translation keys: %.400s", got)
 	}
 
-	want := "file://" + filepath.Join(root, "src/Command/SyncProductsCommand.php")
+	want := symbols.PathToURI(filepath.Join(root, "src/Command/SyncProductsCommand.php"))
 	if got := definitionURI(t, h, uri, positionOf(t, src, "app:sync-products');\n        $application", 4)); got != want {
 		t.Errorf("definition of the command name: got %q, want %q", got, want)
 	}
@@ -143,7 +145,7 @@ class ProbeController
 	}
 
 	// A command added while the server runs is found without a restart.
-	cmdURI := "file://" + filepath.Join(root, "src/Command/ProbeCommand.php")
+	cmdURI := symbols.PathToURI(filepath.Join(root, "src/Command/ProbeCommand.php"))
 	h.notify("textDocument/didOpen", map[string]interface{}{
 		"textDocument": map[string]interface{}{"uri": cmdURI, "languageId": "php", "version": 1, "text": `<?php
 namespace App\Command;

@@ -3,7 +3,6 @@ package lsp
 import (
 	"encoding/json"
 	"maps"
-	"os"
 	"slices"
 
 	"github.com/Tusk-PHP/lsp/internal/document"
@@ -38,7 +37,7 @@ func (s *Server) positionText(uri string) (string, bool) {
 	if source := s.index.GetFileSource(uri); source != "" {
 		return source, true
 	}
-	content, err := os.ReadFile(symbols.URIToPath(uri))
+	content, err := symbols.ReadURI(uri)
 	if err != nil {
 		return "", false
 	}

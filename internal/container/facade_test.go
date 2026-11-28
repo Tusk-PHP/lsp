@@ -63,7 +63,7 @@ func writeTempPHP(t *testing.T, dir, name, content string) string {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return "file://" + path
+	return symbols.PathToURI(path)
 }
 
 func TestResolveFacade(t *testing.T) {
