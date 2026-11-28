@@ -3,6 +3,7 @@ package workspace
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -40,11 +41,39 @@ func TestResolveRootAndPaths(t *testing.T) {
 		filepath.Join(link, "src", "A.php"): filepath.Join(dir, "src", "A.php"),
 		filepath.Join(link, "src", "B.php"): fileLink,
 	} {
-		if got, err := ResolvePath(given); err != nil || got != want {
+		if got, _, err := ResolvePath(given); err != nil || got != want {
 			t.Errorf("ResolvePath(%s) = %q, %v; want %s", given, got, err, want)
 		}
 	}
-	if got, err := ResolvePath(filepath.Join(link, "src", "C.php")); err == nil {
+	if got, _, err := ResolvePath(filepath.Join(link, "src", "C.php")); err == nil {
 		t.Errorf("ResolvePath of a missing file = %q, want an error", got)
+	}
+}
+
+func TestResolvePathSaysWhetherItIsADirectory(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "A.php")
+	if err := os.WriteFile(file, []byte("<?php\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, isDir, err := ResolvePath(dir); err != nil || !isDir {
+		t.Errorf("ResolvePath(dir) isDir = %v, %v", isDir, err)
+	}
+	if _, isDir, err := ResolvePath(file); err != nil || isDir {
+		t.Errorf("ResolvePath(file) isDir = %v, %v", isDir, err)
+	}
+}
+
+func TestResolvingARelativePathNeedsTheWorkingDirectory(t *testing.T) {
+	gone := t.TempDir()
+	t.Chdir(gone)
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := ResolveRoot("app"); err == nil || !strings.Contains(err.Error(), `resolving workspace root "app"`) {
+		t.Errorf("ResolveRoot in a removed directory = %q, %v", got, err)
+	}
+	if got, _, err := ResolvePath("app/A.php"); err == nil || !strings.Contains(err.Error(), `resolving "app/A.php"`) {
+		t.Errorf("ResolvePath in a removed directory = %q, %v", got, err)
 	}
 }

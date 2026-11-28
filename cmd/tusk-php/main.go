@@ -186,7 +186,7 @@ func runIntrospect(args []string) error {
 		return fmt.Errorf("invalid --verbosity %q: must be one of compact, full", *verbosityFlag)
 	}
 
-	absFile, err := workspace.ResolvePath(filePath)
+	absFile, _, err := workspace.ResolvePath(filePath)
 	if err != nil {
 		return err
 	}

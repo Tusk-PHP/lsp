@@ -115,3 +115,20 @@ func TestLineRanges(t *testing.T) {
 		t.Errorf("got %v", got)
 	}
 }
+
+func TestPhpCoverageOfAMissingFileIsAnError(t *testing.T) {
+	if out, err := coverageTestService(t, coverageTestReport).phpCoverage("app/Gone.php"); err == nil || !strings.Contains(err.Error(), "resolving") {
+		t.Errorf("phpCoverage of a missing file = %+v, %v", out, err)
+	}
+}
+
+func TestPhpCoverageToolAnswersWithoutAReport(t *testing.T) {
+	session, _ := connectedService(t, map[string]string{".tusk-php.json": plainProjectConfig})
+	out, err := callTool(t, session, "php_coverage", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if note, _ := out["note"].(string); !strings.Contains(note, "--coverage-clover") {
+		t.Errorf("php_coverage without a report = %+v", out)
+	}
+}

@@ -20,11 +20,11 @@ func ResolveRoot(given string) (string, error) {
 		return "", fmt.Errorf("resolving workspace root %q: %w", given, err)
 	}
 	info, err := os.Stat(root)
+	if err == nil && !info.IsDir() {
+		err = fmt.Errorf("%s is not a directory", root)
+	}
 	if err != nil {
 		return "", fmt.Errorf("resolving workspace root %q: %w", given, err)
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("resolving workspace root %q: %s is not a directory", given, root)
 	}
 	return root, nil
 }
@@ -33,25 +33,26 @@ func ResolveRoot(given string) (string, error) {
 // client names inside the workspace, spelled as the workspace's file walk
 // spells it: the directories on the way have their symbolic links resolved,
 // and so does a directory named itself, while a file keeps its own name.
-func ResolvePath(path string) (string, error) {
+// isDir reports whether it names a directory.
+func ResolvePath(path string) (resolved string, isDir bool, err error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		return "", fmt.Errorf("resolving %q: %w", path, err)
+		return "", false, fmt.Errorf("resolving %q: %w", path, err)
 	}
 	info, err := os.Stat(abs)
 	if err != nil {
-		return "", fmt.Errorf("resolving %q: %w", path, err)
+		return "", false, fmt.Errorf("resolving %q: %w", path, err)
 	}
-	if info.IsDir() {
-		resolved, err := filepath.EvalSymlinks(abs)
-		if err != nil {
-			return "", fmt.Errorf("resolving %q: %w", path, err)
-		}
-		return resolved, nil
+	isDir = info.IsDir()
+	target := abs
+	if !isDir {
+		target = filepath.Dir(abs)
 	}
-	dir, err := filepath.EvalSymlinks(filepath.Dir(abs))
-	if err != nil {
-		return "", fmt.Errorf("resolving %q: %w", path, err)
+	if resolved, err = filepath.EvalSymlinks(target); err != nil {
+		return "", false, fmt.Errorf("resolving %q: %w", path, err)
 	}
-	return filepath.Join(dir, filepath.Base(abs)), nil
+	if !isDir {
+		resolved = filepath.Join(resolved, filepath.Base(abs))
+	}
+	return resolved, isDir, nil
 }

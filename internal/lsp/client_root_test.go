@@ -1,7 +1,10 @@
 package lsp
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,5 +101,20 @@ func TestRespellRootTouchesOnlyWholeURIs(t *testing.T) {
 	}
 	if newRootURIs("file:///same", "file:///same/") != nil {
 		t.Error("the same root needs no respelling")
+	}
+}
+
+func TestAWorkspaceRootThatCantBeOpenedIsKeptAndReported(t *testing.T) {
+	var out bytes.Buffer
+	s := NewServer(strings.NewReader(""), &out, log.New(io.Discard, "", 0))
+	if got := s.resolveRoot(initializeParams{}); got != "" || out.Len() != 0 {
+		t.Errorf("no root: %q, sent %s", got, out.String())
+	}
+	missing := filepath.Join(t.TempDir(), "gone")
+	if got := s.resolveRoot(initializeParams{RootPath: missing}); got != missing {
+		t.Errorf("a root that can't be opened = %q, want it kept as given", got)
+	}
+	if !strings.Contains(out.String(), "window/showMessage") || !strings.Contains(out.String(), "can't open the workspace root") {
+		t.Errorf("the user isn't told: %s", out.String())
 	}
 }

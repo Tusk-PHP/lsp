@@ -44,3 +44,13 @@ func TestProjectDiagnosticsThroughASymlinkedRoot(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectDiagnosticsOfAMissingPathIsAnError(t *testing.T) {
+	svc, err := New(context.Background(), t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, err := svc.projectDiagnostics("src/Gone.php"); err == nil {
+		t.Errorf("diagnostics of a missing file = %+v, want an error", out)
+	}
+}

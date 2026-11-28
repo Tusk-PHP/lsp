@@ -947,7 +947,8 @@ func (s *Service) workspacePath(path string) (string, error) {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(s.RootPath, path)
 	}
-	return workspace.ResolvePath(path)
+	resolved, _, err := workspace.ResolvePath(path)
+	return resolved, err
 }
 
 func (s *Service) findColumn(name string) FindColumnOutput {

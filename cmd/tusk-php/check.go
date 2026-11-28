@@ -206,16 +206,12 @@ func checkTargets(root string, args []string, indexed []string) ([]string, error
 		}
 		found := 0
 		for _, m := range matches {
-			info, err := os.Stat(m)
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", arg, err)
-			}
-			resolved, err := workspace.ResolvePath(m)
+			resolved, isDir, err := workspace.ResolvePath(m)
 			if err != nil {
 				return nil, fmt.Errorf("%s: %w", arg, err)
 			}
 			switch {
-			case info.IsDir():
+			case isDir:
 				found += add(under(resolved)...)
 			case workspace.IsPHPSource(resolved), workspace.IsBlade(resolved):
 				found += add(resolved)
