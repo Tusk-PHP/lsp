@@ -7,6 +7,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	phpast "github.com/Tusk-PHP/lsp/internal/php/ast"
@@ -75,5 +76,32 @@ func TestWalkReachesEveryNodeType(t *testing.T) {
 	}
 	if text := good.Stmts[0].Bounds().Text(string(src)); text != "<p>inline</p>\n" {
 		t.Errorf("a span's text is its source: %q", text)
+	}
+}
+
+func TestDocBeforeFindsTheCommentOfTheNextToken(t *testing.T) {
+	src := "<?php\n/** first */\n/** second */\n$a = 1;\n$b = 2;\n/** trailing */"
+	file := parser.Parse(src, token.Latest)
+	text := func(off int) string {
+		span, ok := file.DocBefore(uint32(off))
+		if !ok {
+			return ""
+		}
+		return src[span.Start:span.End]
+	}
+	for _, c := range []struct {
+		at   string
+		want string
+	}{
+		{"$a", "/** second */"},
+		{"$b", ""},
+		{"<?php", ""},
+	} {
+		if got := text(strings.Index(src, c.at)); got != c.want {
+			t.Errorf("DocBefore(%s) = %q, want %q", c.at, got, c.want)
+		}
+	}
+	if got := text(len(src)); got != "/** trailing */" {
+		t.Errorf("DocBefore(end) = %q, want the trailing doc comment", got)
 	}
 }
