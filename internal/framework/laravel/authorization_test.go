@@ -335,3 +335,19 @@ func BenchmarkReadOutsideFile(b *testing.B) {
 		})
 	}
 }
+
+func TestAuthorizationEdges(t *testing.T) {
+	var none *Authorization
+	none.IndexFile("file:///x.php", "<?php\nGate::define('x', fn () => true);\n")
+	if names := none.AbilityNames(); len(names) != 0 {
+		t.Errorf("no authorization knows no abilities: %v", names)
+	}
+	auth, _, _ := authProject(t)
+	auth.IndexFile("untitled:Untitled-1", "<?php\nGate::define('scratch', fn () => true);\n")
+	if slices.Contains(auth.AbilityNames(), "scratch") {
+		t.Error("an unsaved buffer outside the project registers nothing")
+	}
+	if ability, ok := auth.AbilityFor("update", "Unnamespaced"); !ok || ability.Name != "update" {
+		t.Errorf("a model without a policy still finds the ability: %+v, %v", ability, ok)
+	}
+}

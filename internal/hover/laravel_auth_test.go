@@ -91,3 +91,17 @@ func TestHoverLaravelMiddleware(t *testing.T) {
 		t.Errorf("the parameters are no name:\n%s", text)
 	}
 }
+
+func TestHoverUnknownAuthNamesAndAliasClasses(t *testing.T) {
+	p := setupLaravelAuthHover(t)
+	uses := "<?php\nuse Illuminate\\Support\\Facades\\Gate;\nuse Illuminate\\Support\\Facades\\Route;\n"
+	if text := hoverText(t, p, uses+"Gate::allows('no-such-ability');\n", "no-such"); text != "" {
+		t.Errorf("an unknown ability has no hover:\n%s", text)
+	}
+	if text := hoverText(t, p, uses+"Route::middleware('no-such-middleware');\n", "no-such"); text != "" {
+		t.Errorf("an unknown middleware has no hover:\n%s", text)
+	}
+	if text := hoverText(t, p, uses+"Route::middleware('auth');\n", "auth"); !strings.Contains(text, "`Illuminate\\Auth\\Middleware\\Authenticate`") {
+		t.Errorf("an alias hovers with the class it aliases:\n%s", text)
+	}
+}

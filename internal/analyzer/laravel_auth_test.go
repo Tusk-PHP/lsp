@@ -104,3 +104,14 @@ func TestDefinitionLaravelMiddleware(t *testing.T) {
 		t.Errorf("Laravel's web group goes to where Laravel defines it: %+v", loc)
 	}
 }
+
+func TestDefinitionOfUnknownAuthNames(t *testing.T) {
+	a, _ := setupLaravelAuthAnalyzer(t)
+	uses := "<?php\nuse Illuminate\\Support\\Facades\\Gate;\nuse Illuminate\\Support\\Facades\\Route;\n"
+	if loc := definitionAt(t, a, uses+"Gate::allows('no-such-ability');", "no-such", 2); loc != nil {
+		t.Errorf("an unknown ability has no definition: %+v", loc)
+	}
+	if loc := definitionAt(t, a, uses+"Route::middleware('no-such-middleware');", "no-such", 2); loc != nil {
+		t.Errorf("an unknown middleware has no definition: %+v", loc)
+	}
+}
