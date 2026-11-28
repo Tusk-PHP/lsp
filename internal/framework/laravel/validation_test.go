@@ -585,13 +585,15 @@ func TestValidationRuleStringsInLivewire(t *testing.T) {
 		"validate list":   {`class CreatePost extends Component { #[Validate(['required', 'min:3'], message: 'Too short')] public $title = ''; }`, "array:required[] | array:min[:3]"},
 		"validate keyed": {`class CreatePost extends Component { #[Validate(['todos' => 'required', 'todos.*' => ['required', 'min:3']])] public $todos = []; }`,
 			"piped:required[] | array:required[] | array:min[:3]"},
-		"named rule":       {`class CreatePost extends Component { #[Validate(as: 'title', rule: 'max:5')] public $title = ''; }`, "piped:max[:5]"},
-		"rule attribute":   {`class CreatePost extends Component { #[Rule('email')] public $email = ''; }`, "piped:email[]"},
-		"other attribute":  {`class CreatePost extends Component { #[Other('nope')] public $title = ''; }`, ""},
-		"this validate":    {`class CreatePost extends Component { public function save() { $this->validate(['title' => 'required'], ['title.required' => 'Needed']); } }`, "piped:required[]"},
-		"validateOnly":     {`class CreatePost extends Component { public function updated($p) { $this->validateOnly($p, ['title' => 'max:5']); } }`, "piped:max[:5]"},
-		"not a component":  {`class Service extends Other { protected $rules = ['title' => 'nope']; public function rules() { return ['a' => 'nope']; } }`, ""},
-		"request has none": {`$request->validateOnly('a', ['a' => 'nope']);`, ""},
+		"named rule":                 {`class CreatePost extends Component { #[Validate(as: 'title', rule: 'max:5')] public $title = ''; }`, "piped:max[:5]"},
+		"rule attribute":             {`class CreatePost extends Component { #[Rule('email')] public $email = ''; }`, "piped:email[]"},
+		"other attribute":            {`class CreatePost extends Component { #[Other('nope')] public $title = ''; }`, ""},
+		"this validate":              {`class CreatePost extends Component { public function save() { $this->validate(['title' => 'required'], ['title.required' => 'Needed']); } }`, "piped:required[]"},
+		"validateOnly":               {`class CreatePost extends Component { public function updated($p) { $this->validateOnly($p, ['title' => 'max:5']); } }`, "piped:max[:5]"},
+		"not a component":            {`class Service extends Other { protected $rules = ['title' => 'nope']; public function rules() { return ['a' => 'nope']; } }`, ""},
+		"request has none":           {`$request->validateOnly('a', ['a' => 'nope']);`, ""},
+		"validate without arguments": {`class CreatePost extends Component { #[Validate] public $title = ''; }`, ""},
+		"form request property":      {`class StorePost extends \Illuminate\Foundation\Http\FormRequest { protected $rules = ['a' => 'nope']; public function rules() { return ['a' => 'string']; } }`, "piped:string[]"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := strings.Join(ruleStringsWith(t, livewireFixture, "<?php\n"+tc.src), " | ")
