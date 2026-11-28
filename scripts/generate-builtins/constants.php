@@ -92,14 +92,14 @@ function generateGoConstants(array $dumps): string
         $type = implode('|', $types);
         $value = count($values) === 1 && $occurrences[0]['value'] !== null && !isBuildDependent($name) ? $occurrences[0]['value'] : '';
         $since = sinceVersion($name, $occurrences, $dumps, $baseline);
-        $gate = isset($peclExtensions[$extension]) ? $extension : '';
         $lines[] = sprintf(
-            "	{Name: %s, Type: %s, Value: %s, BuiltinAvailability: BuiltinAvailability{Since: %s, Extension: %s}},",
+            "	{Name: %s, Type: %s, Value: %s, Extension: %s%s%s},",
             renderGoString($name),
             renderGoString($type),
             renderGoValue($value),
-            renderGoString($since),
-            renderGoString($gate)
+            renderGoString($extension),
+            $since === '' ? '' : ', Since: ' . renderGoString($since),
+            isset($peclExtensions[$extension]) ? ', PECL: true' : ''
         );
     }
 

@@ -337,18 +337,11 @@ func (idx *Index) registerBuiltinRegistryLocked(profile BuiltinProfile) {
 	}
 
 	for _, c := range generatedBuiltinConstants {
-		if idx.symbols[c.Name] != nil || !availableIn(constantAvailability(c), profile) {
+		if idx.symbols[c.Name] != nil || !availableIn(c.availability(), profile) {
 			continue
 		}
 		idx.storeBuiltinLocked(&Symbol{Name: shortName(c.Name), FQN: c.Name, Kind: KindConstant, Source: SourceBuiltin, URI: builtinRegistryURI, Type: c.Type, Value: c.Value})
 	}
-}
-
-func constantAvailability(c builtinConstant) BuiltinAvailability {
-	if a, ok := builtinAvailabilityByName[c.Name]; ok {
-		return a
-	}
-	return c.BuiltinAvailability
 }
 
 // RegisterBuiltinStubs indexes embedded PHP stub declarations as built-in
