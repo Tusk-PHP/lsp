@@ -298,9 +298,12 @@ func ownReceiver(tokens []parser.Token, arrow int) bool {
 	return prev < 0 || (tokens[prev].Kind != parser.TokenArrow && tokens[prev].Kind != parser.TokenDoubleColon)
 }
 
-// ownClassName reports whether tok names the class itself: self, static or
-// its own name.
+// ownClassName reports whether tok names the class itself: self, static,
+// its own name or $this.
 func (c *useCollector) ownClassName(tok parser.Token) bool {
+	if isThis(tok) {
+		return true
+	}
 	if !isWordToken(tok) {
 		return false
 	}
@@ -377,10 +380,7 @@ func (c *useCollector) collectStaticAccess(tokens []parser.Token, colons int) {
 	u := c.u
 	at := nextSignificant(tokens, colons+1)
 	name := tokenAt(tokens, at)
-	own := false
-	if class := parser.PrevSignificant(tokens, colons-1); class >= 0 {
-		own = c.ownClassName(tokens[class])
-	}
+	own := c.ownClassName(tokenAt(tokens, parser.PrevSignificant(tokens, colons-1)))
 	switch {
 	case isWordToken(name):
 		u.methods[strings.ToLower(name.Value)] = true
