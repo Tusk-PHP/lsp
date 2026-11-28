@@ -10,6 +10,7 @@ import (
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/parser"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
+	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
 // TypedVar is a variable a view receives, typed as the union of what each
@@ -155,11 +156,19 @@ func (c *varCollector) add(site ViewVar, typ string) {
 		c.types[site.Name] = map[string]bool{}
 	}
 	v.Sites = append(v.Sites, site)
-	for _, part := range strings.Split(typ, "|") {
-		if part = strings.TrimSpace(part); part != "" && part != "mixed" {
+	for _, member := range unionMembers(typ) {
+		if part := member.String(); part != "" && part != "mixed" {
 			c.types[site.Name][part] = true
 		}
 	}
+}
+
+func unionMembers(typ string) []types.TypeExpr {
+	expr := types.ParseTypeExpr(typ)
+	if expr.Kind == types.TypeKindUnion {
+		return expr.Types
+	}
+	return []types.TypeExpr{expr}
 }
 
 func (c *varCollector) vars() []TypedVar {
@@ -251,12 +260,16 @@ func (t *ViewTypes) qualify(typ, uri string, st *typingState) string {
 	if f.file == nil {
 		return typ
 	}
-	parts := strings.Split(typ, "|")
-	for i, part := range parts {
-		nullable := strings.HasPrefix(part, "?")
-		name := strings.TrimPrefix(part, "?")
+	members := unionMembers(typ)
+	parts := make([]string, len(members))
+	for i, member := range members {
+		if member.Kind != types.TypeKindNamed {
+			parts[i] = member.String()
+			continue
+		}
+		name := member.Name
 		switch {
-		case name == "" || scalarTypes[strings.ToLower(name)] || strings.ContainsAny(name, "<>{}()&"):
+		case name == "" || scalarTypes[strings.ToLower(name)]:
 		case strings.HasPrefix(name, `\`):
 			name = name[1:]
 		default:
@@ -283,7 +296,7 @@ func (t *ViewTypes) qualify(typ, uri string, st *typingState) string {
 				name = resolved
 			}
 		}
-		if nullable {
+		if member.Nullable {
 			name = "?" + name
 		}
 		parts[i] = name
