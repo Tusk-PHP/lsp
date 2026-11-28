@@ -1,6 +1,7 @@
 package symbols
 
 import (
+	"slices"
 	"strconv"
 	"testing"
 
@@ -81,5 +82,31 @@ func TestReparseForGrammarsSkipsFilesWhoseGrammarStays(t *testing.T) {
 	}
 	if idx.Lookup("match") == nil {
 		t.Error("function match() stays declared")
+	}
+}
+
+func TestReparseForGrammarsKeepsAnIDEHelperFileAHelper(t *testing.T) {
+	idx := NewIndexFor(phpparser.OnlyGrammar(token.PHP74))
+	model := "file:///app/Models/User.php"
+	idx.IndexFile(model, "<?php\nclass User {}\n")
+	helper := "file:///app/_ide_helper_models.php"
+	idx.IndexIDEHelperFile(helper, "<?php\n/** @property string $email */\nclass User {}\nclass Readonly {}\n")
+	if idx.Lookup("Readonly") == nil {
+		t.Fatal("PHP 7.4 reads class Readonly")
+	}
+	moveTo(t, idx, phpparser.OnlyGrammar(token.PHP81))
+	var reparsed []string
+	idx.ReparseForGrammars(func(uri, _ string) { reparsed = append(reparsed, uri) })
+	if !slices.Contains(reparsed, helper) {
+		t.Fatalf("reparsed %v, want the helper among them", reparsed)
+	}
+	if idx.Lookup("Readonly") != nil {
+		t.Error("readonly is a keyword on PHP 8.1")
+	}
+	if user := idx.Lookup("User"); user == nil || user.URI != model {
+		t.Errorf("User = %+v, want the model's declaration", user)
+	}
+	if email := idx.Lookup("User::$email"); email == nil || !email.IsVirtual || email.URI != helper {
+		t.Errorf("User::$email = %+v, want the helper's virtual property", email)
 	}
 }
