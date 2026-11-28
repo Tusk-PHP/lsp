@@ -29,11 +29,45 @@ func qualifyDocTypes(doc string, uses []parser.UseNode) string {
 	}
 	var b strings.Builder
 	last := 0
+	forEachDocType(doc, func(ts int, typeStr string) {
+		forEachImportedName(typeStr, uses, func(start, end int, fqn string) {
+			if b.Len() == 0 {
+				b.Grow(len(doc) + 64)
+			}
+			b.WriteString(doc[last : ts+start])
+			b.WriteByte('\\')
+			b.WriteString(fqn)
+			last = ts + end
+		})
+	})
+	if last == 0 {
+		return doc
+	}
+	b.WriteString(doc[last:])
+	return b.String()
+}
+
+// ForEachDocClassName calls fn with each class name the type tags of a PHPDoc
+// comment use, as written (a fully qualified one with its leading backslash),
+// and its byte offsets in doc. Variables, literals and shape keys are not
+// names; template parameters and type keywords are, since only the file's
+// imports can tell them apart.
+func ForEachDocClassName(doc string, fn func(start, end int, name string)) {
+	forEachDocType(doc, func(ts int, typeStr string) {
+		forEachClassName(typeStr, func(start, end int) {
+			fn(ts+start, ts+end, typeStr[start:end])
+		})
+	})
+}
+
+// forEachDocType calls fn with each type a PHPDoc comment's tags give and
+// where it starts in doc.
+func forEachDocType(doc string, fn func(ts int, typeStr string)) {
 	i := 0
 	for {
 		k := strings.IndexByte(doc[i:], '@')
 		if k < 0 {
-			break
+			return
 		}
 		at := i + k
 		j := at + 1
@@ -51,38 +85,38 @@ func qualifyDocTypes(doc string, uses []parser.UseNode) string {
 		}
 		starts, n := docTagTypeStarts(tag, doc, j, lineEnd)
 		for _, ts := range starts[:n] {
-			if ts < last {
+			if ts < i {
 				continue
 			}
 			typeStr, _ := types.ExtractDocTypeString(doc[ts:lineEnd])
 			if typeStr == "" || !strings.HasPrefix(doc[ts:], typeStr) {
 				continue
 			}
-			forEachImportedName(typeStr, uses, func(start, end int, fqn string) {
-				if b.Len() == 0 {
-					b.Grow(len(doc) + 64)
-				}
-				b.WriteString(doc[last : ts+start])
-				b.WriteByte('\\')
-				b.WriteString(fqn)
-				last = ts + end
-			})
+			fn(ts, typeStr)
 			if ts+len(typeStr) > i {
 				i = ts + len(typeStr)
 			}
 		}
 	}
-	if last == 0 {
-		return doc
-	}
-	b.WriteString(doc[last:])
-	return b.String()
 }
 
 // forEachImportedName calls fn for each class name in a PHPDoc type whose first
 // segment is a `use` import, with its position and fully qualified name.
-// Variables, quoted literals, shape keys and fully qualified names are skipped.
 func forEachImportedName(t string, uses []parser.UseNode, fn func(start, end int, fqn string)) {
+	forEachClassName(t, func(start, end int) {
+		if t[start] == '\\' {
+			return
+		}
+		if fqn, ok := importedName(t[start:end], uses); ok {
+			fn(start, end, fqn)
+		}
+	})
+}
+
+// forEachClassName calls fn with the position of each class name in a PHPDoc
+// type, fully qualified ones included. Variables, quoted literals, numbers and
+// shape keys are skipped.
+func forEachClassName(t string, fn func(start, end int)) {
 	braces := 0
 	for i := 0; i < len(t); {
 		c := t[i]
@@ -98,19 +132,17 @@ func forEachImportedName(t string, uses []parser.UseNode, fn func(start, end int
 			braces++
 		case c == '}':
 			braces--
-		case c == '$' || c == '\\' || (c >= '0' && c <= '9'):
-			// A variable, a fully qualified name or a number: skip all of it.
+		case c == '$' || (c >= '0' && c <= '9'):
 			i++
 			for i < len(t) && (isDocNameByte(t[i]) || t[i] == '\\') {
 				i++
 			}
 			continue
-		case isDocNameByte(c):
+		case c == '\\' || isDocNameByte(c):
 			start := i
 			for i < len(t) && (isDocNameByte(t[i]) || t[i] == '\\') {
 				i++
 			}
-			// `key: Type` and `key?: Type` in a shape name a key, not a class.
 			if braces > 0 {
 				k := i
 				if k < len(t) && t[k] == '?' {
@@ -120,9 +152,7 @@ func forEachImportedName(t string, uses []parser.UseNode, fn func(start, end int
 					continue
 				}
 			}
-			if fqn, ok := importedName(t[start:i], uses); ok {
-				fn(start, i, fqn)
-			}
+			fn(start, i)
 			continue
 		}
 		i++

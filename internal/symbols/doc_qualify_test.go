@@ -1,6 +1,7 @@
 package symbols
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
@@ -68,4 +69,32 @@ func BenchmarkQualifyDocTypes(b *testing.B) {
 			qualifyDocTypes(plain, uses)
 		}
 	})
+}
+
+func TestForEachDocClassNameGivesEveryNameWithItsPlace(t *testing.T) {
+	doc := "/**\n * Finds a user. User is not a type here.\n * @param User|\\App\\Models\\Team $owner\n * @param array{user: Post, n: int} $shape\n * @return Collection<int, Models\\User>\n * @throws 'User'\n */"
+	var got []string
+	ForEachDocClassName(doc, func(start, end int, name string) {
+		if doc[start:end] != name {
+			t.Errorf("%q is at %d:%d, which holds %q", name, start, end, doc[start:end])
+		}
+		got = append(got, name)
+	})
+	want := []string{"User", `\App\Models\Team`, "array", "Post", "int", "Collection", "int", `Models\User`}
+	if !slices.Equal(got, want) {
+		t.Errorf("names = %q, want %q", got, want)
+	}
+}
+
+func TestADocTypeInsideAnotherIsReadOnce(t *testing.T) {
+	doc := "/** @template T of Foo<A =B> */"
+	var got []string
+	ForEachDocClassName(doc, func(_, _ int, name string) { got = append(got, name) })
+	if want := []string{"Foo", "A", "B"}; !slices.Equal(got, want) {
+		t.Errorf("names = %q, want %q: the default after = lies inside the bound and is not a type of its own", got, want)
+	}
+	uses := []parser.UseNode{{FullName: "Vendor\\B", Alias: "B"}}
+	if got, want := qualifyDocTypes(doc, uses), "/** @template T of Foo<A =\\Vendor\\B> */"; got != want {
+		t.Errorf("qualified to %q, want %q", got, want)
+	}
 }

@@ -348,6 +348,9 @@ func TestDocumentOutsideItsLines(t *testing.T) {
 	if file := doc.File(); file == nil || len(file.Classes) != 1 || file.Classes[0].Name != "Shop" {
 		t.Fatalf("the document's declarations are the parsed file's: %+v", file)
 	}
+	if doc.URI() != "file:///a.php" {
+		t.Errorf("the document's URI is the one it was made with, got %q", doc.URI())
+	}
 	if name := Analyze("file:///a.php", source, protocol.Position{Line: 2, Character: 7}).Name(); name == nil || name.SymbolText != "Shop" {
 		t.Errorf("the name under the cursor is Shop, got %+v", name)
 	}

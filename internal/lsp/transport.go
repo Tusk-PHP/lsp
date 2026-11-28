@@ -29,8 +29,9 @@ type rpcError struct {
 }
 
 const (
-	codeMethodNotFound = -32601
-	codeInvalidParams  = -32602
+	codeMethodNotFound  = -32601
+	codeInvalidParams   = -32602
+	codeContentModified = -32801
 )
 
 func (s *Server) decodeParams[P any](msg *jsonRPCMessage) (P, bool) {

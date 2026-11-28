@@ -1,121 +1,136 @@
 package analyzer
 
 import (
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/framework/laravel/blade"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/resolve"
+	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/workspace"
 )
 
-// findSymbolOccurrences scans all indexed files, and the PHP in templates, for
-// references to the given symbol. Returns locations for both definition sites
-// and usage sites.
+// findSymbolOccurrences finds the references to sym, and to the members of
+// its family (symbols.MemberFamily), in every indexed file and in the PHP of
+// templates, their declarations included.
 //
 // uri and source are the document the request came from. When it's a template,
 // source is its virtual PHP and its locations are positions in that PHP, which
 // the caller maps back; locations in other templates are mapped here.
-func (a *Analyzer) findSymbolOccurrences(sym *symbols.Symbol, readDocument func(string) string, uri, source string) []protocol.Location {
-	// Built-in symbols are opaque to navigation.
+func (a *Analyzer) findSymbolOccurrences(r *resolve.Resolver, sym *symbols.Symbol, readDocument func(string) string, uri, source string) []protocol.Location {
 	if symbols.IsBuiltin(sym) {
 		return nil
 	}
-
-	var locs []protocol.Location
-
-	// Include the definition itself
-	if sym.URI != "" && sym.AliasOf == nil {
-		locs = append(locs, protocol.Location{URI: sym.URI, Range: sym.Range})
+	target := a.referenceTargetOf(sym)
+	locs := target.declarations()
+	uris := slices.DeleteFunc(a.index.GetAllFileURIs(), func(u string) bool { return strings.HasPrefix(u, "builtin://") })
+	for i, src := range a.mentioningSources(uris, sym, readDocument) {
+		if src != "" {
+			locs = append(locs, locationsIn(uris[i], a.occurrencesInDocument(r, target, sourcectx.NewDocument(uris[i], src), src))...)
+		}
 	}
-
-	for _, fileURI := range a.index.GetAllFileURIs() {
-		// Defense in depth: skip any stub URIs that may have been indexed.
-		if strings.HasPrefix(fileURI, "builtin://") {
-			continue
-		}
-		var src string
-		if readDocument != nil {
-			src = readDocument(fileURI)
-		}
-		// Prefer the in-memory source stored by the index to avoid redundant disk I/O.
-		// Fall back to disk only when neither the caller-supplied reader nor the index
-		// has a stored copy (e.g. files indexed without source via IndexFile on older paths).
-		if src == "" {
-			src = a.index.GetFileSource(fileURI)
-		}
-		if src == "" {
-			src = a.readFileFromDisk(fileURI)
-		}
-		if src == "" {
-			continue
-		}
-		locs = append(locs, symbolOccurrencesIn(sym, fileURI, src)...)
-	}
-	locs = append(locs, a.templateOccurrences(sym, readDocument, uri, source)...)
-
-	// Deduplicate (definition may appear twice: once from sym.Range, once from file scan)
+	locs = append(locs, a.templateOccurrences(r, target, readDocument, uri, source)...)
 	return deduplicateLocations(locs)
 }
 
-// symbolOccurrencesIn finds the words in source that may name sym.
-func symbolOccurrencesIn(sym *symbols.Symbol, fileURI, source string) []protocol.Location {
-	var locs []protocol.Location
-	name := sym.Name
-	bareName := strings.TrimPrefix(name, "$")
-	lineNum := 0
-	for rest := source; ; lineNum++ {
-		line := rest
-		nl := strings.IndexByte(rest, '\n')
-		if nl >= 0 {
-			line = rest[:nl]
+// mentioningSources reads each file of uris and keeps its source when a token
+// in it may name sym, "" otherwise. Reading and lexing are independent per
+// file, so they run on one worker per CPU.
+func (a *Analyzer) mentioningSources(uris []string, sym *symbols.Symbol, readDocument func(string) string) []string {
+	sources := make([]string, len(uris))
+	next := atomic.Int64{}
+	var wg sync.WaitGroup
+	for range min(runtime.GOMAXPROCS(0), len(uris)) {
+		wg.Go(func() {
+			for i := int(next.Add(1) - 1); i < len(uris); i = int(next.Add(1) - 1) {
+				if src := a.sourceOf(uris[i], readDocument); mayMention(src, sym) && mentions(src, sym) {
+					sources[i] = src
+				}
+			}
+		})
+	}
+	wg.Wait()
+	return sources
+}
+
+func (a *Analyzer) sourceOf(uri string, readDocument func(string) string) string {
+	if readDocument != nil {
+		if src := readDocument(uri); src != "" {
+			return src
 		}
-		switch sym.Kind {
-		case symbols.KindClass, symbols.KindInterface, symbols.KindEnum, symbols.KindTrait:
-			locs = append(locs, findWordLocations(fileURI, line, lineNum, name)...)
-			// Also find as last segment of FQN (e.g. \Cacheable in use App\Contracts\Cacheable)
-			locs = append(locs, findAccessLocations(fileURI, line, lineNum, "\\"+name, 1, name)...)
+	}
+	if src := a.index.GetFileSource(uri); src != "" {
+		return src
+	}
+	return a.readFileFromDisk(uri)
+}
 
-		case symbols.KindMethod:
-			locs = append(locs, findWordLocations(fileURI, line, lineNum, name)...)
-
-		case symbols.KindProperty:
-			// Declaration form: $name
-			locs = append(locs, findWordLocations(fileURI, line, lineNum, "$"+bareName)...)
-			// Access form: ->name
-			locs = append(locs, findAccessLocations(fileURI, line, lineNum, "->"+bareName, 2, bareName)...)
-
-		case symbols.KindFunction:
-			locs = append(locs, findWordLocations(fileURI, line, lineNum, name)...)
-
-		case symbols.KindConstant, symbols.KindEnumCase:
-			locs = append(locs, findWordLocations(fileURI, line, lineNum, name)...)
+func mayMention(src string, sym *symbols.Symbol) bool {
+	name := strings.TrimPrefix(sym.Name, "$")
+	if name == "" {
+		return false
+	}
+	fold := foldsCase(sym.Kind)
+	first := name[:1]
+	if fold && first[0] < 0x80 {
+		first = strings.ToLower(first) + strings.ToUpper(first)
+	}
+	for offset := 0; ; {
+		i := strings.IndexAny(src[offset:], first)
+		if i < 0 {
+			return false
 		}
-		if nl < 0 {
-			break
+		start, end := offset+i, offset+i+len(name)
+		offset = start + 1
+		if end > len(src) {
+			return false
 		}
-		rest = rest[nl+1:]
+		if word := src[start:end]; word != name && (!fold || !strings.EqualFold(word, name)) {
+			continue
+		}
+		if (start == 0 || !continuesName(src[start-1]) && (src[start-1] != '$' || sym.Kind == symbols.KindProperty)) &&
+			(end == len(src) || !continuesName(src[end])) {
+			return true
+		}
+	}
+}
+
+func continuesName(ch byte) bool {
+	return ch != '\\' && resolve.IsWordChar(ch)
+}
+
+func foldsCase(kind symbols.SymbolKind) bool {
+	switch kind {
+	case symbols.KindFunction, symbols.KindMethod, symbols.KindClass, symbols.KindInterface, symbols.KindTrait, symbols.KindEnum:
+		return true
+	}
+	return false
+}
+
+func locationsIn(uri string, ranges []protocol.Range) []protocol.Location {
+	locs := make([]protocol.Location, len(ranges))
+	for i, r := range ranges {
+		locs[i] = protocol.Location{URI: uri, Range: r}
 	}
 	return locs
 }
 
-// templateOccurrences finds sym in the PHP of the workspace's templates. Only
-// PHP written in a template counts; what Blade generates around it never does.
-func (a *Analyzer) templateOccurrences(sym *symbols.Symbol, readDocument func(string) string, uri, source string) []protocol.Location {
+func (a *Analyzer) templateOccurrences(r *resolve.Resolver, target referenceTarget, readDocument func(string) string, uri, source string) []protocol.Location {
 	templates := a.index.TemplateFileURIs()
 	if workspace.IsBlade(uri) {
-		// The requesting view is read from the request, in its PHP's positions.
-		locs := symbolOccurrencesIn(sym, uri, source)
+		locs := locationsIn(uri, a.occurrencesIn(r, target, uri, source))
 		templates = slices.DeleteFunc(templates, func(t string) bool { return t == uri })
-		return append(locs, a.otherTemplateOccurrences(sym, readDocument, templates)...)
+		return append(locs, a.otherTemplateOccurrences(r, target, readDocument, templates)...)
 	}
-	return a.otherTemplateOccurrences(sym, readDocument, templates)
+	return a.otherTemplateOccurrences(r, target, readDocument, templates)
 }
 
-func (a *Analyzer) otherTemplateOccurrences(sym *symbols.Symbol, readDocument func(string) string, templates []string) []protocol.Location {
-	bareName := strings.TrimPrefix(sym.Name, "$")
+func (a *Analyzer) otherTemplateOccurrences(r *resolve.Resolver, target referenceTarget, readDocument func(string) string, templates []string) []protocol.Location {
 	var locs []protocol.Location
 	for _, t := range templates {
 		var src string
@@ -125,82 +140,17 @@ func (a *Analyzer) otherTemplateOccurrences(sym *symbols.Symbol, readDocument fu
 		if src == "" {
 			src = a.readFileFromDisk(t)
 		}
-		// Most views don't mention the name at all: skip them unparsed.
-		if src == "" || !strings.Contains(src, bareName) {
+		if !mayMention(src, target.sym) {
 			continue
 		}
 		doc := blade.Compile(src)
-		for _, l := range symbolOccurrencesIn(sym, t, doc.PHP) {
-			r := l.Range
-			sl, sc, el, ec, ok := doc.TemplateRange(r.Start.Line, r.Start.Character, r.End.Line, r.End.Character)
-			// The whole name must be text the view contains.
-			if !ok || sl != el || ec-sc != r.End.Character-r.Start.Character {
+		for _, rng := range a.occurrencesIn(r, target, t, doc.PHP) {
+			sl, sc, el, ec, ok := doc.TemplateRange(rng.Start.Line, rng.Start.Character, rng.End.Line, rng.End.Character)
+			if !ok || sl != el || ec-sc != rng.End.Character-rng.Start.Character {
 				continue
 			}
-			l.Range = protocol.Range{Start: protocol.Position{Line: sl, Character: sc}, End: protocol.Position{Line: el, Character: ec}}
-			locs = append(locs, l)
+			locs = append(locs, protocol.Location{URI: t, Range: protocol.Range{Start: protocol.Position{Line: sl, Character: sc}, End: protocol.Position{Line: el, Character: ec}}})
 		}
-	}
-	return locs
-}
-
-// findWordLocations finds all word-boundary occurrences of `word` on a line.
-func findWordLocations(uri, line string, lineNum int, word string) []protocol.Location {
-	var locs []protocol.Location
-	offset := 0
-	for {
-		idx := strings.Index(line[offset:], word)
-		if idx < 0 {
-			break
-		}
-		col := offset + idx
-		end := col + len(word)
-		// Word boundary before
-		if col > 0 && (resolve.IsWordChar(line[col-1]) || line[col-1] == '$') {
-			offset = end
-			continue
-		}
-		// Word boundary after
-		if end < len(line) && resolve.IsWordChar(line[end]) {
-			offset = end
-			continue
-		}
-		locs = append(locs, protocol.Location{
-			URI: uri,
-			Range: protocol.Range{
-				Start: protocol.Position{Line: lineNum, Character: col},
-				End:   protocol.Position{Line: lineNum, Character: end},
-			},
-		})
-		offset = end
-	}
-	return locs
-}
-
-// findAccessLocations finds occurrences of a needle (e.g. "->name") on a line
-// and returns locations pointing to the identifier part (after skipChars).
-func findAccessLocations(uri, line string, lineNum int, needle string, skipChars int, identName string) []protocol.Location {
-	var locs []protocol.Location
-	offset := 0
-	for {
-		idx := strings.Index(line[offset:], needle)
-		if idx < 0 {
-			break
-		}
-		col := offset + idx + skipChars
-		end := col + len(identName)
-		if end < len(line) && resolve.IsWordChar(line[end]) {
-			offset = end
-			continue
-		}
-		locs = append(locs, protocol.Location{
-			URI: uri,
-			Range: protocol.Range{
-				Start: protocol.Position{Line: lineNum, Character: col},
-				End:   protocol.Position{Line: lineNum, Character: end},
-			},
-		})
-		offset = end
 	}
 	return locs
 }
