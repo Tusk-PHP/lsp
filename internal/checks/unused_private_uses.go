@@ -293,17 +293,14 @@ func boundOtherwise(code codeTokens, i int) bool {
 	if open < 0 {
 		return false
 	}
-	switch code.kind(open) {
-	case token.LeftBracket:
+	if code.kind(open) == token.LeftBracket {
 		return code.kind(matchingClose(code, open)+1) == token.Equals
-	case token.LeftParen:
-		switch code.kind(open - 1) {
-		case token.List, token.Function, token.Fn, token.Use:
-			return true
-		}
-		return code.kind(open-2) == token.Function
 	}
-	return false
+	switch code.kind(open - 1) {
+	case token.List, token.Function, token.Fn, token.Use:
+		return true
+	}
+	return code.kind(open-2) == token.Function
 }
 
 // enclosingOpen returns the `(` or `[` that code.tokens[i] is inside, or -1.

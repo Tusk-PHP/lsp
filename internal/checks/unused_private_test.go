@@ -341,6 +341,7 @@ func TestUnusedPrivateMethodNameVariables(t *testing.T) {
 		{"a literal that starts an expression", "$m = 'format_x' ?: $key; return $this->$m();", nil},
 		{"an interpolated string that starts an expression", `$m = "format_{$key}" . $key; return $this->$m();`, []string{"Private method 'Foo::helper' is never used"}},
 		{"an interpolated string that starts with a variable", `$m = "$key"; return $this->$m();`, nil},
+		{"an interpolated string with an escape before its variable", `$m = "format\t$key"; return $this->$m();`, nil},
 		{"an array left open", "$m = 'format_'; $a = [$m; return $this->$m();", []string{"Private method 'Foo::helper' is never used"}},
 	} {
 		src := "<?php\nclass Foo {\n    private function helper(): void {}\n    private function format_x(): void {}\n    public function run(string $key, array $keys) { " + c.body + " }\n}\n"
