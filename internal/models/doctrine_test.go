@@ -501,6 +501,8 @@ class Product
     private Collection $reviews;
     private $tags;
     private $category;
+    private $cover;
+    private $location;
 }
 `)
 	xmlPath := filepath.Join(dir, "Product.orm.xml")
@@ -512,6 +514,8 @@ class Product
         <one-to-many field="reviews" target-entity="App\Entity\Review" mapped-by="product"/>
         <many-to-many field="tags" target-entity="App\Entity\Tag"/>
         <many-to-one field="category" target-entity="App\Entity\Category"/>
+        <one-to-one field="cover" target-entity="App\Entity\Image"/>
+        <field name="location" type="geometry"/>
     </entity>
 </doctrine-mapping>`), 0o644); err != nil {
 		t.Fatal(err)
@@ -523,6 +527,8 @@ class Product
 		"$reviews":  `Doctrine\Common\Collections\Collection<int, App\Entity\Review>`,
 		"$tags":     `Doctrine\Common\Collections\Collection<int, App\Entity\Tag>`,
 		"$category": `?App\Entity\Category`,
+		"$cover":    `?App\Entity\Image`,
+		"$location": "mixed",
 	} {
 		if sym := idx.Lookup(`App\Entity\Product::` + prop); sym == nil || sym.Type != want {
 			t.Errorf("%s: %+v, want type %s", prop, sym, want)

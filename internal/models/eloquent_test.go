@@ -411,6 +411,8 @@ class Category extends Model
     public function followers() { return $this->morphedByMany(Follower::class, 'followable'); }
     public function orders() { return $this->hasManyThrough(Order::class, Product::class); }
     public function owner() { return $this->morphTo(); }
+    public function shipment() { return $this->hasOneThrough(Shipment::class); }
+    public function related($class) { return $this->hasMany($class::class); }
     public function typed(): HasMany { return $this->hasMany(Product::class); }
     /** @return HasMany<Product, $this> */
     public function documented() { return $this->hasMany(Product::class); }
@@ -429,6 +431,8 @@ class Category extends Model
 		"followers":  `Illuminate\Database\Eloquent\Relations\MorphToMany<App\Models\Follower, App\Models\Category>`,
 		"orders":     `Illuminate\Database\Eloquent\Relations\HasManyThrough<App\Models\Order, App\Models\Product, App\Models\Category>`,
 		"owner":      `Illuminate\Database\Eloquent\Relations\MorphTo`,
+		"shipment":   `Illuminate\Database\Eloquent\Relations\HasOneThrough`,
+		"related":    `Illuminate\Database\Eloquent\Relations\HasMany`,
 		"typed":      `Illuminate\Database\Eloquent\Relations\HasMany`,
 		"documented": "",
 	} {
