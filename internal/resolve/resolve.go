@@ -828,7 +828,7 @@ func (r *Resolver) resolveVariableTypeTypedBase(varName string, lines []string, 
 	varPrefix := "$" + bare
 
 	// Check foreach loop value bindings: foreach ($iterable as $v) or foreach ($iterable as $k => $v)
-	if rt := r.resolveForeachValueType(varPrefix, lines, pos, file, vs.firstLine); !rt.IsEmpty() {
+	if rt := r.resolveForeachValueType(varPrefix, lines, pos, file, vs); !rt.IsEmpty() {
 		return rt
 	}
 
