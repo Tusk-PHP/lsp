@@ -177,3 +177,41 @@ func TestSpaceInAStringOffsetEndsItWithoutAnEmptyToken(t *testing.T) {
 		t.Errorf("the offset's text runs on as string content, got %q", text)
 	}
 }
+
+func TestDenseCodeGrowsTheTokensOnceOrTwice(t *testing.T) {
+	dense := strings.Repeat("$alphabet = 'letters';\n", 8000)
+	for _, tc := range []struct {
+		name   string
+		src    string
+		growth float64
+	}{
+		{"uniform", "<?php " + dense, 1},
+		{"sparse then dense", "<?php\n/*" + strings.Repeat(" ", 50000) + "*/\n" + dense, 2},
+	} {
+		fits := "<?php " + strings.Repeat(" ", len(tc.src))
+		base := testing.AllocsPerRun(5, func() { Lex(fits, token.Latest) })
+		got := testing.AllocsPerRun(5, func() { Lex(tc.src, token.Latest) })
+		if got > base+tc.growth {
+			t.Errorf("%s: %v allocations, want at most %v more than the %v of code that fits", tc.name, got, tc.growth, base)
+		}
+		toks := Lex(tc.src, token.Latest)
+		if spare := cap(toks) - len(toks); spare > len(toks)/4 {
+			t.Errorf("%s: %d tokens reserve %d more", tc.name, len(toks), spare)
+		}
+	}
+}
+
+func TestAGrowthStepNeverMoreThanDoublesTheTokens(t *testing.T) {
+	src := "<?php " + strings.Repeat(";", 400000) + "?>" + strings.Repeat("<p>html</p>\n", 133000)
+	toks := Lex(src, token.Latest)
+	if limit := 2*len(toks) + minTokenGrowth; cap(toks) > limit {
+		t.Errorf("%d tokens reserve a capacity of %d, want at most %d", len(toks), cap(toks), limit)
+	}
+}
+
+func TestTinySourcesGrowTheTokensOnce(t *testing.T) {
+	src := "<?php echo 1;"
+	if got := testing.AllocsPerRun(5, func() { Lex(src, token.Latest) }); got > 2 {
+		t.Errorf("lexing %q allocates %v times, want at most 2", src, got)
+	}
+}
