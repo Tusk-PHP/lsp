@@ -128,7 +128,7 @@ func (r *Resolver) writeValueType(varName string, lines []string, file *parser.F
 // whether that counts as a guard cut.
 func (r *Resolver) writeValue(varName string, lines []string, file *parser.FileNode, b *scope.Binding, w int, counted bool) (ResolvedType, bool) {
 	key := varMemoKey{binding: b, rebind: w, holds: true, onWrite: true}
-	if rt, ok := r.varMemoGet(key); ok {
+	if rt, ok := r.varMemoGet(lines, key); ok {
 		return rt, false
 	}
 	exit, ok := r.enterGuard(writeKey(b, w), counted)
@@ -140,7 +140,7 @@ func (r *Resolver) writeValue(varName string, lines []string, file *parser.FileN
 
 	if caught := b.Caught(w); len(caught) > 0 {
 		rt := r.caughtType(caught, file)
-		r.varMemoPut(key, rt)
+		r.varMemoPut(lines, key, rt)
 		return rt, false
 	}
 	site := b.Site(w)
@@ -154,7 +154,7 @@ func (r *Resolver) writeValue(varName string, lines []string, file *parser.FileN
 		rt = r.feedsItself(varName, lines, file, b, w, pos, rt)
 	}
 	if r.cuts == cutsBefore {
-		r.varMemoPut(key, rt)
+		r.varMemoPut(lines, key, rt)
 	}
 	return rt, false
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Tusk-PHP/lsp/internal/parser"
+	"github.com/Tusk-PHP/lsp/internal/symbols"
 	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
@@ -185,5 +186,41 @@ func TestGenericExpressionTypes(t *testing.T) {
 		if got := r.ExpressionType(expr, ctx).FullString(); got != want {
 			t.Errorf("%s = %q, want %q", expr, got, want)
 		}
+	}
+}
+
+func TestClosureParameterFollowsTheCallableAfterReindexing(t *testing.T) {
+	library := func(param string) string {
+		return `<?php
+namespace App;
+class Person {}
+class Robot {}
+class People {
+    /** @param callable(` + param + `): void $fn */
+    public function each(callable $fn): void {}
+}
+`
+	}
+	const usage = `<?php
+namespace App;
+class Usage {
+    public function run(People $ps): void {
+        $ps->each(function ($p) { echo $p; });
+    }
+}
+`
+	idx := symbols.NewIndex()
+	idx.IndexFile("file:///lib.php", library("Person"))
+	e := NewEngine(idx)
+	file := parser.ParseFile(usage)
+	lines := SplitLines(usage)
+	line := lineContaining(t, lines, "echo $p")
+	pos := textpos.Position{Line: line, Character: strings.LastIndex(lines[line], "$p") + 1}
+	if got := e.Resolver().ResolveVariableTypeTyped("$p", lines, pos, file).FQN; got != `App\Person` {
+		t.Fatalf("before reindexing: got %q, want App\\Person", got)
+	}
+	idx.IndexFile("file:///lib.php", library("Robot"))
+	if got := e.Resolver().ResolveVariableTypeTyped("$p", lines, pos, file).FQN; got != `App\Robot` {
+		t.Errorf("after reindexing: got %q, want App\\Robot", got)
 	}
 }
