@@ -46,10 +46,12 @@ func TestAsAliasWithoutAnIDUsesTheOnlyInterface(t *testing.T) {
 		class string
 		want  string
 	}{
-		"no arguments":     {"#[AsAlias]\nclass SmtpMailer implements MailerInterface {}\n", `App\Mail\SmtpMailer`},
-		"explicit null id": {"#[AsAlias(id: null, public: true)]\nclass SmtpMailer implements MailerInterface {}\n", `App\Mail\SmtpMailer`},
-		"two interfaces":   {"#[AsAlias]\nclass SmtpMailer implements MailerInterface, Transport {}\n", ""},
-		"a parent class":   {"#[AsAlias]\nclass SmtpMailer extends Base implements MailerInterface {}\n", ""},
+		"no arguments":                   {"#[AsAlias]\nclass SmtpMailer implements MailerInterface {}\n", `App\Mail\SmtpMailer`},
+		"explicit null id":               {"#[AsAlias(id: null, public: true)]\nclass SmtpMailer implements MailerInterface {}\n", `App\Mail\SmtpMailer`},
+		"named options only":             {"#[AsAlias(public: true)]\nclass SmtpMailer implements MailerInterface {}\n", `App\Mail\SmtpMailer`},
+		"a class declared in a function": {"function make() {\n    #[AsAlias]\n    class SmtpMailer implements MailerInterface {}\n}\n", ""},
+		"two interfaces":                 {"#[AsAlias]\nclass SmtpMailer implements MailerInterface, Transport {}\n", ""},
+		"a parent class":                 {"#[AsAlias]\nclass SmtpMailer extends Base implements MailerInterface {}\n", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			ca, _ := symfonyProject(t, map[string]string{
