@@ -1,6 +1,7 @@
 package resolve
 
 import (
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -164,6 +165,30 @@ func TestFreshResolverFindsLinesSplitFromACachedSource(t *testing.T) {
 	if again := e.Resolver().fileOfLines(strings.Split(source, "\n")); again != cached {
 		t.Error("the cached file is still found by its lines after a file with the same first line was added")
 	}
+}
+
+func TestParallelRaisesAWorkersPanicOnTheCaller(t *testing.T) {
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(4))
+	var calls atomic.Int32
+	defer func() {
+		p, ok := recover().(*workerPanic)
+		if !ok {
+			t.Fatal("the panic reaches the caller as a workerPanic")
+		}
+		if p.value != "boom" || !strings.Contains(p.Error(), "boom") || len(p.stack) == 0 {
+			t.Errorf("the panic keeps its value and the worker's stack: %v", p)
+		}
+		if n := calls.Load(); n == 10000 {
+			t.Error("a panic stops the calls not yet started")
+		}
+	}()
+	NewEngine(symbols.NewIndex()).Parallel(10000, func(_ *Resolver, i int) {
+		calls.Add(1)
+		if i == 10 {
+			panic("boom")
+		}
+	})
+	t.Fatal("Parallel returned after a worker panicked")
 }
 
 func BenchmarkResolveManyFiles(b *testing.B) {
