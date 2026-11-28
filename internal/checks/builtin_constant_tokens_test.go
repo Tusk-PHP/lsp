@@ -60,6 +60,7 @@ func TestBuiltinUnavailableReportsOnlyGlobalConstantUses(t *testing.T) {
 		"<?php\nswitch ($f) { case FILTER_VALIDATE_BOOL: break; }\n",
 		"<?php\n$x = \"{$a[FILTER_VALIDATE_BOOL]}\";\n",
 		"<?php\n$x = <<<TXT\n{$a[FILTER_VALIDATE_BOOL]}\nTXT;\n",
+		"<?php\n$x = \"{$o->{'name'}[FILTER_VALIDATE_BOOL]} FILTER_VALIDATE_BOOL\";\n",
 	}
 	for _, src := range reported {
 		got := unavailableConstants(t, src)
