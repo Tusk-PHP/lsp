@@ -242,20 +242,14 @@ func (r *Resolver) closureMemoGet(lines []string, closure *scope.Scope) (closure
 	f := r.fileOfLines(lines)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	m, ok := f.closureMemos[closure]
-	return m, ok
+	return f.closureMemos.get(r.Index.Generation(), closure)
 }
 
 func (r *Resolver) closureMemoPut(lines []string, closure *scope.Scope, m closureMemo) {
 	f := r.fileOfLines(lines)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.closureMemos == nil {
-		f.closureMemos = make(map[*scope.Scope]closureMemo)
-	}
-	if len(f.closureMemos) < maxClosureMemos {
-		f.closureMemos[closure] = m
-	}
+	f.closureMemos.put(r.Index.Generation(), closure, m, maxClosureMemos)
 }
 
 func (r *Resolver) computeClosureExpectations(closure *scope.Scope, lines []string, file *parser.FileNode) (expected ResolvedType, closureThis ResolvedType, ok bool) {

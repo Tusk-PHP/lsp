@@ -57,29 +57,15 @@ func (r *Resolver) varMemoKeyAt(vs variableScope, varName string, lines []string
 }
 
 func (r *Resolver) varMemoGet(lines []string, key varMemoKey) (ResolvedType, bool) {
-	if r.Index == nil {
-		return ResolvedType{}, false
-	}
 	f := r.fileOfLines(lines)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.varMemoGen != r.Index.Generation() {
-		return ResolvedType{}, false
-	}
-	t, ok := f.varMemos[key]
-	return t, ok
+	return f.varMemos.get(r.Index.Generation(), key)
 }
 
 func (r *Resolver) varMemoPut(lines []string, key varMemoKey, t ResolvedType) {
-	if key.binding == nil || r.Index == nil {
-		return
-	}
 	f := r.fileOfLines(lines)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if gen := r.Index.Generation(); f.varMemos == nil || f.varMemoGen != gen || len(f.varMemos) >= maxVarMemos {
-		f.varMemos = make(map[varMemoKey]ResolvedType)
-		f.varMemoGen = gen
-	}
-	f.varMemos[key] = t
+	f.varMemos.put(r.Index.Generation(), key, t, maxVarMemos)
 }

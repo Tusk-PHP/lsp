@@ -31,14 +31,37 @@ type fileState struct {
 	doc     *scope.Document
 
 	mu           sync.Mutex
-	closureMemos map[*scope.Scope]closureMemo
-	varMemos     map[varMemoKey]ResolvedType
-	varMemoGen   uint64
+	closureMemos generationMemo[*scope.Scope, closureMemo]
+	varMemos     generationMemo[varMemoKey, ResolvedType]
 }
 
 func (f *fileState) document() *scope.Document {
 	f.docOnce.Do(func() { f.doc = scope.Collect(f.source) })
 	return f.doc
+}
+
+// generationMemo holds answers worked out against one index generation, and
+// forgets them all once the generation changes or it reaches its limit.
+type generationMemo[K comparable, V any] struct {
+	gen     uint64
+	answers map[K]V
+}
+
+func (m *generationMemo[K, V]) get(gen uint64, key K) (V, bool) {
+	if m.gen != gen {
+		var none V
+		return none, false
+	}
+	v, ok := m.answers[key]
+	return v, ok
+}
+
+func (m *generationMemo[K, V]) put(gen uint64, key K, v V, limit int) {
+	if m.answers == nil || m.gen != gen || len(m.answers) >= limit {
+		m.answers = make(map[K]V)
+		m.gen = gen
+	}
+	m.answers[key] = v
 }
 
 // fileCache is an Engine's bounded set of fileStates, keyed by source text: a
