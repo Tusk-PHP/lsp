@@ -318,7 +318,7 @@ func (at *cursorDeclarations) enclose(stmt ast.Stmt) {
 		switch n := n.(type) {
 		case *ast.ClassDecl:
 			if n.Name == nil {
-				at.enterAnonymousClass()
+				at.enterAnonymousClass(n)
 			} else {
 				at.enterClass(n.Name)
 			}
@@ -366,9 +366,13 @@ func (at *cursorDeclarations) enterClass(name *ast.Identifier) {
 	at.scope = nil
 }
 
-func (at *cursorDeclarations) enterAnonymousClass() {
+func (at *cursorDeclarations) enterAnonymousClass(decl *ast.ClassDecl) {
 	anon := at.file.AnonymousClassAt(at.pos.Line, at.pos.Character)
-	if anon == nil || anon.FullName == at.classFQN {
+	if anon == nil {
+		return
+	}
+	line, col := at.lines.Position(decl.Start)
+	if anon.StartLine < line || anon.StartLine == line && anon.StartCol < col {
 		return
 	}
 	at.classFQN = anon.FullName
