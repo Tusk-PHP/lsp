@@ -15,6 +15,11 @@ import (
 
 func callArgAt(t *testing.T, marked string) (ast.CallArg, bool) {
 	t.Helper()
+	return cursorContextAt(t, marked).CallArg()
+}
+
+func cursorContextAt(t *testing.T, marked string) *sourcectx.CursorContext {
+	t.Helper()
 	at := strings.Index(marked, "|")
 	if at < 0 {
 		at = len(marked)
@@ -27,7 +32,7 @@ func callArgAt(t *testing.T, marked string) (ast.CallArg, bool) {
 	if ctx == nil {
 		t.Fatalf("no cursor context in %q", marked)
 	}
-	return ctx.CallArg()
+	return ctx
 }
 
 func TestBuilderArgContext(t *testing.T) {

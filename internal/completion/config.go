@@ -1,12 +1,10 @@
 package completion
 
 import (
-	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/php/ast"
 	"github.com/Tusk-PHP/lsp/internal/protocol"
-	sourcectx "github.com/Tusk-PHP/lsp/internal/source"
 	"github.com/Tusk-PHP/lsp/internal/types"
 )
 
@@ -19,23 +17,8 @@ type configResultArrayContext struct {
 
 const configHelper = "config"
 
-func configResultContext(ctx *sourcectx.CursorContext) *configResultArrayContext {
-	dim, ok := ctx.StringDim()
-	if !ok {
-		return nil
-	}
-	src := ctx.File.Source
-	var keys []string
-	e := dim.Fetch.Array
-	for fetch, ok := e.(*ast.ArrayDimFetch); ok; fetch, ok = e.(*ast.ArrayDimFetch) {
-		key, isString := ast.StringValue(src, fetch.Dim)
-		if !isString {
-			return nil
-		}
-		keys = append(keys, key)
-		e = fetch.Array
-	}
-	call, ok := e.(*ast.Call)
+func configResultContext(src string, dim ast.StringDim) *configResultArrayContext {
+	call, ok := dim.Base.(*ast.Call)
 	if !ok || ast.FunctionName(src, call) != configHelper || len(call.Args.Args) == 0 {
 		return nil
 	}
@@ -43,8 +26,7 @@ func configResultContext(ctx *sourcectx.CursorContext) *configResultArrayContext
 	if !ok || configArg == "" {
 		return nil
 	}
-	slices.Reverse(keys)
-	return &configResultArrayContext{ConfigArg: configArg, AccessKeys: keys, Partial: dim.Partial, Quote: dim.Quote}
+	return &configResultArrayContext{ConfigArg: configArg, AccessKeys: dim.Keys, Partial: dim.Partial, Quote: dim.Quote}
 }
 
 func (p *Provider) completeConfigResultKeys(ctx *configResultArrayContext) []protocol.CompletionItem {

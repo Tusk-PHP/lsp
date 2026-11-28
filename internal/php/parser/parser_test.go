@@ -1349,3 +1349,23 @@ func TestAMissingArgumentKeepsTheArgumentsAfterIt(t *testing.T) {
 		t.Errorf("errors = %v, want only the missing argument", file.Errors)
 	}
 }
+
+func TestAttributesWithoutATargetAreKept(t *testing.T) {
+	for _, src := range []string{"<?php\n#[", "<?php\n#[Foo, Ba", "<?php\n#[Foo]\n$x = 1;"} {
+		file := Parse(src, token.Latest)
+		var bad *ast.BadExpr
+		ast.Walk(file, func(n ast.Node) bool {
+			if b, ok := n.(*ast.BadExpr); ok && len(b.Attrs) > 0 {
+				bad = b
+			}
+			return true
+		})
+		if bad == nil || bad.Attrs[0].Start != uint32(len("<?php\n")) {
+			t.Errorf("%q: got %#v", src, bad)
+		}
+		if len(file.Errors) == 0 {
+			t.Errorf("%q: expected an error", src)
+		}
+		checkTree(t, src, token.Latest)
+	}
+}

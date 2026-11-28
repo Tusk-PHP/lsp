@@ -83,6 +83,10 @@ func (c *CursorContext) StringDim() (ast.StringDim, bool) {
 	return ast.StringDimAt(c.File.Tree, c.File.Source, c.Offset)
 }
 
+func (c *CursorContext) NameSlot() (ast.NameSlot, bool) {
+	return ast.NameSlotAt(c.File.Tree, c.File.Source, c.Offset)
+}
+
 func (c *NameContext) MemberAccess() resolve.MemberAccess {
 	return resolve.MemberAccessOf(c.Called, c.AccessKind == AccessStatic, c.SymbolText)
 }

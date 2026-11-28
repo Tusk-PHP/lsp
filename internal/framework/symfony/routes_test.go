@@ -10,7 +10,6 @@ import (
 	phpparser "github.com/Tusk-PHP/lsp/internal/php/parser"
 	"github.com/Tusk-PHP/lsp/internal/php/token"
 	"github.com/Tusk-PHP/lsp/internal/symbols"
-	"github.com/Tusk-PHP/lsp/internal/textpos"
 )
 
 func TestDiscoverRoutesFromAttributes(t *testing.T) {
@@ -46,42 +45,6 @@ class ProductController
 	}
 	if routes[1].Path != "/products/{id}" {
 		t.Fatalf("second route path = %q, want %q", routes[1].Path, "/products/{id}")
-	}
-}
-
-func TestRouteNameAtPosition(t *testing.T) {
-	source := `<?php
-class ProductController
-{
-    public function show(): void
-    {
-        $url = $this->generateUrl('product_show');
-    }
-}
-`
-
-	lineNo := -1
-	col := -1
-	for i, line := range strings.Split(source, "\n") {
-		col = strings.Index(line, "product_show")
-		if col >= 0 {
-			lineNo = i
-			break
-		}
-	}
-	if lineNo < 0 {
-		t.Fatal("failed to find route usage")
-	}
-
-	name, rng, ok := RouteNameAtPosition(source, textpos.Position{Line: lineNo, Character: col + 3})
-	if !ok {
-		t.Fatal("expected route name context")
-	}
-	if name != "product_show" {
-		t.Fatalf("name = %q, want %q", name, "product_show")
-	}
-	if rng.Start.Line != lineNo || rng.End.Line != lineNo {
-		t.Fatalf("range = %#v", rng)
 	}
 }
 

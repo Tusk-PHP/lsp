@@ -288,68 +288,6 @@ func FindRoute(index *symbols.Index, name string) *Route {
 	return nil
 }
 
-var routeCallPatterns = routePatterns()
-
-func routePatterns() []string {
-	patterns := make([]string, 0, len(routeNameCalls)+len(routeNameMethods))
-	for _, c := range routeNameCalls {
-		patterns = append(patterns, c+"(")
-	}
-	for _, m := range routeNameMethods {
-		patterns = append(patterns, "->"+m+"(")
-	}
-	return patterns
-}
-
-func RouteNameAtPosition(source string, pos textpos.Position) (string, textpos.Range, bool) {
-	lines := strings.Split(source, "\n")
-	if pos.Line < 0 || pos.Line >= len(lines) {
-		return "", textpos.Range{}, false
-	}
-	line := lines[pos.Line]
-	if pos.Character < 0 || pos.Character > len(line) {
-		return "", textpos.Range{}, false
-	}
-
-	for _, pat := range routeCallPatterns {
-		idx := strings.LastIndex(line[:pos.Character], pat)
-		if idx < 0 {
-			continue
-		}
-		i := idx + len(pat)
-		for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
-			i++
-		}
-		if i >= len(line) || (line[i] != '\'' && line[i] != '"') {
-			continue
-		}
-		quote := line[i]
-		start := i + 1
-		end := start
-		for end < len(line) {
-			if line[end] == '\\' {
-				end += 2
-				continue
-			}
-			if line[end] == quote {
-				break
-			}
-			end++
-		}
-		if end >= len(line) || pos.Character < start || pos.Character > end {
-			continue
-		}
-		if comma := strings.Index(line[idx+len(pat):start-1], ","); comma >= 0 {
-			continue
-		}
-		return line[start:end], textpos.Range{
-			Start: textpos.Position{Line: pos.Line, Character: start},
-			End:   textpos.Position{Line: pos.Line, Character: end},
-		}, true
-	}
-	return "", textpos.Range{}, false
-}
-
 func discoverRoutesInFile(uri, source string, grammars phpparser.GrammarRange) []Route {
 	tree := parser.ParseTreeIn(source, grammars)
 	reader := routeReader{src: source, file: parser.FileNodeOf(source, tree), lines: ast.NewLines(source)}

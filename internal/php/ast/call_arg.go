@@ -1,6 +1,7 @@
 package ast
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/Tusk-PHP/lsp/internal/php/lexer"
@@ -19,17 +20,24 @@ type CallArg struct {
 	Call     Expr
 	Function string
 	Method   string
+	Class    string
 	Receiver Expr
 	Static   bool
+	New      bool
 	Index    int
 	InArray  bool
 	Value    ArgValue
 	Partial  string
+	Text     string
 	Quote    string
+	src      string
+	args     *ArgList
 }
 
 type StringDim struct {
 	Fetch   *ArrayDimFetch
+	Base    Expr
+	Keys    []string
 	Value   ArgValue
 	Partial string
 	Quote   string
@@ -56,11 +64,40 @@ func StringDimAt(tree *File, src string, off uint32) (StringDim, bool) {
 	if fetch == nil {
 		return StringDim{}, false
 	}
-	value, partial, quote, ok := cur.classify(fetch.Dim)
+	value, partial, _, quote, ok := cur.classify(fetch.Dim)
 	if !ok || value == ArgName {
 		return StringDim{}, false
 	}
-	return StringDim{Fetch: fetch, Value: value, Partial: partial, Quote: quote}, true
+	base, keys, ok := dimKeys(cur.src, fetch.Array)
+	if !ok {
+		return StringDim{}, false
+	}
+	return StringDim{Fetch: fetch, Base: base, Keys: keys, Value: value, Partial: partial, Quote: quote}, true
+}
+
+func dimKeys(src string, e Expr) (Expr, []string, bool) {
+	var keys []string
+	for fetch, ok := e.(*ArrayDimFetch); ok; fetch, ok = e.(*ArrayDimFetch) {
+		key, isString := StringValue(src, fetch.Dim)
+		if !isString {
+			return nil, nil, false
+		}
+		keys = append(keys, key)
+		e = fetch.Array
+	}
+	slices.Reverse(keys)
+	return e, keys, true
+}
+
+func (a CallArg) StringArg(i int) (string, bool) {
+	if i >= len(a.args.Args) {
+		return "", false
+	}
+	return StringValue(a.src, a.args.Args[i].Value)
+}
+
+func LastSegment(name string) string {
+	return name[strings.LastIndexByte(name, '\\')+1:]
 }
 
 func CallAt(tree *File, off uint32) (Expr, *ArgList) {
@@ -68,11 +105,7 @@ func CallAt(tree *File, off uint32) (Expr, *ArgList) {
 }
 
 func FunctionName(src string, call *Call) string {
-	name, ok := call.Callee.(*ConstFetch)
-	if !ok {
-		return ""
-	}
-	return strings.TrimPrefix(name.Name.Bounds().Text(src), `\`)
+	return className(src, call.Callee)
 }
 
 func StringValue(src string, e Expr) (string, bool) {
@@ -104,6 +137,8 @@ func argList(n Node) *ArgList {
 		return n.Args
 	case *StaticCall:
 		return n.Args
+	case *New:
+		return n.Args
 	}
 	return nil
 }
@@ -132,7 +167,7 @@ func (cur cursor) callArg(tree *File) (CallArg, bool) {
 	if !ok {
 		return CallArg{}, false
 	}
-	out := CallArg{Call: call, Index: index}
+	out := CallArg{Call: call, Index: index, src: cur.src, args: args}
 	cur.callee(call, &out)
 	var value Expr
 	if slot != nil {
@@ -144,7 +179,7 @@ func (cur cursor) callArg(tree *File) (CallArg, bool) {
 			return CallArg{}, false
 		}
 	}
-	out.Value, out.Partial, out.Quote, ok = cur.classify(value)
+	out.Value, out.Partial, out.Text, out.Quote, ok = cur.classify(value)
 	return out, ok
 }
 
@@ -156,7 +191,18 @@ func (cur cursor) callee(call Expr, out *CallArg) {
 		out.Receiver, out.Method = call.Object, MethodName(cur.src, call)
 	case *StaticCall:
 		out.Receiver, out.Static, out.Method = call.Class, true, MethodName(cur.src, call)
+		out.Class = className(cur.src, call.Class)
+	case *New:
+		out.New, out.Class = true, className(cur.src, call.Class)
 	}
+}
+
+func className(src string, e Expr) string {
+	name, ok := e.(*ConstFetch)
+	if !ok {
+		return ""
+	}
+	return strings.TrimPrefix(name.Name.Bounds().Text(src), `\`)
 }
 
 func MethodName(src string, call Expr) string {
@@ -190,7 +236,7 @@ func (cur cursor) slot(slots []Node) (int, Node, bool) {
 	for i, s := range slots {
 		span := s.Bounds()
 		if cur.off < span.Start {
-			if i == 0 || cur.commaIn(prevEnd, cur.off) {
+			if i == 0 || cur.tokenIn(prevEnd, cur.off, token.Comma) {
 				return i, nil, true
 			}
 			return 0, nil, false
@@ -200,44 +246,52 @@ func (cur cursor) slot(slots []Node) (int, Node, bool) {
 		}
 		prevEnd = span.End
 	}
-	if len(slots) == 0 || cur.commaIn(prevEnd, cur.off) {
+	if len(slots) == 0 || cur.tokenIn(prevEnd, cur.off, token.Comma) {
 		return len(slots), nil, true
 	}
 	return 0, nil, false
 }
 
-func (cur cursor) commaIn(from, to uint32) bool {
+func (cur cursor) tokenIn(from, to uint32, kind token.Kind) bool {
 	for _, tok := range lexer.LexCode(cur.src[from:to], cur.grammar) {
-		if tok.Kind == token.Comma {
+		if tok.Kind == kind {
 			return true
 		}
 	}
 	return false
 }
 
-func (cur cursor) classify(e Expr) (ArgValue, string, string, bool) {
+func (cur cursor) classify(e Expr) (value ArgValue, partial, text, quote string, ok bool) {
 	if e == nil || IsMissing(e) || cur.off <= e.Bounds().Start {
-		return ArgEmpty, "", "", true
+		return ArgEmpty, "", "", "", true
 	}
 	switch e := e.(type) {
 	case *Literal:
 		closed := e.Kind == token.ConstantString
 		if !closed && e.Kind != token.EncapsedAndWhitespace || cur.off == e.End && closed {
-			return 0, "", "", false
+			return 0, "", "", "", false
 		}
-		return ArgString, cur.src[e.Start+1 : cur.off], cur.src[e.Start : e.Start+1], true
+		return ArgString, cur.src[e.Start+1 : cur.off], cur.stringText(e.Span, closed), cur.src[e.Start : e.Start+1], true
 	case *InterpolatedString:
 		if e.Kind != token.DoubleQuote {
-			return 0, "", "", false
+			return 0, "", "", "", false
 		}
 		for _, part := range e.Parts {
 			if _, plain := part.(*StringPart); !plain && part.Bounds().Start < cur.off {
-				return 0, "", "", false
+				return 0, "", "", "", false
 			}
 		}
-		return ArgString, cur.src[e.Start+1 : cur.off], `"`, true
+		closed := e.End-e.Start > 1 && cur.src[e.End-1] == '"'
+		return ArgString, cur.src[e.Start+1 : cur.off], cur.stringText(e.Span, closed), `"`, true
 	case *ConstFetch:
-		return ArgName, cur.src[e.Start:cur.off], "", true
+		return ArgName, cur.src[e.Start:cur.off], e.Bounds().Text(cur.src), "", true
 	}
-	return 0, "", "", false
+	return 0, "", "", "", false
+}
+
+func (cur cursor) stringText(span Span, closed bool) string {
+	if closed {
+		return cur.src[span.Start+1 : span.End-1]
+	}
+	return cur.src[span.Start+1 : span.End]
 }
