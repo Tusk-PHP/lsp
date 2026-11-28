@@ -210,11 +210,10 @@ func compareWalkOrder(a, b string) int {
 
 type bindingSet struct {
 	bindings map[string]*ServiceBinding
-	aliases  map[string]string
 }
 
 func newBindingSet(defaults []ServiceBinding) *bindingSet {
-	set := &bindingSet{bindings: make(map[string]*ServiceBinding, len(defaults)), aliases: make(map[string]string)}
+	set := &bindingSet{bindings: make(map[string]*ServiceBinding, len(defaults))}
 	for _, b := range defaults {
 		set.bindings[b.Abstract] = &b
 	}
@@ -226,11 +225,6 @@ func (set *bindingSet) resolve(name string, seen map[string]bool) *ServiceBindin
 		return nil
 	}
 	seen[name] = true
-	if abstract, ok := set.aliases[name]; ok {
-		if binding := set.resolve(abstract, seen); binding != nil {
-			return binding
-		}
-	}
 	binding, ok := set.bindings[name]
 	if !ok {
 		return nil
@@ -328,7 +322,6 @@ func (defs serviceDefinitions) apply(set *bindingSet) {
 		}
 		if d.alias != "" {
 			b.Alias = d.alias
-			set.aliases[d.id] = d.alias
 		}
 		switch d.sharing {
 		case sharingShared:

@@ -342,7 +342,7 @@ return static function ($c) {
 	if b := set.bindings[`App\Mailer`]; b == nil || b.Concrete != `App\Mailer` {
 		t.Errorf("Mailer: %+v", b)
 	}
-	if b := set.bindings["mailer"]; b == nil || b.Alias != "app.mailer" || set.aliases["mailer"] != "app.mailer" {
+	if b := set.bindings["mailer"]; b == nil || b.Alias != "app.mailer" {
 		t.Errorf("mailer: %+v", b)
 	}
 	if set.bindings["broken"] != nil {
