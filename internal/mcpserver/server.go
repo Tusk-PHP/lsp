@@ -44,7 +44,6 @@ const reindexTool = "tusk_reindex"
 type Service struct {
 	RootPath      string
 	Framework     string
-	Config        *config.Config
 	logger        *slog.Logger
 	profileSource atomic.Pointer[string]
 	disk          diskState
@@ -351,7 +350,6 @@ func New(ctx context.Context, rootPath string, logger *slog.Logger) (*Service, e
 	svc := &Service{
 		RootPath:          rootPath,
 		Framework:         framework,
-		Config:            cfg,
 		logger:            logger,
 		Workspace:         ws,
 		projectSummaryURI: "tusk://project/summary",
@@ -1368,13 +1366,14 @@ func (s *Service) isPathReadable(absPath string) bool {
 	if rel == "." {
 		return true
 	}
-	for _, deny := range s.Config.AIDenyPaths() {
+	cfg := s.runtime().Workspace.Config()
+	for _, deny := range cfg.AIDenyPaths() {
 		deny = filepath.ToSlash(filepath.Clean(deny))
 		if rel == deny || strings.HasPrefix(rel, deny+"/") {
 			return false
 		}
 	}
-	allowed := s.Config.AIRoots()
+	allowed := cfg.AIRoots()
 	if len(allowed) == 0 {
 		return true
 	}

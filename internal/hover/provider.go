@@ -3,6 +3,7 @@ package hover
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/config"
 	"github.com/Tusk-PHP/lsp/internal/container"
@@ -23,7 +24,7 @@ type Provider struct {
 	engine        *resolve.Engine
 	framework     string
 	arrayResolver *models.FrameworkArrayResolver
-	cfg           *config.Config
+	cfg           atomic.Pointer[config.Config]
 	coverage      *coverage.Store
 }
 
@@ -59,7 +60,7 @@ func (p *Provider) SetArrayResolver(resolver *models.FrameworkArrayResolver) {
 // PHPManualLocale) at request time rather than at construction time, which
 // allows config reloads to take effect without rebuilding the provider.
 func (p *Provider) SetConfig(cfg *config.Config) {
-	p.cfg = cfg
+	p.cfg.Store(cfg)
 }
 
 func (p *Provider) GetHover(uri, source string, pos protocol.Position) *protocol.Hover {
@@ -346,8 +347,8 @@ func (p *Provider) formatHover(sym *symbols.Symbol) string {
 		manualOwner = p.index.Lookup(sym.ParentFQN)
 	}
 	locale := ""
-	if p.cfg != nil {
-		locale = p.cfg.PHPManualLocale
+	if cfg := p.cfg.Load(); cfg != nil {
+		locale = cfg.PHPManualLocale
 	}
 	if url := symbols.PHPManualURL(sym, manualOwner, locale); url != "" {
 		sb.WriteString(fmt.Sprintf("\n[PHP Manual](%s)\n", url))

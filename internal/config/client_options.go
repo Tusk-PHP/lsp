@@ -14,10 +14,12 @@ type ClientOptions struct {
 	PHPStanPath               string                      `json:"phpstanPath,omitempty"`
 	PHPStanLevel              string                      `json:"phpstanLevel,omitempty"`
 	PHPStanConfig             string                      `json:"phpstanConfig,omitempty"`
+	PHPStanTimeoutMs          *int                        `json:"phpstanTimeoutMs,omitempty"`
 	CoverageReportPath        string                      `json:"coverageReportPath,omitempty"`
 	PintEnabled               *bool                       `json:"pintEnabled,omitempty"`
 	PintPath                  string                      `json:"pintPath,omitempty"`
 	PintConfig                string                      `json:"pintConfig,omitempty"`
+	PintTimeoutMs             *int                        `json:"pintTimeoutMs,omitempty"`
 	DatabaseEnabled           *bool                       `json:"databaseEnabled,omitempty"`
 	MaxIndexFiles             *int                        `json:"maxIndexFiles,omitempty"`
 	ExcludePaths              []string                    `json:"excludePaths,omitempty"`

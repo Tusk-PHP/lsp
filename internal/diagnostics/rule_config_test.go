@@ -13,9 +13,11 @@ import (
 func providerWithRules(t *testing.T, rules string) *Provider {
 	t.Helper()
 	p := newTestProvider()
-	if err := p.cfg.SetDiagnosticRulesJSON(rules); err != nil {
+	cfg := *p.settings.Load().cfg
+	if err := cfg.SetDiagnosticRulesJSON(rules); err != nil {
 		t.Fatal(err)
 	}
+	p.SetConfig(&cfg)
 	return p
 }
 
@@ -160,5 +162,100 @@ func TestUnknownNamedArgumentIsReported(t *testing.T) {
 	off.index.MarkReady()
 	if got := filterByCode(off.Analyze("file:///t.php", "<?php\ngreet(nmae: 'x');\n"), "unknown-named-argument"); len(got) != 0 {
 		t.Errorf("turned off: %#v", got)
+	}
+}
+
+func TestSetConfigAppliesToTheNextAnalysis(t *testing.T) {
+	p := newTestProvider()
+	if got := filterByCode(p.Analyze("file:///t.php", redundantUnionSource), "redundant-union-member"); len(got) != 1 {
+		t.Fatalf("the rule reports by default, got %v", got)
+	}
+	cfg := *p.settings.Load().cfg
+	if err := cfg.SetDiagnosticRulesJSON(`{"redundant-union-member": "off"}`); err != nil {
+		t.Fatal(err)
+	}
+	p.SetConfig(&cfg)
+	if got := filterByCode(p.Analyze("file:///t.php", redundantUnionSource), "redundant-union-member"); len(got) != 0 {
+		t.Errorf("a rule the new configuration turns off stops reporting, got %v", got)
+	}
+}
+
+func TestSetConfigDropsToolResultsWhenTheToolsChange(t *testing.T) {
+	p := newTestProvider()
+	tool := Diagnostic{Source: "phpstan", Message: "cached"}
+	p.toolResults["file:///t.php"] = []Diagnostic{tool}
+
+	same := *p.settings.Load().cfg
+	if err := same.SetDiagnosticRulesJSON(`{"redundant-union-member": "off"}`); err != nil {
+		t.Fatal(err)
+	}
+	p.SetConfig(&same)
+	if len(p.toolResults) != 1 {
+		t.Fatal("tool results stay while the tools' settings don't change")
+	}
+
+	other := same
+	other.PHPStanLevel = "max"
+	p.SetConfig(&other)
+	if len(p.toolResults) != 0 {
+		t.Error("tool results from other tool settings are dropped")
+	}
+}
+
+func TestReanalyzeSavedAppliesNewRulesToTheSavedSource(t *testing.T) {
+	const uri = "file:///t.php"
+	p := builderProvider(t, `{}`)
+	p.AnalyzeOnSave(uri, builderSource)
+	cfg := *p.settings.Load().cfg
+	if err := cfg.SetDiagnosticRulesJSON(`{"unknown-relation": "error"}`); err != nil {
+		t.Fatal(err)
+	}
+	p.SetConfig(&cfg)
+	p.ReanalyzeSaved()
+	rels := filterByCode(p.Analyze(uri, builderSource), "unknown-relation")
+	if len(rels) != 1 || rels[0].Severity != rule.SeverityError {
+		t.Errorf("the saved source's on-save findings follow the new rules: %#v", rels)
+	}
+}
+
+func TestReanalyzeSavedKeepsASaveStoredMeanwhile(t *testing.T) {
+	const uri = "file:///t.php"
+	const resaved = "<?php\n"
+	p := builderProvider(t, `{}`)
+	p.AnalyzeOnSave(uri, builderSource)
+	resolve := p.BuilderModelResolver
+	saved := false
+	p.BuilderModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
+		if !saved {
+			saved = true
+			p.AnalyzeOnSave(uri, resaved)
+		}
+		return resolve(prefix, method, source, line, file)
+	}
+	cfg := *p.settings.Load().cfg
+	p.SetConfig(&cfg)
+	p.ReanalyzeSaved()
+	if !saved {
+		t.Fatal("the reanalysis resolves the builder's model")
+	}
+	if cols := filterByCode(p.Analyze(uri, resaved), "unknown-column"); len(cols) != 0 {
+		t.Errorf("findings of the older source don't replace those of a save stored during the reanalysis: %#v", cols)
+	}
+}
+
+func TestSetConfigWithTheConfigurationInUseKeepsTheSavedFindings(t *testing.T) {
+	const uri = "file:///t.php"
+	p := builderProvider(t, `{}`)
+	p.AnalyzeOnSave(uri, builderSource)
+	resolve := p.BuilderModelResolver
+	reanalyzed := false
+	p.BuilderModelResolver = func(prefix, method, source string, line int, file *parser.FileNode) frameworklaravel.QueriedModel {
+		reanalyzed = true
+		return resolve(prefix, method, source, line, file)
+	}
+	p.SetConfig(p.settings.Load().cfg)
+	p.ReanalyzeSaved()
+	if reanalyzed {
+		t.Error("the on-save findings stay when the configuration handed over is the one in use")
 	}
 }

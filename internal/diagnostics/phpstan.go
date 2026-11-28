@@ -1,10 +1,10 @@
 package diagnostics
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -14,12 +14,9 @@ import (
 )
 
 type phpstanRunner struct {
-	binPath  string
-	level    string
-	cfgFile  string
-	rootPath string
-	logger   *log.Logger
-	enabled  bool
+	externalTool
+	level   string
+	cfgFile string
 }
 
 type phpstanOutput struct {
@@ -44,87 +41,37 @@ type phpstanMessage struct {
 
 func newPHPStanRunner(rootPath string, cfg *config.Config, logger *log.Logger) *phpstanRunner {
 	r := &phpstanRunner{
-		rootPath: rootPath,
-		logger:   logger,
-		level:    cfg.PHPStanLevel,
+		externalTool: newExternalTool("PHPStan", "phpstan", rootPath, cfg.PHPStanPath, cfg.PHPStanEnabled, cfg.PHPStanTimeout(), logger),
+		level:        cfg.PHPStanLevel,
+		cfgFile:      cfg.PHPStanConfig,
 	}
-
-	if cfg.PHPStanEnabled != nil {
-		r.enabled = *cfg.PHPStanEnabled
-	} else {
-		r.enabled = true
-	}
-
-	if cfg.PHPStanPath != "" {
-		r.binPath = cfg.PHPStanPath
-	} else {
-		vendorBin := filepath.Join(rootPath, "vendor", "bin", "phpstan")
-		if _, err := os.Stat(vendorBin); err == nil {
-			r.binPath = vendorBin
-		} else if path, err := exec.LookPath("phpstan"); err == nil {
-			r.binPath = path
-		} else {
-			r.enabled = false
-		}
-	}
-
-	if cfg.PHPStanConfig != "" {
-		r.cfgFile = cfg.PHPStanConfig
-	} else {
+	if r.cfgFile == "" {
 		for _, name := range []string{"phpstan.neon", "phpstan.neon.dist", "phpstan.dist.neon"} {
-			candidate := filepath.Join(rootPath, name)
-			if _, err := os.Stat(candidate); err == nil {
+			if candidate := filepath.Join(rootPath, name); fileExists(candidate) {
 				r.cfgFile = candidate
 				break
 			}
 		}
 	}
-
-	if r.enabled && r.binPath != "" {
+	if r.available() {
 		logger.Printf("PHPStan: binary=%s config=%s level=%s", r.binPath, r.cfgFile, r.level)
 	}
-
 	return r
 }
 
-func (r *phpstanRunner) available() bool {
-	return r.enabled && r.binPath != ""
-}
-
-func (r *phpstanRunner) analyze(filePath string) []Diagnostic {
+func (r *phpstanRunner) analyze(ctx context.Context, filePath string) []Diagnostic {
 	args := []string{"analyse", "--error-format=json", "--no-progress", "--no-ansi"}
-
 	if r.cfgFile != "" {
 		args = append(args, "-c", r.cfgFile)
 	}
-
 	if r.level != "" {
 		args = append(args, "--level="+r.level)
 	}
-
-	args = append(args, filePath)
-
-	cmd := exec.Command(r.binPath, args...)
-	cmd.Dir = r.rootPath
-
-	// Output() returns stdout; on non-zero exit, err is *ExitError
-	// but stdout still contains the JSON output.
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			if exitErr.ExitCode() != 1 {
-				// Exit code 1 = errors found (expected), anything else is a real error
-				r.logger.Printf("PHPStan error (exit %d): %s", exitErr.ExitCode(), string(exitErr.Stderr))
-				return nil
-			}
-			// Exit code 1: errors found, stdout has JSON — fall through to parse
-		} else {
-			r.logger.Printf("PHPStan exec error: %v", err)
-			return nil
-		}
+	output, ok := r.run(ctx, filePath, args...)
+	if !ok {
+		return nil
 	}
 
-	// Read source lines so we can compute accurate diagnostic ranges
 	var lines []string
 	if src, err := os.ReadFile(filePath); err == nil {
 		lines = strings.Split(string(src), "\n")

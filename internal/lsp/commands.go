@@ -115,7 +115,7 @@ func (s *Server) debugDocument(uri string) string {
 		findings = s.analysis.NativeFindings(source)
 	}
 
-	v := introspect.ParseVerbosity(s.cfg.Introspection.Verbosity)
+	v := introspect.ParseVerbosity(s.config().Introspection.Verbosity)
 
 	var profile string
 	if s.workspace != nil {

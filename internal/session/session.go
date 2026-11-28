@@ -74,9 +74,10 @@ func New(ws *workspace.Bootstrapped, opts Options) *Session {
 	logger := opts.logger()
 
 	s := &Session{ws: ws}
+	cfg := ws.Config()
 	engine := diagnostics.TypeEngine(ws.Index, ws.Container)
 
-	s.diag = diagnostics.NewProvider(ws.Index, ws.Framework, ws.RootPath, logger, ws.Config)
+	s.diag = diagnostics.NewProvider(ws.Index, ws.Framework, ws.RootPath, logger, cfg)
 	s.diag.ResolveTypes(ws.Container)
 	s.diag.BuilderMemberChecker = diagnostics.NewIndexMemberChecker(ws.Index, ws.SchemaIsLive)
 	s.diag.Profile = ws.Profile
@@ -104,7 +105,6 @@ func New(ws *workspace.Bootstrapped, opts Options) *Session {
 	arrays := models.NewFrameworkArrayResolver(ws.Index, ws.RootPath, ws.Framework)
 
 	s.completion = completion.NewProvider(ws.Index, ws.Container, ws.Framework)
-	s.completion.SetAutoImportAliasStyle(ws.Config.AutoImport.AliasStyle)
 	s.completion.SetArrayResolver(arrays)
 	if ws.RouteIndex != nil {
 		s.completion.SetLaravelRouteIndex(ws.RouteIndex)
@@ -116,7 +116,6 @@ func New(ws *workspace.Bootstrapped, opts Options) *Session {
 
 	s.hover = hover.NewProvider(ws.Index, ws.Container, ws.Framework)
 	s.hover.SetArrayResolver(arrays)
-	s.hover.SetConfig(ws.Config)
 	s.hover.SetTypedChainResolver(s.typedExpression)
 
 	s.inlayHint = inlayhint.NewProvider(ws.Index, ws.Container)
@@ -132,6 +131,7 @@ func New(ws *workspace.Bootstrapped, opts Options) *Session {
 	s.analyzer.SetTranslationResolver(s.translations)
 	s.analyzer.SetSymfonyTranslationResolver(s.symfonyTranslations)
 	s.analyzer.SetSymfonyCommands(ws.SymfonyCommands)
+	s.SetConfig(cfg)
 	return s
 }
 
@@ -157,8 +157,25 @@ func Open(ctx context.Context, root string, opts Options) (*Session, error) {
 	return New(ws, opts), nil
 }
 
-// Config is the project's configuration.
-func (s *Session) Config() *config.Config { return s.ws.Config }
+// Config is the project's current configuration.
+func (s *Session) Config() *config.Config { return s.ws.Config() }
+
+// SetConfig hands a configuration to every provider that reads settings:
+// diagnostics, completion's auto-import alias style and hover. New calls it
+// once; a transport calls it again whenever the settings change. The
+// workspace takes a new configuration separately, in Refresh.
+func (s *Session) SetConfig(cfg *config.Config) {
+	s.diag.SetConfig(cfg)
+	s.completion.SetAutoImportAliasStyle(cfg.AutoImport.AliasStyle)
+	s.hover.SetConfig(cfg)
+}
+
+// ReanalyzeSaved works out the on-save rules' findings again, under the
+// current settings, for every saved file it holds findings for; a newer
+// save meanwhile keeps its own.
+func (s *Session) ReanalyzeSaved() {
+	s.diag.ReanalyzeSaved()
+}
 
 // Analyze returns a file's diagnostics while it is being edited: the fast
 // rules, plus the latest on-save and external-tool results for it.
@@ -180,9 +197,16 @@ func (s *Session) Saved(uri, source string) {
 }
 
 // RunTools runs the configured external tools (PHPStan, Pint) over a saved
-// file in the background and keeps their findings for Analyze to report.
-func (s *Session) RunTools(uri, filePath string) {
-	s.diag.RunTools(uri, filePath)
+// file and keeps their findings for Analyze to report, if unchanged still
+// reports true when they end. A newer run for the file, Closed, StopTools or
+// new tool settings stop it, and it then reports false.
+func (s *Session) RunTools(uri, filePath string, unchanged func() bool) bool {
+	return s.diag.RunTools(uri, filePath, unchanged)
+}
+
+// StopTools stops every external tool run in progress.
+func (s *Session) StopTools() {
+	s.diag.StopTools()
 }
 
 // Closed forgets what was kept for a file.

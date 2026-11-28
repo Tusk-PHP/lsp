@@ -36,6 +36,14 @@ func (r excludeRules) excludes(rel string) bool {
 	return ok
 }
 
+func (r excludeRules) excludesDir(root, dir string) bool {
+	rel, err := filepath.Rel(root, dir)
+	if err != nil || rel == "." {
+		return false
+	}
+	return r.excludes(filepath.ToSlash(rel))
+}
+
 func (r excludeRules) reaches(rel string) bool {
 	for dir := path.Dir(rel); dir != "."; dir = path.Dir(dir) {
 		if r.excludes(dir) {

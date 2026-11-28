@@ -30,7 +30,7 @@ func (s *Server) handleDidOpen(msg *jsonRPCMessage) {
 	}
 	s.docIndex.reopened(uri)
 	s.indexDocumentMaybeAsync(uri, text)
-	if s.cfg.DiagnosticsEnabled {
+	if s.config().DiagnosticsEnabled {
 		s.publishDiagnostics(uri, text)
 	}
 }
@@ -51,7 +51,7 @@ func (s *Server) handleDidChange(msg *jsonRPCMessage) {
 			return
 		}
 		s.indexDocumentMaybeAsync(uri, source)
-		if s.cfg.DiagnosticsEnabled {
+		if s.config().DiagnosticsEnabled {
 			s.scheduleDiagnostics(uri)
 		}
 	}
@@ -122,13 +122,13 @@ func (s *Server) handleDidSave(msg *jsonRPCMessage) {
 		s.session.Components().Invalidate()
 	}
 	s.goSafe("container.Analyze", s.container.Analyze)
-	if s.cfg.DiagnosticsEnabled {
+	if s.config().DiagnosticsEnabled {
+		saved := s.getDocument(uri)
 		s.goSafe("diagnostics.RunTools", func() {
-			filePath := symbols.URIToPath(uri)
 			// PHPStan and Pint run on .php files only: Pint would reformat a
 			// template, and PHPStan doesn't analyse .phtml unless configured to.
-			if !workspace.IsTemplate(uri) {
-				s.analysis.RunTools(uri, filePath)
+			if !workspace.IsTemplate(uri) && !s.analysis.RunTools(uri, symbols.URIToPath(uri), func() bool { return s.isCurrentDocument(uri, saved) }) {
+				return
 			}
 			source := s.getDocument(uri)
 			s.analysis.Saved(uri, source)

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Tusk-PHP/lsp/internal/protocol"
 	"github.com/Tusk-PHP/lsp/internal/session"
 )
 
@@ -134,7 +135,11 @@ func (s *Server) docIndexIdle(uri string) bool {
 // the send one step, so an older version's diagnostics never arrive after a
 // newer version's.
 func (s *Server) publishDiagnostics(uri, source string) {
-	diagnostics := s.positionsOf(uri, source).diagnosticsOut(uri, session.LSPDiagnostics(s.analysis.Analyze(uri, source)))
+	diagnostics := []protocol.Diagnostic{}
+	if s.config().DiagnosticsEnabled {
+		diagnostics = session.LSPDiagnostics(s.analysis.Analyze(uri, source))
+	}
+	diagnostics = s.positionsOf(uri, source).diagnosticsOut(uri, diagnostics)
 	s.publishMu.Lock()
 	defer s.publishMu.Unlock()
 	if !s.isCurrentDocument(uri, source) {

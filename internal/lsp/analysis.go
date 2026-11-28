@@ -10,7 +10,7 @@ import (
 type fileAnalysis interface {
 	Analyze(uri, source string) []diagnostics.Diagnostic
 	Saved(uri, source string)
-	RunTools(uri, filePath string)
+	RunTools(uri, filePath string, unchanged func() bool) bool
 	Closed(uri string)
 	NativeFindings(source string) []checks.Finding
 }

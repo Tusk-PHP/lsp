@@ -8,6 +8,7 @@ package cardhover
 import (
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/Tusk-PHP/lsp/internal/composer/lockfile"
 	"github.com/Tusk-PHP/lsp/internal/composer/manifest"
@@ -22,29 +23,30 @@ type Provider struct {
 	rootPath         string
 	projectPHPVer    func() string
 	loadLockfile     func(root string) (*lockfile.Lockfile, error) // injectable for tests
-	enabled          bool
-	openOnDefinition bool
+	enabled          atomic.Bool
+	openOnDefinition atomic.Bool
 }
 
 // NewProvider constructs a Provider bound to a workspace root. projectPHPVer
 // is the resolved platform PHP version used to render the compatibility
 // glyph in the hover card; empty disables the glyph.
 func NewProvider(rootPath string, projectPHPVer func() string) *Provider {
-	return &Provider{
+	p := &Provider{
 		rootPath:      rootPath,
 		projectPHPVer: projectPHPVer,
 		loadLockfile:  lockfile.Load,
-		enabled:       true,
 	}
+	p.enabled.Store(true)
+	return p
 }
 
 // SetEnabled toggles the whole feature. When false, Hover and Definition
 // return nil unconditionally.
-func (p *Provider) SetEnabled(v bool) { p.enabled = v }
+func (p *Provider) SetEnabled(v bool) { p.enabled.Store(v) }
 
 // SetOpenOnDefinition controls whether Definition reports an external URL
 // for the cursor's package. Off by default.
-func (p *Provider) SetOpenOnDefinition(v bool) { p.openOnDefinition = v }
+func (p *Provider) SetOpenOnDefinition(v bool) { p.openOnDefinition.Store(v) }
 
 // IsComposerJSON reports whether the given URI/path refers to a
 // composer.json file the provider should answer for. Vendor composer.json
@@ -58,7 +60,7 @@ func IsComposerJSON(uri string) bool {
 // Hover renders the package card for the cursor's position, or nil when
 // the cursor isn't on a require/require-dev entry.
 func (p *Provider) Hover(uri, source string, pos protocol.Position) *protocol.Hover {
-	if p == nil || !p.enabled {
+	if p == nil || !p.enabled.Load() {
 		return nil
 	}
 	entry, repos := p.entryAt(source, pos)
@@ -83,7 +85,7 @@ type DefinitionResult struct {
 // SetOpenOnDefinition. Empty result means the server should respond with
 // a null Location.
 func (p *Provider) Definition(uri, source string, pos protocol.Position) DefinitionResult {
-	if p == nil || !p.enabled || !p.openOnDefinition {
+	if p == nil || !p.enabled.Load() || !p.openOnDefinition.Load() {
 		return DefinitionResult{}
 	}
 	entry, repos := p.entryAt(source, pos)

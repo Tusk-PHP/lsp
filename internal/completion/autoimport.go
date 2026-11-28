@@ -83,7 +83,7 @@ func (p *Provider) newImportPlanner(source string, file *parser.FileNode) *impor
 		source:     source,
 		file:       file,
 		index:      p.index,
-		style:      normalizeAliasStyle(p.aliasStyle),
+		style:      p.autoImportAliasStyle(),
 		insertLine: -1,
 	}
 	if file == nil {

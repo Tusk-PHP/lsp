@@ -144,3 +144,35 @@ func TestEditorFeaturesShareTheSessionsResolvers(t *testing.T) {
 		t.Errorf("typedExpression = %q, want Foo", got.FullString())
 	}
 }
+
+func TestSetConfigAndReanalyzeSavedApplyNewRuleSettings(t *testing.T) {
+	s := newSession(t, Options{})
+	s.ws.Index.IndexFile("file:///probe/Foo.php", "<?php\nclass Foo { public function bar(): Foo { return $this; } }\n")
+	const uri = "file:///probe/a.php"
+	src := "<?php\nfunction f(Foo $foo) {\n    $foo?->bar();\n    echo $missing;\n}\n"
+	severity := func(code rule.Code) (rule.Severity, bool) {
+		for _, d := range s.Analyze(uri, src) {
+			if d.Code == string(code) {
+				return d.Severity, true
+			}
+		}
+		return 0, false
+	}
+	s.Saved(uri, src)
+	if got, ok := severity(rule.RedundantNullsafe); !ok || got == rule.SeverityError {
+		t.Fatalf("before the change: redundant-nullsafe reported %v with severity %v", ok, got)
+	}
+
+	cfg := *s.Config()
+	if err := cfg.SetDiagnosticRulesJSON(`{"undefined-variable": "off", "redundant-nullsafe": "error"}`); err != nil {
+		t.Fatal(err)
+	}
+	s.SetConfig(&cfg)
+	if _, ok := severity(rule.UndefinedVariable); ok {
+		t.Error("a rule the new configuration turns off still reports")
+	}
+	s.ReanalyzeSaved()
+	if got, ok := severity(rule.RedundantNullsafe); !ok || got != rule.SeverityError {
+		t.Errorf("the saved file's on-save findings don't follow the new severity: reported %v with %v", ok, got)
+	}
+}
