@@ -110,10 +110,18 @@ func highlightLines(a *Analyzer, uri, source string, pos protocol.Position) []in
 }
 
 func TestHighlightsOfAClassSkipMembersAndFunctionsOfTheSameName(t *testing.T) {
-	source := roomSource + "$room->room;\nRoom::ROOM;\nfunction room() {}\n"
+	source := roomSource + "$room->room;\nRoom::ROOM;\nfunction room() {}\nfunction &ROOM() {}\n"
 	got := highlightLines(roomAnalyzer(), "file:///app/Room.php", source, charPosOf(t, source, "Room", "function use_room"))
 	if want := []int{2, 7, 10, 11, 14}; !slices.Equal(got, want) {
-		t.Errorf("a property, a constant and a function named like the class are not highlighted: lines %v, want %v", got, want)
+		t.Errorf("a property, a constant and functions named like the class, by reference or not, are not highlighted: lines %v, want %v", got, want)
+	}
+}
+
+func TestHighlightsOfAClassInASnippetWithoutAnOpenTag(t *testing.T) {
+	source := "Room::SIZE;\n$r = new Room();\n"
+	got := highlightLines(roomAnalyzer(), "file:///app/snippet.php", source, protocol.Position{Line: 1, Character: 13})
+	if want := []int{0, 1}; !slices.Equal(got, want) {
+		t.Errorf("the class at the very start of a snippet is highlighted with the other use: lines %v, want %v", got, want)
 	}
 }
 
