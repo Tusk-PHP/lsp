@@ -211,18 +211,24 @@ func (r *Resolver) MemberTypeForCall(member *symbols.Symbol, file *parser.FileNo
 			member = inh
 		}
 	}
+	if rt := r.declaredMemberType(member, file, callerFQN, typeContext, call); !rt.IsEmpty() || rt.Nullable {
+		return rt
+	}
+	return r.memberTypeFallback(member, file)
+}
+
+// declaredMemberType is the type member's PHPDoc or signature declares at a
+// call, empty when they declare none.
+func (r *Resolver) declaredMemberType(member *symbols.Symbol, file *parser.FileNode, callerFQN string, typeContext []ResolvedType, call *CallSite) ResolvedType {
 	raw := r.rawMemberReturnType(member)
 	staticFQN := callerFQN
 	if staticFQN == "" {
 		staticFQN = member.ParentFQN
 	}
 	if raw == "" || raw == "void" {
-		return r.memberTypeFallback(member, file)
+		return ResolvedType{}
 	}
 	pattern := r.parseType(raw)
-	if pattern.IsEmpty() {
-		return r.memberTypeFallback(member, file)
-	}
 
 	classTmpls := r.templatesOf(member.ParentFQN)
 	subst := r.classSubst(member.ParentFQN, staticFQN, typeContext)
@@ -260,13 +266,7 @@ func (r *Resolver) MemberTypeForCall(member *symbols.Symbol, file *parser.FileNo
 	}
 
 	static := ResolvedType{FQN: staticFQN, Params: typeContext}
-	rt := r.applyEnv(pattern, typeEnv{subst: subst, static: static, owner: member.ParentFQN, file: file})
-	if rt.IsEmpty() && !rt.Nullable {
-		if fb := r.memberTypeFallback(member, file); !fb.IsEmpty() {
-			return fb
-		}
-	}
-	return rt
+	return r.applyEnv(pattern, typeEnv{subst: subst, static: static, owner: member.ParentFQN, file: file})
 }
 
 func (r *Resolver) applyFallback(rt ResolvedType, member *symbols.Symbol, file *parser.FileNode, callerFQN string) ResolvedType {
