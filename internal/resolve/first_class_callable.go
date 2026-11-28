@@ -56,7 +56,7 @@ func (r *Resolver) MemberCallableType(member *symbols.Symbol, file *parser.FileN
 	subst = r.fillUnbound(subst, member.Templates, member.ParentFQN, file)
 	subst = r.fillUnbound(subst, r.templatesOf(member.ParentFQN), member.ParentFQN, file)
 	env := typeEnv{subst: subst, static: ResolvedType{FQN: staticFQN, Params: typeContext}, owner: member.ParentFQN, file: file}
-	sig := &CallableType{Params: r.callableParams(member, env)}
+	sig := &CallableType{Params: r.callableParams(member, env), Names: paramNames(member)}
 	if ret := r.MemberTypeForCall(member, file, callerFQN, typeContext, nil); !ret.IsEmpty() || ret.Nullable {
 		sig.Return = &ret
 	}
@@ -69,7 +69,7 @@ func (r *Resolver) FunctionCallableType(fn *symbols.Symbol, file *parser.FileNod
 		return plainClosure()
 	}
 	subst := r.fillUnbound(nil, fn.Templates, fn.FQN, file)
-	sig := &CallableType{Params: r.callableParams(fn, typeEnv{subst: subst, owner: fn.FQN, file: file})}
+	sig := &CallableType{Params: r.callableParams(fn, typeEnv{subst: subst, owner: fn.FQN, file: file}), Names: paramNames(fn)}
 	if ret := r.FunctionTypeForCall(fn, file, nil); !ret.IsEmpty() || ret.Nullable {
 		sig.Return = &ret
 	}
@@ -116,6 +116,18 @@ func (r *Resolver) invokedVariableType(rhs, varName string, ctx ExprContext) (Re
 	}
 	rt := r.ExpressionType(rhs, ctx)
 	return rt, !rt.IsEmpty()
+}
+
+// paramNames returns the names of sym's parameters, or nil when it has none.
+func paramNames(sym *symbols.Symbol) []string {
+	if len(sym.Params) == 0 {
+		return nil
+	}
+	names := make([]string, len(sym.Params))
+	for i, p := range sym.Params {
+		names[i] = p.Name
+	}
+	return names
 }
 
 // callableParams is the parameter types of a method or function as a
@@ -219,6 +231,7 @@ func PartialClosure(full ResolvedType, sym *symbols.Symbol, args string) Resolve
 	for i, p := range full.Callable.Params {
 		if open[i] || (rest && !given[i]) {
 			sig.Params = append(sig.Params, p)
+			sig.Names = append(sig.Names, sym.Params[i].Name)
 		}
 	}
 	return ResolvedType{FQN: "Closure", Callable: sig}

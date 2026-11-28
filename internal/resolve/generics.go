@@ -73,7 +73,7 @@ func (rt ResolvedType) transform(fn func(ResolvedType) ResolvedType) ResolvedTyp
 		}
 	}
 	if rt.Callable != nil {
-		sig := &CallableType{}
+		sig := &CallableType{Names: rt.Callable.Names}
 		if len(rt.Callable.Params) > 0 {
 			sig.Params = make([]ResolvedType, len(rt.Callable.Params))
 			for i, p := range rt.Callable.Params {

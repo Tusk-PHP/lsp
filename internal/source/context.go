@@ -100,6 +100,12 @@ func (d *Document) Tokens() []parser.Token {
 	return d.result.Tokens
 }
 
+// Lines returns the document's source split into lines. Read them, don't
+// change them.
+func (d *Document) Lines() []string {
+	return d.lines
+}
+
 func (d *Document) File() *parser.FileNode {
 	return d.file
 }

@@ -1093,9 +1093,10 @@ func (a *Analyzer) GetWorkspaceSymbols(query string) []protocol.SymbolInformatio
 }
 
 func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *protocol.SignatureHelp {
-	callee, activeParam, ok := sourcectx.CallAt(uri, source, pos)
+	doc := sourcectx.NewDocument(uri, source)
+	callee, activeParam, ok := doc.CallAt(pos)
 	if !ok {
-		return nil
+		return a.closureSignatureHelp(doc, pos)
 	}
 	sym := a.symbolTarget(a.engine.Resolver(), uri, source, callee).sym
 	if sym == nil {
@@ -1118,6 +1119,47 @@ func (a *Analyzer) GetSignatureHelp(uri, source string, pos protocol.Position) *
 		activeParam = maxParam
 	}
 	return &protocol.SignatureHelp{Signatures: []protocol.SignatureInformation{sig}, ActiveParameter: activeParam}
+}
+
+// closureSignatureHelp is the signature of a closure held in a variable
+// being called, `$fn(…)`, such as the Closure a partial application makes:
+// `$greet = greet(?, 'Hi'); $greet(` shows greet's open parameters.
+func (a *Analyzer) closureSignatureHelp(doc *sourcectx.Document, pos protocol.Position) *protocol.SignatureHelp {
+	name, at, activeParam, ok := doc.CalledVariableAt(pos)
+	if !ok {
+		return nil
+	}
+	r := a.engine.Resolver()
+	rt := r.CallableOf(r.ResolveVariableTypeTyped(name, doc.Lines(), at, doc.File()))
+	if rt.Callable == nil {
+		return nil
+	}
+	sig := rt.Callable
+	params := make([]string, len(sig.Params))
+	info := protocol.SignatureInformation{}
+	for i, p := range sig.Params {
+		label := p.FullString()
+		if i < len(sig.Names) && sig.Names[i] != "" {
+			if label == "" || label == "mixed" {
+				label = sig.Names[i]
+			} else {
+				label += " " + sig.Names[i]
+			}
+		}
+		params[i] = label
+		info.Parameters = append(info.Parameters, protocol.ParameterInformation{Label: label})
+	}
+	ret := "mixed"
+	if sig.Return != nil && sig.Return.FullString() != "" {
+		ret = sig.Return.FullString()
+	}
+	info.Label = name + "(" + strings.Join(params, ", ") + "): " + ret
+	if len(params) == 0 {
+		activeParam = 0
+	} else if activeParam > len(params)-1 {
+		activeParam = len(params) - 1
+	}
+	return &protocol.SignatureHelp{Signatures: []protocol.SignatureInformation{info}, ActiveParameter: activeParam}
 }
 
 // formatParams returns the parenthesized parameter list for a symbol, e.g.
